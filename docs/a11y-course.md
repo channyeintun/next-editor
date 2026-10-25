@@ -97,16 +97,11 @@ thousands separator; screen-reader output is phrased as "would announce".
 Concept-lesson pages live in **"Next Editor · Accessibility course"**:
 https://docs.google.com/presentation/d/1LSOwZ_xfFr7Ip4ZSgcCFtCq0DnuXok6x56U8-6dA7ys/edit
 (79 lesson pages `l01_p01` … `l20_p12`, checked page by page against the lesson plans; the ten
-`kit_k*` template pages sit at the end and do no harm). The five deck lessons point at the
-placeholder `https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub`, so they
-cannot render until the deck is published:
-
-1. In the deck: File → Share → Publish to web → Publish, and copy the `…/pub` link.
-2. Swap it into the five scripts (or send the link and it will be swapped and committed for you):
-
-```bash
-sed -i '' 's#https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub#PASTE_PUB_LINK#g' src/studio/scripts/a11y-course-01-why.yaml src/studio/scripts/a11y-course-02-measure.yaml src/studio/scripts/a11y-course-14-video-audio.yaml src/studio/scripts/a11y-course-17-design-ux.yaml src/studio/scripts/a11y-course-20-screen-readers.yaml
-```
+`kit_k*` template pages sit at the end and do no harm). It is published (2026-10-25) at
+https://docs.google.com/presentation/d/e/2PACX-1vS49RvFI0NE8_9Ph7-02k2R6UoHFSRdUJ_th9LNl_jcK-mCK7GXYPXn4q-SlDXEaHqHEUnCBqoOtBiO/pub,
+the five deck lessons point at that link, and the Director finds every referenced page in it. The
+published SVG shapes Burmese correctly and keeps the quiz pages' ✓ mark. Edits to the deck show up
+in the published copy within seconds, and a render pins the page SVG at that moment.
 
 Deck lessons use `timing.p95Ms` 500 (deck SVG paint stalls); the others use 300.
 
