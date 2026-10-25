@@ -16,6 +16,15 @@ import type { HtmlTagDescriptor, PluginOption } from "vite";
  */
 export const CHUNK_RELEASE = { releaseName: "next-editor", releaseVersion: "chunks" } as const;
 
+/**
+ * Source maps per upload batch. posthog-cli asks PostHog for every batch's
+ * upload URLs in one request and gives up on it after about 30 s, which
+ * fails the build. When a deploy uploaded all 327 chunks again, batches of the
+ * default 50 took 11–19 s and two of them timed out; batches of 20 took 1–8 s
+ * after a first one of 24 s.
+ */
+const UPLOAD_BATCH_SIZE = 20;
+
 /** `<` would let a release id close the inline script; JSON allows `<`. */
 function inlineScriptJson(value: string): string {
   return JSON.stringify(value).replaceAll("<", "\\u003c");
@@ -50,12 +59,15 @@ function deployReleaseHtmlPlugin(options: PostHogRollupPluginOptions): PluginOpt
 }
 
 /**
- * PostHog's source-map upload with a constant chunk release, plus the
- * index.html script that reports each deploy's own release.
+ * PostHog's source-map upload with a constant chunk release, in small batches,
+ * plus the index.html script that reports each deploy's own release.
  */
 export function posthogReleasePlugins(options: PostHogRollupPluginOptions): PluginOption[] {
   return [
-    posthog({ ...options, sourcemaps: { ...options.sourcemaps, ...CHUNK_RELEASE } }),
+    posthog({
+      ...options,
+      sourcemaps: { batchSize: UPLOAD_BATCH_SIZE, ...options.sourcemaps, ...CHUNK_RELEASE },
+    }),
     deployReleaseHtmlPlugin(options),
   ];
 }
