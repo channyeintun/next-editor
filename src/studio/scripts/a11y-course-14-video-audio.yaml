@@ -1,0 +1,537 @@
+# Accessibility course (Burmese), lesson 14 of 20: video and audio.
+#
+# Built from template.yaml + ws/ + slides.part with `bun build.ts` (pins ws/
+# byte-exact). Narration is Burmese, written directly; voice-script.md next to
+# this file is the lint's copy. DESIGN.md is the brief.
+#
+# A concept lesson: nothing runs and there is no preview. Deck pages (course
+# deck, kits K1-K11) carry the ideas; the editor shows the markup a learner
+# would write for the shop's tea-making video: a <track kind="captions"> line
+# in video.html, two WebVTT cues (a speaker voice tag and a sound in brackets)
+# in captions.vtt, and a transcript section under the video. No video or audio
+# file can be pinned in a workspace, so the narration says once that we look
+# at the code only, and never claims a video plays.
+#
+# Shape: cover + recall lesson 13 → persona လှလှ (deaf customer) → who needs
+# which alternative → what decides the alternatives → captions vs subtitles →
+# open vs closed captions → good captions (speaker, sounds, check auto
+# captions) → editor: track element → captions.vtt cues → transcripts (page)
+# → editor: transcript section with a visual-only line → audio description
+# (page; integrated / separate version / description file; extended) → sign
+# language (300+, Burmese sign language, AAA) → accessible media player
+# (keyboard, names, no autoplay with sound; the native controls attribute
+# selected) → WCAG 1.2 levels (K11) → quiz + reveal → recap on the code,
+# hand-off to lesson 15 (forms).
+#
+# Deck: every page points at the course deck's placeholder /pub URL until Chan
+# publishes it; the Director's unreachable-deck warning is expected.
+# Page plan (kit fields per page): ~/Documents/a11y-course-work/pages/a11y-course-14-video-audio.json
+#
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-14-video-audio
+  title: "Accessibility course 14: Video နဲ့ audio"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course 14
+    entryFilePath: video.html
+    files:
+      captions.vtt: ""
+      package.json: |
+        {
+          "name": "a11y-course-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      video.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>လက်ဖက်ရည် ဖျော်နည်း — ရွှေလက်ဖက်ရည်ဆိုင်</title>
+          </head>
+          <body>
+            <main>
+              <h1>လက်ဖက်ရည် ဖျော်နည်း</h1>
+              <video controls width="640" preload="metadata">
+                <source src="tea-making.mp4" type="video/mp4" />
+              </video>
+            </main>
+          </body>
+        </html>
+  slides:
+    - {
+        id: l14_p01,
+        contentType: google,
+        name: "Cover: video and audio",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p01,
+      }
+    - {
+        id: l14_p02,
+        contentType: google,
+        name: "Persona: လှလှ (deaf customer)",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p02,
+      }
+    - {
+        id: l14_p03,
+        contentType: google,
+        name: "Who needs which alternative",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p03,
+      }
+    - {
+        id: l14_p04,
+        contentType: google,
+        name: "What decides the alternatives",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p04,
+      }
+    - {
+        id: l14_p05,
+        contentType: google,
+        name: "Subtitles vs captions",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p05,
+      }
+    - {
+        id: l14_p06,
+        contentType: google,
+        name: "Open vs closed captions",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p06,
+      }
+    - {
+        id: l14_p07,
+        contentType: google,
+        name: "Good captions",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p07,
+      }
+    - {
+        id: l14_p08,
+        contentType: google,
+        name: "Transcripts",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p08,
+      }
+    - {
+        id: l14_p09,
+        contentType: google,
+        name: "Audio description",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p09,
+      }
+    - {
+        id: l14_p09b,
+        contentType: google,
+        name: "Three ways to provide audio description",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p09b,
+      }
+    - {
+        id: l14_p10,
+        contentType: google,
+        name: "Sign language: 300+",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p10,
+      }
+    - {
+        id: l14_p11,
+        contentType: google,
+        name: "Accessible media player",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p11,
+      }
+    - {
+        id: l14_p12,
+        contentType: google,
+        name: "WCAG levels for media",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p12,
+      }
+    - {
+        id: l14_p13,
+        contentType: google,
+        name: "Quiz",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p13,
+      }
+    - {
+        id: l14_p13b,
+        contentType: google,
+        name: "Quiz answer: captions",
+        deckUrl: "https://docs.google.com/presentation/d/e/A11Y-COURSE-NOT-PUBLISHED-YET/pub",
+        pageId: l14_p13b,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2614
+
+# Concept lesson: the runtime block is required by the schema but never started.
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Video နဲ့ audio"
+    narration: >
+      [[mark:p01]] ပြီးခဲ့တဲ့ lesson မှာ ဆိုင်ရဲ့ စာသားတွေကို ဖတ်ရလွယ်အောင် ပြင်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      video နဲ့ audio ကို လူတိုင်း သုံးနိုင်အောင် ဘာတွေ ထည့်ပေးရမလဲ ဆိုတာ ကြည့်ပါမယ်။ ဆိုင်က
+      လက်ဖက်ရည် ဖျော်နည်း video လေး တစ်ခုကို website ပေါ် တင်ချင်တယ် ဆိုပါစို့။ အသံ မကြားရတဲ့သူ၊ ပုံ
+      မမြင်ရတဲ့သူ အတွက်ဆိုရင် video ရဲ့ အကြောင်းအရာ တစ်ဝက်လောက် ပျောက်သွားနိုင်ပါတယ်။
+      [[mark:p02]] အရင် lesson တွေမှာ တွေ့ခဲ့တဲ့ လှလှကို ပြန်သတိရကြည့်ပါ။ လှလှက နားမကြားလို့ sign
+      language နဲ့ စကားပြောပြီး၊ video တွေကို caption ဖွင့်ပြီး ဖတ်ကြည့်ပါတယ်။ caption မပါတဲ့ video
+      ဆိုရင်တော့ ဘာပြောနေလဲ မသိရလို့ ကျော်သွားရပါတယ်။ အသံသက်သက် ဖြစ်တဲ့ podcast လိုမျိုးဆိုရင် စာနဲ့
+      ရေးထားတဲ့ transcript လိုပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio"
+        url: "https://web.dev/learn/accessibility/video-audio"
+      - title: "W3C WAI — Making Audio and Video Media Accessible"
+        url: "https://www.w3.org/WAI/media/av/"
+    actions:
+      # Same pull-backs as the shipped concept lessons: the dock collapses and the cover is
+      # up before the first word, inside the 2 s opening handle.
+      - { id: collapse-dock, type: runtime.collapseDock, at: { scene: start, offsetMs: -1750 } }
+      - { id: show-p01, type: slide.show, at: { mark: p01, offsetMs: -1450 }, slideId: l14_p01 }
+      - { id: show-p02, type: slide.show, at: { mark: p02 }, slideId: l14_p02 }
+
+  - id: who-needs-what
+    chapter: "ဘယ်သူ ဘာ လိုလဲ"
+    narration: >
+      [[mark:p03]] video နဲ့ audio အတွက် အစားထိုး ပုံစံ လေးမျိုး ရှိပါတယ်။ caption၊ transcript၊ audio
+      description နဲ့ sign language ပါ။ နားမကြားသူ၊ အကြား အားနည်းသူတွေက caption၊ transcript နဲ့ sign
+      language ကို သုံးပြီး၊ မျက်မမြင်နဲ့ အမြင် အားနည်းသူတွေက audio description နဲ့ transcript ကို
+      သုံးပါတယ်။ [[mark:p03-more]] cognitive disability ရှိသူတွေ အတွက်လည်း caption နဲ့၊ ကိုယ့်နှုန်းနဲ့ ဖတ်လို့ ရတဲ့
+      transcript က အထောက်အကူ ဖြစ်ပါတယ်။ ဘတ်စ်ကားပေါ်မှာ headphone မပါလို့ caption ဖွင့်ကြည့်ဖူးတဲ့ ကိုယ်တွေလည်း
+      ဒီထဲမှာ ပါပါတယ်။ [[mark:p04]] ဘယ်ဟာတွေ ထည့်ရမလဲ ဆိုတာကတော့ အချက် သုံးချက်ပေါ် မူတည်ပါတယ်။
+      ပထမက media အမျိုးအစားပါ။ audio သက်သက်လား၊ video သက်သက်လား၊ အသံရော ပုံရော ပါတာလား။ ဒုတိယက
+      live လား၊ ကြိုရိုက်ထားတာလား။ တတိယက ကိုယ် ရည်မှန်းထားတဲ့ WCAG level ပါ။ 
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio: Alternative media types"
+        url: "https://web.dev/learn/accessibility/video-audio#alternative-media-types"
+      - title: "W3C WAI — Planning Audio and Video Media (what WCAG requires)"
+        url: "https://www.w3.org/WAI/media/av/planning/"
+    actions:
+      - { id: show-p03, type: slide.show, at: { mark: p03 }, slideId: l14_p03 }
+      - { id: show-p04, type: slide.show, at: { mark: p04 }, slideId: l14_p04 }
+
+  - id: captions
+    chapter: "Caption"
+    narration: >
+      [[mark:p05]] caption ဆိုတာ video ထဲက စကားနဲ့ အရေးကြီးတဲ့ အသံတွေကို အချိန်ကိုက် စာနဲ့ ပြတာပါ။ video
+      ရဲ့ အသံ ဘာသာစကား အတိုင်းပဲ ရေးပြီး၊ တံခါး ခေါက်သံ၊ နောက်ခံ ဂီတသံလို စကား မဟုတ်တဲ့ အသံတွေကိုပါ
+      ထည့်ပါတယ်။ subtitle နဲ့ ရောတတ်ကြပေမယ့် မတူပါဘူး။ subtitle က အသံကို ကြားရပေမယ့် ဘာသာစကား
+      နားမလည်တဲ့သူ အတွက် စကားပြောကိုပဲ ဘာသာပြန်ပြတာ ဖြစ်လို့ နောက်ခံ အသံတွေ မပါပါဘူး။ [[mark:p06]]
+      caption မှာလည်း နှစ်မျိုး ရှိပါတယ်။ closed caption ကို ကြည့်တဲ့သူက ဖွင့်လို့ ပိတ်လို့ ရပြီး၊ player
+      ပေါ် မူတည်ပြီး စာလုံး အရွယ်၊ အရောင်ကိုပါ ပြင်လို့ ရပါတယ်။ open caption ကတော့ video ပုံထဲမှာ
+      ပါပြီးသား ဖြစ်လို့ ပိတ်လို့လည်း မရ၊ style ပြောင်းလို့လည်း မရပါဘူး။ player ကို ကိုယ် မထိန်းနိုင်တဲ့
+      နေရာမှာ open caption အသုံးဝင်ပေမယ့်၊ ကိုယ့် website မှာတော့ closed caption က user ကို ရွေးခွင့်
+      ပိုပေးပါတယ်။ [[mark:p07]] caption ကောင်း တစ်ခုမှာ ဘယ်သူ ပြောနေလဲ ဆိုတာနဲ့ အရေးကြီးတဲ့ အသံတွေ
+      ပါရပါမယ်။ platform တွေရဲ့ auto caption က အချိန် သက်သာစေပေမယ့် အမှား ပါတတ်လို့၊ လူက ပြန်စစ်ပြီး
+      ပြင်ပြီးမှ တင်ရပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio: Captions"
+        url: "https://web.dev/learn/accessibility/video-audio#captions"
+      - title: "W3C WAI — Captions/Subtitles"
+        url: "https://www.w3.org/WAI/media/av/captions/"
+    actions:
+      - { id: show-p05, type: slide.show, at: { mark: p05 }, slideId: l14_p05 }
+      - { id: show-p06, type: slide.show, at: { mark: p06 }, slideId: l14_p06 }
+      - { id: show-p07, type: slide.show, at: { mark: p07 }, slideId: l14_p07 }
+
+  - id: track
+    chapter: "Caption ကို HTML မှာ ထည့်ရအောင်"
+    narration: >
+      [[mark:close-p07]] ဒါဆို caption ကို web page မှာ ဘယ်လို ထည့်လဲ ကြည့်ရအောင်။ [[mark:select-video]] ဒါက
+      ဆိုင်ရဲ့ video page ပါ။ video element ထဲမှာ video ဖိုင်ကို source နဲ့ ညွှန်ထားပါတယ်။ video ဖိုင်
+      ကိုယ်တိုင်ကိုတော့ ဒီ lesson ထဲ ထည့်လို့ မရလို့၊ code ကိုပဲ ကြည့်သွားပါမယ်။ [[mark:type-track]]
+      source ရဲ့ အောက်မှာ track element တစ်ခု ထည့်ပါမယ်။ [[mark:select-kind]] kind ကို captions လို့
+      ပေးထားလို့ browser က ဒီ track ကို caption အဖြစ် သိပါတယ်။ [[mark:select-src]] src က caption စာတွေ
+      ရေးမယ့် ဖိုင်ကို ညွှန်ပြီး၊ src lang က မြန်မာ ဘာသာ ဖြစ်ကြောင်း ပြောပါတယ်။ label ကတော့ player ရဲ့
+      caption menu မှာ ပေါ်မယ့် နာမည်ပါ။ caption ဘာသာ တစ်ခုထက် ပိုရှိရင် ဘာသာ တစ်ခုစီအတွက် track
+      တစ်ခုစီ ထပ်ထည့်လို့ ရပါတယ်။
+    sources:
+      - title: "MDN — <track>: Embed text track element"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/track"
+      - title: "web.dev Learn Accessibility — Video and audio: Captions"
+        url: "https://web.dev/learn/accessibility/video-audio#captions"
+    actions:
+      - { id: close-p07, type: slide.close, at: { mark: close-p07, offsetMs: -400 } }
+      - id: select-video
+        type: editor.select
+        at: { mark: select-video }
+        target:
+          {
+            file: video.html,
+            text: '<source src="tea-making.mp4" type="video/mp4" />',
+            occurrence: 1,
+          }
+      - id: type-track
+        type: editor.type
+        at: { mark: type-track }
+        cadence: block
+        target:
+          {
+            file: video.html,
+            after: "        <source src=\"tea-making.mp4\" type=\"video/mp4\" />\n",
+            occurrence: 1,
+          }
+        text: "        <track kind=\"captions\" src=\"captions.vtt\" srclang=\"my\" label=\"မြန်မာ\" />\n"
+      - id: select-kind
+        type: editor.select
+        at: { mark: select-kind }
+        target: { file: video.html, text: 'kind="captions"', occurrence: 1 }
+      - id: select-src
+        type: editor.select
+        at: { mark: select-src }
+        target: { file: video.html, text: 'src="captions.vtt" srclang="my"', occurrence: 1 }
+
+  - id: webvtt
+    narration: >
+      [[mark:open-vtt]] caption စာတွေကို WebVTT ဆိုတဲ့ format နဲ့ ရေးပါတယ်။ ဒီ ဖိုင်က အခု အလွတ်ပါ။
+      [[mark:type-cue1]] ဖိုင်ရဲ့ ထိပ်ဆုံးမှာ WEBVTT ဆိုတဲ့ စကားလုံးနဲ့ စရပြီး၊ ပြီးရင် cue တွေကို တစ်ခုချင်း
+      ရေးပါတယ်။ cue တစ်ခုမှာ ဘယ်အချိန်ကနေ ဘယ်အချိန်ထိ ပြမလဲ ဆိုတဲ့ စာကြောင်းနဲ့၊ အဲဒီ အချိန်အတွင်း
+      ပြမယ့် စာ ပါပါတယ်။ [[mark:select-voice]] ဒီ voice tag က ပြောနေတဲ့သူကို ဆိုင်ရှင်လို့ မှတ်ပေးတာပါ။
+      ပြောသူ နှစ်ယောက် ရှိတဲ့ video မှာ ဘယ်သူ့ စကားလဲ ဆိုတာ ခွဲသိနိုင်အောင်ပါ။ [[mark:type-cue2]]
+      ဒုတိယ cue မှာတော့ စကား မဟုတ်ဘဲ ရေနွေးအိုး ဆူသံကို လေးထောင့် ကွင်းထဲမှာ ရေးပါမယ်။ ဒါမှ လှလှလည်း
+      ရေနွေး ဆူလာပြီ ဆိုတာ သိမှာပါ။ [[mark:after-cue2]] user က player ရဲ့ caption ခလုတ်နဲ့ caption ကို
+      ဖွင့်ထားရင်၊ video ပြနေတုန်း ဒီ အချိန်တွေ ရောက်လာတာနဲ့ browser က ဒီ စာတွေကို video ပေါ်မှာ
+      ပြပေးပါတယ်။ မလိုချင်ရင်လည်း အဲဒီ ခလုတ်နဲ့ပဲ ပြန်ပိတ်လို့ ရပါတယ်။
+    sources:
+      - title: "MDN — Web Video Text Tracks Format (WebVTT)"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/WebVTT_API"
+      - title: "W3C — WebVTT: The Web Video Text Tracks Format (voice spans)"
+        url: "https://www.w3.org/TR/webvtt1/"
+    actions:
+      - { id: open-vtt, type: workspace.openFile, at: { mark: open-vtt }, path: captions.vtt }
+      - id: type-cue1
+        type: editor.type
+        at: { mark: type-cue1 }
+        cadence: line-by-line
+        target: { file: captions.vtt, after: "", occurrence: 1 }
+        text: "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n<v ဆိုင်ရှင်>ဒီနေ့ လက်ဖက်ရည် ဖျော်နည်း ပြပါမယ်။\n"
+      - id: select-voice
+        type: editor.select
+        at: { mark: select-voice }
+        target: { file: captions.vtt, text: "<v ဆိုင်ရှင်>", occurrence: 1 }
+      - id: type-cue2
+        type: editor.type
+        at: { mark: type-cue2 }
+        cadence: line-by-line
+        target: { file: captions.vtt, after: "ဖျော်နည်း ပြပါမယ်။\n", occurrence: 1 }
+        text: "\n00:00:04.500 --> 00:00:07.000\n[ရေနွေးအိုး ဆူသံ]\n"
+
+  - id: transcript
+    chapter: "Transcript"
+    narration: >
+      [[mark:p08]] transcript ဆိုတာ video ဒါမှမဟုတ် audio ရဲ့ အကြောင်းအရာ အားလုံးကို စာနဲ့ ရေးထားတာပါ။
+      စကားတွေ၊ အရေးကြီးတဲ့ အသံတွေနဲ့ မြင်ရမှ သိနိုင်တဲ့ အချက်တွေကိုပါ ထည့်ရေးထားရင်၊ အမြင်ရော အကြားပါ
+      မရှိတဲ့ deafblind သုံးသူတွေက braille display နဲ့ ဖတ်နိုင်ပါတယ်။ ကိုယ့်နှုန်းနဲ့ ပြန်ဖတ်ချင်သူတွေ
+      အတွက်လည်း အသုံးဝင်ပြီး၊ [[mark:p08-more]] page ပေါ်က စာ ဖြစ်လို့ search engine ကလည်း ဖတ်နိုင်ပါတယ်။ caption
+      ရေးပြီးသား ဆိုရင် အဲဒီ caption တွေကနေ စပြီး transcript ကို ဆောက်လို့ ရလို့ အချိန် သက်သာပါတယ်။
+      [[mark:close-p08]] player တချို့မှာ transcript ခလုတ် မပါတာ၊ ပါပေမယ့် keyboard နဲ့ မရောက်တာမျိုး
+      ရှိလို့၊ အသေချာဆုံးက video ရဲ့ အောက်မှာ page ထဲ တိုက်ရိုက် ထည့်တာပါ။ [[mark:type-transcript]] video
+      ရဲ့ အောက်မှာ ခေါင်းစဉ်နဲ့ transcript section တစ်ခု ထည့်ပါမယ်။ [[mark:select-visual]] ဒီ နောက်ဆုံး
+      စာကြောင်းကို ကြည့်ပါ။ ဆိုင်ရှင်က လက်ဖက်ခြောက်ကို ရေနွေးထဲ ထည့်တာက အသံ မထွက်ပေမယ့် မြင်ရမှ
+      သိနိုင်တဲ့ အချက်ပါ။ ဒါကြောင့် caption မှာ မပါပေမယ့် transcript မှာတော့ ထည့်ရေးထားပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio: Transcripts"
+        url: "https://web.dev/learn/accessibility/video-audio#transcripts"
+      - title: "W3C WAI — Transcripts (descriptive transcripts for people who are Deafblind)"
+        url: "https://www.w3.org/WAI/media/av/transcripts/"
+    actions:
+      - {
+          id: open-video-for-p08,
+          type: workspace.openFile,
+          at: { mark: p08, offsetMs: -1200 },
+          path: video.html,
+        }
+      - { id: show-p08, type: slide.show, at: { mark: p08 }, slideId: l14_p08 }
+      - { id: close-p08, type: slide.close, at: { mark: close-p08 } }
+      - id: type-transcript
+        type: editor.type
+        at: { mark: type-transcript }
+        cadence: line-by-line
+        target: { file: video.html, after: "      </video>\n", occurrence: 1 }
+        text: "      <section>\n        <h2>Transcript</h2>\n        <p>ဆိုင်ရှင်: ဒီနေ့ လက်ဖက်ရည် ဖျော်နည်း ပြပါမယ်။</p>\n        <p>[ရေနွေးအိုး ဆူသံ]</p>\n        <p>ဆိုင်ရှင်က လက်ဖက်ခြောက်ကို ရေနွေးထဲ ထည့်ပါတယ်။</p>\n      </section>\n"
+      - id: select-visual
+        type: editor.select
+        at: { mark: select-visual }
+        target: { file: video.html, text: "<p>ဆိုင်ရှင်က လက်ဖက်ခြောက်ကို ရေနွေးထဲ ထည့်ပါတယ်။</p>", occurrence: 1 }
+
+  - id: audio-description
+    chapter: "Audio description"
+    narration: >
+      [[mark:p09]] audio description ဆိုတာ မြင်ရမှ သိနိုင်တဲ့ အချက်တွေကို အသံနဲ့ ရှင်းပြတာပါ။ video ထဲက
+      စကားပြောတွေကြား အသံ တိတ်နေတဲ့ နေရာလေးတွေမှာ၊ မျက်နှာ အမူအရာ၊ စကား မပြောဘဲ လုပ်နေတဲ့ အလုပ်၊
+      နောက်ခံ နေရာတွေကို ပြောပြပါတယ်။ ဥပမာ ဆိုင်ရှင်က နို့ဆီကို ခွက်ထဲ ဖြည်းဖြည်း လောင်းထည့်နေတာကို
+      မျက်မမြင် customer က မမြင်ရလို့ ပြောပြပေးရပါမယ်။ ပြောစရာ များပြီး တိတ်နေတဲ့ နေရာ မလောက်ရင်တော့
+      video ကို ခဏ ရပ်ထားပြီး ရှင်းပြတဲ့ extended audio description ကို သုံးပါတယ်။ [[mark:ad-ways]]
+      ပေးတဲ့ နည်းကလည်း အမျိုးမျိုး ရှိပါတယ်။ ဆိုင်ရှင်က ကိုယ်တိုင် အခု နို့ဆီ ထည့်ပါမယ်လို့ ပြောရင်း
+      ရိုက်ထားရင် description က video ထဲမှာ ပါပြီးသား ဖြစ်ပါတယ်။ မဟုတ်ရင် description ပါတဲ့ video
+      version တစ်ခု သီးသန့် ထပ်ပေးတာ၊ player က ဖတ်ပေးနိုင်တဲ့ description ဖိုင် သီးသန့် ပေးတာတွေ
+      လုပ်လို့ ရပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio: Audio descriptions"
+        url: "https://web.dev/learn/accessibility/video-audio#audio-descriptions"
+      - title: "W3C WAI — Description of Visual Information (integrated, alternative video, separate file)"
+        url: "https://www.w3.org/WAI/media/av/description/"
+    actions:
+      - { id: show-p09, type: slide.show, at: { mark: p09 }, slideId: l14_p09 }
+      - { id: show-p09b, type: slide.show, at: { mark: ad-ways }, slideId: l14_p09b }
+
+  - id: sign-language
+    chapter: "Sign language"
+    narration: >
+      [[mark:p10]] နားမကြားသူ အများအပြား အတွက်တော့ sign language က ပထမ ဘာသာစကား ဖြစ်ပါတယ်။ ဒါကြောင့်
+      စကားပြောကို sign language နဲ့ ပြန်ပြတဲ့ စကားပြန်ကို video ထဲမှာ ထည့်ပေးရင်၊ caption ထက်တောင်
+      ပိုပြည့်စုံတဲ့ အတွေ့အကြုံကို ပေးနိုင်ပါတယ်။ ဒါပေမဲ့ အချိန်နဲ့ ငွေ ကုန်ပြီး၊ ကမ္ဘာပေါ်မှာ sign language
+      ပေါင်း ၃၀၀ ကျော် ရှိလို့ တစ်မျိုးတည်းနဲ့ လူတိုင်းကို မမီပါဘူး။ [[mark:p10-more]] မြန်မာနိုင်ငံမှာလည်း ကိုယ်ပိုင် sign
+      language ရှိပြီး၊ ရန်ကုန်နဲ့ မန္တလေးမှာ သုံးတဲ့ sign တွေတောင် မတူကြပါဘူး။ WCAG မှာတော့ sign
+      language က level AAA ပါ။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio: Sign language interpretation"
+        url: "https://web.dev/learn/accessibility/video-audio#sign-language-interpretation"
+      - title: "W3C WAI — Sign Languages"
+        url: "https://www.w3.org/WAI/media/av/sign-languages/"
+      - title: "Wikipedia — List of sign languages"
+        url: "https://en.wikipedia.org/wiki/List_of_sign_languages"
+      - title: "Wikipedia — Burmese sign language (Yangon and Mandalay signs differ)"
+        url: "https://en.wikipedia.org/wiki/Burmese_sign_language"
+    actions:
+      - { id: show-p10, type: slide.show, at: { mark: p10 }, slideId: l14_p10 }
+
+  - id: media-player
+    chapter: "Accessible media player"
+    narration: >
+      [[mark:p11]] caption တွေ ပြင်ဆင်ပြီးရင် player ကိုယ်တိုင်လည်း accessible ဖြစ်ရပါမယ်။ play၊ pause၊
+      အသံ၊ caption ဖွင့်တဲ့ ခလုတ်တွေကို keyboard နဲ့ သုံးလို့ ရရမယ်၊ screen reader က ခလုတ်တိုင်းရဲ့
+      နာမည်ကို ဖတ်ပြနိုင်ရပါမယ်။ [[mark:p11-more]] page ကို ဖွင့်တာနဲ့ အသံပါတဲ့ video ကို အလိုလို မဖွင့်ပါနဲ့။ screen reader
+      သုံးသူအတွက် video ရဲ့ အသံက screen reader အသံကို ဖုံးသွားလို့ပါ။ အသံက သုံးစက္ကန့်ထက် ကြာကြာ
+      အလိုလို ဖွင့်ရင် ရပ်ဖို့ ဒါမှမဟုတ် အသံ လျှော့ဖို့ နည်း ပေးရမယ်လို့ WCAG ရဲ့ level A မှာ ပါပါတယ်။
+      [[mark:select-controls]] ကိုယ့် page မှာတော့ video element ရဲ့ controls ကို ကြည့်ပါ။ browser ရဲ့
+      ကိုယ်ပိုင် control တွေကို keyboard နဲ့ သုံးလို့ ရပြီး၊ ကိုယ် ထည့်ထားတဲ့ caption track ကိုလည်း
+      menu ထဲမှာ ပြပေးပါတယ်။ autoplay လည်း မပါလို့ user က ကိုယ်တိုင် နှိပ်မှ စပါမယ်။ player ကို
+      ကိုယ်တိုင် ဆောက်ရင်တော့ ဒီ အချက်တွေ အားလုံးကို ကိုယ်တိုင် တာဝန်ယူရပါမယ်။
+    sources:
+      - title: "W3C WAI — Media Players (accessibility requirements)"
+        url: "https://www.w3.org/WAI/media/av/player/"
+      - title: "W3C — Understanding SC 1.4.2 Audio Control (Level A)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/audio-control.html"
+      - title: "MDN — <video>: the controls and autoplay attributes"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/video"
+    actions:
+      - { id: show-p11, type: slide.show, at: { mark: p11 }, slideId: l14_p11 }
+      - { id: close-p11, type: slide.close, at: { mark: select-controls, offsetMs: -600 } }
+      - id: select-controls
+        type: editor.select
+        at: { mark: select-controls }
+        target: { file: video.html, text: "controls", occurrence: 1 }
+
+  - id: wcag-levels
+    chapter: "WCAG level တွေ"
+    narration: >
+      [[mark:p12]] ဒါဆို WCAG က ဘယ် level မှာ ဘာ တောင်းလဲ စုကြည့်ရအောင်။ level A မှာ ကြိုရိုက်ထားတဲ့
+      video ကို caption ထည့်ရပြီး၊ audio သက်သက် ဆိုရင် transcript ပေးရပါမယ်။ level AA မှာ live video
+      ကိုပါ caption ထည့်ရပြီး၊ ကြိုရိုက်ထားတဲ့ video ကို audio description ပေးရပါမယ်။ sign language နဲ့
+      extended audio description ကတော့ level AAA ပါ။ ဆိုတော့ အများဆုံး ရည်မှန်းကြတဲ့ level AA
+      အတွက်ဆိုရင် caption နဲ့ audio description က မပါမဖြစ် လိုပါတယ်။
+    sources:
+      - title: "W3C — Understanding Guideline 1.2 Time-based Media"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/time-based-media"
+      - title: "W3C — Understanding SC 1.2.2 Captions (Prerecorded)"
+        url: "https://www.w3.org/WAI/WCAG22/Understanding/captions-prerecorded.html"
+      - title: "W3C WAI — Planning Audio and Video Media"
+        url: "https://www.w3.org/WAI/media/av/planning/"
+    actions:
+      - { id: show-p12, type: slide.show, at: { mark: p12 }, slideId: l14_p12 }
+
+  - id: quiz
+    chapter: "Quiz"
+    narration: >
+      [[mark:p13]] မေးခွန်း တစ်ခု ဖြေကြည့်ရအောင်။ ဆိုင်ရဲ့ video မှာ ကော်ဖီစက် မြည်သံ ပါပါတယ်။ အဲဒီ
+      အသံကို စာနဲ့ ပြပေးတာက ဘာလဲ။ subtitle လား၊ caption လား၊ audio description လား။ lesson ကို
+      ခဏ pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:p13b]] အဖြေက caption ပါ။ subtitle မှာ စကားပြောပဲ ပါပြီး နောက်ခံ အသံ
+      မပါပါဘူး။ audio description ကတော့ မြင်ရတာကို အသံနဲ့ ပြောတာ ဖြစ်လို့ ပြောင်းပြန်ပါ။ caption ကပဲ
+      အရေးကြီးတဲ့ အသံတွေကို စာနဲ့ ပြပေးပါတယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio: Captions"
+        url: "https://web.dev/learn/accessibility/video-audio#captions"
+    actions:
+      - { id: show-p13, type: slide.show, at: { mark: p13 }, slideId: l14_p13 }
+      - { id: show-p13b, type: slide.show, at: { mark: p13b }, slideId: l14_p13b }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap-open]] ဒါဆို ပြန်ချုပ်ကြည့်ရအောင်။ [[mark:sel-track]] caption က စကားနဲ့ အရေးကြီးတဲ့ အသံတွေကို
+      အချိန်ကိုက် စာနဲ့ ပြပြီး၊ web မှာ track element နဲ့ WebVTT ဖိုင်ကို သုံးပြီး ထည့်ပါတယ်။
+      [[mark:sel-transcript]] transcript က အကုန်လုံးကို စာနဲ့ ရေးထားတာ ဖြစ်ပြီး၊ video ရဲ့ အောက်မှာ page
+      ထဲ တိုက်ရိုက် ထည့်တာ အကောင်းဆုံးပါ။ audio description က မြင်ရတာကို အသံနဲ့ ပြောပြပြီး၊ sign
+      language က level AAA ပါ။ [[mark:sel-controls]] player ကိုလည်း keyboard နဲ့ သုံးလို့ ရရမယ်၊ အသံပါတဲ့
+      autoplay မလုပ်ရပါဘူး။ နောက် lesson မှာတော့ ဆိုင်ရဲ့ အော်ဒါ form ကို label နဲ့ error message တွေနဲ့
+      လူတိုင်း ဖြည့်နိုင်အောင် ပြင်သွားပါမယ်။
+    sources:
+      - title: "web.dev Learn Accessibility — Video and audio"
+        url: "https://web.dev/learn/accessibility/video-audio"
+      - title: "web.dev Learn Accessibility — Forms (next lesson)"
+        url: "https://web.dev/learn/accessibility/forms"
+    actions:
+      - { id: close-p13b, type: slide.close, at: { mark: recap-open, offsetMs: -400 } }
+      - id: sel-track
+        type: editor.select
+        at: { mark: sel-track }
+        target:
+          {
+            file: video.html,
+            text: '<track kind="captions" src="captions.vtt" srclang="my" label="မြန်မာ" />',
+            occurrence: 1,
+          }
+      - id: sel-transcript
+        type: editor.select
+        at: { mark: sel-transcript }
+        target: { file: video.html, text: "<h2>Transcript</h2>", occurrence: 1 }
+      - id: sel-controls
+        type: editor.select
+        at: { mark: sel-controls }
+        target: { file: video.html, text: "controls", occurrence: 1 }
+      - id: expect-track
+        type: expect.file
+        at: { afterAction: sel-controls }
+        path: video.html
+        contains: "<track kind=\"captions\" src=\"captions.vtt\" srclang=\"my\" label=\"မြန်မာ\" />\n      </video>"
+      - id: expect-transcript
+        type: expect.file
+        at: { afterAction: sel-controls }
+        path: video.html
+        contains: "<h2>Transcript</h2>"
+      - id: expect-cues
+        type: expect.file
+        at: { afterAction: sel-controls }
+        path: captions.vtt
+        contains: "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n<v ဆိုင်ရှင်>ဒီနေ့ လက်ဖက်ရည် ဖျော်နည်း ပြပါမယ်။\n\n00:00:04.500 --> 00:00:07.000\n[ရေနွေးအိုး ဆူသံ]\n"
+
+checks:
+  # 500, not 300: google-svg deck pages stall the main thread at show/close.
+  - { type: timing.p95Ms, max: 500 }
