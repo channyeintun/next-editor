@@ -688,6 +688,19 @@ top of it. Two ways to show a second diagram:
 `clear` never removes an id the same action upserts, so re-drawing one element
 of the previous board while wiping the rest works.
 
+### Preview focus and overlays
+
+While a maximized slide or the whiteboard is open, the studio makes the editor
+and the preview inert, the way a modal dialog should. Going inert blurs whatever
+had focus inside the preview, and closing the overlay does not put it back:
+focus returns to the studio's own controls. So focus a `preview.click` gave an
+element is gone after any `slide.show` (maximized) or `whiteboard.apply` with
+`open: true`. Assert and narrate a focused element before the overlay opens, or
+focus it again with another `preview.click` after it closes; a Tab-like step
+that moves on from the focused element starts from the top of the page after an
+overlay. `studio-verify-lesson` clears preview focus at the same moments, so it
+catches a lesson that leans on focus surviving one.
+
 ## Editorial requirements (summary — full text in studio-persona.md)
 
 - **Pick a shape**: one concept taught and run (usually 20–100 seconds), or a

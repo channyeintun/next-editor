@@ -14,7 +14,9 @@
  * a Vite overlay or a console error. `preview.*` commands and
  * `expect.preview` go through the studio's real preview bridge, and
  * `expect.file` checks the typed workspace. Pointer, slides, whiteboard and
- * console runs are skipped. `--speed=2` types twice as fast, never closer than
+ * console runs are skipped, except that a maximized slide or an opening
+ * whiteboard clears focus in the preview, as the studio's inert workspace does
+ * during a render. `--speed=2` types twice as fast, never closer than
  * 90 ms a chunk; `--only-scene` types every earlier scene at once.
  *
  * Fidelity, all reused from src/:
@@ -847,6 +849,16 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
     note(reason);
     return { skipped: reason };
   };
+  // A maximized slide or the whiteboard covers the workspace, and the studio makes the
+  // editor and preview inert while one is open (useIsWorkspaceCovered). Going inert
+  // blurs whatever had focus in the preview, and closing the overlay never puts it
+  // back, so do the same here: a lesson must not rely on preview focus surviving one.
+  const coverWorkspace = async (reason: string) => {
+    await previewFrame
+      ?.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      .catch(() => {});
+    return skip(`${reason}; preview focus cleared (the workspace goes inert)`);
+  };
   const requireActive = (path: string) => {
     if (activeFile !== path) {
       throw new StudioActionError(
@@ -1024,9 +1036,13 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
     waitForOutput: async () => skip("console output is not checked"),
     collapseRuntimeDock: async () => skip("dock state is not checked"),
     expandRuntimeDock: async () => skip("dock state is not checked"),
-    showSlide: async () => skip("slides are not checked"),
+    showSlide: async ({ maximized }) =>
+      maximized ? coverWorkspace("slides are not checked") : skip("slides are not checked"),
     closeSlide: async () => skip("slides are not checked"),
-    applyWhiteboard: async () => skip("the whiteboard is not checked"),
+    applyWhiteboard: async ({ open }) =>
+      open
+        ? coverWorkspace("the whiteboard is not checked")
+        : skip("the whiteboard is not checked"),
   };
 
   // ---- walk the plan in the studio's order
