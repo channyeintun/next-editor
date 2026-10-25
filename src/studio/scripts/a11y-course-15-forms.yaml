@@ -1,0 +1,2512 @@
+# Accessibility course, lesson 15: forms.
+#
+# Hands-on (tea-shop order form, accessibility panel modes "tree live",
+# scoped to the form). Start state: the name field has only an example
+# placeholder, the phone field only a "ဖုန်း" placeholder, no type, no
+# autocomplete and a red asterisk as the only sign that it is required; the
+# visible hint under it is not connected; the sugar radios sit in a div with a
+# plain title paragraph; main.js marks a wrong number with nothing but a red
+# border (.is-invalid). The status line is already a role="status" region
+# (lesson 9).
+#
+# Fixes, all insert-only (every HTML/JS save reloads the page, so typed values
+# and focus reset; each check sits after the edit and interactions are redone):
+#   1. <label for="name"> and <label for="phone"> (with the required text)
+#      inserted before the fields -> textbox names come from the labels.
+#   2. type="tel" autocomplete="tel" required on the phone input -> "required";
+#      autocomplete="name" on the name input.
+#   3. aria-describedby="phone-hint" -> desc "09 နဲ့ စတဲ့ နံပါတ်".
+#   4. a <fieldset> with a <legend> inserted after the old div group, then the
+#      old div hidden (honest narration: in your own code you would delete it).
+#   5. an empty error paragraph, "phone-error " inserted at the front of the
+#      aria-describedby value, and one block in main.js that sets aria-invalid,
+#      writes the error text and moves focus to the field on a wrong number.
+# The success path announces "မှာပြီးပါပြီ" through the existing status region.
+#
+# Built from template.yaml + ws/ with `bun build.ts`.
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   ~/Documents/a11y-course-work/tools/verify.sh <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-15-forms
+  title: "Accessibility course 15: Form တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course
+    entryFilePath: index.html
+    files:
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and page furniture, in its accessible form: every text
+          colour passes WCAG AA, form fields have 3:1 borders, nothing hides focus.
+          A lesson keeps the sections it needs and drops any declaration its own demo
+          types or relies on being absent (COURSE-KIT.md, "Deriving a lesson
+          workspace"). Section E holds the few rules a start state pins on purpose,
+          including deliberately broken ones (a pale colour, a removed outline).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img>.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --field: #8a7866;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 22px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* A class that sets display must never un-hide a [hidden] element. */
+        [hidden] {
+          display: none !important;
+        }
+
+        /* Text for screen readers only (the forms and images lessons use it). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .skip-link {
+          position: absolute;
+          top: -48px;
+          left: 8px;
+          padding: 4px 12px;
+          background: var(--cream);
+          color: var(--tea-dark);
+        }
+
+        .skip-link:focus {
+          top: 8px;
+        }
+
+        .site-header {
+          padding: 12px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .shop-name {
+          margin: 0;
+          flex: 1;
+        }
+
+        .call-link {
+          display: inline-flex;
+          padding: 8px;
+          border-radius: 999px;
+          background: var(--tea);
+        }
+
+        .call-link img {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          display: flex;
+          gap: 16px;
+          margin: 4px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .divider {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 0 auto 16px;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .status {
+          margin-left: 8px;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .sold-out .name {
+          text-decoration: line-through;
+        }
+
+        .order-link,
+        .order-btn,
+        .confirm-btn,
+        .disclosure,
+        .fav,
+        .confirm button {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .fav {
+          margin-left: 8px;
+          padding: 0 12px;
+          font-size: 14px;
+        }
+
+        .fav[aria-pressed="true"] {
+          background: var(--leaf);
+        }
+
+        .tea-options {
+          margin: 16px 0;
+        }
+
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .chips li {
+          padding: 2px 12px;
+          border: 1px solid var(--field);
+          border-radius: 999px;
+          background: #fff;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .quote {
+          margin: 16px 0;
+          padding: 8px 16px;
+          border-left: 4px solid var(--tea);
+          background: var(--cream);
+          font-style: italic;
+        }
+
+        .quote p {
+          margin: 0;
+        }
+
+        .hours-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #fff;
+        }
+
+        .hours-table caption {
+          text-align: start;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-table th,
+        .hours-table td {
+          padding: 4px 8px;
+          border: 1px solid var(--line);
+          text-align: start;
+        }
+
+        .hours-table thead th {
+          background: var(--cream);
+        }
+
+        .location {
+          margin: 16px 0;
+        }
+
+        .map {
+          position: relative;
+          height: 120px;
+          border: 1px solid var(--field);
+          border-radius: var(--radius);
+          background:
+            linear-gradient(90deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%),
+            linear-gradient(0deg, transparent 40%, #fff 40%, #fff 50%, transparent 50%),
+            #d9e8c9;
+        }
+
+        .map-pin {
+          position: absolute;
+          top: 34px;
+          left: 56%;
+          width: 18px;
+          height: 18px;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          background: var(--chili);
+        }
+
+        .address {
+          margin: 4px 0 0;
+        }
+
+        .order-form {
+          margin: 16px 0;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .hint {
+          margin: 2px 0 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .sugar {
+          margin: 12px 0 0;
+          padding: 4px 12px 8px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+        }
+
+        .sugar label {
+          display: inline-block;
+          margin: 0 12px 0 0;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .error {
+          margin: 2px 0 0;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .alert {
+          margin: 8px 0 0;
+          padding: 8px 12px;
+          border-radius: 8px;
+          background: #fde8e4;
+          color: var(--chili);
+        }
+
+        .order-status {
+          min-height: 1.8em;
+          margin: 8px 0 0;
+          color: var(--leaf);
+          font-weight: 700;
+        }
+
+        .confirm {
+          margin: 16px auto auto;
+          max-width: 320px;
+          padding: 16px;
+          border: 0;
+          border-radius: var(--radius);
+          background: var(--cream);
+          color: var(--ink);
+        }
+
+        .confirm::backdrop {
+          background: rgb(0 0 0 / 0.25);
+        }
+
+        .confirm form {
+          display: flex;
+          gap: 8px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* == E. lesson rules == */
+        /* Forms lesson start state: the phone field sits in a row with a red
+           asterisk (the only sign that it is required), and main.js marks a wrong
+           number with nothing but a red border (.is-invalid). The old sugar group is a
+           div with a plain title paragraph. */
+        .field {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .order-form .field input {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .order-form .field input.is-invalid {
+          border: 2px solid var(--chili);
+        }
+
+        .req {
+          color: var(--chili);
+          font-weight: 700;
+        }
+
+        .sugar-title {
+          margin: 0;
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>အော်ဒါမှာရန် · ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header (brand only) -->
+            <header class="site-header" data-testid="site-header">
+              <div class="brand">
+                <img class="logo" src="/cup.svg" alt="" width="40" height="40" data-testid="logo" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+              </div>
+            </header>
+
+            <main class="page" id="main" data-testid="main">
+              <!-- lesson block: the order form before the lesson (placeholders only, a red asterisk, a div group) -->
+              <form class="order-form" id="order" aria-labelledby="order-title" data-testid="order-form">
+                <h2 id="order-title">အော်ဒါမှာရန်</h2>
+                <input id="name" name="name" type="text" placeholder="ဥပမာ အောင်အောင်" data-testid="input-name" />
+                <div class="field">
+                  <input id="phone" name="phone" placeholder="ဖုန်း" data-testid="input-phone" />
+                  <span class="req">*</span>
+                </div>
+                <p class="hint" id="phone-hint" data-testid="phone-hint">09 နဲ့ စတဲ့ နံပါတ်</p>
+                <div class="sugar" data-testid="sugar-old">
+                  <p class="sugar-title">သကြား</p>
+                  <label><input type="radio" name="sugar" value="sweet" checked /> ချို</label>
+                  <label><input type="radio" name="sugar" value="less" /> ချိုပေါ့</label>
+                  <label><input type="radio" name="sugar" value="none" /> မထည့်</label>
+                </div>
+                <button class="order-btn" id="order-button" type="submit" data-testid="order-button">မှာမယ်</button>
+                <p class="order-status" id="order-status" role="status" data-testid="order-status"></p>
+              </form>
+            </main>
+
+            <script type="module" src="/main.js"></script>
+            <!-- kit block: panel-script (tree and live log, scoped to the form) -->
+            <script type="module" src="/panel.js" data-modes="tree live" data-scope="#order" data-height="45"></script>
+          </body>
+        </html>
+      main.js: |
+        // အော်ဒါ form ကို စစ်တဲ့ JavaScript
+
+        // ဖုန်း နံပါတ်က 09 နဲ့ စရပါမယ်
+        const phone = document.querySelector("#phone");
+        const orderStatus = document.querySelector("#order-status");
+
+        document.querySelector("#order").addEventListener("submit", (event) => {
+          event.preventDefault();
+          const ok = phone.value.startsWith("09");
+          phone.classList.toggle("is-invalid", !ok);
+          orderStatus.textContent = ok ? "မှာပြီးပါပြီ" : "";
+        });
+      package.json: |
+        {
+          "name": "a11y-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "dom-accessibility-api": "0.7.1",
+            "tabbable": "6.5.0",
+            "vite": "5.4.21"
+          }
+        }
+      panel.js: |
+        // panel.js: the course's A11y panel. Pinned, never typed, never edited.
+        // It shows what assistive technology gets from the page, as real DOM in a
+        // drawer at the bottom of the preview, so the recorded lesson replays it.
+        //
+        //   <script type="module" src="/panel.js" data-modes="tree tabs" data-scope="#order"></script>
+        //
+        //   data-modes     any of: tree tabs contrast live axe (drawn in that order)
+        //   data-scope     CSS selector; tree, contrast, live and axe look only inside
+        //                  it, tabs keeps page-wide numbers but lists only stops inside
+        //   data-height    drawer height, % of the preview height (20-60, default 40)
+        //   data-axe-tags  axe rule tags to run (default: axe's default rules)
+        //
+        // A row for an element with data-testid="x" gets data-testid="a11y-x" (tree),
+        // "tab-x" (tabs) or "contrast-x" (COURSE-KIT.md lists every test id). The
+        // panel is inert: never focusable, never in the accessibility tree, never in
+        // its own results. It rewrites a section only when its text changes. Names
+        // come from dom-accessibility-api (W3C accname), tab stops from tabbable,
+        // roles from Chrome's mapping of HTML elements.
+
+        import { computeAccessibleDescription, computeAccessibleName } from "dom-accessibility-api";
+        import { isFocusable, tabbable } from "tabbable";
+
+        const tag = document.querySelector('script[src*="panel.js"]');
+        const config = {
+          modes: (tag?.dataset.modes || "tree").split(/\s+/).filter((m) => ["tree", "tabs", "contrast", "live", "axe"].includes(m)),
+          scope: tag?.dataset.scope || "",
+          height: Math.min(60, Math.max(20, Number(tag?.dataset.height) || 40)),
+          axeTags: (tag?.dataset.axeTags || "").split(/\s+/).filter(Boolean),
+        };
+        const on = (mode) => config.modes.includes(mode);
+        const words = (text) => new Set(text.split(" "));
+
+        // ---------------------------------------------------------------- roles
+
+        const TAG_ROLES = {
+          article: "article", aside: "complementary", blockquote: "blockquote", button: "button", dialog: "dialog",
+          dd: "definition", details: "group", dl: "list", dt: "term", fieldset: "group", figure: "figure", hr: "separator",
+          iframe: "iframe", li: "listitem",
+          main: "main", menu: "list", meter: "meter", nav: "navigation", ol: "list", optgroup: "group", option: "option",
+          output: "status", p: "paragraph", progress: "progressbar", search: "search", summary: "button", table: "table",
+          textarea: "textbox", tr: "row", ul: "list", h1: "heading", h2: "heading", h3: "heading", h4: "heading",
+          h5: "heading", h6: "heading",
+        };
+        const INPUT_ROLES = {
+          button: "button", submit: "button", reset: "button", image: "button", checkbox: "checkbox", radio: "radio",
+          range: "slider", number: "spinbutton", search: "searchbox", hidden: "none",
+        };
+        // Roles that get a row; paragraph and generic get one only with lang, aria-live or focus.
+        const ROWS = words(
+          "alert alertdialog article banner blockquote button cell checkbox columnheader combobox complementary " +
+            "contentinfo dialog figure form grid gridcell group heading iframe img link list listbox listitem log main " +
+            "menu menubar menuitem menuitemcheckbox menuitemradio meter navigation option progressbar radio radiogroup " +
+            "region row rowheader search searchbox separator slider spinbutton status switch tab table tablist tabpanel " +
+            "term definition textbox timer toolbar tooltip tree treeitem",
+        );
+        // Roles that must have an accessible name ("⚠ no name").
+        const NEEDS_NAME = words(
+          "button link img iframe dialog alertdialog checkbox radio switch textbox searchbox combobox listbox slider " +
+            "spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem option region form progressbar meter",
+        );
+        // Controls: one that cannot take focus gets "⚠ not focusable".
+        const INTERACTIVE = words(
+          "button link checkbox radio switch textbox searchbox combobox listbox slider spinbutton tab menuitem " +
+            "menuitemcheckbox menuitemradio treeitem",
+        );
+        // Roles whose children are presentational: the row stands for the whole control.
+        const LEAF = words("button checkbox radio switch img textbox searchbox spinbutton slider progressbar meter separator iframe tab");
+        // Roles that never take a name, so the panel skips computing one.
+        const UNNAMED = words("list listitem row paragraph generic separator blockquote term definition");
+
+        const explicitRole = (el) => (el.getAttribute("role") || "").trim().split(/\s+/)[0].toLowerCase();
+        const hasName = (el) => el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby") || el.hasAttribute("title");
+        const outsideSections = (el) => !el.parentElement?.closest("article, aside, main, nav, section");
+
+        function focusable(el) {
+          try {
+            return isFocusable(el);
+          } catch {
+            return false;
+          }
+        }
+
+        function roleOf(el) {
+          const role = explicitRole(el);
+          // An author cannot take the role away from something focusable or named.
+          if (role === "none" || role === "presentation") return focusable(el) || hasName(el) ? implicitRole(el) : "none";
+          return role || implicitRole(el);
+        }
+
+        function implicitRole(el) {
+          const tagName = el.localName;
+          const cellsHidden = () => ["none", "presentation"].includes(explicitRole(el.closest("table") || el));
+          switch (tagName) {
+            case "a":
+            case "area":
+              return el.hasAttribute("href") ? "link" : "generic";
+            case "img":
+              return el.getAttribute("alt") === "" && !hasName(el) ? "none" : "img";
+            case "svg":
+              return hasName(el) || el.querySelector(":scope > title") ? "img" : "none";
+            case "input":
+              return INPUT_ROLES[el.type] || (el.hasAttribute("list") ? "combobox" : "textbox");
+            case "select":
+              return el.multiple || el.size > 1 ? "listbox" : "combobox";
+            case "header":
+              return outsideSections(el) ? "banner" : "generic";
+            case "footer":
+              return outsideSections(el) ? "contentinfo" : "generic";
+            case "section":
+              return hasName(el) ? "region" : "generic";
+            case "form":
+              return hasName(el) ? "form" : "generic";
+            case "li":
+              return el.parentElement?.matches("ul, ol, menu") ? "listitem" : "generic";
+            case "tr":
+              return cellsHidden() ? "generic" : "row";
+            case "td":
+              return cellsHidden() ? "generic" : el.closest("[role=grid], [role=treegrid]") ? "gridcell" : "cell";
+            case "th": {
+              if (cellsHidden()) return "generic";
+              const scope = el.getAttribute("scope");
+              if (scope === "row" || scope === "rowgroup") return "rowheader";
+              if (scope === "col" || scope === "colgroup" || el.closest("thead")) return "columnheader";
+              const firstOfDataRow = el.parentElement?.firstElementChild === el && el.parentElement.querySelector(":scope > td");
+              return firstOfDataRow ? "rowheader" : "columnheader";
+            }
+            default:
+              return TAG_ROLES[tagName] || "generic";
+          }
+        }
+
+        // ---------------------------------------------------------------- names and states
+
+        const squash = (text) => (text || "").replace(/\s+/g, " ").trim();
+        const segmenter = new Intl.Segmenter();
+        function clip(text, max) {
+          const graphemes = Array.from(segmenter.segment(text), (part) => part.segment);
+          return graphemes.length > max ? `${graphemes.slice(0, max - 1).join("")}…` : text;
+        }
+
+        function nameOf(el) {
+          let name = "";
+          try {
+            name = squash(computeAccessibleName(el, { computedStyleSupportsPseudoElements: true }));
+          } catch {}
+          if (name) return { name, from: "" };
+          // Two HTML-AAM rules Chrome follows and accname leaves out.
+          if (el.localName === "figure") return { name: squash(el.querySelector(":scope > figcaption")?.textContent), from: "" };
+          const placeholder = /^(input|textarea)$/.test(el.localName) ? squash(el.getAttribute("placeholder")) : "";
+          return placeholder ? { name: placeholder, from: "from placeholder" } : { name: "", from: "" };
+        }
+
+        function statesOf(el, role) {
+          const states = [];
+          const aria = (name) => el.getAttribute(`aria-${name}`);
+          const summary = el.localName === "summary";
+          if (aria("expanded") === "true" || (summary && el.parentElement?.open)) states.push("expanded");
+          else if (aria("expanded") === "false" || summary) states.push("collapsed");
+          if (aria("pressed")) states.push({ true: "pressed", false: "not pressed", mixed: "mixed" }[aria("pressed")] || "");
+          if (["checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"].includes(role)) {
+            const native = el instanceof HTMLInputElement;
+            const mixed = native ? el.indeterminate : aria("checked") === "mixed";
+            states.push(mixed ? "mixed" : (native ? el.checked : aria("checked") === "true") ? "checked" : "not checked");
+          }
+          if (aria("selected") === "true" || (el instanceof HTMLOptionElement && el.selected)) states.push("selected");
+          if (aria("current") && aria("current") !== "false") states.push(`current=${aria("current")}`);
+          if (el.hasAttribute("required") || aria("required") === "true") states.push("required");
+          if (["true", "grammar", "spelling"].includes(aria("invalid"))) states.push("invalid");
+          if (el.hasAttribute("readonly") || aria("readonly") === "true") states.push("readonly");
+          const disabled = el.matches(":disabled") || aria("disabled") === "true";
+          if (disabled) states.push("disabled");
+          const canFocus = focusable(el);
+          if (canFocus && !INTERACTIVE.has(role) && role !== "iframe") states.push("focusable");
+          if (!canFocus && !disabled && INTERACTIVE.has(role)) states.push("⚠ not focusable");
+          if (el === activeElement()) states.push("focused");
+          if (aria("live") && aria("live") !== "off") states.push(`live=${aria("live")}`);
+          return states.filter(Boolean);
+        }
+
+        function activeElement() {
+          const el = document.activeElement;
+          return el && el !== document.body && el !== document.documentElement && !host.contains(el) ? el : null;
+        }
+
+        function openModal() {
+          try {
+            return document.querySelector("dialog:modal");
+          } catch {
+            return null;
+          }
+        }
+
+        function scopeRoot() {
+          try {
+            return (config.scope && document.querySelector(config.scope)) || document.body;
+          } catch {
+            return document.body;
+          }
+        }
+
+        // ---------------------------------------------------------------- tree
+
+        function describe(el, role) {
+          const states = statesOf(el, role);
+          const extra = el.hasAttribute("lang") || states.some((s) => s === "focusable" || s === "focused" || s.startsWith("live="));
+          if (role === "none" || !(ROWS.has(role) || extra)) return null;
+          const { name, from } = UNNAMED.has(role) ? { name: "", from: "" } : nameOf(el);
+          const level = role === "heading" ? Number(el.getAttribute("aria-level")) || Number(el.localName.slice(1)) || 2 : 0;
+          const parts = [{ cls: "role", text: level ? `heading level ${level}` : role }];
+          if (name) parts.push({ cls: "name", text: `"${clip(name, 60)}"` });
+          else if (NEEDS_NAME.has(role)) parts.push({ cls: "warn", text: "⚠ no name" });
+          if (from) parts.push({ cls: "muted", text: from });
+          if (role === "list" && el.localName !== "dl") {
+            const items = Array.from(el.children).filter((c) => c.localName === "li" || explicitRole(c) === "listitem");
+            parts.push({ cls: "muted", text: `${items.length} ${items.length === 1 ? "item" : "items"}` });
+          }
+          for (const state of states) parts.push({ cls: state.startsWith("⚠") ? "warn" : "state", text: state });
+          if (el.hasAttribute("aria-describedby")) {
+            let description = "";
+            try {
+              description = squash(computeAccessibleDescription(el));
+            } catch {}
+            if (description) parts.push({ cls: "muted", text: `desc "${clip(description, 40)}"` });
+          }
+          if (el.hasAttribute("lang")) parts.push({ cls: "state", text: `lang="${el.getAttribute("lang")}"` });
+          if (!name && ["paragraph", "generic", "blockquote", "status", "alert", "log", "term", "definition"].includes(role) && squash(el.textContent)) {
+            parts.push({ cls: "muted", text: `· ${clip(squash(el.textContent), 40)}` });
+          }
+          const warnings = parts.filter((part) => part.cls === "warn").length;
+          return { role, name, states, parts, warnings, testid: el.getAttribute("data-testid") };
+        }
+
+        function buildTree() {
+          const rows = [];
+          const visit = (el, depth) => {
+            if (el === host || /^(script|style|template|noscript|head|title|meta|link)$/.test(el.localName)) return;
+            if (el.getAttribute("aria-hidden") === "true" || el.hasAttribute("inert")) return;
+            const style = getComputedStyle(el);
+            if (style.display === "none") return;
+            let childDepth = depth;
+            if (style.visibility === "visible" && el !== document.body) {
+              const role = roleOf(el);
+              const row = describe(el, role);
+              if (row) {
+                rows.push({ ...row, depth });
+                childDepth = depth + 1;
+                if (LEAF.has(role)) return;
+              }
+            }
+            if (el.localName === "svg" || el.localName === "select") return;
+            for (const child of el.children) visit(child, childDepth);
+          };
+          // While a modal dialog is open, everything outside it is inert.
+          visit(openModal() || scopeRoot(), 0);
+          return { rows, title: squash(document.title), lang: document.documentElement.getAttribute("lang") || "" };
+        }
+
+        function renderTree({ rows, title, lang }) {
+          const warnings = rows.reduce((sum, r) => sum + r.warnings, 0) + (title ? 0 : 1) + (lang ? 0 : 1);
+          const label = warnings ? `Accessibility tree · ⚠ ${warnings} ${warnings === 1 ? "warning" : "warnings"}` : "Accessibility tree · no warnings";
+          const head = row({ testid: "a11y-summary", head: true, attrs: { "data-warnings": warnings } }, [{ text: label }]);
+          const doc = row({ testid: "a11y-document", depth: 0, attrs: { "data-title": title, "data-lang": lang } }, [
+            { cls: "role", text: "document" },
+            title ? { cls: "name", text: `"${clip(title, 50)}"` } : { cls: "warn", text: "⚠ no title" },
+            lang ? { cls: "state", text: `lang="${lang}"` } : { cls: "warn", text: "⚠ no lang" },
+          ]);
+          const body = rows.map((r) =>
+            row(
+              {
+                testid: r.testid && `a11y-${r.testid}`,
+                depth: r.depth + 1,
+                focused: r.states.includes("focused"),
+                attrs: { "data-name": r.name, "data-states": r.states.join(" ") },
+              },
+              r.parts,
+            ),
+          );
+          return [head, doc, ...body];
+        }
+
+        // ---------------------------------------------------------------- tabs
+
+        function tabStops() {
+          let stops = [];
+          try {
+            stops = tabbable(openModal() || document.body, { displayCheck: "full" });
+          } catch {}
+          // A radio group with nothing checked is one stop (its first radio), as in Chrome.
+          const groups = new Set();
+          return stops.filter((el) => {
+            if (!(el instanceof HTMLInputElement) || el.type !== "radio" || !el.name) return true;
+            const group = Array.from((el.form || document).querySelectorAll("input[type=radio]")).filter((r) => r.name === el.name);
+            if (group.some((r) => r.checked)) return true;
+            if (groups.has(group[0])) return false;
+            groups.add(group[0]);
+            return true;
+          });
+        }
+
+        let marked = new Map();
+        function buildTabs() {
+          const scope = openModal() || (config.scope ? scopeRoot() : null);
+          const stops = tabStops().map((el, index) => {
+            const rect = el.getBoundingClientRect();
+            const text = squash(el.textContent);
+            return {
+              el,
+              order: index + 1,
+              role: roleOf(el),
+              name: nameOf(el).name,
+              text,
+              testid: el.getAttribute("data-testid"),
+              ariaHidden: Boolean(el.closest('[aria-hidden="true"]')),
+              focused: el === activeElement(),
+              x: Math.round(rect.left + scrollX),
+              y: Math.round(rect.top + scrollY),
+              listed: !scope || scope.contains(el),
+            };
+          });
+          // data-a11y-tab="n" on a listed stop is what its badge anchors to.
+          const next = new Map(stops.filter((s) => s.listed && s.order <= 60).map((s) => [s.el, String(s.order)]));
+          for (const el of marked.keys()) if (!next.has(el)) el.removeAttribute("data-a11y-tab");
+          for (const [el, order] of next) if (el.getAttribute("data-a11y-tab") !== order) el.setAttribute("data-a11y-tab", order);
+          marked = next;
+          return stops;
+        }
+
+        function renderTabs(stops) {
+          const head = row({ testid: "tab-count", head: true, attrs: { "data-count": stops.length } }, [
+            { text: `Tab order · ${stops.length} stops` },
+          ]);
+          const items = stops
+            .filter((s) => s.listed)
+            .map((s) => {
+              const parts = [{ cls: "order", text: String(s.order) }, { cls: "role", text: s.role }];
+              if (s.name) parts.push({ cls: "name", text: `"${clip(s.name, 50)}"` });
+              else if (NEEDS_NAME.has(s.role)) parts.push({ cls: "warn", text: "⚠ no name" });
+              else if (s.text) parts.push({ cls: "muted", text: `· ${clip(s.text, 40)}` });
+              if (s.ariaHidden) parts.push({ cls: "warn", text: "⚠ aria-hidden" });
+              if (s.focused) parts.push({ cls: "state", text: "focused" });
+              return row({ testid: s.testid && `tab-${s.testid}`, depth: 0, focused: s.focused, attrs: { "data-order": s.order } }, parts);
+            });
+          return [head, ...(items.length ? items : [row({}, [{ cls: "muted", text: "(no tab stops here)" }])])];
+        }
+
+        // Studio cannot press keys, so a lesson clicks two hidden panel controls
+        // (preview.click on a11y-tab-next / a11y-tab-prev) to move focus the way Tab
+        // and Shift+Tab do. Past the last stop focus leaves the page (body).
+        function moveFocus(step) {
+          const stops = tabStops();
+          const active = activeElement();
+          let next = active ? null : step > 0 ? stops[0] : stops.at(-1);
+          if (active) {
+            let index = stops.indexOf(active);
+            if (index === -1) {
+              // Focus sits outside the order: continue from its place in the page.
+              const after = stops.findIndex((el) => active.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+              index = (after === -1 ? stops.length : after) - (step > 0 ? 1 : 0);
+            }
+            next = stops[index + step];
+          }
+          if (next) next.focus();
+          else active?.blur();
+        }
+
+        const renderBadges = (stops) =>
+          stops
+            .filter((s) => s.listed)
+            .map(
+              (s) =>
+                `<span class="a11yp-badge${s.focused ? " is-focused" : ""}" style="--x:${s.x}px;--y:${s.y}px;position-anchor:--a11yp-${s.order}">${s.order}</span>`,
+            );
+
+        // ---------------------------------------------------------------- contrast
+
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        function parseColor(value) {
+          const match = /^rgba?\(([^)]+)\)$/.exec(value || "");
+          if (match) {
+            const [r, g, b, a = 1] = match[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+            return { r, g, b, a };
+          }
+          // oklch(), color(), color-mix() and friends: let a 1px canvas convert them.
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = "#000";
+          canvas.fillStyle = value;
+          canvas.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+          return { r, g, b, a: a / 255 };
+        }
+
+        const over = (top, below) => ({
+          r: top.r * top.a + below.r * (1 - top.a),
+          g: top.g * top.a + below.g * (1 - top.a),
+          b: top.b * top.a + below.b * (1 - top.a),
+          a: 1,
+        });
+
+        // The colour behind an element: its own and its ancestors' background colours
+        // stacked on a white canvas. Background images and opacity are not counted.
+        function backgroundOf(el) {
+          const layers = [];
+          let image = false;
+          for (let node = el; node instanceof Element; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            image ||= style.backgroundImage !== "none";
+            layers.push(parseColor(style.backgroundColor));
+            if (layers.at(-1).a >= 1) break;
+          }
+          return { color: layers.reduceRight((below, layer) => over(layer, below), { r: 255, g: 255, b: 255, a: 1 }), image };
+        }
+
+        function luminance({ r, g, b }) {
+          const linear = (v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+          return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        }
+
+        const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+
+        function buildContrast() {
+          const root = scopeRoot();
+          const targets = [...(root.matches("[data-contrast]") ? [root] : []), ...root.querySelectorAll("[data-contrast]")];
+          return targets.map((el) => {
+            const style = getComputedStyle(el);
+            const border = el.dataset.contrast === "border";
+            const label = el.dataset.contrastLabel || clip(squash(el.textContent) || nameOf(el).name || el.localName, 18);
+            const item = { testid: el.getAttribute("data-testid"), label, border };
+            if (!el.getClientRects().length) return { ...item, hidden: true };
+            const behind = backgroundOf(border ? el.parentElement || el : el);
+            const side = ["Top", "Right", "Bottom", "Left"].find((s) => parseFloat(style[`border${s}Width`]) > 0);
+            const ink = border ? (side ? parseColor(style[`border${side}Color`]) : behind.color) : parseColor(style.color);
+            const fg = over(ink, behind.color);
+            const [high, low] = [luminance(fg), luminance(behind.color)].sort((x, y) => y - x);
+            const ratio = (high + 0.05) / (low + 0.05);
+            const size = parseFloat(style.fontSize);
+            const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);
+            // Compare the exact ratio, show it cut (not rounded) to 2 places: 4.499 shows 4.49 and fails.
+            const shown = (Math.floor(ratio * 100 + 1e-9) / 100).toFixed(2);
+            return { ...item, shown, large, fg: hex(fg), bg: hex(behind.color), image: behind.image, aa: ratio >= (border || large ? 3 : 4.5), aaa: ratio >= (large ? 4.5 : 7) };
+          });
+        }
+
+        function renderContrast(items) {
+          const rows = items.map((item) => {
+            const parts = [{ cls: "name", text: `"${item.label}"` }];
+            const attrs = {};
+            const verdict = (ok, prefix) => ({ cls: ok ? "pass" : "warn", text: `${prefix}${ok ? "pass" : "fail"}` });
+            if (item.hidden) parts.push({ cls: "muted", text: "not rendered" });
+            else if (item.border) {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail" });
+              parts.push({ cls: "role", text: "border" }, { cls: "order", text: `${item.shown}:1` }, { cls: "muted", text: "needs 3:1" }, verdict(item.aa, ""));
+            } else {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail", "data-aaa": item.aaa ? "pass" : "fail" });
+              parts.push({ cls: "order", text: `${item.shown}:1` }, verdict(item.aa, "AA "), verdict(item.aaa, "AAA "));
+              if (item.large) parts.push({ cls: "muted", text: "large text" });
+            }
+            if (item.image) parts.push({ cls: "warn", text: "⚠ background image: check by eye" });
+            const swatches = item.hidden ? "" : `<span class="a11yp-swatch" style="background:${item.fg}"></span><span class="a11yp-swatch" style="background:${item.bg}"></span>`;
+            return row({ testid: item.testid && `contrast-${item.testid}`, depth: 0, attrs, prefix: swatches }, parts);
+          });
+          const head = row({ head: true }, [{ text: "Contrast (WCAG 2)" }]);
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(mark elements with data-contrast)" }])])];
+        }
+
+        // ---------------------------------------------------------------- live regions
+
+        // A simplified screen reader: it speaks a change to a live region that was
+        // already on the page, never the text a region arrives with (except an alert).
+        const liveState = new WeakMap();
+        const liveLog = [];
+        let liveCount = 0;
+        let liveBaseline = false;
+
+        function scanLive() {
+          if (!on("live")) return false;
+          let changed = false;
+          for (const el of scopeRoot().querySelectorAll("[aria-live], [role~=status], [role~=alert], [role~=log], output")) {
+            const alert = /\balert\b/.test(el.getAttribute("role") || "");
+            const politeness = el.getAttribute("aria-live") || (alert ? "assertive" : "polite");
+            const present = !el.closest('[hidden], [aria-hidden="true"], [inert]') && el.checkVisibility();
+            const now = { present, text: squash(el.innerText) };
+            const before = liveState.get(el);
+            liveState.set(el, now);
+            if (!liveBaseline || politeness === "off" || !now.present || !now.text) continue;
+            if (before?.present ? before.text === now.text : !alert) continue;
+            liveCount += 1;
+            liveLog.push({ n: liveCount, politeness, text: now.text });
+            if (liveLog.length > 6) liveLog.shift();
+            changed = true;
+          }
+          liveBaseline = true;
+          return changed;
+        }
+
+        function renderLive() {
+          const head = row({ testid: "live-count", head: true, attrs: { "data-count": liveCount } }, [
+            { text: "Live regions · likely spoken (simplified)" },
+          ]);
+          const rows = liveLog.map((entry) =>
+            row({ testid: `live-${entry.n}`, depth: 0 }, [
+              { cls: "order", text: String(entry.n) },
+              { cls: entry.politeness === "assertive" ? "warn" : "state", text: entry.politeness },
+              { cls: "name", text: `"${clip(entry.text, 60)}"` },
+            ]),
+          );
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(nothing announced yet)" }])])];
+        }
+
+        // ---------------------------------------------------------------- axe (base-axe workspaces: axe.js sets window.a11yPanelAxe)
+
+        const axeRun = { running: false, again: false, timer: 0, state: null };
+
+        function scheduleAxe(delay = 700) {
+          if (!on("axe") || !window.a11yPanelAxe) return;
+          clearTimeout(axeRun.timer);
+          axeRun.timer = setTimeout(runAxe, delay);
+        }
+
+        async function runAxe() {
+          const axe = window.a11yPanelAxe;
+          if (axeRun.running) return void (axeRun.again = true);
+          axeRun.running = true;
+          try {
+            const context = { exclude: [["#a11y-panel"]], ...(config.scope && { include: [[config.scope]] }) };
+            const options = { resultTypes: ["violations"], ...(config.axeTags.length && { runOnly: { type: "tag", values: config.axeTags } }) };
+            const { violations } = await axe.run(context, options);
+            axeRun.state = { violations: violations.map((v) => ({ id: v.id, impact: v.impact || "minor", help: v.help, nodes: v.nodes.length })) };
+          } catch (error) {
+            axeRun.state = { error: String(error?.message || error) };
+          }
+          axeRun.running = false;
+          render();
+          if (axeRun.again) {
+            axeRun.again = false;
+            scheduleAxe(300);
+          }
+        }
+
+        function renderAxe() {
+          const { state } = axeRun;
+          const version = window.a11yPanelAxe?.version;
+          if (!version) return [row({ head: true }, [{ text: "axe · not installed in this lesson" }])];
+          if (!state || state.error) {
+            return [row({ testid: "axe-count", head: true }, [state ? { cls: "warn", text: `axe error: ${clip(state.error, 60)}` } : { text: "axe · running…" }])];
+          }
+          const impact = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+          const issues = state.violations.length;
+          const head = row({ testid: "axe-count", head: true, attrs: { "data-count": issues } }, [
+            { text: `axe-core ${version} · ${issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "no issues"}` },
+          ]);
+          const rows = state.violations
+            .sort((a, b) => impact[a.impact] - impact[b.impact] || a.id.localeCompare(b.id))
+            .map((v) =>
+              row({ testid: `axe-${v.id}`, depth: 0, attrs: { "data-count": v.nodes } }, [
+                { cls: impact[v.impact] < 2 ? "warn" : "state", text: v.impact },
+                { cls: "role", text: v.id },
+                { cls: "order", text: `×${v.nodes}` },
+                { cls: "muted", text: v.help },
+              ]),
+            );
+          return [head, ...rows];
+        }
+
+        // ---------------------------------------------------------------- drawing
+
+        const escape = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+        // One row. Its textContent is the parts joined by single spaces, exactly as
+        // it reads, so expect.preview's textContains matches what learners see.
+        function row({ testid, head = false, depth = -1, focused = false, attrs = {}, prefix = "" }, parts) {
+          const classes = `a11yp-row${head ? " a11yp-head" : ""}${focused ? " is-focused" : ""}`;
+          const extra = Object.entries(attrs).map(([key, value]) => ` ${key}="${escape(value)}"`).join("");
+          const id = testid ? ` data-testid="${escape(testid)}"` : "";
+          const indent = depth >= 0 ? ` style="--d:${Math.min(depth, 8)}"` : "";
+          const spans = parts.map((p) => (p.cls ? `<span class="a11yp-${p.cls}">${escape(p.text)}</span>` : escape(p.text))).join(" ");
+          return `<div class="${classes}"${id}${indent}${extra}>${prefix}${spans}</div>`;
+        }
+
+        const C = { bg: "#202124", head: "#303134", text: "#e8eaed", role: "#aecbfa", name: "#fdd663", state: "#d7aefb", muted: "#bdc1c6", warn: "#f6aea9", pass: "#a8dab5", focus: "#123a6e", ring: "#8ab4f8" };
+        const P = "#a11y-panel";
+        const CSS = `
+        :where(html){scroll-padding-bottom:calc(${config.height}vh + 16px)}
+        ${P} .a11yp-spacer{display:block;height:${config.height}vh}
+        ${P} .a11yp-drawer{position:fixed;inset:auto 0 0 0;z-index:2147483001;box-sizing:border-box;height:${config.height}vh;margin:0;padding:0 0 8px;overflow:auto;overscroll-behavior:contain;background:${C.bg};color:${C.text};border-top:3px solid ${C.ring};font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Sangam MN","Myanmar MN","Myanmar Text",Padauk,monospace;text-align:start;letter-spacing:normal;text-transform:none;font-style:normal}
+        ${P} .a11yp-row{display:block;margin:0;padding:1px 8px 1px calc(8px + var(--d,0) * 14px);border-left:4px solid transparent;overflow-wrap:anywhere}
+        ${P} .a11yp-head{position:sticky;top:0;z-index:1;padding-left:8px;background:${C.head};font-weight:700}
+        ${P} .a11yp-row.is-focused{background:${C.focus};border-left-color:${C.ring}}
+        ${P} .a11yp-role{color:${C.role}} ${P} .a11yp-name{color:${C.name}} ${P} .a11yp-state{color:${C.state}}
+        ${P} .a11yp-muted{color:${C.muted}} ${P} .a11yp-pass{color:${C.pass}} ${P} .a11yp-order{font-weight:700}
+        ${P} .a11yp-warn{color:${C.warn};font-weight:700}
+        ${P} .a11yp-swatch{display:inline-block;width:12px;height:12px;margin-right:4px;border:1px solid ${C.muted};vertical-align:middle}
+        ${P} .a11yp-badges{display:block;position:static;height:0}
+        ${P} .a11yp-badge{position:absolute;z-index:2147483000;top:var(--y);left:var(--x);box-sizing:border-box;min-width:20px;height:20px;margin:-8px 0 0 -8px;padding:0 4px;border-radius:10px;background:#174ea6;color:#fff;font:700 13px/20px ui-monospace,Menlo,monospace;text-align:center;box-shadow:0 0 0 2px #fff;pointer-events:none}
+        ${P} .a11yp-badge.is-focused{background:#b3261e}
+        @supports (anchor-name: --a){${P} .a11yp-badge{top:anchor(top,var(--y));left:anchor(left,var(--x));position-visibility:anchors-visible}}
+        ${Array.from({ length: 60 }, (_, i) => `[data-a11y-tab="${i + 1}"]{anchor-name:--a11yp-${i + 1}}`).join("")}`;
+
+        const host = document.createElement("div");
+        host.id = "a11y-panel";
+        host.inert = true;
+        host.innerHTML =
+          `<style>${CSS}</style><div class="a11yp-badges"></div><div class="a11yp-spacer"></div>` +
+          `<span hidden data-step="1" data-testid="a11y-tab-next"></span><span hidden data-step="-1" data-testid="a11y-tab-prev"></span>` +
+          `<div class="a11yp-drawer" data-testid="a11y-panel">` +
+          `${config.modes.map((mode) => `<div data-mode="${mode}"></div>`).join("")}</div>`;
+        document.body.append(host);
+        const drawer = host.querySelector(".a11yp-drawer");
+        const badges = host.querySelector(".a11yp-badges");
+        const sections = Object.fromEntries(Array.from(drawer.children, (el) => [el.dataset.mode, el]));
+        const written = new Map();
+
+        // Rewrite only the rows whose text changed (a focus move touches two rows);
+        // a change in the number of rows redraws the section.
+        function write(el, rows) {
+          const before = written.get(el) || [];
+          written.set(el, rows);
+          if (before.length !== rows.length || el.children.length !== rows.length) el.innerHTML = rows.join("");
+          else rows.forEach((html, i) => html !== before[i] && (el.children[i].outerHTML = html));
+        }
+
+        // Keep the focused row and the newest announcement in view inside the drawer.
+        let shown = { focus: null, live: 0 };
+        function reveal() {
+          const focus = activeElement();
+          let target = null;
+          if (focus !== shown.focus) target = drawer.querySelector(".is-focused");
+          if (liveCount !== shown.live) target = drawer.querySelector(`[data-testid="live-${liveCount}"]`);
+          shown = { focus, live: liveCount };
+          if (!target) return;
+          const headHeight = target.parentElement.firstElementChild.offsetHeight;
+          const top = target.offsetTop - headHeight;
+          const bottom = target.offsetTop + target.offsetHeight - drawer.clientHeight;
+          if (top < drawer.scrollTop) drawer.scrollTop = top;
+          else if (bottom > drawer.scrollTop) drawer.scrollTop = bottom + 8;
+        }
+
+        function render() {
+          try {
+            if (on("tree")) write(sections.tree, renderTree(buildTree()));
+            if (on("tabs")) {
+              const stops = buildTabs();
+              write(sections.tabs, renderTabs(stops));
+              write(badges, renderBadges(stops));
+            }
+            if (on("contrast")) write(sections.contrast, renderContrast(buildContrast()));
+            if (on("live")) write(sections.live, renderLive());
+            if (on("axe")) write(sections.axe, renderAxe());
+            reveal();
+          } catch {
+            // The panel must never break a lesson; the next tick tries again.
+          }
+        }
+
+        // ---------------------------------------------------------------- updates
+
+        let timer = 0;
+        const schedule = (delay = 40) => {
+          clearTimeout(timer);
+          timer = setTimeout(render, delay);
+        };
+
+        new MutationObserver((records) => {
+          if (!records.some((r) => !host.contains(r.target) && r.attributeName !== "data-a11y-tab")) return;
+          scanLive();
+          schedule();
+          if (!axeRun.running) scheduleAxe();
+        }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+
+        document.addEventListener("focusin", () => schedule(0), true);
+        document.addEventListener("focusout", () => schedule(0), true);
+        // A CSS edit swaps the stylesheet <link>; its load (and image loads) can change contrast and layout.
+        document.addEventListener("load", () => (schedule(), scheduleAxe()), true);
+        addEventListener("resize", () => schedule(100));
+        addEventListener("a11y-panel-axe", () => scheduleAxe(0));
+        host.addEventListener("click", (event) => {
+          const step = Number(event.target.closest?.("[data-step]")?.dataset.step);
+          if (step) moveFocus(step);
+        });
+        // The drawer is inert, so the wheel would scroll the page under it; scroll the drawer instead.
+        addEventListener(
+          "wheel",
+          (event) => {
+            if (event.clientY < drawer.getBoundingClientRect().top) return;
+            event.preventDefault();
+            drawer.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+          },
+          { passive: false },
+        );
+
+        // A cheap periodic pass catches what no event reports (a style change that
+        // hides something or changes a colour). Timers, not animation frames: frames
+        // never run in a hidden tab.
+        (function tick() {
+          if (scanLive()) schedule(0);
+          render();
+          setTimeout(tick, 600);
+        })();
+        scheduleAxe(0);
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      styles.css: ""
+  whiteboardAssets:
+    # Board A: the five parts of the lesson.
+    - {
+        id: a-title,
+        kind: text,
+        x: 290,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "လူတိုင်း ဖြည့်နိုင်တဲ့ form",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-p1-box,
+        kind: rectangle,
+        x: 270,
+        y: 228,
+        width: 820,
+        height: 66,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-p1-head,
+        kind: text,
+        x: 292,
+        y: 242,
+        width: 260,
+        height: 36,
+        text: "1 · label",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-p1-body,
+        kind: text,
+        x: 610,
+        y: 242,
+        width: 440,
+        height: 36,
+        text: "field တိုင်းမှာ နာမည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p2-box,
+        kind: rectangle,
+        x: 270,
+        y: 308,
+        width: 820,
+        height: 66,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-p2-head,
+        kind: text,
+        x: 292,
+        y: 322,
+        width: 300,
+        height: 36,
+        text: "2 · type · autocomplete",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-p2-body,
+        kind: text,
+        x: 690,
+        y: 322,
+        width: 380,
+        height: 36,
+        text: "မြန်မြန် ဖြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p3-box,
+        kind: rectangle,
+        x: 270,
+        y: 388,
+        width: 820,
+        height: 66,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-p3-head,
+        kind: text,
+        x: 292,
+        y: 402,
+        width: 260,
+        height: 36,
+        text: "3 · fieldset",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-p3-body,
+        kind: text,
+        x: 610,
+        y: 402,
+        width: 440,
+        height: 36,
+        text: "radio တွေ အုပ်စုဖွဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p4-box,
+        kind: rectangle,
+        x: 270,
+        y: 468,
+        width: 820,
+        height: 66,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-p4-head,
+        kind: text,
+        x: 292,
+        y: 482,
+        width: 260,
+        height: 36,
+        text: "4 · hint",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-p4-body,
+        kind: text,
+        x: 610,
+        y: 482,
+        width: 440,
+        height: 36,
+        text: "ဘယ်လို ဖြည့်ရမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p5-box,
+        kind: rectangle,
+        x: 270,
+        y: 548,
+        width: 820,
+        height: 66,
+        strokeColor: "#e03131",
+        backgroundColor: "#fff5f5",
+      }
+    - {
+        id: a-p5-head,
+        kind: text,
+        x: 292,
+        y: 562,
+        width: 260,
+        height: 36,
+        text: "5 · error",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-p5-body,
+        kind: text,
+        x: 610,
+        y: 562,
+        width: 440,
+        height: 36,
+        text: "စာနဲ့ ပြ၊ ပြင်နည်း ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B: three rules for showing an error.
+    - {
+        id: b-title,
+        kind: text,
+        x: 290,
+        y: 160,
+        width: 480,
+        height: 46,
+        text: "အမှားကို ပြတဲ့အခါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-bad,
+        kind: text,
+        x: 780,
+        y: 168,
+        width: 300,
+        height: 36,
+        text: "အနီရောင် ဘောင်ပဲ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-box,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 820,
+        height: 110,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: b-r1-head,
+        kind: text,
+        x: 292,
+        y: 247,
+        width: 300,
+        height: 36,
+        text: "1 · စာနဲ့ ပြ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-body,
+        kind: text,
+        x: 292,
+        y: 293,
+        width: 560,
+        height: 36,
+        text: "ဘာ မှားလဲ · ဘယ်လို ပြင်ရမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-box,
+        kind: rectangle,
+        x: 270,
+        y: 370,
+        width: 820,
+        height: 110,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: b-r2-head,
+        kind: text,
+        x: 292,
+        y: 382,
+        width: 300,
+        height: 36,
+        text: "2 · field နဲ့ ချိတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-body,
+        kind: text,
+        x: 292,
+        y: 428,
+        width: 620,
+        height: 36,
+        text: "aria-describedby · aria-invalid",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-box,
+        kind: rectangle,
+        x: 270,
+        y: 505,
+        width: 820,
+        height: 110,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-r3-head,
+        kind: text,
+        x: 292,
+        y: 517,
+        width: 300,
+        height: 36,
+        text: "3 · သိအောင် လုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-body,
+        kind: text,
+        x: 292,
+        y: 563,
+        width: 620,
+        height: 36,
+        text: "focus ရွှေ့ · ဒါမှမဟုတ် live region",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C: more WCAG 2.2 criteria for forms.
+    - {
+        id: c-title,
+        kind: text,
+        x: 290,
+        y: 160,
+        width: 600,
+        height: 46,
+        text: "Form အတွက် WCAG စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-r1-box,
+        kind: rectangle,
+        x: 270,
+        y: 228,
+        width: 820,
+        height: 92,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: c-r1-head,
+        kind: text,
+        x: 292,
+        y: 236,
+        width: 600,
+        height: 36,
+        text: "3.3.7 Redundant Entry · A",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1-body,
+        kind: text,
+        x: 292,
+        y: 276,
+        width: 600,
+        height: 36,
+        text: "ဖြည့်ပြီးသားကို ထပ်မတောင်းနဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2-box,
+        kind: rectangle,
+        x: 270,
+        y: 330,
+        width: 820,
+        height: 92,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: c-r2-head,
+        kind: text,
+        x: 292,
+        y: 338,
+        width: 700,
+        height: 36,
+        text: "3.3.8 Accessible Authentication · AA",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2-body,
+        kind: text,
+        x: 292,
+        y: 378,
+        width: 600,
+        height: 36,
+        text: "paste · password manager ✓",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-box,
+        kind: rectangle,
+        x: 270,
+        y: 432,
+        width: 820,
+        height: 92,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-r3-head,
+        kind: text,
+        x: 292,
+        y: 440,
+        width: 600,
+        height: 36,
+        text: "2.5.8 Target Size · AA",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3-body,
+        kind: text,
+        x: 292,
+        y: 480,
+        width: 600,
+        height: 36,
+        text: "အနည်းဆုံး 24 × 24 px",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4-box,
+        kind: rectangle,
+        x: 270,
+        y: 534,
+        width: 820,
+        height: 92,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: c-r4-head,
+        kind: text,
+        x: 292,
+        y: 542,
+        width: 600,
+        height: 36,
+        text: "2.2.1 Timing Adjustable · A",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-r4-body,
+        kind: text,
+        x: 292,
+        y: 582,
+        width: 600,
+        height: 36,
+        text: "အချိန် တိုးခွင့် ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2615
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "Form ကို လူတိုင်း ဖြည့်နိုင်အောင်"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ video နဲ့ audio ကို caption နဲ့ transcript တွေနဲ့ လူတိုင်း နားလည်အောင် လုပ်တာ
+      ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ဆိုင်ရဲ့ အော်ဒါ form ကို ပြင်ကြည့်ပါမယ်။ [[mark:start-server]] form
+      ကို ဖြည့်လို့ မရရင် အော်ဒါ မှာလို့ မရ၊ စာရင်း သွင်းလို့ မရ ဖြစ်သွားပါတယ်။ ဒါပေမဲ့ form က မှန်အောင်
+      လုပ်ရ အခက်ဆုံး အပိုင်းတွေထဲက တစ်ခုပါ။ အရင် lesson တွေမှာ ကြည့်ခဲ့တဲ့ focus၊ contrast စတာတွေ အကုန်
+      လိုအပ်တဲ့အပြင်၊ form အတွက် သီးသန့် စည်းကမ်းတွေ ထပ်ရှိလို့ပါ။ [[mark:draw-part1]] ဒီ lesson မှာ
+      အပိုင်း ငါးခု ကြည့်ပါမယ်။ ပထမက field တိုင်းမှာ label လို့ ခေါ်တဲ့ မြင်ရတဲ့ နာမည် ရှိဖို့ပါ။
+      [[mark:draw-part2]] ဒုတိယက field အမျိုးအစား မှန်မှန် ရွေးပြီး autocomplete ထည့်ဖို့ပါ။
+      [[mark:draw-part3]] တတိယက radio ခလုတ်တွေကို အုပ်စုဖွဲ့ဖို့ပါ။ [[mark:draw-part4]] စတုတ္ထက ဘယ်လို
+      ဖြည့်ရမလဲ ဆိုတဲ့ hint ကို field နဲ့ ချိတ်ဖို့ပါ။ [[mark:draw-part5]] နောက်ဆုံးကတော့ အမှားကို
+      အရောင်နဲ့ပဲ မပြဘဲ၊ စာနဲ့ ပြပြီး ဘယ်လို ပြင်ရမလဲ ပြောပြဖို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms",
+          url: "https://web.dev/learn/accessibility/forms",
+        }
+      - { title: "W3C WAI: Forms Tutorial", url: "https://www.w3.org/WAI/tutorials/forms/" }
+    actions:
+      - id: open-parts-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-part1
+        type: whiteboard.apply
+        at: { mark: draw-part1 }
+        upsertIds: [a-p1-box, a-p1-head, a-p1-body]
+        drawMs: 1500
+      - id: draw-part2
+        type: whiteboard.apply
+        at: { mark: draw-part2 }
+        upsertIds: [a-p2-box, a-p2-head, a-p2-body]
+        drawMs: 1500
+      - id: draw-part3
+        type: whiteboard.apply
+        at: { mark: draw-part3 }
+        upsertIds: [a-p3-box, a-p3-head, a-p3-body]
+        drawMs: 1500
+      - id: draw-part4
+        type: whiteboard.apply
+        at: { mark: draw-part4 }
+        upsertIds: [a-p4-box, a-p4-head, a-p4-body]
+        drawMs: 1500
+      - id: draw-part5
+        type: whiteboard.apply
+        at: { mark: draw-part5 }
+        upsertIds: [a-p5-box, a-p5-head, a-p5-body]
+        drawMs: 1500
+
+  - id: code-tour
+    narration: >
+      [[mark:close-parts]] ကဲ၊ form ရဲ့ HTML ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက ဆိုင်ရဲ့ HTML
+      ဖိုင်ပါ။ [[mark:select-name-placeholder]] ပထမ field မှာ label မရှိဘဲ placeholder ပဲ ရှိပါတယ်။
+      placeholder ဆိုတာ field ထဲမှာ မှိန်မှိန်လေး ပြထားတဲ့ စာပါ။ ဒီမှာတော့ ဥပမာ နာမည် တစ်ခု ပြထားပါတယ်။
+      [[mark:select-asterisk]] ဖုန်း field ဘေးမှာတော့ မဖြစ်မနေ ဖြည့်ရမယ် ဆိုတာကို အနီရောင် ကြယ်ပွင့်လေး
+      တစ်ခုနဲ့ပဲ ပြထားပါတယ်။ [[mark:select-sugar-title]] သကြား ရွေးတဲ့ radio သုံးခုကိုတော့ div ထဲမှာ
+      စုထားပြီး၊ ခေါင်းစဉ်ကို သာမန် စာပိုဒ်နဲ့ ရေးထားပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Labels",
+          url: "https://web.dev/learn/accessibility/forms#labels",
+        }
+      - {
+          title: "MDN: placeholder attribute",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/placeholder",
+        }
+    actions:
+      - id: close-parts
+        type: whiteboard.apply
+        at: { mark: close-parts }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-name-placeholder
+        type: editor.select
+        at: { mark: select-name-placeholder }
+        target: { file: index.html, text: 'placeholder="ဥပမာ အောင်အောင်"', occurrence: 1 }
+      - id: select-asterisk
+        type: editor.select
+        at: { mark: select-asterisk }
+        target: { file: index.html, text: '<span class="req">*</span>', occurrence: 1 }
+      - id: select-sugar-title
+        type: editor.select
+        at: { mark: select-sugar-title }
+        target: { file: index.html, text: '<p class="sugar-title">သကြား</p>', occurrence: 1 }
+
+  - id: first-look
+    narration: >
+      [[mark:preview-ready]] ညာဘက်မှာ form ကို မြင်ရပါပြီ။ မျက်စိနဲ့ ကြည့်ရင်တော့ ပြဿနာ မရှိသလိုပါပဲ။
+      accessibility panel မှာတော့ form ရဲ့ tree နဲ့ live region အပိုင်းကို ပြထားပါတယ်။
+      [[mark:look-name-row]] ပထမ field ကို ကြည့်ပါ။ role က textbox၊ name က ဥပမာ အောင်အောင် ဖြစ်ပြီး၊ from
+      placeholder လို့ ပြထားပါတယ်။ label မရှိလို့ browser က placeholder ကို နာမည်အဖြစ် ယူသုံးလိုက်တာပါ။
+      screen reader က ဥပမာ အောင်အောင် လို့ ဖတ်ပြမှာ ဖြစ်ပြီး၊ ဘာ ဖြည့်ရမလဲ ဆိုတာ ရှင်းရှင်း မပြောပါဘူး။
+      [[mark:input-name]] field ထဲကို နာမည် ရိုက်ထည့်ကြည့်ရအောင်။ [[mark:after-input-name]] စာ
+      ရိုက်လိုက်တာနဲ့ placeholder ပျောက်သွားပါပြီ။ မျက်စိနဲ့ မြင်ရတဲ့သူလည်း ဒီ field ဘာအတွက်လဲ ဆိုတာ
+      ပြန်မမြင်ရတော့ပါဘူး။ မှတ်ဉာဏ် အားနည်းတဲ့သူ၊ အာရုံ ခဏခဏ ပျံ့တဲ့သူတွေ အတွက် ဒါက တကယ့် ပြဿနာပါ။
+      ဒါကြောင့် placeholder က label ကို အစားထိုးလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Labels",
+          url: "https://web.dev/learn/accessibility/forms#labels",
+        }
+      - {
+          title: "W3C WAI: Labeling Controls",
+          url: "https://www.w3.org/WAI/tutorials/forms/labels/",
+        }
+      - {
+          title: "HTML-AAM: input accessible name computation (placeholder fallback)",
+          url: "https://www.w3.org/TR/html-aam-1.0/#input-type-text-input-type-password-input-type-number-input-type-search-input-type-tel-input-type-email-input-type-url-and-textarea-element-accessible-name-computation",
+        }
+    actions:
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-document-title
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-document }
+        attribute: { name: data-title, value: "အော်ဒါမှာရန် · ရွှေလက်ဖက်ရည်ဆိုင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-name-from-placeholder
+        type: expect.preview
+        at: { mark: look-name-row }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-name }
+        textContains: '"ဥပမာ အောင်အောင်" from placeholder'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: input-name
+        type: preview.input
+        at: { mark: input-name }
+        timeoutMs: 5000
+        target: { by: testId, value: input-name }
+        value: "အောင်အောင်"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-name-value
+        type: expect.preview
+        at: { mark: after-input-name }
+        timeoutMs: 5000
+        target: { by: testId, value: input-name }
+        value: "အောင်အောင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: labels
+    chapter: "Field တိုင်းမှာ label ထည့်ရအောင်"
+    narration: >
+      [[mark:type-name-label]] ဒါဆို field တစ်ခုစီရဲ့ အပေါ်မှာ label element ကို ထည့်ပါမယ်။ label ရဲ့ for
+      attribute နဲ့ field ရဲ့ id ကို တူအောင် ပေးရင် browser က နှစ်ခုကို ချိတ်ပေးပါတယ်။
+      [[mark:after-name-label]] field အပေါ်မှာ နာမည် ဆိုတဲ့ စာ ပေါ်လာပြီး၊ tree ထဲမှာလည်း name က နာမည်
+      ဖြစ်သွားပါပြီ။ label ကို နှိပ်ရင်လည်း field ထဲကို cursor ရောက်သွားလို့၊ လက်ကို တိတိကျကျ
+      မလှုပ်နိုင်တဲ့သူ အတွက် နှိပ်ရမယ့် နေရာ ပိုကြီးလာပါတယ်။ [[mark:type-phone-label]] ဖုန်း field
+      အတွက်လည်း label ထည့်ပါမယ်။ ကြယ်ပွင့်ကို screen reader က ဖတ်ပြချင်မှ ဖတ်ပြမှာ ဖြစ်ပြီး၊ အဓိပ္ပာယ်
+      မသိတဲ့သူလည်း ရှိလို့၊ မဖြစ်မနေ ဆိုတာကို label ထဲမှာ စာနဲ့ ရေးထားပါမယ်။ [[mark:after-phone-label]]
+      tree မှာ ဖုန်း field ရဲ့ name က ဖုန်း၊ မဖြစ်မနေ ဆိုပြီး ပေါ်လာပါပြီ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Labels",
+          url: "https://web.dev/learn/accessibility/forms#labels",
+        }
+      - {
+          title: "MDN: The label element",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/label",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Labels or Instructions",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/labels-or-instructions.html",
+        }
+    actions:
+      - id: type-name-label
+        type: editor.type
+        at: { mark: type-name-label }
+        cadence: block
+        target: { file: index.html, after: '<h2 id="order-title">အော်ဒါမှာရန်</h2>', occurrence: 1 }
+        text: "\n        <label for=\"name\">နာမည်</label>"
+      - id: expect-name-label
+        type: expect.preview
+        at: { mark: after-name-label }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-name }
+        attribute: { name: data-name, value: "နာမည်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-phone-label
+        type: editor.type
+        at: { mark: type-phone-label }
+        cadence: block
+        target: { file: index.html, after: 'data-testid="input-name" />', occurrence: 1 }
+        text: "\n        <label for=\"phone\">ဖုန်း (မဖြစ်မနေ)</label>"
+      - id: expect-phone-label
+        type: expect.preview
+        at: { mark: after-phone-label }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        attribute: { name: data-name, value: "ဖုန်း (မဖြစ်မနေ)" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: fields
+    chapter: "Field အမျိုးအစားနဲ့ autocomplete"
+    narration: >
+      field တွေကို div နဲ့ ကိုယ်တိုင် မဆောက်ဘဲ HTML ရဲ့ input element ကို သုံးထားတာ ကောင်းပါတယ်။ state
+      တွေ၊ keyboard နဲ့ သုံးတာတွေ ပါပြီးသား ဖြစ်လို့ပါ။ [[mark:type-phone-attrs]] အခု ဖုန်း field မှာ type
+      ကို tel လို့ ပေးပြီး၊ autocomplete နဲ့ required ကိုပါ ထည့်ပါမယ်။ [[mark:after-phone-attrs]] tree
+      ထဲမှာ required ဆိုတဲ့ state ပေါ်လာပါပြီ။ screen reader က မဖြစ်မနေ ဖြည့်ရမယ့် field လို့ ဖတ်ပြမှာပါ။
+      type tel ကတော့ panel မှာ မမြင်ရပေမယ့်၊ ဖုန်းနဲ့ ဖြည့်တဲ့အခါ ဂဏန်း keyboard ကို ပြပေးပါတယ်။ email နဲ့
+      number လို type တွေကလည်း သင့်တော်တဲ့ keyboard ကို ပြပေးတဲ့အပြင်၊ ဖြည့်ထားတာ ပုံစံ မှန်မမှန်ကို
+      browser က စစ်ပေးပါတယ်။ [[mark:type-name-autocomplete]] နာမည် field မှာလည်း autocomplete name ကို
+      ထည့်ပါမယ်။ autocomplete က ဒီ field မှာ ဘယ်လို အချက်အလက် ဖြည့်ရမလဲ ဆိုတာ browser ကို ပြောပြတာပါ။
+      ဒါကြောင့် browser က မှတ်ထားတဲ့ နာမည်နဲ့ ဖုန်းနံပါတ်ကို တစ်ချက်တည်းနဲ့ ဖြည့်ပေးနိုင်ပြီး၊ စာရိုက်ရ
+      ခက်တဲ့သူ၊ မှတ်ဉာဏ် အားနည်းတဲ့သူတွေ အတွက် အများကြီး သက်သာစေပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Fields",
+          url: "https://web.dev/learn/accessibility/forms#fields",
+        }
+      - {
+          title: "MDN: autocomplete attribute",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/autocomplete",
+        }
+      - {
+          title: "MDN: input type tel",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/tel",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Identify Input Purpose",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/identify-input-purpose.html",
+        }
+    actions:
+      - id: type-phone-attrs
+        type: editor.type
+        at: { mark: type-phone-attrs }
+        cadence: block
+        target: { file: index.html, after: '<input id="phone" name="phone"', occurrence: 1 }
+        text: ' type="tel" autocomplete="tel" required'
+      - id: expect-phone-required
+        type: expect.preview
+        at: { mark: after-phone-attrs }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        textContains: '"ဖုန်း (မဖြစ်မနေ)" required'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-name-autocomplete
+        type: editor.type
+        at: { mark: type-name-autocomplete }
+        cadence: block
+        target:
+          { file: index.html, after: '<input id="name" name="name" type="text"', occurrence: 1 }
+        text: ' autocomplete="name"'
+
+  - id: description
+    chapter: "Hint ကို field နဲ့ ချိတ်ရအောင်"
+    narration: >
+      [[mark:look-hint]] ဖုန်း field အောက်မှာ ၀၉ နဲ့ စတဲ့ နံပါတ် ဆိုတဲ့ hint စာ ရှိပေမယ့်၊ tree ထဲက ဖုန်း
+      field မှာတော့ ဒီ စာ မပါပါဘူး။ screen reader သုံးတဲ့သူက Tab key နဲ့ field တစ်ခုကနေ တစ်ခုကို
+      ခုန်သွားတာ များလို့၊ field နဲ့ မချိတ်ထားတဲ့ စာကို ကျော်သွားနိုင်ပါတယ်။ [[mark:type-describedby]]
+      ဒါကြောင့် ဖုန်း field မှာ aria describedby ကို ထည့်ပြီး hint ရဲ့ id ကို ပေးပါမယ်။
+      [[mark:after-describedby]] tree ထဲမှာ desc ဆိုပြီး hint စာ ပေါ်လာပါပြီ။ screen reader က field ရဲ့
+      နာမည် ဖတ်ပြီးတာနဲ့ ဒီ hint ကိုပါ ဆက်ဖတ်ပြမှာပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Descriptions",
+          url: "https://web.dev/learn/accessibility/forms#descriptions",
+        }
+      - {
+          title: "MDN: aria-describedby",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-describedby",
+        }
+    actions:
+      - id: expect-no-desc
+        type: expect.preview
+        at: { mark: look-hint }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        attribute: { name: data-states, value: "required" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-describedby
+        type: editor.type
+        at: { mark: type-describedby }
+        cadence: block
+        target:
+          {
+            file: index.html,
+            after: '<input id="phone" name="phone" type="tel" autocomplete="tel" required',
+            occurrence: 1,
+          }
+        text: ' aria-describedby="phone-hint"'
+      - id: expect-desc
+        type: expect.preview
+        at: { mark: after-describedby }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        textContains: 'desc "09 နဲ့ စတဲ့ နံပါတ်"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: grouping
+    chapter: "Radio တွေကို fieldset နဲ့ အုပ်စုဖွဲ့ရအောင်"
+    narration: >
+      tree ထဲက radio သုံးခုမှာ ချို၊ ချိုပေါ့၊ မထည့် ဆိုတဲ့ နာမည်တွေ ရှိပါတယ်။ radio တစ်ခုစီကို label
+      ထဲမှာ ထည့်ပြီး ချိတ်ထားလို့ပါ။ ဒါပေမဲ့ သကြား ဆိုတဲ့ ခေါင်းစဉ်ကတော့ radio တွေနဲ့ ချိတ်မထားပါဘူး။
+      screen reader က ချို၊ radio လို့ပဲ ဖတ်ပြမှာ ဖြစ်လို့၊ သုံးတဲ့သူက ဘာ ချိုတာလဲ မသိနိုင်ပါဘူး။
+      [[mark:type-fieldset]] ဒါကြောင့် radio တွေကို fieldset element နဲ့ အုပ်ပြီး၊ ခေါင်းစဉ်ကို legend
+      element နဲ့ ရေးထားတဲ့ အုပ်စု အသစ် ထည့်ပါမယ်။ [[mark:after-fieldset]] tree ထဲမှာ name က သကြား ဖြစ်တဲ့
+      group တစ်ခု ပေါ်လာပြီး၊ radio တွေက သူ့ အောက်မှာ ရောက်နေပါတယ်။ screen reader က ဒီ အုပ်စုထဲ ဝင်တာနဲ့
+      သကြား ဆိုတာ အရင် ဖတ်ပြမှာပါ။ [[mark:type-hide-old]] div အဟောင်းကိုတော့ ကိုယ့် code မှာဆိုရင်
+      ဖျက်လိုက်ရုံပါပဲ။ ဒီ lesson မှာတော့ hidden ထည့်ပြီး ဖျောက်ထားပါမယ်။ [[mark:after-hide-old]] အခု
+      သကြား အုပ်စု တစ်ခုပဲ ကျန်ပါတော့တယ်။ လိပ်စာ field တွေလို ဆက်စပ်နေတဲ့ field တွေကိုလည်း ဒီ နည်းနဲ့ပဲ
+      အုပ်စုဖွဲ့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Labels (grouping)",
+          url: "https://web.dev/learn/accessibility/forms#labels",
+        }
+      - {
+          title: "W3C WAI: Grouping Controls",
+          url: "https://www.w3.org/WAI/tutorials/forms/grouping/",
+        }
+      - {
+          title: "MDN: The fieldset element",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/fieldset",
+        }
+    actions:
+      - id: type-fieldset
+        type: editor.type
+        at: { mark: type-fieldset }
+        cadence: block
+        target:
+          {
+            file: index.html,
+            after: "          <label><input type=\"radio\" name=\"sugar\" value=\"none\" /> မထည့်</label>\n        </div>",
+            occurrence: 1,
+          }
+        text: "\n        <fieldset class=\"sugar\" data-testid=\"sugar\">\n          <legend>သကြား</legend>\n          <label><input type=\"radio\" name=\"sugar\" value=\"sweet\" checked data-testid=\"sugar-sweet\" /> ချို</label>\n          <label><input type=\"radio\" name=\"sugar\" value=\"less\" data-testid=\"sugar-less\" /> ချိုပေါ့</label>\n          <label><input type=\"radio\" name=\"sugar\" value=\"none\" data-testid=\"sugar-none\" /> မထည့်</label>\n        </fieldset>"
+      - id: expect-group
+        type: expect.preview
+        at: { mark: after-fieldset }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-sugar }
+        textContains: 'group "သကြား"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-group-radio
+        type: expect.preview
+        at: { afterAction: expect-group }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-sugar-sweet }
+        textContains: 'radio "ချို" checked'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-hide-old
+        type: editor.type
+        at: { mark: type-hide-old }
+        cadence: block
+        target:
+          { file: index.html, after: '<div class="sugar" data-testid="sugar-old"', occurrence: 1 }
+        text: " hidden"
+      - id: expect-old-hidden
+        type: expect.preview
+        at: { mark: after-hide-old }
+        timeoutMs: 5000
+        target: { by: testId, value: sugar-old }
+        attribute: { name: hidden, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-group-kept
+        type: expect.preview
+        at: { afterAction: expect-old-hidden }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-sugar }
+        textContains: 'group "သကြား"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: error-problem
+    chapter: "အမှားကို အရောင်တစ်ခုတည်းနဲ့ မပြရအောင်"
+    narration: >
+      [[mark:input-phone-1]] အခု ဖုန်း field မှာ ၀၉ နဲ့ မစတဲ့ နံပါတ် တစ်ခု ထည့်ကြည့်ရအောင်။
+      [[mark:click-order-1]] ပြီးရင် မှာမယ် ကို နှိပ်ပါမယ်။ [[mark:after-order-1]] ဖုန်း field ရဲ့ ဘောင်က
+      အနီရောင် ဖြစ်သွားပါပြီ။ ဒါပေမဲ့ ဘာ မှားလဲ၊ ဘယ်လို ပြင်ရမလဲ ဆိုတဲ့ စာ တစ်လုံးမှ မရှိပါဘူး။ အရောင်
+      ခွဲခြားရ ခက်တဲ့သူက ဘောင် ပြောင်းတာကို သတိထားမိချင်မှ မိမှာ ဖြစ်သလို၊ tree ထဲက ဖုန်း field မှာလည်း
+      ဘာမှ မပြောင်းပါဘူး။ ဒါကြောင့် screen reader သုံးတဲ့သူက အော်ဒါ ဘာကြောင့် မရောက်တာလဲ လုံးဝ
+      မသိနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Errors",
+          url: "https://web.dev/learn/accessibility/forms#errors",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Use of Color",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Error Identification",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/error-identification.html",
+        }
+    actions:
+      - id: input-phone-1
+        type: preview.input
+        at: { mark: input-phone-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: input-phone }
+        value: "123 456 789"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-order-1
+        type: preview.click
+        at: { mark: click-order-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-red-border
+        type: expect.preview
+        at: { mark: after-order-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: input-phone }
+        attribute: { name: class, value: "is-invalid" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-not-invalid
+        type: expect.preview
+        at: { afterAction: expect-red-border }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        attribute: { name: data-states, value: "required" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: error-rules
+    narration: >
+      [[mark:board-errors]] အမှားကို ပြတဲ့အခါ လုပ်ရမယ့် အချက် သုံးခု ရှိပါတယ်။ [[mark:draw-err1]] ပထမ၊ ဘာ
+      မှားလဲ၊ ဘယ်လို ပြင်ရမလဲ ဆိုတာကို field နားမှာ စာနဲ့ ရေးပြပါ။ [[mark:draw-err2]] ဒုတိယ၊ အဲဒီ စာကို
+      aria describedby နဲ့ field နဲ့ ချိတ်ပြီး၊ field မှာ aria invalid ကို true ပေးပါ။ [[mark:draw-err3]]
+      တတိယ၊ အမှား ဖြစ်သွားပြီ ဆိုတာ သိအောင် focus ကို အဲဒီ field ဆီ ရွှေ့ပေးပါ။ live region နဲ့
+      ဖတ်ပြခိုင်းလို့လည်း ရပါတယ်။ field များတဲ့ form မှာဆိုရင်တော့ အမှား အားလုံးကို form ရဲ့ အပေါ်မှာ
+      စုပြတဲ့ နည်းလည်း ရှိပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Errors",
+          url: "https://web.dev/learn/accessibility/forms#errors",
+        }
+      - {
+          title: "W3C WAI: User Notifications (forms tutorial)",
+          url: "https://www.w3.org/WAI/tutorials/forms/notifications/",
+        }
+      - {
+          title: "WebAIM: Usable and Accessible Form Validation and Error Recovery",
+          url: "https://webaim.org/techniques/formvalidation/",
+        }
+      - {
+          title: "MDN: aria-invalid",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-invalid",
+        }
+    actions:
+      - id: board-errors
+        type: whiteboard.apply
+        at: { mark: board-errors }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-bad]
+      - id: draw-err1
+        type: whiteboard.apply
+        at: { mark: draw-err1 }
+        upsertIds: [b-r1-box, b-r1-head, b-r1-body]
+        drawMs: 1600
+      - id: draw-err2
+        type: whiteboard.apply
+        at: { mark: draw-err2 }
+        upsertIds: [b-r2-box, b-r2-head, b-r2-body]
+        drawMs: 1600
+      - id: draw-err3
+        type: whiteboard.apply
+        at: { mark: draw-err3 }
+        upsertIds: [b-r3-box, b-r3-head, b-r3-body]
+        drawMs: 1600
+
+  - id: error-fix
+    chapter: "အမှား စာကို field နဲ့ ချိတ်ရအောင်"
+    narration: >
+      [[mark:close-errors]] ဒါဆို ကိုယ့် form ကို ပြင်ကြည့်ရအောင်။ [[mark:type-error-p]] hint ရဲ့ အောက်မှာ
+      အမှား စာအတွက် စာပိုဒ် အလွတ် တစ်ခု ထည့်ပါမယ်။ [[mark:type-error-ref]] ပြီးတော့ ဖုန်း field ရဲ့ aria
+      describedby ထဲမှာ အဲဒီ စာပိုဒ်ကို hint ရဲ့ ရှေ့မှာ ထည့်ပါမယ်။ ဒါမှ screen reader က အမှား စာကို အရင်
+      ဖတ်ပြမှာပါ။ [[mark:open-main]] နောက်တစ်ဆင့်က JavaScript ပါ။ [[mark:select-toggle]] အခု code က form
+      ကို submit လုပ်တိုင်း နံပါတ် မှားရင် အနီရောင် ဘောင်အတွက် class ကိုပဲ ထည့်ပါတယ်။
+      [[mark:type-error-js]] သူ့ အောက်မှာ aria invalid ကို ပြောင်းတဲ့ စာကြောင်း၊ အမှား စာ ထည့်တဲ့
+      စာကြောင်းနဲ့၊ မှားရင် focus ကို ဖုန်း field ဆီ ရွှေ့တဲ့ စာကြောင်းတွေ ထည့်ပါမယ်။ အမှား စာမှာ ပြင်နည်း
+      ပါအောင်၊ ဖုန်းနံပါတ်ကို ၀၉ နဲ့ စပြီး ရိုက်ပါ လို့ ရေးထားပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Errors",
+          url: "https://web.dev/learn/accessibility/forms#errors",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Error Suggestion",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion.html",
+        }
+      - {
+          title: "MDN: HTMLElement focus()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus",
+        }
+    actions:
+      - id: close-errors
+        type: whiteboard.apply
+        at: { mark: close-errors }
+        open: false
+      - id: type-error-p
+        type: editor.type
+        at: { mark: type-error-p }
+        cadence: block
+        target:
+          {
+            file: index.html,
+            after: '<p class="hint" id="phone-hint" data-testid="phone-hint">09 နဲ့ စတဲ့ နံပါတ်</p>',
+            occurrence: 1,
+          }
+        text: "\n        <p class=\"error\" id=\"phone-error\" data-testid=\"phone-error\"></p>"
+      - id: type-error-ref
+        type: editor.type
+        at: { mark: type-error-ref }
+        cadence: block
+        target: { file: index.html, after: 'aria-describedby="', occurrence: 1 }
+        text: "phone-error "
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: main.js
+      - id: select-toggle
+        type: editor.select
+        at: { mark: select-toggle }
+        target: { file: main.js, text: 'phone.classList.toggle("is-invalid", !ok);', occurrence: 1 }
+      - id: type-error-js
+        type: editor.type
+        at: { mark: type-error-js }
+        cadence: block
+        target:
+          { file: main.js, after: 'phone.classList.toggle("is-invalid", !ok);', occurrence: 1 }
+        text: "\n  phone.setAttribute(\"aria-invalid\", String(!ok));\n  const phoneError = document.querySelector(\"#phone-error\");\n  phoneError.textContent = ok ? \"\" : \"ဖုန်းနံပါတ်ကို 09 နဲ့ စပြီး ရိုက်ပါ\";\n  if (!ok) phone.focus();"
+
+  - id: error-result
+    narration: >
+      [[mark:input-phone-2]] မှားတဲ့ နံပါတ်ကို ပြန်ထည့်ပြီး၊ [[mark:click-order-2]] မှာမယ် ကို
+      နှိပ်ကြည့်ရအောင်။ [[mark:after-order-2]] ဒီတစ်ခါတော့ field အောက်မှာ အမှား စာ ပေါ်လာပါပြီ။ tree ထဲက
+      ဖုန်း field မှာ invalid ဆိုတဲ့ state ပေါ်လာပြီး၊ desc ရဲ့ အစမှာ အမှား စာ ရောက်နေပါတယ်။ focus ကလည်း
+      ဖုန်း field ဆီ ရောက်လာလို့၊ screen reader က field ရဲ့ နာမည်၊ invalid ဖြစ်နေတာ၊ အမှား စာနဲ့ hint ကို
+      ဆက်တိုက် ဖတ်ပြမှာပါ။ အရောင် ခွဲခြားရ ခက်တဲ့သူရော၊ screen reader သုံးတဲ့သူရော၊ အားလုံး ဘာ ပြင်ရမလဲ
+      သိသွားပါပြီ။ [[mark:input-phone-3]] ဒါဆို နံပါတ် အမှန်ကို ထည့်ပြီး၊ [[mark:click-order-3]]
+      ထပ်နှိပ်ကြည့်ရအောင်။ [[mark:after-order-3]] အမှား စာ ပျောက်သွားပြီး invalid လည်း မရှိတော့ပါဘူး။ live
+      region အပိုင်းမှာ polite နဲ့ မှာပြီးပါပြီ ဆိုတာ ပေါ်လာပါတယ်။ အောင်မြင်သွားပြီ ဆိုတာကိုလည်း ဒီလို
+      ပြောပြပေးရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Errors",
+          url: "https://web.dev/learn/accessibility/forms#errors",
+        }
+      - {
+          title: "MDN: ARIA live regions",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Guides/Live_regions",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Status Messages",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html",
+        }
+    actions:
+      - id: input-phone-2
+        type: preview.input
+        at: { mark: input-phone-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: input-phone }
+        value: "123 456 789"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-order-2
+        type: preview.click
+        at: { mark: click-order-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-error-text
+        type: expect.preview
+        at: { mark: after-order-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: phone-error }
+        textContains: "ဖုန်းနံပါတ်ကို 09 နဲ့ စပြီး ရိုက်ပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-invalid-focused
+        type: expect.preview
+        at: { afterAction: expect-error-text }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        attribute: { name: data-states, value: "required invalid focused" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-error-desc
+        type: expect.preview
+        at: { afterAction: expect-invalid-focused }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        textContains: 'desc "ဖုန်းနံပါတ်ကို 09 နဲ့ စပြီး'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: input-phone-3
+        type: preview.input
+        at: { mark: input-phone-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: input-phone }
+        value: "09 123 456 789"
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: click-order-3
+        type: preview.click
+        at: { mark: click-order-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-announced
+        type: expect.preview
+        at: { mark: after-order-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: live-1 }
+        textContains: 'polite "မှာပြီးပါပြီ"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-valid-again
+        type: expect.preview
+        at: { afterAction: expect-announced }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-input-phone }
+        attribute: { name: data-states, value: "required" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: more-criteria
+    chapter: "Form အတွက် ထပ်သိထားသင့်တာတွေ"
+    narration: >
+      [[mark:board-more]] WCAG ၂.၂ မှာ form နဲ့ ဆိုင်တဲ့ စည်းကမ်း အသစ်တွေလည်း ရှိပါတယ်။
+      [[mark:draw-more1]] ပထမက လိပ်စာလို တစ်ခါ ဖြည့်ပြီးသား အချက်အလက်ကို နောက် အဆင့်မှာ ထပ်မတောင်းဖို့ပါ။
+      ကြိုဖြည့်ထားတာ ဒါမှမဟုတ် ရွေးလို့ ရအောင် လုပ်ပေးရပါမယ်။ [[mark:draw-more2]] ဒုတိယက login ဝင်တဲ့အခါ
+      password မှတ်ရတာ၊ ပဟေဠိ ဖြေရတာလို မှတ်ဉာဏ် စမ်းတဲ့ နည်း တစ်ခုတည်း မထားဖို့ပါ။ password manager နဲ့
+      ဖြည့်တာ၊ paste လုပ်တာကို ခွင့်ပြုရပါမယ်။ [[mark:draw-more3]] တတိယက နှိပ်ရမယ့် ခလုတ်တွေကို အနည်းဆုံး
+      အလျား ၂၄ pixel၊ အနံ ၂၄ pixel ရှိအောင်၊ ဒါမှမဟုတ် ဘေးမှာ နေရာလွတ် လုံလောက်အောင် ထားဖို့ပါ။
+      [[mark:draw-more4]] အရင်ကတည်းက ရှိတဲ့ စည်းကမ်း တစ်ခုကတော့၊ အချိန် ကန့်သတ်ထားတဲ့ form မှာ အချိန်
+      တိုးလို့ ရအောင် လုပ်ပေးဖို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms — Additional success criteria",
+          url: "https://web.dev/learn/accessibility/forms#additional_success_criteria",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Redundant Entry",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/redundant-entry.html",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Accessible Authentication (Minimum)",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/accessible-authentication-minimum.html",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Target Size (Minimum)",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Timing Adjustable",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/timing-adjustable.html",
+        }
+    actions:
+      - id: board-more
+        type: whiteboard.apply
+        at: { mark: board-more }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-more1
+        type: whiteboard.apply
+        at: { mark: draw-more1 }
+        upsertIds: [c-r1-box, c-r1-head, c-r1-body]
+        drawMs: 1600
+      - id: draw-more2
+        type: whiteboard.apply
+        at: { mark: draw-more2 }
+        upsertIds: [c-r2-box, c-r2-head, c-r2-body]
+        drawMs: 1600
+      - id: draw-more3
+        type: whiteboard.apply
+        at: { mark: draw-more3 }
+        upsertIds: [c-r3-box, c-r3-head, c-r3-body]
+        drawMs: 1600
+      - id: draw-more4
+        type: whiteboard.apply
+        at: { mark: draw-more4 }
+        upsertIds: [c-r4-box, c-r4-head, c-r4-body]
+        drawMs: 1600
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:close-more]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-label]] field တိုင်းမှာ မြင်ရတဲ့ label
+      ရှိရပြီး၊ placeholder က label ကို အစားထိုးလို့ မရပါဘူး။ [[mark:recap-type]] မှန်တဲ့ type နဲ့
+      autocomplete က ဖြည့်ရတာကို မြန်စေပါတယ်။ [[mark:recap-group]] radio တွေကို fieldset နဲ့ legend နဲ့
+      အုပ်စုဖွဲ့ပါ။ [[mark:recap-error]] hint နဲ့ အမှား စာကို aria describedby နဲ့ ချိတ်ပြီး၊ အမှားကို
+      အရောင်နဲ့ပဲ မပြဘဲ စာနဲ့ ပြပါ။ ကိုယ့် ကွန်ပျူတာက screen reader နဲ့ ဒီ form ကို ဖြည့်ကြည့်ပါ။ နောက်
+      lesson မှာတော့ pattern၊ component နဲ့ design system အကြောင်း ကြည့်ပြီး၊ div နဲ့ ဆောက်ထားတဲ့
+      accordion နဲ့ dialog ကို HTML element တွေနဲ့ ပြန်ဆောက်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: Forms",
+          url: "https://web.dev/learn/accessibility/forms",
+        }
+      - {
+          title: "web.dev Learn Accessibility: Patterns, components, and design systems",
+          url: "https://web.dev/learn/accessibility/patterns",
+        }
+    actions:
+      - id: close-more
+        type: whiteboard.apply
+        at: { mark: close-more }
+        open: false
+      - id: open-index-recap
+        type: workspace.openFile
+        at: { mark: recap-label }
+        path: index.html
+      - id: recap-label
+        type: editor.select
+        at: { afterAction: open-index-recap }
+        target: { file: index.html, text: '<label for="name">နာမည်</label>', occurrence: 1 }
+      - id: recap-type
+        type: editor.select
+        at: { mark: recap-type }
+        target: { file: index.html, text: 'type="tel" autocomplete="tel" required', occurrence: 1 }
+      - id: recap-group
+        type: editor.select
+        at: { mark: recap-group }
+        target: { file: index.html, text: "<legend>သကြား</legend>", occurrence: 1 }
+      - id: recap-error
+        type: editor.select
+        at: { mark: recap-error }
+        target:
+          { file: index.html, text: 'aria-describedby="phone-error phone-hint"', occurrence: 1 }
+      - id: expect-file-name-label
+        type: expect.file
+        at: { afterAction: recap-error }
+        path: index.html
+        contains: '<label for="name">နာမည်</label>'
+      - id: expect-file-phone-input
+        type: expect.file
+        at: { afterAction: expect-file-name-label }
+        path: index.html
+        contains: '<input id="phone" name="phone" type="tel" autocomplete="tel" required aria-describedby="phone-error phone-hint"'
+      - id: expect-file-name-autocomplete
+        type: expect.file
+        at: { afterAction: expect-file-phone-input }
+        path: index.html
+        contains: 'type="text" autocomplete="name"'
+      - id: expect-file-fieldset
+        type: expect.file
+        at: { afterAction: expect-file-name-autocomplete }
+        path: index.html
+        contains: "<legend>သကြား</legend>"
+      - id: expect-file-invalid-js
+        type: expect.file
+        at: { afterAction: expect-file-fieldset }
+        path: main.js
+        contains: 'phone.setAttribute("aria-invalid", String(!ok));'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
