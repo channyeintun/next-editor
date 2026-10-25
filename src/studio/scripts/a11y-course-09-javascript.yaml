@@ -2290,17 +2290,18 @@ scenes:
   - id: focus
     chapter: "Focus ကို ဘယ်ပို့မလဲ"
     narration: >
-      [[mark:board-focus]] နောက်ဆုံး အလုပ်က focus ပါ။ keyboard သုံးတဲ့သူအတွက် focus ဆိုတာ page ပေါ်မှာ
-      ကိုယ် ရောက်နေတဲ့ နေရာပါ။ JavaScript က page ကို ပြောင်းတဲ့အခါ အဲဒီ နေရာ ပျောက်မသွားအောင် ကိုယ်က
+      [[mark:look-focus]] နောက်ဆုံး အလုပ်က focus ပါ။ panel ကို ကြည့်ပါ။ မှာမယ် ခလုတ်ကို နှိပ်ပြီးတဲ့
+      နောက်မှာလည်း ခလုတ်က နေရာမှာ ရှိနေဆဲ ဖြစ်လို့၊ သူ့ row က focus ရှိနေတုန်းပါ။ [[mark:board-focus]]
+      keyboard သုံးတဲ့သူအတွက် focus ဆိုတာ page ပေါ်မှာ ကိုယ် ရောက်နေတဲ့ နေရာပါ။ JavaScript က page ကို ပြောင်းတဲ့အခါ အဲဒီ နေရာ ပျောက်မသွားအောင် ကိုယ်က
       ဆုံးဖြတ်ပေးရပါတယ်။ [[mark:draw-component]] component အဆင့်မှာဆိုရင်၊ dialog ဖွင့်တာနဲ့ focus ကို
       အထဲ ရွှေ့ပေးရပြီး၊ ဖွင့်ထားတုန်း Tab key က dialog ထဲမှာပဲ လှည့်နေရပါမယ်။ ပိတ်လိုက်ရင်တော့ focus
       ကို ဖွင့်ခဲ့တဲ့ ခလုတ်ဆီ ပြန်ပို့ပေးရပါမယ်။ [[mark:draw-page]] page အဆင့်မှာတော့ view အသစ်
       ပြောင်းတဲ့အခါ focus ကို ခေါင်းစဉ် ဒါမှမဟုတ် main အပိုင်းဆီ ရွှေ့ပေးတာ များပါတယ်။ ဘယ်နည်း ရွေးမလဲ
       ဆိုတာ ကိုယ့် app ပေါ် မူတည်ပါတယ်။ [[mark:draw-trap]] dialog က Tab ကို အထဲမှာ ထိန်းထားပေမယ့်၊
       Escape ဒါမှမဟုတ် ပိတ်တဲ့ ခလုတ်နဲ့ အမြဲ ပြန်ထွက်လို့ ရရပါမယ်။ ထွက်လမ်း မရှိဘဲ focus ပိတ်မိနေတဲ့
-      keyboard trap ကိုတော့ ဘယ်တော့မှ မဖြစ်စေရပါဘူး။ [[mark:draw-stay]] ကိုယ့် မှာမယ် ခလုတ်ကတော့
-      နှိပ်ပြီးတဲ့ နောက်မှာလည်း နေရာမှာ ရှိနေဆဲပါ။ [[mark:close-focus]] panel မှာလည်း သူ့ row က focus
-      ရှိနေတုန်းပါ။ ဒါကြောင့် focus ကို မရွှေ့ဘဲ live region နဲ့ ပြောပြတာ မှန်ပါတယ်။ ခလုတ်
+      keyboard trap ကိုတော့ ဘယ်တော့မှ မဖြစ်စေရပါဘူး။ [[mark:draw-stay]] ကိုယ့် ဆိုင်ရဲ့ မှာမယ် ခလုတ်ကတော့
+      ခုနက မြင်ခဲ့သလို နှိပ်ပြီးတဲ့ နောက်မှာလည်း နေရာမှာ ရှိနေလို့၊ focus ပျောက်မသွားပါဘူး။
+      [[mark:close-focus]] ဒါကြောင့် focus ကို မရွှေ့ဘဲ live region နဲ့ ပြောပြတာ မှန်ပါတယ်။ ခလုတ်
       ပျောက်သွားခဲ့ရင်တော့ focus က page ရဲ့ body ဆီ ပြန်ကျသွားလို့၊ JavaScript နဲ့ သင့်တော်တဲ့ နေရာဆီ
       ရွှေ့ပေးရပါမယ်။
     sources:
@@ -2321,6 +2322,13 @@ scenes:
           url: "https://html.spec.whatwg.org/multipage/interaction.html#focus-fixup-rule",
         }
     actions:
+      - id: expect-order-focused
+        type: expect.preview
+        at: { mark: look-focus }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-order-button }
+        attribute: { name: data-states, value: "focused" }
+        retry: { maxAttempts: 3, delayMs: 300 }
       - id: board-focus
         type: whiteboard.apply
         at: { mark: board-focus }
@@ -2351,13 +2359,6 @@ scenes:
         type: whiteboard.apply
         at: { mark: close-focus }
         open: false
-      - id: expect-order-focused
-        type: expect.preview
-        at: { afterAction: close-focus }
-        timeoutMs: 5000
-        target: { by: testId, value: a11y-order-button }
-        attribute: { name: data-states, value: "focused" }
-        retry: { maxAttempts: 3, delayMs: 300 }
 
   - id: recap
     chapter: "ပြန်ချုပ်ရရင်"
