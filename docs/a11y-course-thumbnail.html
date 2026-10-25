@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Accessibility course thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      Accessibility course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Same template as docs/css-course-thumbnail.html.
+      Click any text to edit it; click a progress square to load that lesson from LESSONS.
+      Screenshot the frame only (DevTools → right-click the #thumb node → Capture node
+      screenshot for an exact 1280×720 PNG), or render the whole set with
+      `bun docs/a11y-course-thumbnails/render.ts`.
+      Brand: Next Editor lesson template (cream page, ink, yellow/purple/teal,
+      Google Sans + Google Sans Code); Burmese runs are set in Noto Sans Myanmar.
+      Mascot: "Ally", an original character drawn for this course: a teal body inside a
+      purple focus ring (the keyboard-focus outline the course keeps asking for), wearing
+      headphones (listening the way a screen reader user does). It uses no W3C, WCAG or
+      wheelchair/accessibility logo and must not be traced from one.
+      Pose, mirror, tilt and the speech bubble are set from the toolbar under the
+      frame, or all at once with window.setThumb({...}) from the console.
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --gray: #80868b;
+        --dot: #cfccc2;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* max-content keeps the whole frame reachable by scrolling in a narrow window.
+         The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      [contenteditable] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable]:hover {
+        box-shadow: inset 0 -3px 0 rgb(109 87 255 / 0.35);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .series {
+        position: absolute;
+        left: 60px;
+        top: 46px;
+        font: 700 36px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 60px;
+        top: 38px;
+        padding: 12px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 164px;
+        width: 300px;
+        height: 350px;
+        border-radius: 28px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .number .label {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.16em;
+      }
+
+      .number .value {
+        font: 700 200px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .title-box {
+        position: absolute;
+        left: 420px;
+        top: 140px;
+        width: 480px;
+        height: 290px;
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        width: 100%;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.32;
+        letter-spacing: -0.01em;
+        /* Editable text defaults to break-word in Chrome, which splits a long word
+           instead of letting fitTitle shrink it. */
+        overflow-wrap: normal;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, so every Myanmar run
+         in the title is wrapped in .mm (see renderTitle). A run never breaks inside:
+         Chrome's dictionary breaker would split a word like အရွယ်အစား mid-way, so a
+         title only wraps at its spaces. */
+      .title .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      /* A phrase that must not break across lines (see renderTitle). */
+      .title .nb {
+        white-space: nowrap;
+      }
+
+      .code {
+        left: 420px;
+        top: 462px;
+        width: 796px;
+        height: 92px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        padding: 0 34px;
+      }
+
+      .code .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      /* Noto Sans Myanmar sits in the stack for Burmese inside CSS strings
+         (content: " ကျပ်"). */
+      .code .src {
+        width: 100%;
+        white-space: pre;
+        overflow: hidden;
+        font:
+          500 32px/1.2 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+      }
+
+      /* CSS: selectors and at-rules purple, properties ink, values teal, numbers and
+         colours amber, punctuation gray. HTML (index.html): tags and attributes
+         purple, attribute values teal. */
+      .src .sel,
+      .src .at,
+      .src .kw {
+        color: var(--purple);
+        font-weight: 700;
+      }
+
+      .src .prop {
+        color: var(--ink);
+      }
+
+      .src .val,
+      .src .str {
+        color: var(--teal-dk);
+      }
+
+      .src .fn {
+        color: var(--teal-dk);
+        font-weight: 700;
+      }
+
+      .src .num {
+        color: #b26b00;
+      }
+
+      .src .pn {
+        color: var(--gray);
+      }
+
+      .src .tag,
+      .src .attr {
+        color: var(--purple);
+      }
+
+      .src .cm {
+        color: var(--gray);
+      }
+
+      /* 43 lessons in eight parts: the squares are smaller than the React set's so the
+         row stays clear of the brand. */
+      .progress {
+        position: absolute;
+        left: 64px;
+        bottom: 66px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .module {
+        display: flex;
+        gap: 4px;
+      }
+
+      .sq {
+        width: 15px;
+        height: 15px;
+        border-radius: 4px;
+        background: var(--dot);
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .sq.on {
+        background: var(--yellow);
+        box-shadow: inset 0 0 0 3px var(--ink);
+      }
+
+      .brand {
+        position: absolute;
+        right: 60px;
+        bottom: 50px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 56px;
+        height: 56px;
+      }
+
+      /* The mascot stands on the right end of the code card: its box ends at 472px,
+         just over the card's top border (462px), so its feet rest on it. */
+      .mascot {
+        position: absolute;
+        right: 36px;
+        top: 100px;
+        width: 310px;
+        height: 372px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 18px;
+      }
+
+      .bubble {
+        position: relative;
+        max-width: 310px;
+        overflow: hidden;
+        padding: 8px 24px 10px;
+        border: 4px solid var(--ink);
+        border-radius: 24px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        font:
+          700 34px/1.35 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+        white-space: nowrap;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, and its stacked
+         marks need a taller line than code text. */
+      .bubble.mm {
+        font-family: "Noto Sans Myanmar", "Google Sans", sans-serif;
+        line-height: 1.6;
+        padding: 4px 24px 6px;
+      }
+
+      .bubble.off {
+        display: none;
+      }
+
+      .bubble-tail {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        background: var(--white);
+        border-right: 4px solid var(--ink);
+        border-bottom: 4px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .ally {
+        width: 310px;
+        height: 200px;
+        flex: none;
+        overflow: visible;
+        transform-origin: center bottom;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+      }
+
+      .toolbar button {
+        padding: 6px 12px;
+        border: 1px solid #55555c;
+        border-radius: 8px;
+        background: #3a3a3f;
+        color: #f0f0f3;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .toolbar button[aria-pressed="true"] {
+        border-color: var(--yellow);
+        color: var(--yellow);
+      }
+
+      .help {
+        max-width: 1280px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series">
+        <span class="brace">{</span> Accessibility course <span class="brace">}</span>
+      </div>
+      <div class="lang" contenteditable="plaintext-only" spellcheck="false">မြန်မာလို</div>
+
+      <div class="card number">
+        <div class="label">LESSON</div>
+        <div class="value" id="number" contenteditable="plaintext-only" spellcheck="false">01</div>
+      </div>
+
+      <div class="title-box" id="title-box">
+        <div class="title" id="title" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="card code">
+        <div class="tab" id="file" contenteditable="plaintext-only" spellcheck="false"></div>
+        <div class="src" id="code" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="mascot">
+        <div class="bubble" id="bubble" contenteditable="plaintext-only" spellcheck="false"></div>
+        <svg
+          class="ally"
+          id="ally"
+          viewBox="-155 -95 310 200"
+          role="img"
+          aria-label="Ally, the course's focus-ring mascot"
+        ></svg>
+      </div>
+      <!-- The tail sits outside the bubble so the bubble can clip long text. -->
+      <div class="bubble-tail" id="bubble-tail"></div>
+
+      <div class="progress" id="progress" aria-label="Lesson in the course"></div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      Ally:
+      <button type="button" data-pose="happy">Happy</button>
+      <button type="button" data-pose="thinking">Thinking</button>
+      <button type="button" data-pose="joy">Joy</button>
+      <button type="button" data-action="mirror">Mirror</button>
+      <button type="button" data-tilt="-6">Tilt left</button>
+      <button type="button" data-tilt="0">Straight</button>
+      <button type="button" data-tilt="6">Tilt right</button>
+      <button type="button" data-action="bubble">Bubble</button>
+    </div>
+
+    <p class="help">
+      Click any text to edit it (including Ally's bubble) · click a square to load that lesson ·
+      pick Ally's pose above · then screenshot only the 1280×720 frame.
+    </p>
+
+    <script>
+      /**
+       * Every lesson's thumbnail data lives here and only here; render.ts and the
+       * progress squares both read it. `slug` is the PNG name in
+       * docs/css-course-thumbnails/. `code` is one real line (or a whole rule) of
+       * that lesson's CSS, short enough to stay at the full 32px (38 characters at
+       * most); a `file` ending in .html switches the code card to HTML colours.
+       */
+      const LESSONS = [
+        {
+          number: 1,
+          slug: "01-why",
+          title: "Accessibility ဆိုတာ ဘာလဲ",
+          file: "notes.md",
+          code: "accessibility (a11y)",
+          bubble: "for everyone",
+          pose: "joy",
+          tilt: -6,
+        },
+        {
+          number: 2,
+          slug: "02-measure",
+          title: "Accessibility ကို ဘယ်လို တိုင်းတာလဲ",
+          file: "notes.md",
+          code: "success criterion 86 ခု",
+          bubble: "WCAG 2.2",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 3,
+          slug: "03-accessibility-tree",
+          title: "Accessibility tree နဲ့ semantic HTML",
+          file: "index.html",
+          code: '<button class="order-btn"',
+          bubble: "real button",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 4,
+          slug: "04-aria-rules",
+          title: "ARIA ကို ဘယ်အချိန် သုံးမလဲ",
+          file: "index.html",
+          code: 'aria-label="ကြိုက်တယ်"',
+          bubble: "ARIA rules",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 5,
+          slug: "05-landmarks-headings",
+          title: "Landmark နဲ့ heading",
+          file: "index.html",
+          code: '<nav aria-label="အဓိက"',
+          bubble: "landmarks",
+          pose: "happy",
+          tilt: -4,
+        },
+        {
+          number: 6,
+          slug: "06-lists-tables",
+          title: "List နဲ့ table",
+          file: "index.html",
+          code: '<th scope="col">နေ့</th>',
+          bubble: "tables",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 7,
+          slug: "07-document",
+          title: "Page title နဲ့ ဘာသာစကား",
+          file: "index.html",
+          code: '<html lang="my">',
+          bubble: "lang",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 8,
+          slug: "08-keyboard-focus",
+          title: "Keyboard focus",
+          file: "styles.css",
+          code: ":focus-visible {",
+          bubble: "focus ring",
+          pose: "joy",
+          tilt: 4,
+        },
+        {
+          number: 9,
+          slug: "09-javascript",
+          title: "JavaScript နဲ့ accessibility",
+          file: "index.html",
+          code: 'role="status"',
+          bubble: "live region",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 10,
+          slug: "10-images",
+          title: "ပုံတွေနဲ့ alt text",
+          file: "index.html",
+          code: 'alt="ဖုန်းဆက်ရန်"',
+          bubble: "alt text",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 11,
+          slug: "11-color-contrast",
+          title: "အရောင်နဲ့ contrast",
+          file: "styles.css",
+          code: "color: saddlebrown;",
+          bubble: "contrast",
+          pose: "joy",
+          tilt: -5,
+        },
+        {
+          number: 12,
+          slug: "12-motion",
+          title: "Animation နဲ့ motion",
+          file: "styles.css",
+          code: ".reduce-motion * {",
+          bubble: "reduce motion",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 13,
+          slug: "13-typography",
+          title: "ဖတ်ရလွယ်တဲ့ စာသား",
+          file: "styles.css",
+          code: "line-height: 1.8;",
+          bubble: "line height",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 14,
+          slug: "14-video-audio",
+          title: "Video နဲ့ audio",
+          file: "video.html",
+          code: '<track kind="captions">',
+          bubble: "captions",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 15,
+          slug: "15-forms",
+          title: "Form တွေ",
+          file: "index.html",
+          code: '<label for="name">နာမည်</label>',
+          bubble: "labels",
+          pose: "happy",
+          tilt: -4,
+        },
+        {
+          number: 16,
+          slug: "16-patterns",
+          title: "Pattern၊ component နဲ့ design system",
+          file: "main.js",
+          code: "confirmDialog.showModal();",
+          bubble: "native first",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 17,
+          slug: "17-design-ux",
+          title: "Design နဲ့ UX",
+          file: "notes.md",
+          code: "persona — မသန်စွမ်းမှု ထည့်",
+          bubble: "persona",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 18,
+          slug: "18-automated-testing",
+          title: "Automated testing",
+          file: "index.html",
+          code: '<ul class="menu">',
+          bubble: "axe",
+          pose: "joy",
+          tilt: 4,
+        },
+        {
+          number: 19,
+          slug: "19-manual-testing",
+          title: "Manual testing",
+          file: "styles.css",
+          code: "text-decoration: underline;",
+          bubble: "manual check",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 20,
+          slug: "20-screen-readers",
+          title: "Screen reader နဲ့ စမ်းသပ်ခြင်း",
+          file: "index.html",
+          code: '<span class="deco" aria-hidden="true">',
+          bubble: "screen reader",
+          pose: "joy",
+          tilt: 5,
+        },
+      ];
+      window.LESSONS = LESSONS;
+
+      // Parts of the course (curriculum.md): foundations 1–2 · structure 3–7 ·
+      // interaction 8–9 · perception 10–14 · forms and patterns 15–16 · design and
+      // testing 17–20. One group of squares per part.
+      const PARTS = [2, 5, 2, 5, 2, 4];
+
+      const number = document.getElementById("number");
+      const title = document.getElementById("title");
+      const titleBox = document.getElementById("title-box");
+      const file = document.getElementById("file");
+      const code = document.getElementById("code");
+      const progress = document.getElementById("progress");
+      const bubble = document.getElementById("bubble");
+      const bubbleTail = document.getElementById("bubble-tail");
+      const ally = document.getElementById("ally");
+      const thumb = document.getElementById("thumb");
+      const toolbar = document.getElementById("toolbar");
+      const mascot = { pose: "happy", mirror: false, tilt: -6, bubble: true };
+
+      // ---- Ally, the original focus-ring mascot (flat fills, bold ink outline) -----
+      // A teal body with a drop shadow, wearing yellow-cupped headphones, inside a
+      // purple focus ring drawn with a gap, the way outline-offset leaves one.
+
+      const INK = "#1e1e1e";
+      const BODY = { x: -68, y: -60, w: 136, h: 124, r: 46 };
+      const RING = { x: -90, y: -84, w: 180, h: 170, r: 66 };
+
+      function rect(box, attrs, dx = 0, dy = 0) {
+        return `<rect x="${box.x + dx}" y="${box.y + dy}" width="${box.w}" height="${box.h}" rx="${box.r}" ${attrs}/>`;
+      }
+
+      // An arm is an ink stroke from the shoulder, ending in a round yellow hand.
+      function arm(d, hx, hy) {
+        return (
+          `<path d="${d}" fill="none" stroke="${INK}" stroke-width="10" stroke-linecap="round"/>` +
+          `<circle cx="${hx}" cy="${hy}" r="10.5" fill="#ffd255" stroke="${INK}" stroke-width="5"/>`
+        );
+      }
+
+      function sparkle(x, y, size) {
+        const s = size;
+        const d = `M ${x} ${y - s} Q ${x + s * 0.18} ${y - s * 0.18} ${x + s} ${y} Q ${x + s * 0.18} ${y + s * 0.18} ${x} ${y + s} Q ${x - s * 0.18} ${y + s * 0.18} ${x - s} ${y} Q ${x - s * 0.18} ${y - s * 0.18} ${x} ${y - s} Z`;
+        return `<path d="${d}" fill="#ffd255" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
+      }
+
+      const CHEEKS =
+        `<ellipse cx="-35" cy="10" rx="9" ry="5.5" fill="#ff8f7e" opacity="0.6"/>` +
+        `<ellipse cx="35" cy="10" rx="9" ry="5.5" fill="#ff8f7e" opacity="0.6"/>`;
+
+      function roundEye(x, y) {
+        return (
+          `<ellipse cx="${x}" cy="${y}" rx="8.5" ry="11" fill="${INK}"/>` +
+          `<circle cx="${x + 2.6}" cy="${y - 4.4}" r="3.4" fill="#fff"/>`
+        );
+      }
+
+      const FACES = {
+        happy:
+          roundEye(-20, -12) +
+          roundEye(20, -12) +
+          CHEEKS +
+          `<path d="M -16 6 Q 0 30 16 6 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<path d="M -8 18 Q 0 13 8 18 Q 0 23 -8 18 Z" fill="#ff7f72"/>`,
+        thinking:
+          roundEye(-17, -9) +
+          roundEye(24, -9) +
+          `<path d="M -31 -28 L -8 -26" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>` +
+          `<path d="M 13 -30 Q 24 -39 36 -31" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -5 19 Q 2 12 9 18 T 23 15" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`,
+        joy:
+          `<path d="M -32 -6 Q -21 -22 -10 -6" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>` +
+          `<path d="M 10 -6 Q 21 -22 32 -6" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -21 5 Q 0 42 21 5 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<ellipse cx="0" cy="21" rx="9" ry="4.5" fill="#ff7f72"/>`,
+      };
+
+      // Arms per pose: happy waves, thinking scratches the top corner, joy cheers.
+      const ARMS = {
+        happy:
+          arm("M -70 16 Q -104 32 -110 56", -110, 56) + arm("M 70 4 Q 110 -6 118 -40", 118, -40),
+        thinking:
+          arm("M -70 16 Q -102 34 -106 58", -106, 58) + arm("M 70 6 Q 126 -14 104 -72", 104, -72),
+        joy:
+          arm("M -70 2 Q -110 -22 -118 -58", -118, -58) + arm("M 70 2 Q 110 -22 118 -58", 118, -58),
+      };
+
+      const EXTRAS = {
+        happy: "",
+        thinking: `<circle cx="-122" cy="-70" r="6" fill="#fff" stroke="${INK}" stroke-width="4"/><circle cx="-142" cy="-84" r="8.5" fill="#fff" stroke="${INK}" stroke-width="4"/>`,
+        joy: sparkle(-138, -80, 11) + sparkle(142, -88, 10),
+      };
+
+      const HEADPHONES =
+        `<path d="M -58 -22 C -58 -92 58 -92 58 -22" fill="none" stroke="${INK}" stroke-width="9" stroke-linecap="round"/>` +
+        `<rect x="-80" y="-34" width="24" height="44" rx="10" fill="#ffd255" stroke="${INK}" stroke-width="5"/>` +
+        `<rect x="56" y="-34" width="24" height="44" rx="10" fill="#ffd255" stroke="${INK}" stroke-width="5"/>`;
+
+      function allySvg(pose) {
+        return (
+          EXTRAS[pose] +
+          // The focus ring: solid, with a see-through gap around the body.
+          rect(RING, `fill="none" stroke="#6d57ff" stroke-width="7"`) +
+          ARMS[pose] +
+          // Feet first, so the body sits on them.
+          `<ellipse cx="-32" cy="76" rx="20" ry="11" fill="${INK}"/>` +
+          `<ellipse cx="32" cy="76" rx="20" ry="11" fill="${INK}"/>` +
+          rect(BODY, `fill="${INK}"`, 7, 7) +
+          rect(BODY, `fill="#4de5d6" stroke="${INK}" stroke-width="7"`) +
+          `<ellipse cx="-36" cy="-36" rx="10" ry="5" fill="#fff" opacity="0.6" transform="rotate(-30 -36 -36)"/>` +
+          HEADPHONES +
+          FACES[pose]
+        );
+      }
+
+      // ---- Progress squares -------------------------------------------------------
+
+      const squares = [];
+      for (const count of PARTS) {
+        const module = document.createElement("div");
+        module.className = "module";
+        for (let i = 0; i < count; i++) {
+          const index = squares.length + 1;
+          const square = document.createElement("button");
+          square.type = "button";
+          square.className = "sq";
+          square.title = `Lesson ${index}`;
+          square.addEventListener("click", () => window.setThumb({ lesson: index }));
+          squares.push(square);
+          module.append(square);
+        }
+        progress.append(module);
+      }
+
+      function markLesson(index) {
+        squares.forEach((square, i) => square.classList.toggle("on", i + 1 === index));
+      }
+
+      // ---- Text fitting -----------------------------------------------------------
+
+      function escapeHtml(text) {
+        return text.replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      // Terms that read as one word and must stay on one line (a hyphen inside one
+      // never breaks either).
+      const NO_BREAK_TERMS = [
+        "Accessibility tree",
+        "semantic HTML",
+        "alt text",
+        "design system",
+        "Screen reader",
+        "Page title",
+      ];
+      // Particles that stay on the line of the word before them ("layer တွေ",
+      // "Unit တွေနဲ့", "Component နဲ့" never split).
+      const PARTICLES = ["တွေနဲ့", "နဲ့", "တွေ"];
+      const MYANMAR = /[\u1000-\u109f\ua9e0-\ua9ff\uaa60-\uaa7f]+/g;
+      // Markers for a space and a hyphen that must not break; both are put back as
+      // plain characters in the markup.
+      const GLUE = "\u00a0";
+      const GLUE_HYPHEN = "\u2011";
+
+      function titleHtml(text) {
+        return escapeHtml(text)
+          .replace(MYANMAR, (run) => `<span class="mm">${run}</span>`)
+          .replaceAll(GLUE, " ")
+          .replaceAll(GLUE_HYPHEN, "-");
+      }
+
+      // Glue NO_BREAK_TERMS, each particle to the word before it and the part number
+      // to အပိုင်း, wrap each glued piece in .nb and each Burmese run in .mm so a
+      // single font shapes it. A glued piece may still break after the hyphen of its
+      // first word ("Pseudo-" / "element တွေ"), which keeps it from shrinking to a
+      // tiny single line. A part title starts its topic on a new line:
+      // "Flexbox အပိုင်း 1၊" / "axis နဲ့ wrap". (A no-break space in LESSONS would not
+      // survive the whitespace collapse below, so the glue is added here, in markup.)
+      function renderTitle() {
+        let text = title.textContent.replace(/\s+/g, " ").trim();
+        for (const term of NO_BREAK_TERMS)
+          text = text.split(term).join(term.replaceAll(" ", GLUE).replaceAll("-", GLUE_HYPHEN));
+        for (const particle of PARTICLES)
+          text = text.replace(new RegExp(` (${particle})(?= |$)`, "g"), `${GLUE}$1`);
+        text = text.replace(/အပိုင်း (\d+)/g, `အပိုင်း${GLUE}$1`);
+        title.innerHTML = text
+          .split(" ")
+          .map((piece, i, pieces) => {
+            let html = titleHtml(piece);
+            if (piece.includes(GLUE) || piece.includes(GLUE_HYPHEN)) {
+              const firstWord = piece.split(GLUE)[0];
+              const cut = firstWord.lastIndexOf("-") + 1;
+              html = `${titleHtml(piece.slice(0, cut))}<span class="nb">${titleHtml(piece.slice(cut))}</span>`;
+            }
+            // The space stays before the <br> so textContent keeps the words apart.
+            const partEnd = /^အပိုင်း\u00a0\d+၊$/.test(piece) && i < pieces.length - 1;
+            return i < pieces.length - 1 ? html + (partEnd ? " <br>" : " ") : html;
+          })
+          .join("");
+        fitTitle();
+      }
+
+      // Largest size (to 116px) at which the title fits its box.
+      function fitTitle() {
+        let size = 116;
+        title.style.fontSize = `${size}px`;
+        while (
+          size > 40 &&
+          (title.scrollHeight > titleBox.clientHeight || title.scrollWidth > titleBox.clientWidth)
+        ) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // Light CSS highlighting for a one-line rule or fragment. The line starts as a
+      // selector when it has a `{`, as a declaration when it opens with `name:`, and
+      // as a bare value otherwise.
+      function highlightCss(source) {
+        let ctx = source.includes("{")
+          ? "sel"
+          : /^\s*-?-?[A-Za-z][\w-]*\s*:\s/.test(source)
+            ? "prop"
+            : "val";
+        let atName = "";
+        const token =
+          /(\s+)|(\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(@[\w-]+)|([{}])|(;)|(#[0-9a-fA-F]{3,8}(?![\w-]))|([+-]?(?:\d+\.?\d*|\.\d+)(?:%|[A-Za-z]+)?)|(-?-?[A-Za-z_][\w-]*)(\()?|(!important)|(:(?=\s|$))|[\s\S]/gy;
+        const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
+        let html = "";
+        let selector = "";
+        const flushSelector = () => {
+          if (selector) html += span("sel", selector);
+          selector = "";
+        };
+        for (const m of source.matchAll(token)) {
+          const [
+            text,
+            space,
+            comment,
+            string,
+            at,
+            brace,
+            semi,
+            hex,
+            num,
+            ident,
+            call,
+            important,
+            colon,
+          ] = m;
+          if (ctx === "sel" && !space && !comment && !string && !at && !brace) {
+            // Everything up to the brace is selector text; combinators and commas
+            // read as punctuation.
+            if (/^[,>+~]$/.test(text)) {
+              flushSelector();
+              html += span("pn", text);
+            } else selector += text;
+            continue;
+          }
+          flushSelector();
+          if (space) html += text;
+          else if (comment) html += span("cm", text);
+          else if (string) html += span("str", text);
+          else if (at) {
+            html += span("at", text);
+            atName = text;
+            ctx = "at";
+          } else if (brace) {
+            html += span("pn", text);
+            if (text === "}") ctx = "sel";
+            else
+              ctx = /^@(font-face|property|counter-style|page)$/.test(atName)
+                ? "prop"
+                : ctx === "at"
+                  ? "sel"
+                  : "prop";
+            atName = "";
+          } else if (semi) {
+            html += span("pn", text);
+            ctx = ctx === "at" ? "sel" : "prop";
+          } else if (hex || num) html += span("num", text);
+          else if (ident) {
+            if (call) html += span("fn", ident) + span("pn", call);
+            else if (ctx === "prop") html += span("prop", ident);
+            else if (ctx === "val" && !ident.startsWith("--")) html += span("val", ident);
+            else html += escapeHtml(ident);
+          } else if (important) html += span("kw", text);
+          else if (colon) {
+            html += span("pn", text);
+            if (ctx === "prop") ctx = "val";
+          } else html += span("pn", text);
+        }
+        flushSelector();
+        return html;
+      }
+
+      // Light HTML highlighting: tags and attribute names purple, values teal.
+      function highlightHtml(source) {
+        const token = /(<\/?)([\w-]+)|([\w:@-]+)(?==)|("[^"]*"|'[^']*')|(\/?>|=)/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, angle, tag, attr, string, punct] = match;
+          if (angle)
+            html += `<span class="pn">${escapeHtml(angle)}</span><span class="tag">${escapeHtml(tag)}</span>`;
+          else if (attr) html += `<span class="attr">${escapeHtml(attr)}</span>`;
+          else if (string) html += `<span class="str">${escapeHtml(string)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Light JavaScript highlighting: strings teal, keywords purple, calls bold teal.
+      function highlightJs(source) {
+        const token =
+          /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`)|\b(const|let|if|else|return|true|false|function|new|await)\b|([A-Za-z_$][\w$]*)(?=\()|([()[\]{}.,;=])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, string, keyword, call, punct] = match;
+          if (string) html += `<span class="str">${escapeHtml(string)}</span>`;
+          else if (keyword) html += `<span class="kw">${escapeHtml(keyword)}</span>`;
+          else if (call) html += `<span class="fn">${escapeHtml(call)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Shrink long code lines so they stay on one line inside the card.
+      function fitCode() {
+        let size = 32;
+        code.style.fontSize = `${size}px`;
+        while (size > 18 && code.scrollWidth > code.clientWidth) {
+          size -= 1;
+          code.style.fontSize = `${size}px`;
+        }
+      }
+
+      function renderCode() {
+        const source = code.textContent.replace(/\s*\n\s*/g, " ").trim();
+        const name = file.textContent.trim();
+        code.innerHTML = /\.(html?|vtt)$/i.test(name)
+          ? highlightHtml(source)
+          : /\.css$/i.test(name)
+            ? highlightCss(source)
+            : /\.js$/i.test(name)
+              ? highlightJs(source)
+              : escapeHtml(source);
+        fitCode();
+      }
+
+      // Keep the bubble on one line: shrink long words rather than wrap them.
+      function fitBubble() {
+        bubble.classList.toggle("mm", /[\u1000-\u109f]/.test(bubble.textContent));
+        let size = 34;
+        bubble.style.fontSize = `${size}px`;
+        while (size > 18 && bubble.scrollWidth > bubble.clientWidth) {
+          size -= 1;
+          bubble.style.fontSize = `${size}px`;
+        }
+        placeTail();
+      }
+
+      // The tail hangs under the bubble, pointing down at Ally.
+      function placeTail() {
+        bubbleTail.style.display = mascot.bubble ? "" : "none";
+        if (!mascot.bubble) return;
+        const frame = thumb.getBoundingClientRect();
+        const box = bubble.getBoundingClientRect();
+        bubbleTail.style.left = `${box.left - frame.left + box.width / 2 - 15}px`;
+        bubbleTail.style.top = `${box.bottom - frame.top - 17}px`;
+      }
+
+      function renderMascot() {
+        ally.innerHTML = allySvg(mascot.pose);
+        ally.style.transform = `scaleX(${mascot.mirror ? -1 : 1}) rotate(${mascot.tilt}deg)`;
+        bubble.classList.toggle("off", !mascot.bubble);
+        for (const button of toolbar.querySelectorAll("button")) {
+          const pressed =
+            button.dataset.pose === mascot.pose ||
+            (button.dataset.tilt !== undefined && Number(button.dataset.tilt) === mascot.tilt) ||
+            (button.dataset.action === "mirror" && mascot.mirror) ||
+            (button.dataset.action === "bubble" && mascot.bubble);
+          button.setAttribute("aria-pressed", String(pressed));
+        }
+        placeTail();
+      }
+
+      toolbar.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        if (button.dataset.pose) mascot.pose = button.dataset.pose;
+        if (button.dataset.tilt !== undefined) mascot.tilt = Number(button.dataset.tilt);
+        if (button.dataset.action === "mirror") mascot.mirror = !mascot.mirror;
+        if (button.dataset.action === "bubble") mascot.bubble = !mascot.bubble;
+        renderMascot();
+      });
+
+      /**
+       * Set any part of the thumbnail at once (used to render the course set):
+       * setThumb({ lesson: 3 }) loads LESSONS[2]; any other field overrides it:
+       * setThumb({ lesson: 3, code: "…", pose: "thinking", mirror: true, tilt: 0, bubble: "?" })
+       * Fields: number, title, file, code, pose (happy | thinking | joy), mirror, tilt,
+       * bubble (`null` hides the speech bubble).
+       */
+      window.setThumb = (input) => {
+        const base =
+          input.lesson !== undefined
+            ? LESSONS.find((l) => l.number === Number(input.lesson))
+            : null;
+        const spec = { ...(base ?? {}), ...input };
+        if (base && input.mirror === undefined) spec.mirror = false;
+        if (spec.number !== undefined) {
+          number.textContent = String(spec.number).padStart(2, "0");
+          const value = Number(spec.number);
+          markLesson(value >= 1 && value <= squares.length ? value : 0);
+        }
+        if (spec.title !== undefined) title.textContent = spec.title;
+        if (spec.file !== undefined) file.textContent = spec.file;
+        if (spec.code !== undefined) code.textContent = spec.code;
+        if (spec.pose !== undefined && FACES[spec.pose]) mascot.pose = spec.pose;
+        if (spec.mirror !== undefined) mascot.mirror = spec.mirror;
+        if (spec.tilt !== undefined) mascot.tilt = spec.tilt;
+        if (spec.bubble !== undefined) {
+          mascot.bubble = spec.bubble !== null;
+          if (spec.bubble !== null) bubble.textContent = spec.bubble;
+        }
+        renderCode();
+        renderMascot();
+        renderTitle();
+        fitBubble();
+      };
+
+      number.addEventListener("input", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        markLesson(value >= 1 && value <= squares.length ? value : 0);
+      });
+      title.addEventListener("input", fitTitle);
+      title.addEventListener("blur", renderTitle);
+      file.addEventListener("blur", renderCode);
+      code.addEventListener("input", fitCode);
+      code.addEventListener("blur", renderCode);
+      bubble.addEventListener("input", fitBubble);
+
+      window.setThumb({ lesson: 1 });
+
+      // Load every face up front (Noto Sans Myanmar only loads once Burmese is on
+      // screen), then refit: sizes measured before the fonts arrive are wrong.
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '400 36px "Google Sans"',
+          '700 36px "Google Sans Code"',
+          '500 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+          '400 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => {
+          renderCode();
+          renderTitle();
+          fitBubble();
+        });
+    </script>
+  </body>
+</html>
