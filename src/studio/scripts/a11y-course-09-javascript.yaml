@@ -1,0 +1,2427 @@
+# Accessibility course, lesson 9: JavaScript and accessibility.
+#
+# Hands-on (tea-shop page, A11y panel modes "tree live", scoped to <main>).
+# The page's behaviour lives in a pinned main.js the learner reads (no kit.js,
+# so nothing flips ARIA behind the lesson's back). Start state: the taste
+# disclosure shows/hides its list but has no aria-expanded; the order status
+# line gets its text from main.js but is not a live region; ordering never
+# changes document.title.
+#
+# Fixes, all insert-only (every HTML/JS save reloads the page, so each fix is
+# followed by a fresh click and the assertions sit after it):
+#   1. index.html: aria-expanded="false" on the button  -> tree "collapsed";
+#      a click shows the list but the tree still says collapsed (out of sync).
+#   2. main.js: setAttribute("aria-expanded", ...) inside the handler -> a
+#      click gives "expanded".
+#   3. index.html: role="status" on the status line -> the live log shows
+#      1 polite "မှာပြီးပါပြီ" after a click (before: live-count 0).
+#   4. main.js: document.title = "…" in the order handler -> the document row's
+#      title follows the click.
+# Trigger events, live-region rules and focus management are drawn on boards;
+# focus is shown only as the panel's focused row (it stays on the button).
+# JavaScript is never keystroke-typed: each JS fix is one block insert of a
+# complete statement.
+#
+# Workspace: ws/ pinned byte-exact with tools/pin-files.ts (bun build.ts).
+# Validate with (from the repo root):
+#   bun scripts/studio-director.ts <this file>
+#   bun scripts/studio-compile-check.ts <this file>
+#   ~/Documents/a11y-course-work/tools/verify.sh <this file>
+schemaVersion: 1
+
+lesson:
+  slug: a11y-course-09-javascript
+  title: "Accessibility course 9: JavaScript နဲ့ accessibility"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Accessibility course
+    entryFilePath: index.html
+    files:
+      base.css: |
+        /*
+          base.css: pinned, never typed during a lesson.
+          The shop's palette and page furniture, in its accessible form: every text
+          colour passes WCAG AA, form fields have 3:1 borders, nothing hides focus.
+          A lesson keeps the sections it needs and drops any declaration its own demo
+          types or relies on being absent (COURSE-KIT.md, "Deriving a lesson
+          workspace"). Section E holds the few rules a start state pins on purpose,
+          including deliberately broken ones (a pale colour, a removed outline).
+          Keep it free of the url, image-set and @-import functions (they switch on
+          Vite's postcss step); images come from <img>.
+        */
+
+        /* == A. palette == */
+        :root {
+          color-scheme: light;
+          --tea-dark: #3b2314;
+          --tea: #8b5a2b;
+          --tea-light: #c9a27e;
+          --cream: #fff8ec;
+          --paper: #fdf3e1;
+          --leaf: #2f6b3a;
+          --gold: #c9a227;
+          --chili: #b23a2b;
+          --ink: #2b1d14;
+          --muted: #6b5a4c;
+          --line: #e6d5bf;
+          --field: #8a7866;
+          --radius: 12px;
+        }
+
+        /* == B. page == */
+        body {
+          margin: 0;
+          font-family: "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar MN", "Myanmar Text", "Padauk",
+            system-ui, sans-serif;
+          font-size: 16px;
+          line-height: 1.8;
+          color: var(--ink);
+          background: var(--paper);
+        }
+
+        .page {
+          padding: 0 16px 24px;
+        }
+
+        h1,
+        h2,
+        h3 {
+          margin: 0 0 8px;
+          line-height: 1.5;
+        }
+
+        h1 {
+          font-size: 22px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        h3 {
+          font-size: 17px;
+        }
+
+        a {
+          color: var(--tea);
+        }
+
+        /* A class that sets display must never un-hide a [hidden] element. */
+        [hidden] {
+          display: none !important;
+        }
+
+        /* Text for screen readers only (the forms and images lessons use it). */
+        .visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
+
+        /* == B2. reset == */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+        }
+
+        /* == C. furniture == */
+        .skip-link {
+          position: absolute;
+          top: -48px;
+          left: 8px;
+          padding: 4px 12px;
+          background: var(--cream);
+          color: var(--tea-dark);
+        }
+
+        .skip-link:focus {
+          top: 8px;
+        }
+
+        .site-header {
+          padding: 12px 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+        }
+
+        .site-header a {
+          color: var(--cream);
+        }
+
+        .brand {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .logo {
+          display: block;
+        }
+
+        .shop-name {
+          margin: 0;
+          flex: 1;
+        }
+
+        .call-link {
+          display: inline-flex;
+          padding: 8px;
+          border-radius: 999px;
+          background: var(--tea);
+        }
+
+        .call-link img {
+          display: block;
+        }
+
+        .tagline {
+          margin: 0;
+          color: var(--tea-light);
+          font-size: 14px;
+        }
+
+        .nav ul {
+          display: flex;
+          gap: 16px;
+          margin: 4px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .hero {
+          margin: 16px 0;
+          padding: 16px;
+          background: var(--cream);
+          border-radius: var(--radius);
+        }
+
+        .divider {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          margin: 0 auto 16px;
+        }
+
+        .menu {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .menu-card {
+          margin: 0 0 12px;
+          padding: 12px 16px;
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+        }
+
+        .menu-card .name,
+        .menu-card .desc {
+          margin: 0;
+        }
+
+        .menu-card .desc {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .price {
+          font-weight: 700;
+          color: var(--tea);
+        }
+
+        .status {
+          margin-left: 8px;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .sold-out .name {
+          text-decoration: line-through;
+        }
+
+        .order-link,
+        .order-btn,
+        .confirm-btn,
+        .disclosure,
+        .fav,
+        .confirm button {
+          display: inline-block;
+          padding: 6px 16px;
+          border: 0;
+          border-radius: 999px;
+          background: var(--tea);
+          color: #fff;
+          font: inherit;
+          text-decoration: none;
+        }
+
+        .fav {
+          margin-left: 8px;
+          padding: 0 12px;
+          font-size: 14px;
+        }
+
+        .fav[aria-pressed="true"] {
+          background: var(--leaf);
+        }
+
+        .tea-options {
+          margin: 16px 0;
+        }
+
+        .chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .chips li {
+          padding: 2px 12px;
+          border: 1px solid var(--field);
+          border-radius: 999px;
+          background: #fff;
+        }
+
+        .gallery figure {
+          margin: 0 0 12px;
+        }
+
+        .gallery img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: var(--radius);
+        }
+
+        figcaption {
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .quote {
+          margin: 16px 0;
+          padding: 8px 16px;
+          border-left: 4px solid var(--tea);
+          background: var(--cream);
+          font-style: italic;
+        }
+
+        .quote p {
+          margin: 0;
+        }
+
+        .hours-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #fff;
+        }
+
+        .hours-table caption {
+          text-align: start;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .hours-table th,
+        .hours-table td {
+          padding: 4px 8px;
+          border: 1px solid var(--line);
+          text-align: start;
+        }
+
+        .hours-table thead th {
+          background: var(--cream);
+        }
+
+        .location {
+          margin: 16px 0;
+        }
+
+        .map {
+          position: relative;
+          height: 120px;
+          border: 1px solid var(--field);
+          border-radius: var(--radius);
+          background:
+            linear-gradient(90deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%),
+            linear-gradient(0deg, transparent 40%, #fff 40%, #fff 50%, transparent 50%),
+            #d9e8c9;
+        }
+
+        .map-pin {
+          position: absolute;
+          top: 34px;
+          left: 56%;
+          width: 18px;
+          height: 18px;
+          border: 3px solid #fff;
+          border-radius: 50%;
+          background: var(--chili);
+        }
+
+        .address {
+          margin: 4px 0 0;
+        }
+
+        .order-form {
+          margin: 16px 0;
+        }
+
+        .order-form label {
+          display: block;
+          margin-top: 8px;
+        }
+
+        .order-form input[type="text"],
+        .order-form input[type="tel"],
+        .order-form input[type="number"] {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+          background: #fff;
+          font: inherit;
+        }
+
+        .hint {
+          margin: 2px 0 0;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .sugar {
+          margin: 12px 0 0;
+          padding: 4px 12px 8px;
+          border: 1px solid var(--field);
+          border-radius: 8px;
+        }
+
+        .sugar label {
+          display: inline-block;
+          margin: 0 12px 0 0;
+        }
+
+        .order-btn {
+          margin-top: 12px;
+        }
+
+        .error {
+          margin: 2px 0 0;
+          color: var(--chili);
+          font-size: 14px;
+        }
+
+        .alert {
+          margin: 8px 0 0;
+          padding: 8px 12px;
+          border-radius: 8px;
+          background: #fde8e4;
+          color: var(--chili);
+        }
+
+        .order-status {
+          min-height: 1.8em;
+          margin: 8px 0 0;
+          color: var(--leaf);
+          font-weight: 700;
+        }
+
+        .confirm {
+          margin: 16px auto auto;
+          max-width: 320px;
+          padding: 16px;
+          border: 0;
+          border-radius: var(--radius);
+          background: var(--cream);
+          color: var(--ink);
+        }
+
+        .confirm::backdrop {
+          background: rgb(0 0 0 / 0.25);
+        }
+
+        .confirm form {
+          display: flex;
+          gap: 8px;
+        }
+
+        .site-footer {
+          margin-top: 24px;
+          padding: 16px;
+          background: var(--tea-dark);
+          color: var(--cream);
+          font-size: 14px;
+        }
+
+        .site-footer p {
+          margin: 0;
+        }
+
+        .site-footer a {
+          color: var(--cream);
+        }
+
+        /* == D. helpers == */
+        /* .demo shows a box's edges without changing layout (outline takes no space). */
+        .demo {
+          outline: 1px dashed var(--muted);
+        }
+
+        /* == E. lesson rules == */
+        /* Empty in the kit. A start state may pin a few rules here (a pale colour for
+           the contrast lesson, outline: none for the focus lesson); each is listed in
+           the lesson's start state and never shown. */
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင်</title>
+            <link rel="stylesheet" href="/base.css" />
+            <link rel="stylesheet" href="/styles.css" />
+          </head>
+          <body>
+            <!-- kit block: header -->
+            <header class="site-header" data-testid="site-header">
+              <div class="brand">
+                <img class="logo" src="/cup.svg" alt="" width="40" height="40" data-testid="logo" />
+                <h1 class="shop-name" data-testid="shop-name">ရွှေလက်ဖက်ရည်ဆိုင်</h1>
+                <a class="call-link" href="tel:+959123456789" data-testid="call-link"><img src="/phone.svg" alt="ဖုန်းဆက်ရန်" width="24" height="24" /></a>
+              </div>
+              <p class="tagline" lang="en">Yangon · since 1998</p>
+            </header>
+
+            <main class="page" id="main" data-testid="main">
+              <!-- lesson block: tea-options, driven by main.js (no aria-expanded yet) -->
+              <section class="tea-options" data-testid="tea-options">
+                <h2>လက်ဖက်ရည် အရသာ</h2>
+                <button class="disclosure" id="strength-button" type="button" data-testid="strength-button">အရသာ ရွေးရန်</button>
+                <ul class="chips" id="strength-list" hidden data-testid="strength-list">
+                  <li>ချိုဆိမ့်</li>
+                  <li>ပေါ့ဆိမ့်</li>
+                  <li>ကျဆိမ့်</li>
+                  <li>နို့စိမ်း</li>
+                </ul>
+              </section>
+
+              <!-- lesson block: order, driven by main.js (the status line has no live role yet) -->
+              <section class="order-form" id="order" data-testid="order">
+                <h2>အော်ဒါမှာရန်</h2>
+                <button class="order-btn" id="order-button" type="button" data-testid="order-button">မှာမယ်</button>
+                <p class="order-status" id="order-status" data-testid="order-status"></p>
+              </section>
+            </main>
+
+            <script type="module" src="/main.js"></script>
+            <!-- kit block: panel-script (tree and live log, scoped to main) -->
+            <script type="module" src="/panel.js" data-modes="tree live" data-scope="#main"></script>
+          </body>
+        </html>
+      main.js: |
+        // ဆိုင်ရဲ့ page ကို လှုပ်ရှားစေတဲ့ JavaScript
+
+        // အရသာ ရွေးရန် ခလုတ်: နှိပ်တိုင်း အရသာ စာရင်းကို ပြ / ဖျောက်
+        const strengthButton = document.querySelector("#strength-button");
+        const strengthList = document.querySelector("#strength-list");
+
+        strengthButton.addEventListener("click", () => {
+          const willOpen = strengthList.hidden;
+          strengthList.hidden = !willOpen;
+        });
+
+        // မှာမယ် ခလုတ်: နှိပ်ရင် ခလုတ်အောက်မှာ စာ ထည့်
+        const orderButton = document.querySelector("#order-button");
+        const orderStatus = document.querySelector("#order-status");
+
+        orderButton.addEventListener("click", () => {
+          orderStatus.textContent = "မှာပြီးပါပြီ";
+        });
+      package.json: |
+        {
+          "name": "a11y-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "dom-accessibility-api": "0.7.1",
+            "tabbable": "6.5.0",
+            "vite": "5.4.21"
+          }
+        }
+      panel.js: |
+        // panel.js: the course's A11y panel. Pinned, never typed, never edited.
+        // It shows what assistive technology gets from the page, as real DOM in a
+        // drawer at the bottom of the preview, so the recorded lesson replays it.
+        //
+        //   <script type="module" src="/panel.js" data-modes="tree tabs" data-scope="#order"></script>
+        //
+        //   data-modes     any of: tree tabs contrast live axe (drawn in that order)
+        //   data-scope     CSS selector; tree, contrast, live and axe look only inside
+        //                  it, tabs keeps page-wide numbers but lists only stops inside
+        //   data-height    drawer height, % of the preview height (20-60, default 40)
+        //   data-axe-tags  axe rule tags to run (default: axe's default rules)
+        //
+        // A row for an element with data-testid="x" gets data-testid="a11y-x" (tree),
+        // "tab-x" (tabs) or "contrast-x" (COURSE-KIT.md lists every test id). The
+        // panel is inert: never focusable, never in the accessibility tree, never in
+        // its own results. It rewrites a section only when its text changes. Names
+        // come from dom-accessibility-api (W3C accname), tab stops from tabbable,
+        // roles from Chrome's mapping of HTML elements.
+
+        import { computeAccessibleDescription, computeAccessibleName } from "dom-accessibility-api";
+        import { isFocusable, tabbable } from "tabbable";
+
+        const tag = document.querySelector('script[src*="panel.js"]');
+        const config = {
+          modes: (tag?.dataset.modes || "tree").split(/\s+/).filter((m) => ["tree", "tabs", "contrast", "live", "axe"].includes(m)),
+          scope: tag?.dataset.scope || "",
+          height: Math.min(60, Math.max(20, Number(tag?.dataset.height) || 40)),
+          axeTags: (tag?.dataset.axeTags || "").split(/\s+/).filter(Boolean),
+        };
+        const on = (mode) => config.modes.includes(mode);
+        const words = (text) => new Set(text.split(" "));
+
+        // ---------------------------------------------------------------- roles
+
+        const TAG_ROLES = {
+          article: "article", aside: "complementary", blockquote: "blockquote", button: "button", dialog: "dialog",
+          dd: "definition", details: "group", dl: "list", dt: "term", fieldset: "group", figure: "figure", hr: "separator",
+          iframe: "iframe", li: "listitem",
+          main: "main", menu: "list", meter: "meter", nav: "navigation", ol: "list", optgroup: "group", option: "option",
+          output: "status", p: "paragraph", progress: "progressbar", search: "search", summary: "button", table: "table",
+          textarea: "textbox", tr: "row", ul: "list", h1: "heading", h2: "heading", h3: "heading", h4: "heading",
+          h5: "heading", h6: "heading",
+        };
+        const INPUT_ROLES = {
+          button: "button", submit: "button", reset: "button", image: "button", checkbox: "checkbox", radio: "radio",
+          range: "slider", number: "spinbutton", search: "searchbox", hidden: "none",
+        };
+        // Roles that get a row; paragraph and generic get one only with lang, aria-live or focus.
+        const ROWS = words(
+          "alert alertdialog article banner blockquote button cell checkbox columnheader combobox complementary " +
+            "contentinfo dialog figure form grid gridcell group heading iframe img link list listbox listitem log main " +
+            "menu menubar menuitem menuitemcheckbox menuitemradio meter navigation option progressbar radio radiogroup " +
+            "region row rowheader search searchbox separator slider spinbutton status switch tab table tablist tabpanel " +
+            "term definition textbox timer toolbar tooltip tree treeitem",
+        );
+        // Roles that must have an accessible name ("⚠ no name").
+        const NEEDS_NAME = words(
+          "button link img iframe dialog alertdialog checkbox radio switch textbox searchbox combobox listbox slider " +
+            "spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem option region form progressbar meter",
+        );
+        // Controls: one that cannot take focus gets "⚠ not focusable".
+        const INTERACTIVE = words(
+          "button link checkbox radio switch textbox searchbox combobox listbox slider spinbutton tab menuitem " +
+            "menuitemcheckbox menuitemradio treeitem",
+        );
+        // Roles whose children are presentational: the row stands for the whole control.
+        const LEAF = words("button checkbox radio switch img textbox searchbox spinbutton slider progressbar meter separator iframe tab");
+        // Roles that never take a name, so the panel skips computing one.
+        const UNNAMED = words("list listitem row paragraph generic separator blockquote term definition");
+
+        const explicitRole = (el) => (el.getAttribute("role") || "").trim().split(/\s+/)[0].toLowerCase();
+        const hasName = (el) => el.hasAttribute("aria-label") || el.hasAttribute("aria-labelledby") || el.hasAttribute("title");
+        const outsideSections = (el) => !el.parentElement?.closest("article, aside, main, nav, section");
+
+        function focusable(el) {
+          try {
+            return isFocusable(el);
+          } catch {
+            return false;
+          }
+        }
+
+        function roleOf(el) {
+          const role = explicitRole(el);
+          // An author cannot take the role away from something focusable or named.
+          if (role === "none" || role === "presentation") return focusable(el) || hasName(el) ? implicitRole(el) : "none";
+          return role || implicitRole(el);
+        }
+
+        function implicitRole(el) {
+          const tagName = el.localName;
+          const cellsHidden = () => ["none", "presentation"].includes(explicitRole(el.closest("table") || el));
+          switch (tagName) {
+            case "a":
+            case "area":
+              return el.hasAttribute("href") ? "link" : "generic";
+            case "img":
+              return el.getAttribute("alt") === "" && !hasName(el) ? "none" : "img";
+            case "svg":
+              return hasName(el) || el.querySelector(":scope > title") ? "img" : "none";
+            case "input":
+              return INPUT_ROLES[el.type] || (el.hasAttribute("list") ? "combobox" : "textbox");
+            case "select":
+              return el.multiple || el.size > 1 ? "listbox" : "combobox";
+            case "header":
+              return outsideSections(el) ? "banner" : "generic";
+            case "footer":
+              return outsideSections(el) ? "contentinfo" : "generic";
+            case "section":
+              return hasName(el) ? "region" : "generic";
+            case "form":
+              return hasName(el) ? "form" : "generic";
+            case "li":
+              return el.parentElement?.matches("ul, ol, menu") ? "listitem" : "generic";
+            case "tr":
+              return cellsHidden() ? "generic" : "row";
+            case "td":
+              return cellsHidden() ? "generic" : el.closest("[role=grid], [role=treegrid]") ? "gridcell" : "cell";
+            case "th": {
+              if (cellsHidden()) return "generic";
+              const scope = el.getAttribute("scope");
+              if (scope === "row" || scope === "rowgroup") return "rowheader";
+              if (scope === "col" || scope === "colgroup" || el.closest("thead")) return "columnheader";
+              const firstOfDataRow = el.parentElement?.firstElementChild === el && el.parentElement.querySelector(":scope > td");
+              return firstOfDataRow ? "rowheader" : "columnheader";
+            }
+            default:
+              return TAG_ROLES[tagName] || "generic";
+          }
+        }
+
+        // ---------------------------------------------------------------- names and states
+
+        const squash = (text) => (text || "").replace(/\s+/g, " ").trim();
+        const segmenter = new Intl.Segmenter();
+        function clip(text, max) {
+          const graphemes = Array.from(segmenter.segment(text), (part) => part.segment);
+          return graphemes.length > max ? `${graphemes.slice(0, max - 1).join("")}…` : text;
+        }
+
+        function nameOf(el) {
+          let name = "";
+          try {
+            name = squash(computeAccessibleName(el, { computedStyleSupportsPseudoElements: true }));
+          } catch {}
+          if (name) return { name, from: "" };
+          // Two HTML-AAM rules Chrome follows and accname leaves out.
+          if (el.localName === "figure") return { name: squash(el.querySelector(":scope > figcaption")?.textContent), from: "" };
+          const placeholder = /^(input|textarea)$/.test(el.localName) ? squash(el.getAttribute("placeholder")) : "";
+          return placeholder ? { name: placeholder, from: "from placeholder" } : { name: "", from: "" };
+        }
+
+        function statesOf(el, role) {
+          const states = [];
+          const aria = (name) => el.getAttribute(`aria-${name}`);
+          const summary = el.localName === "summary";
+          if (aria("expanded") === "true" || (summary && el.parentElement?.open)) states.push("expanded");
+          else if (aria("expanded") === "false" || summary) states.push("collapsed");
+          if (aria("pressed")) states.push({ true: "pressed", false: "not pressed", mixed: "mixed" }[aria("pressed")] || "");
+          if (["checkbox", "radio", "switch", "menuitemcheckbox", "menuitemradio"].includes(role)) {
+            const native = el instanceof HTMLInputElement;
+            const mixed = native ? el.indeterminate : aria("checked") === "mixed";
+            states.push(mixed ? "mixed" : (native ? el.checked : aria("checked") === "true") ? "checked" : "not checked");
+          }
+          if (aria("selected") === "true" || (el instanceof HTMLOptionElement && el.selected)) states.push("selected");
+          if (aria("current") && aria("current") !== "false") states.push(`current=${aria("current")}`);
+          if (el.hasAttribute("required") || aria("required") === "true") states.push("required");
+          if (["true", "grammar", "spelling"].includes(aria("invalid"))) states.push("invalid");
+          if (el.hasAttribute("readonly") || aria("readonly") === "true") states.push("readonly");
+          const disabled = el.matches(":disabled") || aria("disabled") === "true";
+          if (disabled) states.push("disabled");
+          const canFocus = focusable(el);
+          if (canFocus && !INTERACTIVE.has(role) && role !== "iframe") states.push("focusable");
+          if (!canFocus && !disabled && INTERACTIVE.has(role)) states.push("⚠ not focusable");
+          if (el === activeElement()) states.push("focused");
+          if (aria("live") && aria("live") !== "off") states.push(`live=${aria("live")}`);
+          return states.filter(Boolean);
+        }
+
+        function activeElement() {
+          const el = document.activeElement;
+          return el && el !== document.body && el !== document.documentElement && !host.contains(el) ? el : null;
+        }
+
+        function openModal() {
+          try {
+            return document.querySelector("dialog:modal");
+          } catch {
+            return null;
+          }
+        }
+
+        function scopeRoot() {
+          try {
+            return (config.scope && document.querySelector(config.scope)) || document.body;
+          } catch {
+            return document.body;
+          }
+        }
+
+        // ---------------------------------------------------------------- tree
+
+        function describe(el, role) {
+          const states = statesOf(el, role);
+          const extra = el.hasAttribute("lang") || states.some((s) => s === "focusable" || s === "focused" || s.startsWith("live="));
+          if (role === "none" || !(ROWS.has(role) || extra)) return null;
+          const { name, from } = UNNAMED.has(role) ? { name: "", from: "" } : nameOf(el);
+          const level = role === "heading" ? Number(el.getAttribute("aria-level")) || Number(el.localName.slice(1)) || 2 : 0;
+          const parts = [{ cls: "role", text: level ? `heading level ${level}` : role }];
+          if (name) parts.push({ cls: "name", text: `"${clip(name, 60)}"` });
+          else if (NEEDS_NAME.has(role)) parts.push({ cls: "warn", text: "⚠ no name" });
+          if (from) parts.push({ cls: "muted", text: from });
+          if (role === "list" && el.localName !== "dl") {
+            const items = Array.from(el.children).filter((c) => c.localName === "li" || explicitRole(c) === "listitem");
+            parts.push({ cls: "muted", text: `${items.length} ${items.length === 1 ? "item" : "items"}` });
+          }
+          for (const state of states) parts.push({ cls: state.startsWith("⚠") ? "warn" : "state", text: state });
+          if (el.hasAttribute("aria-describedby")) {
+            let description = "";
+            try {
+              description = squash(computeAccessibleDescription(el));
+            } catch {}
+            if (description) parts.push({ cls: "muted", text: `desc "${clip(description, 40)}"` });
+          }
+          if (el.hasAttribute("lang")) parts.push({ cls: "state", text: `lang="${el.getAttribute("lang")}"` });
+          if (!name && ["paragraph", "generic", "blockquote", "status", "alert", "log", "term", "definition"].includes(role) && squash(el.textContent)) {
+            parts.push({ cls: "muted", text: `· ${clip(squash(el.textContent), 40)}` });
+          }
+          const warnings = parts.filter((part) => part.cls === "warn").length;
+          return { role, name, states, parts, warnings, testid: el.getAttribute("data-testid") };
+        }
+
+        function buildTree() {
+          const rows = [];
+          const visit = (el, depth) => {
+            if (el === host || /^(script|style|template|noscript|head|title|meta|link)$/.test(el.localName)) return;
+            if (el.getAttribute("aria-hidden") === "true" || el.hasAttribute("inert")) return;
+            const style = getComputedStyle(el);
+            if (style.display === "none") return;
+            let childDepth = depth;
+            if (style.visibility === "visible" && el !== document.body) {
+              const role = roleOf(el);
+              const row = describe(el, role);
+              if (row) {
+                rows.push({ ...row, depth });
+                childDepth = depth + 1;
+                if (LEAF.has(role)) return;
+              }
+            }
+            if (el.localName === "svg" || el.localName === "select") return;
+            for (const child of el.children) visit(child, childDepth);
+          };
+          // While a modal dialog is open, everything outside it is inert.
+          visit(openModal() || scopeRoot(), 0);
+          return { rows, title: squash(document.title), lang: document.documentElement.getAttribute("lang") || "" };
+        }
+
+        function renderTree({ rows, title, lang }) {
+          const warnings = rows.reduce((sum, r) => sum + r.warnings, 0) + (title ? 0 : 1) + (lang ? 0 : 1);
+          const label = warnings ? `Accessibility tree · ⚠ ${warnings} ${warnings === 1 ? "warning" : "warnings"}` : "Accessibility tree · no warnings";
+          const head = row({ testid: "a11y-summary", head: true, attrs: { "data-warnings": warnings } }, [{ text: label }]);
+          const doc = row({ testid: "a11y-document", depth: 0, attrs: { "data-title": title, "data-lang": lang } }, [
+            { cls: "role", text: "document" },
+            title ? { cls: "name", text: `"${clip(title, 50)}"` } : { cls: "warn", text: "⚠ no title" },
+            lang ? { cls: "state", text: `lang="${lang}"` } : { cls: "warn", text: "⚠ no lang" },
+          ]);
+          const body = rows.map((r) =>
+            row(
+              {
+                testid: r.testid && `a11y-${r.testid}`,
+                depth: r.depth + 1,
+                focused: r.states.includes("focused"),
+                attrs: { "data-name": r.name, "data-states": r.states.join(" ") },
+              },
+              r.parts,
+            ),
+          );
+          return [head, doc, ...body];
+        }
+
+        // ---------------------------------------------------------------- tabs
+
+        function tabStops() {
+          let stops = [];
+          try {
+            stops = tabbable(openModal() || document.body, { displayCheck: "full" });
+          } catch {}
+          // A radio group with nothing checked is one stop (its first radio), as in Chrome.
+          const groups = new Set();
+          return stops.filter((el) => {
+            if (!(el instanceof HTMLInputElement) || el.type !== "radio" || !el.name) return true;
+            const group = Array.from((el.form || document).querySelectorAll("input[type=radio]")).filter((r) => r.name === el.name);
+            if (group.some((r) => r.checked)) return true;
+            if (groups.has(group[0])) return false;
+            groups.add(group[0]);
+            return true;
+          });
+        }
+
+        let marked = new Map();
+        function buildTabs() {
+          const scope = openModal() || (config.scope ? scopeRoot() : null);
+          const stops = tabStops().map((el, index) => {
+            const rect = el.getBoundingClientRect();
+            const text = squash(el.textContent);
+            return {
+              el,
+              order: index + 1,
+              role: roleOf(el),
+              name: nameOf(el).name,
+              text,
+              testid: el.getAttribute("data-testid"),
+              ariaHidden: Boolean(el.closest('[aria-hidden="true"]')),
+              focused: el === activeElement(),
+              x: Math.round(rect.left + scrollX),
+              y: Math.round(rect.top + scrollY),
+              listed: !scope || scope.contains(el),
+            };
+          });
+          // data-a11y-tab="n" on a listed stop is what its badge anchors to.
+          const next = new Map(stops.filter((s) => s.listed && s.order <= 60).map((s) => [s.el, String(s.order)]));
+          for (const el of marked.keys()) if (!next.has(el)) el.removeAttribute("data-a11y-tab");
+          for (const [el, order] of next) if (el.getAttribute("data-a11y-tab") !== order) el.setAttribute("data-a11y-tab", order);
+          marked = next;
+          return stops;
+        }
+
+        function renderTabs(stops) {
+          const head = row({ testid: "tab-count", head: true, attrs: { "data-count": stops.length } }, [
+            { text: `Tab order · ${stops.length} stops` },
+          ]);
+          const items = stops
+            .filter((s) => s.listed)
+            .map((s) => {
+              const parts = [{ cls: "order", text: String(s.order) }, { cls: "role", text: s.role }];
+              if (s.name) parts.push({ cls: "name", text: `"${clip(s.name, 50)}"` });
+              else if (NEEDS_NAME.has(s.role)) parts.push({ cls: "warn", text: "⚠ no name" });
+              else if (s.text) parts.push({ cls: "muted", text: `· ${clip(s.text, 40)}` });
+              if (s.ariaHidden) parts.push({ cls: "warn", text: "⚠ aria-hidden" });
+              if (s.focused) parts.push({ cls: "state", text: "focused" });
+              return row({ testid: s.testid && `tab-${s.testid}`, depth: 0, focused: s.focused, attrs: { "data-order": s.order } }, parts);
+            });
+          return [head, ...(items.length ? items : [row({}, [{ cls: "muted", text: "(no tab stops here)" }])])];
+        }
+
+        // Studio cannot press keys, so a lesson clicks two hidden panel controls
+        // (preview.click on a11y-tab-next / a11y-tab-prev) to move focus the way Tab
+        // and Shift+Tab do. Past the last stop focus leaves the page (body).
+        function moveFocus(step) {
+          const stops = tabStops();
+          const active = activeElement();
+          let next = active ? null : step > 0 ? stops[0] : stops.at(-1);
+          if (active) {
+            let index = stops.indexOf(active);
+            if (index === -1) {
+              // Focus sits outside the order: continue from its place in the page.
+              const after = stops.findIndex((el) => active.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+              index = (after === -1 ? stops.length : after) - (step > 0 ? 1 : 0);
+            }
+            next = stops[index + step];
+          }
+          if (next) next.focus();
+          else active?.blur();
+        }
+
+        const renderBadges = (stops) =>
+          stops
+            .filter((s) => s.listed)
+            .map(
+              (s) =>
+                `<span class="a11yp-badge${s.focused ? " is-focused" : ""}" style="--x:${s.x}px;--y:${s.y}px;position-anchor:--a11yp-${s.order}">${s.order}</span>`,
+            );
+
+        // ---------------------------------------------------------------- contrast
+
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        function parseColor(value) {
+          const match = /^rgba?\(([^)]+)\)$/.exec(value || "");
+          if (match) {
+            const [r, g, b, a = 1] = match[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+            return { r, g, b, a };
+          }
+          // oklch(), color(), color-mix() and friends: let a 1px canvas convert them.
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = "#000";
+          canvas.fillStyle = value;
+          canvas.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+          return { r, g, b, a: a / 255 };
+        }
+
+        const over = (top, below) => ({
+          r: top.r * top.a + below.r * (1 - top.a),
+          g: top.g * top.a + below.g * (1 - top.a),
+          b: top.b * top.a + below.b * (1 - top.a),
+          a: 1,
+        });
+
+        // The colour behind an element: its own and its ancestors' background colours
+        // stacked on a white canvas. Background images and opacity are not counted.
+        function backgroundOf(el) {
+          const layers = [];
+          let image = false;
+          for (let node = el; node instanceof Element; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            image ||= style.backgroundImage !== "none";
+            layers.push(parseColor(style.backgroundColor));
+            if (layers.at(-1).a >= 1) break;
+          }
+          return { color: layers.reduceRight((below, layer) => over(layer, below), { r: 255, g: 255, b: 255, a: 1 }), image };
+        }
+
+        function luminance({ r, g, b }) {
+          const linear = (v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+          return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+        }
+
+        const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+
+        function buildContrast() {
+          const root = scopeRoot();
+          const targets = [...(root.matches("[data-contrast]") ? [root] : []), ...root.querySelectorAll("[data-contrast]")];
+          return targets.map((el) => {
+            const style = getComputedStyle(el);
+            const border = el.dataset.contrast === "border";
+            const label = el.dataset.contrastLabel || clip(squash(el.textContent) || nameOf(el).name || el.localName, 18);
+            const item = { testid: el.getAttribute("data-testid"), label, border };
+            if (!el.getClientRects().length) return { ...item, hidden: true };
+            const behind = backgroundOf(border ? el.parentElement || el : el);
+            const side = ["Top", "Right", "Bottom", "Left"].find((s) => parseFloat(style[`border${s}Width`]) > 0);
+            const ink = border ? (side ? parseColor(style[`border${side}Color`]) : behind.color) : parseColor(style.color);
+            const fg = over(ink, behind.color);
+            const [high, low] = [luminance(fg), luminance(behind.color)].sort((x, y) => y - x);
+            const ratio = (high + 0.05) / (low + 0.05);
+            const size = parseFloat(style.fontSize);
+            const large = size >= 24 || (size >= 18.66 && Number(style.fontWeight) >= 700);
+            // Compare the exact ratio, show it cut (not rounded) to 2 places: 4.499 shows 4.49 and fails.
+            const shown = (Math.floor(ratio * 100 + 1e-9) / 100).toFixed(2);
+            return { ...item, shown, large, fg: hex(fg), bg: hex(behind.color), image: behind.image, aa: ratio >= (border || large ? 3 : 4.5), aaa: ratio >= (large ? 4.5 : 7) };
+          });
+        }
+
+        function renderContrast(items) {
+          const rows = items.map((item) => {
+            const parts = [{ cls: "name", text: `"${item.label}"` }];
+            const attrs = {};
+            const verdict = (ok, prefix) => ({ cls: ok ? "pass" : "warn", text: `${prefix}${ok ? "pass" : "fail"}` });
+            if (item.hidden) parts.push({ cls: "muted", text: "not rendered" });
+            else if (item.border) {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail" });
+              parts.push({ cls: "role", text: "border" }, { cls: "order", text: `${item.shown}:1` }, { cls: "muted", text: "needs 3:1" }, verdict(item.aa, ""));
+            } else {
+              Object.assign(attrs, { "data-ratio": item.shown, "data-aa": item.aa ? "pass" : "fail", "data-aaa": item.aaa ? "pass" : "fail" });
+              parts.push({ cls: "order", text: `${item.shown}:1` }, verdict(item.aa, "AA "), verdict(item.aaa, "AAA "));
+              if (item.large) parts.push({ cls: "muted", text: "large text" });
+            }
+            if (item.image) parts.push({ cls: "warn", text: "⚠ background image: check by eye" });
+            const swatches = item.hidden ? "" : `<span class="a11yp-swatch" style="background:${item.fg}"></span><span class="a11yp-swatch" style="background:${item.bg}"></span>`;
+            return row({ testid: item.testid && `contrast-${item.testid}`, depth: 0, attrs, prefix: swatches }, parts);
+          });
+          const head = row({ head: true }, [{ text: "Contrast (WCAG 2)" }]);
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(mark elements with data-contrast)" }])])];
+        }
+
+        // ---------------------------------------------------------------- live regions
+
+        // A simplified screen reader: it speaks a change to a live region that was
+        // already on the page, never the text a region arrives with (except an alert).
+        const liveState = new WeakMap();
+        const liveLog = [];
+        let liveCount = 0;
+        let liveBaseline = false;
+
+        function scanLive() {
+          if (!on("live")) return false;
+          let changed = false;
+          for (const el of scopeRoot().querySelectorAll("[aria-live], [role~=status], [role~=alert], [role~=log], output")) {
+            const alert = /\balert\b/.test(el.getAttribute("role") || "");
+            const politeness = el.getAttribute("aria-live") || (alert ? "assertive" : "polite");
+            const present = !el.closest('[hidden], [aria-hidden="true"], [inert]') && el.checkVisibility();
+            const now = { present, text: squash(el.innerText) };
+            const before = liveState.get(el);
+            liveState.set(el, now);
+            if (!liveBaseline || politeness === "off" || !now.present || !now.text) continue;
+            if (before?.present ? before.text === now.text : !alert) continue;
+            liveCount += 1;
+            liveLog.push({ n: liveCount, politeness, text: now.text });
+            if (liveLog.length > 6) liveLog.shift();
+            changed = true;
+          }
+          liveBaseline = true;
+          return changed;
+        }
+
+        function renderLive() {
+          const head = row({ testid: "live-count", head: true, attrs: { "data-count": liveCount } }, [
+            { text: "Live regions · likely spoken (simplified)" },
+          ]);
+          const rows = liveLog.map((entry) =>
+            row({ testid: `live-${entry.n}`, depth: 0 }, [
+              { cls: "order", text: String(entry.n) },
+              { cls: entry.politeness === "assertive" ? "warn" : "state", text: entry.politeness },
+              { cls: "name", text: `"${clip(entry.text, 60)}"` },
+            ]),
+          );
+          return [head, ...(rows.length ? rows : [row({}, [{ cls: "muted", text: "(nothing announced yet)" }])])];
+        }
+
+        // ---------------------------------------------------------------- axe (base-axe workspaces: axe.js sets window.a11yPanelAxe)
+
+        const axeRun = { running: false, again: false, timer: 0, state: null };
+
+        function scheduleAxe(delay = 700) {
+          if (!on("axe") || !window.a11yPanelAxe) return;
+          clearTimeout(axeRun.timer);
+          axeRun.timer = setTimeout(runAxe, delay);
+        }
+
+        async function runAxe() {
+          const axe = window.a11yPanelAxe;
+          if (axeRun.running) return void (axeRun.again = true);
+          axeRun.running = true;
+          try {
+            const context = { exclude: [["#a11y-panel"]], ...(config.scope && { include: [[config.scope]] }) };
+            const options = { resultTypes: ["violations"], ...(config.axeTags.length && { runOnly: { type: "tag", values: config.axeTags } }) };
+            const { violations } = await axe.run(context, options);
+            axeRun.state = { violations: violations.map((v) => ({ id: v.id, impact: v.impact || "minor", help: v.help, nodes: v.nodes.length })) };
+          } catch (error) {
+            axeRun.state = { error: String(error?.message || error) };
+          }
+          axeRun.running = false;
+          render();
+          if (axeRun.again) {
+            axeRun.again = false;
+            scheduleAxe(300);
+          }
+        }
+
+        function renderAxe() {
+          const { state } = axeRun;
+          const version = window.a11yPanelAxe?.version;
+          if (!version) return [row({ head: true }, [{ text: "axe · not installed in this lesson" }])];
+          if (!state || state.error) {
+            return [row({ testid: "axe-count", head: true }, [state ? { cls: "warn", text: `axe error: ${clip(state.error, 60)}` } : { text: "axe · running…" }])];
+          }
+          const impact = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+          const issues = state.violations.length;
+          const head = row({ testid: "axe-count", head: true, attrs: { "data-count": issues } }, [
+            { text: `axe-core ${version} · ${issues ? `${issues} ${issues === 1 ? "issue" : "issues"}` : "no issues"}` },
+          ]);
+          const rows = state.violations
+            .sort((a, b) => impact[a.impact] - impact[b.impact] || a.id.localeCompare(b.id))
+            .map((v) =>
+              row({ testid: `axe-${v.id}`, depth: 0, attrs: { "data-count": v.nodes } }, [
+                { cls: impact[v.impact] < 2 ? "warn" : "state", text: v.impact },
+                { cls: "role", text: v.id },
+                { cls: "order", text: `×${v.nodes}` },
+                { cls: "muted", text: v.help },
+              ]),
+            );
+          return [head, ...rows];
+        }
+
+        // ---------------------------------------------------------------- drawing
+
+        const escape = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+        // One row. Its textContent is the parts joined by single spaces, exactly as
+        // it reads, so expect.preview's textContains matches what learners see.
+        function row({ testid, head = false, depth = -1, focused = false, attrs = {}, prefix = "" }, parts) {
+          const classes = `a11yp-row${head ? " a11yp-head" : ""}${focused ? " is-focused" : ""}`;
+          const extra = Object.entries(attrs).map(([key, value]) => ` ${key}="${escape(value)}"`).join("");
+          const id = testid ? ` data-testid="${escape(testid)}"` : "";
+          const indent = depth >= 0 ? ` style="--d:${Math.min(depth, 8)}"` : "";
+          const spans = parts.map((p) => (p.cls ? `<span class="a11yp-${p.cls}">${escape(p.text)}</span>` : escape(p.text))).join(" ");
+          return `<div class="${classes}"${id}${indent}${extra}>${prefix}${spans}</div>`;
+        }
+
+        const C = { bg: "#202124", head: "#303134", text: "#e8eaed", role: "#aecbfa", name: "#fdd663", state: "#d7aefb", muted: "#bdc1c6", warn: "#f6aea9", pass: "#a8dab5", focus: "#123a6e", ring: "#8ab4f8" };
+        const P = "#a11y-panel";
+        const CSS = `
+        :where(html){scroll-padding-bottom:calc(${config.height}vh + 16px)}
+        ${P} .a11yp-spacer{display:block;height:${config.height}vh}
+        ${P} .a11yp-drawer{position:fixed;inset:auto 0 0 0;z-index:2147483001;box-sizing:border-box;height:${config.height}vh;margin:0;padding:0 0 8px;overflow:auto;overscroll-behavior:contain;background:${C.bg};color:${C.text};border-top:3px solid ${C.ring};font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,"Noto Sans Myanmar","Myanmar Sangam MN","Myanmar MN","Myanmar Text",Padauk,monospace;text-align:start;letter-spacing:normal;text-transform:none;font-style:normal}
+        ${P} .a11yp-row{display:block;margin:0;padding:1px 8px 1px calc(8px + var(--d,0) * 14px);border-left:4px solid transparent;overflow-wrap:anywhere}
+        ${P} .a11yp-head{position:sticky;top:0;z-index:1;padding-left:8px;background:${C.head};font-weight:700}
+        ${P} .a11yp-row.is-focused{background:${C.focus};border-left-color:${C.ring}}
+        ${P} .a11yp-role{color:${C.role}} ${P} .a11yp-name{color:${C.name}} ${P} .a11yp-state{color:${C.state}}
+        ${P} .a11yp-muted{color:${C.muted}} ${P} .a11yp-pass{color:${C.pass}} ${P} .a11yp-order{font-weight:700}
+        ${P} .a11yp-warn{color:${C.warn};font-weight:700}
+        ${P} .a11yp-swatch{display:inline-block;width:12px;height:12px;margin-right:4px;border:1px solid ${C.muted};vertical-align:middle}
+        ${P} .a11yp-badges{display:block;position:static;height:0}
+        ${P} .a11yp-badge{position:absolute;z-index:2147483000;top:var(--y);left:var(--x);box-sizing:border-box;min-width:20px;height:20px;margin:-8px 0 0 -8px;padding:0 4px;border-radius:10px;background:#174ea6;color:#fff;font:700 13px/20px ui-monospace,Menlo,monospace;text-align:center;box-shadow:0 0 0 2px #fff;pointer-events:none}
+        ${P} .a11yp-badge.is-focused{background:#b3261e}
+        @supports (anchor-name: --a){${P} .a11yp-badge{top:anchor(top,var(--y));left:anchor(left,var(--x));position-visibility:anchors-visible}}
+        ${Array.from({ length: 60 }, (_, i) => `[data-a11y-tab="${i + 1}"]{anchor-name:--a11yp-${i + 1}}`).join("")}`;
+
+        const host = document.createElement("div");
+        host.id = "a11y-panel";
+        host.inert = true;
+        host.innerHTML =
+          `<style>${CSS}</style><div class="a11yp-badges"></div><div class="a11yp-spacer"></div>` +
+          `<span hidden data-step="1" data-testid="a11y-tab-next"></span><span hidden data-step="-1" data-testid="a11y-tab-prev"></span>` +
+          `<div class="a11yp-drawer" data-testid="a11y-panel">` +
+          `${config.modes.map((mode) => `<div data-mode="${mode}"></div>`).join("")}</div>`;
+        document.body.append(host);
+        const drawer = host.querySelector(".a11yp-drawer");
+        const badges = host.querySelector(".a11yp-badges");
+        const sections = Object.fromEntries(Array.from(drawer.children, (el) => [el.dataset.mode, el]));
+        const written = new Map();
+
+        // Rewrite only the rows whose text changed (a focus move touches two rows);
+        // a change in the number of rows redraws the section.
+        function write(el, rows) {
+          const before = written.get(el) || [];
+          written.set(el, rows);
+          if (before.length !== rows.length || el.children.length !== rows.length) el.innerHTML = rows.join("");
+          else rows.forEach((html, i) => html !== before[i] && (el.children[i].outerHTML = html));
+        }
+
+        // Keep the focused row and the newest announcement in view inside the drawer.
+        let shown = { focus: null, live: 0 };
+        function reveal() {
+          const focus = activeElement();
+          let target = null;
+          if (focus !== shown.focus) target = drawer.querySelector(".is-focused");
+          if (liveCount !== shown.live) target = drawer.querySelector(`[data-testid="live-${liveCount}"]`);
+          shown = { focus, live: liveCount };
+          if (!target) return;
+          const headHeight = target.parentElement.firstElementChild.offsetHeight;
+          const top = target.offsetTop - headHeight;
+          const bottom = target.offsetTop + target.offsetHeight - drawer.clientHeight;
+          if (top < drawer.scrollTop) drawer.scrollTop = top;
+          else if (bottom > drawer.scrollTop) drawer.scrollTop = bottom + 8;
+        }
+
+        function render() {
+          try {
+            if (on("tree")) write(sections.tree, renderTree(buildTree()));
+            if (on("tabs")) {
+              const stops = buildTabs();
+              write(sections.tabs, renderTabs(stops));
+              write(badges, renderBadges(stops));
+            }
+            if (on("contrast")) write(sections.contrast, renderContrast(buildContrast()));
+            if (on("live")) write(sections.live, renderLive());
+            if (on("axe")) write(sections.axe, renderAxe());
+            reveal();
+          } catch {
+            // The panel must never break a lesson; the next tick tries again.
+          }
+        }
+
+        // ---------------------------------------------------------------- updates
+
+        let timer = 0;
+        const schedule = (delay = 40) => {
+          clearTimeout(timer);
+          timer = setTimeout(render, delay);
+        };
+
+        new MutationObserver((records) => {
+          if (!records.some((r) => !host.contains(r.target) && r.attributeName !== "data-a11y-tab")) return;
+          scanLive();
+          schedule();
+          if (!axeRun.running) scheduleAxe();
+        }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+
+        document.addEventListener("focusin", () => schedule(0), true);
+        document.addEventListener("focusout", () => schedule(0), true);
+        // A CSS edit swaps the stylesheet <link>; its load (and image loads) can change contrast and layout.
+        document.addEventListener("load", () => (schedule(), scheduleAxe()), true);
+        addEventListener("resize", () => schedule(100));
+        addEventListener("a11y-panel-axe", () => scheduleAxe(0));
+        host.addEventListener("click", (event) => {
+          const step = Number(event.target.closest?.("[data-step]")?.dataset.step);
+          if (step) moveFocus(step);
+        });
+        // The drawer is inert, so the wheel would scroll the page under it; scroll the drawer instead.
+        addEventListener(
+          "wheel",
+          (event) => {
+            if (event.clientY < drawer.getBoundingClientRect().top) return;
+            event.preventDefault();
+            drawer.scrollTop += event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+          },
+          { passive: false },
+        );
+
+        // A cheap periodic pass catches what no event reports (a style change that
+        // hides something or changes a colour). Timers, not animation frames: frames
+        // never run in a hidden tab.
+        (function tick() {
+          if (scanLive()) schedule(0);
+          render();
+          setTimeout(tick, 600);
+        })();
+        scheduleAxe(0);
+      public/cup.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+          <path d="M36 30c-5-6 5-10 0-17M48 30c-5-6 5-10 0-17M60 30c-5-6 5-10 0-17" fill="none" stroke="#c9a27e" stroke-width="3" stroke-linecap="round"/>
+          <path d="M18 38h52v14a26 26 0 0 1-52 0z" fill="#8b5a2b"/>
+          <path d="M70 44h6a8 8 0 0 1 0 16h-8" fill="none" stroke="#8b5a2b" stroke-width="5"/>
+          <path d="M22 42h44" stroke="#c9a27e" stroke-width="4" stroke-linecap="round"/>
+          <ellipse cx="44" cy="82" rx="34" ry="6" fill="#3b2314"/>
+        </svg>
+      public/phone.svg: |
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+          <path d="M6.6 3.5l2.6-.6 1.6 4.2-2 1.4a11 11 0 0 0 6.7 6.7l1.4-2 4.2 1.6-.6 2.6a2 2 0 0 1-2 1.6A15.5 15.5 0 0 1 3.5 4.9a2 2 0 0 1 1.6-2z" fill="#fff8ec"/>
+        </svg>
+      styles.css: ""
+  whiteboardAssets:
+    # Board A: the four jobs of the lesson.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 46,
+        text: "JavaScript နဲ့ accessibility",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-job1-box,
+        kind: rectangle,
+        x: 270,
+        y: 245,
+        width: 400,
+        height: 150,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: a-job1-head,
+        kind: text,
+        x: 292,
+        y: 262,
+        width: 200,
+        height: 36,
+        text: "1 · event",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-job1-body,
+        kind: text,
+        x: 292,
+        y: 318,
+        width: 340,
+        height: 36,
+        text: "keyboard နဲ့လည်း ရရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-job2-box,
+        kind: rectangle,
+        x: 700,
+        y: 245,
+        width: 390,
+        height: 150,
+        strokeColor: "#6741d9",
+        backgroundColor: "#f3f0ff",
+      }
+    - {
+        id: a-job2-head,
+        kind: text,
+        x: 722,
+        y: 262,
+        width: 200,
+        height: 36,
+        text: "2 · state",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-job2-body,
+        kind: text,
+        x: 722,
+        y: 318,
+        width: 330,
+        height: 36,
+        text: "မြင်ရတာနဲ့ tree တူရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-job3-box,
+        kind: rectangle,
+        x: 270,
+        y: 425,
+        width: 400,
+        height: 150,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: a-job3-head,
+        kind: text,
+        x: 292,
+        y: 442,
+        width: 260,
+        height: 36,
+        text: "3 · live region",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-job3-body,
+        kind: text,
+        x: 292,
+        y: 498,
+        width: 340,
+        height: 36,
+        text: "ပေါ်လာတဲ့ စာကို ဖတ်ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-job4-box,
+        kind: rectangle,
+        x: 700,
+        y: 425,
+        width: 390,
+        height: 150,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: a-job4-head,
+        kind: text,
+        x: 722,
+        y: 442,
+        width: 300,
+        height: 36,
+        text: "4 · title နဲ့ focus",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-job4-body,
+        kind: text,
+        x: 722,
+        y: 498,
+        width: 330,
+        height: 36,
+        text: "ဘယ်ရောက်နေလဲ သိရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board B: who a click listener works for.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 460,
+        height: 46,
+        text: "click event နဲ့ keyboard",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-button-box,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 820,
+        height: 110,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: b-button-label,
+        kind: text,
+        x: 292,
+        y: 252,
+        width: 380,
+        height: 36,
+        text: "button · link + click",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-button-result,
+        kind: text,
+        x: 292,
+        y: 298,
+        width: 700,
+        height: 36,
+        text: "mouse ✓   Enter ✓   Space ✓ (button)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-div-box,
+        kind: rectangle,
+        x: 270,
+        y: 375,
+        width: 820,
+        height: 110,
+        strokeColor: "#e03131",
+        backgroundColor: "#fff5f5",
+      }
+    - {
+        id: b-div-label,
+        kind: text,
+        x: 292,
+        y: 387,
+        width: 260,
+        height: 36,
+        text: "div + click",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-div-result,
+        kind: text,
+        x: 292,
+        y: 433,
+        width: 520,
+        height: 36,
+        text: "mouse ✓    keyboard ✗",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-mouse-box,
+        kind: rectangle,
+        x: 270,
+        y: 510,
+        width: 820,
+        height: 110,
+        strokeColor: "#f08c00",
+        backgroundColor: "#fff4e6",
+      }
+    - {
+        id: b-mouse-label,
+        kind: text,
+        x: 292,
+        y: 522,
+        width: 400,
+        height: 36,
+        text: "hover · double click",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-mouse-result,
+        kind: text,
+        x: 292,
+        y: 568,
+        width: 520,
+        height: 36,
+        text: "mouse သုံးတဲ့သူပဲ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+    # Board C: live region rules.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 300,
+        height: 46,
+        text: "live region",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-ok-box,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 820,
+        height: 110,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: c-ok-label,
+        kind: text,
+        x: 292,
+        y: 252,
+        width: 560,
+        height: 36,
+        text: "region အရင်ရှိ → စာ ပြောင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-ok-result,
+        kind: text,
+        x: 292,
+        y: 298,
+        width: 520,
+        height: 36,
+        text: "screen reader ဖတ်ပြ ✓",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-bad-box,
+        kind: rectangle,
+        x: 270,
+        y: 375,
+        width: 820,
+        height: 110,
+        strokeColor: "#e03131",
+        backgroundColor: "#fff5f5",
+      }
+    - {
+        id: c-bad-label,
+        kind: text,
+        x: 292,
+        y: 387,
+        width: 600,
+        height: 36,
+        text: "region နဲ့ စာ တစ်ပြိုင်တည်း ထည့်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-bad-result,
+        kind: text,
+        x: 292,
+        y: 433,
+        width: 520,
+        height: 36,
+        text: "မဖတ်ပြတာ များ ✗",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-polite,
+        kind: text,
+        x: 280,
+        y: 520,
+        width: 640,
+        height: 36,
+        text: "status · polite → ဖတ်နေတာ ပြီးမှ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-assertive,
+        kind: text,
+        x: 280,
+        y: 575,
+        width: 640,
+        height: 36,
+        text: "alert · assertive → ချက်ချင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+
+    # Board D: where focus goes.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 460,
+        height: 46,
+        text: "focus ကို ဘယ်ပို့မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-comp-box,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 400,
+        height: 230,
+        strokeColor: "#1971c2",
+        backgroundColor: "#e7f5ff",
+      }
+    - {
+        id: d-comp-head,
+        kind: text,
+        x: 292,
+        y: 254,
+        width: 200,
+        height: 36,
+        text: "component",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-comp-body,
+        kind: text,
+        x: 292,
+        y: 310,
+        width: 350,
+        height: 130,
+        text: "dialog ဖွင့် → focus အထဲ\nTab က အထဲမှာပဲ\nပိတ် → ခလုတ်ဆီ ပြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-page-box,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 390,
+        height: 230,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#ebfbee",
+      }
+    - {
+        id: d-page-head,
+        kind: text,
+        x: 722,
+        y: 254,
+        width: 200,
+        height: 36,
+        text: "page",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-page-body,
+        kind: text,
+        x: 722,
+        y: 310,
+        width: 340,
+        height: 90,
+        text: "view ပြောင်း →\nခေါင်းစဉ် · main",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-trap,
+        kind: text,
+        x: 280,
+        y: 505,
+        width: 700,
+        height: 36,
+        text: "keyboard trap ✗ · Escape နဲ့ ထွက်လို့ ရရမယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-stay,
+        kind: text,
+        x: 280,
+        y: 565,
+        width: 620,
+        height: 36,
+        text: "ခလုတ် ရှိနေဆဲ → focus မရွှေ့ · live region",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 2609
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: intro
+    chapter: "JavaScript က page ကို ပြောင်းတဲ့အခါ"
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ keyboard focus နဲ့ Tab key ရဲ့ အစဉ်ကို ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      JavaScript က page ကို ပြောင်းတဲ့အခါ၊ အဲဒီ အပြောင်းအလဲကို လူတိုင်း သိအောင် ဘယ်လို လုပ်မလဲ ဆိုတာ
+      ကြည့်ပါမယ်။ [[mark:start-server]] ခလုတ် နှိပ်ရင် စာရင်း ပေါ်လာတာ၊ အော်ဒါ မှာရင် စာ တစ်ကြောင်း
+      ပေါ်လာတာ စတာတွေက JavaScript ရဲ့ အလုပ်ပါ။ မျက်စိနဲ့ မြင်ရတဲ့သူက ချက်ချင်း သတိထားမိပေမယ့်၊ screen
+      reader သုံးတဲ့သူကတော့ accessibility tree ထဲမှာ ပြောင်းသွားတာကိုပဲ သိနိုင်ပါတယ်။ ဒါကြောင့် page
+      ကို ပြောင်းတိုင်း tree ကိုပါ မှန်အောင် ထိန်းပေးရပါမယ်။ [[mark:draw-job1]] ဒီ lesson မှာ အလုပ်
+      လေးခုကို ကြည့်ပါမယ်။ ပထမက event တွေကို keyboard နဲ့လည်း သုံးလို့ ရအောင် လုပ်ဖို့ပါ။
+      [[mark:draw-job2]] ဒုတိယက ခလုတ်ရဲ့ state ကို မြင်ရတဲ့ အတိုင်း tree ထဲမှာ လိုက်ပြောင်းဖို့ပါ။
+      [[mark:draw-job3]] တတိယက ပေါ်လာတဲ့ စာကို screen reader က ဖတ်ပြအောင် live region သုံးဖို့ပါ။
+      [[mark:draw-job4]] နောက်ဆုံးကတော့ page title နဲ့ focus ကို ဂရုစိုက်ပြီး၊ သုံးတဲ့သူ ဘယ်ရောက်နေလဲ
+      သိနေအောင် လုပ်ဖို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript",
+          url: "https://web.dev/learn/accessibility/javascript",
+        }
+      - {
+          title: "MDN: Accessibility tree",
+          url: "https://developer.mozilla.org/en-US/docs/Glossary/Accessibility_tree",
+        }
+    actions:
+      - id: open-jobs-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: start-server }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-job1
+        type: whiteboard.apply
+        at: { mark: draw-job1 }
+        upsertIds: [a-job1-box, a-job1-head, a-job1-body]
+        drawMs: 1500
+      - id: draw-job2
+        type: whiteboard.apply
+        at: { mark: draw-job2 }
+        upsertIds: [a-job2-box, a-job2-head, a-job2-body]
+        drawMs: 1500
+      - id: draw-job3
+        type: whiteboard.apply
+        at: { mark: draw-job3 }
+        upsertIds: [a-job3-box, a-job3-head, a-job3-body]
+        drawMs: 1500
+      - id: draw-job4
+        type: whiteboard.apply
+        at: { mark: draw-job4 }
+        upsertIds: [a-job4-box, a-job4-head, a-job4-body]
+        drawMs: 1500
+
+  - id: trigger-events
+    chapter: "Click event နဲ့ keyboard"
+    narration: >
+      [[mark:board-events]] event ကနေ စကြည့်ရအောင်။ mouse မသုံးနိုင်တဲ့သူ၊ လက်ကို တိတိကျကျ လှုပ်ရှားရ
+      ခက်တဲ့သူ၊ screen reader သုံးတဲ့သူ အများစုက web ကို keyboard နဲ့ သုံးကြပါတယ်။
+      [[mark:draw-button-row]] button element ပေါ်မှာ click ကို နားထောင်ထားရင်၊ keyboard ရဲ့ Enter
+      ဒါမှမဟုတ် Space နှိပ်တာကိုလည်း browser က click အဖြစ် ပို့ပေးပါတယ်။ link ဆိုရင်လည်း Enter
+      နှိပ်တာက click ဖြစ်သွားပါတယ်။ ကိုယ်က ဘာမှ ထပ်ရေးစရာ မလိုပါဘူး။ [[mark:draw-div-row]] ဒါပေမဲ့ div
+      ပေါ်မှာ click ထည့်ထားရင်တော့ mouse နဲ့ပဲ အလုပ်လုပ်ပါတယ်။ div ကို မဖြစ်မနေ သုံးရမယ်ဆိုရင် role
+      နဲ့ tab index အပြင်၊ Enter နဲ့ Space ကို စစ်တဲ့ key event ကိုပါ ကိုယ်တိုင် ရေးရပါမယ်။ ဒါကို
+      မေ့သွားရင် keyboard သုံးတဲ့သူအတွက် အဲဒီ ခလုတ်က လုံးဝ သုံးလို့ မရတော့ပါဘူး။
+      [[mark:draw-mouse-row]] mouse တင်မှ ပေါ်လာတဲ့ menu နဲ့ နှစ်ချက် ဆက်နှိပ်မှ အလုပ်လုပ်တဲ့
+      ခလုတ်တွေကလည်း mouse သုံးတဲ့သူပဲ သုံးလို့ ရပါတယ်။ ဒါကြောင့် တကယ့် button နဲ့ link ပေါ်မှာ click
+      ကို နားထောင်တာက အကောင်းဆုံးပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — Trigger events",
+          url: "https://web.dev/learn/accessibility/javascript#trigger_events",
+        }
+      - {
+          title: "MDN: Element click event",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event",
+        }
+      - {
+          title: "WAI-ARIA APG: Button pattern (keyboard interaction)",
+          url: "https://www.w3.org/WAI/ARIA/apg/patterns/button/",
+        }
+    actions:
+      - id: board-events
+        type: whiteboard.apply
+        at: { mark: board-events }
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-button-row
+        type: whiteboard.apply
+        at: { mark: draw-button-row }
+        upsertIds: [b-button-box, b-button-label, b-button-result]
+        drawMs: 1800
+      - id: draw-div-row
+        type: whiteboard.apply
+        at: { mark: draw-div-row }
+        upsertIds: [b-div-box, b-div-label, b-div-result]
+        drawMs: 1800
+      - id: draw-mouse-row
+        type: whiteboard.apply
+        at: { mark: draw-mouse-row }
+        upsertIds: [b-mouse-box, b-mouse-label, b-mouse-result]
+        drawMs: 1800
+
+  - id: code-tour
+    narration: >
+      [[mark:close-events]] ကဲ၊ ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ [[mark:open-main]] ဒါက page ကို
+      လှုပ်ရှားစေတဲ့ JavaScript ဖိုင်ပါ။ [[mark:select-strength-click]] ပထမ အပိုင်းက အရသာ ရွေးရန်
+      ခလုတ်ရဲ့ click ကို နားထောင်ပါတယ်။ တကယ့် button element ဖြစ်လို့ keyboard နဲ့လည်း နှိပ်လို့
+      ရပြီးသားပါ။ [[mark:select-hidden-toggle]] နှိပ်လိုက်တိုင်း အရသာ စာရင်းကို ပြလိုက် ဖျောက်လိုက်
+      လုပ်ပါတယ်။ စာရင်းက page ထဲမှာ ရှိပြီးသား ဖြစ်ပြီး၊ HTML အသစ် ထုတ်မပေးဘဲ hidden ကိုပဲ ပြောင်းတာက
+      ကောင်းတဲ့ အလေ့အကျင့်ပါ။ [[mark:select-order-text]] ဒုတိယ အပိုင်းကတော့ မှာမယ် ခလုတ်ကို နှိပ်ရင်၊
+      ခလုတ်အောက်က စာပိုဒ်ထဲကို မှာပြီးပါပြီ ဆိုတဲ့ စာ ထည့်ပေးပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — Dynamic content",
+          url: "https://web.dev/learn/accessibility/javascript#dynamic_content",
+        }
+      - {
+          title: "MDN: HTMLElement hidden property",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/hidden",
+        }
+    actions:
+      - id: close-events
+        type: whiteboard.apply
+        at: { mark: close-events }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: main.js
+      - id: select-strength-click
+        type: editor.select
+        at: { mark: select-strength-click }
+        target: { file: main.js, text: 'strengthButton.addEventListener("click"', occurrence: 1 }
+      - id: select-hidden-toggle
+        type: editor.select
+        at: { mark: select-hidden-toggle }
+        target: { file: main.js, text: "strengthList.hidden = !willOpen;", occurrence: 1 }
+      - id: select-order-text
+        type: editor.select
+        at: { mark: select-order-text }
+        target: { file: main.js, text: 'orderStatus.textContent = "မှာပြီးပါပြီ";', occurrence: 1 }
+
+  - id: first-look
+    narration: >
+      [[mark:preview-ready]] ညာဘက်မှာ ဆိုင်ရဲ့ page ကို မြင်ရပါပြီ။ မျက်စိနဲ့ ကြည့်ရင်တော့ ပြဿနာ
+      မရှိသလိုပါပဲ။ accessibility panel မှာ ဒီတစ်ခါ အပေါ်က tree နဲ့ အောက်က live region အပိုင်း
+      ပါပါတယ်။ live region အပိုင်းက screen reader က အလိုလို ဖတ်ပြမယ့် စာတွေကို ရိုးရှင်းအောင်
+      ပြထားတာပါ။ [[mark:look-strength-row]] tree ထဲမှာ အရသာ ရွေးရန် ခလုတ်ကို role က button၊ name က
+      အရသာ ရွေးရန် ဆိုပြီး မြင်ရပါတယ်။ ဒါပေမဲ့ စာရင်း ပွင့်နေလား ပိတ်နေလား ဆိုတဲ့ state မပါလို့၊
+      screen reader သုံးတဲ့သူက နှိပ်ရင် တစ်ခုခု ပွင့်မယ် ဆိုတာ ကြိုမသိနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: ARIA and HTML — the accessibility tree",
+          url: "https://web.dev/learn/accessibility/aria-html",
+        }
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — State management",
+          url: "https://web.dev/learn/accessibility/javascript#state_management",
+        }
+    actions:
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: preview-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-document-title
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-document }
+        attribute: { name: data-title, value: "ရွှေလက်ဖက်ရည်ဆိုင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-strength-no-state
+        type: expect.preview
+        at: { mark: look-strength-row }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        attribute: { name: data-states, value: "" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-strength-name
+        type: expect.preview
+        at: { afterAction: expect-strength-no-state }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        attribute: { name: data-name, value: "အရသာ ရွေးရန်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: expanded-attribute
+    chapter: "ခလုတ်ရဲ့ state ကို tree ထဲ ပြရအောင်"
+    narration: >
+      [[mark:open-index]] HTML ဖိုင်ကို ဖွင့်ပြီး ခလုတ်ကို ပြင်ကြည့်ရအောင်။ [[mark:type-expanded]]
+      ခလုတ်မှာ aria expanded ကို false နဲ့ ထည့်ပါမယ်။ ဒီ ခလုတ်က တစ်ခုခုကို အဖွင့် အပိတ် လုပ်တဲ့
+      ခလုတ်ဖြစ်ပြီး၊ အခု ပိတ်ထားတယ် လို့ ပြောလိုက်တာပါ။ [[mark:after-expanded]] tree ကို ကြည့်ပါ၊
+      ခလုတ်ရဲ့ နာမည် နောက်မှာ collapsed ပေါ်လာပါပြီ။ screen reader က အရသာ ရွေးရန်၊ button၊ collapsed
+      လို့ ဖတ်ပြမှာပါ။ [[mark:click-strength-1]] ခလုတ်ကို နှိပ်ကြည့်ရအောင်။ [[mark:after-click-1]]
+      အရသာ စာရင်း ပေါ်လာပါပြီ။ ဒါပေမဲ့ tree မှာတော့ collapsed ပဲ ကျန်နေပါတယ်။ မျက်စိနဲ့ မြင်ရတာက
+      ပွင့်နေပေမယ့်၊ screen reader ကတော့ ပိတ်နေတယ် လို့ ပြောနေတာပါ။ HTML ထဲက attribute က သူ့ဘာသာ
+      မပြောင်းလို့၊ state ပြောင်းတိုင်း JavaScript က လိုက်ပြောင်းပေးရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — State management",
+          url: "https://web.dev/learn/accessibility/javascript#state_management",
+        }
+      - {
+          title: "MDN: aria-expanded",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes/aria-expanded",
+        }
+      - {
+          title: "WAI-ARIA APG: Disclosure (Show/Hide) pattern",
+          url: "https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/",
+        }
+    actions:
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: type-expanded
+        type: editor.type
+        at: { mark: type-expanded }
+        cadence: block
+        target:
+          {
+            file: index.html,
+            after: '<button class="disclosure" id="strength-button" type="button"',
+            occurrence: 1,
+          }
+        text: ' aria-expanded="false"'
+      - id: expect-collapsed
+        type: expect.preview
+        at: { mark: after-expanded }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        textContains: '"အရသာ ရွေးရန်" collapsed'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-strength-1
+        type: preview.click
+        at: { mark: click-strength-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: strength-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-list-shown-1
+        type: expect.preview
+        at: { mark: after-click-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-list }
+        textContains: "list"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-still-collapsed
+        type: expect.preview
+        at: { afterAction: expect-list-shown-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        attribute: { name: data-states, value: "collapsed focused" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: expanded-script
+    narration: >
+      [[mark:open-main-2]] JavaScript ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:type-set-expanded]] စာရင်းကို ပြ
+      ဖျောက် လုပ်တဲ့ စာကြောင်းရဲ့ အောက်မှာ၊ aria expanded ကို စာရင်းနဲ့ အတူတူ ပြောင်းပေးတဲ့ စာကြောင်း
+      ထည့်ပါမယ်။ စာရင်း ပွင့်ရင် true၊ ပိတ်ရင် false ဖြစ်မှာပါ။ [[mark:click-strength-2]] ခလုတ်ကို
+      ထပ်နှိပ်ကြည့်ရအောင်။ [[mark:after-click-2]] ဒီတစ်ခါတော့ စာရင်း ပေါ်လာတာနဲ့ အတူ tree ထဲမှာလည်း
+      expanded ဖြစ်သွားပါပြီ။ ခလုတ်ပေါ်မှာ focus ရှိနေလို့ သူ့ row ကို အပြာရောင်နဲ့ ပြထားတာကိုလည်း
+      သတိထား ကြည့်ပါ။ [[mark:explain-states]] ဒီလိုပဲ ခလုတ်ကို ဖိထားလား မဖိထားလား ပြတဲ့ aria pressed၊
+      tab အုပ်စုထဲမှာ ဘယ် tab ကို ရွေးထားလဲ ပြတဲ့ aria selected၊ menu ထဲမှာ အခု ရောက်နေတဲ့ page ကို
+      ပြတဲ့ aria current စတာတွေ ရှိပါသေးတယ်။ ဘယ်ဟာကို သုံးသုံး၊ မြင်ရတဲ့ အခြေအနေ ပြောင်းတဲ့ code
+      နေရာမှာ ARIA ကိုပါ တစ်ခါတည်း လိုက်ပြောင်းရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — State management",
+          url: "https://web.dev/learn/accessibility/javascript#state_management",
+        }
+      - {
+          title: "MDN: Element.setAttribute()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/Element/setAttribute",
+        }
+      - {
+          title: "MDN: ARIA states and properties",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Attributes",
+        }
+    actions:
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: main.js
+      - id: type-set-expanded
+        type: editor.type
+        at: { mark: type-set-expanded }
+        cadence: block
+        target: { file: main.js, after: "strengthList.hidden = !willOpen;", occurrence: 1 }
+        text: "\n  strengthButton.setAttribute(\"aria-expanded\", String(willOpen));"
+      - id: expect-collapsed-again
+        type: expect.preview
+        at: { mark: click-strength-2, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        attribute: { name: data-states, value: "collapsed" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-strength-2
+        type: preview.click
+        at: { mark: click-strength-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: strength-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-expanded
+        type: expect.preview
+        at: { mark: after-click-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        textContains: '"အရသာ ရွေးရန်" expanded'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-expanded-focused
+        type: expect.preview
+        at: { afterAction: expect-expanded }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-strength-button }
+        attribute: { name: data-states, value: "expanded focused" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: live-problem
+    chapter: "ပေါ်လာတဲ့ စာကို ဖတ်ပြအောင်"
+    narration: >
+      [[mark:click-order-1]] အခု မှာမယ် ခလုတ်ကို နှိပ်ကြည့်ရအောင်။ [[mark:after-order-1]]
+      ခလုတ်အောက်မှာ မှာပြီးပါပြီ ဆိုတဲ့ စာ ပေါ်လာပေမယ့်၊ live region အပိုင်းမှာ ဘာမှ မရှိပါဘူး။ screen
+      reader သုံးတဲ့သူက ခလုတ်ပေါ်မှာပဲ ရှိနေလို့ စာ ပေါ်လာမှန်း မသိပါဘူး။ အော်ဒါ ရောက်မရောက်
+      မသေချာလို့ ထပ်နှိပ်မိရင် နှစ်ခါ မှာမိသွားနိုင်ပါတယ်။ [[mark:board-live]] ဒီလို နေရာမှာ live
+      region ကို သုံးပါတယ်။ live region ဆိုတာ စာသား ပြောင်းတာနဲ့ screen reader က အလိုလို ဖတ်ပြမယ့်
+      နေရာပါ။ [[mark:draw-live-ok]] အရေးကြီးတဲ့ စည်းကမ်းက၊ region က page ထဲမှာ အရင် ရှိနေပြီးမှ သူ့ထဲက
+      စာကို ပြောင်းရမယ် ဆိုတာပါ။ [[mark:draw-live-bad]] region နဲ့ စာကို တစ်ပြိုင်တည်း
+      ထည့်လိုက်ရင်တော့ screen reader က မဖတ်ပြတာ များပါတယ်။ [[mark:draw-live-levels]] role status
+      ဒါမှမဟုတ် aria live polite က လက်ရှိ ဖတ်နေတာ ပြီးမှ ဖတ်ပြပြီး၊ role alert ဒါမှမဟုတ် aria live
+      assertive ကတော့ ဖြတ်ပြီး ချက်ချင်း ဖတ်ပါတယ်။ ဒါကြောင့် alert ကို အရေးကြီးတဲ့ သတိပေးချက်အတွက်ပဲ
+      သုံးပြီး၊ စာကိုလည်း တိုတို ရှင်းရှင်း ရေးပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — State management (page level)",
+          url: "https://web.dev/learn/accessibility/javascript#page_level_2",
+        }
+      - {
+          title: "MDN: ARIA live regions",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Guides/Live_regions",
+        }
+      - {
+          title: "MDN: ARIA status role",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/status_role",
+        }
+      - {
+          title: "MDN: ARIA alert role",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/alert_role",
+        }
+    actions:
+      - id: click-order-1
+        type: preview.click
+        at: { mark: click-order-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-status-text-1
+        type: expect.preview
+        at: { mark: after-order-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-status }
+        textContains: "မှာပြီးပါပြီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-nothing-announced
+        type: expect.preview
+        at: { afterAction: expect-status-text-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: live-count }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: board-live
+        type: whiteboard.apply
+        at: { mark: board-live }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-live-ok
+        type: whiteboard.apply
+        at: { mark: draw-live-ok }
+        upsertIds: [c-ok-box, c-ok-label, c-ok-result]
+        drawMs: 1800
+      - id: draw-live-bad
+        type: whiteboard.apply
+        at: { mark: draw-live-bad }
+        upsertIds: [c-bad-box, c-bad-label, c-bad-result]
+        drawMs: 1800
+      - id: draw-live-levels
+        type: whiteboard.apply
+        at: { mark: draw-live-levels }
+        upsertIds: [c-polite, c-assertive]
+        drawMs: 1600
+
+  - id: live-fix
+    narration: >
+      [[mark:close-live]] ကိုယ့် page မှာတော့ အော်ဒါ စာ ထည့်မယ့် စာပိုဒ်က အလွတ်နဲ့ ရှိနေပြီးသားပါ။
+      [[mark:open-index-2]] ဒါကြောင့် HTML ထဲက အဲဒီ စာပိုဒ်ကို live region ဖြစ်အောင် လုပ်ရုံပါပဲ။
+      [[mark:type-status]] role status ကို ထည့်ပါမယ်။ JavaScript ကိုတော့ ပြင်စရာ မလိုပါဘူး။
+      [[mark:click-order-2]] မှာမယ် ကို ထပ်နှိပ်ကြည့်ရအောင်။ [[mark:after-order-2]] live region
+      အပိုင်းမှာ polite နဲ့ မှာပြီးပါပြီ ဆိုတာ ပေါ်လာပါပြီ။ screen reader က လက်ရှိ ဖတ်နေတာ ပြီးတာနဲ့
+      မှာပြီးပါပြီ လို့ ဖတ်ပြမှာပါ။ ဒီ panel က ရိုးရှင်းအောင် ပြထားတာမို့၊ ကိုယ့် ကွန်ပျူတာက screen
+      reader နဲ့လည်း စမ်းကြည့်ပါ။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — State management (page level)",
+          url: "https://web.dev/learn/accessibility/javascript#page_level_2",
+        }
+      - {
+          title: "MDN: ARIA status role",
+          url: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/status_role",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: Status Messages",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html",
+        }
+    actions:
+      - id: close-live
+        type: whiteboard.apply
+        at: { mark: close-live }
+        open: false
+      - id: open-index-2
+        type: workspace.openFile
+        at: { mark: open-index-2 }
+        path: index.html
+      - id: type-status
+        type: editor.type
+        at: { mark: type-status }
+        cadence: block
+        target:
+          { file: index.html, after: '<p class="order-status" id="order-status"', occurrence: 1 }
+        text: ' role="status"'
+      - id: expect-status-role
+        type: expect.preview
+        at: { mark: click-order-2, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-order-status }
+        textContains: "status"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-order-2
+        type: preview.click
+        at: { mark: click-order-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-announced
+        type: expect.preview
+        at: { mark: after-order-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: live-1 }
+        textContains: 'polite "မှာပြီးပါပြီ"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-one-announcement
+        type: expect.preview
+        at: { afterAction: expect-announced }
+        timeoutMs: 5000
+        target: { by: testId, value: live-count }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: page-title
+    chapter: "View ပြောင်းရင် title လည်း ပြောင်းရအောင်"
+    narration: >
+      [[mark:look-document]] ဒါပေမဲ့ panel ရဲ့ အပေါ်ဆုံးက document row ကို ကြည့်ပါ။ အော်ဒါ
+      မှာပြီးပေမယ့် page title က ရွှေလက်ဖက်ရည်ဆိုင် အတိုင်းပဲ ရှိနေပါတယ်။ page title က screen reader
+      ပထမဆုံး ဖတ်ပြတဲ့ စာဖြစ်ပြီး၊ ဘယ် page ရောက်နေလဲ ဆိုတာ ပြောပြပါတယ်။ [[mark:explain-spa]] single
+      page app မှာ JavaScript က HTML ဖိုင် တစ်ခုတည်းထဲမှာပဲ view ကို လဲပေးတာ ဖြစ်လို့၊ title က သူ့ဘာသာ
+      မပြောင်းပါဘူး။ [[mark:open-main-3]] ဒါကြောင့် view ပြောင်းတဲ့ နေရာမှာ title ကို ကိုယ်တိုင်
+      ပြောင်းပေးရပါမယ်။ [[mark:type-title]] ကိုယ့် page မှာတော့ အော်ဒါ မှာပြီးသွားတာကို view အသစ်
+      တစ်ခုလို သဘောထားပြီး၊ အော်ဒါ စာ ထည့်တဲ့ စာကြောင်းရဲ့ အောက်မှာ document title ကို ပြောင်းပါမယ်။
+      ဒီ view အတွက် အပိုင်းက ရှေ့မှာ၊ ဆိုင် နာမည်က နောက်မှာ ရှိပါတယ်။ [[mark:click-order-3]] မှာမယ်
+      ကို နှိပ်ကြည့်ရအောင်။ [[mark:after-order-3]] document row ရဲ့ title က မှာပြီးပါပြီ၊
+      ရွှေလက်ဖက်ရည်ဆိုင် ဆိုပြီး ပြောင်းသွားပါပြီ။ browser tab မှာလည်း ဒီ နာမည် ပေါ်မှာပါ။ ဒါပေမဲ့
+      title ပြောင်းရုံနဲ့ screen reader က ချက်ချင်း ဖတ်ပြမယ်လို့ အာမခံ မရလို့၊ live region ဒါမှမဟုတ်
+      focus ရွှေ့တဲ့ နည်းနဲ့ တွဲသုံးရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — Page titles",
+          url: "https://web.dev/learn/accessibility/javascript#page_titles",
+        }
+      - {
+          title: "MDN: Document.title",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/Document/title",
+        }
+      - {
+          title: "MDN: SPA (Single-page application)",
+          url: "https://developer.mozilla.org/en-US/docs/Glossary/SPA",
+        }
+      - {
+          title: "Hidde de Vries: Accessible page titles in a single page app",
+          url: "https://hidde.blog/accessible-page-titles-in-a-single-page-app/",
+        }
+    actions:
+      - id: expect-title-unchanged
+        type: expect.preview
+        at: { mark: look-document }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-document }
+        attribute: { name: data-title, value: "ရွှေလက်ဖက်ရည်ဆိုင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: main.js
+      - id: type-title
+        type: editor.type
+        at: { mark: type-title }
+        cadence: block
+        target: { file: main.js, after: 'orderStatus.textContent = "မှာပြီးပါပြီ";', occurrence: 1 }
+        text: "\n  document.title = \"မှာပြီးပါပြီ · ရွှေလက်ဖက်ရည်ဆိုင်\";"
+      - id: expect-reloaded-before-order-3
+        type: expect.preview
+        at: { mark: click-order-3, offsetMs: -700 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-order-status }
+        textContains: "status"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-order-3
+        type: preview.click
+        at: { mark: click-order-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: order-button }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-title-changed
+        type: expect.preview
+        at: { mark: after-order-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-document }
+        attribute: { name: data-title, value: "မှာပြီးပါပြီ · ရွှေလက်ဖက်ရည်ဆိုင်" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-announced-again
+        type: expect.preview
+        at: { afterAction: expect-title-changed }
+        timeoutMs: 5000
+        target: { by: testId, value: live-1 }
+        textContains: 'polite "မှာပြီးပါပြီ"'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: focus
+    chapter: "Focus ကို ဘယ်ပို့မလဲ"
+    narration: >
+      [[mark:board-focus]] နောက်ဆုံး အလုပ်က focus ပါ။ keyboard သုံးတဲ့သူအတွက် focus ဆိုတာ page ပေါ်မှာ
+      ကိုယ် ရောက်နေတဲ့ နေရာပါ။ JavaScript က page ကို ပြောင်းတဲ့အခါ အဲဒီ နေရာ ပျောက်မသွားအောင် ကိုယ်က
+      ဆုံးဖြတ်ပေးရပါတယ်။ [[mark:draw-component]] component အဆင့်မှာဆိုရင်၊ dialog ဖွင့်တာနဲ့ focus ကို
+      အထဲ ရွှေ့ပေးရပြီး၊ ဖွင့်ထားတုန်း Tab key က dialog ထဲမှာပဲ လှည့်နေရပါမယ်။ ပိတ်လိုက်ရင်တော့ focus
+      ကို ဖွင့်ခဲ့တဲ့ ခလုတ်ဆီ ပြန်ပို့ပေးရပါမယ်။ [[mark:draw-page]] page အဆင့်မှာတော့ view အသစ်
+      ပြောင်းတဲ့အခါ focus ကို ခေါင်းစဉ် ဒါမှမဟုတ် main အပိုင်းဆီ ရွှေ့ပေးတာ များပါတယ်။ ဘယ်နည်း ရွေးမလဲ
+      ဆိုတာ ကိုယ့် app ပေါ် မူတည်ပါတယ်။ [[mark:draw-trap]] dialog က Tab ကို အထဲမှာ ထိန်းထားပေမယ့်၊
+      Escape ဒါမှမဟုတ် ပိတ်တဲ့ ခလုတ်နဲ့ အမြဲ ပြန်ထွက်လို့ ရရပါမယ်။ ထွက်လမ်း မရှိဘဲ focus ပိတ်မိနေတဲ့
+      keyboard trap ကိုတော့ ဘယ်တော့မှ မဖြစ်စေရပါဘူး။ [[mark:draw-stay]] ကိုယ့် မှာမယ် ခလုတ်ကတော့
+      နှိပ်ပြီးတဲ့ နောက်မှာလည်း နေရာမှာ ရှိနေဆဲပါ။ [[mark:close-focus]] panel မှာလည်း သူ့ row က focus
+      ရှိနေတုန်းပါ။ ဒါကြောင့် focus ကို မရွှေ့ဘဲ live region နဲ့ ပြောပြတာ မှန်ပါတယ်။ ခလုတ်
+      ပျောက်သွားခဲ့ရင်တော့ focus က page ရဲ့ body ဆီ ပြန်ကျသွားလို့၊ JavaScript နဲ့ သင့်တော်တဲ့ နေရာဆီ
+      ရွှေ့ပေးရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript — Focus management",
+          url: "https://web.dev/learn/accessibility/javascript#focus_management",
+        }
+      - {
+          title: "WAI-ARIA APG: Dialog (Modal) pattern",
+          url: "https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/",
+        }
+      - {
+          title: "WCAG 2.2 Understanding: No Keyboard Trap",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap.html",
+        }
+      - {
+          title: "HTML Standard: focus fixup rule",
+          url: "https://html.spec.whatwg.org/multipage/interaction.html#focus-fixup-rule",
+        }
+    actions:
+      - id: board-focus
+        type: whiteboard.apply
+        at: { mark: board-focus }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-component
+        type: whiteboard.apply
+        at: { mark: draw-component }
+        upsertIds: [d-comp-box, d-comp-head, d-comp-body]
+        drawMs: 2200
+      - id: draw-page
+        type: whiteboard.apply
+        at: { mark: draw-page }
+        upsertIds: [d-page-box, d-page-head, d-page-body]
+        drawMs: 2000
+      - id: draw-trap
+        type: whiteboard.apply
+        at: { mark: draw-trap }
+        upsertIds: [d-trap]
+        drawMs: 1400
+      - id: draw-stay
+        type: whiteboard.apply
+        at: { mark: draw-stay }
+        upsertIds: [d-stay]
+        drawMs: 1400
+      - id: close-focus
+        type: whiteboard.apply
+        at: { mark: close-focus }
+        open: false
+      - id: expect-order-focused
+        type: expect.preview
+        at: { afterAction: close-focus }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-order-button }
+        attribute: { name: data-states, value: "focused" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ JavaScript က page ကို ပြောင်းတိုင်း၊ မျက်စိနဲ့ မမြင်ရတဲ့သူလည်း
+      အဲဒီ အပြောင်းအလဲကို သိရပါမယ်။ [[mark:recap-events]] တကယ့် button နဲ့ link ပေါ်မှာ click ကို
+      နားထောင်ရင် keyboard နဲ့လည်း အလုပ်လုပ်ပါတယ်။ [[mark:recap-state]] ခလုတ်ရဲ့ အခြေအနေ
+      ပြောင်းတဲ့ နေရာမှာ aria expanded လို state ကို တစ်ခါတည်း လိုက်ပြောင်းပေးပါ။
+      [[mark:recap-live]] ရုတ်တရက် ပေါ်လာတဲ့ စာကိုတော့ page ထဲမှာ ကြိုရှိနေတဲ့ live region ထဲ
+      ထည့်ပေးပါ။ [[mark:recap-title]] view ပြောင်းရင် page title ကို ပြောင်းပေးပြီး၊ focus ဘယ်ကို
+      သွားမလဲ ဆိုတာကိုလည်း ဆုံးဖြတ်ပေးပါ။ နောက် lesson မှာတော့ ပုံတွေနဲ့ alt text အကြောင်း
+      ကြည့်သွားပါမယ်။ ပုံ တစ်ပုံကို မမြင်ရတဲ့သူအတွက် ဘာ စာ ရေးပေးရမလဲ ဆိုတာ၊ ပုံရဲ့
+      ရည်ရွယ်ချက်ပေါ် မူတည်ပုံကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn Accessibility: JavaScript",
+          url: "https://web.dev/learn/accessibility/javascript",
+        }
+      - {
+          title: "web.dev Learn Accessibility: Images",
+          url: "https://web.dev/learn/accessibility/images",
+        }
+    actions:
+      - id: recap-events
+        type: editor.select
+        at: { mark: recap-events }
+        target: { file: main.js, text: 'strengthButton.addEventListener("click"', occurrence: 1 }
+      - id: recap-state
+        type: editor.select
+        at: { mark: recap-state }
+        target:
+          {
+            file: main.js,
+            text: 'strengthButton.setAttribute("aria-expanded", String(willOpen));',
+            occurrence: 1,
+          }
+      - id: recap-live
+        type: editor.select
+        at: { mark: recap-live }
+        target: { file: main.js, text: 'orderStatus.textContent = "မှာပြီးပါပြီ";', occurrence: 1 }
+      - id: recap-title
+        type: editor.select
+        at: { mark: recap-title }
+        target: { file: main.js, text: 'document.title = "မှာပြီးပါပြီ · ရွှေလက်ဖက်ရည်ဆိုင်";', occurrence: 1 }
+      - id: expect-file-expanded-js
+        type: expect.file
+        at: { afterAction: recap-title }
+        path: main.js
+        contains: 'strengthButton.setAttribute("aria-expanded", String(willOpen));'
+      - id: expect-file-title-js
+        type: expect.file
+        at: { afterAction: expect-file-expanded-js }
+        path: main.js
+        contains: 'document.title = "မှာပြီးပါပြီ · ရွှေလက်ဖက်ရည်ဆိုင်";'
+      - id: expect-file-expanded-html
+        type: expect.file
+        at: { afterAction: expect-file-title-js }
+        path: index.html
+        contains: 'id="strength-button" type="button" aria-expanded="false"'
+      - id: expect-file-status-html
+        type: expect.file
+        at: { afterAction: expect-file-expanded-html }
+        path: index.html
+        contains: '<p class="order-status" id="order-status" role="status"'
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
