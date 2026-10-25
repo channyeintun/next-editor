@@ -53,16 +53,6 @@ beforeEach(() => {
   mockedPost.mockReset();
 });
 
-// jsdom's Blob has no .text(); FileReader is the portable way to read it here.
-function blobText(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
-    reader.readAsText(blob);
-  });
-}
-
 describe("formatDuration", () => {
   it("formats whole minutes and seconds with zero-padding", () => {
     expect(formatDuration(150_000)).toBe("2:30");
@@ -277,8 +267,8 @@ describe("uploadLesson", () => {
 
     const englishVtt = putBodies[1] as Blob;
     expect(englishVtt.type).toBe("text/vtt");
-    expect(await blobText(englishVtt)).toContain("WEBVTT");
-    expect(await blobText(putBodies[2] as Blob)).toContain("မင်္ဂလာပါ");
+    expect(await englishVtt.text()).toContain("WEBVTT");
+    expect(await (putBodies[2] as Blob).text()).toContain("မင်္ဂလာပါ");
   });
 
   // Keyed by language alone, a second track in a language overwrote the first on R2.
@@ -312,8 +302,8 @@ describe("uploadLesson", () => {
       "/uploads/lesson-5/media/lesson-5.en.vtt",
       "/uploads/lesson-5/media/lesson-5-2.en.vtt",
     ]);
-    expect(await blobText(putBodies[1] as Blob)).toContain("Studio");
-    expect(await blobText(putBodies[2] as Blob)).toContain("Corrected");
+    expect(await (putBodies[1] as Blob).text()).toContain("Studio");
+    expect(await (putBodies[2] as Blob).text()).toContain("Corrected");
     // The second name still says its language to the loader.
     expect(inferLanguageFromFilename("lesson-5-2.en.vtt")).toBe("en");
   });

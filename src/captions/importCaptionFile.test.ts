@@ -15,9 +15,8 @@ afterEach(() => {
 
 const vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n";
 
-// jsdom's File has no text(); a browser's reads the same words.
 function pickedFile(text: string, name: string): File {
-  return Object.assign(new File([text], name), { text: async () => text });
+  return new File([text], name);
 }
 
 describe("parseCaptionFile", () => {

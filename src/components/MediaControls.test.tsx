@@ -237,11 +237,7 @@ describe("MediaControls", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     // The picker has closed and focus is still on Import captions…: only an alert is heard.
-    // jsdom's File has no text(); a browser's reads the same words.
-    const notCaptions = Object.assign(
-      new File(["just some notes"], "notes.vtt", { type: "text/vtt" }),
-      { text: async () => "just some notes" },
-    );
+    const notCaptions = new File(["just some notes"], "notes.vtt", { type: "text/vtt" });
     fireEvent.change(filePicker(container, ".vtt"), { target: { files: [notCaptions] } });
     expect(await screen.findByRole("alert")).toHaveTextContent(
       'No captions found in "notes.vtt" — expected WebVTT or SRT.',
@@ -259,9 +255,7 @@ describe("MediaControls", () => {
     expect(announced()).toContain("Captions generated: English (auto)");
 
     const vtt = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHello\n";
-    const captions = Object.assign(new File([vtt], "lesson.my.vtt", { type: "text/vtt" }), {
-      text: async () => vtt,
-    });
+    const captions = new File([vtt], "lesson.my.vtt", { type: "text/vtt" });
     fireEvent.change(filePicker(container, ".vtt"), { target: { files: [captions] } });
     // The latest outcome is the one heard.
     await waitFor(() => expect(announced()).toContain("Captions imported: Burmese"));
