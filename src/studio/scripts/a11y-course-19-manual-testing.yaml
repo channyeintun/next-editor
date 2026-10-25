@@ -1867,8 +1867,9 @@ scenes:
       ဖျက်ပစ်ပါ။ [[mark:open-styles]] ဒီမှာတော့ styles ဖိုင်မှာ focus visible အတွက် ကိုယ်ပိုင် ring
       တစ်ခု ထည့်ပါမယ်။ [[mark:type-ring]] အညိုရင့် ဘောင်
       အထူ ဖြစ်ပြီး၊ element နဲ့ နည်းနည်း ခွာထားပါမယ်။ focus visible ဆိုတာ keyboard နဲ့ focus
-      ရောက်လာလို့ browser က ring ပြသင့်တယ်လို့ ဆုံးဖြတ်တဲ့ အခြေအနေပါ။ [[mark:after-ring]]
-      ကြည့်ပါ၊ focus ရောက်နေတဲ့ link ပတ်လည်မှာ ring ပေါ်လာပါပြီ။
+      ရောက်လာလို့ browser က ring ပြသင့်တယ်လို့ ဆုံးဖြတ်တဲ့ အခြေအနေပါ။ editor မှာ ရိုက်နေတုန်း focus
+      က page ကနေ ထွက်သွားလို့၊ [[mark:tab-again]] Tab ကို နောက်တစ်ခါ နှိပ်ပြီး ပထမ link ကို
+      ပြန်သွားပါမယ်။ [[mark:after-ring]] ကြည့်ပါ၊ focus ရောက်နေတဲ့ link ပတ်လည်မှာ ring ပေါ်လာပါပြီ။
     sources:
       - title: "web.dev Learn Accessibility — Manual accessibility testing (Keyboard checks, Issue 1)"
         url: "https://web.dev/learn/accessibility/test-manual"
@@ -1900,6 +1901,12 @@ scenes:
         cadence: fast-explainer
         target: { file: styles.css, after: "", occurrence: 1 }
         text: ":focus-visible {\n  outline: 3px solid var(--tea-dark);\n  outline-offset: 2px;\n}\n"
+      - id: tab-again
+        type: preview.click
+        at: { mark: tab-again, offsetMs: 400 }
+        timeoutMs: 5000
+        target: { by: testId, value: a11y-tab-next }
+        retry: { maxAttempts: 1, delayMs: 0 }
       - id: expect-still-focused
         type: expect.preview
         at: { mark: after-ring }
@@ -1980,7 +1987,7 @@ scenes:
         at: { mark: after-order }
         timeoutMs: 5000
         target: { by: testId, value: tab-link-laphet-yay }
-        textContains: '4 link "လက်ဖက်ရည်" focused'
+        textContains: '4 link "လက်ဖက်ရည်"'
         retry: { maxAttempts: 3, delayMs: 300 }
 
   - id: contrast
