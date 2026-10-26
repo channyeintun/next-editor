@@ -17,7 +17,7 @@ On screen:
 
 chapter: AI လည်း service တစ်ခုပါပဲ
 
-> ⟪page l27_p02⟫ AI feature မို့ reliability ကို အစကနေ ပြန်သင်ရမလား ဆိုတော့ မလိုပါဘူး။ Ask Padauk လည်း service ပဲမို့ SLO၊ capacity၊ ဘေးကင်းတဲ့ change တွေ အရင်အတိုင်း လိုပါတယ်။ အသစ်က နှစ်ခုပဲ ရှိပါတယ်၊ အဖြေက error မပြဘဲ မှားနိုင်တာနဲ့ request တိုင်းမှာ token ကုန်တာပါ။
+> ⟪page l27_p02⟫ AI feature မို့ reliability ကို အစကနေ ပြန်သင်ရမလား ဆိုတော့ မလိုပါဘူး။ Ask Padauk လည်း service ပဲမို့ service level objective ခေါ် SLO ပစ်မှတ်၊ capacity၊ ဘေးကင်းတဲ့ change တွေ အရင်အတိုင်း လိုပါတယ်။ အသစ်က နှစ်ခုပဲ ရှိပါတယ်၊ အဖြေက error မပြဘဲ မှားနိုင်တာနဲ့ request တိုင်းမှာ token ကုန်တာပါ။
 > ⟪page l27_p02b⟫ model ကို data နဲ့ သင်ပေးတာက training ဖြစ်ပြီး train ပြီးသား model နဲ့ request တစ်ခုချင်းကို ဖြေတာက inference ပါ။ token က model ခွဲဖတ်တဲ့ စာသား အပိုင်းလေးတွေ ဖြစ်ပြီး တစ်ခါတည်း ဖတ်နိုင်တဲ့ အများဆုံး ပမာဏကို context window လို့ ခေါ်ပါတယ်။ transaction ရှာတာ၊ ticket ဖွင့်တာလို tool တွေကို အဆင့်လိုက် ခေါ်သုံးတဲ့ model က agent ဖြစ်ပြီး tool တစ်ခါ ခေါ်တာက tool call ပါ။
 > ⟪page l27_p02c⟫ model ကို provider ဆီက ငှားသုံးရင် အလေ့အထ လေးခု ရှိပါတယ်။ prompt နဲ့ limit သတ်မှတ်တဲ့ အပိုင်းကို user ကို ဖြေတဲ့ အပိုင်းနဲ့ ခွဲထားပြီး quota ကို ရှားပါးတဲ့ resource လို သုံးပါ။ AI အပိုင်းကိုပါ observe လုပ်ပြီး prompt နဲ့ model ကို rollback လုပ်လို့ရအောင် version တပ်ပါ။ ဈေးပေါတဲ့ model ဆီ traffic လွှဲတဲ့ model router ကလည်း reliability ခလုတ် တစ်ခုပါ။
 
@@ -47,7 +47,7 @@ On screen:
 
 chapter: Ask Padauk ရဲ့ SLI တွေ
 
-> ⟪close board⟫ ⟪page l27_p03⟫ ဒါဆို refund အမှားကို ဘယ် ကိန်းဂဏန်းက ဖမ်းမလဲ? မသီရိက user ကြုံရတာကို တိုင်းတဲ့ SLI တွေကို ဒုက္ခ တစ်ခုချင်းကနေ ဆွဲထုတ်ပါတယ်။ refund မှားတာအတွက် transaction မှန်မှန် ရွေးတဲ့ ရာခိုင်နှုန်း၊ အဖြေ အသုံးမဝင်တာအတွက် ၅ မိနစ်အတွင်း ထပ်မမေးရတဲ့ chat ရာခိုင်နှုန်း၊ စောင့်ရတာအတွက် ပထမ စာလုံး ပေါ်တဲ့အထိ ကြာချိန်၊ time to first token ၂ စက္ကန့်အတွင်း ဆိုတာတွေပါ။ fallback အဖြေကိုတော့ degraded လို့ ရေတွက်ပါတယ်။
+> ⟪close board⟫ ⟪page l27_p03⟫ ဒါဆို refund အမှားကို ဘယ် ကိန်းဂဏန်းက ဖမ်းမလဲ? မသီရိက user ကြုံရတာကို တိုင်းတဲ့ service level indicator၊ SLI တွေကို ဒုက္ခ တစ်ခုချင်းကနေ ဆွဲထုတ်ပါတယ်။ refund မှားတာအတွက် transaction မှန်မှန် ရွေးတဲ့ ရာခိုင်နှုန်း၊ အဖြေ အသုံးမဝင်တာအတွက် ၅ မိနစ်အတွင်း ထပ်မမေးရတဲ့ chat ရာခိုင်နှုန်း၊ စောင့်ရတာအတွက် ပထမ စာလုံး ပေါ်တဲ့အထိ ကြာချိန်၊ time to first token ၂ စက္ကန့်အတွင်း ဆိုတာတွေပါ။ fallback အဖြေကိုတော့ degraded လို့ ရေတွက်ပါတယ်။
 > ⟪page l27_p03b⟫ prompt အသစ်ကို user မမြင်ခင်ရော ဘယ်လို စစ်မလဲ? အဖြေ မှန်ကို ကြိုသိထားတဲ့ မေးခွန်း စုစည်းမှု၊ golden set နဲ့ AI အဖြေကို စနစ်တကျ စစ်တာကို eval လို့ ခေါ်ပါတယ်။ Padauk က တကယ့် complaint ၅၀ နဲ့ golden set လုပ်ပြီး eval ရမှတ်ကို SLI၊ အောင်မျဉ်းကို SLO အဖြစ် ထားပါတယ်။ အဖြေတွေက စကားလုံး ကွဲတတ်လို့ စာလုံးချင်း တိုက်မစစ်ဘဲ ID၊ ငွေပမာဏနဲ့ format ကိုပဲ စစ်ပါတယ်။
 > ⟪page l27_p03c⟫ agent ရဲ့ SLI အနေနဲ့ tool call အောင်မြင်တာ၊ ID validation ဖြတ်တာ၊ ticket format မှန်တာကိုလည်း တိုင်းပါတယ်။ မနှင်းနဲ့ မသီရိက refund မှန်မှန် ရဖို့ ဆိုတဲ့ product ပန်းတိုင်ကို အရင် သဘောတူပါတယ်။ ပထမ SLO ကို မီနိုင်တဲ့ ဂဏန်းမှာ ထားပြီး နောက်မှ မြှင့်မှာပါ၊ degraded အဖြေတွေကလည်း အဲဒီ SLO ရဲ့ error budget ကို သုံးပါတယ်။
 
