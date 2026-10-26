@@ -1,4 +1,4 @@
-# Lesson 6 · SLO နဲ့ error budget
+# Lesson 06 · SLO နဲ့ error budget
 
 slug: sre-06-slo-error-budget · budget: 8400 characters (±5%)
 

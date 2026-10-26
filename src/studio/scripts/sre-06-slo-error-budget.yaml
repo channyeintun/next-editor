@@ -1,4 +1,4 @@
-# SRE from zero, lesson 6: SLOs and error budgets (Burmese concept lesson).
+# SRE from zero, lesson 06: SLOs and error budgets (Burmese concept lesson).
 #
 # Built from the approved voice script
 # docs/sre-course/voice-scripts/sre-06-slo-error-budget.md. Every spoken
@@ -40,7 +40,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-06-slo-error-budget
-  title: "SRE from zero 6: SLO နဲ့ error budget"
+  title: "SRE from zero 06: SLO နဲ့ error budget"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -70,7 +70,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · 6</p>
+              <p class="course">SRE from zero · 06</p>
               <h1>SLO နဲ့ error budget</h1>
             </main>
           </body>
