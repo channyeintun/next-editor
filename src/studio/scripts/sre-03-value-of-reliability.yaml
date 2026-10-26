@@ -1,4 +1,4 @@
-# SRE from zero, lesson 3: Reliability ရဲ့ တန်ဖိုး (the value of reliability).
+# SRE from zero, lesson 03: Reliability ရဲ့ တန်ဖိုး (the value of reliability).
 #
 # A no-code concept lesson: Google deck pages (deck SRE 1) and the whiteboard
 # carry it, notes.md closes it, and nothing runs. Built from the approved voice
@@ -29,7 +29,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-03-value-of-reliability
-  title: "SRE from zero 3: Reliability ရဲ့ တန်ဖိုး"
+  title: "SRE from zero 03: Reliability ရဲ့ တန်ဖိုး"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -58,7 +58,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · 3</p>
+              <p class="course">SRE from zero · 03</p>
               <h1>Reliability ရဲ့ တန်ဖိုး</h1>
               <p class="hook">outage ရဲ့ တကယ့် ကုန်ကျစရိတ်နဲ့ 100% က ဘာလို့ မှားလဲ</p>
             </main>
@@ -1315,8 +1315,7 @@ scenes:
       မကြာခင် launch လုပ်မယ့် Bill Pay ကို ၁ မြို့ကနေ ၃ မြို့၊ ၅ မြို့အထိ ချဲ့ချင်ပါတယ်။
       မြို့တိုင်းမှာ server တွေ၊ setting တွေကို လက်နဲ့ ဆင်ရရင် ops ဝန်ထမ်း ၂ ယောက်ကနေ ၆ ယောက်၊
       နောက်ဆုံး ၁၀ ယောက်အထိ တိုးရပါမယ်။ [[mark:b4-step2]] ဒါပေမဲ့ ကောင်းတဲ့ setting တွေ ပါပြီးသား
-      template တွေနဲ့၊ code ပြောင်းတိုင်း အလိုအလျောက် test လုပ်ပြီး production အထိ ပို့ပေးတဲ့ CI CD
-      ကို သုံးရင်တော့ ၃ ယောက်လောက်ပဲ လိုပါတော့တယ်။ [[mark:b4-step3]] ဒီ ကွာဟချက်က SRE ပေးတဲ့
+      template တွေနဲ့၊ code ပြောင်းတိုင်း အလိုအလျောက် test လုပ်ပြီး production အထိ ပို့ပေးတဲ့ continuous integration နဲ့ continuous delivery၊ CI CD ကို သုံးရင်တော့ ၃ ယောက်လောက်ပဲ လိုပါတော့တယ်။ [[mark:b4-step3]] ဒီ ကွာဟချက်က SRE ပေးတဲ့
       တန်ဖိုးပါ၊ business ကြီးလာသလောက် လူ လိုက်မတိုးရတာပါ။ ဆိုင်အသစ်တွေကို လက်နဲ့ စစ်ပြီး approve
       လုပ်တာကလည်း merchant ၂၀၀ မှာ တစ်ပတ်ကို ၂ နာရီခွဲပဲ ကြာပေမဲ့၊ merchant ၂၀၀၀ ဆိုရင် တစ်ပတ်ရဲ့
       အလုပ်ချိန် အများစု ကုန်ပါမယ်။ ဒါက toil ပါ၊ automate လုပ်ပြီး မဖယ်ရှားရင် business နဲ့အတူ

@@ -1,4 +1,4 @@
-# Lesson 3 · Reliability ရဲ့ တန်ဖိုး
+# Lesson 03 · Reliability ရဲ့ တန်ဖိုး
 
 slug: sre-03-value-of-reliability · budget: 7600 characters (±5%)
 
@@ -85,7 +85,7 @@ On screen:
 chapter: —
 
 > ⟪close page⟫ ⟪board B4 step 1⟫ ဒီ ကွာခြားချက်ကို Bill Pay နဲ့ ကြည့်ရအောင်။ ကိုနေလင်းက မကြာခင် launch လုပ်မယ့် Bill Pay ကို ၁ မြို့ကနေ ၃ မြို့၊ ၅ မြို့အထိ ချဲ့ချင်ပါတယ်။ မြို့တိုင်းမှာ server တွေ၊ setting တွေကို လက်နဲ့ ဆင်ရရင် ops ဝန်ထမ်း ၂ ယောက်ကနေ ၆ ယောက်၊ နောက်ဆုံး ၁၀ ယောက်အထိ တိုးရပါမယ်။
-> ⟪board B4 step 2⟫ ဒါပေမဲ့ ကောင်းတဲ့ setting တွေ ပါပြီးသား template တွေနဲ့၊ code ပြောင်းတိုင်း အလိုအလျောက် test လုပ်ပြီး production အထိ ပို့ပေးတဲ့ CI CD ကို သုံးရင်တော့ ၃ ယောက်လောက်ပဲ လိုပါတော့တယ်။
+> ⟪board B4 step 2⟫ ဒါပေမဲ့ ကောင်းတဲ့ setting တွေ ပါပြီးသား template တွေနဲ့၊ code ပြောင်းတိုင်း အလိုအလျောက် test လုပ်ပြီး production အထိ ပို့ပေးတဲ့ continuous integration နဲ့ continuous delivery၊ CI CD ကို သုံးရင်တော့ ၃ ယောက်လောက်ပဲ လိုပါတော့တယ်။
 > ⟪board B4 step 3⟫ ဒီ ကွာဟချက်က SRE ပေးတဲ့ တန်ဖိုးပါ၊ business ကြီးလာသလောက် လူ လိုက်မတိုးရတာပါ။ ဆိုင်အသစ်တွေကို လက်နဲ့ စစ်ပြီး approve လုပ်တာကလည်း merchant ၂၀၀ မှာ တစ်ပတ်ကို ၂ နာရီခွဲပဲ ကြာပေမဲ့၊ merchant ၂၀၀၀ ဆိုရင် တစ်ပတ်ရဲ့ အလုပ်ချိန် အများစု ကုန်ပါမယ်။ ဒါက toil ပါ၊ automate လုပ်ပြီး မဖယ်ရှားရင် business နဲ့အတူ လိုက်ကြီးလာမှာပါ။
 
 On screen:
