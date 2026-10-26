@@ -1165,7 +1165,7 @@ scenes:
     chapter: Plan လုပ်ဖို့ တန်လား
     narration: >
       [[mark:show-p02]] ဒါပေမဲ့ လေးယောက်ပဲ ရှိတဲ့ မသီရိရဲ့ အဖွဲ့က service တိုင်းကို plan မလုပ်နိုင်လို့ တန်မတန် အရင် မေးရပါတယ်။ ဥပမာ support အဖွဲ့ရဲ့ admin tool လို သေးပြီး ခဏ နှေးလည်း ရတဲ့ service မှာ autoscaling နဲ့ အပို နည်းနည်း ထားတာက engineer အချိန်ထက် သက်သာပါတယ်။ Wallet နဲ့ Top-up လို ကြီးပြီး ငွေနဲ့ ဆိုင်တဲ့ service တွေကတော့ ကြို plan လုပ်ရပါမယ်။
-      [[mark:show-p02b]] capacity ဆုံးဖြတ်ချက်တိုင်းမှာ မြန်တာ၊ ဈေးသက်သာတာ၊ မပျက်တာ ဆိုတဲ့ သုံးခုကို ချိန်ရပြီး ဘယ်လို ချိန်မလဲ ဆိုတာကို engineer အကြိုက်နဲ့ မဟုတ်ဘဲ business က ဆုံးဖြတ်ပါတယ်။ spike တိုင်းအတွက် စက်တွေကို အမြဲ ပိုထားရင် ငွေ အလဟဿ ဖြစ်မှာမို့ lesson ၆ မှာ SLO ရဲ့ ပျက်ခွင့်၊ error budget ကို သဘောတူခဲ့သလိုပဲ capacity မလောက်မယ့် risk ကိုလည်း တမင် ရွေးရပါတယ်။
+      [[mark:show-p02b]] capacity ဆုံးဖြတ်ချက်တိုင်းမှာ မြန်တာ၊ ဈေးသက်သာတာ၊ မပျက်တာ ဆိုတဲ့ သုံးခုကို ချိန်ရပြီး ဘယ်လို ချိန်မလဲ ဆိုတာကို engineer အကြိုက်နဲ့ မဟုတ်ဘဲ business က ဆုံးဖြတ်ပါတယ်။ spike တိုင်းအတွက် စက်တွေကို အမြဲ ပိုထားရင် ငွေ အလဟဿ ဖြစ်မှာမို့ lesson ၆ မှာ service level objective၊ SLO ရဲ့ ပျက်ခွင့်၊ error budget ကို သဘောတူခဲ့သလိုပဲ capacity မလောက်မယ့် risk ကိုလည်း တမင် ရွေးရပါတယ်။
     sources:
       - {
           title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
