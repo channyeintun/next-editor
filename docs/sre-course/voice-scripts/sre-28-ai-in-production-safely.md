@@ -6,7 +6,7 @@ slug: sre-28-ai-in-production-safely · budget: 8400 characters (±5%)
 
 chapter: Production access တောင်းတဲ့ Ops Buddy
 
-> ⟪page l28_p01⟫ Ask Padauk မှာ အခု AI SLI တွေ ရှိပြီး နေ့တိုင်း အဖြေ နမူနာ စစ်နေသလို fraud model ကလည်း data မကောင်းရင် training ကို ရပ်ပါတယ်။ ဒီနေ့တော့ production ကို run ဖို့ ကူညီမယ့် AI ဘက်ကို လှည့်ကြည့်ပါမယ်။
+> ⟪page l28_p01⟫ Ask Padauk မှာ အခု AI အတွက် user ကြုံရတာကို တိုင်းတဲ့ service level indicator၊ SLI တွေ ရှိပြီး နေ့တိုင်း အဖြေ နမူနာ စစ်နေသလို fraud model ကလည်း data မကောင်းရင် training ကို ရပ်ပါတယ်။ ဒီနေ့တော့ production ကို run ဖို့ ကူညီမယ့် AI ဘက်ကို လှည့်ကြည့်ပါမယ်။
 > platform အဖွဲ့က alert နဲ့ log တွေကို ဖတ်ပြီး on-call ကို ကူညီမယ့် internal AI agent၊ Ops Buddy ကို ဆောက်ပါတယ်။ ဒါပေမဲ့ သူ့ ပထမ version က admin token နဲ့ production တစ်ခုလုံး ဝင်ခွင့် တောင်းထားပါတယ်။ Ops Buddy ကို ဘေးကင်းကင်း ဘယ်လို ဝင်ခွင့်ပေးမလဲ?
 > ⟪page l28_p01b⟫ AI ကို ဘာလို့ လိုလာတာလဲ? service တွေ များလာတော့ alert တိုင်းကို လူက လိုက်ကြည့်လို့ မမီသလို script တွေကလည်း ကြိုသိထားတဲ့ ပြဿနာကိုပဲ ဖြေရှင်းနိုင်ပါတယ်။ AI ကတော့ ပုံစံမကျတဲ့ chat နဲ့ log တွေကို ဖတ်ပြီး ဘယ်သူမှ rule မရေးထားတဲ့ အခြေအနေမှာလည်း အကြံပေးနိုင်ပါတယ်၊ ဒါပေမဲ့ ရိုးရိုး rule နဲ့ ရပြီးသား နေရာမှာတော့ AI မလိုပါဘူး။
 > ⟪page l28_p01c⟫ ပြဿနာက လူနဲ့ agent မှားပုံ မတူတာပါ။ လူ တစ်ယောက် မှားရင် တစ်ခါပဲ မှားပြီး ဘေးက တစ်ယောက်ယောက် သတိထားမိတတ်ပါတယ်။ ၂၀၀ ခါမှာ တစ်ခါပဲ မှားတဲ့ agent က တစ်ရက်ကို action ၁၀၀၀ လုပ်ရင်တော့ အမှား ငါးခုကို ပုံစံတူ မြန်မြန် ထပ်လုပ်ပါလိမ့်မယ်။ input တူရင်တောင် အဖြေ ကွဲနိုင်တဲ့ AI ကို ဘယ်တော့မှ မမှားအောင် လုပ်လို့ မရလို့ ဘယ်လောက် မှားလဲ တိုင်းပြီး ထိန်းရပါတယ်။
@@ -79,7 +79,7 @@ On screen:
 
 chapter: Budget နှစ်ခုနဲ့ stop button
 
-> ⟪close page⟫ ⟪board B4 step 1⟫ Ops Buddy ကို သီးသန့် budget နှစ်ခုနဲ့ ထိန်းပါတယ်။ ပထမက SLO က ခွင့်ပြုထားတဲ့ ပျက်ခွင့်၊ service ရဲ့ error budget ပါ၊ Top-up ဆိုရင် တစ်လကို fail ဖြစ်တဲ့ top-up ၁၀၀၀၀ ပါ။ ဒုတိယက Ops Buddy ကိုယ်ပိုင် safety budget ပါ၊ on-call က သူ့ action ကို ပြန် undo လုပ်ပေးရတိုင်း၊ သူ့ အကြံကို ဘေးမကင်းလို့ ငြင်းရတိုင်း လျော့သွားပါတယ်။
+> ⟪close page⟫ ⟪board B4 step 1⟫ Ops Buddy ကို သီးသန့် budget နှစ်ခုနဲ့ ထိန်းပါတယ်။ ပထမက service level objective၊ SLO ပစ်မှတ်က ခွင့်ပြုထားတဲ့ ပျက်ခွင့်၊ service ရဲ့ error budget ပါ၊ Top-up ဆိုရင် တစ်လကို fail ဖြစ်တဲ့ top-up ၁၀၀၀၀ ပါ။ ဒုတိယက Ops Buddy ကိုယ်ပိုင် safety budget ပါ၊ on-call က သူ့ action ကို ပြန် undo လုပ်ပေးရတိုင်း၊ သူ့ အကြံကို ဘေးမကင်းလို့ ငြင်းရတိုင်း လျော့သွားပါတယ်။
 > ⟪board B4 step 2⟫ Top-up ရဲ့ error budget ကုန်ရင် Ops Buddy က Top-up မှာ ကိုယ်တိုင် ဘာမှ မလုပ်တော့ဘဲ အကြံပဲ ပေးပါတယ်။ safety budget ကုန်ရင်တော့ service ကောင်းနေရင်တောင် အဖွဲ့က review မလုပ်မချင်း ကိုယ်တိုင် လုပ်ခွင့် အားလုံး ရပ်ပါတယ်။ ဒါ့အပြင် action မလုပ်ခင် ဖွင့်ထားတဲ့ incident ရှိလား စစ်ပါတယ်၊ သင်္ကြန် change freeze အတွင်းမှာလည်း ကိုယ့်ဘာသာ ရပ်နေပါတယ်။
 > ⟪board B4 step 3⟫ နောက်ဆုံး ဘရိတ်က stop button ပါ။ on-call ကျနေတဲ့ ဘယ်သူမဆို ခွင့်မတောင်းဘဲ နှိပ်လိုက်တာနဲ့ Ops Buddy ရဲ့ access အားလုံး ချက်ချင်း ပြတ်ပါတယ်။ ရပ်လို့ရမှန်း သိထားမှ on-call တွေက Ops Buddy နဲ့ စိတ်ချလက်ချ တွဲလုပ်ရဲကြတာပါ။
 
