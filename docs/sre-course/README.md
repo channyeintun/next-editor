@@ -24,15 +24,15 @@ decides the final length. Total: about 270,000 narration characters, roughly 5 h
 
 | #   | Script                               | Title                              | Deck   | ≈ min |
 | --- | ------------------------------------ | ---------------------------------- | ------ | ----- |
-| 1   | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                 | SRE 1  | 9.4   |
-| 2   | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                        | SRE 1  | 9.4   |
-| 3   | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                 | SRE 1  | 9.4   |
-| 4   | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ          | SRE 1  | 9.4   |
-| 5   | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                | SRE 1  | 9.5   |
-| 6   | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                 | SRE 2  | 10.5  |
-| 7   | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                  | SRE 2  | 10.5  |
-| 8   | `sre-08-observability`               | Monitoring ကနေ observability ဆီ     | SRE 2  | 10.5  |
-| 9   | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                 | SRE 3  | 9.5   |
+| 01  | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                 | SRE 1  | 9.4   |
+| 02  | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                        | SRE 1  | 9.4   |
+| 03  | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                 | SRE 1  | 9.4   |
+| 04  | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ          | SRE 1  | 9.4   |
+| 05  | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                | SRE 1  | 9.5   |
+| 06  | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                 | SRE 2  | 10.5  |
+| 07  | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                  | SRE 2  | 10.5  |
+| 08  | `sre-08-observability`               | Monitoring ကနေ observability ဆီ     | SRE 2  | 10.5  |
+| 09  | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                 | SRE 3  | 9.5   |
 | 10  | `sre-10-working-an-incident`         | Incident တစ်ခုကို အစကနေ အဆုံးထိ           | SRE 3  | 9.5   |
 | 11  | `sre-11-postmortems`                 | သင်ခန်းစာ ရတဲ့ postmortem              | SRE 3  | 9.4   |
 | 12  | `sre-12-how-complex-systems-fail`    | ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ          | SRE 3  | 10.5  |
@@ -57,7 +57,7 @@ decides the final length. Total: about 270,000 narration characters, roughly 5 h
 | 31  | `sre-31-sre-in-legacy-and-regulated` | ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE             | SRE 6B | 10.5  |
 | 32  | `sre-32-the-road-ahead`              | SRE ရဲ့ ရှေ့ခရီး                        | SRE 6B | 10.5  |
 
-Catalog titles are "SRE from zero N: <title>", so the catalog groups them; add them to one playlist in
+Catalog titles are "SRE from zero NN: <title>", so the catalog groups them; add them to one playlist in
 this order. Modules: 1 Why SRE (1–5), 2 Agree and notice (6–8), 3 Respond and learn (9–13), 4 People
 and teams (14–16), 5 Build it in (17–25), 6 AI, and SRE where you work (26–32).
 

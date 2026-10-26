@@ -596,7 +596,12 @@ app, update this table.
   paraphrase for the same idea in one lesson.
 - **Acronyms:**
   - Say the full English phrase the first time in each lesson, then the acronym
-    ("Site Reliability Engineering … SRE").
+    ("Site Reliability Engineering … SRE"). This holds in every lesson, even
+    long after the teaching lesson, because a learner may open any lesson on
+    its own. Say it as "service level objective၊ SLO" (add "အတိုကောက်" when
+    the sentence names the term), and keep a Burmese meaning such as ပစ်မှတ် in
+    the sentence when it doesn't already explain the term. Everyday acronyms
+    (AI, API, SMS, QR, CPU, HTTP, NRC, CTO, ID) need no expansion.
   - A term marked `Full phrase` is never said as its acronym.
   - Always write the plural in Burmese: "SLO တွေ", "SRE တွေ", "incident တွေ".
     Never use an English plural (SLOs, SREs, incidents). The pronunciation list

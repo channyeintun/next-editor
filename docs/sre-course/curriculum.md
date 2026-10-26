@@ -30,19 +30,19 @@ second; `bun scripts/studio-compile-check.ts` estimates 400 ms per dialog plus 7
 is the gate before voice synthesis). Every lesson stays between 7,000 and 8,400 characters. **Idea
 budget:** a lesson explains at most 8 ideas (about one per concept scene) and mentions at most 12 more in
 a sentence each; anything beyond that is left out on purpose and recorded in the private coverage map.
-Catalog titles are "SRE from zero N: <Burmese title>".
+Catalog titles are "SRE from zero NN: <Burmese title>".
 
 | #   | Script                               | Burmese title                      | Topic                                                    | ≈ min | Chars |
 | --- | ------------------------------------ | ---------------------------------- | -------------------------------------------------------- | ----- | ----- |
-| 1   | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                 | running software is the long, hard part                  | 10    | 7,600 |
-| 2   | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                        | what users feel, shrinking incidents, the Padauk loop    | 10    | 7,600 |
-| 3   | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                 | the real outage bill, and why 100% is wrong              | 10    | 7,600 |
-| 4   | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ          | cloud, golden paths, gray failure                        | 10    | 7,600 |
-| 5   | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                | bad news, blameless reviews, no heroes                   | 10    | 7,600 |
-| 6   | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                 | agreeing on "reliable enough"                            | 11    | 8,400 |
-| 7   | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                  | three ways a green SLO can lie                           | 11    | 8,400 |
-| 8   | `sre-08-observability`               | Monitoring ကနေ observability ဆီ     | seeing production clearly                                | 11    | 8,400 |
-| 9   | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                 | rotations people can sustain, incident roles             | 10    | 7,600 |
+| 01  | `sre-01-why-reliability-now`         | SRE ဘာကြောင့် လိုလာတာလဲ                 | running software is the long, hard part                  | 10    | 7,600 |
+| 02  | `sre-02-what-sre-is`                 | SRE ဆိုတာ ဘာလဲ                        | what users feel, shrinking incidents, the Padauk loop    | 10    | 7,600 |
+| 03  | `sre-03-value-of-reliability`        | Reliability ရဲ့ တန်ဖိုး                 | the real outage bill, and why 100% is wrong              | 10    | 7,600 |
+| 04  | `sre-04-production-then-now`         | Production ဘယ်လို ပြောင်းလဲလာလဲ          | cloud, golden paths, gray failure                        | 10    | 7,600 |
+| 05  | `sre-05-reliability-culture`         | Reliability ယဉ်ကျေးမှု                | bad news, blameless reviews, no heroes                   | 10    | 7,600 |
+| 06  | `sre-06-slo-error-budget`            | SLO နဲ့ error budget                 | agreeing on "reliable enough"                            | 11    | 8,400 |
+| 07  | `sre-07-slo-from-the-users-side`     | User ဘက်က ကြည့်တဲ့ SLO                  | three ways a green SLO can lie                           | 11    | 8,400 |
+| 08  | `sre-08-observability`               | Monitoring ကနေ observability ဆီ     | seeing production clearly                                | 11    | 8,400 |
+| 09  | `sre-09-sustainable-on-call`         | ရေရှည် လုပ်နိုင်တဲ့ on-call                 | rotations people can sustain, incident roles             | 10    | 7,600 |
 | 10  | `sre-10-working-an-incident`         | Incident တစ်ခုကို အစကနေ အဆုံးထိ           | the payday incident, minute by minute                    | 10    | 7,600 |
 | 11  | `sre-11-postmortems`                 | သင်ခန်းစာ ရတဲ့ postmortem              | a postmortem meeting that teaches                        | 10    | 7,600 |
 | 12  | `sre-12-how-complex-systems-fail`    | ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ          | near misses, drift, good days, cliffs                    | 11    | 8,400 |
@@ -187,15 +187,15 @@ lesson means updating this table and the neighbours' bridges.
 
 | L   | Padauk moment                                                                                                                      | What Padauk keeps afterwards                                                                                              |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Thingyan eve: a rewards screen built in an afternoon while top-ups double-charge (idempotency keys skipped for a promo months ago) | a written list of the "loans" it pays interest on, and a repay rule                                                       |
-| 2   | a fee-config typo charges 10× for 20 minutes                                                                                       | config in Git with a check, a fee-anomaly alert, Yangon-first rollout; the loop drawn around it                           |
-| 3   | a 30-minute lunchtime outage of shop QR payments, tallied from the users' and shops' side                                          | CTO buy-in; Padauk's first-year starter list                                                                              |
-| 4   | "all servers green, users can't pay"; Bill Pay ships through a template                                                            | a first golden-path template; a cap on autoscaling                                                                        |
-| 5   | Ko Min's quiet warning; Ko Aung away at Thingyan; the first blameless review                                                       | a 30-minute blameless review after every incident; Thiri made full-time SRE                                               |
-| 6   | Top-up pilot: finance wants 100%                                                                                                   | first SLOs and an error budget policy                                                                                     |
-| 7   | every SLO green, Eats orders stuck                                                                                                 | a journey SLO with a synthetic test order; per-merchant SLOs for the top 10                                               |
-| 8   | "Top-up never confirms"                                                                                                            | user-level checks, monitoring in another zone, evidence-based alerts, dashboards generated from the shared gateway client |
-| 9   | a muted 60-person Viber alert group                                                                                                | per-service rotations, a volunteer swarm, incident roles                                                                  |
+| 01  | Thingyan eve: a rewards screen built in an afternoon while top-ups double-charge (idempotency keys skipped for a promo months ago) | a written list of the "loans" it pays interest on, and a repay rule                                                       |
+| 02  | a fee-config typo charges 10× for 20 minutes                                                                                       | config in Git with a check, a fee-anomaly alert, Yangon-first rollout; the loop drawn around it                           |
+| 03  | a 30-minute lunchtime outage of shop QR payments, tallied from the users' and shops' side                                          | CTO buy-in; Padauk's first-year starter list                                                                              |
+| 04  | "all servers green, users can't pay"; Bill Pay ships through a template                                                            | a first golden-path template; a cap on autoscaling                                                                        |
+| 05  | Ko Min's quiet warning; Ko Aung away at Thingyan; the first blameless review                                                       | a 30-minute blameless review after every incident; Thiri made full-time SRE                                               |
+| 06  | Top-up pilot: finance wants 100%                                                                                                   | first SLOs and an error budget policy                                                                                     |
+| 07  | every SLO green, Eats orders stuck                                                                                                 | a journey SLO with a synthetic test order; per-merchant SLOs for the top 10                                               |
+| 08  | "Top-up never confirms"                                                                                                            | user-level checks, monitoring in another zone, evidence-based alerts, dashboards generated from the shared gateway client |
+| 09  | a muted 60-person Viber alert group                                                                                                | per-service rotations, a volunteer swarm, incident roles                                                                  |
 | 10  | the payday top-up incident                                                                                                         | a generic mitigation list, a drill card, monthly incident role-plays                                                      |
 | 11  | double charges from Ko Min's Wallet retry change (the Wallet half of the L01 loan, never repaid)                                   | a postmortem template with "went right / got lucky"; idempotency keys on Wallet                                           |
 | 12  | a payday near miss saved by luck                                                                                                   | a quarterly "normalized shortcuts" review; a manual bank throttle made into a tool                                        |
@@ -428,7 +428,7 @@ the approved voice script); board steps are numbered in drawing order; "Narratio
 voice script must explain in that scene, in our own words. The lists of book ideas each scene carries
 live only in the private coverage map.
 
-### Lesson 1 · `sre-01-why-reliability-now` · ≈ 10 min · deck SRE 1
+### Lesson 01 · `sre-01-why-reliability-now` · ≈ 10 min · deck SRE 1
 
 **SRE ဘာကြောင့် လိုလာတာလဲ** — _Why running software is the long, hard part, and how this course works_
 
@@ -493,7 +493,7 @@ live only in the private coverage map.
 - **Bridge:** "Next: a typo in the fee config charges users ten times the fee for 20 minutes. What do we
   fix first?"
 
-### Lesson 2 · `sre-02-what-sre-is` · ≈ 10 min · deck SRE 1
+### Lesson 02 · `sre-02-what-sre-is` · ≈ 10 min · deck SRE 1
 
 **SRE ဆိုတာ ဘာလဲ** — _What SRE is: what users feel, three ways to shrink an incident, and the Padauk loop_
 
@@ -552,7 +552,7 @@ live only in the private coverage map.
   shorter, one rarer and one smaller."
 - **Bridge:** "Next: a 30-minute lunchtime outage. Is that 30 minutes of cost, or something much bigger?"
 
-### Lesson 3 · `sre-03-value-of-reliability` · ≈ 10 min · deck SRE 1
+### Lesson 03 · `sre-03-value-of-reliability` · ≈ 10 min · deck SRE 1
 
 **Reliability ရဲ့ တန်ဖိုး** — _The value of reliability: the real outage bill, and why 100% is the wrong goal_
 
@@ -614,7 +614,7 @@ live only in the private coverage map.
 - **Bridge:** "Next: every server shows green, yet Bank Y transfers take 20 seconds. Who is right, the
   dashboard or the user?"
 
-### Lesson 4 · `sre-04-production-then-now` · ≈ 10 min · deck SRE 1
+### Lesson 04 · `sre-04-production-then-now` · ≈ 10 min · deck SRE 1
 
 **Production ဘယ်လို ပြောင်းလဲလာလဲ** — _Production then and now: cloud, golden paths and gray failure_
 
@@ -670,7 +670,7 @@ live only in the private coverage map.
 - **Bridge:** "Next: 9 p.m., Ko Min sees the SMS codes slowing before a big promo. He's new, and last
   month someone laughed at his question. Does he speak up?"
 
-### Lesson 5 · `sre-05-reliability-culture` · ≈ 10 min · deck SRE 1
+### Lesson 05 · `sre-05-reliability-culture` · ≈ 10 min · deck SRE 1
 
 **Reliability ယဉ်ကျေးမှု** — _Reliability culture: bad news, blameless reviews, no heroes_
 
@@ -745,7 +745,7 @@ Yangon; Thiri is the first full-time SRE and works alone with each product team.
 `m2_map` (in L06): "Module 2 · Agree and notice" · "Agree what reliable enough means" · "Notice when
 users hurt". The loop's Agree and Notice stations are lit.
 
-### Lesson 6 · `sre-06-slo-error-budget` · ≈ 11 min · deck SRE 2
+### Lesson 06 · `sre-06-slo-error-budget` · ≈ 11 min · deck SRE 2
 
 **SLO နဲ့ error budget** — _SLOs and error budgets: agreeing on "reliable enough"_
 
@@ -815,7 +815,7 @@ users hurt". The loop's Agree and Notice stations are lit.
   3: the daily allowance is about 333)
 - **Bridge:** "Next: every SLO is green, but Eats orders are stuck. What did we forget to measure?"
 
-### Lesson 7 · `sre-07-slo-from-the-users-side` · ≈ 11 min · deck SRE 2
+### Lesson 07 · `sre-07-slo-from-the-users-side` · ≈ 11 min · deck SRE 2
 
 **User ဘက်က ကြည့်တဲ့ SLO** — _SLOs from the user's side: three ways a green SLO can lie_
 
@@ -881,7 +881,7 @@ users hurt". The loop's Agree and Notice stations are lit.
 - **Bridge:** "Next: Top-up never confirms, users ask for refunds of top-ups that worked, and every
   dashboard is perfect. How do we see inside?"
 
-### Lesson 8 · `sre-08-observability` · ≈ 11 min · deck SRE 2
+### Lesson 08 · `sre-08-observability` · ≈ 11 min · deck SRE 2
 
 **Monitoring ကနေ observability ဆီ** — _From monitoring to observability: seeing production clearly_
 
@@ -961,7 +961,7 @@ is the course's difficulty peak. Module map page `m3_map` (in L09): "Module 3 ·
 "When it breaks: on-call and incidents" · "Afterwards: learn, then change the system". The loop's
 Respond and Learn stations are lit.
 
-### Lesson 9 · `sre-09-sustainable-on-call` · ≈ 10 min · deck SRE 3
+### Lesson 09 · `sre-09-sustainable-on-call` · ≈ 10 min · deck SRE 3
 
 **ရေရှည် လုပ်နိုင်တဲ့ on-call** — _On-call people can sustain, and who leads when it breaks_
 
@@ -2593,7 +2593,7 @@ our own words. The book is credited in `sources` and the lesson description, nev
 Prefer a non-Google source where one fits, so the course reads as drawing on the field, not on one
 company's book.
 
-### Lesson 1 · Why running software is the hard part
+### Lesson 01 · Why running software is the hard part
 
 - [SRE book second edition (Google Cloud Blog)](https://cloud.google.com/blog/products/devops-sre/sre-book-second-edition) — the 2026 rewrite and the decade of change (AI, microservices, multi-cloud, serverless, platform engineering).
 - [20 Years of SRE at Google](https://sre.google/20/) — lessons from twenty years of practice.
@@ -2601,20 +2601,20 @@ company's book.
 - † [Ward Cunningham, "The WyCash Portfolio Management System" (OOPSLA 1992 experience report)](http://c2.com/doc/oopsla92.html) — the origin of the technical-debt metaphor.
 - † [Martin Fowler: Technical Debt](https://martinfowler.com/bliki/TechnicalDebt.html) — debt, interest and when to repay.
 
-### Lesson 2 · What SRE is
+### Lesson 02 · What SRE is
 
 - [SRE book, 1st ed: Introduction](https://sre.google/sre-book/introduction/) — SRE as software engineers running operations; a cap on ops work.
 - [Workbook: How SRE Relates to DevOps](https://sre.google/workbook/how-sre-relates/) — SRE as one concrete way to practise DevOps.
 - [Prodverbs](https://sre.google/prodverbs/) — short rules of thumb about production.
 
-### Lesson 3 · The value of reliability
+### Lesson 03 · The value of reliability
 
 - [SRE book, 1st ed: Embracing Risk](https://sre.google/sre-book/embracing-risk/) — 100% is the wrong target; risk tolerance is a business choice.
 - [SRE book, 1st ed: Availability Table](https://sre.google/sre-book/availability-table/) — what each "nine" allows.
 - [The Calculus of Service Availability (research.google)](https://research.google/pubs/the-calculus-of-service-availability/) — availability is capped by dependencies.
 - † [DORA: The four keys / software delivery performance](https://dora.dev/guides/dora-metrics-four-keys/) — stability and speed measured together.
 
-### Lesson 4 · Production then and now
+### Lesson 04 · Production then and now
 
 - [SRE book, 1st ed: The Production Environment at Google](https://sre.google/sre-book/production-environment/) — a 2016 baseline, useful for "then vs now".
 - [Google Cloud Well-Architected Framework: Reliability pillar](https://docs.cloud.google.com/architecture/framework/reliability) — current cloud reliability principles.
@@ -2622,7 +2622,7 @@ company's book.
 - † [CNCF Platforms White Paper](https://tag-app-delivery.cncf.io/whitepapers/platforms/) — golden paths and self-service platforms.
 - † [FinOps Foundation: FinOps principles](https://www.finops.org/framework/principles/) — capacity as a spending decision.
 
-### Lesson 5 · Reliability culture
+### Lesson 05 · Reliability culture
 
 - [Westrum, "A typology of organisational cultures" (BMJ Qual Saf, PMC)](https://pmc.ncbi.nlm.nih.gov/articles/PMC1765804/) — the primary source for the three culture types and how each treats information.
 - [DORA capability: Generative organizational culture](https://dora.dev/capabilities/generative-organizational-culture/) — culture predicts delivery performance.
@@ -2631,7 +2631,7 @@ company's book.
 - † [Etsy, "Debriefing Facilitation Guide"](https://extfiles.etsy.com/DebriefingFacilitationGuide.pdf) — running blameless reviews and asking questions without blame.
 - † Sidney Dekker's public writing on restorative just culture — accountability that repairs rather than punishes (find and verify a public URL).
 
-### Lesson 6 · SLOs and error budgets
+### Lesson 06 · SLOs and error budgets
 
 - [SRE book, 1st ed: Service Level Objectives](https://sre.google/sre-book/service-level-objectives/) — SLI, SLO, SLA.
 - [Workbook: Implementing SLOs](https://sre.google/workbook/implementing-slos/) — from SLI to SLO, with error budgets.
@@ -2640,14 +2640,14 @@ company's book.
 - [SRE fundamentals: SLAs vs SLOs vs SLIs (Google Cloud Blog)](https://cloud.google.com/blog/products/devops-sre/sre-fundamentals-slis-slas-and-slos) — the three terms in plain language.
 - † [Brendan Gregg: The USE Method](https://www.brendangregg.com/usemethod.html) and † [Tom Wilkie: The RED Method (Grafana blog)](https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/) — generic first metrics.
 
-### Lesson 7 · SLOs from the user's side
+### Lesson 07 · SLOs from the user's side
 
 - [Product-Focused Reliability for SRE (sre.google)](https://sre.google/resources/practices-and-processes/product-focused-reliability-for-sre/) — critical user journeys as the unit of reliability.
 - [OpenTelemetry: Browser getting started](https://opentelemetry.io/docs/languages/js/getting-started/browser/) — client-side telemetry.
 - [web.dev: Web Vitals](https://web.dev/articles/vitals) — user-felt client metrics.
 - † [Hyrum's Law](https://www.hyrumslaw.com/) — every observable behavior gets relied on.
 
-### Lesson 8 · Observability
+### Lesson 08 · Observability
 
 - [OpenTelemetry: Observability primer](https://opentelemetry.io/docs/concepts/observability-primer/) — observability vs monitoring.
 - [OpenTelemetry: Signals](https://opentelemetry.io/docs/concepts/signals/) — traces, metrics, logs and profiles.
@@ -2655,7 +2655,7 @@ company's book.
 - [What is eBPF?](https://ebpf.io/what-is-ebpf/) — collecting telemetry without changing app code.
 - † The OECD Privacy Guidelines — collection limits and purpose, for telemetry that is personal data (find and verify the URL).
 
-### Lesson 9 · Sustainable on-call
+### Lesson 09 · Sustainable on-call
 
 - [Workbook: On-Call](https://sre.google/workbook/on-call/) — sustainable rotations and paging load.
 - [Google SRE Incident Management Guide (sre.google)](https://sre.google/resources/practices-and-processes/incident-management-guide/) — incident roles, the incident commander.
