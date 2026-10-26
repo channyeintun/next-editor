@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SRE from zero thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      SRE from zero (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Same template as docs/a11y-course-thumbnail.html.
+      Click any text to edit it; click a progress square to load that lesson from LESSONS.
+      Screenshot the frame only (DevTools → right-click the #thumb node → Capture node
+      screenshot for an exact 1280×720 PNG), or render the whole set with
+      `bun docs/sre-course-thumbnails/render.ts`.
+      Brand: Next Editor lesson template (cream page, ink, yellow/purple/teal,
+      Google Sans + Google Sans Code); Burmese runs are set in Noto Sans Myanmar.
+      Mascot: "Htaung", an original character drawn for this course: a ပစ်တိုင်းထောင်, the
+      Burmese roly-poly doll that always stands back up when it is knocked over, as a
+      picture of resilience. Purple body on a round weighted base, a painted white face
+      under a black fringe, a yellow collar and a yellow padauk flower on the belly.
+      It tilts by rolling on its base, so incident lessons wobble and recovery lessons
+      stand upright.
+      The course teaches ideas from Site Reliability Engineering (2nd ed., O'Reilly) in
+      its own words: the thumbnails quote nothing from the book and show no book cover,
+      no O'Reilly animal and no Google logo. The code lines and bubbles are our own
+      words; "Padauk" is the course's fictional company.
+      Pose, mirror, tilt and the speech bubble are set from the toolbar under the
+      frame, or all at once with window.setThumb({...}) from the console.
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --gray: #80868b;
+        --dot: #cfccc2;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* max-content keeps the whole frame reachable by scrolling in a narrow window.
+         The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      [contenteditable] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable]:hover {
+        box-shadow: inset 0 -3px 0 rgb(109 87 255 / 0.35);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .series {
+        position: absolute;
+        left: 60px;
+        top: 46px;
+        font: 700 36px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 60px;
+        top: 38px;
+        padding: 12px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 164px;
+        width: 300px;
+        height: 350px;
+        border-radius: 28px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .number .label {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.16em;
+      }
+
+      .number .value {
+        font: 700 200px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .title-box {
+        position: absolute;
+        left: 420px;
+        top: 116px;
+        width: 480px;
+        height: 320px;
+        display: flex;
+        align-items: center;
+      }
+
+      /* Burmese stacks marks above and below the letter (ကြို, ပျက်, ကုမ္ပဏီ), so the
+         title gets a taller line than the Latin-only courses' 1.32. At 1.42 a mark
+         under one line (the ု of ကို, the ြ bar of ကြီး) came within 2-4px of a mark
+         over the next and the two merged at card size; 1.55 keeps them apart, and the
+         title box is taller (116-436px, still clear of the code card's tab) so
+         fitTitle keeps the same line breaks. */
+      .title {
+        width: 100%;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.55;
+        letter-spacing: -0.01em;
+        /* Editable text defaults to break-word in Chrome, which splits a long word
+           instead of letting fitTitle shrink it. */
+        overflow-wrap: normal;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, so every Myanmar run
+         in the title is wrapped in .mm (see renderTitle). A run never breaks inside:
+         Chrome's dictionary breaker would split a word like ပိုအရေးကြီးတယ် mid-way, so a
+         title only wraps at its spaces. */
+      .title .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      /* A phrase that must not break across lines (see renderTitle). */
+      .title .nb {
+        white-space: nowrap;
+      }
+
+      .code {
+        left: 420px;
+        top: 462px;
+        width: 796px;
+        height: 92px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        padding: 0 34px;
+      }
+
+      .code .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      /* Noto Sans Myanmar sits in the stack for any Burmese typed into the line. */
+      .code .src {
+        width: 100%;
+        white-space: pre;
+        overflow: hidden;
+        font:
+          500 32px/1.2 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+      }
+
+      /* YAML (*.yaml): keys purple, values teal, numbers amber, punctuation and
+         comments gray. Notes (*.md, *.log): headings purple, numbers and times amber,
+         arrows and separators gray. */
+      .src .key,
+      .src .kw {
+        color: var(--purple);
+        font-weight: 700;
+      }
+
+      .src .val,
+      .src .str {
+        color: var(--teal-dk);
+      }
+
+      .src .num {
+        color: #b26b00;
+      }
+
+      .src .pn,
+      .src .cm {
+        color: var(--gray);
+      }
+
+      /* 32 lessons in six modules. */
+      .progress {
+        position: absolute;
+        left: 64px;
+        bottom: 64px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .module {
+        display: flex;
+        gap: 5px;
+      }
+
+      .sq {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        background: var(--dot);
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .sq.on {
+        background: var(--yellow);
+        box-shadow: inset 0 0 0 3px var(--ink);
+      }
+
+      .brand {
+        position: absolute;
+        right: 60px;
+        bottom: 50px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 56px;
+        height: 56px;
+      }
+
+      /* The mascot stands on the right end of the code card: its box ends at 468px,
+         and the doll's round base (y = 100 in the SVG, 5px above the box's bottom)
+         touches the card's top border at 463px. */
+      .mascot {
+        position: absolute;
+        right: 36px;
+        top: 96px;
+        width: 310px;
+        height: 372px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 14px;
+      }
+
+      .bubble {
+        position: relative;
+        max-width: 310px;
+        overflow: hidden;
+        padding: 8px 24px 10px;
+        border: 4px solid var(--ink);
+        border-radius: 24px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        font:
+          700 34px/1.35 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+        white-space: nowrap;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, and its stacked
+         marks need a taller line than code text. */
+      .bubble.mm {
+        font-family: "Noto Sans Myanmar", "Google Sans", sans-serif;
+        line-height: 1.6;
+        padding: 4px 24px 6px;
+      }
+
+      .bubble.off {
+        display: none;
+      }
+
+      .bubble-tail {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        background: var(--white);
+        border-right: 4px solid var(--ink);
+        border-bottom: 4px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .doll {
+        width: 310px;
+        height: 215px;
+        flex: none;
+        overflow: visible;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+      }
+
+      .toolbar button {
+        padding: 6px 12px;
+        border: 1px solid #55555c;
+        border-radius: 8px;
+        background: #3a3a3f;
+        color: #f0f0f3;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .toolbar button[aria-pressed="true"] {
+        border-color: var(--yellow);
+        color: var(--yellow);
+      }
+
+      .help {
+        max-width: 1280px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series">
+        <span class="brace">{</span> SRE from zero <span class="brace">}</span>
+      </div>
+      <div class="lang" contenteditable="plaintext-only" spellcheck="false">မြန်မာလို</div>
+
+      <div class="card number">
+        <div class="label">LESSON</div>
+        <div class="value" id="number" contenteditable="plaintext-only" spellcheck="false">01</div>
+      </div>
+
+      <div class="title-box" id="title-box">
+        <div class="title" id="title" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="card code">
+        <div class="tab" id="file" contenteditable="plaintext-only" spellcheck="false"></div>
+        <div class="src" id="code" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="mascot">
+        <div class="bubble" id="bubble" contenteditable="plaintext-only" spellcheck="false"></div>
+        <svg
+          class="doll"
+          id="doll"
+          viewBox="-155 -110 310 215"
+          role="img"
+          aria-label="Htaung, the course's roly-poly doll mascot"
+        ></svg>
+      </div>
+      <!-- The tail sits outside the bubble so the bubble can clip long text. -->
+      <div class="bubble-tail" id="bubble-tail"></div>
+
+      <div class="progress" id="progress" aria-label="Lesson in the course"></div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      Htaung:
+      <button type="button" data-pose="calm">Calm</button>
+      <button type="button" data-pose="wobble">Wobble</button>
+      <button type="button" data-pose="thinking">Thinking</button>
+      <button type="button" data-pose="joy">Joy</button>
+      <button type="button" data-action="mirror">Mirror</button>
+      <button type="button" data-tilt="-14">Rock left</button>
+      <button type="button" data-tilt="-5">Lean left</button>
+      <button type="button" data-tilt="0">Upright</button>
+      <button type="button" data-tilt="5">Lean right</button>
+      <button type="button" data-tilt="14">Rock right</button>
+      <button type="button" data-action="bubble">Bubble</button>
+    </div>
+
+    <p class="help">
+      Click any text to edit it (including Htaung's bubble) · click a square to load that lesson ·
+      pick Htaung's pose above · then screenshot only the 1280×720 frame.
+    </p>
+
+    <script>
+      /**
+       * Every lesson's thumbnail data lives here and only here; render.ts and the
+       * progress squares both read it. `slug` is the PNG name in
+       * docs/sre-course-thumbnails/: the two-digit number plus the lesson's script
+       * name without its `sre-NN-` prefix, so the studio workflow matches
+       * sre-01-why-reliability-now to 01-why-reliability-now.png. `code` is one short
+       * line of our own words for the lesson (never text from the book), short enough
+       * to stay at the full 32px (37 characters at most); a `file` ending in .yaml
+       * switches the code card to YAML colours. `tilt` is in degrees: incident lessons
+       * rock hard (wobble pose), recovery lessons stand upright (0).
+       */
+      const LESSONS = [
+        {
+          number: 1,
+          slug: "01-why-reliability-now",
+          title: "SRE ဘာကြောင့် လိုလာတာလဲ",
+          file: "notes.md",
+          code: "build: one afternoon · run: years",
+          bubble: "why SRE?",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 2,
+          slug: "02-what-sre-is",
+          title: "SRE ဆိုတာ ဘာလဲ",
+          file: "notes.md",
+          code: "down · slow · wrong",
+          bubble: "users feel it",
+          pose: "joy",
+          tilt: -4,
+        },
+        {
+          number: 3,
+          slug: "03-value-of-reliability",
+          title: "Reliability ရဲ့ တန်ဖိုး",
+          file: "budget.yaml",
+          code: "error_budget: 100% - SLO",
+          bubble: "not 100%",
+          pose: "thinking",
+          tilt: -5,
+        },
+        {
+          number: 4,
+          slug: "04-production-then-now",
+          title: "Production ဘယ်လို ပြောင်းလဲလာလဲ",
+          file: "health.yaml",
+          code: "server: up   users: slow",
+          bubble: "gray failure",
+          pose: "wobble",
+          tilt: 9,
+        },
+        {
+          number: 5,
+          slug: "05-reliability-culture",
+          title: "Reliability ယဉ်ကျေးမှု",
+          file: "review.md",
+          code: 'ask "what happened", not "who"',
+          bubble: "no heroes",
+          pose: "calm",
+          tilt: 0,
+        },
+        {
+          number: 6,
+          slug: "06-slo-error-budget",
+          title: "SLO နဲ့ error budget",
+          file: "slo.yaml",
+          code: "objective: 99.9%   window: 30d",
+          bubble: "good enough",
+          pose: "joy",
+          tilt: -5,
+        },
+        {
+          number: 7,
+          slug: "07-slo-from-the-users-side",
+          title: "User ဘက်က ကြည့်တဲ့ SLO",
+          file: "slo.yaml",
+          code: "journey: pick dish → pay → receipt",
+          bubble: "green ≠ happy",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 8,
+          slug: "08-observability",
+          title: "Monitoring ကနေ observability ဆီ",
+          file: "notes.md",
+          code: "metrics · logs · traces · profiles",
+          bubble: "why stuck?",
+          pose: "calm",
+          tilt: -4,
+        },
+        {
+          number: 9,
+          slug: "09-sustainable-on-call",
+          title: "ရေရှည် လုပ်နိုင်တဲ့ on-call",
+          file: "oncall.yaml",
+          code: "page_at_night: only if users hurt",
+          bubble: "2 a.m. page",
+          pose: "wobble",
+          tilt: 12,
+        },
+        {
+          number: 10,
+          slug: "10-working-an-incident",
+          title: "Incident တစ်ခုကို အစကနေ အဆုံးထိ",
+          file: "incident.log",
+          code: "18:40 page → triage → mitigate",
+          bubble: "users first",
+          pose: "wobble",
+          tilt: -15,
+        },
+        {
+          number: 11,
+          slug: "11-postmortems",
+          title: "သင်ခန်းစာ ရတဲ့ postmortem",
+          file: "postmortem.md",
+          code: "## Timeline · Impact · Actions",
+          bubble: "blameless",
+          pose: "thinking",
+          tilt: -3,
+        },
+        {
+          number: 12,
+          slug: "12-how-complex-systems-fail",
+          title: "ရှုပ်ထွေးတဲ့ system တွေ ဘယ်လို ပျက်လဲ",
+          file: "notes.md",
+          code: "near miss → drift → cliff",
+          bubble: "Swiss cheese",
+          pose: "wobble",
+          tilt: 14,
+        },
+        {
+          number: 13,
+          slug: "13-stpa-and-cast",
+          title: "Root cause ထက် ပိုကြည့်တဲ့ STPA နဲ့ CAST",
+          file: "cast.md",
+          code: "controller → action → feedback",
+          bubble: "root cause?",
+          pose: "thinking",
+          tilt: -8,
+        },
+        {
+          number: 14,
+          slug: "14-becoming-an-sre",
+          title: "SRE တစ်ယောက် ဖြစ်လာဖို့",
+          file: "onboarding.md",
+          code: "shadow → reverse shadow → on-call",
+          bubble: "T-shaped",
+          pose: "joy",
+          tilt: -4,
+        },
+        {
+          number: 15,
+          slug: "15-where-sre-lives",
+          title: "SRE အဖွဲ့ကို ဘယ်မှာ ထားမလဲ",
+          file: "charter.yaml",
+          code: "scope: [Wallet, Top-up]",
+          bubble: "embedded?",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 16,
+          slug: "16-engagement-models",
+          title: "Product team နဲ့ ဘယ်လို တွဲလုပ်မလဲ",
+          file: "agreement.md",
+          code: "owner · outcome · on-call · handback",
+          bubble: "outcomes",
+          pose: "calm",
+          tilt: -3,
+        },
+        {
+          number: 17,
+          slug: "17-toil-and-automation",
+          title: "Toil နဲ့ automation",
+          file: "toil.yaml",
+          code: "toil: 55%   target: 35%",
+          bubble: "automate it",
+          pose: "joy",
+          tilt: 4,
+        },
+        {
+          number: 18,
+          slug: "18-testing-and-config",
+          title: "Test နဲ့ config",
+          file: "config.yaml",
+          code: "checks: [syntax, meaning, dry-run]",
+          bubble: "config = code",
+          pose: "thinking",
+          tilt: -5,
+        },
+        {
+          number: 19,
+          slug: "19-testing-in-production",
+          title: "Production ထဲမှာ စမ်းသပ်ခြင်း",
+          file: "rollout.yaml",
+          code: "canary: 1% → 10% → 50% → 100%",
+          bubble: "game day",
+          pose: "wobble",
+          tilt: 10,
+        },
+        {
+          number: 20,
+          slug: "20-capacity-planning",
+          title: "Capacity ဘယ်လောက် လိုမလဲ",
+          file: "capacity.yaml",
+          code: "thingyan_peak: 20,000 req/s",
+          bubble: "enough?",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 21,
+          slug: "21-data-you-are-trusted-with",
+          title: "ယုံကြည်ပြီး အပ်ထားတဲ့ data",
+          file: "data.yaml",
+          code: "access: least privilege",
+          bubble: "keep it safe",
+          pose: "calm",
+          tilt: 0,
+        },
+        {
+          number: 22,
+          slug: "22-backups-and-restores",
+          title: "Backup ထက် restore က ပိုအရေးကြီးတယ်",
+          file: "drill.md",
+          code: "restore → time it → check data",
+          bubble: "restored!",
+          pose: "joy",
+          tilt: 0,
+        },
+        {
+          number: 23,
+          slug: "23-containing-failure",
+          title: "Failure ကို ဘောင်ခတ်ထားတဲ့ design",
+          file: "design.yaml",
+          code: "blast_radius: one zone",
+          bubble: "contain it",
+          pose: "calm",
+          tilt: -5,
+        },
+        {
+          number: 24,
+          slug: "24-overload-change-emergency",
+          title: "Overload နဲ့ emergency mode",
+          file: "client.yaml",
+          code: "retry: backoff + jitter",
+          bubble: "shed load!",
+          pose: "wobble",
+          tilt: -14,
+        },
+        {
+          number: 25,
+          slug: "25-platform-engineering",
+          title: "မှန်တဲ့နည်းကို လွယ်တဲ့နည်း ဖြစ်အောင်",
+          file: "service.yaml",
+          code: "template: golden-path",
+          bubble: "easy = right",
+          pose: "joy",
+          tilt: 0,
+        },
+        {
+          number: 26,
+          slug: "26-when-ai-writes-the-code",
+          title: "AI က code ရေးတဲ့ခေတ်",
+          file: "notes.md",
+          code: "merges a day: 15 → 120",
+          bubble: "who reviews?",
+          pose: "wobble",
+          tilt: 8,
+        },
+        {
+          number: 27,
+          slug: "27-reliability-for-ai-features",
+          title: "AI feature တွေရဲ့ reliability",
+          file: "ask-padauk.log",
+          code: "200 OK · answer: wrong",
+          bubble: "eval it",
+          pose: "thinking",
+          tilt: -5,
+        },
+        {
+          number: 28,
+          slug: "28-ai-in-production-safely",
+          title: "AI ကို production ထဲ ဘေးကင်းကင်း ထည့်ခြင်း",
+          file: "ops-buddy.yaml",
+          code: "mode: dry-run   stop_button: on",
+          bubble: "earn trust",
+          pose: "calm",
+          tilt: 0,
+        },
+        {
+          number: 29,
+          slug: "29-where-ai-helps-operations",
+          title: "AI က operations မှာ ဘယ်နေရာ ကူညီလဲ",
+          file: "notes.md",
+          code: "group complaints → find the pain",
+          bubble: "AI helper",
+          pose: "joy",
+          tilt: 4,
+        },
+        {
+          number: 30,
+          slug: "30-the-first-sre",
+          title: "ပထမဆုံး SRE",
+          file: "first-30-days.md",
+          code: "listen → fix one fire → playbook",
+          bubble: "day one",
+          pose: "joy",
+          tilt: -3,
+        },
+        {
+          number: 31,
+          slug: "31-sre-in-legacy-and-regulated",
+          title: "ကုမ္ပဏီကြီး အဟောင်းတွေထဲက SRE",
+          file: "access.yaml",
+          code: "break_glass: time-limited, logged",
+          bubble: "audit ready",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 32,
+          slug: "32-the-road-ahead",
+          title: "SRE ရဲ့ ရှေ့ခရီး",
+          file: "year-end.md",
+          code: "toil: 45% → 15%",
+          bubble: "keep going",
+          pose: "joy",
+          tilt: 0,
+        },
+      ];
+      window.LESSONS = LESSONS;
+
+      // Modules of the course (docs/sre-course/curriculum.md): 1 Why SRE 1–5 ·
+      // 2 Agree and notice 6–8 · 3 Respond and learn 9–13 · 4 People and teams 14–16 ·
+      // 5 Build it in 17–25 · 6 AI, and SRE where you work 26–32. One group of
+      // squares per module.
+      const MODULES = [5, 3, 5, 3, 9, 7];
+
+      const number = document.getElementById("number");
+      const title = document.getElementById("title");
+      const titleBox = document.getElementById("title-box");
+      const file = document.getElementById("file");
+      const code = document.getElementById("code");
+      const progress = document.getElementById("progress");
+      const bubble = document.getElementById("bubble");
+      const bubbleTail = document.getElementById("bubble-tail");
+      const doll = document.getElementById("doll");
+      const thumb = document.getElementById("thumb");
+      const toolbar = document.getElementById("toolbar");
+      const mascot = { pose: "calm", mirror: false, tilt: 0, bubble: true };
+
+      // ---- Htaung, the original ပစ်တိုင်းထောင် mascot (flat fills, bold ink outline) --
+      // An egg-shaped purple body whose bottom is part of one circle, the weighted
+      // base it rocks on; a painted white face under a black fringe, a yellow collar
+      // and a yellow padauk flower on the belly; short arms with round white hands.
+
+      const INK = "#1e1e1e";
+      const BASE = { cy: 30, r: 70 };
+      const GROUND = BASE.cy + BASE.r;
+      const BODY = `M 0 ${GROUND} A 70 70 0 0 0 70 30 C 70 -22 54 -86 0 -86 C -54 -86 -70 -22 -70 30 A 70 70 0 0 0 0 ${GROUND} Z`;
+
+      const round1 = (value) => Math.round(value * 10) / 10;
+
+      // An arm is an ink stroke from the shoulder, ending in a round white hand.
+      function arm(d, hx, hy) {
+        return (
+          `<path d="${d}" fill="none" stroke="${INK}" stroke-width="10" stroke-linecap="round"/>` +
+          `<circle cx="${hx}" cy="${hy}" r="10.5" fill="#fff" stroke="${INK}" stroke-width="5"/>`
+        );
+      }
+
+      function sparkle(x, y, size) {
+        const s = size;
+        const d = `M ${x} ${y - s} Q ${x + s * 0.18} ${y - s * 0.18} ${x + s} ${y} Q ${x + s * 0.18} ${y + s * 0.18} ${x} ${y + s} Q ${x - s * 0.18} ${y + s * 0.18} ${x - s} ${y} Q ${x - s * 0.18} ${y - s * 0.18} ${x} ${y - s} Z`;
+        return `<path d="${d}" fill="#ffd255" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
+      }
+
+      // The padauk (Myanmar's yellow national flower, and the course company's name).
+      function padauk(cx, cy) {
+        let petals = "";
+        for (let i = 0; i < 5; i++)
+          petals += `<ellipse cx="${cx}" cy="${cy - 10}" rx="6.5" ry="9.5" transform="rotate(${i * 72} ${cx} ${cy})" fill="#ffd255" stroke="${INK}" stroke-width="3"/>`;
+        return (
+          petals +
+          `<circle cx="${cx}" cy="${cy}" r="5" fill="#f2b705" stroke="${INK}" stroke-width="3"/>`
+        );
+      }
+
+      // Painted on the body, clipped to it: white face, black fringe parted in the
+      // middle, yellow collar with an ink edge.
+      const PAINT =
+        `<ellipse cx="0" cy="-30" rx="45" ry="39" fill="#fff"/>` +
+        `<path d="M -92 -22 Q -46 -80 0 -63 Q 46 -80 92 -22 L 92 -120 L -92 -120 Z" fill="${INK}"/>` +
+        `<path d="M -84 -6 Q 0 46 84 -6" fill="none" stroke="${INK}" stroke-width="17"/>` +
+        `<path d="M -84 -6 Q 0 46 84 -6" fill="none" stroke="#ffd255" stroke-width="9"/>`;
+
+      const SHINE =
+        `<ellipse cx="-44" cy="50" rx="6" ry="15" fill="#fff" opacity="0.32" transform="rotate(28 -44 50)"/>` +
+        `<path d="M -36 -72 Q -24 -80 -10 -80" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity="0.55"/>`;
+
+      const CHEEKS =
+        `<ellipse cx="-30" cy="-19" rx="8" ry="5" fill="#ff8f7e" opacity="0.65"/>` +
+        `<ellipse cx="30" cy="-19" rx="8" ry="5" fill="#ff8f7e" opacity="0.65"/>`;
+
+      function roundEye(x, y) {
+        return (
+          `<ellipse cx="${x}" cy="${y}" rx="7.5" ry="9.5" fill="${INK}"/>` +
+          `<circle cx="${x + 2.4}" cy="${y - 3.8}" r="3" fill="#fff"/>`
+        );
+      }
+
+      // A startled eye: white with an ink ring and a small pupil.
+      function wideEye(x, y) {
+        return (
+          `<circle cx="${x}" cy="${y}" r="10.5" fill="#fff" stroke="${INK}" stroke-width="4"/>` +
+          `<circle cx="${x + 1.5}" cy="${y + 1}" r="4.5" fill="${INK}"/>`
+        );
+      }
+
+      const FACES = {
+        calm:
+          roundEye(-17, -35) +
+          roundEye(17, -35) +
+          CHEEKS +
+          `<path d="M -11 -14 Q 0 -5 11 -14" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`,
+        wobble:
+          wideEye(-17, -35) +
+          wideEye(17, -35) +
+          `<path d="M -28 -53 Q -18 -59 -8 -54" fill="none" stroke="${INK}" stroke-width="4.5" stroke-linecap="round"/>` +
+          `<path d="M 8 -54 Q 18 -59 28 -53" fill="none" stroke="${INK}" stroke-width="4.5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<ellipse cx="0" cy="-11" rx="6" ry="7.5" fill="${INK}"/>` +
+          `<path d="M 44 -60 C 48 -52 51 -47 49 -43 A 6 6 0 0 1 38 -43 C 37 -47 40 -52 44 -60 Z" fill="#4de5d6" stroke="${INK}" stroke-width="3" stroke-linejoin="round"/>`,
+        thinking:
+          roundEye(-15, -37) +
+          roundEye(19, -37) +
+          `<path d="M -27 -54 L -7 -52" fill="none" stroke="${INK}" stroke-width="4.5" stroke-linecap="round"/>` +
+          `<path d="M 9 -56 Q 19 -64 30 -56" fill="none" stroke="${INK}" stroke-width="4.5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -8 -12 Q -2 -18 4 -13 T 16 -14" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`,
+        joy:
+          `<path d="M -27 -33 Q -17 -47 -7 -33" fill="none" stroke="${INK}" stroke-width="5.5" stroke-linecap="round"/>` +
+          `<path d="M 7 -33 Q 17 -47 27 -33" fill="none" stroke="${INK}" stroke-width="5.5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -16 -19 Q 0 10 16 -19 Z" fill="${INK}" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>` +
+          `<ellipse cx="0" cy="-7" rx="7" ry="3.5" fill="#ff7f72"/>`,
+      };
+
+      // Arms behind the body, per pose: calm rests them at its sides, wobble flings
+      // them out for balance, thinking scratches the side of its head, joy cheers.
+      const ARMS_BACK = {
+        calm: arm("M -60 12 Q -90 26 -88 56", -88, 56) + arm("M 60 12 Q 90 26 88 56", 88, 56),
+        wobble: arm("M -60 4 Q -98 -10 -110 -44", -110, -44) + arm("M 60 14 Q 98 18 116 2", 116, 2),
+        thinking: arm("M -60 12 Q -90 28 -86 58", -86, 58) + arm("M 60 10 Q 106 2 76 -44", 76, -44),
+        joy:
+          arm("M -60 4 Q -100 -12 -106 -50", -106, -50) + arm("M 60 4 Q 100 -12 106 -50", 106, -50),
+      };
+
+      // Two short rocking arcs on each side of the base, in the ground's frame.
+      function rockArcs(dx) {
+        const point = (r, angle, side) => {
+          const a = (angle * Math.PI) / 180;
+          return `${round1(dx + side * r * Math.cos(a))} ${round1(BASE.cy + r * Math.sin(a))}`;
+        };
+        const arc = (r, from, to, side) =>
+          `<path d="M ${point(r, from, side)} A ${r} ${r} 0 0 ${side > 0 ? 1 : 0} ${point(r, to, side)}" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`;
+        return (
+          arc(88, 12, 46, 1) + arc(103, 20, 40, 1) + arc(88, 12, 46, -1) + arc(103, 20, 40, -1)
+        );
+      }
+
+      // Floating extras stay upright while the doll rocks.
+      const EXTRAS = {
+        calm: "",
+        wobble: "",
+        thinking: `<circle cx="-112" cy="-66" r="6" fill="#fff" stroke="${INK}" stroke-width="4"/><circle cx="-130" cy="-84" r="8.5" fill="#fff" stroke="${INK}" stroke-width="4"/>`,
+        joy: sparkle(-128, -78, 11) + sparkle(132, -86, 10),
+      };
+
+      // The doll tilts by rolling on its base: it turns about the base circle's
+      // centre and moves along the ground by the arc it rolled, so the base still
+      // touches the ground at any tilt.
+      function dollSvg(pose, tilt) {
+        const dx = round1((BASE.r * tilt * Math.PI) / 180);
+        return (
+          `<defs><clipPath id="doll-body"><path d="${BODY}"/></clipPath></defs>` +
+          (pose === "wobble" && tilt !== 0 ? rockArcs(dx) : "") +
+          EXTRAS[pose] +
+          `<g transform="translate(${dx} 0) rotate(${tilt} 0 ${BASE.cy})">` +
+          ARMS_BACK[pose] +
+          `<path d="${BODY}" fill="${INK}" transform="translate(8 0)"/>` +
+          `<path d="${BODY}" fill="#6d57ff"/>` +
+          `<g clip-path="url(#doll-body)">${PAINT}</g>` +
+          padauk(0, 62) +
+          SHINE +
+          `<path d="${BODY}" fill="none" stroke="${INK}" stroke-width="7" stroke-linejoin="round"/>` +
+          FACES[pose] +
+          `</g>`
+        );
+      }
+
+      // ---- Progress squares -------------------------------------------------------
+
+      const squares = [];
+      for (const count of MODULES) {
+        const module = document.createElement("div");
+        module.className = "module";
+        for (let i = 0; i < count; i++) {
+          const index = squares.length + 1;
+          const square = document.createElement("button");
+          square.type = "button";
+          square.className = "sq";
+          square.title = `Lesson ${String(index).padStart(2, "0")}`;
+          square.addEventListener("click", () => window.setThumb({ lesson: index }));
+          squares.push(square);
+          module.append(square);
+        }
+        progress.append(module);
+      }
+
+      function markLesson(index) {
+        squares.forEach((square, i) => square.classList.toggle("on", i + 1 === index));
+      }
+
+      // ---- Text fitting -----------------------------------------------------------
+
+      function escapeHtml(text) {
+        return text.replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      // Terms that read as one word and must stay on one line (a hyphen inside one
+      // never breaks either).
+      const NO_BREAK_TERMS = [
+        "error budget",
+        "on-call",
+        "Root cause",
+        "Product team",
+        "emergency mode",
+        "AI feature",
+        "STPA နဲ့ CAST",
+      ];
+      // Particles that stay on the line of the word before them ("SRE ရဲ့",
+      // "Backup ထက်", "system တွေ" never split).
+      const PARTICLES = [
+        "တွေရဲ့",
+        "တွေနဲ့",
+        "ထဲမှာ",
+        "ကနေ",
+        "နဲ့",
+        "ရဲ့",
+        "တွေ",
+        "ကို",
+        "ထက်",
+        "မှာ",
+        "ထဲ",
+        "ဆီ",
+        "က",
+      ];
+      const MYANMAR = /[က-႟ꧠ-꧿ꩠ-ꩿ]+/g;
+      // Markers for a space and a hyphen that must not break; both are put back as
+      // plain characters in the markup.
+      const GLUE = " ";
+      const GLUE_HYPHEN = "‑";
+
+      function titleHtml(text) {
+        return escapeHtml(text)
+          .replace(MYANMAR, (run) => `<span class="mm">${run}</span>`)
+          .replaceAll(GLUE, " ")
+          .replaceAll(GLUE_HYPHEN, "-");
+      }
+
+      // Glue NO_BREAK_TERMS and each particle to the word before it, wrap each glued
+      // piece in .nb and each Burmese run in .mm so a single font shapes it. A glued
+      // piece may still break after the hyphen of its first word, which keeps it from
+      // shrinking to a tiny single line. (A no-break space in LESSONS would not
+      // survive the whitespace collapse below, so the glue is added here, in markup.)
+      function renderTitle() {
+        let text = title.textContent.replace(/\s+/g, " ").trim();
+        for (const term of NO_BREAK_TERMS)
+          text = text.split(term).join(term.replaceAll(" ", GLUE).replaceAll("-", GLUE_HYPHEN));
+        for (const particle of PARTICLES)
+          text = text.replace(new RegExp(` (${particle})(?= |$)`, "g"), `${GLUE}$1`);
+        title.innerHTML = text
+          .split(" ")
+          .map((piece, i, pieces) => {
+            let html = titleHtml(piece);
+            if (piece.includes(GLUE) || piece.includes(GLUE_HYPHEN)) {
+              const firstWord = piece.split(GLUE)[0];
+              const cut = firstWord.lastIndexOf("-") + 1;
+              html = `${titleHtml(piece.slice(0, cut))}<span class="nb">${titleHtml(piece.slice(cut))}</span>`;
+            }
+            return i < pieces.length - 1 ? `${html} ` : html;
+          })
+          .join("");
+        fitTitle();
+      }
+
+      // Largest size (to 116px) at which the title fits its box.
+      function fitTitle() {
+        let size = 116;
+        title.style.fontSize = `${size}px`;
+        while (
+          size > 40 &&
+          (title.scrollHeight > titleBox.clientHeight || title.scrollWidth > titleBox.clientWidth)
+        ) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
+
+      // Light YAML highlighting for one line (it may hold several `key: value` pairs):
+      // keys purple, numbers amber, other values teal, punctuation and comments gray.
+      function highlightYaml(source) {
+        const token =
+          /(#.*$)|([A-Za-z_][\w.-]*)(?=:(?:\s|$))|("[^"]*")|(\d[\d,.]*(?:%|[a-z]+)?)|([A-Za-z][\w-]*)|([:[\],→·+=/-])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, comment, key, string, num, word] = match;
+          if (comment) html += span("cm", text);
+          else if (key) html += span("key", text);
+          else if (string) html += span("str", text);
+          else if (num) html += span("num", text);
+          else if (word) html += span("val", text);
+          else html += span("pn", text);
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Light notes highlighting (*.md, *.log): a heading is purple after its gray
+      // hashes; times and numbers amber, quotes teal, arrows and separators gray.
+      function highlightNotes(source) {
+        const heading = /^(#{1,6})(\s.*)$/.exec(source);
+        if (heading)
+          return (
+            span("pn", heading[1]) +
+            heading[2]
+              .split(/( · )/)
+              .map((part) => (part === " · " ? span("pn", part) : span("kw", part)))
+              .join("")
+          );
+        const token = /(\d{1,2}:\d{2})|(\d[\d,.]*%?)|("[^"]*")|([→·:=+])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, time, num, string] = match;
+          if (time || num) html += span("num", text);
+          else if (string) html += span("str", text);
+          else html += span("pn", text);
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Shrink long code lines so they stay on one line inside the card.
+      function fitCode() {
+        let size = 32;
+        code.style.fontSize = `${size}px`;
+        while (size > 18 && code.scrollWidth > code.clientWidth) {
+          size -= 1;
+          code.style.fontSize = `${size}px`;
+        }
+      }
+
+      function renderCode() {
+        const source = code.textContent.replace(/\s*\n\s*/g, " ").trim();
+        const name = file.textContent.trim();
+        code.innerHTML = /\.ya?ml$/i.test(name) ? highlightYaml(source) : highlightNotes(source);
+        fitCode();
+      }
+
+      // Keep the bubble on one line: shrink long words rather than wrap them.
+      function fitBubble() {
+        bubble.classList.toggle("mm", /[က-႟]/.test(bubble.textContent));
+        let size = 34;
+        bubble.style.fontSize = `${size}px`;
+        while (size > 18 && bubble.scrollWidth > bubble.clientWidth) {
+          size -= 1;
+          bubble.style.fontSize = `${size}px`;
+        }
+        placeTail();
+      }
+
+      // The tail hangs under the bubble, pointing down at Htaung.
+      function placeTail() {
+        bubbleTail.style.display = mascot.bubble ? "" : "none";
+        if (!mascot.bubble) return;
+        const frame = thumb.getBoundingClientRect();
+        const box = bubble.getBoundingClientRect();
+        bubbleTail.style.left = `${box.left - frame.left + box.width / 2 - 15}px`;
+        bubbleTail.style.top = `${box.bottom - frame.top - 17}px`;
+      }
+
+      function renderMascot() {
+        doll.innerHTML = dollSvg(mascot.pose, mascot.tilt);
+        doll.style.transform = mascot.mirror ? "scaleX(-1)" : "";
+        bubble.classList.toggle("off", !mascot.bubble);
+        for (const button of toolbar.querySelectorAll("button")) {
+          const pressed =
+            button.dataset.pose === mascot.pose ||
+            (button.dataset.tilt !== undefined && Number(button.dataset.tilt) === mascot.tilt) ||
+            (button.dataset.action === "mirror" && mascot.mirror) ||
+            (button.dataset.action === "bubble" && mascot.bubble);
+          button.setAttribute("aria-pressed", String(pressed));
+        }
+        placeTail();
+      }
+
+      toolbar.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        if (button.dataset.pose) mascot.pose = button.dataset.pose;
+        if (button.dataset.tilt !== undefined) mascot.tilt = Number(button.dataset.tilt);
+        if (button.dataset.action === "mirror") mascot.mirror = !mascot.mirror;
+        if (button.dataset.action === "bubble") mascot.bubble = !mascot.bubble;
+        renderMascot();
+      });
+
+      /**
+       * Set any part of the thumbnail at once (used to render the course set):
+       * setThumb({ lesson: 3 }) loads LESSONS[2]; any other field overrides it:
+       * setThumb({ lesson: 3, code: "…", pose: "wobble", mirror: true, tilt: -14, bubble: "?" })
+       * Fields: number, title, file, code, pose (calm | wobble | thinking | joy), mirror,
+       * tilt (degrees; positive leans right), bubble (`null` hides the speech bubble).
+       */
+      window.setThumb = (input) => {
+        const base =
+          input.lesson !== undefined
+            ? LESSONS.find((l) => l.number === Number(input.lesson))
+            : null;
+        const spec = { ...(base ?? {}), ...input };
+        if (base && input.mirror === undefined) spec.mirror = false;
+        if (spec.number !== undefined) {
+          number.textContent = String(spec.number).padStart(2, "0");
+          const value = Number(spec.number);
+          markLesson(value >= 1 && value <= squares.length ? value : 0);
+        }
+        if (spec.title !== undefined) title.textContent = spec.title;
+        if (spec.file !== undefined) file.textContent = spec.file;
+        if (spec.code !== undefined) code.textContent = spec.code;
+        if (spec.pose !== undefined && FACES[spec.pose]) mascot.pose = spec.pose;
+        if (spec.mirror !== undefined) mascot.mirror = spec.mirror;
+        if (spec.tilt !== undefined) mascot.tilt = spec.tilt;
+        if (spec.bubble !== undefined) {
+          mascot.bubble = spec.bubble !== null;
+          if (spec.bubble !== null) bubble.textContent = spec.bubble;
+        }
+        renderCode();
+        renderMascot();
+        renderTitle();
+        fitBubble();
+      };
+
+      number.addEventListener("input", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        markLesson(value >= 1 && value <= squares.length ? value : 0);
+      });
+      // Keep the lesson number two digits ("7" reads back as "07").
+      number.addEventListener("blur", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        if (Number.isFinite(value)) number.textContent = String(value).padStart(2, "0");
+      });
+      title.addEventListener("input", fitTitle);
+      title.addEventListener("blur", renderTitle);
+      file.addEventListener("blur", renderCode);
+      code.addEventListener("input", fitCode);
+      code.addEventListener("blur", renderCode);
+      bubble.addEventListener("input", fitBubble);
+
+      window.setThumb({ lesson: 1 });
+
+      // Load every face up front (Noto Sans Myanmar only loads once Burmese is on
+      // screen), then refit: sizes measured before the fonts arrive are wrong.
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '400 36px "Google Sans"',
+          '700 36px "Google Sans Code"',
+          '500 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+          '400 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ →·≠").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => {
+          renderCode();
+          renderTitle();
+          fitBubble();
+        });
+    </script>
+  </body>
+</html>

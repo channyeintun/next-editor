@@ -61,6 +61,14 @@ Catalog titles are "SRE from zero NN: <title>", so the catalog groups them; add 
 this order. Modules: 1 Why SRE (1–5), 2 Agree and notice (6–8), 3 Respond and learn (9–13), 4 People
 and teams (14–16), 5 Build it in (17–25), 6 AI, and SRE where you work (26–32).
 
+Thumbnails (1280×720) are in [sre-course-thumbnails/](../sre-course-thumbnails/), named
+`NN-<topic>.png` so the studio workflow matches each one to its `sre-NN-<topic>` lesson. They are
+rendered from [sre-course-thumbnail.html](../sre-course-thumbnail.html) with
+`bun docs/sre-course-thumbnails/render.ts` (add lesson numbers to render only those). The template is
+editable in Chrome like the other courses' templates. Its mascot, Htaung, is an original
+ပစ်တိုင်းထောင် (the roly-poly doll that always rights itself) drawn for this course. It uses no
+book, O'Reilly or Google artwork.
+
 ## Decks
 
 One published Google Slides deck per module group. Each lesson pins its pages by id (`lNN_pMM`, plus
