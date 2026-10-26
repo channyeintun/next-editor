@@ -1,4 +1,4 @@
-# SRE from zero, lesson 5: Reliability culture (Burmese concept lesson).
+# SRE from zero, lesson 05: Reliability culture (Burmese concept lesson).
 #
 # Built from the approved voice script
 # docs/sre-course/voice-scripts/sre-05-reliability-culture.md. Every spoken
@@ -38,7 +38,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-05-reliability-culture
-  title: "SRE from zero 5: Reliability ယဉ်ကျေးမှု"
+  title: "SRE from zero 05: Reliability ယဉ်ကျေးမှု"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -67,7 +67,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · 5</p>
+              <p class="course">SRE from zero · 05</p>
               <h1>Reliability ယဉ်ကျေးမှု</h1>
             </main>
           </body>
@@ -920,7 +920,7 @@ scenes:
     narration: >
       [[mark:show-p02]] ကိုမင်း ပြောရဲမလား ဆိုတာက သူ့ သတ္တိထက်၊ အရင်က မေးခွန်း မေးခဲ့တဲ့သူတွေ ဘာဖြစ်ခဲ့လဲ ဆိုတာပေါ်မှာ ပိုမူတည်ပါတယ်။ လူမှုဗေဒ ပညာရှင် Ron Westrum က သတင်းဆိုး ယူလာတဲ့သူကို ဘယ်လို ဆက်ဆံလဲ ဆိုတာနဲ့ အဖွဲ့အစည်း ယဉ်ကျေးမှုကို သုံးမျိုး ခွဲပြခဲ့ပါတယ်။
       ပထမ pathological အဖွဲ့မှာ အာဏာကို ဦးစားပေးလို့ သတင်းဆိုး ယူလာသူကို နှုတ်ပိတ်ခိုင်းပါတယ်။ [[mark:show-p02b]] ဒုတိယ bureaucratic အဖွဲ့မှာ စည်းမျဉ်းကို ဦးစားပေးလို့ သတင်းက တန်းစီပြီး အလှည့်စောင့်ရပါတယ်။ တတိယ generative အဖွဲ့မှာတော့ ရလဒ်ကို ဦးစားပေးလို့ သတင်းဆိုး ယူလာသူကို ကျေးဇူးတင်ပြီး ချက်ချင်း ဖြေရှင်းပါတယ်။
-      software delivery ကို နှစ်စဉ် လေ့လာတဲ့ DORA သုတေသနကလည်း အဖွဲ့တစ်ခု generative ဘက် ရောက်လေ software ကို ပိုမြန်မြန်၊ ပိုစိတ်ချရအောင် ထုတ်နိုင်လေ ဖြစ်တာကို တွေ့ထားပါတယ်။ မသီရိက ကိုနေလင်းကို ပြတဲ့ အထောက်အထားလည်း ဒါပါပဲ။
+      [[mark:westrum-dora]] software delivery ကို နှစ်စဉ် လေ့လာတဲ့ DevOps Research and Assessment၊ DORA ရဲ့ သုတေသနကလည်း အဖွဲ့တစ်ခု generative ဘက် ရောက်လေ software ကို ပိုမြန်မြန်၊ ပိုစိတ်ချရအောင် ထုတ်နိုင်လေ ဖြစ်တာကို တွေ့ထားပါတယ်။ မသီရိက ကိုနေလင်းကို ပြတဲ့ အထောက်အထားလည်း ဒါပါပဲ။
     sources:
       - {
           title: "Site Reliability Engineering, 2nd ed. (O'Reilly, 2026), further reading",
