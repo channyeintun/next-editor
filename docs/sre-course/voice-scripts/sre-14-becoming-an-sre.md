@@ -6,7 +6,7 @@ slug: sre-14-becoming-an-sre · budget: 8400 characters (±5%)
 
 chapter: ပထမဆုံး SRE အလုပ်ခေါ် ကြော်ငြာ
 
-> ⟪page l14_p01⟫ Padauk က refund design ကို STPA နဲ့ ကြိုစစ်ပြီး လစာထုတ်ရက်မှာ ပိတ်ခံရတဲ့ wallet ၂၈၀၀ ကိုလည်း CAST နဲ့ ပြန်ခွဲကြည့်ခဲ့ပါပြီ။ ဒါပေမဲ့ lesson ၆ ကတည်းက incident တွေမှာ reliability ဘက်ကို ထမ်းခဲ့ရတာ Site Reliability Engineer၊ SRE ဖြစ်တဲ့ မသီရိ တစ်ယောက်တည်းပါ။
+> ⟪page l14_p01⟫ Padauk က refund design ကို System-Theoretic Process Analysis၊ STPA နဲ့ ကြိုစစ်ပြီး လစာထုတ်ရက်မှာ ပိတ်ခံရတဲ့ wallet ၂၈၀၀ ကိုလည်း Causal Analysis based on Systems Theory၊ CAST နဲ့ ပြန်ခွဲကြည့်ခဲ့ပါပြီ။ ဒါပေမဲ့ lesson ၆ ကတည်းက incident တွေမှာ reliability ဘက်ကို ထမ်းခဲ့ရတာ Site Reliability Engineer၊ SRE ဖြစ်တဲ့ မသီရိ တစ်ယောက်တည်းပါ။
 > ဒါကြောင့် CTO ကိုနေလင်းက SRE အဖွဲ့ ဖွဲ့ဖို့ ငွေ ခွဲပေးလိုက်တော့ မသီရိက Padauk ရဲ့ ပထမဆုံး SRE အလုပ်ခေါ် ကြော်ငြာကို ရေးနေပါပြီ။ ဘယ်လို လူမျိုးကို ခန့်ရမလဲ၊ လူသစ်တွေကရော ဘေးကင်းကင်း ဘယ်လို သင်ယူကြမလဲ?
 > ⟪page m4_map⟫ lesson ၁ မှာ ပြောခဲ့သလို Module ၄ က reliability loop ကို လည်နေအောင် လုပ်ပေးတဲ့ အလယ်က လူတွေ အကြောင်းပါ။ tool တွေ ဘယ်လောက်ပဲ ကောင်းကောင်း service ကို စိတ်ချရအောင် ထိန်းထားတာက လူတွေပါ။
 
