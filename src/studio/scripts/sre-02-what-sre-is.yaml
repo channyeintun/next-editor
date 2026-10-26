@@ -1,4 +1,4 @@
-# SRE from zero, lesson 2: what SRE is (Burmese concept lesson; nothing runs).
+# SRE from zero, lesson 02: what SRE is (Burmese concept lesson; nothing runs).
 #
 # Narration is Chan's approved voice script
 # docs/sre-course/voice-scripts/sre-02-what-sre-is.md, byte for byte: each
@@ -35,7 +35,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-02-what-sre-is
-  title: "SRE from zero 2: SRE ဆိုတာ ဘာလဲ"
+  title: "SRE from zero 02: SRE ဆိုတာ ဘာလဲ"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -64,7 +64,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · lesson 2</p>
+              <p class="course">SRE from zero · lesson 02</p>
               <h1>SRE ဆိုတာ ဘာလဲ</h1>
               <p class="hook">ပျက်နေတာ၊ နှေးနေတာ၊ မှားနေတာ</p>
             </main>
@@ -1053,7 +1053,7 @@ scenes:
       အနေနဲ့ရော၊ ကူညီမယ့် tool အနေနဲ့ရော loop ပေါ် ရောက်လာပါမယ်။ [[mark:l02-b3-agree]] သဘောတူတဲ့
       အဆင့်မှာ Padauk က ဝန်ဆောင်ခ အမြဲ ပုံမှန် ဖြစ်ရမယ်လို့ စာနဲ့ ရေးပြီး သဘောတူပါတယ်။
       [[mark:l02-b3-notice]] သတိထားမိတဲ့ အဆင့်မှာ ဒီတစ်ခါ မစုရဲ့ complaint တွေက alert အစား ဖြစ်ခဲ့ပေမဲ့
-      နောက်ဆို ဝန်ဆောင်ခ alert က user တွေ မတိုင်ခင် သတိပေးပါမယ်။ [[mark:l02-b3-tools]] ဘေးက SLO လို ပစ်မှတ်တွေ၊ alert၊ dashboard၊ log
+      နောက်ဆို ဝန်ဆောင်ခ alert က user တွေ မတိုင်ခင် သတိပေးပါမယ်။ [[mark:l02-b3-tools]] ဘေးက service level objective၊ SLO လို ပစ်မှတ်တွေ၊ alert၊ dashboard၊ log
       နဲ့ trace တွေက production ထဲ ဘာဖြစ်နေလဲ မြင်ရအောင် ကူညီတဲ့ tool တွေပါ၊ Module ၂ မှာ လေ့လာပါမယ်။
       အရင်က production ကျန်းမာဖို့ဆိုတာ ပြဿနာ တက်မှ ပြေးပြင်တာ ဖြစ်ခဲ့ပေမဲ့ အခုတော့ အများစုက design
       ကောင်းတာနဲ့ ကြိုပြင်ထားတာကနေ လာပါတယ်။ [[mark:l02-b3-respond]] တုံ့ပြန်တဲ့ အဆင့်မှာ ၃ မိနစ်နဲ့
