@@ -1,4 +1,4 @@
-# Lesson 1 · SRE ဘာကြောင့် လိုလာတာလဲ
+# Lesson 01 · SRE ဘာကြောင့် လိုလာတာလဲ
 
 slug: sre-01-why-reliability-now · budget: 7600 characters (±5%)
 

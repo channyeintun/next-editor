@@ -1,4 +1,4 @@
-# SRE from zero, lesson 1: why running software is the long, hard part.
+# SRE from zero, lesson 01: why running software is the long, hard part.
 #
 # A concept lesson: nothing runs. Deck pages (deck SRE 1) and four whiteboard
 # boards carry the lesson, and the recap highlights the key terms in notes.md.
@@ -21,7 +21,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-01-why-reliability-now
-  title: "SRE from zero 1: SRE ဘာကြောင့် လိုလာတာလဲ"
+  title: "SRE from zero 01: SRE ဘာကြောင့် လိုလာတာလဲ"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -50,7 +50,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · 1</p>
+              <p class="course">SRE from zero · 01</p>
               <h1>SRE ဘာကြောင့် လိုလာတာလဲ</h1>
             </main>
           </body>
