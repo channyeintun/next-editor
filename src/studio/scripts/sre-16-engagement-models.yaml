@@ -1023,7 +1023,7 @@ scenes:
     chapter: ဘယ် pager ကို ဘယ်သူ ယူမလဲ
     narration: >
       [[mark:close-b1]] [[mark:b2-s1]] ဒါဆို pager ကို SRE က ဘာလို့ မယူတာလဲ? ပြီးခဲ့တဲ့ သင်္ကြန်က ကံစမ်းမဲ service ကို ကြည့်ပါ။ [[mark:b2-s1b]] ပွဲတော် ခဏပဲ ဆိုပြီး SRE က pager ကို ယူပေးခဲ့ပေမဲ့ launch ပြီးတော့ developer တွေက project အသစ်ဆီ ရွှေ့သွားလို့ လတွေ ကြာတဲ့အထိ ပိုင်ရှင်မဲ့ service ရဲ့ page တွေကို SRE ကပဲ ဖြေနေရပါတယ်။
-      [[mark:b2-s2]] ဒါကြောင့် အဲဒီ service ကို ဆောက်ခဲ့တဲ့ အဖွဲ့ဆီ ပြန်ပေးပါတယ်။ on-call တာဝန်ကို developer တွေဆီ ပြန်လွှဲတာကို handback လို့ ခေါ်ပြီး ဒီတစ်ခါတော့ ရက်စွဲ၊ runbook၊ training နဲ့ ကြိုစီစဉ်ပြီး လွှဲတာပါ၊ office hours လည်း ဆက်ရှိပါတယ်။ lesson ၃ မှာတော့ service က သဘောတူထားတဲ့ reliability ပစ်မှတ်၊ SLO ကို ခဏခဏ မမီလို့ ပြန်လွှဲတာပါ။
+      [[mark:b2-s2]] ဒါကြောင့် အဲဒီ service ကို ဆောက်ခဲ့တဲ့ အဖွဲ့ဆီ ပြန်ပေးပါတယ်။ on-call တာဝန်ကို developer တွေဆီ ပြန်လွှဲတာကို handback လို့ ခေါ်ပြီး ဒီတစ်ခါတော့ ရက်စွဲ၊ runbook၊ training နဲ့ ကြိုစီစဉ်ပြီး လွှဲတာပါ၊ office hours လည်း ဆက်ရှိပါတယ်။ lesson ၃ မှာတော့ service က သဘောတူထားတဲ့ reliability ပစ်မှတ် ဖြစ်တဲ့ service level objective၊ SLO ကို ခဏခဏ မမီလို့ ပြန်လွှဲတာပါ။
       [[mark:b2-s3]] Bill Pay အတွက်တော့ on-call ကို ခွဲယူပါတယ်။ [[mark:b2-s3b]] app ရဲ့ page တွေကို developer တွေက အရင် ဖြေပြီး မျှသုံးတဲ့ database နဲ့ ဘေလ် ကောက်တဲ့ ကုမ္ပဏီတွေဆီ ချိတ်တဲ့ gateway ရဲ့ page တွေကိုတော့ SRE က ယူပါတယ်။ ဒီနေ့ release မှာ ဘာ ပြောင်းသွားလဲ ဆိုတာ developer တွေပဲ သိလို့ ညဘက်မှာလည်း ဆက်သွယ်လို့ ရနေရပါတယ်။ on-call ကနေ နှစ်ဖက်လုံး production ကို သင်ယူကြပါတယ်။
     sources:
       - {
