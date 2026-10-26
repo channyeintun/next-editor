@@ -1,4 +1,4 @@
-# SRE from zero, lesson 8: From monitoring to observability (Burmese concept lesson).
+# SRE from zero, lesson 08: From monitoring to observability (Burmese concept lesson).
 #
 # Built from the approved voice script
 # docs/sre-course/voice-scripts/sre-08-observability.md. Every spoken
@@ -50,7 +50,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-08-observability
-  title: "SRE from zero 8: Monitoring ကနေ observability ဆီ"
+  title: "SRE from zero 08: Monitoring ကနေ observability ဆီ"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -81,7 +81,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · 8</p>
+              <p class="course">SRE from zero · 08</p>
               <h1>Monitoring ကနေ observability ဆီ</h1>
             </main>
           </body>
@@ -978,7 +978,7 @@ scenes:
   - id: hook
     chapter: အတည်ပြုချက် မပေါ်တဲ့ Top-up
     narration: >
-      [[mark:show-p01]] Eats order တွေ ရပ်ခဲ့ပြီးနောက် Padauk က order တစ်ခုကို အစအဆုံး တိုင်းတဲ့ journey SLO နဲ့ အကြီးဆုံး merchant ၁၀ ခုအတွက် SLO တွေ ထည့်ထားပါတယ်။ ဒီတစ်ပတ်မှာတော့ top-up လုပ်ရင် app က loading လည်နေရုံပဲ ဖြစ်ပြီး ဖုန်းဘေလ် ဝင်ပြီ ဆိုတဲ့ အတည်ပြုချက် ဘယ်တော့မှ မပေါ်ပါဘူး။
+      [[mark:show-p01]] Eats order တွေ ရပ်ခဲ့ပြီးနောက် Padauk က service level objective၊ SLO လို့ ခေါ်တဲ့ သဘောတူ ပစ်မှတ် နှစ်မျိုး ထပ်ထည့်ထားပါတယ်။ order တစ်ခုကို အစအဆုံး တိုင်းတဲ့ journey SLO နဲ့ အကြီးဆုံး merchant ၁၀ ခုအတွက် SLO တွေပါ။ ဒီတစ်ပတ်မှာတော့ top-up လုပ်ရင် app က loading လည်နေရုံပဲ ဖြစ်ပြီး ဖုန်းဘေလ် ဝင်ပြီ ဆိုတဲ့ အတည်ပြုချက် ဘယ်တော့မှ မပေါ်ပါဘူး။
       [[mark:hook-refunds]] စောင့်မနေနိုင်တဲ့ user တွေက ဖုန်းကတ် ဝယ်ဖြည့်ပြီး refund တောင်းကြပေမဲ့ အဲဒီ top-up တွေက တကယ်တော့ ဘေလ် ဝင်ပြီးသားပါ။ API က success code ပြန်ပေးပြီး dashboard တိုင်းကလည်း အစိမ်းရောင်ချည်းပါ။ system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?
     sources:
       - {

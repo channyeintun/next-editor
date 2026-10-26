@@ -1,4 +1,4 @@
-# Lesson 8 · Monitoring ကနေ observability ဆီ
+# Lesson 08 · Monitoring ကနေ observability ဆီ
 
 slug: sre-08-observability · budget: 8400 characters (±5%)
 
@@ -6,7 +6,7 @@ slug: sre-08-observability · budget: 8400 characters (±5%)
 
 chapter: အတည်ပြုချက် မပေါ်တဲ့ Top-up
 
-> ⟪page l08_p01⟫ Eats order တွေ ရပ်ခဲ့ပြီးနောက် Padauk က order တစ်ခုကို အစအဆုံး တိုင်းတဲ့ journey SLO နဲ့ အကြီးဆုံး merchant ၁၀ ခုအတွက် SLO တွေ ထည့်ထားပါတယ်။ ဒီတစ်ပတ်မှာတော့ top-up လုပ်ရင် app က loading လည်နေရုံပဲ ဖြစ်ပြီး ဖုန်းဘေလ် ဝင်ပြီ ဆိုတဲ့ အတည်ပြုချက် ဘယ်တော့မှ မပေါ်ပါဘူး။
+> ⟪page l08_p01⟫ Eats order တွေ ရပ်ခဲ့ပြီးနောက် Padauk က service level objective၊ SLO လို့ ခေါ်တဲ့ သဘောတူ ပစ်မှတ် နှစ်မျိုး ထပ်ထည့်ထားပါတယ်။ order တစ်ခုကို အစအဆုံး တိုင်းတဲ့ journey SLO နဲ့ အကြီးဆုံး merchant ၁၀ ခုအတွက် SLO တွေပါ။ ဒီတစ်ပတ်မှာတော့ top-up လုပ်ရင် app က loading လည်နေရုံပဲ ဖြစ်ပြီး ဖုန်းဘေလ် ဝင်ပြီ ဆိုတဲ့ အတည်ပြုချက် ဘယ်တော့မှ မပေါ်ပါဘူး။
 > စောင့်မနေနိုင်တဲ့ user တွေက ဖုန်းကတ် ဝယ်ဖြည့်ပြီး refund တောင်းကြပေမဲ့ အဲဒီ top-up တွေက တကယ်တော့ ဘေလ် ဝင်ပြီးသားပါ။ API က success code ပြန်ပေးပြီး dashboard တိုင်းကလည်း အစိမ်းရောင်ချည်းပါ။ system ရဲ့ အထဲကို ဘယ်လို မြင်မလဲ?
 
 On screen:
