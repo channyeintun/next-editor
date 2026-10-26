@@ -1,4 +1,4 @@
-# Lesson 4 · Production ဘယ်လို ပြောင်းလဲလာလဲ
+# Lesson 04 · Production ဘယ်လို ပြောင်းလဲလာလဲ
 
 slug: sre-04-production-then-now · budget: 7600 characters (±5%)
 

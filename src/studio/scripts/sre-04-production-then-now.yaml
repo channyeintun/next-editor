@@ -1,4 +1,4 @@
-# SRE from zero, lesson 4: production then and now.
+# SRE from zero, lesson 04: production then and now.
 #
 # Built from the approved voice script
 # docs/sre-course/voice-scripts/sre-04-production-then-now.md. The narration
@@ -44,7 +44,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-04-production-then-now
-  title: "SRE from zero 4: Production ဘယ်လို ပြောင်းလဲလာလဲ"
+  title: "SRE from zero 04: Production ဘယ်လို ပြောင်းလဲလာလဲ"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -73,7 +73,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="series">SRE from zero · 4</p>
+              <p class="series">SRE from zero · 04</p>
               <h1>Production ဘယ်လို ပြောင်းလဲလာလဲ</h1>
             </main>
           </body>
