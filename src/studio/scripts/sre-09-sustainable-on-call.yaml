@@ -1,4 +1,4 @@
-# SRE from zero, lesson 9: On-call people can sustain (Burmese concept lesson).
+# SRE from zero, lesson 09: On-call people can sustain (Burmese concept lesson).
 #
 # Built from the approved voice script
 # docs/sre-course/voice-scripts/sre-09-sustainable-on-call.md. Every spoken
@@ -46,7 +46,7 @@ schemaVersion: 1
 
 lesson:
   slug: sre-09-sustainable-on-call
-  title: "SRE from zero 9: ရေရှည် လုပ်နိုင်တဲ့ on-call"
+  title: "SRE from zero 09: ရေရှည် လုပ်နိုင်တဲ့ on-call"
   locale: my-MM
   workspace:
     lessonType: javascript
@@ -75,7 +75,7 @@ lesson:
           </head>
           <body>
             <main class="card">
-              <p class="course">SRE from zero · 9</p>
+              <p class="course">SRE from zero · 09</p>
               <h1>ရေရှည် လုပ်နိုင်တဲ့ on-call</h1>
             </main>
           </body>
@@ -720,7 +720,7 @@ scenes:
   - id: coverage-clock
     chapter: "ဘယ်အချိန်၊ ဘယ်လောက် မြန်မြန်"
     narration: >
-      [[mark:close-p02]] [[mark:b2-s1]] rotation ဆွဲဖို့ မသီရိက service တိုင်းအတွက် မေးခွန်း တစ်ခုတည်း မေးပါတယ်၊ ဒီ page ကို မနက် ၇ နာရီအထိ စောင့်ခိုင်းရင် ဘာ ဆုံးရှုံးမလဲ ဆိုတာပါ။ Wallet ရဲ့ burn-rate page က သဘောတူထားတဲ့ ပစ်မှတ်၊ SLO ရဲ့ ပျက်ခွင့်ကို အရမ်း မြန်မြန် သုံးနေမှ ဝင်လာတာမို့ စောင့်ခိုင်းရင် ငွေလွှဲတဲ့ user တွေ မိနစ်တိုင်း ပိုဒုက္ခရောက်ပါမယ်။ ဒါကြောင့် Wallet ကို တစ်နေ့ ၂၄ နာရီ၊ ရက်တိုင်း စောင့်ပြီး ၅ မိနစ်အတွင်း စတုံ့ပြန်ရပါတယ်။
+      [[mark:close-p02]] [[mark:b2-s1]] rotation ဆွဲဖို့ မသီရိက service တိုင်းအတွက် မေးခွန်း တစ်ခုတည်း မေးပါတယ်၊ ဒီ page ကို မနက် ၇ နာရီအထိ စောင့်ခိုင်းရင် ဘာ ဆုံးရှုံးမလဲ ဆိုတာပါ။ Wallet ရဲ့ burn-rate page က သဘောတူထားတဲ့ ပစ်မှတ် ဖြစ်တဲ့ service level objective၊ SLO ရဲ့ ပျက်ခွင့်ကို အရမ်း မြန်မြန် သုံးနေမှ ဝင်လာတာမို့ စောင့်ခိုင်းရင် ငွေလွှဲတဲ့ user တွေ မိနစ်တိုင်း ပိုဒုက္ခရောက်ပါမယ်။ ဒါကြောင့် Wallet ကို တစ်နေ့ ၂၄ နာရီ၊ ရက်တိုင်း စောင့်ပြီး ၅ မိနစ်အတွင်း စတုံ့ပြန်ရပါတယ်။
       [[mark:b2-s2]] Eats ကတော့ ညဘက် ဆိုင်တွေ ပိတ်လို့ မနက် ၇ နာရီကနေ ည ၁၁ နာရီအထိပဲ စောင့်ပါတယ်။ merchant တွေဆီ ငွေလွှဲတဲ့ settlement job ကလည်း ပျက်ရင် နာရီအနည်းငယ် နောက်မှ ပြန် run လို့ရလို့ ရုံးချိန်ထဲမှာပဲ ကြည့်ပါတယ်။
       [[mark:b2-s3]] promo banner ပြတဲ့ service ကတော့ ပျက်ရင် app က banner မပြရုံပဲမို့ page လုံးဝ မပို့ဘဲ မနက်ကျမှ ticket နဲ့ ပြင်ပါတယ်။ တစ်နေ့ ၂၄ နာရီ on-call က ပိုက်ဆံလည်း ကုန်၊ လူလည်း ပင်ပန်းလို့ တကယ် လိုမှ ထားရပါတယ်။
       [[mark:b2-s4]] page ဝင်ပြီး စတုံ့ပြန်ရမယ့် ကြာချိန်ကို response time လို့ ခေါ်ပါတယ်။ ၅ မိနစ်ဆိုရင် laptop ကို ဘယ်သွားသွား ယူသွားရပြီး ရုံးသွားတဲ့ လမ်းပေါ် မရောက်ခင် နောက်လူကို လွှဲထားရပါတယ်။ page က primary ဆီ အရင် ရောက်ပြီး သူက ကြည့်နေပါပြီလို့ ack မလုပ်ရင် secondary ဆီ ဆက်သွားပါတယ်။
