@@ -62,7 +62,7 @@ On screen:
 chapter: Fault experiment
 
 > ⟪page l19_p03⟫ ပျက်တာကို ကြိုစမ်းတဲ့ နည်းက fault experiment ပါ၊ ပျက်စီးမှု တစ်ခုကို production ထဲ တမင် inject လုပ်ပြီး system ဘယ်လို တုံ့ပြန်လဲ ကြည့်တာပါ။ ဒါကို စနစ်တကျ ပုံမှန် လုပ်တာကို chaos engineering လို့ ခေါ်ပေမဲ့ ကျပန်း ဖျက်တာ မဟုတ်ပါဘူး၊ လူတိုင်း ဖတ်လို့ရတဲ့ Principles of Chaos Engineering ထဲက အဆင့်တွေအတိုင်း သွားပြီး ထိခိုက်နိုင်တဲ့ နယ်ပယ်၊ blast radius ကို အမြဲ ကန့်သတ်ပါတယ်။
-> ⟪page l19_p03b⟫ steady state ဆိုတာ ပုံမှန် ကျန်းမာနေတဲ့ ပုံကို သဘောတူထားတဲ့ ပစ်မှတ်၊ SLO လိုပဲ user ခံစားရတဲ့ ကိန်းဂဏန်းနဲ့ ရေးတာပါ။ Padauk ရဲ့ checkout အတွက်ဆို ၉၉.၅ ရာခိုင်နှုန်း အောင်မြင်ပြီး request ၉၅ ရာခိုင်နှုန်းက ၁.၅ စက္ကန့်အတွင်း ပြီးရပါမယ်။ hypothesis ကတော့ စမ်းပြီး စစ်မယ့် ယူဆချက်ပါ၊ point ပေးတဲ့ loyalty service က error ပြန်ပေးပေး၊ ၃ စက္ကန့် နှေးနှေး checkout က ဒီ steady state ထဲမှာ ဆက်ရှိမယ်လို့ ယူဆပါတယ်။
+> ⟪page l19_p03b⟫ steady state ဆိုတာ ပုံမှန် ကျန်းမာနေတဲ့ ပုံကို သဘောတူထားတဲ့ ပစ်မှတ် ဖြစ်တဲ့ service level objective၊ SLO လိုပဲ user ခံစားရတဲ့ ကိန်းဂဏန်းနဲ့ ရေးတာပါ။ Padauk ရဲ့ checkout အတွက်ဆို ၉၉.၅ ရာခိုင်နှုန်း အောင်မြင်ပြီး request ၉၅ ရာခိုင်နှုန်းက ၁.၅ စက္ကန့်အတွင်း ပြီးရပါမယ်။ hypothesis ကတော့ စမ်းပြီး စစ်မယ့် ယူဆချက်ပါ၊ point ပေးတဲ့ loyalty service က error ပြန်ပေးပေး၊ ၃ စက္ကန့် နှေးနှေး checkout က ဒီ steady state ထဲမှာ ဆက်ရှိမယ်လို့ ယူဆပါတယ်။
 
 On screen:
 
