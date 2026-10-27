@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SRE from zero poster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      The Burmese "SRE from zero" course's announcement poster, 1080×1350 (4:5, the tallest
+      image a Facebook feed shows whole), with every lesson's thumbnail in a 5×7 grid; the
+      course link fills the last row's three spare cells. Same brand as
+      docs/a11y-course-poster.html and docs/sre-course-thumbnail.html: cream page, ink,
+      yellow/purple/teal, Google Sans + Google Sans Code, Burmese in Noto Sans Myanmar.
+      Like the thumbnails, it never calls the course a translation or summary of the book
+      and shows no book, O'Reilly or Google artwork (docs/sre-course/curriculum.md).
+      The grid shows the PNGs in docs/sre-course-thumbnails/, so re-render those first
+      after a thumbnail change. Render with `bun docs/sre-course-poster-render.ts`
+      (writes docs/sre-course-poster.png at 2×).
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --gray: #5f6368;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", "Noto Sans Myanmar", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px;
+        background: #2b2b2e;
+      }
+
+      #poster {
+        position: relative;
+        width: 1080px;
+        height: 1350px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        font-family: var(--sans);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      /* Burmese shapes only when one font holds the whole run. */
+      .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      .latin {
+        font-family: var(--sans);
+      }
+
+      .series {
+        position: absolute;
+        left: 48px;
+        top: 50px;
+        font: 700 34px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 48px;
+        top: 38px;
+        padding: 8px 26px 12px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .headline {
+        position: absolute;
+        left: 48px;
+        top: 112px;
+        margin: 0;
+        font: 700 58px/1.45 var(--mm);
+        letter-spacing: 0;
+      }
+
+      .headline .latin {
+        letter-spacing: -0.02em;
+      }
+
+      .headline .mark {
+        background: linear-gradient(
+          transparent 62%,
+          rgb(77 229 214 / 0.55) 62% 92%,
+          transparent 92%
+        );
+      }
+
+      .count {
+        position: absolute;
+        right: 64px;
+        top: 112px;
+        width: 168px;
+        height: 168px;
+        border: 5px solid var(--ink);
+        border-radius: 50%;
+        background: var(--yellow);
+        box-shadow: 7px 7px 0 var(--ink);
+        transform: rotate(9deg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .count .value {
+        font: 700 76px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .count .label {
+        font: 700 21px/1 var(--mono);
+        letter-spacing: 0.14em;
+      }
+
+      .sub {
+        position: absolute;
+        left: 48px;
+        right: 48px;
+        top: 302px;
+        margin: 0;
+        font: 700 25px/1.6 var(--mm);
+        color: var(--gray);
+      }
+
+      /* Five 16:9 thumbnails a row, seven rows: 32 lessons, then the course link in the
+         last row's three spare cells. */
+      .grid {
+        position: absolute;
+        left: 48px;
+        right: 48px;
+        top: 372px;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 18px 12px;
+      }
+
+      .grid img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        border: 2.5px solid var(--ink);
+        border-radius: 10px;
+        box-shadow: 4px 4px 0 var(--ink);
+        background: var(--white);
+      }
+
+      .link {
+        position: relative;
+        grid-column: span 3;
+        border: 3px solid var(--ink);
+        border-radius: 14px;
+        box-shadow: 5px 5px 0 var(--ink);
+        background: var(--white);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 10px 18px 0 22px;
+        font: 700 23px/1.35 var(--mono);
+        white-space: nowrap;
+      }
+
+      .link .tab {
+        position: absolute;
+        left: 18px;
+        top: -15px;
+        padding: 4px 12px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      .link .host {
+        display: block;
+        color: var(--purple);
+      }
+
+      .link .path {
+        display: block;
+        color: var(--teal-dk);
+      }
+
+      .link .go {
+        margin-left: auto;
+        flex: none;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--yellow);
+        border: 3px solid var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 25px/1 var(--sans);
+      }
+
+      .footer {
+        position: absolute;
+        left: 48px;
+        right: 48px;
+        bottom: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 50px;
+        height: 50px;
+      }
+
+      .oss {
+        font: 700 24px/1 var(--mono);
+        color: var(--gray);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster">
+      <div class="series">
+        <span class="brace">{</span> SRE from zero <span class="brace">}</span>
+      </div>
+      <div class="lang">မြန်မာလို</div>
+      <h1 class="headline">
+        <span class="latin mark">SRE</span> ကို အစကနေ<br />
+        မြန်မာလို လေ့လာမယ်
+      </h1>
+      <div class="count" aria-label="32 lessons">
+        <span class="value">32</span>
+        <span class="label">LESSONS</span>
+      </div>
+      <p class="sub">
+        <span class="latin">Site Reliability Engineering</span> · production ကို စိတ်ချရအောင်
+        ထိန်းကျောင်းနည်း
+      </p>
+      <div class="grid" id="grid">
+        <div class="link">
+          <span class="tab">course link</span>
+          <span
+            ><span class="host">nexteditor.dev</span
+            ><span class="path">/learn/playlist/sre-from-zero</span></span
+          >
+          <span class="go">→</span>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="brand">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true">
+            <defs>
+              <linearGradient
+                id="g2c"
+                x1="300"
+                y1="312"
+                x2="724"
+                y2="712"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#4DE5D6" />
+                <stop offset="0.5" stop-color="#FFD255" />
+                <stop offset="1" stop-color="#6D57FF" />
+              </linearGradient>
+            </defs>
+            <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+            <polygon
+              points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+              fill="url(#g2c)"
+            />
+          </svg>
+          Next Editor
+        </div>
+        <div class="oss">github.com/channyeintun/next-editor</div>
+      </div>
+    </div>
+
+    <script>
+      // The lesson thumbnails, in course order (docs/sre-course-thumbnails/).
+      const LESSONS = [
+        "01-why-reliability-now",
+        "02-what-sre-is",
+        "03-value-of-reliability",
+        "04-production-then-now",
+        "05-reliability-culture",
+        "06-slo-error-budget",
+        "07-slo-from-the-users-side",
+        "08-observability",
+        "09-sustainable-on-call",
+        "10-working-an-incident",
+        "11-postmortems",
+        "12-how-complex-systems-fail",
+        "13-stpa-and-cast",
+        "14-becoming-an-sre",
+        "15-where-sre-lives",
+        "16-engagement-models",
+        "17-toil-and-automation",
+        "18-testing-and-config",
+        "19-testing-in-production",
+        "20-capacity-planning",
+        "21-data-you-are-trusted-with",
+        "22-backups-and-restores",
+        "23-containing-failure",
+        "24-overload-change-emergency",
+        "25-platform-engineering",
+        "26-when-ai-writes-the-code",
+        "27-reliability-for-ai-features",
+        "28-ai-in-production-safely",
+        "29-where-ai-helps-operations",
+        "30-the-first-sre",
+        "31-sre-in-legacy-and-regulated",
+        "32-the-road-ahead",
+      ];
+      const grid = document.getElementById("grid");
+      const link = grid.querySelector(".link");
+      const images = LESSONS.map((slug, index) => {
+        const img = document.createElement("img");
+        img.src = `sre-course-thumbnails/${slug}.png`;
+        img.alt = `Lesson ${index + 1}`;
+        grid.insertBefore(img, link);
+        return img.decode().catch(() => {});
+      });
+
+      // Every font face and every thumbnail loaded: render.ts waits for this.
+      window.posterReady = Promise.all([
+        ...[
+          '700 36px "Google Sans"',
+          '700 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+        ...images,
+      ]).then(() => document.fonts.ready);
+    </script>
+  </body>
+</html>
