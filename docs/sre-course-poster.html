@@ -203,13 +203,15 @@
         font: 700 17px/1 var(--mono);
       }
 
-      .link .host {
+      .link .line {
         display: block;
+      }
+
+      .link .host {
         color: var(--purple);
       }
 
       .link .path {
-        display: block;
         color: var(--teal-dk);
       }
 
@@ -277,8 +279,10 @@
         <div class="link">
           <span class="tab">course link</span>
           <span
-            ><span class="host">nexteditor.dev</span
-            ><span class="path">/learn/playlist/sre-from-zero</span></span
+            ><span class="line"
+              ><span class="host">nexteditor.dev</span
+              ><span class="path">/learn/playlist</span></span
+            ><span class="line path">/site-reliability-engineering</span></span
           >
           <span class="go">→</span>
         </div>
