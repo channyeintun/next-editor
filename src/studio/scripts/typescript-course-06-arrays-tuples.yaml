@@ -1,0 +1,1581 @@
+# TypeScript course, lesson 06: arrays, tuples and type arguments (Burmese).
+#
+# Start state (ws/): src/order.ts exports lesson 05's `Order` type. src/main.ts has four short
+# parts, each with a real problem: an array of today's orders where the coffee order has no cups
+# (the loop's total prints NaN; TS18048 at the loop), a best-seller pair inferred as
+# (string | number)[] (TS2362 at the multiply, although it runs), a Set of table numbers built
+# without a type argument that holds 5 and "5", and an order parsed from JSON whose cups is the
+# text "2" (cups + 1 prints 21). Panel (data-modes "errors types output"): 2 errors, 4 lines.
+#
+# Edits, all insert-only:
+#   1. arrays: `^?` on orders (a long inferred union array), `: Array<Order>` -> Types shows
+#      Order[]; the error moves to the coffee order (TS2741); `cups: 1, ` -> total 4.
+#   2. tuples: `^?` on best -> (string | number)[]; `: [string, number]` -> 0 errors; labels
+#      `item: ` + `cups: ` (back to back); a new `quick` tuple with an optional member.
+#   3. type arguments: `^?` on tables -> Set<unknown>; `<number>` -> TS2345 at the text table;
+#      `Number(` + `)` -> Set(1) { 5 }; a Map<number, string> of table -> customer.
+#   4. JSON.parse: `^?` on fromPhone.cups -> any; `<Order>` -> TS2558; one block writes the
+#      annotated line above and comments the old one out -> cups: number, Output still 21.
+# Board: array / tuple / type argument, drawn as the opening frames the lesson.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-06-arrays-tuples.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-06-arrays-tuples
+  title: "TypeScript course 06: Array၊ tuple နဲ့ type argument"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import type { Order } from "./order";
+
+        const orders = [
+          { item: "လက်ဖက်ရည်", cups: 2, table: 5 },
+          { item: "ကော်ဖီ", table: 3 },
+          { item: "သံပုရာရည်", cups: 1 },
+        ];
+        let totalCups = 0;
+        for (const order of orders) totalCups += order.cups;
+        console.log("ခွက် စုစုပေါင်း", totalCups);
+
+        const best = ["လက်ဖက်ရည်", 12];
+        console.log(best[0], best[1] * 1500, "ကျပ်");
+
+        const tables = new Set();
+        tables.add(5);
+        tables.add("5"); // QR menu
+        console.log("စားပွဲ", tables);
+
+        const saved = '{ "item": "ကော်ဖီ", "cups": "2" }';
+        const fromPhone = JSON.parse(saved);
+        console.log(fromPhone.item, fromPhone.cups + 1, "ခွက်");
+      src/order.ts: |
+        export type Order = {
+          item: string;
+          cups: number;
+          table?: number;
+        };
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: three ways to give many values a type.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "တန်ဖိုး အများကြီးကို type ပေးခြင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r1-label,
+        kind: text,
+        x: 280,
+        y: 245,
+        width: 150,
+        height: 36,
+        text: "array",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r1-box1,
+        kind: rectangle,
+        x: 470,
+        y: 236,
+        width: 110,
+        height: 54,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r1-t1,
+        kind: text,
+        x: 485,
+        y: 245,
+        width: 90,
+        height: 36,
+        text: "Order",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r1-box2,
+        kind: rectangle,
+        x: 590,
+        y: 236,
+        width: 110,
+        height: 54,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r1-t2,
+        kind: text,
+        x: 605,
+        y: 245,
+        width: 90,
+        height: 36,
+        text: "Order",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r1-box3,
+        kind: rectangle,
+        x: 710,
+        y: 236,
+        width: 110,
+        height: 54,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r1-t3,
+        kind: text,
+        x: 725,
+        y: 245,
+        width: 90,
+        height: 36,
+        text: "Order",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r1-more,
+        kind: text,
+        x: 840,
+        y: 245,
+        width: 60,
+        height: 36,
+        text: "…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r1-desc,
+        kind: text,
+        x: 470,
+        y: 300,
+        width: 600,
+        height: 36,
+        text: "type တူ၊ ဘယ်နှစ်ခု ဖြစ်ဖြစ် ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r2-label,
+        kind: text,
+        x: 280,
+        y: 380,
+        width: 150,
+        height: 36,
+        text: "tuple",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r2-box1,
+        kind: rectangle,
+        x: 470,
+        y: 371,
+        width: 150,
+        height: 54,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r2-t1,
+        kind: text,
+        x: 492,
+        y: 380,
+        width: 120,
+        height: 36,
+        text: "string",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r2-box2,
+        kind: rectangle,
+        x: 630,
+        y: 371,
+        width: 150,
+        height: 54,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: r2-t2,
+        kind: text,
+        x: 652,
+        y: 380,
+        width: 120,
+        height: 36,
+        text: "number",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r2-desc,
+        kind: text,
+        x: 470,
+        y: 435,
+        width: 600,
+        height: 36,
+        text: "နေရာလိုက် type သီးသန့်၊ အရေအတွက် ပုံသေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r3-label,
+        kind: text,
+        x: 280,
+        y: 515,
+        width: 240,
+        height: 36,
+        text: "type argument",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r3-code,
+        kind: text,
+        x: 560,
+        y: 515,
+        width: 300,
+        height: 36,
+        text: "new Set<number>()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r3-desc,
+        kind: text,
+        x: 560,
+        y: 570,
+        width: 500,
+        height: 36,
+        text: "အထဲမှာ ဘာ ထည့်မလဲ ကြိုပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3106
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "တန်ဖိုး အများကြီးရဲ့ type"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ အော်ဒါ တစ်ခုရဲ့ ပုံစံကို object type နဲ့ ရေးပြီး၊ type
+      alias နဲ့ Order ဆိုတဲ့ နာမည် ပေးခဲ့ပါတယ်။ ဒါပေမဲ့ ဆိုင်မှာ တစ်နေ့ကို အော်ဒါ တစ်ခုတည်း ရှိတာ
+      မဟုတ်ပါဘူး။ ဒီ lesson မှာတော့ တန်ဖိုး အများကြီးကို စုထားတဲ့ အခါ type ဘယ်လို ပေးမလဲ ဆိုတာ
+      ကြည့်သွားပါမယ်။ [[mark:draw-array]] ပထမ တစ်ခုက array ပါ။ array ဆိုတာ တန်ဖိုးတွေကို အစဉ်လိုက်
+      စီထားတဲ့ စာရင်း ဖြစ်ပြီး၊ array type က အထဲက တန်ဖိုး တိုင်းဟာ type တစ်မျိုးတည်း ဖြစ်ရမယ်လို့
+      ပြောပါတယ်။ ဥပမာ အော်ဒါတွေရဲ့ array ဆိုရင် တစ်ခုချင်းစီက Order ဖြစ်ရပြီး၊ ဘယ်နှစ်ခု ပါပါ
+      ရပါတယ်။ [[mark:draw-tuple]] ဒုတိယက tuple ပါ။ tuple ဆိုတာ အရေအတွက် သတ်မှတ်ထားပြီး နေရာ
+      တစ်ခုချင်းစီမှာ type သီးသန့် ရှိတဲ့ array ပါ။ ဥပမာ ပထမ နေရာမှာ string ထား၊ ဒုတိယ နေရာမှာ
+      number ထား ဆိုပြီး နေရာလိုက် သတ်မှတ်တာပါ။ [[mark:draw-argument]] တတိယကတော့ type argument ပါ။
+      Set လို၊ Map လို တန်ဖိုးတွေ ထည့်သိမ်းတဲ့ container တစ်ခုကို ဆောက်တဲ့ အခါ၊ နာမည်ရဲ့ နောက်မှာ
+      type တစ်ခု ထည့်ပေးပြီး အထဲမှာ ဘာ ထည့်မလဲ ဆိုတာ ကြိုပြောလို့ ရပါတယ်။ အဲဒီလို ပေးလိုက်တဲ့ type
+      ကို type argument လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations (arrays and tuples, passing types to functions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (arrays)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#arrays",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (tuple types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-array
+        type: whiteboard.apply
+        at: { mark: draw-array }
+        upsertIds: [r1-label, r1-box1, r1-t1, r1-box2, r1-t2, r1-box3, r1-t3, r1-more, r1-desc]
+        drawMs: 3600
+      - id: draw-tuple
+        type: whiteboard.apply
+        at: { mark: draw-tuple }
+        upsertIds: [r2-label, r2-box1, r2-t1, r2-box2, r2-t2, r2-desc]
+        drawMs: 3000
+      - id: draw-argument
+        type: whiteboard.apply
+        at: { mark: draw-argument }
+        upsertIds: [r3-label, r3-code, r3-desc]
+        drawMs: 2400
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:select-import]] ပြီးခဲ့တဲ့ lesson က Order type ကို သူ့ ဖိုင်
+      သီးသန့်ထဲ ရွှေ့ထားပြီး၊ main ဖိုင်က import type နဲ့ ယူသုံးထားပါတယ်။ [[mark:select-orders]] ဒီ array ထဲမှာ ဒီနေ့
+      အော်ဒါ သုံးခု ရှိပြီး၊ ကော်ဖီ အော်ဒါမှာ ခွက် အရေအတွက်ကို ရေးဖို့ ကျန်ခဲ့ပါတယ်။
+      [[mark:select-loop]] အောက်က loop က အော်ဒါ တစ်ခုချင်းစီရဲ့ ခွက် အရေအတွက်ကို ပေါင်းပြီး၊ ဒီနေ့
+      ခွက် စုစုပေါင်းကို တွက်ပါတယ်။ [[mark:select-best]] ဒီ array ကတော့ ဒီနေ့ အရောင်းရဆုံး
+      ပစ္စည်းနဲ့ ရောင်းရတဲ့ ခွက် အရေအတွက်ကို တွဲထားပြီး၊ အောက်က line မှာ ခွက် အရေအတွက်ကို ၁၅၀၀
+      ကျပ်နဲ့ မြှောက်ပြီး ရောင်းရငွေကို ထုတ်ပြပါတယ်။ [[mark:select-tables]] Set ကတော့ ထပ်နေတဲ့
+      တန်ဖိုးကို တစ်ခါပဲ သိမ်းတဲ့ container ပါ။ ဒီမှာ အော်ဒါ ဝင်လာတဲ့ စားပွဲ နံပါတ်တွေကို သိမ်းပြီး၊
+      ဒုတိယ တစ်ခုကတော့ QR menu ကနေ စာသား အနေနဲ့ ဝင်လာတာပါ။ [[mark:select-json]] နောက်ဆုံး
+      အပိုင်းကတော့ ဖုန်း app က စာသား အနေနဲ့ သိမ်းထားတဲ့ အော်ဒါကို object ပြန်ပြောင်းပြီး၊ customer က
+      တစ်ခွက် ထပ်မှာလို့ ခွက် အရေအတွက်ကို တစ် ပေါင်းပါတယ်။
+    sources:
+      - {
+          title: "MDN: Set",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set",
+        }
+      - {
+          title: "MDN: JSON.parse()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: select-import
+        type: editor.select
+        at: { mark: select-import }
+        target: { file: src/main.ts, text: 'import type { Order } from "./order";', occurrence: 1 }
+      - id: select-orders
+        type: editor.select
+        at: { mark: select-orders }
+        target:
+          {
+            file: src/main.ts,
+            text: "  { item: \"လက်ဖက်ရည်\", cups: 2, table: 5 },\n  { item: \"ကော်ဖီ\", table: 3 },\n  { item: \"သံပုရာရည်\", cups: 1 },",
+            occurrence: 1,
+          }
+      - id: select-loop
+        type: editor.select
+        at: { mark: select-loop }
+        target:
+          {
+            file: src/main.ts,
+            text: "for (const order of orders) totalCups += order.cups;",
+            occurrence: 1,
+          }
+      - id: select-best
+        type: editor.select
+        at: { mark: select-best }
+        target:
+          {
+            file: src/main.ts,
+            text: "const best = [\"လက်ဖက်ရည်\", 12];\nconsole.log(best[0], best[1] * 1500, \"ကျပ်\");",
+            occurrence: 1,
+          }
+      - id: select-tables
+        type: editor.select
+        at: { mark: select-tables }
+        target:
+          {
+            file: src/main.ts,
+            text: "tables.add(5);\ntables.add(\"5\"); // QR menu",
+            occurrence: 1,
+          }
+      - id: select-json
+        type: editor.select
+        at: { mark: select-json }
+        target:
+          {
+            file: src/main.ts,
+            text: "const fromPhone = JSON.parse(saved);\nconsole.log(fromPhone.item, fromPhone.cups + 1, \"ခွက်\");",
+            occurrence: 1,
+          }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] ညာဘက်က panel ရဲ့ Output ကို အရင် ကြည့်ရအောင်။ ခွက် စုစုပေါင်းက ဂဏန်း မဟုတ်ဘူး
+      ဆိုတဲ့ NaN ဖြစ်နေပါတယ်။ [[mark:read-set]] စားပွဲ Set ထဲမှာ ဂဏန်း ၅ နဲ့ စာသား ၅ နှစ်ခုလုံး
+      ပါနေလို့ စားပွဲ တစ်ခုတည်းကို နှစ်ခါ မှတ်ထားပြီး၊ ဖုန်းက အော်ဒါကလည်း သုံးခွက် ဖြစ်ရမယ့် အစား ၂၁
+      ခွက် ဖြစ်နေပါတယ်။ [[mark:read-errors]] Errors မှာတော့ error နှစ်ခုပဲ ရှိပါတယ်။ ပထမ တစ်ခုက loop
+      ထဲက ခွက် အရေအတွက်ဟာ undefined ဖြစ်နိုင်တယ်လို့ ပြောပြီး၊ ဒုတိယ တစ်ခုက အရောင်းရဆုံး ပစ္စည်းရဲ့ ခွက်
+      အရေအတွက်ကို မြှောက်တဲ့ နေရာမှာ ဂဏန်း ဖြစ်မှန်း မသေချာတဲ့ တန်ဖိုးကို မြှောက်လို့ မရဘူးလို့ ပြောပါတယ်။
+      ကျန်တဲ့ ပြဿနာ နှစ်ခုကိုတော့ TypeScript က ဘာမှ မပြောနိုင်သေးပါဘူး။
+    sources:
+      - {
+          title: "MDN: NaN",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/NaN",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (arrays)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#arrays",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-two-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-undefined
+        type: expect.preview
+        at: { afterAction: expect-start-two-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "18048" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-multiply
+        type: expect.preview
+        at: { afterAction: expect-start-undefined }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        attribute: { name: data-code, value: "2362" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-start-multiply }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-nan
+        type: expect.preview
+        at: { afterAction: expect-start-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "ခွက် စုစုပေါင်း NaN"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-revenue
+        type: expect.preview
+        at: { afterAction: expect-start-nan }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "လက်ဖက်ရည် 18000 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-set
+        type: expect.preview
+        at: { afterAction: expect-start-revenue }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "Set(2) { 5, '5' }"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-21
+        type: expect.preview
+        at: { afterAction: expect-start-set }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "ကော်ဖီ 21 ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: arrays
+    chapter: "Array type"
+    narration: >
+      [[mark:type-query-orders]] အော်ဒါ array ကို TypeScript က ဘယ်လို မြင်လဲ၊ query comment နဲ့
+      မေးကြည့်ရအောင်။ [[mark:read-query-orders]] Types မှာ ရှည်လျားတဲ့ type တစ်ခု ပေါ်လာပါပြီ။
+      အဆုံးက square bracket နှစ်ခုက array ကို ပြပြီး၊ အထဲမှာတော့ object ပုံစံ သုံးမျိုး ပါပါတယ်။
+      TypeScript က အော်ဒါ သုံးခုကို ကြည့်ပြီး ပုံစံ မတူတာ သုံးမျိုး ရှိတယ်လို့ infer လုပ်ထားလို့၊
+      ခွက် အရေအတွက် မပါတဲ့ ကော်ဖီ အော်ဒါကိုလည်း လက်ခံထားပြီး loop ထဲရောက်မှ error ပြနေတာပါ။
+      [[mark:type-array]] ဒါကြောင့် ဒီ array က အော်ဒါတွေရဲ့ array ဖြစ်တယ်လို့ ကိုယ်တိုင်
+      ကြေညာပေးပါမယ်။ ဒီမှာတော့ Array ဆိုတဲ့ နာမည်ရဲ့ နောက်မှာ Order ကို type argument အနေနဲ့ ပေးတဲ့
+      ရေးနည်းကို သုံးပါမယ်။ [[mark:read-array]] Types မှာ Order ရဲ့ နောက်မှာ square bracket နှစ်ခု
+      ပါတဲ့ ပုံစံကို ပြနေပါပြီ။ ကိုယ် ရေးတဲ့ ပုံစံနဲ့ မတူပေမယ့်၊ ဒီ နှစ်မျိုးက type တစ်ခုတည်းကို
+      ရေးနည်း နှစ်မျိုးပဲ ဖြစ်ပြီး၊ TypeScript က အတိုကောက် ပုံစံနဲ့ ပြတာပါ။ လက်တွေ့မှာလည်း အတိုကောက်
+      ပုံစံကို ပိုသုံးကြပါတယ်။ [[mark:select-coffee]] Errors မှာလည်း loop ထဲက error ပျောက်သွားပြီး၊
+      ကော်ဖီ အော်ဒါမှာ ခွက် အရေအတွက် မပါဘူး၊ ဒါပေမဲ့ Order type က လိုအပ်တယ် ဆိုတဲ့ error
+      ပေါ်လာပါပြီ။ array ရဲ့ type ကို ကြေညာလိုက်တော့ အထဲက တန်ဖိုး တစ်ခုချင်းစီကို စစ်ပြီး၊ အမှား
+      စဖြစ်တဲ့ နေရာကို တန်းပြပေးတာပါ။ [[mark:type-cups]] ကော်ဖီ အော်ဒါမှာ ခွက် အရေအတွက်ကို
+      ထည့်ပေးလိုက်ပါမယ်။ [[mark:read-cups]] error ပျောက်သွားပြီး၊ Output မှာ ခွက် စုစုပေါင်းက ၄ ခွက်
+      ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations (arrays, arrays of objects)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (arrays: number[] and Array<number>)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#arrays",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (the Array type)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#the-array-type",
+        }
+    actions:
+      - id: type-query-orders
+        type: editor.type
+        at: { mark: type-query-orders }
+        target:
+          {
+            file: src/main.ts,
+            after: "for (const order of orders) totalCups += order.cups;\n",
+            occurrence: 1,
+          }
+        text: "//                  ^?\n"
+        cadence: fast-explainer
+      - id: expect-orders-inferred
+        type: expect.preview
+        at: { afterAction: type-query-orders }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "const orders: ({"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-array
+        type: editor.type
+        at: { mark: type-array }
+        target: { file: src/main.ts, after: "const orders", occurrence: 1 }
+        text: ": Array<Order>"
+      - id: expect-array-type
+        type: expect.preview
+        at: { afterAction: type-array }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "const orders: Order[]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-array-errors
+        type: expect.preview
+        at: { afterAction: expect-array-type }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-array-missing
+        type: expect.preview
+        at: { afterAction: expect-array-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'cups' is missing in type '{ item: string; table: number; }' but required in type 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-coffee
+        type: editor.select
+        at: { mark: select-coffee }
+        target: { file: src/main.ts, text: '{ item: "ကော်ဖီ", table: 3 }', occurrence: 1 }
+      - id: type-cups
+        type: editor.type
+        at: { mark: type-cups }
+        target: { file: src/main.ts, after: '  { item: "ကော်ဖီ", ', occurrence: 1 }
+        text: "cups: 1, "
+      - id: expect-cups-one-error
+        type: expect.preview
+        at: { afterAction: type-cups }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cups-total
+        type: expect.preview
+        at: { afterAction: expect-cups-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "ခွက် စုစုပေါင်း 4"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: tuples
+    chapter: "Tuple"
+    narration: >
+      [[mark:type-query-best]] အခု အရောင်းရဆုံး ပစ္စည်းကို မှတ်ထားတဲ့ array ရဲ့ type ကို မေးကြည့်ရအောင်။
+      [[mark:read-query-best]] string ဒါမှမဟုတ် number တွေရဲ့ array လို့ ပြနေပါတယ်။ ဆိုလိုတာက ဘယ်
+      နေရာမှာ မဆို string ဖြစ်နိုင်သလို number လည်း ဖြစ်နိုင်တယ် ဆိုတာပါ။ ဒါကြောင့် ဒုတိယ နေရာက
+      ဂဏန်း ဖြစ်မယ်လို့ မသေချာလို့ မြှောက်တဲ့ နေရာမှာ error ပြနေတာပါ။ Output မှာ ရောင်းရငွေက
+      မှန်နေတာကိုလည်း သတိထား ကြည့်ပါ။ run တဲ့ အချိန်မှာ တကယ့် တန်ဖိုးက ဂဏန်း ဖြစ်နေပေမယ့်၊
+      TypeScript က ဒီ array ရဲ့ ပုံစံကို မသိလို့ပါ။ [[mark:type-tuple]] ဒါကြောင့် ပထမ နေရာက string
+      ဖြစ်ပြီး ဒုတိယ နေရာက number ဖြစ်တဲ့ tuple type ကို ထည့်ပေးပါမယ်။ [[mark:read-tuple]] error
+      ပျောက်သွားပြီး၊ Types မှာ square bracket ထဲမှာ string နဲ့ number ကို အစဉ်လိုက် ပြနေပါပြီ။
+      tuple က နေရာ တစ်ခုချင်းစီရဲ့ type ကို မှတ်ထားလို့ ဒုတိယ နေရာက number ဆိုတာ သိသွားပြီး၊
+      အရေအတွက်လည်း ပုံသေ ဖြစ်လို့ တန်ဖိုး သုံးခု ထည့်ရင် error ပြပါလိမ့်မယ်။ [[mark:type-labels]]
+      နေရာ တစ်ခုချင်းစီကို နာမည်လည်း ပေးလို့ ရပါတယ်။ ပထမ နေရာကို ပစ္စည်းနာမည်၊ ဒုတိယ နေရာကို ခွက်
+      အရေအတွက် ဆိုပြီး နာမည် ပေးပါမယ်။ [[mark:read-labels]] Types မှာ နာမည်တွေ ပါလာပါပြီ။ ဒီ
+      နာမည်တွေက type ကို မပြောင်းပါဘူး၊ code ဖတ်တဲ့သူ နားလည်လွယ်အောင် ထည့်တာပါ။ [[mark:type-quick]]
+      နေရာ တစ်ခုကို optional လည်း လုပ်လို့ ရပါတယ်။ ကောင်တာက အမြန် အော်ဒါအတွက် tuple အသစ် တစ်ခု
+      ရေးပါမယ်။ ခွက် အရေအတွက်ရဲ့ နာမည်နောက်မှာ question mark ပါလို့၊ ပစ္စည်းနာမည် တစ်ခုတည်းနဲ့လည်း
+      ရေးလို့ ရပါတယ်။ [[mark:read-quick]] Types မှာ ဒုတိယ နေရာကို number ဒါမှမဟုတ် undefined လို့
+      ပြနေပါတယ်။ ပြီးခဲ့တဲ့ lesson က optional property လိုပဲ၊ မပါဘဲ နေနိုင်တဲ့ နေရာ ဖြစ်လို့ undefined
+      ပါလာတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations (tuples, named tuples, optional members)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (tuple types, optional tuple elements)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types",
+        }
+      - {
+          title: "TypeScript 4.0 release notes: labeled tuple elements",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#labeled-tuple-elements",
+        }
+    actions:
+      - id: type-query-best
+        type: editor.type
+        at: { mark: type-query-best }
+        target: { file: src/main.ts, after: "const best = [\"လက်ဖက်ရည်\", 12];\n", occurrence: 1 }
+        text: "//    ^?\n"
+      - id: expect-best-array
+        type: expect.preview
+        at: { afterAction: type-query-best }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const best: (string | number)[]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-tuple
+        type: editor.type
+        at: { mark: type-tuple }
+        target: { file: src/main.ts, after: "const best", occurrence: 1 }
+        text: ": [string, number]"
+      - id: expect-tuple-clean
+        type: expect.preview
+        at: { afterAction: type-tuple }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tuple-type
+        type: expect.preview
+        at: { afterAction: expect-tuple-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const best: [string, number]" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-label-item
+        type: editor.type
+        at: { mark: type-labels }
+        target: { file: src/main.ts, after: "const best: [", occurrence: 1 }
+        text: "item: "
+        cadence: fast-explainer
+      - id: type-label-cups
+        type: editor.type
+        at: { afterAction: type-label-item }
+        target: { file: src/main.ts, after: "const best: [item: string, ", occurrence: 1 }
+        text: "cups: "
+        cadence: fast-explainer
+      - id: expect-labels
+        type: expect.preview
+        at: { afterAction: type-label-cups }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const best: [item: string, cups: number]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-quick
+        type: editor.type
+        at: { mark: type-quick }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(best[0], best[1] * 1500, \"ကျပ်\");\n",
+            occurrence: 1,
+          }
+        text: "const quick: [item: string, cups?: number] = [\"သံပုရာရည်\"];\n//    ^?\n"
+        cadence: line-by-line
+      - id: expect-quick
+        type: expect.preview
+        at: { afterAction: type-quick }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute:
+          { name: data-type, value: "const quick: [item: string, cups?: number | undefined]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-quick-clean
+        type: expect.preview
+        at: { afterAction: expect-quick }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: type-arguments
+    chapter: "Set၊ Map နဲ့ type argument"
+    narration: >
+      [[mark:type-query-tables]] အခု စားပွဲ နံပါတ်တွေကို သိမ်းတဲ့ Set ကို query comment နဲ့
+      မေးကြည့်ရအောင်။ [[mark:read-query-tables]] unknown တွေရဲ့ Set လို့ ပြနေပါတယ်။ unknown ဆိုတာ ဘာ
+      type မှန်း မသိဘူး ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ Set ကို ဆောက်တဲ့ အခါ ဘာ ထည့်မလဲ မပြောခဲ့လို့၊ စာသား
+      ဖြစ်နေတဲ့ စားပွဲ နံပါတ်ကိုလည်း TypeScript က လက်ခံလိုက်တာပါ။ [[mark:type-set-argument]] Set ရဲ့
+      နာမည်နောက်မှာ number ကို type argument အနေနဲ့ ပေးလိုက်ပါမယ်။ [[mark:read-set-argument]] Types
+      မှာ number တွေရဲ့ Set ဖြစ်သွားပြီး၊ Errors မှာတော့ QR menu က စာသားကို number ရှိရမယ့် နေရာမှာ
+      ထည့်လို့ မရဘူး ဆိုတဲ့ error ပေါ်လာပါပြီ။ [[mark:type-number]] ဒါကြောင့် စာသားကို ဂဏန်း
+      ပြောင်းပေးတဲ့ Number function နဲ့ ပတ်ပေးပါမယ်။ [[mark:read-number]] error ပျောက်သွားပြီး၊
+      Output မှာ စားပွဲ Set ထဲမှာ ၅ တစ်ခုတည်း ကျန်ပါတော့တယ်။ [[mark:type-map]] Map ကတော့ key နဲ့
+      value ကို တွဲသိမ်းတဲ့ container ပါ။ စားပွဲ နံပါတ်ကနေ customer နာမည်ကို ရှာလို့ ရအောင် Map
+      တစ်ခု ဆောက်ပါမယ်။ ဒီတစ်ခါ type argument နှစ်ခု ပေးရပြီး၊ ပထမ တစ်ခုက key ဖြစ်တဲ့ စားပွဲ
+      နံပါတ်အတွက်၊ ဒုတိယ တစ်ခုက value ဖြစ်တဲ့ customer နာမည်အတွက်ပါ။ [[mark:read-map]] Output မှာ
+      စားပွဲ ၅ ကနေ မြမြ ကို ညွှန်ထားတဲ့ Map ပေါ်လာပါပြီ။ ဒီ Map ထဲကို စာသား key ဒါမှမဟုတ် ဂဏန်း
+      value ထည့်ရင်တော့ TypeScript က error ပြပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations (passing types to Set and Map)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (type arguments)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html",
+        }
+      - {
+          title: "MDN: Map",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map",
+        }
+      - {
+          title: "MDN: Number() constructor (conversion)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/Number",
+        }
+    actions:
+      - id: type-query-tables
+        type: editor.type
+        at: { mark: type-query-tables }
+        target: { file: src/main.ts, after: "const tables = new Set();\n", occurrence: 1 }
+        text: "//    ^?\n"
+      - id: expect-set-unknown
+        type: expect.preview
+        at: { afterAction: type-query-tables }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-4 }
+        attribute: { name: data-type, value: "const tables: Set<unknown>" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-set-argument
+        type: editor.type
+        at: { mark: type-set-argument }
+        target: { file: src/main.ts, after: "const tables = new Set", occurrence: 1 }
+        text: "<number>"
+      - id: expect-set-number
+        type: expect.preview
+        at: { afterAction: type-set-argument }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-4 }
+        attribute: { name: data-type, value: "const tables: Set<number>" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-set-error
+        type: expect.preview
+        at: { afterAction: expect-set-number }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Argument of type 'string' is not assignable to parameter of type 'number'."
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-number-open
+        type: editor.type
+        at: { mark: type-number }
+        target: { file: src/main.ts, after: "tables.add(", occurrence: 2 }
+        text: "Number("
+        cadence: fast-explainer
+      - id: type-number-close
+        type: editor.type
+        at: { afterAction: type-number-open }
+        target: { file: src/main.ts, after: 'tables.add(Number("5"', occurrence: 1 }
+        text: ")"
+        cadence: fast-explainer
+      - id: expect-number-clean
+        type: expect.preview
+        at: { afterAction: type-number-close }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-number-set
+        type: expect.preview
+        at: { afterAction: expect-number-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "Set(1) { 5 }"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-map
+        type: editor.type
+        at: { mark: type-map }
+        target: { file: src/main.ts, after: "console.log(\"စားပွဲ\", tables);\n", occurrence: 1 }
+        text: "const seats = new Map<number, string>();\nseats.set(5, \"မြမြ\");\nconsole.log(seats);\n"
+        cadence: line-by-line
+      - id: expect-map-output
+        type: expect.preview
+        at: { afterAction: type-map }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "Map(1) { 5 => 'မြမြ' }"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-map-clean
+        type: expect.preview
+        at: { afterAction: expect-map-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: json
+    chapter: "JSON parse နဲ့ any"
+    narration: >
+      [[mark:type-query-cups]] နောက်ဆုံး ပြဿနာ ဖြစ်တဲ့ ဖုန်းက အော်ဒါကို ကြည့်ရအောင်။ ခွက်
+      အရေအတွက်ကို query comment နဲ့ မေးကြည့်ပါမယ်။ [[mark:read-query-cups]] any လို့ ပြနေပါတယ်။ JSON
+      parse က စာသားကနေ ဘာ ထွက်လာမလဲ ကြိုမသိနိုင်လို့ any ကို ပြန်ပေးတာ ဖြစ်ပြီး၊ any ဖြစ်နေတော့
+      TypeScript က ဘာမှ စစ်မပေးပါဘူး။ [[mark:type-parse-argument]] Set မှာလိုပဲ type argument
+      ပေးကြည့်ရအောင်။ [[mark:read-parse-argument]] ဒီ function က type argument လုံးဝ မယူဘူး ဆိုတဲ့
+      error ပေါ်လာပါပြီ။ function တိုင်းက type argument လက်ခံတာ မဟုတ်ပါဘူး။ ဘယ် function က လက်ခံလဲ
+      ဆိုတာကို VS Code မှာ function နာမည်ပေါ် mouse တင်ကြည့်ပြီး သိနိုင်ပါတယ်။ လက်ခံတဲ့ function ဆိုရင်
+      နာမည်ရဲ့ နောက်မှာ angle bracket ပါနေတာကို တွေ့ရပါမယ်။ [[mark:type-parse-fix]]
+      ဒါကြောင့် variable ကိုပဲ Order type လို့ annotation ထည့်တဲ့ line အသစ် ရေးပြီး၊ ခုနက line ကို
+      comment လုပ်ပြီး ပိတ်ထားပါမယ်။ [[mark:read-parse-fix]] error ပျောက်သွားပြီး၊ Types မှာ ခွက်
+      အရေအတွက်ကို number လို့ ပြနေပါပြီ။ [[mark:read-faith]] ဒါပေမဲ့ Output ကို ကြည့်ပါ။ ၂၁ ဆိုတဲ့
+      အဖြေ မှားက ဒီ အတိုင်း ရှိနေပါသေးတယ်။ ဖုန်းထဲက data မှာ ခွက် အရေအတွက်ကို စာသား အနေနဲ့
+      သိမ်းထားလို့၊ တစ် ပေါင်းလိုက်တော့ စာသား ဆက်သွားတာပါ။ [[mark:explain-faith]] annotation က ဒီ
+      object ဟာ Order ဖြစ်တယ်လို့ TypeScript ကို ကတိပေးလိုက်တာ ဖြစ်ပြီး၊ run တဲ့ အချိန်မှာ data ကို
+      တကယ် စစ်ပေးတာ မဟုတ်ပါဘူး။ ဒါကြောင့် အပြင်ကနေ ဝင်လာတဲ့ data ကို annotation ပေးတဲ့ အခါ
+      သတိထားရပါမယ်။ data ကို တကယ် စစ်ပေးတဲ့ နည်းကိုတော့ နောက်ပိုင်း Zod lesson မှာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations (not all functions can receive types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+      - {
+          title: "MDN: JSON.parse()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (any)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#any",
+        }
+    actions:
+      - id: type-query-cups
+        type: editor.type
+        at: { mark: type-query-cups }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(fromPhone.item, fromPhone.cups + 1, \"ခွက်\");\n",
+            occurrence: 1,
+          }
+        text: "//                                    ^?\n"
+        cadence: block
+      - id: expect-cups-any
+        type: expect.preview
+        at: { afterAction: type-query-cups }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-5 }
+        attribute: { name: data-type, value: "any" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-parse-argument
+        type: editor.type
+        at: { mark: type-parse-argument }
+        target: { file: src/main.ts, after: "JSON.parse", occurrence: 1 }
+        text: "<Order>"
+      - id: expect-parse-error-count
+        type: expect.preview
+        at: { afterAction: type-parse-argument }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-parse-error
+        type: expect.preview
+        at: { afterAction: expect-parse-error-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Expected 0 type arguments, but got 1."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-parse-fix
+        type: editor.type
+        at: { mark: type-parse-fix }
+        target:
+          {
+            file: src/main.ts,
+            after: "const saved = '{ \"item\": \"ကော်ဖီ\", \"cups\": \"2\" }';\n",
+            occurrence: 1,
+          }
+        text: "const fromPhone: Order = JSON.parse(saved);\n// "
+        cadence: block
+      - id: expect-parse-clean
+        type: expect.preview
+        at: { afterAction: type-parse-fix }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cups-number
+        type: expect.preview
+        at: { afterAction: expect-parse-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-5 }
+        attribute: { name: data-type, value: "(property) cups: number" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-still-21
+        type: expect.preview
+        at: { mark: read-faith }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "ကော်ဖီ 21 ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap-array]] ဒါဆို ပြန်ချုပ်ရရင်၊ array type က အထဲက တန်ဖိုး တိုင်း type တူရမယ်လို့
+      ပြောပြီး၊ ရေးနည်း နှစ်မျိုး ရှိပေမယ့် type တစ်ခုတည်းပါ။ အော်ဒါတွေရဲ့ array လို့ ကြေညာထားရင်
+      အထဲက အော်ဒါ တိုင်းကို စစ်ပေးပါတယ်။ [[mark:recap-tuple]] tuple ကတော့ နေရာ တစ်ခုချင်းစီရဲ့ type
+      နဲ့ အရေအတွက်ကို မှတ်ထားပြီး၊ နေရာတွေကို နာမည် ပေးတာ၊ optional လုပ်တာလည်း ရပါတယ်။
+      [[mark:recap-arguments]] Set နဲ့ Map လို container တွေကို type argument နဲ့ ဘာ ထည့်မလဲ
+      ပြောလို့ ရပေမယ့်၊ JSON parse လို type argument မယူတဲ့ function တွေလည်း ရှိပါတယ်။ အဲဒီ ရလဒ်ကို
+      annotation ပေးရင် TypeScript က ယုံလိုက်ရုံ ဖြစ်လို့၊ data မှန်ဖို့က ကိုယ့် တာဝန်ပါ။ နောက်
+      lesson မှာတော့ function တွေရဲ့ parameter တွေနဲ့ ပြန်ပေးတဲ့ တန်ဖိုးတွေကို type ပေးတဲ့ နည်းကို
+      အသေးစိတ် ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: select-array-recap
+        type: editor.select
+        at: { mark: recap-array }
+        target: { file: src/main.ts, text: "Array<Order>", occurrence: 1 }
+      - id: select-tuple-recap
+        type: editor.select
+        at: { mark: recap-tuple }
+        target: { file: src/main.ts, text: "[item: string, cups: number]", occurrence: 1 }
+      - id: select-arguments-recap
+        type: editor.select
+        at: { mark: recap-arguments }
+        target: { file: src/main.ts, text: "new Map<number, string>()", occurrence: 1 }
+      - id: expect-file-orders
+        type: expect.file
+        at: { afterAction: select-array-recap }
+        path: src/main.ts
+        contains: "const orders: Array<Order> = [\n  { item: \"လက်ဖက်ရည်\", cups: 2, table: 5 },\n  { item: \"ကော်ဖီ\", cups: 1, table: 3 },"
+      - id: expect-file-tuples
+        type: expect.file
+        at: { afterAction: expect-file-orders }
+        path: src/main.ts
+        contains: "const best: [item: string, cups: number] = [\"လက်ဖက်ရည်\", 12];\n//    ^?\nconsole.log(best[0], best[1] * 1500, \"ကျပ်\");\nconst quick: [item: string, cups?: number] = [\"သံပုရာရည်\"];"
+      - id: expect-file-set
+        type: expect.file
+        at: { afterAction: expect-file-tuples }
+        path: src/main.ts
+        contains: "const tables = new Set<number>();\n//    ^?\ntables.add(5);\ntables.add(Number(\"5\")); // QR menu"
+      - id: expect-file-json
+        type: expect.file
+        at: { afterAction: expect-file-set }
+        path: src/main.ts
+        contains: "const fromPhone: Order = JSON.parse(saved);\n// const fromPhone = JSON.parse<Order>(saved);"
+checks:
+  - { type: timing.p95Ms, max: 300 }
