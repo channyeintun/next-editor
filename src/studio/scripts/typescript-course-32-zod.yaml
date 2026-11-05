@@ -1,0 +1,1482 @@
+# TypeScript course, lesson 32: runtime validation with Zod (Burmese).
+#
+# Start state (ws/, from base-zod): src/inbox.ts — four orders as JSON text "from the QR-code app"
+# (a good one, cups as the text "two", sugar "none", zero cups); src/main.ts — imports z, a
+# hand-written one-line `type Order`, ticket(order: Order) and a loop that JSON.parses each message
+# into `const order: Order`. Panel data-modes "errors types output js", data-js src/main.ts.
+# Panel at the start: 0 errors; Output 4 tickets, three of them wrong; the JavaScript output has no
+# trace of Order (types vanish at run time).
+# Edits, all insert-only: an OrderSchema block (z.object, z.string, z.number, z.enum — it stays in
+# the JavaScript output); a parse line (old line commented out) -> the run stops with an
+# "Uncaught ZodError" at the second order; a safeParse block (+ prettifyError, continue,
+# result.data; the parse line commented out) -> 4 lines, two readable errors; `.int().positive()`
+# -> the zero-cups order is rejected; `type Order = z.infer<typeof OrderSchema>` + a query (the
+# hand-written type commented out); `note: z.string().optional()` -> the query gains `note?`.
+# Boards: (A) types vanish at run time, outside data, a schema is a run-time value, the type comes
+# from it; (B) safeParse's result is a discriminated union, parse throws.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-32-zod.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-32-zod
+  title: "TypeScript course 32: Zod နဲ့ runtime validation"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/modules-zod.js: |
+        // TypeScript course · the packages a lesson's program may import while it runs in the panel.
+        import * as zod from "zod";
+
+        window.__courseModules = { ...window.__courseModules, zod };
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/modules-zod.js"></script>
+            <script type="module" src="/course/panel.js" data-modes="errors types output js" data-js="src/main.ts"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-zod",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          },
+          "dependencies": {
+            "zod": "4.6.7"
+          }
+        }
+      src/inbox.ts: |
+        // QR code app ကနေ စာသားအနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေ
+        export const inbox = [
+          '{"item":"လက်ဖက်ရည်","cups":2,"sugar":"less"}',
+          '{"item":"ကော်ဖီ","cups":"two","sugar":"normal"}',
+          '{"item":"သံပုရာရည်","cups":1,"sugar":"none"}',
+          '{"item":"ကော်ဖီ","cups":0,"sugar":"less"}',
+        ];
+      src/main.ts: |
+        import { z } from "zod";
+        import { inbox } from "./inbox";
+
+        type Order = { item: string; cups: number; sugar: "less" | "normal" | "extra" };
+
+        function ticket(order: Order) {
+          return `${order.cups} ခွက် ${order.item} · သကြား ${order.sugar}`;
+        }
+
+        for (const text of inbox) {
+          const order: Order = JSON.parse(text);
+          console.log(ticket(order));
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+          // Pre-bundle zod up front so Vite never discovers it mid-lesson and reloads.
+          optimizeDeps: { include: ["zod"] },
+        });
+  whiteboardAssets:
+    # Board A: types exist only while TypeScript checks; a Zod schema is a value that also runs.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Type တွေ run ချိန်မှာ မရှိတော့ဘူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-ts-box,
+        kind: rectangle,
+        x: 270,
+        y: 245,
+        width: 330,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-ts-name,
+        kind: text,
+        x: 290,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "TypeScript စစ်ချိန်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-ts-sub,
+        kind: text,
+        x: 290,
+        y: 312,
+        width: 300,
+        height: 40,
+        text: "type Order ✓",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 612,
+        y: 285,
+        width: 56,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-js-box,
+        kind: rectangle,
+        x: 680,
+        y: 245,
+        width: 370,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-js-name,
+        kind: text,
+        x: 700,
+        y: 260,
+        width: 340,
+        height: 40,
+        text: "run ချိန် (JavaScript)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-js-sub,
+        kind: text,
+        x: 700,
+        y: 312,
+        width: 300,
+        height: 40,
+        text: "type မရှိတော့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-outside,
+        kind: text,
+        x: 270,
+        y: 410,
+        width: 820,
+        height: 40,
+        text: "form · API · JSON.parse → စစ်မထားတဲ့ data",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-zod,
+        kind: text,
+        x: 270,
+        y: 480,
+        width: 820,
+        height: 40,
+        text: "Zod schema = run ချိန်မှာ စစ်ပေးတဲ့ တန်ဖိုး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-infer,
+        kind: text,
+        x: 270,
+        y: 550,
+        width: 820,
+        height: 40,
+        text: "type ကိုလည်း schema ကနေ ထုတ်ယူ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board B: safeParse returns a discriminated union; parse throws.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "safeParse ရဲ့ ရလဒ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-ok-box,
+        kind: rectangle,
+        x: 270,
+        y: 245,
+        width: 360,
+        height: 120,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-ok-1,
+        kind: text,
+        x: 290,
+        y: 260,
+        width: 320,
+        height: 40,
+        text: "success: true",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-ok-2,
+        kind: text,
+        x: 290,
+        y: 312,
+        width: 320,
+        height: 40,
+        text: "data → Order",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-bad-box,
+        kind: rectangle,
+        x: 690,
+        y: 245,
+        width: 360,
+        height: 120,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-bad-1,
+        kind: text,
+        x: 710,
+        y: 260,
+        width: 320,
+        height: 40,
+        text: "success: false",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-bad-2,
+        kind: text,
+        x: 710,
+        y: 312,
+        width: 320,
+        height: 40,
+        text: "error → ZodError",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-union,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 820,
+        height: 40,
+        text: "success နဲ့ ခွဲတဲ့ discriminated union",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-parse,
+        kind: text,
+        x: 270,
+        y: 495,
+        width: 820,
+        height: 40,
+        text: "parse → throw · safeParse → ရလဒ် ပြန်ပေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3232
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Run ချိန်မှာ type မရှိတော့ဘူး"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ type predicate နဲ့ assertion function ကို ကိုယ်တိုင်
+      ရေးခဲ့ပြီး၊ အထဲက စစ်ဆေးချက် မပြည့်စုံရင်တောင် TypeScript က ကိုယ့် ကတိကို ယုံလိုက်တာကို
+      မြင်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ အပြင်ကနေ ဝင်လာတဲ့ data ကို Zod ဆိုတဲ့ library နဲ့ run နေတဲ့
+      အချိန်မှာ ဘယ်လို စစ်မလဲ ဆိုတာ ကြည့်သွားပါမယ်။ [[mark:draw-ts]] ပထမဆုံး သိထားရမှာက၊ type တွေဟာ
+      TypeScript က code ကို စစ်နေတဲ့ အချိန်မှာပဲ ရှိတယ် ဆိုတာပါ။ [[mark:draw-run]] JavaScript အဖြစ်
+      ပြောင်းလိုက်တာနဲ့ type တွေ အကုန် ပျောက်သွားလို့၊ program run နေတဲ့ အချိန်မှာ Order ဆိုတဲ့ type က
+      ဘယ်နေရာမှာမှ မရှိတော့ပါဘူး။ [[mark:draw-outside]] ဒါကြောင့် ဖောင်ကနေ ဝင်လာတဲ့ တန်ဖိုး၊ API ကနေ
+      ပြန်လာတဲ့ data တွေ၊ JSON parse လုပ်ထားတဲ့ စာသား စတာတွေကို type annotation ပေးထားရုံနဲ့ စစ်ပြီးသား
+      မဖြစ်ပါဘူး။ TypeScript က ကိုယ့် annotation ကို ယုံလိုက်တာပဲ ရှိပါတယ်။ [[mark:draw-zod]] Zod
+      မှာတော့ data ရဲ့ ပုံစံကို schema လို့ ခေါ်တဲ့ JavaScript တန်ဖိုး တစ်ခုနဲ့ ရေးပါတယ်။ schema က
+      တန်ဖိုး ဖြစ်လို့ run နေတဲ့ အချိန်မှာလည်း ရှိနေပြီး၊ data ကို တကယ် စစ်ပေးနိုင်ပါတယ်။
+      [[mark:draw-infer]] ပြီးတော့ အဲဒီ schema ကနေ TypeScript type ကိုပါ ထုတ်ယူလို့ ရတဲ့အတွက်၊ ပုံစံကို
+      နေရာ တစ်ခုတည်းမှာပဲ ရေးဖို့ လိုပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript: Zod tutorial",
+          url: "https://www.totaltypescript.com/tutorials/zod",
+        }
+      - { title: "Zod: Intro", url: "https://zod.dev/" }
+      - {
+          title: "TypeScript Handbook: The Basics (erased types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/basic-types.html#erased-types",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-ts
+        type: whiteboard.apply
+        at: { mark: draw-ts }
+        upsertIds: [a-ts-box, a-ts-name, a-ts-sub]
+        drawMs: 2000
+      - id: draw-run
+        type: whiteboard.apply
+        at: { mark: draw-run }
+        upsertIds: [a-arrow, a-js-box, a-js-name, a-js-sub]
+        drawMs: 2600
+      - id: draw-outside
+        type: whiteboard.apply
+        at: { mark: draw-outside }
+        upsertIds: [a-outside]
+        drawMs: 2000
+      - id: draw-zod
+        type: whiteboard.apply
+        at: { mark: draw-zod }
+        upsertIds: [a-zod]
+        drawMs: 2000
+      - id: draw-infer
+        type: whiteboard.apply
+        at: { mark: draw-infer }
+        upsertIds: [a-infer]
+        drawMs: 1600
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-inbox]] ဒါက QR code app ကနေ
+      စာသားအနေနဲ့ ဝင်လာတဲ့ အော်ဒါ လေးခုပါ။ [[mark:select-good]] ပထမ တစ်ခုက လက်ဖက်ရည် နှစ်ခွက်၊ သကြား
+      နည်းနည်းနဲ့ မှန်မှန်ကန်ကန် ဝင်လာပါတယ်။ [[mark:select-text-cups]] ဒုတိယ တစ်ခုမှာတော့ ခွက်
+      အရေအတွက်ကို ဂဏန်း မဟုတ်ဘဲ စာလုံးနဲ့ ရေးထားပါတယ်။ [[mark:select-none]] တတိယ တစ်ခုမှာ ဆိုင်မှာ
+      မရှိတဲ့ သကြား အဆင့် ပါလာပြီး၊ [[mark:select-zero]] နောက်ဆုံး တစ်ခုကတော့ သုည ခွက် မှာထားပါတယ်။
+      [[mark:open-main]] main ဖိုင်မှာ Zod ကို import လုပ်ထားပြီးသား ဖြစ်ပါတယ်။ [[mark:select-type]]
+      အော်ဒါ တစ်ခုရဲ့ type ကို ကိုယ်တိုင် ရေးထားပြီး၊ [[mark:select-ticket]] ticket function က
+      မီးဖိုချောင်အတွက် စာကြောင်း တစ်ကြောင်း ထုတ်ပေးပါတယ်။ [[mark:select-parse]] loop ထဲမှာတော့ အော်ဒါ
+      စာသားကို JSON parse နဲ့ object ပြောင်းပြီး၊ Order type ကို annotation အနေနဲ့ ပေးထားပါတယ်။
+    sources:
+      - {
+          title: "MDN: JSON.parse()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse",
+        }
+      - {
+          title: "Total TypeScript: Zod tutorial (verify unknown APIs with an object schema)",
+          url: "https://www.totaltypescript.com/tutorials/zod/zod-section/object",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-inbox
+        type: workspace.openFile
+        at: { mark: open-inbox }
+        path: src/inbox.ts
+      - id: select-good
+        type: editor.select
+        at: { mark: select-good }
+        target:
+          {
+            file: src/inbox.ts,
+            text: '''{"item":"လက်ဖက်ရည်","cups":2,"sugar":"less"}''',
+            occurrence: 1,
+          }
+      - id: select-text-cups
+        type: editor.select
+        at: { mark: select-text-cups }
+        target: { file: src/inbox.ts, text: '"cups":"two"', occurrence: 1 }
+      - id: select-none
+        type: editor.select
+        at: { mark: select-none }
+        target: { file: src/inbox.ts, text: '"sugar":"none"', occurrence: 1 }
+      - id: select-zero
+        type: editor.select
+        at: { mark: select-zero }
+        target: { file: src/inbox.ts, text: '"cups":0', occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-type
+        type: editor.select
+        at: { mark: select-type }
+        target:
+          {
+            file: src/main.ts,
+            text: 'type Order = { item: string; cups: number; sugar: "less" | "normal" | "extra" };',
+            occurrence: 1,
+          }
+      - id: select-ticket
+        type: editor.select
+        at: { mark: select-ticket }
+        target:
+          {
+            file: src/main.ts,
+            text: "  return `${order.cups} ခွက် ${order.item} · သကြား ${order.sugar}`;",
+            occurrence: 1,
+          }
+      - id: select-parse
+        type: editor.select
+        at: { mark: select-parse }
+        target:
+          { file: src/main.ts, text: "  const order: Order = JSON.parse(text);", occurrence: 1 }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] panel ကို ကြည့်ရအောင်။ Errors အပိုင်းမှာ error တစ်ခုမှ မရှိဘဲ၊ Output မှာ
+      ticket လေးခုလုံး ထွက်လာပါတယ်။ ဒါပေမဲ့ ပထမ တစ်ခုပဲ မှန်ပါတယ်။ ဒုတိယ ticket မှာ ခွက် အရေအတွက်
+      နေရာမှာ စာလုံး ပေါ်နေပြီး၊ တတိယမှာ ဆိုင်မှာ မရှိတဲ့ သကြား အဆင့် ပါနေပါတယ်။ စတုတ္ထမှာတော့ သုည ခွက်
+      ဖြစ်နေပါတယ်။ JSON parse က any type ကို ပြန်ပေးလို့၊ Order လို့ annotation ပေးလိုက်တာကို TypeScript
+      က ဘာမှ မစစ်ဘဲ လက်ခံလိုက်တာပါ။ [[mark:read-js]] အောက်ဆုံးက JavaScript output ကို ကြည့်ပါ။ Order
+      type ရော annotation ရော မရှိတော့ပါဘူး။ run နေတဲ့ အချိန်မှာ ဒီ data ကို စစ်ပေးမယ့် code
+      တစ်ကြောင်းမှ မရှိတာ မြင်ရပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: The Basics (erased types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/basic-types.html#erased-types",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 4: Essential Types and Annotations (JSON.parse returns any)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/essential-types-and-annotations",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-no-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-four-lines
+        type: expect.preview
+        at: { afterAction: expect-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-text-cups
+        type: expect.preview
+        at: { afterAction: expect-four-lines }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "two ခွက် ကော်ဖီ · သကြား normal"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-sugar-none
+        type: expect.preview
+        at: { afterAction: expect-text-cups }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "1 ခွက် သံပုရာရည် · သကြား none"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-zero-cups
+        type: expect.preview
+        at: { afterAction: expect-sugar-none }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "0 ခွက် ကော်ဖီ · သကြား less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-js-no-type
+        type: expect.preview
+        at: { mark: read-js }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "const order = JSON.parse(text);"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: schema
+    chapter: "Zod schema"
+    narration: >
+      [[mark:type-schema]] ဒါဆို အော်ဒါရဲ့ ပုံစံကို Zod schema နဲ့ ရေးကြည့်ရအောင်။ import တွေရဲ့
+      အောက်မှာ schema တစ်ခု ထည့်ပါမယ်။ [[mark:select-object]] Zod ရဲ့ object function က object တစ်ခုမှာ
+      ဘယ် property တွေ ပါရမလဲ ဆိုတာ သတ်မှတ်ပေးပါတယ်။ [[mark:select-string-number]] item က string
+      ဖြစ်ရပြီး၊ cups က number ဖြစ်ရပါမယ်။ [[mark:select-enum]] sugar ကိုတော့ Zod ရဲ့ enum နဲ့
+      ရေးထားလို့၊ ဒီ စကားလုံး သုံးလုံးထဲက တစ်ခုခုပဲ ဖြစ်ရပါမယ်။ lesson ၁၉ က TypeScript enum မဟုတ်ဘဲ၊
+      ခွင့်ပြုတဲ့ စာသားတွေကို စာရင်းပေးတဲ့ Zod function ပါ။ [[mark:read-js-schema]] JavaScript output
+      ကို ပြန်ကြည့်ပါ။ type တွေ ပျောက်သွားပေမယ့်၊ schema ကတော့ JavaScript တန်ဖိုး ဖြစ်လို့ အဲဒီ ထဲမှာ
+      ဆက်ရှိနေပါတယ်။ ဒါကြောင့် run နေတဲ့ အချိန်မှာ data ကို စစ်ဖို့ သုံးလို့ ရပါတယ်။
+    sources:
+      - { title: "Zod: Basic usage (defining a schema)", url: "https://zod.dev/basics" }
+      - {
+          title: "Zod: Defining schemas (objects, strings, numbers, enums)",
+          url: "https://zod.dev/api",
+        }
+      - {
+          title: "Total TypeScript: Zod tutorial (be specific with allowed types)",
+          url: "https://www.totaltypescript.com/tutorials/zod/zod-section/union",
+        }
+    actions:
+      - id: type-schema
+        type: editor.type
+        at: { mark: type-schema, offsetMs: 300 }
+        target:
+          { file: src/main.ts, after: "import { inbox } from \"./inbox\";\n\n", occurrence: 1 }
+        text: "const OrderSchema = z.object({\n  item: z.string(),\n  cups: z.number(),\n  sugar: z.enum([\"less\", \"normal\", \"extra\"]),\n});\n\n"
+        cadence: block
+      - id: select-object
+        type: editor.select
+        at: { mark: select-object }
+        target: { file: src/main.ts, text: "const OrderSchema = z.object({", occurrence: 1 }
+      - id: select-string-number
+        type: editor.select
+        at: { mark: select-string-number }
+        target:
+          { file: src/main.ts, text: "  item: z.string(),\n  cups: z.number(),", occurrence: 1 }
+      - id: select-enum
+        type: editor.select
+        at: { mark: select-enum }
+        target: { file: src/main.ts, text: 'z.enum(["less", "normal", "extra"])', occurrence: 1 }
+      - id: expect-js-schema
+        type: expect.preview
+        at: { mark: read-js-schema }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "const OrderSchema = z.object({"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: parse
+    chapter: "parse နဲ့ safeParse"
+    narration: >
+      [[mark:type-parse]] ပထမဆုံး schema ရဲ့ parse method ကို သုံးကြည့်ပါမယ်။ JSON parse ရဲ့ ရလဒ်ကို
+      schema ရဲ့ parse ထဲ ထည့်တဲ့ line အသစ် ရေးပြီး၊ အဟောင်း line ကို comment လုပ်လိုက်ပါမယ်။
+      [[mark:read-parse-throw]] Output မှာ ပထမ ticket ပဲ ထွက်ပြီး၊ ဒုတိယ အော်ဒါမှာ ZodError ဆိုတဲ့
+      အနီရောင် error နဲ့ program ရပ်သွားပါပြီ။ parse က data မှန်ရင် data ကို ပြန်ပေးပြီး၊
+      မှားရင်တော့ error ကို throw လုပ်ပါတယ်။ [[mark:read-zod-error]] error ထဲမှာ cups ဆိုတဲ့ နေရာမှာ
+      number ကို မျှော်လင့်ထားပေမယ့် string ရောက်လာတယ် ဆိုတာ အသေးစိတ် ပါပါတယ်။ ဒါပေမဲ့ program
+      ဖတ်ဖို့ ရေးထားတဲ့ ပုံစံ ဖြစ်လို့ လူ ဖတ်ရ ခက်ပြီး၊ ကျန်တဲ့ အော်ဒါ နှစ်ခုကိုလည်း
+      မစစ်လိုက်ရတော့ပါဘူး။
+    sources:
+      - { title: "Zod: Basic usage (parsing data, handling errors)", url: "https://zod.dev/basics" }
+      - {
+          title: "Total TypeScript: Zod tutorial (runtime checking with Zod)",
+          url: "https://www.totaltypescript.com/tutorials/zod/zod-section/number",
+        }
+    actions:
+      - id: type-parse
+        type: editor.type
+        at: { mark: type-parse, offsetMs: 300 }
+        target: { file: src/main.ts, after: "for (const text of inbox) {\n  ", occurrence: 1 }
+        text: "const order: Order = OrderSchema.parse(JSON.parse(text));\n  // "
+        cadence: block
+      - id: expect-two-lines
+        type: expect.preview
+        at: { afterAction: type-parse }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-zod-error
+        type: expect.preview
+        at: { afterAction: expect-two-lines }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "Uncaught ZodError:"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-zod-error-level
+        type: expect.preview
+        at: { afterAction: expect-zod-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        attribute: { name: data-level, value: "error" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-zod-error-detail
+        type: expect.preview
+        at: { afterAction: expect-zod-error-level }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: '"message": "Invalid input: expected number, received string"'
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: safe-parse
+    narration: >
+      [[mark:board-result]] ဒီလို program ရပ်မသွားစေချင်ရင် safe parse ကို သုံးပါတယ်။ [[mark:draw-ok]]
+      safe parse က error ကို throw မလုပ်ဘဲ ရလဒ် object တစ်ခု ပြန်ပေးပါတယ်။ data မှန်ရင် success က true
+      ဖြစ်ပြီး data ပါလာပါတယ်။ [[mark:draw-bad]] မှားရင်တော့ success က false ဖြစ်ပြီး error ပါလာပါတယ်။
+      [[mark:draw-union]] ဒါက lesson ၁၁ က discriminated union ပါ။ success ဆိုတဲ့ property နဲ့
+      ခွဲခြားလို့ ရတဲ့အတွက်၊ success ကို စစ်လိုက်တာနဲ့ TypeScript က ရလဒ်ကို narrow လုပ်ပေးပါတယ်။
+      [[mark:close-board-b]] code ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:type-safe-parse]] safe parse ရဲ့ ရလဒ်ကို
+      စစ်ပါမယ်။ မှားနေရင် error ကို ထုတ်ပြပြီး နောက် အော်ဒါကို ဆက်သွားပါမယ်။ parse သုံးထားတဲ့ line
+      ကိုတော့ comment လုပ်လိုက်ပါမယ်။ [[mark:select-success]] success မဖြစ်တဲ့ ဒီ branch ထဲမှာ ရလဒ်ထဲမှာ
+      error ပါလာပြီး၊ [[mark:select-prettify]] Zod ရဲ့ prettify error function က အဲဒီ error ကို လူ
+      ဖတ်လို့ ရတဲ့ စာသား ပြောင်းပေးပါတယ်။ [[mark:select-data]] if ရဲ့ အောက်ကို ရောက်ရင်တော့ success
+      ဖြစ်တာ သေချာလို့ data ကို ယူသုံးလို့ ရပါတယ်။ [[mark:read-pretty]] ဒီတစ်ခါ program မရပ်ဘဲ အော်ဒါ
+      လေးခုလုံးကို စစ်ပြီးသွားပါပြီ။ Output မှာ ဒုတိယ အော်ဒါက cups မှာ number လိုချင်ပေမယ့် string
+      ရောက်လာတယ်လို့၊ တတိယ အော်ဒါက sugar မှာ ဒီ သုံးမျိုးထဲက တစ်ခု ဖြစ်ရမယ်လို့ ရှင်းရှင်းလင်းလင်း
+      ပြနေပါတယ်။ ဒါပေမဲ့ သုည ခွက်ကတော့ number ဖြစ်နေလို့ စစ်ဆေးချက်ကို ကျော်ပြီး ticket ထွက်သွားပါတယ်။
+    sources:
+      - {
+          title: "Zod: Basic usage (safeParse returns a discriminated union)",
+          url: "https://zod.dev/basics",
+        }
+      - {
+          title: "Zod: Formatting errors (z.prettifyError)",
+          url: "https://zod.dev/error-formatting",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (discriminated unions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions",
+        }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-result }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-ok
+        type: whiteboard.apply
+        at: { mark: draw-ok }
+        upsertIds: [b-ok-box, b-ok-1, b-ok-2]
+        drawMs: 2200
+      - id: draw-bad
+        type: whiteboard.apply
+        at: { mark: draw-bad }
+        upsertIds: [b-bad-box, b-bad-1, b-bad-2]
+        drawMs: 2200
+      - id: draw-union
+        type: whiteboard.apply
+        at: { mark: draw-union }
+        upsertIds: [b-union, b-parse]
+        drawMs: 2400
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: close-board-b }
+        open: false
+      - id: type-safe-parse
+        type: editor.type
+        at: { mark: type-safe-parse, offsetMs: 300 }
+        target: { file: src/main.ts, after: "for (const text of inbox) {\n  ", occurrence: 1 }
+        text: "const result = OrderSchema.safeParse(JSON.parse(text));\n  if (!result.success) {\n    console.log(z.prettifyError(result.error));\n    continue;\n  }\n  const order = result.data;\n  // "
+        cadence: block
+      - id: select-success
+        type: editor.select
+        at: { mark: select-success }
+        target: { file: src/main.ts, text: "if (!result.success) {", occurrence: 1 }
+      - id: select-prettify
+        type: editor.select
+        at: { mark: select-prettify }
+        target: { file: src/main.ts, text: "z.prettifyError(result.error)", occurrence: 1 }
+      - id: select-data
+        type: editor.select
+        at: { mark: select-data }
+        target: { file: src/main.ts, text: "const order = result.data;", occurrence: 1 }
+      - id: expect-four-again
+        type: expect.preview
+        at: { mark: read-pretty }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-pretty-cups
+        type: expect.preview
+        at: { afterAction: expect-four-again }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "✖ Invalid input: expected number, received string\n  → at cups"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-pretty-sugar
+        type: expect.preview
+        at: { afterAction: expect-pretty-cups }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "✖ Invalid option: expected one of \"less\"|\"normal\"|\"extra\"\n  → at sugar"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-zero-passes
+        type: expect.preview
+        at: { afterAction: expect-pretty-sugar }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "0 ခွက် ကော်ဖီ · သကြား less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-safe-clean
+        type: expect.preview
+        at: { afterAction: expect-zero-passes }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: refine
+    chapter: "Schema ကို ပိုတိကျအောင်"
+    narration: >
+      [[mark:select-cups]] schema မှာ cups ကို number လို့ပဲ ပြောထားပါတယ်။ number က သုည၊ အနုတ်ကိန်း၊ ဒဿမ
+      ဂဏန်းတွေကိုပါ လက်ခံပါတယ်။ Zod မှာတော့ schema ကို ဆက်ပြီး ကန့်သတ်လို့ ရပါတယ်။
+      [[mark:type-int-positive]] cups မှာ int နဲ့ positive ကို ဆက်ရေးလိုက်ပါမယ်။ ဒါဆို ကိန်းပြည့်
+      ဖြစ်ရမယ်၊ သုညထက် ကြီးရမယ် ဆိုတဲ့ စည်းကမ်း နှစ်ခု ထပ်ပါသွားပါတယ်။ [[mark:read-too-small]] Output
+      ရဲ့ နောက်ဆုံးမှာ သုည ခွက် အော်ဒါကိုလည်း သုညထက် ကြီးရမယ်လို့ ပြပြီး ငြင်းလိုက်ပါပြီ။ ဒီ
+      စည်းကမ်းတွေက run ချိန်မှာ စစ်တာ ဖြစ်လို့၊ type ကတော့ number အတိုင်းပဲ ကျန်နေပါတယ်။
+    sources:
+      - {
+          title: "Zod: Defining schemas (numbers: int, positive)",
+          url: "https://zod.dev/api#numbers",
+        }
+      - {
+          title: "Total TypeScript: Zod tutorial (complex schema validation)",
+          url: "https://www.totaltypescript.com/tutorials/zod/zod-section/validations",
+        }
+    actions:
+      - id: select-cups
+        type: editor.select
+        at: { mark: select-cups }
+        target: { file: src/main.ts, text: "cups: z.number()", occurrence: 1 }
+      - id: type-int-positive
+        type: editor.type
+        at: { mark: type-int-positive }
+        target: { file: src/main.ts, after: "cups: z.number()", occurrence: 1 }
+        text: ".int().positive()"
+        cadence: fast-explainer
+      - id: expect-too-small
+        type: expect.preview
+        at: { afterAction: type-int-positive }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "✖ Too small: expected number to be >0\n  → at cups"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: infer
+    chapter: "Schema ကနေ type ထုတ်ယူခြင်း"
+    narration: >
+      [[mark:select-old-type]] အခု ကိုယ့် code ထဲမှာ အော်ဒါရဲ့ ပုံစံက နှစ်နေရာမှာ ရှိနေပါတယ်။ ကိုယ်တိုင်
+      ရေးထားတဲ့ type နဲ့ Zod schema ပါ။ တစ်ခုကို ပြင်ပြီး ကျန်တစ်ခုကို မေ့သွားရင် နှစ်ခု
+      မကိုက်တော့ပါဘူး။ lesson ၂၁ မှာ ပြောခဲ့သလို အတူတူ ပြောင်းရမယ့် type တွေကို တစ်နေရာကနေ ထုတ်ယူတာ
+      ပိုကောင်းပါတယ်။ [[mark:type-infer]] ဒါကြောင့် type ကို schema ကနေ ထုတ်ယူပါမယ်။ type of နဲ့ schema
+      ရဲ့ type ကို ယူပြီး၊ Zod ရဲ့ infer နဲ့ schema က စစ်ပြီး ပြန်ပေးမယ့် data ရဲ့ type ကို ထုတ်ယူတာပါ။
+      ကိုယ်တိုင် ရေးထားတဲ့ type ကိုတော့ comment လုပ်လိုက်ပါမယ်။ [[mark:read-infer]] Types အပိုင်းမှာ
+      item ကို string လို့၊ cups ကို number လို့၊ sugar ကို စကားလုံး သုံးလုံးရဲ့ union လို့ ပြတဲ့ type
+      ပေါ်လာပါပြီ။ ကိုယ်တိုင် ရေးခဲ့တဲ့ type နဲ့ အတူတူပဲ ဖြစ်လို့ ticket function ကလည်း error မရှိဘဲ ဆက်
+      အလုပ်လုပ်ပါတယ်။ [[mark:type-note]] ဒီ အချိန်ကစပြီး ပုံစံ ပြောင်းချင်ရင် schema ကိုပဲ
+      ပြင်ရပါတော့မယ်။ ဥပမာအားဖြင့် မပါလည်း ရတဲ့ မှတ်ချက်ကို optional နဲ့ ထည့်ကြည့်ပါမယ်။
+      [[mark:read-note]] Types မှာ မပါလည်း ရတဲ့ note property ချက်ချင်း ပေါ်လာပါပြီ။ schema တစ်ခုတည်းကနေ
+      run ချိန် စစ်ဆေးချက်ရော၊ TypeScript type ရော နှစ်ခုလုံး ရတာပါ။
+    sources:
+      - { title: "Zod: Basic usage (inferring types)", url: "https://zod.dev/basics" }
+      - {
+          title: "Total TypeScript: Zod tutorial (extract a type from a parser object)",
+          url: "https://www.totaltypescript.com/tutorials/zod/zod-section/infer",
+        }
+      - {
+          title: "Total TypeScript: Zod tutorial (make schemas optional)",
+          url: "https://www.totaltypescript.com/tutorials/zod/zod-section/optional",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: select-old-type
+        type: editor.select
+        at: { mark: select-old-type }
+        target:
+          {
+            file: src/main.ts,
+            text: 'type Order = { item: string; cups: number; sugar: "less" | "normal" | "extra" };',
+            occurrence: 1,
+          }
+      - id: type-infer
+        type: editor.type
+        at: { mark: type-infer, offsetMs: 300 }
+        target: { file: src/main.ts, after: "});\n\n", occurrence: 1 }
+        text: "type Order = z.infer<typeof OrderSchema>;\n//   ^?\n// "
+        cadence: block
+      - id: expect-inferred
+        type: expect.preview
+        at: { afterAction: type-infer }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: 'sugar: "less" | "normal" | "extra";'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-inferred-clean
+        type: expect.preview
+        at: { afterAction: expect-inferred }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-note
+        type: editor.type
+        at: { mark: type-note }
+        target:
+          {
+            file: src/main.ts,
+            after: "  sugar: z.enum([\"less\", \"normal\", \"extra\"]),\n",
+            occurrence: 1,
+          }
+        text: "  note: z.string().optional(),\n"
+        cadence: fast-explainer
+      - id: expect-note
+        type: expect.preview
+        at: { afterAction: type-note }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "note?: string | undefined;"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-note-output
+        type: expect.preview
+        at: { afterAction: expect-note }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ TypeScript ရဲ့ type တွေက run ချိန်မှာ မရှိတော့လို့၊ အပြင်က ဝင်လာတဲ့ data
+      ကို annotation တစ်ခုနဲ့ စစ်လို့ မရပါဘူး။ [[mark:recap-schema]] Zod schema ကတော့ run ချိန်မှာ
+      data ကို တကယ် စစ်ပေးပါတယ်။ parse က မှားရင် throw လုပ်ပြီး၊ safe parse ကတော့ success နဲ့
+      ခွဲလို့ ရတဲ့ ရလဒ်ကို ပြန်ပေးပါတယ်။ [[mark:recap-infer]] type ကိုလည်း Zod ရဲ့ infer နဲ့ schema
+      ကနေ ထုတ်ယူတာ ဖြစ်လို့၊ ပုံစံကို နေရာ တစ်ခုတည်းမှာပဲ ထိန်းထားရပါတယ်။ [[mark:recap-next]] နောက်
+      lesson မှာတော့ React component တွေကို TypeScript နဲ့ ဘယ်လို ရေးမလဲ ဆိုတာ ကြည့်သွားပါမယ်။
+    sources:
+      - { title: "Zod: Intro", url: "https://zod.dev/" }
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+    actions:
+      - id: select-recap-schema
+        type: editor.select
+        at: { mark: recap-schema }
+        target:
+          { file: src/main.ts, text: "OrderSchema.safeParse(JSON.parse(text))", occurrence: 1 }
+      - id: select-recap-infer
+        type: editor.select
+        at: { mark: recap-infer }
+        target: { file: src/main.ts, text: "z.infer<typeof OrderSchema>", occurrence: 1 }
+      - id: expect-file-schema
+        type: expect.file
+        at: { mark: recap-next }
+        path: src/main.ts
+        contains: "const OrderSchema = z.object({\n  item: z.string(),\n  cups: z.number().int().positive(),\n  sugar: z.enum([\"less\", \"normal\", \"extra\"]),\n  note: z.string().optional(),\n});"
+      - id: expect-file-infer
+        type: expect.file
+        at: { afterAction: expect-file-schema }
+        path: src/main.ts
+        contains: "type Order = z.infer<typeof OrderSchema>;"
+      - id: expect-file-safe-parse
+        type: expect.file
+        at: { afterAction: expect-file-infer }
+        path: src/main.ts
+        contains: "  const result = OrderSchema.safeParse(JSON.parse(text));\n  if (!result.success) {\n    console.log(z.prettifyError(result.error));\n    continue;\n  }\n  const order = result.data;"
+checks:
+  - type: timing.p95Ms
+    max: 300
