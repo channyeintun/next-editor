@@ -1,0 +1,1691 @@
+# TypeScript course, lesson 11: discriminated unions (Burmese).
+#
+# Start state (ws/): src/order.ts describes an order as one "bag of optionals" type (status plus an
+# optional paidAt and an optional reason) and turns an order into a status line with a switch;
+# src/main.ts holds three orders and prints their status lines. The coffee order says "paid" but
+# has no paidAt, so the panel (data-modes "errors types output") starts with
+#   - 1 error, TS18048 at order.ts:13 ('order.paidAt' is possibly 'undefined'), on code that is right
+#   - Output: two good lines, then "Uncaught TypeError: Cannot read properties of undefined
+#     (reading 'slice')" for the order that is wrong but was accepted.
+# Edits, all insert-only:
+#   union      one block insert turns `export type Order = {` into a three-member union and renames
+#              the old shape to OrderBag (kept for comparison) -> the 18048 is gone, the coffee order
+#              gets TS2322 ("Property 'paidAt' is missing ...")
+#   fix-order  `, paidAt: "09:52:40"` -> 0 errors, 3 output lines
+#   switch     a ^? query in the paid case -> the narrowed member with `paidAt: string`
+#   destructure  destructuring paidAt before the check -> TS2339 + an "undefined" receipt line;
+#              an early `continue` guard before it -> 0 errors
+#   tuple      FindResult = ["ok", Order] | ["error", string]; destructured, then narrowed (2 queries)
+#   exhaustive a `never` default (query: never) -> a brewing member -> TS2322 at the default ->
+#              the brewing case -> 0 errors
+# Boards: (A) the data each status needs and the 12 shapes the bag allows, (B) one member per status
+# with `status` as the discriminant.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-11-discriminated-unions.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-11-discriminated-unions
+  title: "TypeScript course 11: Discriminated union"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors types output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { statusText, type Order } from "./order";
+
+        const orders: Order[] = [
+          { item: "လက်ဖက်ရည်", status: "paid", paidAt: "09:30:12" },
+          { item: "မုန့်ဟင်းခါး", status: "cancelled", reason: "ကုန်သွားပြီ" },
+          { item: "ကော်ဖီ", status: "paid" },
+        ];
+
+        for (const order of orders) {
+          console.log(statusText(order));
+        }
+      src/order.ts: |
+        export type Order = {
+          item: string;
+          status: "pending" | "paid" | "cancelled";
+          paidAt?: string;
+          reason?: string;
+        };
+
+        export function statusText(order: Order): string {
+          switch (order.status) {
+            case "pending":
+              return `${order.item}: ငွေ မရှင်းရသေး`;
+            case "paid":
+              return `${order.item}: ${order.paidAt.slice(0, 5)} မှာ ငွေရှင်းပြီး`;
+            case "cancelled":
+              return `${order.item}: ပယ်ဖျက်ပြီး၊ ${order.reason}`;
+          }
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: the data each status needs, and what one type full of optionals allows.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "status အလိုက် ပါရမယ့် data",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-s1,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 190,
+        height: 36,
+        text: "pending",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-ar1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 505,
+        y: 245,
+        width: 50,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-d1,
+        kind: text,
+        x: 575,
+        y: 245,
+        width: 480,
+        height: 36,
+        text: "ပစ္စည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-s2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 190,
+        height: 36,
+        text: "paid",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-ar2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 505,
+        y: 300,
+        width: 50,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-d2,
+        kind: text,
+        x: 575,
+        y: 300,
+        width: 480,
+        height: 36,
+        text: "ပစ္စည်း + ငွေရှင်းချိန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-s3,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 190,
+        height: 36,
+        text: "cancelled",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-ar3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 505,
+        y: 355,
+        width: 50,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-d3,
+        kind: text,
+        x: 575,
+        y: 355,
+        width: 480,
+        height: 36,
+        text: "ပစ္စည်း + အကြောင်းပြချက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-bag,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 720,
+        height: 36,
+        text: "type တစ်ခုတည်း + optional property နှစ်ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-count,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 720,
+        height: 36,
+        text: "3 × 2 × 2 = ပုံစံ 12 မျိုး လက်ခံ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-sense,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 720,
+        height: 36,
+        text: "အဓိပ္ပာယ် ရှိတာ 3 မျိုးပဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-bad1,
+        kind: text,
+        x: 300,
+        y: 605,
+        width: 300,
+        height: 36,
+        text: "paid၊ အချိန် မပါ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-bad2,
+        kind: text,
+        x: 610,
+        y: 605,
+        width: 470,
+        height: 36,
+        text: "pending၊ အကြောင်းပြချက် ပါ ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board B: one member per status; `status` is in every member with its own literal.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "status တစ်ခု = member တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-box1,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 640,
+        height: 66,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-s1,
+        kind: text,
+        x: 300,
+        y: 255,
+        width: 200,
+        height: 36,
+        text: '"pending"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-d1,
+        kind: text,
+        x: 520,
+        y: 255,
+        width: 380,
+        height: 36,
+        text: "ပစ္စည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-or2,
+        kind: text,
+        x: 252,
+        y: 335,
+        width: 40,
+        height: 36,
+        text: "|",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-box2,
+        kind: rectangle,
+        x: 280,
+        y: 320,
+        width: 640,
+        height: 66,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-s2,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 200,
+        height: 36,
+        text: '"paid"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-d2,
+        kind: text,
+        x: 520,
+        y: 335,
+        width: 380,
+        height: 36,
+        text: "ပစ္စည်း၊ ငွေရှင်းချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-or3,
+        kind: text,
+        x: 252,
+        y: 415,
+        width: 40,
+        height: 36,
+        text: "|",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-box3,
+        kind: rectangle,
+        x: 280,
+        y: 400,
+        width: 640,
+        height: 66,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-s3,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 200,
+        height: 36,
+        text: '"cancelled"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-d3,
+        kind: text,
+        x: 520,
+        y: 415,
+        width: 380,
+        height: 36,
+        text: "ပစ္စည်း၊ အကြောင်းပြချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 285,
+        y: 236,
+        width: 230,
+        height: 236,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-disc,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 760,
+        height: 36,
+        text: "status = discriminant",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-disc-sub,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 760,
+        height: 36,
+        text: "member တိုင်းမှာ ပါ · literal တန်ဖိုး မတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3111
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Optional property တွေ စုထားရင်"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ unknown type ကို မသုံးခင် narrow လုပ်ရတယ် ဆိုတာနဲ့၊ never က
+      ဘယ်တန်ဖိုးမှ ဝင်လို့ မရတဲ့ type ဖြစ်တယ် ဆိုတာ မြင်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ object တွေကို narrow
+      လုပ်တဲ့အခါ အသုံးအများဆုံး ပုံစံ ဖြစ်တဲ့ discriminated union ကို ကြည့်သွားပါမယ်။
+      [[mark:draw-statuses]] ဆိုင်ရဲ့ အော်ဒါမှာ ပါရမယ့် အချက်အလက်တွေက status ပေါ်မူတည်ပြီး ကွာပါတယ်။ ငွေ
+      မရှင်းရသေးတဲ့ အော်ဒါမှာ ပစ္စည်းပဲ ပါပြီး၊ ငွေရှင်းပြီးသား အော်ဒါမှာ ငွေရှင်းခဲ့တဲ့ အချိန်၊ cancel
+      လုပ်ထားတဲ့ အော်ဒါမှာတော့ cancel လုပ်ရတဲ့ အကြောင်းပြချက် ပါရပါတယ်။ [[mark:draw-bag]] ဒါကို type
+      တစ်ခုတည်းနဲ့ ရေးရင်၊ ငွေရှင်းချိန်နဲ့ အကြောင်းပြချက်ကို မပါလည်း ရတဲ့ optional property အဖြစ်
+      ထည့်ကြတာ များပါတယ်။ [[mark:draw-count]] ဒါပေမဲ့ ဒီ type က ဘာတွေကို ခွင့်ပြုလဲ တွက်ကြည့်ရအောင်။
+      status က သုံးမျိုး၊ ငွေရှင်းချိန် ပါတာ မပါတာ နှစ်မျိုး၊ အကြောင်းပြချက်လည်း နှစ်မျိုး ဖြစ်လို့
+      ပုံစံ ၁၂ မျိုးကို လက်ခံပါတယ်။ တကယ် အဓိပ္ပာယ် ရှိတာကတော့ သုံးမျိုးပဲ ရှိပါတယ်။ [[mark:draw-bad]]
+      ကျန်တာတွေက ငွေရှင်းပြီးပေမယ့် အချိန် မပါတဲ့ အော်ဒါ၊ ငွေ မရှင်းရသေးပေမယ့် cancel အကြောင်းပြချက်
+      ပါနေတဲ့ အော်ဒါလိုမျိုး၊ တကယ်တမ်း ဖြစ်လို့ မရတဲ့ ပုံစံတွေပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (discriminated unions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (discriminated unions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-statuses
+        type: whiteboard.apply
+        at: { mark: draw-statuses }
+        upsertIds: [a-s1, a-ar1, a-d1, a-s2, a-ar2, a-d2, a-s3, a-ar3, a-d3]
+        drawMs: 4000
+      - id: draw-bag
+        type: whiteboard.apply
+        at: { mark: draw-bag }
+        upsertIds: [a-bag]
+        drawMs: 1400
+      - id: draw-count
+        type: whiteboard.apply
+        at: { mark: draw-count }
+        upsertIds: [a-count, a-sense]
+        drawMs: 2400
+      - id: draw-bad
+        type: whiteboard.apply
+        at: { mark: draw-bad }
+        upsertIds: [a-bad1, a-bad2]
+        drawMs: 2000
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီ type ကို code ထဲမှာ ကြည့်ရအောင်။ [[mark:open-order]] ဒါက အော်ဒါရဲ့ type
+      နဲ့ status စာကို ထုတ်ပေးတဲ့ function ရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-optional]] ငွေရှင်းချိန်နဲ့
+      အကြောင်းပြချက်ကို question mark နဲ့ optional လုပ်ထားတာ ခုနက ပုံထဲက အတိုင်းပါပဲ။
+      [[mark:select-switch]] function ကတော့ switch statement နဲ့ status ကို စစ်ပြီး၊ status တစ်ခုစီအတွက်
+      ပြရမယ့် စာကို ပြန်ပေးပါတယ်။ [[mark:select-slice]] ငွေရှင်းပြီးတဲ့ အော်ဒါဆိုရင် ငွေရှင်းချိန်ထဲက
+      စက္ကန့်ကို ဖြတ်ပြီး၊ နာရီနဲ့ မိနစ်ကိုပဲ ပြပါတယ်။ [[mark:open-main]] main ဖိုင်မှာတော့ အော်ဒါ
+      သုံးခုရဲ့ status စာကို ထုတ်ပြပါတယ်။ [[mark:select-coffee]] နောက်ဆုံး ကော်ဖီ အော်ဒါကို သတိထား
+      ကြည့်ပါ။ ငွေရှင်းပြီးလို့ ရေးထားပေမယ့် ငွေရှင်းတဲ့ အချိန် မပါပါဘူး။ ခုနက ပုံထဲမှာ အနီရောင်နဲ့
+      ပြခဲ့တဲ့ ဖြစ်လို့ မရတဲ့ ပုံစံ တစ်ခုပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (optional properties)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#optional-properties",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-order
+        type: workspace.openFile
+        at: { mark: open-order }
+        path: src/order.ts
+      - id: select-optional
+        type: editor.select
+        at: { mark: select-optional }
+        target:
+          { file: src/order.ts, text: "  paidAt?: string;\n  reason?: string;", occurrence: 1 }
+      - id: select-switch
+        type: editor.select
+        at: { mark: select-switch }
+        target: { file: src/order.ts, text: "switch (order.status)", occurrence: 1 }
+      - id: select-slice
+        type: editor.select
+        at: { mark: select-slice }
+        target: { file: src/order.ts, text: "order.paidAt.slice(0, 5)", occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-coffee
+        type: editor.select
+        at: { mark: select-coffee }
+        target: { file: src/main.ts, text: '{ item: "ကော်ဖီ", status: "paid" }', occurrence: 1 }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] panel ကို ကြည့်ရအောင်။ Output မှာ လက်ဖက်ရည်နဲ့ မုန့်ဟင်းခါး အော်ဒါတွေက
+      မှန်မှန် ထွက်လာပေမယ့်၊ တတိယ line မှာ အနီရောင် error နဲ့ program ရပ်သွားပါတယ်။ ကော်ဖီမှာ
+      ငွေရှင်းချိန် မရှိလို့ undefined ပေါ်မှာ စာသား ဖြတ်တဲ့ method ကို ခေါ်မိတာပါ။ [[mark:read-error]]
+      Errors အပိုင်းမှာတော့ ငွေရှင်းပြီးတဲ့ case ထဲက ငွေရှင်းချိန်ဟာ undefined ဖြစ်နိုင်တယ်လို့
+      ပြောနေပါတယ်။ [[mark:two-problems]] ဆိုတော့ ပြဿနာ နှစ်ခု ရှိနေပါတယ်။ ငွေရှင်းပြီးတဲ့ အော်ဒါမှာ
+      အချိန် အမြဲ ပါတယ် ဆိုတာ TypeScript မသိလို့ မှန်နေတဲ့ code ကို error ပြနေပြီး၊ အချိန် မပါတဲ့ ကော်ဖီ
+      အော်ဒါလို တကယ် မှားနေတဲ့ data ကိုကျတော့ ဘာမှ မပြောဘဲ လက်ခံထားပါတယ်။ အကြောင်းရင်းက တစ်ခုတည်းပါ။ ဘယ်
+      property က ဘယ် status နဲ့ တွဲပါရမလဲ ဆိုတာ type ထဲမှာ ရေးမထားလို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (discriminated unions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "MDN: TypeError",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypeError",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-one-error
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-possibly-undefined
+        type: expect.preview
+        at: { afterAction: expect-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'order.paidAt' is possibly 'undefined'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-error-file
+        type: expect.preview
+        at: { afterAction: expect-possibly-undefined }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "src/order.ts" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-tea-line
+        type: expect.preview
+        at: { afterAction: expect-error-file }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည်: 09:30 မှာ ငွေရှင်းပြီး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-crash
+        type: expect.preview
+        at: { afterAction: expect-tea-line }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "Uncaught TypeError: Cannot read properties of undefined (reading 'slice')"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-crash-level
+        type: expect.preview
+        at: { afterAction: expect-crash }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        attribute: { name: data-level, value: "error" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: union-idea
+    chapter: "Discriminated union"
+    narration: >
+      [[mark:board-union]] ဒါကို ဖြေရှင်းဖို့ property အားလုံးကို type တစ်ခုထဲ မစုဘဲ၊ status
+      တစ်ခုစီအတွက် object type တစ်ခုစီ ခွဲရေးပါမယ်။ [[mark:draw-members]] ငွေရှင်းပြီးတဲ့ အော်ဒါမှာ
+      ငွေရှင်းချိန်၊ cancel လုပ်ထားတဲ့ အော်ဒါမှာ အကြောင်းပြချက် ပါပြီး၊ ဘယ်ဟာမှ optional မဟုတ်တော့ပါဘူး။
+      ပြီးတော့ အဲဒီ သုံးခုကို union နဲ့ ပေါင်းလိုက်ရင် Order type ရပါပြီ။ [[mark:draw-discriminant]]
+      ဒီမှာ အရေးကြီးတာက status ပါ။ member တိုင်းမှာ ပါပြီး တစ်ခုစီမှာ literal type မတူတာ ရှိလို့၊ status
+      ကို စစ်လိုက်တာနဲ့ ဘယ် member လဲ ဆိုတာ TypeScript က တန်းသိပါတယ်။ ဒီလို property ကို discriminant
+      လို့ ခေါ်ပြီး၊ discriminant ပါတဲ့ union ကိုတော့ discriminated union လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Narrowing (discriminated unions, the discriminant property)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (discriminated unions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-union }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-members
+        type: whiteboard.apply
+        at: { mark: draw-members }
+        upsertIds: [b-box1, b-s1, b-d1, b-or2, b-box2, b-s2, b-d2, b-or3, b-box3, b-s3, b-d3]
+        drawMs: 4400
+      - id: draw-discriminant
+        type: whiteboard.apply
+        at: { mark: draw-discriminant }
+        upsertIds: [b-circle, b-disc, b-disc-sub]
+        drawMs: 2800
+
+  - id: union-code
+    narration: >
+      [[mark:close-board-b]] code ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:open-order-2]] အော်ဒါ ဖိုင်ကို
+      ပြန်ဖွင့်ပါမယ်။ [[mark:type-union]] Order type ကို member သုံးခု ပါတဲ့ union အဖြစ် ပြန်ရေးပြီး၊
+      type အဟောင်းကိုတော့ နှိုင်းယှဉ်လို့ ရအောင် နာမည် ပြောင်းပြီး အောက်မှာ ချန်ထားပါမယ်။ တကယ့် project
+      မှာဆိုရင်တော့ ဖျက်လိုက်ရုံပါပဲ။ [[mark:select-paid-member]] ငွေရှင်းပြီးတဲ့ member မှာ
+      ငွေရှင်းချိန်က question mark မပါတော့လို့၊ ဒီ member ဖြစ်ရင် အချိန် အမြဲ ပါရပါမယ်။
+      [[mark:read-union-panel]] panel မှာ function ထဲက error ပျောက်သွားပြီး၊ main ဖိုင်က ကော်ဖီ
+      အော်ဒါမှာ error အသစ် ပေါ်လာပါပြီ။ အောက်ဆုံး အပိုင်းကို ဖတ်ကြည့်ရင်၊ ငွေရှင်းချိန် ပါရမယ့် member
+      နဲ့ နှိုင်းယှဉ်ပြီး ငွေရှင်းချိန် မပါဘူးလို့ ပြောနေပါတယ်။ status ကို ကြည့်ပြီး ဘယ် member ဖြစ်ရမလဲ
+      ဆိုတာ TypeScript က ရွေးလိုက်တာပါ။ [[mark:both-solved]] ဆိုတော့ မှန်တဲ့ code မှာ error မရှိတော့ဘဲ၊
+      မှားနေတဲ့ data မှာ error ပေါ်လာပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (discriminated unions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (union types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#union-types",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: close-board-b }
+        open: false
+      - id: open-order-2
+        type: workspace.openFile
+        at: { mark: open-order-2 }
+        path: src/order.ts
+      - id: type-union
+        type: editor.type
+        at: { mark: type-union }
+        target: { file: src/order.ts, after: "export type Order =", occurrence: 1 }
+        text: "\n  | { status: \"pending\"; item: string }\n  | { status: \"paid\"; item: string; paidAt: string }\n  | { status: \"cancelled\"; item: string; reason: string };\n\ntype OrderBag ="
+        cadence: block
+      - id: expect-union-one-error
+        type: expect.preview
+        at: { afterAction: type-union }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-missing-paid-at
+        type: expect.preview
+        at: { afterAction: expect-union-one-error }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'Property ''paidAt'' is missing in type ''{ item: string; status: "paid"; }'' but required in type ''{ status: "paid"; item: string; paidAt: string; }''.'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-missing-file
+        type: expect.preview
+        at: { afterAction: expect-missing-paid-at }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "src/main.ts" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-paid-member
+        type: editor.select
+        at: { mark: select-paid-member }
+        target:
+          {
+            file: src/order.ts,
+            text: '  | { status: "paid"; item: string; paidAt: string }',
+            occurrence: 1,
+          }
+
+  - id: fix-order
+    narration: >
+      [[mark:open-main-2]] ဒါဆို main ဖိုင်က ကော်ဖီ အော်ဒါမှာ ငွေရှင်းတဲ့ အချိန်ကို ထည့်ပေးလိုက်ပါမယ်။
+      [[mark:read-fixed]] Errors အပိုင်း ရှင်းသွားပြီး၊ Output ရဲ့ တတိယ line မှာလည်း ကော်ဖီကို ၉ နာရီ ၅၂
+      မိနစ်မှာ ငွေရှင်းပြီးလို့ ပြနေပါပြီ။ run မှ ပေါ်မယ့် crash ကို code ရေးနေတုန်းမှာပဲ
+      ဖမ်းမိသွားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (discriminated unions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+    actions:
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: src/main.ts
+      - id: type-paid-at
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: '{ item: "ကော်ဖီ", status: "paid"', occurrence: 1 }
+        text: ', paidAt: "09:52:40"'
+        cadence: fast-explainer
+      - id: expect-fixed-no-errors
+        type: expect.preview
+        at: { afterAction: type-paid-at }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-coffee-line
+        type: expect.preview
+        at: { afterAction: expect-fixed-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "ကော်ဖီ: 09:52 မှာ ငွေရှင်းပြီး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: switch
+    narration: >
+      [[mark:open-order-3]] ဒါဆို function ထဲက error က ဘာကြောင့် ပျောက်သွားတာလဲ။
+      [[mark:select-switch-2]] switch statement က status ကို စစ်ပြီး case တစ်ခုထဲ ဝင်သွားတဲ့အခါ၊
+      TypeScript က အော်ဒါကို အဲဒီ status နဲ့ ကိုက်တဲ့ member တစ်ခုတည်းအထိ narrow လုပ်ပေးလို့ပါ။
+      [[mark:type-query-paid]] ငွေရှင်းပြီးတဲ့ case ထဲမှာ အော်ဒါရဲ့ type ကို query comment နဲ့
+      မေးကြည့်ရအောင်။ [[mark:read-query-paid]] Types အပိုင်းမှာ status က paid တစ်ခုတည်း ဖြစ်ပြီး၊
+      ငွေရှင်းချိန်က string ဖြစ်နေတဲ့ member ကို ပြနေပါတယ်။ undefined ဖြစ်နိုင်ခြေ မရှိတော့လို့ စက္ကန့်
+      ဖြတ်တဲ့ code ကို error မပြတော့တာပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Narrowing (discriminated unions with switch)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (narrowing with switch)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+    actions:
+      - id: open-order-3
+        type: workspace.openFile
+        at: { mark: open-order-3 }
+        path: src/order.ts
+      - id: select-switch-2
+        type: editor.select
+        at: { mark: select-switch-2 }
+        target: { file: src/order.ts, text: "switch (order.status)", occurrence: 1 }
+      - id: type-query-paid
+        type: editor.type
+        at: { mark: type-query-paid }
+        target:
+          {
+            file: src/order.ts,
+            after: "${order.paidAt.slice(0, 5)} မှာ ငွေရှင်းပြီး`;\n",
+            occurrence: 1,
+          }
+        text: "      //        ^?\n"
+        cadence: fast-explainer
+      - id: expect-query-paid
+        type: expect.preview
+        at: { afterAction: type-query-paid }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: 'status: "paid";'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-query-paid-at
+        type: expect.preview
+        at: { afterAction: expect-query-paid }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "paidAt: string;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: destructure
+    chapter: "Destructure လုပ်မယ့် အချိန်"
+    narration: >
+      [[mark:open-main-3]] narrowing မှာ သတိထားရမယ့် အချက် တစ်ခု ရှိပါတယ်။ ငွေရှင်းပြီးတဲ့
+      အော်ဒါတွေအတွက် ဘောင်ချာပါ ထုတ်ချင်တယ် ဆိုပါစို့။ [[mark:type-destructure]] object ထဲက property
+      တွေကို variable တွေအဖြစ် တစ်ခါတည်း ဆွဲထုတ်တဲ့ destructuring ကို status မစစ်ရသေးခင် သုံးရင်
+      ဘာဖြစ်မလဲ ဆိုတာ အရင် စမ်းကြည့်ရအောင်။ ပစ္စည်းနဲ့ ငွေရှင်းချိန်ကို ဆွဲထုတ်ပြီး ပြကြည့်ပါမယ်။ [[mark:read-destructure-error]] Order type မှာ ငွေရှင်းချိန် မရှိဘူး
+      ဆိုတဲ့ error ပေါ်လာပါပြီ။ ဒီနေရာမှာ status ကို မစစ်ရသေးလို့ အော်ဒါက ဘယ် member မဆို ဖြစ်နိုင်ပြီး၊
+      ငွေရှင်းချိန်က member တစ်ခုမှာပဲ ရှိလို့ပါ။ Output မှာလည်း မုန့်ဟင်းခါးအတွက် အချိန်နေရာမှာ
+      undefined ပါတဲ့ ဘောင်ချာ ထွက်လာပါတယ်။ [[mark:type-guard]] ဒါကြောင့် destructure မလုပ်ခင် status
+      ကို အရင် စစ်ပြီး၊ ငွေရှင်းပြီးသား မဟုတ်ရင် နောက် အော်ဒါကို ကျော်ခိုင်းပါမယ်။ [[mark:read-guard]]
+      error ပျောက်သွားပြီး undefined ဘောင်ချာလည်း မရှိတော့ပါဘူး။ ဆိုတော့ member တချို့မှာပဲ ရှိတဲ့
+      property ကို status စစ်ပြီးမှ ဆွဲထုတ်ရပါမယ်။ switch statement မှာဆိုရင်လည်း case ထဲ ရောက်ပြီးမှ
+      destructure လုပ်ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (destructuring discriminated unions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "MDN: Destructuring",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Destructuring",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (control flow analysis)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#control-flow-analysis",
+        }
+    actions:
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: src/main.ts
+      - id: type-destructure
+        type: editor.type
+        at: { mark: type-destructure }
+        target: { file: src/main.ts, after: "  console.log(statusText(order));\n", occurrence: 1 }
+        text: "  const { item, paidAt } = order;\n  console.log(\"ဘောင်ချာ\", item, paidAt);\n"
+        cadence: line-by-line
+      - id: expect-destructure-error
+        type: expect.preview
+        at: { afterAction: type-destructure }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'paidAt' does not exist on type 'Order'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-destructure-count
+        type: expect.preview
+        at: { afterAction: expect-destructure-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-undefined-receipt
+        type: expect.preview
+        at: { afterAction: expect-destructure-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "ဘောင်ချာ မုန့်ဟင်းခါး undefined"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-guard
+        type: editor.type
+        at: { mark: type-guard }
+        target: { file: src/main.ts, after: "  console.log(statusText(order));\n", occurrence: 1 }
+        text: "  if (order.status !== \"paid\") continue;\n"
+        cadence: line-by-line
+      - id: expect-guard-no-errors
+        type: expect.preview
+        at: { afterAction: type-guard }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-guard-output
+        type: expect.preview
+        at: { afterAction: expect-guard-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: tuple
+    chapter: "Discriminated tuple"
+    narration: >
+      [[mark:type-find]] discriminant က tuple ရဲ့ ပထမ နေရာလည်း ဖြစ်နိုင်ပါတယ်။ အော်ဒါကို နံပါတ်နဲ့
+      ရှာပေးတဲ့ function တစ်ခု ရေးပါမယ်။ သူ ပြန်ပေးတဲ့ type က tuple နှစ်မျိုးရဲ့ union ဖြစ်ပြီး၊ တွေ့ရင်
+      ok နဲ့ အော်ဒါ၊ မတွေ့ရင် error နဲ့ message စာသား ပါပါတယ်။ [[mark:type-use]] ၅ နံပါတ် အော်ဒါကို
+      ရှာပြီး၊ ရလာတဲ့ tuple ကို variable နှစ်ခုအဖြစ် destructure လုပ်ပါမယ်။ ပထမ တန်ဖိုးကို စစ်ပြီး ဒုတိယ
+      တန်ဖိုးကို ထုတ်ပြမှာ ဖြစ်ပြီး၊ branch တစ်ခုစီမှာ query comment ထည့်ထားပါတယ်။ [[mark:read-tuple]]
+      Types အပိုင်းမှာ ok branch ထဲက ဒုတိယ တန်ဖိုးကို Order လို့ ပြပြီး၊ else ထဲကကိုတော့ string လို့
+      ပြနေပါတယ်။ ပထမ တန်ဖိုးကို စစ်လိုက်တာနဲ့ ဒုတိယ တန်ဖိုးပါ narrow ဖြစ်သွားတာပါ။ ခုနကလို error မတက်တာက
+      tuple နှစ်မျိုးလုံးမှာ ဒုတိယ နေရာ ရှိနေလို့ပါ။ [[mark:read-tuple-output]] Output ရဲ့ နောက်ဆုံး
+      line မှာလည်း ၅ နံပါတ် အော်ဒါ မရှိဘူး ဆိုတဲ့ message ထွက်လာပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (discriminated tuples)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript 4.6 release notes: control-flow analysis for destructured discriminated unions",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-6.html#control-flow-analysis-for-destructured-discriminated-unions",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (tuple types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types",
+        }
+    actions:
+      - id: type-find
+        type: editor.type
+        at: { mark: type-find }
+        target:
+          {
+            file: src/main.ts,
+            after: "  console.log(\"ဘောင်ချာ\", item, paidAt);\n}\n",
+            occurrence: 1,
+          }
+        text: "\ntype FindResult = [\"ok\", Order] | [\"error\", string];\n\nfunction findOrder(index: number): FindResult {\n  const order = orders[index];\n  if (!order) return [\"error\", `${index} နံပါတ် အော်ဒါ မရှိပါ`];\n  return [\"ok\", order];\n}\n"
+        cadence: block
+      - id: select-find-result
+        type: editor.select
+        at: { afterAction: type-find }
+        target: { file: src/main.ts, text: '["ok", Order] | ["error", string]', occurrence: 1 }
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target: { file: src/main.ts, after: "  return [\"ok\", order];\n}\n", occurrence: 1 }
+        text: "\nconst [result, value] = findOrder(5);\nif (result === \"ok\") {\n  console.log(statusText(value));\n  //                     ^?\n} else {\n  console.log(value);\n  //          ^?\n}\n"
+        cadence: block
+      - id: expect-value-order
+        type: expect.preview
+        at: { afterAction: type-use }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const value: Order" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-value-string
+        type: expect.preview
+        at: { afterAction: expect-value-order }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-3 }
+        attribute: { name: data-type, value: "const value: string" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-not-found
+        type: expect.preview
+        at: { afterAction: expect-value-string }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-6 }
+        textContains: "5 နံပါတ် အော်ဒါ မရှိပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: exhaustive
+    chapter: "Status အသစ် ထပ်လာရင်"
+    narration: >
+      [[mark:open-order-4]] နောက်ဆုံးအနေနဲ့ ဆိုင်က status အသစ် ထပ်ထည့်တဲ့အခါ ဘာဖြစ်လဲ ကြည့်ရအောင်။
+      [[mark:type-default]] အရင်ဆုံး switch statement မှာ default case ထည့်ပြီး၊ အော်ဒါကို never type
+      ရှိတဲ့ variable ထဲ ထည့်ပါမယ်။ သူ့အောက်မှာ query comment လည်း ထည့်ထားပါတယ်။ [[mark:read-never]]
+      Types အပိုင်းမှာ default ထဲက အော်ဒါကို never လို့ ပြနေပါတယ်။ အပေါ်က case သုံးခုက member
+      သုံးခုလုံးကို ယူသွားပြီးလို့ ဘာမှ မကျန်တော့တာပါ။ never ထဲကို never ကလွဲရင် ဘာမှ ထည့်လို့ မရပေမယ့်၊
+      ဒီနေရာက အော်ဒါကိုယ်တိုင် never ဖြစ်နေလို့ error မရှိပါဘူး။ [[mark:type-brewing]] ကဲ၊ ဖျော်နေဆဲ
+      အော်ဒါကို ဘယ်သူ ဖျော်နေလဲ ဆိုတာနဲ့ မှတ်ချင်လို့၊ Order type ထဲကို member အသစ် တစ်ခု ထည့်ပါမယ်။
+      [[mark:read-brewing]] ချက်ချင်းပဲ default မှာ error ပေါ်လာပါပြီ။ ဖျော်နေဆဲ member ကို never ထဲ
+      ထည့်လို့ မရဘူးလို့ ပြောနေပြီး၊ Types မှာလည်း ဒီ member ကို ပြနေပါတယ်။ ဆိုလိုတာက ဒီ switch
+      statement က status အသစ်ကို handle မလုပ်ရသေးဘူး ဆိုတာ program ကို run စရာ မလိုဘဲ သိရတာပါ။
+      [[mark:type-case]] ဒါကြောင့် ဖျော်နေဆဲ အော်ဒါအတွက် case အသစ် ထည့်ပေးပါမယ်။ [[mark:read-case]]
+      error ပျောက်ပြီး၊ default ထဲက type လည်း never ပြန်ဖြစ်သွားပါပြီ။ status အသစ် ထည့်တိုင်း ပြင်ရမယ့်
+      နေရာတွေကို ဒီ စစ်ချက်က တစ်ခုမှ မကျန်အောင် ရှာပေးပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Narrowing (the never type, exhaustiveness checking)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#exhaustiveness-checking",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing (never)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+    actions:
+      - id: open-order-4
+        type: workspace.openFile
+        at: { mark: open-order-4 }
+        path: src/order.ts
+      - id: type-default
+        type: editor.type
+        at: { mark: type-default }
+        target: { file: src/order.ts, after: "${order.reason}`;\n", occurrence: 1 }
+        text: "    default:\n      const unhandled: never = order;\n      //                       ^?\n      return unhandled;\n"
+        cadence: block
+      - id: expect-never
+        type: expect.preview
+        at: { afterAction: type-default }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "(parameter) order: never" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-never-no-errors
+        type: expect.preview
+        at: { afterAction: expect-never }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-brewing
+        type: editor.type
+        at: { mark: type-brewing }
+        target:
+          {
+            file: src/order.ts,
+            after: '  | { status: "cancelled"; item: string; reason: string }',
+            occurrence: 1,
+          }
+        text: "\n  | { status: \"brewing\"; item: string; barista: string }"
+        cadence: line-by-line
+      - id: expect-brewing-error
+        type: expect.preview
+        at: { afterAction: type-brewing }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'Type ''{ status: "brewing"; item: string; barista: string; }'' is not assignable to type ''never''.'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-brewing-count
+        type: expect.preview
+        at: { afterAction: expect-brewing-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-brewing-query
+        type: expect.preview
+        at: { afterAction: expect-brewing-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        textContains: 'status: "brewing";'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-case
+        type: editor.type
+        at: { mark: type-case }
+        target: { file: src/order.ts, after: "${order.reason}`;\n", occurrence: 1 }
+        text: "    case \"brewing\":\n      return `${order.item}: ${order.barista} ဖျော်နေဆဲ`;\n"
+        cadence: line-by-line
+      - id: expect-case-no-errors
+        type: expect.preview
+        at: { afterAction: type-case }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-never-again
+        type: expect.preview
+        at: { afterAction: expect-case-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "(parameter) order: never" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ optional property တွေကို type တစ်ခုထဲ စုထားရင် ဖြစ်လို့ မရတဲ့
+      data ကို လက်ခံပြီး၊ မှန်တဲ့ code ကိုတော့ error ပြတတ်ပါတယ်။ status တစ်ခုစီအတွက် member တစ်ခုစီ
+      ခွဲရေးပြီး literal type ရှိတဲ့ status နဲ့ ခွဲထားရင်၊ case တိုင်းမှာ TypeScript က မှန်တဲ့ member
+      ကို narrow လုပ်ပေးပါတယ်။ [[mark:recap-rules]] member တချို့မှာပဲ ရှိတဲ့ property ကို status
+      စစ်ပြီးမှ destructure လုပ်ရပြီး၊ tuple မှာတော့ ပထမ နေရာကို discriminant အဖြစ် သုံးနိုင်ပါတယ်။
+      default ထဲက never စစ်ချက်ကတော့ status အသစ်အတွက် ကျန်ခဲ့တဲ့ နေရာကို ပြပေးပါတယ်။ နောက် lesson
+      မှာတော့ object type တွေကို ပေါင်းပြီး ချဲ့ထွင်ပေးတဲ့ interface နဲ့ intersection ကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Unions, Literals, and Narrowing",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html",
+        }
+    actions:
+      - id: select-union-recap
+        type: editor.select
+        at: { mark: recap }
+        target:
+          {
+            file: src/order.ts,
+            text: "  | { status: \"pending\"; item: string }\n  | { status: \"paid\"; item: string; paidAt: string }\n  | { status: \"cancelled\"; item: string; reason: string }\n  | { status: \"brewing\"; item: string; barista: string };",
+            occurrence: 1,
+          }
+      - id: select-never-recap
+        type: editor.select
+        at: { mark: recap-rules }
+        target: { file: src/order.ts, text: "const unhandled: never = order;", occurrence: 1 }
+      - id: expect-file-union
+        type: expect.file
+        at: { afterAction: select-union-recap }
+        path: src/order.ts
+        contains: "export type Order =\n  | { status: \"pending\"; item: string }\n  | { status: \"paid\"; item: string; paidAt: string }\n  | { status: \"cancelled\"; item: string; reason: string }\n  | { status: \"brewing\"; item: string; barista: string };\n\ntype OrderBag = {"
+      - id: expect-file-never
+        type: expect.file
+        at: { afterAction: expect-file-union }
+        path: src/order.ts
+        contains: "    case \"brewing\":\n      return `${order.item}: ${order.barista} ဖျော်နေဆဲ`;\n    default:\n      const unhandled: never = order;"
+      - id: expect-file-guard
+        type: expect.file
+        at: { afterAction: expect-file-never }
+        path: src/main.ts
+        contains: "  if (order.status !== \"paid\") continue;\n  const { item, paidAt } = order;"
+      - id: expect-file-tuple
+        type: expect.file
+        at: { afterAction: expect-file-guard }
+        path: src/main.ts
+        contains: 'type FindResult = ["ok", Order] | ["error", string];'
+      - id: expect-file-tuple-use
+        type: expect.file
+        at: { afterAction: expect-file-tuple }
+        path: src/main.ts
+        contains: "if (result === \"ok\") {\n  console.log(statusText(value));\n"
+checks:
+  - { type: timing.p95Ms, max: 300 }
