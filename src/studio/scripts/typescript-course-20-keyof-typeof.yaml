@@ -1,0 +1,1601 @@
+# TypeScript course, lesson 20: deriving types with keyof, typeof and indexed access (Burmese).
+#
+# Start state (ws/): src/menu.ts holds the menu object (tea, coffee, mohinga, palata with prices),
+# a hand-copied `ItemName` union that is missing "palata" on purpose, and priceOf(name: ItemName);
+# src/order.ts holds a plain `Sugar` object (Less/Normal/Extra, no `as const`) and the `Order` type
+# (id, item, a four-member status union, a nested customer); src/main.ts prints two prices and a
+# sugar level. main.ts imports order.ts first, so order.ts's queries are listed first in Types.
+# Panel (data-modes "errors output types"): 1 error (TS2345 '"palata"' not assignable to
+# 'ItemName'), Output 3 lines (the run is fine; only the copied type is out of date).
+# Edits (all insert-only):
+#   `type Menu = typeof menu;` + query (the object type);
+#   one block insert above the copied line: `export type ItemName = keyof Menu;` + query,
+#   and `// ` in front of the old line -> 0 errors, the union with palata;
+#   `lime: 1200,` in menu -> Menu and ItemName both gain lime;
+#   `console.log(ItemName);` (TS2693 + "Uncaught ReferenceError: ItemName is not defined"), then
+#   `// ` in front of it -> output back;
+#   four indexed access aliases + queries under Order: Order["status"], Order["customer"]["table"],
+#   Order["id" | "status"], Order[keyof Order];
+#   `SugarLevel = (typeof Sugar)[keyof typeof Sugar]` + query (string), then ` as const` (the union);
+#   a sugarNote(level: SugarLevel) in main.ts called with Sugar.Extra and with the plain "less".
+# Boards: (A) copy vs derive, (B) enum vs as const object.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-20-keyof-typeof.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-20-keyof-typeof
+  title: "TypeScript course 20: keyof၊ typeof နဲ့ indexed access"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors output types"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { Sugar } from "./order";
+        import { priceOf } from "./menu";
+
+        console.log("လက်ဖက်ရည်", priceOf("tea"), "ကျပ်");
+        console.log("ပလာတာ", priceOf("palata"), "ကျပ်");
+        console.log("သကြား", Sugar.Less);
+      src/menu.ts: |
+        export const menu = {
+          tea: 1500,
+          coffee: 1800,
+          mohinga: 2500,
+          palata: 1200,
+        };
+
+        // menu ထဲက ပစ္စည်း နာမည်တွေ
+        export type ItemName = "tea" | "coffee" | "mohinga";
+
+        export function priceOf(name: ItemName) {
+          return menu[name];
+        }
+      src/order.ts: |
+        // သကြား အဆင့်တွေ · enum အစား ရိုးရိုး object
+        export const Sugar = {
+          Less: "less",
+          Normal: "normal",
+          Extra: "extra",
+        };
+
+        export type Order = {
+          id: number;
+          item: string;
+          status: "pending" | "brewing" | "ready" | "paid";
+          customer: { name: string; table: number };
+        };
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: a copied type drifts, a derived type follows its source.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "ကူးရေးမယ့်အစား ထုတ်ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-src-box,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 230,
+        height: 140,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-src-name,
+        kind: text,
+        x: 330,
+        y: 268,
+        width: 110,
+        height: 36,
+        text: "menu",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-src-sub,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 200,
+        height: 36,
+        text: "+ palata",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-copy,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 510,
+        y: 255,
+        width: 80,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-copy,
+        kind: text,
+        x: 600,
+        y: 258,
+        width: 480,
+        height: 36,
+        text: "ကူးရေးထားတဲ့ type ✘ palata မပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-derive,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 510,
+        y: 335,
+        width: 80,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-derive,
+        kind: text,
+        x: 600,
+        y: 338,
+        width: 480,
+        height: 36,
+        text: "ထုတ်ယူထားတဲ့ type ✓ palata ပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-rule,
+        kind: text,
+        x: 270,
+        y: 450,
+        width: 800,
+        height: 40,
+        text: "မူရင်း တစ်နေရာ ပြင် → type တွေ အလိုလို လိုက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-tools,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 800,
+        height: 40,
+        text: "typeof · keyof · indexed access",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board B: enum vs as const object.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "enum နဲ့ as const object",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-h-enum,
+        kind: text,
+        x: 610,
+        y: 240,
+        width: 120,
+        height: 36,
+        text: "enum",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-h-obj,
+        kind: text,
+        x: 810,
+        y: 240,
+        width: 270,
+        height: 36,
+        text: "as const object",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-label,
+        kind: text,
+        x: 270,
+        y: 300,
+        width: 320,
+        height: 36,
+        text: "string တိုက်ရိုက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-enum,
+        kind: text,
+        x: 610,
+        y: 300,
+        width: 180,
+        height: 36,
+        text: "✘ member ပဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-obj,
+        kind: text,
+        x: 810,
+        y: 300,
+        width: 270,
+        height: 36,
+        text: "✓ ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-label,
+        kind: text,
+        x: 270,
+        y: 365,
+        width: 320,
+        height: 36,
+        text: "import",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-enum,
+        kind: text,
+        x: 610,
+        y: 365,
+        width: 180,
+        height: 36,
+        text: "အမြဲ လို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-obj,
+        kind: text,
+        x: 810,
+        y: 365,
+        width: 270,
+        height: 36,
+        text: "string ဆို မလို",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-label,
+        kind: text,
+        x: 270,
+        y: 430,
+        width: 320,
+        height: 36,
+        text: "တန်ဖိုးတူ enum နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-enum,
+        kind: text,
+        x: 610,
+        y: 430,
+        width: 180,
+        height: 36,
+        text: "✘ nominal",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r3-obj,
+        kind: text,
+        x: 810,
+        y: 430,
+        width: 270,
+        height: 36,
+        text: "✓ structural",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-choice,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 800,
+        height: 40,
+        text: "code အသစ် → as const object",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3120
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "ကူးရေးမယ့်အစား ထုတ်ယူပါ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ enum လို TypeScript မှာပဲ ရှိတဲ့ feature တွေကို
+      ကြည့်ခဲ့ပြီး၊ enum အစား as const object ကို သုံးမယ်လို့ ပြောခဲ့ပါတယ်။ ဒီ lesson မှာ အဲဒီ
+      နည်းကို နားလည်ဖို့၊ ရှိပြီးသား type နဲ့ တန်ဖိုးတွေကနေ type အသစ် ထုတ်ယူတဲ့ နည်းတွေကို အရင်
+      လေ့လာပါမယ်။ [[mark:draw-copy]] code ထဲမှာ အချက်အလက် တစ်ခုတည်းကို နှစ်နေရာမှာ ရေးထားရင်၊
+      တစ်နေရာကို ပြင်တဲ့အခါ ကျန်တဲ့ နေရာကို ပြင်ဖို့ မေ့သွားတတ်ပါတယ်။ ဥပမာအားဖြင့် menu ထဲကို ပလာတာ
+      ထပ်ထည့်လိုက်ပေမယ့်၊ ပစ္စည်း နာမည်တွေကို ကူးရေးထားတဲ့ type ထဲမှာတော့ ထည့်ဖို့ မေ့သွားတာမျိုးပါ။
+      [[mark:draw-derive]] အဲဒီအစား type ကို မူရင်း တန်ဖိုး ဒါမှမဟုတ် မူရင်း type ကနေ ထုတ်ယူထားရင်၊
+      မူရင်းကို ပြင်လိုက်တာနဲ့ ထုတ်ယူထားတဲ့ type ကလည်း အလိုလို လိုက်ပြောင်းပါတယ်။ ဆိုတော့ ပြင်စရာ
+      နေရာ တစ်နေရာပဲ ရှိတော့ပါတယ်။ [[mark:draw-tools]] ဒီလို ထုတ်ယူဖို့ TypeScript မှာ type of ရယ်၊
+      key of ရယ်၊ indexed access ရယ် ဆိုတဲ့ နည်း သုံးမျိုး ရှိပြီး၊ ဒီ lesson မှာ တစ်ခုချင်း သုံးကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (derived types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Creating Types from Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/types-from-types.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-copy
+        type: whiteboard.apply
+        at: { mark: draw-copy }
+        upsertIds: [a-src-box, a-src-name, a-src-sub, a-arrow-copy, a-copy]
+        drawMs: 3000
+      - id: draw-derive
+        type: whiteboard.apply
+        at: { mark: draw-derive }
+        upsertIds: [a-arrow-derive, a-derive, a-rule]
+        drawMs: 2600
+      - id: draw-tools
+        type: whiteboard.apply
+        at: { mark: draw-tools }
+        upsertIds: [a-tools]
+        drawMs: 1200
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒါဆို ဒီ ပြဿနာကို ဆိုင်ရဲ့ code ထဲမှာ ကြည့်ရအောင်။ [[mark:open-menu]] ဒါက ဆိုင်ရဲ့ menu ဖိုင်ပါ။
+      [[mark:select-menu]] menu object ထဲမှာ ပစ္စည်း တစ်ခုချင်းရဲ့ နာမည်နဲ့ ဈေးနှုန်းကို ရေးထားပြီး၊
+      နောက်ဆုံးက ပလာတာကို မကြာခင်က ထပ်ထည့်ထားတာပါ။ [[mark:select-item-name]] သူ့အောက်က type ကတော့
+      ပစ္စည်း နာမည်တွေကို လက်နဲ့ ကူးရေးထားတာ ဖြစ်ပြီး၊ ပလာတာ မပါသေးပါဘူး။ [[mark:select-price-of]]
+      ဈေးနှုန်း ရှာပေးတဲ့ function က အဲဒီ type ကို parameter ရဲ့ type အဖြစ် သုံးထားပါတယ်။
+      [[mark:open-order]] order ဖိုင်မှာတော့ သကြား အဆင့်တွေကို enum မဟုတ်ဘဲ ရိုးရိုး object နဲ့
+      ရေးထားပါတယ်။ [[mark:select-order-type]] အောက်မှာ အော်ဒါ တစ်ခုရဲ့ type ရှိပြီး၊ status
+      လေးမျိုးနဲ့ customer ရဲ့ နာမည်၊ စားပွဲ နံပါတ်တို့ ပါပါတယ်။ [[mark:open-main]] main ဖိုင်ကတော့
+      လက်ဖက်ရည်နဲ့ ပလာတာရဲ့ ဈေးနှုန်းနဲ့ သကြား အဆင့်ကို ထုတ်ပြပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-menu
+        type: workspace.openFile
+        at: { mark: open-menu }
+        path: src/menu.ts
+      - id: select-menu
+        type: editor.select
+        at: { mark: select-menu }
+        target:
+          {
+            file: src/menu.ts,
+            text: "  tea: 1500,\n  coffee: 1800,\n  mohinga: 2500,\n  palata: 1200,",
+            occurrence: 1,
+          }
+      - id: select-item-name
+        type: editor.select
+        at: { mark: select-item-name }
+        target:
+          {
+            file: src/menu.ts,
+            text: 'export type ItemName = "tea" | "coffee" | "mohinga";',
+            occurrence: 1,
+          }
+      - id: select-price-of
+        type: editor.select
+        at: { mark: select-price-of }
+        target:
+          { file: src/menu.ts, text: "export function priceOf(name: ItemName)", occurrence: 1 }
+      - id: open-order
+        type: workspace.openFile
+        at: { mark: open-order }
+        path: src/order.ts
+      - id: select-sugar
+        type: editor.select
+        at: { afterAction: open-order }
+        target:
+          {
+            file: src/order.ts,
+            text: "  Less: \"less\",\n  Normal: \"normal\",\n  Extra: \"extra\",",
+            occurrence: 1,
+          }
+      - id: select-order-type
+        type: editor.select
+        at: { mark: select-order-type }
+        target:
+          {
+            file: src/order.ts,
+            text: "  status: \"pending\" | \"brewing\" | \"ready\" | \"paid\";\n  customer: { name: string; table: number };",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output မှာ ပလာတာ ၁၂၀၀ ကျပ် အပါအဝင် line သုံးကြောင်း
+      မှန်မှန် ထွက်နေပါတယ်။ ဒါပေမဲ့ Errors မှာတော့ ပလာတာ ဆိုတဲ့ string ကို ItemName type ထဲ ထည့်လို့
+      မရဘူး ဆိုတဲ့ error ပေါ်နေပါတယ်။ [[mark:select-palata-call]] ဆိုလိုတာက program က မှန်နေပေမယ့်၊
+      လက်နဲ့ ကူးရေးထားတဲ့ type က menu နဲ့ မကိုက်တော့တာပါ။ ကူးရေးထားတဲ့ နေရာ များလေ၊ ဒီလို ပြဿနာ
+      များလေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (derived types, single source of truth)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-one-error
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-palata-error
+        type: expect.preview
+        at: { afterAction: expect-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'Argument of type ''"palata"'' is not assignable to parameter of type ''ItemName''.'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-palata-price
+        type: expect.preview
+        at: { afterAction: expect-palata-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ပလာတာ 1200 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-three-lines
+        type: expect.preview
+        at: { afterAction: expect-palata-price }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-palata-call
+        type: editor.select
+        at: { mark: select-palata-call }
+        target: { file: src/main.ts, text: 'priceOf("palata")', occurrence: 1 }
+
+  - id: typeof
+    chapter: "typeof နဲ့ တန်ဖိုးရဲ့ type"
+    narration: >
+      [[mark:open-menu-2]] အရင်ဆုံး menu object ရဲ့ type ကို ထုတ်ယူကြည့်ရအောင်။
+      [[mark:type-menu-type]] type alias တစ်ခုမှာ type of ကို menu variable နဲ့ တွဲရေးပြီး၊ query
+      comment နဲ့ ကြည့်ပါမယ်။ [[mark:read-menu-type]] Types မှာ menu ရဲ့ type ပေါ်လာပါပြီ။ property
+      လေးခု ပါပြီး တစ်ခုချင်းစီက number ဖြစ်ပါတယ်။ type of ကို type ရေးတဲ့ နေရာမှာ သုံးရင်၊ တန်ဖိုး
+      တစ်ခုရဲ့ type ကို TypeScript ဆီကနေ ထုတ်ယူပေးပါတယ်။ JavaScript မှာလည်း type of ရှိပေမယ့်၊ အဲဒါက
+      program run တဲ့ အချိန်မှာ object လို စာသား တစ်ခုကို ပြန်ပေးတာ ဖြစ်လို့ နာမည်တူပေမယ့်
+      အလုပ်လုပ်ပုံ မတူပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (typeof)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Typeof Type Operator",
+          url: "https://www.typescriptlang.org/docs/handbook/2/typeof-types.html",
+        }
+    actions:
+      - id: open-menu-2
+        type: workspace.openFile
+        at: { mark: open-menu-2 }
+        path: src/menu.ts
+      - id: type-menu-type
+        type: editor.type
+        at: { mark: type-menu-type }
+        target: { file: src/menu.ts, after: "  palata: 1200,\n};\n", occurrence: 1 }
+        text: "\ntype Menu = typeof menu;\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-menu-type
+        type: expect.preview
+        at: { afterAction: type-menu-type }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "type Menu = {\n    tea: number;\n    coffee: number;\n    mohinga: number;\n    palata: number;\n}"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: keyof
+    chapter: "keyof နဲ့ key တွေရဲ့ union"
+    narration: >
+      key of ကတော့ object type တစ်ခုရဲ့ key နာမည်တွေကို union type အဖြစ် ထုတ်ပေးပါတယ်။ ဆိုတော့ ခုနက
+      ထုတ်ယူထားတဲ့ menu ရဲ့ type ကို key of နဲ့ တွဲလိုက်ရင် ပစ္စည်း နာမည်တွေ ရလာမှာပါ။ [[mark:type-keyof]]
+      ကူးရေးထားတဲ့ type ရဲ့ အပေါ်မှာ အဲဒီ နည်းနဲ့ ထုတ်ယူထားတဲ့ type ကို ရေးပြီး၊ အဟောင်းကိုတော့
+      comment အဖြစ် ချန်ထားပါမယ်။ [[mark:read-keyof]] Errors ရှင်းသွားပါပြီ။ Types မှာ ItemName က
+      ပလာတာ အပါအဝင် ပစ္စည်း နာမည် လေးခုရဲ့ union ဖြစ်သွားတာ တွေ့ရပါတယ်။ [[mark:type-lime]] အခု menu
+      ထဲကို သံပုရာရည် ထပ်ထည့်ကြည့်ရအောင်။ [[mark:read-lime]] type တွေကို ဘာမှ မပြင်ရဘဲ၊ menu ရဲ့
+      type မှာရော ItemName မှာရော lime ပါလာပါပြီ။ ဒါက ထုတ်ယူတဲ့ နည်းရဲ့ အကျိုးပါ။ မူရင်း
+      တစ်နေရာကိုပဲ ပြင်ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (keyof, keyof typeof)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Keyof Type Operator",
+          url: "https://www.typescriptlang.org/docs/handbook/2/keyof-types.html",
+        }
+    actions:
+      - id: type-keyof
+        type: editor.type
+        at: { mark: type-keyof }
+        target: { file: src/menu.ts, after: "// menu ထဲက ပစ္စည်း နာမည်တွေ\n", occurrence: 1 }
+        text: "export type ItemName = keyof Menu;\n//          ^?\n// "
+        cadence: block
+      - id: expect-keyof-clean
+        type: expect.preview
+        at: { afterAction: type-keyof }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-keyof-union
+        type: expect.preview
+        at: { afterAction: expect-keyof-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute:
+          { name: data-type, value: 'type ItemName = "tea" | "coffee" | "mohinga" | "palata"' }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-keyof
+        type: editor.select
+        at: { mark: read-keyof }
+        target: { file: src/menu.ts, text: "keyof Menu", occurrence: 1 }
+      - id: type-lime
+        type: editor.type
+        at: { mark: type-lime }
+        target: { file: src/menu.ts, after: "  palata: 1200,\n", occurrence: 1 }
+        text: "  lime: 1200,\n"
+        cadence: fast-explainer
+      - id: expect-lime-union
+        type: expect.preview
+        at: { afterAction: type-lime }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute:
+          {
+            name: data-type,
+            value: 'type ItemName = "tea" | "coffee" | "mohinga" | "palata" | "lime"',
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-lime-menu
+        type: expect.preview
+        at: { afterAction: expect-lime-union }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    lime: number;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: no-way-back
+    narration: >
+      [[mark:type-experiment]] ဒါဆို ပြောင်းပြန် လုပ်လို့ ရမလား။ type တစ်ခုကို တန်ဖိုး တစ်ခုလို
+      ထုတ်ပြကြည့်ရအောင်။ [[mark:read-experiment]] Errors မှာ ItemName က type သက်သက် ဖြစ်ပြီး၊
+      တန်ဖိုး အဖြစ် သုံးနေတယ်လို့ ပြောနေပါတယ်။ Output မှာလည်း ဈေးနှုန်း line တွေ မထွက်တော့ဘဲ၊ run တဲ့ အချိန်မှာ
+      ItemName ဆိုတာ မရှိဘူး ဆိုတဲ့ error နဲ့ program ရပ်သွားပါတယ်။ type တွေက JavaScript ဖြစ်တဲ့အခါ
+      ဖယ်ထုတ်ခံရလို့ပါ။ ဒါကြောင့် တန်ဖိုးကနေ type ကို ထုတ်ယူလို့ ရပေမယ့်၊ type ကနေ တန်ဖိုးကို
+      ပြန်ထုတ်လို့ မရပါဘူး။ [[mark:type-comment-out]] ဒီ line ကို comment လုပ်လိုက်ပါမယ်။
+      [[mark:read-restored]] error ပျောက်ပြီး Output ပြန်ထွက်လာပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (you can't create runtime values from types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: The Basics (erased types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/basic-types.html#erased-types",
+        }
+    actions:
+      - id: type-experiment
+        type: editor.type
+        at: { mark: type-experiment }
+        target: { file: src/menu.ts, after: "  return menu[name];\n}\n", occurrence: 1 }
+        text: "\nconsole.log(ItemName);\n"
+        cadence: fast-explainer
+      - id: expect-experiment-error
+        type: expect.preview
+        at: { afterAction: type-experiment }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'ItemName' only refers to a type, but is being used as a value here."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-experiment-crash
+        type: expect.preview
+        at: { afterAction: expect-experiment-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "Uncaught ReferenceError: ItemName is not defined"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-experiment-only-line
+        type: expect.preview
+        at: { afterAction: expect-experiment-crash }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-experiment-count
+        type: expect.preview
+        at: { afterAction: expect-experiment-only-line }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-comment-out
+        type: editor.type
+        at: { mark: type-comment-out }
+        target: { file: src/menu.ts, after: "  return menu[name];\n}\n\n", occurrence: 1 }
+        text: "// "
+        cadence: fast-explainer
+      - id: expect-restored
+        type: expect.preview
+        at: { afterAction: type-comment-out }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-restored-clean
+        type: expect.preview
+        at: { afterAction: expect-restored }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: indexed
+    chapter: "Indexed access type"
+    narration: >
+      [[mark:open-order-2]] တတိယ နည်းက indexed access type ပါ။ object ထဲက property ကို လေးထောင့်
+      ကွင်းနဲ့ ယူသလိုပဲ၊ type တစ်ခုထဲက property ရဲ့ type ကို ယူတာပါ။ [[mark:type-status]] အော်ဒါရဲ့
+      status ရဲ့ type ကို ထုတ်ယူကြည့်ရအောင်။ [[mark:read-status]] Types ရဲ့ အပေါ်ဆုံးမှာ status
+      လေးမျိုးရဲ့ union ပေါ်လာပါပြီ။ status တွေကို ထပ်ကူးရေးစရာ မလိုတော့ပါဘူး။ [[mark:type-table]]
+      လေးထောင့် ကွင်းတွေကို ဆက်ရေးပြီး၊ customer ထဲက စားပွဲ နံပါတ်ရဲ့ type ကိုလည်း ယူလို့ ရပါတယ်။
+      [[mark:read-table]] စားပွဲ နံပါတ်က number ဖြစ်တာ ပေါ်လာပါပြီ။ [[mark:type-union-key]] ကွင်းထဲမှာ key တစ်ခုထက်
+      ပိုပြီး union နဲ့ ပေးရင်၊ အဲဒီ property တွေရဲ့ type တွေကို ပေါင်းထားတဲ့ union ကို ရပါတယ်။
+      [[mark:read-union-key]] id ရဲ့ number နဲ့ status လေးမျိုး ပေါင်းထားတာ မြင်ရပါတယ်။
+      [[mark:type-all-values]] ကွင်းထဲမှာ key of Order ကို ထည့်ကြည့်ရအောင်။ key of Order ဆိုတာ
+      အော်ဒါရဲ့ key လေးခုလုံးရဲ့ union ဖြစ်လို့၊ property အားလုံးရဲ့ type တွေကို ရပါတယ်။
+      [[mark:read-all-values]] string ရယ်၊ number ရယ်၊ customer object ရဲ့ type ရယ် ပေါ်လာပါတယ်။
+      status ရဲ့ တန်ဖိုး လေးမျိုးက string ထဲမှာ ပါပြီးသား ဖြစ်လို့ သီးသန့် မပြတော့တာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (indexed access types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Indexed Access Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/indexed-access-types.html",
+        }
+    actions:
+      - id: open-order-2
+        type: workspace.openFile
+        at: { mark: open-order-2 }
+        path: src/order.ts
+      - id: type-status
+        type: editor.type
+        at: { mark: type-status }
+        target:
+          {
+            file: src/order.ts,
+            after: "  customer: { name: string; table: number };\n};\n",
+            occurrence: 1,
+          }
+        text: "\ntype Status = Order[\"status\"];\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-status
+        type: expect.preview
+        at: { afterAction: type-status }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          { name: data-type, value: 'type Status = "pending" | "brewing" | "ready" | "paid"' }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-table
+        type: editor.type
+        at: { mark: type-table }
+        target:
+          {
+            file: src/order.ts,
+            after: "type Status = Order[\"status\"];\n//   ^?\n",
+            occurrence: 1,
+          }
+        text: "type Table = Order[\"customer\"][\"table\"];\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-table
+        type: expect.preview
+        at: { afterAction: type-table }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "type Table = number" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-union-key
+        type: editor.type
+        at: { mark: type-union-key }
+        target:
+          {
+            file: src/order.ts,
+            after: "type Table = Order[\"customer\"][\"table\"];\n//   ^?\n",
+            occurrence: 1,
+          }
+        text: "type IdOrStatus = Order[\"id\" | \"status\"];\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-union-key
+        type: expect.preview
+        at: { afterAction: type-union-key }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute:
+          {
+            name: data-type,
+            value: 'type IdOrStatus = number | "pending" | "brewing" | "ready" | "paid"',
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-all-values
+        type: editor.type
+        at: { mark: type-all-values }
+        target:
+          {
+            file: src/order.ts,
+            after: "type IdOrStatus = Order[\"id\" | \"status\"];\n//   ^?\n",
+            occurrence: 1,
+          }
+        text: "type OrderValue = Order[keyof Order];\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-all-values
+        type: expect.preview
+        at: { afterAction: type-all-values }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-4 }
+        textContains: "type OrderValue = string | number | {\n    name: string;\n    table: number;\n}"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: as-const
+    chapter: "Enum အစား as const object"
+    narration: >
+      [[mark:select-sugar-2]] ဖိုင်ရဲ့ အပေါ်က သကြား object ကို ပြန်ကြည့်ရအောင်။ enum လိုပဲ နာမည်
+      တစ်ခုစီမှာ တန်ဖိုး တစ်ခုစီ ရှိပါတယ်။ [[mark:type-sugar-level]] ဒီ object ရဲ့ တန်ဖိုး
+      အားလုံးကို type အဖြစ် ထုတ်ယူဖို့၊ type of နဲ့ object ရဲ့ type ကို ယူပြီး၊ ကွင်းထဲမှာလည်း key of နဲ့ type of ကို
+      တွဲရေးပြီး key အားလုံးကို ပေးပါမယ်။ [[mark:read-string]] ဒါပေမဲ့ Types မှာ string ပဲ ပေါ်ပါတယ်။ object
+      ရဲ့ property တွေကို နောက်မှ ပြင်လို့ ရတဲ့အတွက်၊ TypeScript က တန်ဖိုးတွေကို string အဖြစ်
+      ချဲ့ပြီး infer လုပ်လို့ပါ။ [[mark:type-as-const]] ဒါကြောင့် lesson ၁၆ မှာ သုံးခဲ့တဲ့ as const
+      ကို object ရဲ့ နောက်မှာ ထည့်ပါမယ်။ [[mark:read-levels]] အခု သကြား အဆင့် သုံးမျိုးရဲ့ union
+      ဖြစ်သွားပါပြီ။ as const က property တွေကို read only ဖြစ်စေပြီး၊ တန်ဖိုးတွေကို literal type
+      အတိုင်း ထားပေးလို့ပါ။ [[mark:open-main-2]] main ဖိုင်မှာ ဒီ type ကို သုံးတဲ့ function တစ်ခု
+      ရေးပြီး၊ object ရဲ့ member နဲ့ရော string သက်သက်နဲ့ရော ခေါ်ကြည့်ပါမယ်။
+      [[mark:read-note-output]] error မရှိဘဲ Output မှာ နှစ်ခုလုံး ထွက်လာပါပြီ။ ပြီးခဲ့တဲ့ lesson မှာ တွေ့ခဲ့တဲ့
+      string enum ဆိုရင်တော့ string သက်သက်ကို လက်မခံခဲ့ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (as const objects instead of enums)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Enums (objects vs enums)",
+          url: "https://www.typescriptlang.org/docs/handbook/enums.html#objects-vs-enums",
+        }
+    actions:
+      - id: select-sugar-2
+        type: editor.select
+        at: { mark: select-sugar-2 }
+        target: { file: src/order.ts, text: "export const Sugar = {", occurrence: 1 }
+      - id: type-sugar-level
+        type: editor.type
+        at: { mark: type-sugar-level }
+        target: { file: src/order.ts, after: "  Extra: \"extra\",\n};\n", occurrence: 1 }
+        text: "export type SugarLevel = (typeof Sugar)[keyof typeof Sugar];\n//          ^?\n"
+        cadence: line-by-line
+      - id: expect-level-string
+        type: expect.preview
+        at: { afterAction: type-sugar-level }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "type SugarLevel = string" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-as-const
+        type: editor.type
+        at: { mark: type-as-const }
+        target: { file: src/order.ts, after: "  Extra: \"extra\",\n}", occurrence: 1 }
+        text: " as const"
+        cadence: fast-explainer
+      - id: expect-level-union
+        type: expect.preview
+        at: { afterAction: type-as-const }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: 'type SugarLevel = "less" | "normal" | "extra"' }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: src/main.ts
+      - id: import-level
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "import { Sugar", occurrence: 1 }
+        text: ", type SugarLevel"
+        cadence: fast-explainer
+      - id: type-note
+        type: editor.type
+        at: { afterAction: import-level }
+        target: { file: src/main.ts, after: "console.log(\"သကြား\", Sugar.Less);\n", occurrence: 1 }
+        text: "\nfunction sugarNote(level: SugarLevel) {\n  return `သကြား ${level}`;\n}\nconsole.log(sugarNote(Sugar.Extra), sugarNote(\"less\"));\n"
+        cadence: line-by-line
+      - id: expect-note-output
+        type: expect.preview
+        at: { afterAction: type-note }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "သကြား extra သကြား less"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-note-clean
+        type: expect.preview
+        at: { afterAction: expect-note-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-raw-less
+        type: editor.select
+        at: { mark: read-note-output }
+        target: { file: src/main.ts, text: 'sugarNote("less")', occurrence: 1 }
+
+  - id: enum-vs-object
+    narration: >
+      [[mark:board-compare]] ဒါဆို enum နဲ့ as const object ကို ယှဉ်ကြည့်ရအောင်။ [[mark:draw-raw]]
+      ပထမ အချက်က string သက်သက်ကို ပေးလို့ ရမရပါ။ enum က member ကိုပဲ လက်ခံလို့ ပိုတိကျပြီး၊ as const
+      object ကတော့ string ကိုပါ လက်ခံလို့ ပိုအဆင်ပြေပါတယ်။ ဒါပေမဲ့ နောက်မှ တန်ဖိုး ပြောင်းချင်ရင်
+      string တွေကို လိုက်ရှာရပါတယ်။ [[mark:draw-import]] ဒုတိယက import ပါ။ enum ကို သုံးတဲ့
+      ဖိုင်တိုင်းမှာ import လုပ်ရပေမယ့်၊ object ကိုတော့ string နဲ့ပဲ ပေးမယ်ဆိုရင် import လုပ်စရာ
+      မလိုပါဘူး။ [[mark:draw-nominal]] တတိယက တန်ဖိုး တူတဲ့ enum နှစ်ခုပါ။ enum ကို နာမည်နဲ့
+      ခွဲခြားလို့၊ တန်ဖိုး တူနေပေမယ့် တစ်ခုရဲ့ နေရာမှာ နောက်တစ်ခုကို ထည့်လို့ မရပါဘူး။ ဒါကို nominal
+      လို့ ခေါ်ပါတယ်။ as const object ကတော့ type ပုံစံ တူရင် ရပြီး၊ ဒါကို structural လို့ ခေါ်ပါတယ်။
+      [[mark:draw-choice]] ဒီ course မှာ code အသစ်အတွက် as const object ကို သုံးပါမယ်။ အဖွဲ့က enum
+      ကို သုံးနေပြီးသား ဆိုရင်တော့ ဆက်သုံးလည်း ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (enums vs as const objects)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (string enums are nominal)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+    actions:
+      - id: board-compare
+        type: whiteboard.apply
+        at: { mark: board-compare }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-h-enum, b-h-obj]
+      - id: draw-raw
+        type: whiteboard.apply
+        at: { mark: draw-raw }
+        upsertIds: [b-r1-label, b-r1-enum, b-r1-obj]
+        drawMs: 1800
+      - id: draw-import
+        type: whiteboard.apply
+        at: { mark: draw-import }
+        upsertIds: [b-r2-label, b-r2-enum, b-r2-obj]
+        drawMs: 1800
+      - id: draw-nominal
+        type: whiteboard.apply
+        at: { mark: draw-nominal }
+        upsertIds: [b-r3-label, b-r3-enum, b-r3-obj]
+        drawMs: 1800
+      - id: draw-choice
+        type: whiteboard.apply
+        at: { mark: draw-choice }
+        upsertIds: [b-choice]
+        drawMs: 1200
+
+  - id: recap
+    narration: >
+      [[mark:close-compare]] ဒါဆို ပြန်ချုပ်ရရင်၊ type of က တန်ဖိုးကနေ type ကို ထုတ်ယူပြီး၊ key of က
+      object type ရဲ့ key တွေကို union အဖြစ် ထုတ်ပေးပါတယ်။ indexed access ကတော့ property တစ်ခုရဲ့
+      type ဒါမှမဟုတ် property အားလုံးရဲ့ type တွေကို ယူပေးပါတယ်။ [[mark:recap-as-const]] ဒီ
+      နည်းတွေကို as const object နဲ့ တွဲသုံးရင် enum လို အလုပ်လုပ်တဲ့ type ကို ရပြီး၊ ကူးရေးမယ့်အစား
+      ထုတ်ယူထားလို့ မူရင်းကို ပြင်တာနဲ့ အားလုံး လိုက်ပြောင်းပါတယ်။ နောက် lesson မှာတော့ function
+      တစ်ခုရဲ့ parameter တွေနဲ့ return type ကနေ type ထုတ်ယူပုံနဲ့၊ union type တွေကို ပြောင်းပေးတဲ့ utility
+      type တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: close-compare
+        type: whiteboard.apply
+        at: { mark: close-compare }
+        open: false
+      - id: open-order-3
+        type: workspace.openFile
+        at: { mark: close-compare, offsetMs: 700 }
+        path: src/order.ts
+      - id: select-recap-level
+        type: editor.select
+        at: { mark: recap-as-const }
+        target:
+          {
+            file: src/order.ts,
+            text: "export type SugarLevel = (typeof Sugar)[keyof typeof Sugar];",
+            occurrence: 1,
+          }
+      - id: expect-file-keyof
+        type: expect.file
+        at: { afterAction: close-compare }
+        path: src/menu.ts
+        contains: "type Menu = typeof menu;\n//   ^?\n\n// menu ထဲက ပစ္စည်း နာမည်တွေ\nexport type ItemName = keyof Menu;\n//          ^?\n// export type ItemName = \"tea\" | \"coffee\" | \"mohinga\";"
+      - id: expect-file-indexed
+        type: expect.file
+        at: { afterAction: expect-file-keyof }
+        path: src/order.ts
+        contains: "type OrderValue = Order[keyof Order];"
+      - id: expect-file-as-const
+        type: expect.file
+        at: { afterAction: expect-file-indexed }
+        path: src/order.ts
+        contains: "  Extra: \"extra\",\n} as const;"
+      - id: expect-file-note
+        type: expect.file
+        at: { afterAction: expect-file-as-const }
+        path: src/main.ts
+        contains: 'console.log(sugarNote(Sugar.Extra), sugarNote("less"));'
+checks:
+  - { type: timing.p95Ms, max: 300 }
