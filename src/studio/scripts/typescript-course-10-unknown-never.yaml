@@ -1091,7 +1091,7 @@ scenes:
       စစ်ပါမယ်။ function နာမည်ရဲ့ အောက်မှာ query comment လည်း ထည့်ထားပါတယ်။ [[mark:read-guard-1]] Types
       အပိုင်းကို ကြည့်ပါ။ ပြန်ပေးမယ့် type နေရာမှာ boolean အစား type predicate လို့ ခေါ်တဲ့ ပုံစံ
       ပေါ်နေပါတယ်။ ဆိုလိုတာက ဒီ function က true ပြန်ပေးရင်၊ value က object ဒါမှမဟုတ် null ဖြစ်တယ် ဆိုတာပါ။
-      TypeScript ၅.၅ ကစပြီး ဒီလို စစ်ပေးတဲ့ function ရဲ့ type predicate ကို TypeScript က သူ့ဘာသာ infer
+      TypeScript ၅ ဒသမ ၅ ကစပြီး ဒီလို စစ်ပေးတဲ့ function ရဲ့ type predicate ကို TypeScript က သူ့ဘာသာ infer
       လုပ်ပေးပါတယ်။ null ပါနေတာကတော့ JavaScript မှာ null ကို type of နဲ့ စစ်ရင် object လို့ ထွက်လို့ပါ။
       [[mark:type-not-null]] ဒါကြောင့် null မဟုတ်ဘူး ဆိုတဲ့ အဆင့်ကို ထပ်ထည့်ပါမယ်။ [[mark:read-guard-2]]
       ဒီတစ်ခါ object တစ်ခုတည်း ကျန်ပါတော့တယ်။ [[mark:type-in-item]] နောက်ဆုံး အဆင့်အနေနဲ့ item ဆိုတဲ့
