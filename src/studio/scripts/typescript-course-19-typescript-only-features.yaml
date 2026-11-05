@@ -1640,7 +1640,7 @@ scenes:
       ကို မစစ်ပါဘူး။ type တွေကို နေရာလွတ်နဲ့ အစားထိုးပြီး၊ ကျန်တဲ့ JavaScript ကို run ရုံပါ။
       [[mark:draw-strip-fail]] ဒါကြောင့် code အသစ် ထုတ်ပေးရမယ့် enum ရယ်၊ namespace ရယ်၊ parameter
       property ရယ် ပါတဲ့ ဖိုင်ဆိုရင် error နဲ့ ရပ်သွားပါတယ်။ [[mark:draw-flag]] ဒါကို run မှ
-      မသိရအောင် TypeScript ၅.၈ မှာ erasable syntax only ဆိုတဲ့ setting ထည့်ပေးခဲ့ပါတယ်။ type ကို
+      မသိရအောင် TypeScript ၅ ဒသမ ၈ မှာ erasable syntax only ဆိုတဲ့ setting ထည့်ပေးခဲ့ပါတယ်။ type ကို
       ဖယ်ရုံနဲ့ ရတဲ့ syntax ကိုပဲ ခွင့်ပြုမယ်လို့ ဆိုလိုတာပါ။ [[mark:open-tsconfig]] tsconfig ထဲမှာ
       ဖွင့်ကြည့်ရအောင်။ [[mark:read-erasable]] Errors မှာ စာ အတူတူ ပါတဲ့ error ခြောက်ခု ပေါ်လာပါပြီ။
       erasable syntax only ဖွင့်ထားရင် ဒီ syntax ကို သုံးလို့ မရဘူးလို့ ပြောနေတာပါ။
