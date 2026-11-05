@@ -1,0 +1,1696 @@
+# TypeScript course, lesson 18: class inheritance (Burmese).
+#
+# Start state (ws/): src/order.ts holds an Order class (item, price, a constructor, total() that
+# returns the price, receipt() that calls this.total()); src/delivery.ts only imports Order;
+# src/main.ts has printReceipt(order: Order), creates one Order and passes it in. tsconfig.json is the base file (no
+# noImplicitOverride yet). Panel (data-modes "errors output", no queries in this lesson): ✓ No errors, Output
+# "လက်ဖက်ရည် 1500 ကျပ်".
+# Edits, all insert-only: a DeliveryOrder that `extends Order` with a constructor that has no
+# super() (TS2377 + TS17009), then `super(item, price);`; main creates a coffee delivery (receipt
+# inherited, 1800); an overriding total() (+500 fee → 2300, the base receipt calls it); a block
+# edit turns on noImplicitOverride (TS4114) and `override ` fixes it; the base method is renamed
+# total → totalPrice (two inserts: TS4113 on the override, Output falls back to 1800) and the
+# subclass follows (2300); `delivery.price = 0;` (500) then `protected ` (TS2445, Output still
+# 500) then `// `; an interface Deliverable + `implements` (TS2420, minutes missing) + `minutes = 30;`;
+# `abstract ` on Order (TS2511 at `new Order`), a one-line TableOrder, main switches to it; an
+# abstract label() (TS2515 ×2), each subclass implements it, and the base receipt shows it.
+# Board: (A) Order → extends → DeliveryOrder.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-18-inheritance.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-18-inheritance
+  title: "TypeScript course 18: Class inheritance"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/delivery.ts: |
+        import { Order } from "./order";
+      src/main.ts: |
+        import { Order } from "./order";
+
+        function printReceipt(order: Order) {
+          console.log(order.receipt());
+        }
+
+        const tea = new Order("လက်ဖက်ရည်", 1500);
+        printReceipt(tea);
+      src/order.ts: |
+        export class Order {
+          item: string;
+          price: number;
+
+          constructor(item: string, price: number) {
+            this.item = item;
+            this.price = price;
+          }
+
+          total() {
+            return this.price;
+          }
+
+          receipt() {
+            return `${this.item} ${this.total()} ကျပ်`;
+          }
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: DeliveryOrder extends Order — inherits everything, adds an address, changes the total.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "Class inheritance",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-base-box,
+        kind: rectangle,
+        x: 260,
+        y: 240,
+        width: 300,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-base-name,
+        kind: text,
+        x: 280,
+        y: 255,
+        width: 260,
+        height: 36,
+        text: "class Order",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-base-props,
+        kind: text,
+        x: 280,
+        y: 310,
+        width: 260,
+        height: 36,
+        text: "item · price",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-base-total,
+        kind: text,
+        x: 280,
+        y: 360,
+        width: 260,
+        height: 36,
+        text: "total()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-base-receipt,
+        kind: text,
+        x: 280,
+        y: 410,
+        width: 260,
+        height: 36,
+        text: "receipt()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-extends,
+        kind: text,
+        x: 572,
+        y: 290,
+        width: 120,
+        height: 36,
+        text: "extends",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 335,
+        width: 80,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-sub-box,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 400,
+        height: 230,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-sub-name,
+        kind: text,
+        x: 710,
+        y: 255,
+        width: 360,
+        height: 36,
+        text: "class DeliveryOrder",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-sub-same,
+        kind: text,
+        x: 710,
+        y: 310,
+        width: 360,
+        height: 36,
+        text: "item · price · receipt()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-sub-add,
+        kind: text,
+        x: 710,
+        y: 360,
+        width: 360,
+        height: 36,
+        text: "+ address",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-sub-change,
+        kind: text,
+        x: 710,
+        y: 410,
+        width: 360,
+        height: 36,
+        text: "total() + ပို့ခ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-is-a,
+        kind: text,
+        x: 260,
+        y: 530,
+        width: 820,
+        height: 40,
+        text: "delivery အော်ဒါ ဆိုတာ အော်ဒါ တစ်မျိုး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 1818
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Inheritance ဆိုတာ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ class တစ်ခုကို ရေးပြီး new နဲ့ object တွေ ဆောက်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ class တစ်ခုက နောက် class တစ်ခုဆီက
+      အမွေဆက်ခံတဲ့ inheritance ကို ကြည့်သွားပါမယ်။ [[mark:draw-base]] ဆိုင်မှာ ဆိုင်ထဲ ထိုင်သောက်တဲ့
+      အော်ဒါရော၊ အိမ်အထိ ပို့ပေးရတဲ့ delivery အော်ဒါရော ရှိပါတယ်။ အော်ဒါ တိုင်းမှာ ပစ္စည်း၊ ဈေးနှုန်း ပါပြီး၊
+      ကျသင့်ငွေ တွက်တာ၊ ဘောင်ချာ ထုတ်တာ လုပ်ရပါတယ်။ [[mark:draw-sub]] delivery အော်ဒါမှာတော့ ပို့ရမယ့် လိပ်စာ
+      ထပ်ပါပြီး၊ ကျသင့်ငွေမှာလည်း ပို့ခ ပေါင်းရပါတယ်။ ကျန်တာ အားလုံးကတော့ သာမန် အော်ဒါနဲ့ အတူတူပါပဲ။
+      [[mark:draw-extends]] ဒီလို အခြေအနေမှာ code ကို ကူးမရေးဘဲ၊ delivery class က အော်ဒါ class ကို extends
+      လုပ်ပြီး အမွေဆက်ခံလို့ ရပါတယ်။ ဆိုလိုတာက မူလ class ရဲ့ property နဲ့ method တွေ အကုန် ပါလာပြီး၊ ကိုယ်
+      လိုတာကိုပဲ ထပ်ထည့်တာ၊ ပြောင်းတာ လုပ်ရတာပါ။ မူလ class ကို base class လို့ ခေါ်ပြီး၊ အမွေဆက်ခံတဲ့ class
+      ကို subclass လို့ ခေါ်ပါတယ်။ [[mark:draw-is-a]] delivery အော်ဒါဟာ အော်ဒါ တစ်မျိုး ဖြစ်တဲ့အတွက်၊ အော်ဒါ
+      လိုတဲ့ နေရာမှာလည်း သုံးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (class inheritance)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (extends clauses)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#extends-clauses",
+        }
+      - {
+          title: "MDN: extends",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/extends",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-base
+        type: whiteboard.apply
+        at: { mark: draw-base }
+        upsertIds: [a-base-box, a-base-name, a-base-props, a-base-total, a-base-receipt]
+        drawMs: 3000
+      - id: draw-sub
+        type: whiteboard.apply
+        at: { mark: draw-sub }
+        upsertIds: [a-sub-box, a-sub-name, a-sub-add, a-sub-change]
+        drawMs: 2800
+      - id: draw-extends
+        type: whiteboard.apply
+        at: { mark: draw-extends }
+        upsertIds: [a-extends, a-arrow, a-sub-same]
+        drawMs: 2400
+      - id: draw-is-a
+        type: whiteboard.apply
+        at: { mark: draw-is-a }
+        upsertIds: [a-is-a]
+        drawMs: 1500
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒါဆို ဆိုင်ရဲ့ code ထဲမှာ ကြည့်ရအောင်။ [[mark:open-order]] ဒါက အော်ဒါ class ပါ။ ပစ္စည်းနဲ့
+      ဈေးနှုန်းကို constructor ကနေ ယူပြီး property နှစ်ခုထဲမှာ သိမ်းပါတယ်။ [[mark:select-total]] ကျသင့်ငွေ
+      တွက်တဲ့ method ကတော့ အခုအတိုင်း ဈေးနှုန်းကိုပဲ ပြန်ပေးပါတယ်။ [[mark:select-receipt]] ဘောင်ချာ method
+      ကတော့ ကျသင့်ငွေကို ကိုယ်တိုင် မတွက်ဘဲ၊ this ကနေ အဲဒီ method ကို ခေါ်ပြီး ယူပါတယ်။ ဒီ အချက်ကို မှတ်ထားပါ၊ နောက်မှ
+      အရေးပါလာပါမယ်။ [[mark:open-delivery]] delivery အော်ဒါကိုတော့ ဒီ ဖိုင်မှာ ရေးသွားမှာ ဖြစ်ပြီး၊ အခု
+      import တစ်ကြောင်းပဲ ရှိပါသေးတယ်။ [[mark:open-main]] main ဖိုင်မှာတော့
+      ဘောင်ချာ ထုတ်တဲ့ function က Order type ရှိတဲ့ parameter ကို လက်ခံပါတယ်။ [[mark:select-new]] အောက်မှာ
+      လက်ဖက်ရည် အော်ဒါ တစ်ခု ဆောက်ပြီး အဲဒီ function ထဲ ထည့်ပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Classes (methods, this)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#methods",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-order
+        type: workspace.openFile
+        at: { mark: open-order }
+        path: src/order.ts
+      - id: select-total
+        type: editor.select
+        at: { mark: select-total }
+        target:
+          { file: src/order.ts, text: "  total() {\n    return this.price;\n  }", occurrence: 1 }
+      - id: select-receipt
+        type: editor.select
+        at: { mark: select-receipt }
+        target: { file: src/order.ts, text: "this.total()", occurrence: 1 }
+      - id: open-delivery
+        type: workspace.openFile
+        at: { mark: open-delivery }
+        path: src/delivery.ts
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-log
+        type: editor.select
+        at: { afterAction: open-main }
+        target: { file: src/main.ts, text: "function printReceipt(order: Order)", occurrence: 1 }
+      - id: select-new
+        type: editor.select
+        at: { mark: select-new }
+        target: { file: src/main.ts, text: 'new Order("လက်ဖက်ရည်", 1500)', occurrence: 1 }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output မှာ လက်ဖက်ရည် ၁၅၀၀ ကျပ် ဆိုတဲ့ ဘောင်ချာ ပေါ်နေပြီး၊ Errors
+      မှာ error မရှိပါဘူး။ အခု delivery အော်ဒါကို ရေးကြည့်ရအောင်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Classes",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-clean
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် 1500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: extends
+    chapter: "extends နဲ့ super"
+    narration: >
+      [[mark:open-delivery-2]] delivery ဖိုင်ကို ဖွင့်ပါမယ်။ [[mark:type-class]] အော်ဒါ class ကို extends
+      လုပ်တဲ့ class တစ်ခု ရေးပြီး လိပ်စာ property ကို ထပ်ထည့်ပါမယ်။ constructor က ပစ္စည်း၊ ဈေးနှုန်းနဲ့
+      လိပ်စာကို လက်ခံပေမယ့်၊ ထဲမှာတော့ လိပ်စာကိုပဲ သိမ်းထားပါတယ်။ [[mark:read-super-errors]] Errors မှာ error
+      နှစ်ခု ပေါ်လာပါပြီ။ ပထမ error က subclass ရဲ့ constructor မှာ super ကို ခေါ်ရမယ်လို့ ပြောပြီး၊ ဒုတိယက
+      this ကို မသုံးခင် super ကို အရင် ခေါ်ရမယ်လို့ ပြောပါတယ်။ super ကို ခေါ်တာဟာ base class ရဲ့ constructor ကို ခေါ်တာပါ။
+      ပစ္စည်းနဲ့ ဈေးနှုန်းကို base class က သိမ်းပေးရမှာ ဖြစ်လို့၊ subclass က သူ့ကို အရင်ဆုံး ခေါ်ပေးရပါတယ်။
+      [[mark:type-super]] ဒါကြောင့် constructor ရဲ့ ပထမ line မှာ ပစ္စည်းနဲ့ ဈေးနှုန်းကို super ဆီ
+      ပို့ပေးပါမယ်။ [[mark:read-super-fixed]] error နှစ်ခုလုံး ပျောက်သွားပါပြီ။ [[mark:open-main-2]] main
+      ဖိုင်မှာ delivery class ကို import လုပ်ပါမယ်။ [[mark:type-delivery]] ပြီးတော့ ကော်ဖီ တစ်ခွက်ကို
+      အင်းလျားလမ်းကို ပို့ဖို့ အော်ဒါ ဆောက်ပြီး၊ ဘောင်ချာ function ထဲ ထည့်ပါမယ်။ [[mark:read-inherited]] Output
+      မှာ ကော်ဖီ ၁၈၀၀ ကျပ် ဆိုတဲ့ ဘောင်ချာ ပေါ်လာပြီး error လည်း မရှိပါဘူး။ delivery class ထဲမှာ ဘောင်ချာ
+      method ကို မရေးထားပေမယ့် base class ဆီက အမွေရလာပြီး၊ delivery အော်ဒါဟာ အော်ဒါ တစ်မျိုး ဖြစ်လို့ Order
+      ကို လက်ခံတဲ့ function ထဲလည်း ထည့်လို့ ရတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (extending a class, super)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "MDN: super",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/super",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (super calls)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#super-calls",
+        }
+    actions:
+      - id: open-delivery-2
+        type: workspace.openFile
+        at: { mark: open-delivery-2 }
+        path: src/delivery.ts
+      - id: type-class
+        type: editor.type
+        at: { mark: type-class }
+        target:
+          { file: src/delivery.ts, after: "import { Order } from \"./order\";\n", occurrence: 1 }
+        text: "\nexport class DeliveryOrder extends Order {\n  address: string;\n\n  constructor(item: string, price: number, address: string) {\n    this.address = address;\n  }\n}\n"
+        cadence: line-by-line
+      - id: expect-super-errors
+        type: expect.preview
+        at: { afterAction: type-class }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2377
+        type: expect.preview
+        at: { afterAction: expect-super-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Constructors for derived classes must contain a 'super' call."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-17009
+        type: expect.preview
+        at: { afterAction: expect-2377 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "'super' must be called before accessing 'this' in the constructor of a derived class."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-super
+        type: editor.type
+        at: { mark: type-super }
+        target: { file: src/delivery.ts, after: "address: string) {\n", occurrence: 1 }
+        text: "    super(item, price);\n"
+      - id: expect-super-fixed
+        type: expect.preview
+        at: { afterAction: type-super }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: src/main.ts
+      - id: type-import
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "import { Order } from \"./order\";\n", occurrence: 1 }
+        text: "import { DeliveryOrder } from \"./delivery\";\n"
+        cadence: block
+      - id: type-delivery
+        type: editor.type
+        at: { mark: type-delivery }
+        target: { file: src/main.ts, after: "printReceipt(tea);\n", occurrence: 1 }
+        text: "\nconst delivery = new DeliveryOrder(\"ကော်ဖီ\", 1800, \"အင်းလျားလမ်း\");\nprintReceipt(delivery);\n"
+        cadence: line-by-line
+      - id: expect-inherited
+        type: expect.preview
+        at: { afterAction: type-delivery }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 1800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-inherited-clean
+        type: expect.preview
+        at: { afterAction: expect-inherited }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: override
+    chapter: "override"
+    narration: >
+      [[mark:type-total]] အခု delivery အော်ဒါမှာ ပို့ခ ၅၀၀ ကျပ် ပေါင်းဖို့၊ base class မှာ ရှိပြီးသား
+      ကျသင့်ငွေ method ကို subclass မှာ နာမည် တူတူနဲ့ ပြန်ရေးပါမယ်။ ဒါကို override လုပ်တယ်လို့ ခေါ်ပါတယ်။
+      [[mark:read-override]] Output မှာ ကော်ဖီက ၂၃၀၀ ကျပ် ဖြစ်သွားပါပြီ။ ဘောင်ချာ method က base class ထဲမှာပဲ
+      ရှိပေမယ့်၊ this ကနေ ကျသင့်ငွေ method ကို ခေါ်တဲ့အခါ delivery အော်ဒါရဲ့ ကိုယ်ပိုင် method ကို
+      သုံးသွားလို့ပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Classes (overriding methods)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#overriding-methods",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (class inheritance)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+    actions:
+      - id: open-delivery-3
+        type: workspace.openFile
+        at: { mark: type-total }
+        path: src/delivery.ts
+      - id: type-total
+        type: editor.type
+        at: { afterAction: open-delivery-3 }
+        target:
+          { file: src/delivery.ts, after: "    this.address = address;\n  }\n", occurrence: 1 }
+        text: "\n  total() {\n    return this.price + 500;\n  }\n"
+        cadence: line-by-line
+      - id: expect-fee
+        type: expect.preview
+        at: { afterAction: type-total }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 2300 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-fee-clean
+        type: expect.preview
+        at: { afterAction: expect-fee }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: no-implicit-override
+    narration: >
+      [[mark:open-config]] TypeScript မှာ override လုပ်တဲ့ method တွေကို override keyword နဲ့ မဖြစ်မနေ
+      ရေးခိုင်းတဲ့ setting တစ်ခု ရှိပါတယ်။ [[mark:type-config]] tsconfig မှာ no implicit override ကို
+      ဖွင့်လိုက်ပါမယ်။ [[mark:read-4114]] Errors မှာ error တစ်ခု ပေါ်လာပါပြီ။ ဒီ method က base class ရဲ့
+      method ကို override လုပ်နေလို့ override keyword ပါရမယ်လို့ ပြောနေတာပါ။ [[mark:type-override]] ဒါကြောင့်
+      delivery ဖိုင်က method ရဲ့ ရှေ့မှာ override keyword ထည့်ပါမယ်။ [[mark:read-override-ok]] error
+      ပျောက်သွားပါပြီ။ ဒီ method က base class ဆီက method ကို တမင် ပြန်ရေးထားတာ ဆိုတာ ဖတ်တဲ့သူရော TypeScript ပါ
+      သိသွားပါပြီ။
+    sources:
+      - {
+          title: "TSConfig: noImplicitOverride",
+          url: "https://www.typescriptlang.org/tsconfig/#noImplicitOverride",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (safe overrides with override)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+    actions:
+      - id: open-config
+        type: workspace.openFile
+        at: { mark: open-config }
+        path: tsconfig.json
+      - id: type-config
+        type: editor.type
+        at: { mark: type-config }
+        target: { file: tsconfig.json, after: "\"strict\": true,\n", occurrence: 1 }
+        text: "    \"noImplicitOverride\": true,\n"
+        cadence: block
+      - id: expect-4114
+        type: expect.preview
+        at: { afterAction: type-config }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "4114" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-4114-message
+        type: expect.preview
+        at: { afterAction: expect-4114 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "This member must have an 'override' modifier because it overrides a member in the base class 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-delivery-4
+        type: workspace.openFile
+        at: { mark: type-override }
+        path: src/delivery.ts
+      - id: type-override
+        type: editor.type
+        at: { afterAction: open-delivery-4 }
+        target: { file: src/delivery.ts, after: "  }\n\n  ", occurrence: 1 }
+        text: "override "
+      - id: expect-override-clean
+        type: expect.preview
+        at: { afterAction: type-override }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: rename
+    narration: >
+      [[mark:open-order-2]] ဒါဆို ဒီ keyword က ဘာ အကျိုး ရှိလဲ ကြည့်ရအောင်။ နောက်ပိုင်း တစ်ယောက်ယောက်က base
+      class ထဲက ကျသင့်ငွေ method ရဲ့ နာမည်ကို ပြောင်းလိုက်တယ် ဆိုပါစို့။ [[mark:type-rename]] method ရဲ့
+      နာမည်ရော၊ ဘောင်ချာထဲက ခေါ်တဲ့ နေရာရော ပြောင်းလိုက်ပါမယ်။ [[mark:read-rename]] Output မှာ ကော်ဖီက ၁၈၀၀
+      ကျပ် ပြန်ဖြစ်ပြီး ပို့ခ ပျောက်သွားပါပြီ။ ဘောင်ချာက နာမည်အသစ်နဲ့ ခေါ်တော့၊ delivery ထဲက နာမည်ဟောင်း
+      method ကို ဘယ်သူမှ မခေါ်တော့လို့ပါ။ override keyword မပါရင် ဒါက error တစ်ခုမှ မပြဘဲ ဖြစ်သွားမယ့် bug ပါ။
+      [[mark:read-4113]] ဒါပေမဲ့ အခု keyword ပါတဲ့အတွက်၊ base class မှာ ဒီ နာမည်နဲ့ method မရှိလို့ override
+      လုပ်လို့ မရဘူး ဆိုတဲ့ error ပေါ်နေပါတယ်။ [[mark:open-delivery-5]] ဒါကြောင့် delivery ဖိုင်မှာလည်း
+      နာမည်ကို လိုက်ပြောင်းပေးပါမယ်။ [[mark:read-rename-fixed]] error ပျောက်ပြီး ကော်ဖီက ၂၃၀၀ ကျပ်
+      ပြန်ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (safe overrides with override)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript 4.3 release notes: override and noImplicitOverride",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-3.html#override-and-the---noimplicitoverride-flag",
+        }
+    actions:
+      - id: open-order-2
+        type: workspace.openFile
+        at: { mark: open-order-2 }
+        path: src/order.ts
+      - id: type-rename-method
+        type: editor.type
+        at: { mark: type-rename }
+        target: { file: src/order.ts, after: "  total", occurrence: 1 }
+        text: "Price"
+        cadence: fast-explainer
+      - id: type-rename-call
+        type: editor.type
+        at: { afterAction: type-rename-method }
+        target: { file: src/order.ts, after: "${this.total", occurrence: 1 }
+        text: "Price"
+        cadence: fast-explainer
+      - id: expect-4113
+        type: expect.preview
+        at: { afterAction: type-rename-call }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-4113-message
+        type: expect.preview
+        at: { afterAction: expect-4113 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "This member cannot have an 'override' modifier because it is not declared in the base class 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-fee-lost
+        type: expect.preview
+        at: { afterAction: expect-4113-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 1800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-delivery-5
+        type: workspace.openFile
+        at: { mark: open-delivery-5 }
+        path: src/delivery.ts
+      - id: type-rename-override
+        type: editor.type
+        at: { afterAction: open-delivery-5 }
+        target: { file: src/delivery.ts, after: "override total", occurrence: 1 }
+        text: "Price"
+        cadence: fast-explainer
+      - id: expect-rename-clean
+        type: expect.preview
+        at: { afterAction: type-rename-override }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-fee-back
+        type: expect.preview
+        at: { afterAction: expect-rename-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 2300 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: protected
+    chapter: "protected"
+    narration: >
+      [[mark:open-main-3]] အခု main ဖိုင်ကနေ delivery အော်ဒါရဲ့ ဈေးနှုန်းကို သုည
+      ပြောင်းလိုက်ပါမယ်။ [[mark:read-zero]] error မရှိဘဲ ကော်ဖီက ပို့ခ ၅၀၀ ကျပ်ပဲ ကျန်ပါတော့တယ်။
+      [[mark:open-order-3]] ဈေးနှုန်းကို အပြင်ကနေ မပြင်စေချင်ပေမယ့်၊ ပို့ခ ပေါင်းဖို့ delivery class ကတော့
+      ဖတ်ရပါမယ်။ ပြီးခဲ့တဲ့ lesson မှာ တွေ့ခဲ့တဲ့ private ကို သုံးရင်တော့ subclass ကပါ သုံးလို့ မရတော့ပါဘူး။
+      [[mark:type-protected]] ဒါကြောင့် ဈေးနှုန်းရဲ့ ရှေ့မှာ protected လို့ ထည့်ပါမယ်။ protected ဆိုတာ class
+      ကိုယ်တိုင်နဲ့ သူ့ subclass တွေထဲမှာပဲ သုံးခွင့် ပေးတဲ့ property ပါ။ [[mark:read-protected]] main ဖိုင်က
+      line မှာ error ပေါ်လာပါပြီ။ protected property ကို class အပြင်ကနေ သုံးလို့
+      မရဘူးလို့ ပြောနေပါတယ်။ ပို့ခ ပေါင်းတဲ့ delivery class ကတော့ error မရှိပါဘူး။ protected ကလည်း type ပိုင်းက
+      စစ်ဆေးချက် ဖြစ်လို့ Output မှာ ၅၀၀ ကျပ် ဆက်ဖြစ်နေပါတယ်။ [[mark:open-main-4]] ဒီ line ကို comment
+      လုပ်ပြီး ပိတ်လိုက်ပါမယ်။ [[mark:read-protected-fixed]] ကော်ဖီက ၂၃၀၀ ကျပ် ပြန်ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (protected properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (protected)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#protected",
+        }
+    actions:
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: src/main.ts
+      - id: type-zero
+        type: editor.type
+        at: { afterAction: open-main-3 }
+        target: { file: src/main.ts, after: "\"အင်းလျားလမ်း\");\n", occurrence: 1 }
+        text: "delivery.price = 0;\n"
+        cadence: fast-explainer
+      - id: expect-zero
+        type: expect.preview
+        at: { afterAction: type-zero }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-order-3
+        type: workspace.openFile
+        at: { mark: open-order-3 }
+        path: src/order.ts
+      - id: type-protected
+        type: editor.type
+        at: { mark: type-protected }
+        target: { file: src/order.ts, after: "  item: string;\n  ", occurrence: 1 }
+        text: "protected "
+      - id: expect-2445
+        type: expect.preview
+        at: { afterAction: type-protected }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2445" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2445-message
+        type: expect.preview
+        at: { afterAction: expect-2445 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'price' is protected and only accessible within class 'Order' and its subclasses."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-2445-only
+        type: expect.preview
+        at: { afterAction: expect-2445-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-zero
+        type: expect.preview
+        at: { afterAction: expect-2445-only }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 500 ကျပ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-main-4
+        type: workspace.openFile
+        at: { mark: open-main-4 }
+        path: src/main.ts
+      - id: type-comment-zero
+        type: editor.type
+        at: { afterAction: open-main-4 }
+        target: { file: src/main.ts, after: "\"အင်းလျားလမ်း\");\n", occurrence: 1 }
+        text: "// "
+      - id: expect-protected-clean
+        type: expect.preview
+        at: { afterAction: type-comment-zero }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-protected-fee
+        type: expect.preview
+        at: { afterAction: expect-protected-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 2300 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: implements
+    chapter: "implements"
+    narration: >
+      [[mark:open-delivery-6]] delivery ပို့တဲ့ ဝန်ထမ်းရဲ့ app က ပို့ရမယ့် အရာတိုင်းမှာ လိပ်စာနဲ့ ရောက်ဖို့
+      ကြာမယ့် မိနစ် ပါရမယ် ဆိုပါစို့။ [[mark:type-interface]] အဲဒီ ပုံစံကို interface တစ်ခုနဲ့ ရေးပါမယ်။
+      [[mark:type-implements]] ပြီးတော့ delivery class က ဒီ interface ကို လိုက်နာမယ်လို့ implements နဲ့
+      ကတိပေးလိုက်ပါမယ်။ [[mark:read-implements]] error ပေါ်လာပါပြီ။ class က interface ကို မှန်မှန်
+      မလိုက်နာဘူး၊ မိနစ် property မပါဘူးလို့ ပြောနေတာပါ။ implements ပါရင် class ကို ရေးတဲ့
+      နေရာမှာတင် အမှားကို တွေ့ရပါတယ်။ [[mark:type-minutes]] ရောက်ဖို့
+      ကြာချိန်ကို မိနစ် ၃၀ နဲ့ ထည့်ပေးပါမယ်။ [[mark:read-implements-fixed]] error ပျောက်သွားပါပြီ။ extends က
+      code ကို အမွေပေးပေမယ့်၊ implements ကတော့ code ဘာမှ မပေးဘဲ ပုံစံ ကိုက်မကိုက်ကိုပဲ စစ်ပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (the implements keyword)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (implements clauses)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#implements-clauses",
+        }
+    actions:
+      - id: open-delivery-6
+        type: workspace.openFile
+        at: { mark: open-delivery-6 }
+        path: src/delivery.ts
+      - id: type-interface
+        type: editor.type
+        at: { mark: type-interface }
+        target:
+          { file: src/delivery.ts, after: "import { Order } from \"./order\";\n", occurrence: 1 }
+        text: "\ninterface Deliverable {\n  address: string;\n  minutes: number;\n}\n"
+        cadence: line-by-line
+      - id: type-implements
+        type: editor.type
+        at: { mark: type-implements }
+        target: { file: src/delivery.ts, after: "extends Order", occurrence: 1 }
+        text: " implements Deliverable"
+        cadence: fast-explainer
+      - id: expect-2420
+        type: expect.preview
+        at: { afterAction: type-implements }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2420" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2420-message
+        type: expect.preview
+        at: { afterAction: expect-2420 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'minutes' is missing in type 'DeliveryOrder' but required in type 'Deliverable'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-minutes
+        type: editor.type
+        at: { mark: type-minutes }
+        target: { file: src/delivery.ts, after: "  address: string;\n", occurrence: 2 }
+        text: "  minutes = 30;\n"
+        cadence: fast-explainer
+      - id: expect-implements-clean
+        type: expect.preview
+        at: { afterAction: type-minutes }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: abstract
+    chapter: "abstract class"
+    narration: >
+      [[mark:open-order-4]] ဆိုင်က အော်ဒါ တိုင်းဟာ ဆိုင်ထဲ အော်ဒါ ဒါမှမဟုတ်
+      delivery အော်ဒါ ဖြစ်ရမှာ ဖြစ်လို့၊ ဘယ်အမျိုးအစားမှ မဟုတ်တဲ့ အော်ဒါ သက်သက်ကို မဆောက်စေချင်ပါဘူး။
+      [[mark:type-abstract]] ဒါကြောင့် class ရဲ့ ရှေ့မှာ abstract လို့ ထည့်ပါမယ်။ abstract class ဆိုတာ new နဲ့
+      တိုက်ရိုက် ဆောက်လို့ မရဘဲ၊ subclass တွေရဲ့ အခြေခံ အဖြစ်ပဲ သုံးတဲ့ class ပါ။ [[mark:read-abstract]] main
+      ဖိုင်မှာ abstract class ကို ဆောက်လို့ မရဘူး ဆိုတဲ့ error ပေါ်လာပါပြီ။ Output ကတော့ အရင်အတိုင်း
+      ထွက်နေပါတယ်၊ abstract ကလည်း TypeScript ရဲ့ စစ်ဆေးချက် ဖြစ်လို့ပါ။ [[mark:type-table-order]] ဒါဆို
+      ဆိုင်ထဲ အော်ဒါအတွက် subclass တစ်ခု ရေးပါမယ်။ ထပ်ထည့်စရာ မရှိသေးလို့ class ရဲ့ အထဲက အလွတ်ပါ။
+      [[mark:open-main-5]] main ဖိုင်မှာ ဒီ class ကို import လုပ်ပြီး လက်ဖက်ရည် အော်ဒါကို သူနဲ့ ဆောက်ပါမယ်။
+      [[mark:read-table-order]] error ပျောက်သွားပြီး ဘောင်ချာ နှစ်ခုလုံး အရင်အတိုင်း ထွက်ပါတယ်။ abstract class
+      ကို type အဖြစ်တော့ ဘောင်ချာ function မှာလို ဆက်သုံးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (abstract classes)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (abstract classes and members)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#abstract-classes-and-members",
+        }
+    actions:
+      - id: open-order-4
+        type: workspace.openFile
+        at: { mark: open-order-4 }
+        path: src/order.ts
+      - id: type-abstract
+        type: editor.type
+        at: { mark: type-abstract }
+        target: { file: src/order.ts, after: "export ", occurrence: 1 }
+        text: "abstract "
+      - id: expect-2511
+        type: expect.preview
+        at: { afterAction: type-abstract }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2511" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2511-message
+        type: expect.preview
+        at: { afterAction: expect-2511 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot create an instance of an abstract class."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-abstract-runs
+        type: expect.preview
+        at: { afterAction: expect-2511-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် 1500 ကျပ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-table-order
+        type: editor.type
+        at: { mark: type-table-order }
+        target: { file: src/order.ts, after: "ကျပ်`;\n  }\n}\n", occurrence: 1 }
+        text: "\nexport class TableOrder extends Order {}\n"
+        cadence: fast-explainer
+      - id: open-main-5
+        type: workspace.openFile
+        at: { mark: open-main-5, offsetMs: 350 }
+        path: src/main.ts
+      - id: type-import-table
+        type: editor.type
+        at: { afterAction: open-main-5 }
+        target: { file: src/main.ts, after: "import { Order", occurrence: 1 }
+        text: ", TableOrder"
+        cadence: fast-explainer
+      - id: type-new-table
+        type: editor.type
+        at: { afterAction: type-import-table }
+        target: { file: src/main.ts, after: "const tea = new ", occurrence: 1 }
+        text: "Table"
+        cadence: fast-explainer
+      - id: expect-abstract-clean
+        type: expect.preview
+        at: { afterAction: type-new-table }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-table-output
+        type: expect.preview
+        at: { afterAction: expect-abstract-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် 1500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: abstract-method
+    narration: >
+      [[mark:open-order-5]] abstract class ထဲမှာ abstract method လည်း ရေးလို့ ရပါတယ်။
+      [[mark:type-abstract-method]] ဘောင်ချာမှာ အော်ဒါ ဘယ်ကို သွားမလဲ ပြချင်လို့၊ နေရာကို စာသားနဲ့ ပြန်ပေးမယ့်
+      abstract method တစ်ခု ထည့်ပါမယ်။ abstract method မှာ code မပါဘဲ နာမည်နဲ့ type ပဲ ပါပါတယ်။
+      [[mark:read-2515]] Errors မှာ error နှစ်ခု ပေါ်လာပါပြီ။ ဆိုင်ထဲ အော်ဒါရော delivery အော်ဒါရော ဒီ abstract
+      method ကို မရေးရသေးဘူးလို့ ပြောနေတာပါ။ abstract method ပါရင် subclass တိုင်းက ကိုယ်ပိုင် version ကို
+      မဖြစ်မနေ ရေးပေးရပါတယ်။ [[mark:type-table-label]] ဆိုင်ထဲ အော်ဒါက ဆိုင်ထဲမှာ ဆိုတဲ့ စာကို ပြန်ပေးပါမယ်။
+      [[mark:open-delivery-7]] delivery အော်ဒါကတော့ လိပ်စာကို ပြန်ပေးပါမယ်။ abstract method ကို ရေးတဲ့အခါ
+      override keyword ကို TypeScript က မတောင်းလို့ ဒီမှာ မထည့်ထားပါဘူး။ [[mark:open-order-6]] နောက်ဆုံး
+      ဘောင်ချာ method ထဲမှာ ဒီ method ကို ခေါ်ပါမယ်။ [[mark:read-labels]] error မရှိတော့ဘဲ၊ Output မှာ
+      လက်ဖက်ရည်က ဆိုင်ထဲမှာ၊ ကော်ဖီက အင်းလျားလမ်း ဆိုပြီး ဘောင်ချာ နှစ်ခု ထွက်လာပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (abstract methods)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (abstract classes and members)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#abstract-classes-and-members",
+        }
+      - {
+          title: "TSConfig: noImplicitOverride",
+          url: "https://www.typescriptlang.org/tsconfig/#noImplicitOverride",
+        }
+    actions:
+      - id: open-order-5
+        type: workspace.openFile
+        at: { mark: open-order-5 }
+        path: src/order.ts
+      - id: type-abstract-method
+        type: editor.type
+        at: { mark: type-abstract-method }
+        target: { file: src/order.ts, after: "    this.price = price;\n  }\n", occurrence: 1 }
+        text: "\n  abstract label(): string;\n"
+        cadence: fast-explainer
+      - id: expect-2515
+        type: expect.preview
+        at: { afterAction: type-abstract-method }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2515-table
+        type: expect.preview
+        at: { afterAction: expect-2515 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Non-abstract class 'TableOrder' does not implement inherited abstract member label from class 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-2515-delivery
+        type: expect.preview
+        at: { afterAction: expect-2515-table }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Non-abstract class 'DeliveryOrder' does not implement inherited abstract member label from class 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-table-label
+        type: editor.type
+        at: { mark: type-table-label }
+        target:
+          { file: src/order.ts, after: "export class TableOrder extends Order {", occurrence: 1 }
+        text: "\n  label() {\n    return \"ဆိုင်ထဲမှာ\";\n  }\n"
+        cadence: line-by-line
+      - id: open-delivery-7
+        type: workspace.openFile
+        at: { mark: open-delivery-7, offsetMs: 350 }
+        path: src/delivery.ts
+      - id: type-delivery-label
+        type: editor.type
+        at: { afterAction: open-delivery-7 }
+        target: { file: src/delivery.ts, after: "return this.price + 500;\n  }\n", occurrence: 1 }
+        text: "\n  label() {\n    return this.address;\n  }\n"
+        cadence: line-by-line
+      - id: expect-labels-clean
+        type: expect.preview
+        at: { afterAction: type-delivery-label }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-order-6
+        type: workspace.openFile
+        at: { mark: open-order-6 }
+        path: src/order.ts
+      - id: type-use-label
+        type: editor.type
+        at: { afterAction: open-order-6 }
+        target: { file: src/order.ts, after: "${this.totalPrice()} ကျပ်", occurrence: 1 }
+        text: " · ${this.label()}"
+        cadence: fast-explainer
+      - id: expect-table-label
+        type: expect.preview
+        at: { afterAction: type-use-label }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် 1500 ကျပ် · ဆိုင်ထဲမှာ"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-delivery-label
+        type: expect.preview
+        at: { afterAction: expect-table-label }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ 2300 ကျပ် · အင်းလျားလမ်း"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-final-clean
+        type: expect.preview
+        at: { afterAction: expect-delivery-label }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ extends နဲ့ base class ရဲ့ property နဲ့ method တွေကို အမွေယူပြီး၊
+      subclass ရဲ့ constructor မှာ super ကို အရင် ခေါ်ရပါတယ်။ protected က subclass တွေကို သုံးခွင့် ပေးပြီး
+      အပြင်ကိုတော့ ပိတ်ထားပါတယ်။ [[mark:recap-override]] override keyword က base class ရဲ့ method ကို
+      ပြန်ရေးမှန်း ပြပြီး၊ base method နာမည် ပြောင်းသွားရင် error နဲ့ သတိပေးပါတယ်။ no implicit override က အဲဒီ
+      keyword ကို မဖြစ်မနေ ရေးခိုင်းပါတယ်။ implements က class တစ်ခု interface နဲ့ ကိုက်မကိုက် စစ်ပြီး၊
+      abstract class ကတော့ တိုက်ရိုက် မဆောက်ရဘဲ subclass တွေ ရေးပေးရမယ့် method တွေကို သတ်မှတ်ပါတယ်။ နောက်
+      lesson မှာတော့ JavaScript မှာ မရှိဘဲ TypeScript မှာပဲ ရှိတဲ့ feature တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html",
+        }
+    actions:
+      - id: open-delivery-8
+        type: workspace.openFile
+        at: { mark: recap }
+        path: src/delivery.ts
+      - id: select-recap-extends
+        type: editor.select
+        at: { afterAction: open-delivery-8 }
+        target:
+          { file: src/delivery.ts, text: "extends Order implements Deliverable", occurrence: 1 }
+      - id: select-recap-override
+        type: editor.select
+        at: { mark: recap-override }
+        target: { file: src/delivery.ts, text: "override totalPrice()", occurrence: 1 }
+      - id: expect-file-order
+        type: expect.file
+        at: { afterAction: select-recap-override }
+        path: src/order.ts
+        contains: "export abstract class Order {\n  item: string;\n  protected price: number;\n"
+      - id: expect-file-abstract
+        type: expect.file
+        at: { afterAction: expect-file-order }
+        path: src/order.ts
+        contains: "  abstract label(): string;\n\n  totalPrice() {\n"
+      - id: expect-file-receipt
+        type: expect.file
+        at: { afterAction: expect-file-abstract }
+        path: src/order.ts
+        contains: "return `${this.item} ${this.totalPrice()} ကျပ် · ${this.label()}`;"
+      - id: expect-file-delivery
+        type: expect.file
+        at: { afterAction: expect-file-receipt }
+        path: src/delivery.ts
+        contains: "export class DeliveryOrder extends Order implements Deliverable {\n  address: string;\n  minutes = 30;\n\n  constructor(item: string, price: number, address: string) {\n    super(item, price);\n    this.address = address;\n  }\n\n  override totalPrice() {\n"
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: expect-file-delivery }
+        path: src/main.ts
+        contains: "function printReceipt(order: Order) {\n  console.log(order.receipt());\n}\n\nconst tea = new TableOrder(\"လက်ဖက်ရည်\", 1500);\nprintReceipt(tea);\n"
+      - id: expect-file-config
+        type: expect.file
+        at: { afterAction: expect-file-main }
+        path: tsconfig.json
+        contains: '"noImplicitOverride": true,'
+checks:
+  - { type: timing.p95Ms, max: 300 }
