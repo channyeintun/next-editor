@@ -1,0 +1,1669 @@
+# TypeScript course, lesson 22: annotations vs satisfies, assertions and error directives (Burmese).
+#
+# Start state (ws/): src/prices.ts has `type Price = number | { small; large }` and a price list
+# annotated `PriceList` (= `Record<string, Price>`) whose paratha price is the text "1200"; src/main.ts reads
+# prices.tea.large and pads a table number read from a QR-code link. Panel: 3 errors — TS2322
+# (paratha is text), TS2339 ('large' does not exist on type 'Price'), TS18047 ('table' is possibly
+# 'null'); Output "လက်ဖက်ရည် ခွက်ကြီး 1800 ကျပ်" / "စားပွဲ 07".
+#
+# Edits, all insert-only:
+#   1. main.ts: a query under `tea` -> `const tea: Price` (the annotation wins).
+#   2. prices.ts: ` /*` + `*/` around the annotation (back to back) -> the value wins: tea is
+#      `{ small: number; large: number }`, both price errors disappear (paratha no longer checked).
+#   3. ` satisfies PriceList` after the object -> the paratha error is back, tea keeps
+#      its detail; one block writes `paratha: 1200,` and comments the text line out -> 1 error.
+#   4. main.ts: a query under `table` (string | null); ` as string` -> 0 errors, string.
+#   5. `const cup = link.get("cup");` + query (string | null); `!` -> string.
+#   6. `const next = table as number;` + a log of next + 1 -> TS2352, Output "နောက် စားပွဲ 71";
+#      `// @ts-expect-error` above it -> 0 errors; `unknown as ` -> TS2578 (unused directive);
+#      `// ` turns the directive off -> 0 errors, Output still 71 (as never converts).
+#   7. prices.ts: ` as const` before ` satisfies` -> tea `{ readonly small: 1500; readonly large: 1800 }`.
+# Boards: (A) who decides a value's type: annotation / inference / satisfies / as / directives;
+# (B) the directives, as any, and when silencing an error is reasonable.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-22-satisfies-assertions.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-22-satisfies-assertions
+  title: "TypeScript course 22: satisfies၊ as နဲ့ error ပိတ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors types output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { prices } from "./prices";
+
+        const tea = prices.tea;
+        console.log("လက်ဖက်ရည် ခွက်ကြီး", tea.large, "ကျပ်");
+
+        // စားပွဲပေါ်က QR code ရဲ့ link
+        const link = new URLSearchParams("?table=7&cup=large");
+        const table = link.get("table");
+        console.log("စားပွဲ", table.padStart(2, "0"));
+      src/prices.ts: |
+        // တစ်ခွက်တည်း ဈေး ဒါမှမဟုတ် ခွက်အရွယ်အလိုက် ဈေး
+        export type Price = number | { small: number; large: number };
+        export type PriceList = Record<string, Price>;
+
+        export const prices: PriceList = {
+          tea: { small: 1500, large: 1800 },
+          coffee: { small: 1800, large: 2100 },
+          paratha: "1200",
+        };
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: who decides the type of a value.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Type ကို ဘယ်သူ ဆုံးဖြတ်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-annot,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 790,
+        height: 36,
+        text: "annotation · variable ရဲ့ type က နိုင်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-infer,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 790,
+        height: 36,
+        text: "annotation မပါ · တန်ဖိုးက နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-satisfies,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 790,
+        height: 36,
+        text: "satisfies · စစ်ပေးပြီး အသေးစိတ် ထိန်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-as,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 790,
+        height: 36,
+        text: "as · ကိုယ်က အတင်း ပြော",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-sat-check,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 360,
+        width: 55,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-as-underline,
+        kind: freedraw,
+        stroke: underline,
+        x: 285,
+        y: 432,
+        width: 320,
+        height: 42,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-silence,
+        kind: text,
+        x: 290,
+        y: 515,
+        width: 790,
+        height: 36,
+        text: "@ts-expect-error · error ကို ပိတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board B: directives, as any, and when to silence an error.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Error ကို ပိတ်တဲ့ နည်းတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-expect,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 790,
+        height: 36,
+        text: "@ts-expect-error · error မရှိရင် ပြန်ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-expect-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 265,
+        y: 228,
+        width: 680,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-ignore,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 790,
+        height: 36,
+        text: "@ts-ignore · ဘယ်တော့မှ မပြော",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-nocheck,
+        kind: text,
+        x: 290,
+        y: 355,
+        width: 790,
+        height: 36,
+        text: "@ts-nocheck · ဖိုင် တစ်ခုလုံး မစစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-nocheck-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 285,
+        y: 355,
+        width: 480,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-asany,
+        kind: text,
+        x: 290,
+        y: 410,
+        width: 790,
+        height: 36,
+        text: "as any · expression တစ်ခုတည်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-when,
+        kind: text,
+        x: 290,
+        y: 510,
+        width: 790,
+        height: 36,
+        text: "✓ TypeScript ထက် ကိုယ်က တကယ် ပိုသိရင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-not-when,
+        kind: text,
+        x: 290,
+        y: 565,
+        width: 790,
+        height: 36,
+        text: "✗ error ကို နားမလည်သေးရင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3122
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Type ကို ဘယ်သူ ဆုံးဖြတ်လဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ function တွေကနေ type ထုတ်ယူတာနဲ့၊ Exclude နဲ့ Extract လို
+      union ကို ပြောင်းတဲ့ utility type တွေကို ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ တန်ဖိုး တစ်ခုရဲ့ type
+      ကို နောက်ဆုံး ဘယ်သူ ဆုံးဖြတ်လဲ ဆိုတာနဲ့၊ TypeScript ကို ကိုယ်က ဝင်ပြောလို့ ရတဲ့ နည်းတွေကို
+      ကြည့်သွားပါမယ်။ [[mark:draw-annot]] variable ရဲ့ နာမည်နောက်မှာ type annotation ရေးလိုက်ရင်၊
+      TypeScript က တန်ဖိုးကို အဲဒီ type နဲ့ စစ်ပြီး၊ နောက်ပိုင်းမှာ annotation ကိုပဲ ယုံပါတယ်။
+      [[mark:draw-infer]] annotation မရေးရင်တော့ တန်ဖိုးကို ကြည့်ပြီး infer လုပ်ထားတဲ့ type ကို
+      သုံးပါတယ်။ [[mark:draw-satisfies]] satisfies ကတော့ ဒီ နှစ်ခုရဲ့ အကောင်းကို ပေါင်းထားတာပါ။ type နဲ့
+      ကိုက်မကိုက် စစ်ပေးပေမယ့်၊ တန်ဖိုးရဲ့ အသေးစိတ်ကိုတော့ မဖျောက်ပါဘူး။ [[mark:draw-as]] as ကတော့ စစ်တာ
+      မဟုတ်ဘဲ၊ ဒီ တန်ဖိုးက ဒီ type ပဲ လို့ ကိုယ်က အတင်း ပြောလိုက်တာပါ။ [[mark:draw-silence]]
+      နောက်ဆုံးမှာ error တစ်ခုကို လုံးဝ ပိတ်ပစ်တဲ့ comment directive တွေ ရှိပါတယ်။ ဒါတွေကို ဆိုင်ရဲ့
+      ဈေးနှုန်း စာရင်းနဲ့၊ စားပွဲပေါ်က QR code ကို ဖတ်တဲ့ code မှာ တစ်ခုချင်း စမ်းကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (type annotations, type assertions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-assertions",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-annot
+        type: whiteboard.apply
+        at: { mark: draw-annot }
+        upsertIds: [a-annot]
+        drawMs: 1400
+      - id: draw-infer
+        type: whiteboard.apply
+        at: { mark: draw-infer }
+        upsertIds: [a-infer]
+        drawMs: 1200
+      - id: draw-satisfies
+        type: whiteboard.apply
+        at: { mark: draw-satisfies }
+        upsertIds: [a-satisfies, a-sat-check]
+        drawMs: 2000
+      - id: draw-as
+        type: whiteboard.apply
+        at: { mark: draw-as }
+        upsertIds: [a-as, a-as-underline]
+        drawMs: 1800
+      - id: draw-silence
+        type: whiteboard.apply
+        at: { mark: draw-silence }
+        upsertIds: [a-silence]
+        drawMs: 1400
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-prices]] ဒါက ဆိုင်ရဲ့ ဈေးနှုန်း
+      ဖိုင်ပါ။ [[mark:select-price-type]] ဈေးနှုန်း တစ်ခုက ဂဏန်း တစ်ခုတည်း ဖြစ်နိုင်သလို၊ ခွက်သေး
+      ခွက်ကြီး အလိုက် ဈေး နှစ်မျိုး ပါတဲ့ object လည်း ဖြစ်နိုင်ပါတယ်။ [[mark:select-price-list]] အောက်က
+      type ကတော့ key က string ဖြစ်ပြီး တန်ဖိုးက ဈေးနှုန်း ဖြစ်တဲ့ Record တစ်ခုပါ။
+      [[mark:select-annotation]] ဆိုင်ရဲ့ ဈေးနှုန်း စာရင်းကို ဒီ type နဲ့ annotation ပေးထားပါတယ်။
+      [[mark:select-paratha]] ပလာတာ ဈေးကိုတော့ ဂဏန်း မဟုတ်ဘဲ quote ထဲမှာ စာသားအနေနဲ့ ရေးထားပါတယ်။
+      [[mark:open-main]] main ဖိုင်ကို ကြည့်ရအောင်။ [[mark:select-tea]] ပထမ အပိုင်းက လက်ဖက်ရည် ဈေးကို
+      ယူပြီး ခွက်ကြီး ဈေးကို ထုတ်ပြပါတယ်။ [[mark:select-link]] ဒုတိယ အပိုင်းကတော့ စားပွဲပေါ်က QR code
+      ရဲ့ link ထဲကနေ စားပွဲ နံပါတ်ကို ဖတ်ပါတယ်။ ပြီးတော့ ဂဏန်း နှစ်လုံး ဖြစ်အောင် ရှေ့မှာ သုည ဖြည့်ပြီး
+      ထုတ်ပြပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Record<Keys, Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type",
+        }
+      - {
+          title: "MDN: URLSearchParams.get()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams/get",
+        }
+      - {
+          title: "MDN: String.prototype.padStart()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/padStart",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-prices
+        type: workspace.openFile
+        at: { mark: open-prices }
+        path: src/prices.ts
+      - id: select-price-type
+        type: editor.select
+        at: { mark: select-price-type }
+        target:
+          { file: src/prices.ts, text: "number | { small: number; large: number }", occurrence: 1 }
+      - id: select-price-list
+        type: editor.select
+        at: { mark: select-price-list }
+        target:
+          {
+            file: src/prices.ts,
+            text: "export type PriceList = Record<string, Price>;",
+            occurrence: 1,
+          }
+      - id: select-annotation
+        type: editor.select
+        at: { mark: select-annotation }
+        target: { file: src/prices.ts, text: ": PriceList", occurrence: 1 }
+      - id: select-paratha
+        type: editor.select
+        at: { mark: select-paratha }
+        target: { file: src/prices.ts, text: 'paratha: "1200"', occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-tea
+        type: editor.select
+        at: { mark: select-tea }
+        target:
+          {
+            file: src/main.ts,
+            text: "const tea = prices.tea;\nconsole.log(\"လက်ဖက်ရည် ခွက်ကြီး\", tea.large, \"ကျပ်\");",
+            occurrence: 1,
+          }
+      - id: select-link
+        type: editor.select
+        at: { mark: select-link }
+        target:
+          {
+            file: src/main.ts,
+            text: "const link = new URLSearchParams(\"?table=7&cup=large\");\nconst table = link.get(\"table\");\nconsole.log(\"စားပွဲ\", table.padStart(2, \"0\"));",
+            occurrence: 1,
+          }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output မှာ လက်ဖက်ရည် ခွက်ကြီး ၁၈၀၀ ကျပ်နဲ့ စားပွဲ နံပါတ် ထွက်လာပြီး၊ program
+      က မှန်မှန် အလုပ်လုပ်နေပါတယ်။ [[mark:read-errors]] ဒါပေမဲ့ Errors မှာ error သုံးခု ရှိပါတယ်။ ပထမ
+      error က ပလာတာ ဈေးဖြစ်တဲ့ စာသားကို ဈေးနှုန်း type ထဲ ထည့်လို့ မရဘူးလို့ ပြောပါတယ်။ annotation က
+      တကယ့် အမှားကို ဖမ်းပေးလိုက်တာပါ။ [[mark:read-error-two]] ဒုတိယ error ကတော့ ဈေးနှုန်း type ပေါ်မှာ
+      large ဆိုတဲ့ property မရှိဘူးလို့ ပြောပါတယ်။ လက်ဖက်ရည်မှာ ခွက်ကြီး ဈေး တကယ် ရှိနေတာ ဖြစ်လို့
+      ထူးဆန်းပါတယ်။ [[mark:read-error-three]] တတိယ error ကတော့ စားပွဲ နံပါတ်က null ဖြစ်နိုင်တယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Narrowing (truthiness, null checks)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (union types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#union-types",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-three-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-paratha-error
+        type: expect.preview
+        at: { afterAction: expect-three-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Type 'string' is not assignable to type 'Price'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-paratha-file
+        type: expect.preview
+        at: { afterAction: expect-paratha-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "src/prices.ts" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-large-error
+        type: expect.preview
+        at: { afterAction: expect-paratha-file }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Property 'large' does not exist on type 'Price'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-null-error
+        type: expect.preview
+        at: { afterAction: expect-large-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-3 }
+        textContains: "'table' is possibly 'null'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-tea-output
+        type: expect.preview
+        at: { afterAction: expect-null-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် ခွက်ကြီး 1800 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-table-output
+        type: expect.preview
+        at: { afterAction: expect-tea-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "စားပွဲ 07"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: annotation
+    chapter: "Annotation နဲ့ satisfies"
+    narration: >
+      [[mark:type-tea-query]] ဒုတိယ error ဘာကြောင့် ပေါ်လဲ သိဖို့၊ လက်ဖက်ရည် ဈေးရဲ့ type ကို query
+      comment နဲ့ ကြည့်ရအောင်။ [[mark:read-tea-price]] Types မှာ ဈေးနှုန်း type ကိုပဲ ပြပါတယ်။ ဆိုလိုတာက
+      ဂဏန်း ဖြစ်နိုင်သလို object လည်း ဖြစ်နိုင်တယ် ဆိုတာလောက်ပဲ TypeScript က သိပါတော့တယ်။
+      [[mark:read-annotation-wins]] variable မှာ annotation ပေးထားရင် variable ရဲ့ type က နိုင်ပါတယ်။
+      TypeScript က တန်ဖိုးကို စစ်ပြီးတာနဲ့၊ လက်ဖက်ရည်မှာ ခွက်ကြီး ဈေး ပါတယ် ဆိုတဲ့ အသေးစိတ်ကို
+      မေ့လိုက်ပြီး annotation ကိုပဲ မှတ်ထားလို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (when you annotate a variable, the variable wins)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (type annotations on variables)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-annotations-on-variables",
+        }
+    actions:
+      - id: type-tea-query
+        type: editor.type
+        at: { mark: type-tea-query }
+        target: { file: src/main.ts, after: "const tea = prices.tea;\n", occurrence: 1 }
+        text: "//    ^?\n"
+      - id: expect-tea-price
+        type: expect.preview
+        at: { afterAction: type-tea-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "const tea: Price" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: value-wins
+    narration: >
+      [[mark:type-comment-open]] annotation ကို ဖယ်ကြည့်ရအောင်။ ဈေးနှုန်း ဖိုင်မှာ annotation ကို
+      comment နဲ့ ပိတ်လိုက်ပါမယ်။ [[mark:read-value-wins]] Types မှာ လက်ဖက်ရည်ကို ခွက်သေး ခွက်ကြီး ဈေး
+      ပါတဲ့ object အဖြစ် မြင်ရပြီး၊ large မရှိဘူး ဆိုတဲ့ error လည်း ပျောက်သွားပါပြီ။ annotation
+      မရှိတော့ တန်ဖိုးက နိုင်ပြီး၊ TypeScript က တန်ဖိုးကို ကြည့်ပြီး infer လုပ်လိုက်လို့ပါ။
+      [[mark:read-lost-check]] ဒါပေမဲ့ Errors ကို ကြည့်ပါ။ ပလာတာ ဈေး error ပါ ပျောက်သွားပါတယ်။ စစ်မယ့်
+      type မရှိတော့လို့၊ စာသား ဈေးကို ဘယ်သူမှ မဖမ်းတော့တာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (with no annotation, the value wins)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+      - {
+          title: "TypeScript Handbook: Type Inference",
+          url: "https://www.typescriptlang.org/docs/handbook/type-inference.html",
+        }
+    actions:
+      - id: open-prices-2
+        type: workspace.openFile
+        at: { mark: type-comment-open }
+        path: src/prices.ts
+      - id: type-comment-open
+        type: editor.type
+        at: { afterAction: open-prices-2 }
+        target: { file: src/prices.ts, after: "export const prices", occurrence: 1 }
+        text: " /*"
+        cadence: fast-explainer
+      - id: type-comment-close
+        type: editor.type
+        at: { afterAction: type-comment-open }
+        target: { file: src/prices.ts, after: "/*: PriceList", occurrence: 1 }
+        text: "*/"
+        cadence: fast-explainer
+      - id: expect-value-wins
+        type: expect.preview
+        at: { afterAction: type-comment-close }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          { name: data-type, value: "const tea: {\n    small: number;\n    large: number;\n}" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-value-one-error
+        type: expect.preview
+        at: { afterAction: expect-value-wins }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-value-null-left
+        type: expect.preview
+        at: { afterAction: expect-value-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "18047" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: satisfies
+    narration: >
+      [[mark:type-satisfies]] ဒီ နှစ်ခုလုံးရဲ့ အကောင်းကို လိုချင်တဲ့အခါ satisfies ကို သုံးပါတယ်။ object
+      ရဲ့ နောက်မှာ satisfies နဲ့ ဈေးနှုန်း စာရင်း type ကို ရေးလိုက်ပါမယ်။ [[mark:read-satisfies]] ပလာတာ
+      error ပြန်ပေါ်လာပါပြီ။ ဒါပေမဲ့ Types မှာ လက်ဖက်ရည်ရဲ့ type က ခွက်သေး ခွက်ကြီး ပါတဲ့ object အတိုင်း
+      ကျန်နေပြီး၊ large error လည်း ပြန်မပေါ်ပါဘူး။ satisfies က type နဲ့ ကိုက်မကိုက် စစ်ပေးပေမယ့်၊
+      variable ရဲ့ type ကိုတော့ annotation နဲ့ အစားမထိုးဘဲ တန်ဖိုးရဲ့ အသေးစိတ်အတိုင်း ထားပေးလို့ပါ။
+      [[mark:type-fix-paratha]] ပလာတာ ဈေးကို ဂဏန်းနဲ့ ရေးတဲ့ line အသစ် ထည့်ပြီး၊ အဟောင်းကို comment
+      ပိတ်လိုက်ပါမယ်။ [[mark:read-paratha-fixed]] Errors မှာ စားပွဲ နံပါတ် error တစ်ခုပဲ ကျန်ပါတော့တယ်။
+    sources:
+      - {
+          title: "TypeScript 4.9 release notes: The satisfies operator",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html#the-satisfies-operator",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (annotating values with satisfies)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+    actions:
+      - id: type-satisfies
+        type: editor.type
+        at: { mark: type-satisfies }
+        target: { file: src/prices.ts, after: "  paratha: \"1200\",\n}", occurrence: 1 }
+        text: " satisfies PriceList"
+        cadence: fast-explainer
+      - id: expect-satisfies-two
+        type: expect.preview
+        at: { afterAction: type-satisfies }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-satisfies-paratha
+        type: expect.preview
+        at: { afterAction: expect-satisfies-two }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Type 'string' is not assignable to type 'Price'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-satisfies-detail
+        type: expect.preview
+        at: { afterAction: expect-satisfies-paratha }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          { name: data-type, value: "const tea: {\n    small: number;\n    large: number;\n}" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-fix-paratha
+        type: editor.type
+        at: { mark: type-fix-paratha }
+        target:
+          {
+            file: src/prices.ts,
+            after: "  coffee: { small: 1800, large: 2100 },\n  ",
+            occurrence: 1,
+          }
+        text: "paratha: 1200,\n  // "
+        cadence: block
+      - id: expect-paratha-fixed
+        type: expect.preview
+        at: { afterAction: type-fix-paratha }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: as-string
+    chapter: "as နဲ့ non-null assertion"
+    narration: >
+      [[mark:select-table]] အခု စားပွဲ နံပါတ်ကို ကြည့်ရအောင်။ [[mark:type-table-query]] link ကနေ
+      ဖတ်ထားတဲ့ တန်ဖိုးရဲ့ type ကို query comment နဲ့ ကြည့်ပါမယ်။ [[mark:read-table-null]] string
+      ဒါမှမဟုတ် null လို့ ပြနေပါတယ်။ link ထဲမှာ ဒီ တန်ဖိုး မပါရင် null ပြန်ပေးလို့ပါ။ ဒါပေမဲ့
+      စားပွဲတိုင်းရဲ့ QR code မှာ စားပွဲ နံပါတ် ပါအောင် ဆိုင်က ကိုယ်တိုင် လုပ်ထားလို့၊ ဒီ နေရာမှာ ကိုယ်က
+      TypeScript ထက် ပိုသိပါတယ်။ [[mark:type-as-string]] ဒါကြောင့် as နဲ့ ဒါ string ပါလို့
+      ပြောလိုက်ပါမယ်။ [[mark:read-as-string]] type က string ဖြစ်သွားပြီး error လည်း ပျောက်သွားပါပြီ။
+      ဒါပေမဲ့ as က type ပိုင်းမှာပဲ အလုပ်လုပ်ပြီး runtime မှာ ဘာမှ မစစ်ပါဘူး။ link ထဲမှာ စားပွဲ နံပါတ်
+      တကယ် မပါခဲ့ရင် null ပဲ ဖြစ်နေပြီး program က ရပ်သွားမှာပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Everyday Types (type assertions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-assertions",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (the as assertion)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+    actions:
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: select-table }
+        path: src/main.ts
+      - id: select-table
+        type: editor.select
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, text: 'link.get("table")', occurrence: 1 }
+      - id: type-table-query
+        type: editor.type
+        at: { mark: type-table-query }
+        target: { file: src/main.ts, after: "const table = link.get(\"table\");\n", occurrence: 1 }
+        text: "//    ^?\n"
+      - id: expect-table-null
+        type: expect.preview
+        at: { afterAction: type-table-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const table: string | null" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-as-string
+        type: editor.type
+        at: { mark: type-as-string }
+        target: { file: src/main.ts, after: 'const table = link.get("table")', occurrence: 1 }
+        text: " as string"
+        cadence: fast-explainer
+      - id: expect-as-string
+        type: expect.preview
+        at: { afterAction: type-as-string }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const table: string" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-as-string-clean
+        type: expect.preview
+        at: { afterAction: expect-as-string }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: non-null
+    narration: >
+      [[mark:type-cup]] ခွက် အရွယ်အစားကိုလည်း link ကနေ ဖတ်ပြီး query comment နဲ့ ကြည့်ပါမယ်။
+      [[mark:read-cup-null]] ဒီမှာလည်း string ဒါမှမဟုတ် null ပါ။ [[mark:type-bang]] ဒီတစ်ခါတော့ နောက်မှာ
+      exclamation mark တစ်လုံး ထည့်ကြည့်ပါမယ်။ [[mark:read-cup-string]] null ပျောက်ပြီး string ပဲ
+      ကျန်ပါတော့တယ်။ ဒါကို non-null assertion လို့ ခေါ်ပြီး၊ type ထဲက null နဲ့ undefined ကို
+      ဖယ်ပေးပါတယ်။ as လိုပဲ runtime မှာ မစစ်ပေးတဲ့အပြင်၊ စာလုံး တစ်လုံးတည်း ဖြစ်လို့ မျက်စိ
+      လွတ်သွားလွယ်တာကို သတိထားပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Everyday Types (non-null assertion operator)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#non-null-assertion-operator-postfix-",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (the non-null assertion)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+    actions:
+      - id: type-cup
+        type: editor.type
+        at: { mark: type-cup }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(\"စားပွဲ\", table.padStart(2, \"0\"));\n",
+            occurrence: 1,
+          }
+        text: "const cup = link.get(\"cup\");\n//    ^?\n"
+        cadence: line-by-line
+      - id: expect-cup-null
+        type: expect.preview
+        at: { afterAction: type-cup }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute: { name: data-type, value: "const cup: string | null" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-bang
+        type: editor.type
+        at: { mark: type-bang }
+        target: { file: src/main.ts, after: 'const cup = link.get("cup")', occurrence: 1 }
+        text: "!"
+      - id: expect-cup-string
+        type: expect.preview
+        at: { afterAction: type-bang }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute: { name: data-type, value: "const cup: string" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: as-limits
+    chapter: "as ရဲ့ ကန့်သတ်ချက်နဲ့ error ပိတ်ခြင်း"
+    narration: >
+      [[mark:type-as-number]] ဒါဆို as နဲ့ ဘာမဆို ပြောလို့ ရသလား။ စားပွဲ နံပါတ်ကို number လို့ ပြောပြီး၊
+      နောက် စားပွဲရဲ့ နံပါတ်ကို တွက်ကြည့်ရအောင်။ [[mark:read-as-number]] Errors မှာ error အသစ်
+      ပေါ်လာပါတယ်။ string နဲ့ number က လုံးဝ မဆိုင်တဲ့ type တွေ ဖြစ်လို့၊ ဒီ ပြောင်းလဲမှုက အမှား
+      ဖြစ်နိုင်တယ်လို့ ပြောနေတာပါ။ as က ဆက်စပ်မှု ရှိတဲ့ type တွေကြားမှာပဲ ပြောင်းခွင့် ပေးပါတယ်။
+      [[mark:read-71]] Output ကိုလည်း ကြည့်ပါ။ နောက် စားပွဲက ၈ မဟုတ်ဘဲ ၇၁ ဖြစ်နေပါတယ်။ တန်ဖိုးက စာသား
+      ဖြစ်နေဆဲမို့ တစ် ပေါင်းလိုက်တော့ စာသား ဆက်သွားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (the limits of as)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (type assertions, two assertions through unknown)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-assertions",
+        }
+    actions:
+      - id: type-as-number
+        type: editor.type
+        at: { mark: type-as-number }
+        target:
+          { file: src/main.ts, after: "const cup = link.get(\"cup\")!;\n//    ^?\n", occurrence: 1 }
+        text: "\nconst next = table as number;\nconsole.log(\"နောက် စားပွဲ\", next + 1);\n"
+        cadence: line-by-line
+      - id: expect-as-number-error
+        type: expect.preview
+        at: { afterAction: type-as-number }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-as-number-code
+        type: expect.preview
+        at: { afterAction: expect-as-number-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2352" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-as-number-text
+        type: expect.preview
+        at: { afterAction: expect-as-number-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Conversion of type 'string' to type 'number' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-71
+        type: expect.preview
+        at: { afterAction: expect-as-number-text }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "နောက် စားပွဲ 71"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: directives
+    narration: >
+      [[mark:type-expect-error]] error ကို ပိတ်တဲ့ နည်း တစ်ခုက၊ line ရဲ့ အပေါ်မှာ ts expect error ဆိုတဲ့
+      comment directive ကို ရေးတာပါ။ [[mark:read-expect-error]] error ပျောက်သွားပါပြီ။ ဒီ directive က
+      နောက် line မှာ error ရှိမယ်လို့ ကြိုပြောထားပြီး၊ အဲဒီ error ကို မပြတော့ပါဘူး။
+      [[mark:type-unknown]] နောက်ထပ် နည်း တစ်ခုက၊ error message ထဲမှာ ပြောထားသလို unknown ကို အရင်
+      ဖြတ်ပြီး as ကို နှစ်ခါ သုံးတာပါ။ [[mark:read-unused]] ဒီတစ်ခါ error အသစ် တစ်ခု ပေါ်လာပါတယ်။
+      unknown ကနေ ဘာ type ကိုမဆို ပြောင်းလို့ ရလို့ ပြောင်းလဲမှု error မရှိတော့ပြီး၊ directive က ပိတ်စရာ
+      error မရှိဘူးလို့ ပြန်ပြောနေတာပါ။ ts expect error ရဲ့ အားသာချက်က၊ မလိုတော့တဲ့အခါ ကိုယ့်ကို
+      ပြန်သတိပေးတာပါ။ [[mark:type-directive-off]] directive ကို comment ပိတ်လိုက်ပါမယ်။ ကိုယ့် project
+      မှာဆိုရင်တော့ ဒီ line ကို ဖျက်လိုက်ရုံပါပဲ။ [[mark:read-double-as]] error မရှိတော့ပေမယ့် Output
+      ကတော့ ၇၁ ပဲ ဖြစ်နေဆဲပါ။ as unknown as က စစ်ဆေးမှုကို လုံးဝ ကျော်လိုက်တာပဲ ဖြစ်ပြီး၊ ဘာမှ
+      ပိုလုံခြုံမလာပါဘူး။ [[mark:type-number]] စာသားကို ဂဏန်း တကယ် ပြောင်းချင်ရင်တော့ Number function ကို
+      သုံးရပါမယ်။ line အသစ် ရေးပြီး အဟောင်းကို comment ပိတ်လိုက်ပါမယ်။ [[mark:read-number]] Output မှာ
+      နောက် စားပွဲက ၈ ဖြစ်သွားပါပြီ။ as က type ကိုပဲ ပြောင်းပြီး၊ တန်ဖိုးကို တကယ် ပြောင်းပေးတာက runtime
+      code ပါ။
+    sources:
+      - {
+          title: "TypeScript 3.9 release notes: // @ts-expect-error comments",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-9.html#-ts-expect-error-comments",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (error suppression directives)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+    actions:
+      - id: type-expect-error
+        type: editor.type
+        at: { mark: type-expect-error }
+        target:
+          {
+            file: src/main.ts,
+            after: "const cup = link.get(\"cup\")!;\n//    ^?\n\n",
+            occurrence: 1,
+          }
+        text: "// @ts-expect-error\n"
+        cadence: line-by-line
+      - id: expect-silenced
+        type: expect.preview
+        at: { afterAction: type-expect-error }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-unknown
+        type: editor.type
+        at: { mark: type-unknown }
+        target: { file: src/main.ts, after: "const next = table as ", occurrence: 1 }
+        text: "unknown as "
+        cadence: fast-explainer
+      - id: expect-unused
+        type: expect.preview
+        at: { afterAction: type-unknown }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-unused-code
+        type: expect.preview
+        at: { afterAction: expect-unused }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2578" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-unused-text
+        type: expect.preview
+        at: { afterAction: expect-unused-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Unused '@ts-expect-error' directive."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-directive-off
+        type: editor.type
+        at: { mark: type-directive-off }
+        target:
+          {
+            file: src/main.ts,
+            after: "const cup = link.get(\"cup\")!;\n//    ^?\n\n",
+            occurrence: 1,
+          }
+        text: "// "
+        cadence: fast-explainer
+      - id: expect-directive-off
+        type: expect.preview
+        at: { afterAction: type-directive-off }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-still-71
+        type: expect.preview
+        at: { afterAction: expect-directive-off }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "နောက် စားပွဲ 71"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-number
+        type: editor.type
+        at: { mark: type-number }
+        target: { file: src/main.ts, after: "// // @ts-expect-error\n", occurrence: 1 }
+        text: "const next = Number(table);\n// "
+        cadence: block
+      - id: expect-number-clean
+        type: expect.preview
+        at: { afterAction: type-number }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-8
+        type: expect.preview
+        at: { afterAction: expect-number-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "နောက် စားပွဲ 8"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: when-to-silence
+    narration: >
+      [[mark:board-directives]] error ပိတ်တဲ့ နည်းတွေကို စုကြည့်ရအောင်။ [[mark:draw-expect]] ts expect
+      error က နောက် line မှာ error ရှိမှ လက်ခံပြီး၊ error မရှိတော့ရင် ပြန်ပြောပါတယ်။
+      [[mark:draw-ignore]] ts ignore ကတော့ နောက် line က error အားလုံးကို ပိတ်ပြီး၊ မလိုတော့တဲ့အခါလည်း
+      ဘာမှ မပြောပါဘူး။ [[mark:prefer-expect]] ဒါကြောင့် ts expect error ကို ပိုသုံးသင့်ပါတယ်။
+      [[mark:draw-nocheck]] ts no check ကတော့ ဖိုင် တစ်ခုလုံးကို မစစ်တော့ဘဲ၊ မေ့ပြီး ကျန်ခဲ့ရင်
+      ရှာရခက်တဲ့ bug တွေ ဖြစ်စေလို့ ရှောင်ပါ။ [[mark:draw-asany]] as any ကတော့ expression တစ်ခုတည်းကိုပဲ
+      မစစ်တော့ပါဘူး။ directive တွေက line တစ်ခုလုံးကို ပိတ်လို့ စာလုံးပေါင်း မှားတာလို တခြား
+      အမှားတွေကိုပါ ဖုံးသွားနိုင်ပေမယ့်၊ as any ကတော့ ကျန်တဲ့ အမှားတွေကို ဆက်ပြပေးပါတယ်။
+      [[mark:draw-when]] ဒါဆို ဘယ်အချိန် ပိတ်သင့်လဲ။ QR code မှာ စားပွဲ နံပါတ် အမြဲ ပါတာလို၊ ကိုယ်က
+      TypeScript ထက် တကယ် ပိုသိတဲ့အခါ ပိတ်လို့ ရပါတယ်။ [[mark:draw-not-when]] ဒါပေမဲ့ error ကို
+      နားမလည်သေးလို့ ပိတ်လိုက်ရင်တော့ ပြဿနာကို နောက်ကို ရွှေ့ထားတာပဲ ဖြစ်ပြီး၊ bug က runtime မှာ
+      ပြန်ပေါ်လာတတ်ပါတယ်။ error ကို နားလည်အောင် အရင် ဖတ်ပြီး code ကို ပြင်တာ ပိုကောင်းပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (as any vs directives; when to suppress errors)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+      - {
+          title: "TypeScript 3.7 release notes: // @ts-nocheck in TypeScript files",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#-ts-nocheck-in-typescript-files",
+        }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-directives }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-expect
+        type: whiteboard.apply
+        at: { mark: draw-expect }
+        upsertIds: [b-expect]
+        drawMs: 1400
+      - id: draw-ignore
+        type: whiteboard.apply
+        at: { mark: draw-ignore }
+        upsertIds: [b-ignore]
+        drawMs: 1200
+      - id: prefer-expect
+        type: whiteboard.apply
+        at: { mark: prefer-expect }
+        upsertIds: [b-expect-circle]
+        drawMs: 1200
+      - id: draw-nocheck
+        type: whiteboard.apply
+        at: { mark: draw-nocheck }
+        upsertIds: [b-nocheck, b-nocheck-strike]
+        drawMs: 1800
+      - id: draw-asany
+        type: whiteboard.apply
+        at: { mark: draw-asany }
+        upsertIds: [b-asany]
+        drawMs: 1200
+      - id: draw-when
+        type: whiteboard.apply
+        at: { mark: draw-when }
+        upsertIds: [b-when]
+        drawMs: 1400
+      - id: draw-not-when
+        type: whiteboard.apply
+        at: { mark: draw-not-when }
+        upsertIds: [b-not-when]
+        drawMs: 1400
+
+  - id: as-const
+    chapter: "as const နဲ့ satisfies"
+    narration: >
+      [[mark:close-board-b]] နောက်ဆုံးအနေနဲ့ ဈေးနှုန်း စာရင်းကို ပြန်သွားရအောင်။ ဈေးနှုန်းတွေက program
+      run နေတုန်း ပြောင်းလို့ မရသင့်တဲ့ config ပါ။ [[mark:type-as-const]] ဒါကြောင့် satisfies ရဲ့
+      ရှေ့မှာ as const ကို ထည့်လိုက်ပါမယ်။ [[mark:read-as-const]] Types မှာ လက်ဖက်ရည်ရဲ့ ဈေး နှစ်ခုက
+      read only ဖြစ်ပြီး၊ number အစား ၁၅၀၀ နဲ့ ၁၈၀၀ ဆိုတဲ့ literal type တွေ ဖြစ်သွားပါပြီ။ as const က
+      object တစ်ခုလုံးကို အတွင်းထဲထိ read only ဖြစ်စေပြီး၊ satisfies က ပုံစံ မှန်မမှန် ဆက်စစ်ပေးပါတယ်။
+      ပြင်လို့ မရတဲ့ config တွေအတွက် ဒီ နှစ်ခုကို ဒီ အစီအစဉ်အတိုင်း တွဲသုံးတာ အကောင်းဆုံးပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions (as const and satisfies)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+      - {
+          title: "TypeScript 3.4 release notes: const assertions",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: close-board-b }
+        open: false
+      - id: open-prices-3
+        type: workspace.openFile
+        at: { mark: type-as-const }
+        path: src/prices.ts
+      - id: type-as-const
+        type: editor.type
+        at: { afterAction: open-prices-3 }
+        target: { file: src/prices.ts, after: "  // paratha: \"1200\",\n}", occurrence: 1 }
+        text: " as const"
+        cadence: fast-explainer
+      - id: expect-as-const
+        type: expect.preview
+        at: { afterAction: type-as-const }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          {
+            name: data-type,
+            value: "const tea: {\n    readonly small: 1500;\n    readonly large: 1800;\n}",
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-as-const-clean
+        type: expect.preview
+        at: { afterAction: expect-as-const }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ variable မှာ annotation ပေးရင် variable ရဲ့ type က နိုင်ပြီး၊
+      မပေးရင် တန်ဖိုးက နိုင်ပါတယ်။ satisfies ကတော့ စစ်လည်း စစ်ပေးပြီး၊ အသေးစိတ်ကိုလည်း ထိန်းထားပေးပါတယ်။
+      [[mark:recap-as]] as နဲ့ non-null assertion က TypeScript ကို ကိုယ်က အတင်း ပြောတာ ဖြစ်ပြီး runtime
+      မှာ ဘာမှ မစစ်ပါဘူး။ error ကို ပိတ်ရမယ် ဆိုရင် ts expect error ကို သုံးပြီး၊ ကိုယ်က တကယ် ပိုသိမှပဲ
+      ပိတ်ပါ။ နောက် lesson မှာတော့ TypeScript ရဲ့ object တွေမှာ တွေ့ရတဲ့ ထူးဆန်းတဲ့ အပြုအမူတွေကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 11: Annotations and Assertions",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/annotations-and-assertions",
+        }
+    actions:
+      - id: select-satisfies
+        type: editor.select
+        at: { mark: recap }
+        target: { file: src/prices.ts, text: "} as const satisfies PriceList;", occurrence: 1 }
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: recap-as }
+        path: src/main.ts
+      - id: select-as
+        type: editor.select
+        at: { afterAction: open-main-3 }
+        target: { file: src/main.ts, text: 'link.get("table") as string', occurrence: 1 }
+      - id: expect-file-prices
+        type: expect.file
+        at: { afterAction: select-as }
+        path: src/prices.ts
+        contains: "export const prices /*: PriceList*/ = {\n  tea: { small: 1500, large: 1800 },\n  coffee: { small: 1800, large: 2100 },\n  paratha: 1200,\n  // paratha: \"1200\",\n} as const satisfies PriceList;"
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: expect-file-prices }
+        path: src/main.ts
+        contains: "const table = link.get(\"table\") as string;\n//    ^?\nconsole.log(\"စားပွဲ\", table.padStart(2, \"0\"));\nconst cup = link.get(\"cup\")!;\n//    ^?\n\n// // @ts-expect-error\nconst next = Number(table);\n// const next = table as unknown as number;\nconsole.log(\"နောက် စားပွဲ\", next + 1);"
+checks:
+  - { type: timing.p95Ms, max: 300 }
