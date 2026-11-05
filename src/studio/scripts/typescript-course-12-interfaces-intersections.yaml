@@ -1,0 +1,1699 @@
+# TypeScript course, lesson 12: intersections and interfaces (Burmese).
+#
+# Start state (ws/): src/menu.ts has the Sugar union, a MenuItem object type and `Drink = MenuItem`
+# (no sugar yet); src/main.ts imports Drink and Snack, builds a tea (with a sugar level) and a
+# mohinga (typed Snack) and prints both. The panel (data-modes "errors types output") starts with
+# 3 errors, all in main.ts: TS2305 (menu has no exported member 'Snack'), TS2353 (excess 'sugar'
+# in the tea literal), TS2339 ('sugar' does not exist on 'MenuItem'). Output prints both lines,
+# because type errors never stop the run.
+# Edits, all insert-only:
+#   intersection ` & { sugar: Sugar }` after `Drink = MenuItem` -> 1 error left (Snack)
+#   never        `type Both = string & number;` + ^? -> `type Both = never`
+#   interface    `export interface Snack extends MenuItem { spicy: boolean; }` -> 0 errors
+#   conflict     `type Promo = Drink & { price: string };` + a Promo object -> TS2322 "Type
+#                'string' is not assignable to type 'never'" at the object; `interface PromoSnack
+#                extends Snack { price: string }` -> TS2430 at the interface; the 3 lines are
+#                commented out (`// `) -> 0 errors
+#   merge        a second `export interface Snack { vegetarian: boolean }` -> TS2741 at mohinga in
+#                main.ts; a second `export type Drink` -> 2 x TS2300 Duplicate identifier; both
+#                lines commented out -> 0 errors
+# Boards: (A) MenuItem & {sugar} -> Drink, union vs intersection in words, (B) string and number as
+# two value sets with nothing in both, (C) type vs interface and the course's default.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-12-interfaces-intersections.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-12-interfaces-intersections
+  title: "TypeScript course 12: Interface နဲ့ intersection"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors types output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import type { Drink, Snack } from "./menu";
+
+        const tea: Drink = { name: "လက်ဖက်ရည်", price: 1500, sugar: "less" };
+        const mohinga: Snack = { name: "မုန့်ဟင်းခါး", price: 2500, spicy: true };
+
+        console.log(tea.name, tea.price, "ကျပ်၊ သကြား", tea.sugar);
+        console.log(mohinga.name, mohinga.price, "ကျပ်၊ အစပ်", mohinga.spicy);
+      src/menu.ts: |
+        export type Sugar = "less" | "normal" | "extra";
+
+        export type MenuItem = {
+          name: string;
+          price: number;
+        };
+
+        export type Drink = MenuItem;
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: MenuItem & { sugar } -> Drink; union is "or", intersection is "and".
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Object type တွေကို ပေါင်းခြင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-box1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 220,
+        height: 200,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-box1-name,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 180,
+        height: 36,
+        text: "MenuItem",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-box1-p1,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 180,
+        height: 36,
+        text: "name",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-box1-p2,
+        kind: text,
+        x: 290,
+        y: 365,
+        width: 180,
+        height: 36,
+        text: "price",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-amp,
+        kind: text,
+        x: 508,
+        y: 315,
+        width: 40,
+        height: 50,
+        text: "&",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: a-box2,
+        kind: rectangle,
+        x: 560,
+        y: 240,
+        width: 170,
+        height: 200,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-box2-p,
+        kind: text,
+        x: 580,
+        y: 315,
+        width: 130,
+        height: 36,
+        text: "sugar",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 742,
+        y: 318,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-box3,
+        kind: rectangle,
+        x: 805,
+        y: 240,
+        width: 260,
+        height: 200,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-box3-name,
+        kind: text,
+        x: 825,
+        y: 255,
+        width: 220,
+        height: 36,
+        text: "Drink",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-box3-p1,
+        kind: text,
+        x: 825,
+        y: 300,
+        width: 220,
+        height: 36,
+        text: "name",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-box3-p2,
+        kind: text,
+        x: 825,
+        y: 345,
+        width: 220,
+        height: 36,
+        text: "price",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-box3-p3,
+        kind: text,
+        x: 825,
+        y: 390,
+        width: 220,
+        height: 36,
+        text: "sugar",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-union,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 760,
+        height: 36,
+        text: "union ( | ) · ဒါ ဒါမှမဟုတ် ဟိုဟာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-inter,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 760,
+        height: 36,
+        text: "intersection ( & ) · ဒါရော ဟိုဟာရော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board B: string and number as two sets of values with nothing in both.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "string & number",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: b-e1, kind: ellipse, x: 290, y: 240, width: 300, height: 200, strokeColor: "#1971c2" }
+    - {
+        id: b-e1-label,
+        kind: text,
+        x: 385,
+        y: 270,
+        width: 110,
+        height: 36,
+        text: "string",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-e1-ex,
+        kind: text,
+        x: 360,
+        y: 335,
+        width: 180,
+        height: 36,
+        text: '"ကော်ဖီ"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-e2, kind: ellipse, x: 660, y: 240, width: 300, height: 200, strokeColor: "#1971c2" }
+    - {
+        id: b-e2-label,
+        kind: text,
+        x: 750,
+        y: 270,
+        width: 120,
+        height: 36,
+        text: "number",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-e2-ex,
+        kind: text,
+        x: 770,
+        y: 335,
+        width: 90,
+        height: 36,
+        text: "1500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-never,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 760,
+        height: 36,
+        text: "နှစ်ခုလုံး ဖြစ်တဲ့ တန်ဖိုး မရှိ → never",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-objects,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 760,
+        height: 36,
+        text: "object type တွေ → property တွေ ပေါင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board C: type alias vs interface, and the default the course follows.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "type လား၊ interface လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-type-h,
+        kind: text,
+        x: 270,
+        y: 240,
+        width: 380,
+        height: 36,
+        text: "type alias",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-type-1,
+        kind: text,
+        x: 270,
+        y: 295,
+        width: 380,
+        height: 36,
+        text: "union အပါ ဘာ type မဆို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-type-2,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 380,
+        height: 36,
+        text: "& → သုံးမှ error",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-type-3,
+        kind: text,
+        x: 270,
+        y: 405,
+        width: 380,
+        height: 36,
+        text: "နာမည်တူ → error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-h,
+        kind: text,
+        x: 690,
+        y: 240,
+        width: 390,
+        height: 36,
+        text: "interface",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-1,
+        kind: text,
+        x: 690,
+        y: 295,
+        width: 390,
+        height: 36,
+        text: "object type ပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-2,
+        kind: text,
+        x: 690,
+        y: 350,
+        width: 390,
+        height: 36,
+        text: "extends → ကြေညာရင် error",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-int-3,
+        kind: text,
+        x: 690,
+        y: 405,
+        width: 390,
+        height: 36,
+        text: "နာမည်တူ → ပေါင်းသွား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-default,
+        kind: text,
+        x: 270,
+        y: 500,
+        width: 800,
+        height: 36,
+        text: "ပုံမှန် → type · ချဲ့ရင် → interface extends",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3112
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Object type တွေကို ပေါင်းခြင်း"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ object type တွေကို union နဲ့ ပေါင်းပြီး၊ status လို
+      discriminant တစ်ခုနဲ့ ခွဲခြားတဲ့ discriminated union ကို လေ့လာခဲ့ပါတယ်။ ဒီ lesson မှာတော့ object
+      type တွေကို နောက်တစ်နည်းနဲ့ ပေါင်းတဲ့ intersection နဲ့၊ object type ကို နာမည်ပေးပြီး ချဲ့လို့ ရတဲ့
+      interface ကို ကြည့်သွားပါမယ်။ [[mark:draw-menu-item]] ဆိုင်ရဲ့ menu ထဲက ပစ္စည်း တိုင်းမှာ နာမည်နဲ့
+      ဈေးနှုန်း ပါပါတယ်။ ဒီ ပုံစံကို menu item type လို့ ခေါ်ပါမယ်။ [[mark:draw-sugar]] လက်ဖက်ရည်၊
+      ကော်ဖီလို သောက်စရာတွေမှာတော့ သကြား ဘယ်လောက် ထည့်မလဲ ဆိုတာပါ ထပ်ပါရပါတယ်။ [[mark:draw-drink]]
+      ဆိုတော့ drink ဆိုတာ menu item မှာ ပါတာ အားလုံးရော၊ သကြား အဆင့်ရော ပါရမယ့် type ပါ။ နာမည်နဲ့
+      ဈေးနှုန်းကို ထပ်ကူးရေးမယ့်အစား ရှိပြီးသား menu item ကို ယူပြီး ချဲ့လိုက်ရင်၊ menu item
+      ပြောင်းတဲ့အခါ drink ပါ လိုက်ပြောင်းသွားမှာပါ။ [[mark:draw-contrast]] union က ဒါ ဒါမှမဟုတ် ဟိုဟာ
+      ဆိုတဲ့ အဓိပ္ပာယ် ဖြစ်ပြီး၊ ဒီနေ့ ကြည့်မယ့် intersection ကတော့ ဒါရော ဟိုဟာရော ဆိုတဲ့ အဓိပ္ပာယ်ပါ။
+      type နှစ်ခုလုံးမှာ ပါတာ အကုန် ရှိရပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (extending objects, intersection types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (intersection types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#intersection-types",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-menu-item
+        type: whiteboard.apply
+        at: { mark: draw-menu-item }
+        upsertIds: [a-box1, a-box1-name, a-box1-p1, a-box1-p2]
+        drawMs: 2400
+      - id: draw-sugar
+        type: whiteboard.apply
+        at: { mark: draw-sugar }
+        upsertIds: [a-amp, a-box2, a-box2-p]
+        drawMs: 1600
+      - id: draw-drink
+        type: whiteboard.apply
+        at: { mark: draw-drink }
+        upsertIds: [a-arrow, a-box3, a-box3-name, a-box3-p1, a-box3-p2, a-box3-p3]
+        drawMs: 3000
+      - id: draw-contrast
+        type: whiteboard.apply
+        at: { mark: draw-contrast }
+        upsertIds: [a-union, a-inter]
+        drawMs: 2200
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-menu]] ဒါက menu ရဲ့ type တွေကို
+      စုရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-menu-item]] menu item type မှာ နာမည်နဲ့ ဈေးနှုန်း ပါပါတယ်။
+      [[mark:select-drink]] drink type ကတော့ အခုထိ menu item နဲ့ အတူတူပဲ ဖြစ်နေပြီး၊ သကြား အဆင့်
+      မပါသေးပါဘူး။ [[mark:select-sugar]] အပေါ်ဆုံးက sugar type ကတော့ သကြား အဆင့် သုံးမျိုးကို literal
+      type တွေနဲ့ ရေးထားတဲ့ union ပါ။ [[mark:open-main]] main ဖိုင်မှာတော့ menu ဖိုင်ကနေ drink နဲ့ snack
+      ဆိုတဲ့ type နှစ်ခုကို import လုပ်ထားပါတယ်။ [[mark:select-tea]] လက်ဖက်ရည်က drink ဖြစ်ပြီး သကြား
+      နည်းနည်းနဲ့ပါ။ [[mark:select-mohinga]] မုန့်ဟင်းခါးကတော့ snack ဖြစ်ပြီး၊ စပ်လား မစပ်လား ဆိုတဲ့
+      property ပါပါတယ်။ ဒါပေမဲ့ snack type ကို menu ဖိုင်မှာ ရေးမထားရသေးပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (type aliases)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-aliases",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-menu
+        type: workspace.openFile
+        at: { mark: open-menu }
+        path: src/menu.ts
+      - id: select-menu-item
+        type: editor.select
+        at: { mark: select-menu-item }
+        target:
+          {
+            file: src/menu.ts,
+            text: "export type MenuItem = {\n  name: string;\n  price: number;\n};",
+            occurrence: 1,
+          }
+      - id: select-drink
+        type: editor.select
+        at: { mark: select-drink }
+        target: { file: src/menu.ts, text: "export type Drink = MenuItem;", occurrence: 1 }
+      - id: select-sugar
+        type: editor.select
+        at: { mark: select-sugar }
+        target:
+          {
+            file: src/menu.ts,
+            text: 'export type Sugar = "less" | "normal" | "extra";',
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-tea
+        type: editor.select
+        at: { mark: select-tea }
+        target:
+          {
+            file: src/main.ts,
+            text: 'const tea: Drink = { name: "လက်ဖက်ရည်", price: 1500, sugar: "less" };',
+            occurrence: 1,
+          }
+      - id: select-mohinga
+        type: editor.select
+        at: { mark: select-mohinga }
+        target:
+          {
+            file: src/main.ts,
+            text: 'const mohinga: Snack = { name: "မုန့်ဟင်းခါး", price: 2500, spicy: true };',
+            occurrence: 1,
+          }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] panel မှာ error သုံးခု ရှိနေပါတယ်။ ပထမ error က menu ဖိုင်မှာ snack ဆိုတဲ့
+      export မရှိဘူးလို့ ပြောနေပါတယ်။ [[mark:read-sugar-errors]] ဒုတိယနဲ့ တတိယ error တွေကတော့ menu item
+      type မှာ သကြား property မရှိဘူးလို့ ပြောနေပါတယ်။ လက်ဖက်ရည် object ထဲမှာ သကြား ထည့်ထားတဲ့ နေရာနဲ့၊
+      သကြားကို ပြန်ထုတ်ပြတဲ့ နေရာမှာပါ။ drink က menu item နဲ့ အတူတူ ဖြစ်နေသေးလို့ error ထဲမှာ menu item
+      လို့ ပြတာပါ။ [[mark:read-output]] Output ကိုတော့ ကြည့်ပါ။ type error တွေ ရှိနေပေမယ့် program က run
+      သွားပြီး၊ လက်ဖက်ရည်ရဲ့ သကြား အဆင့်နဲ့ မုန့်ဟင်းခါးရဲ့ အစပ်ကို ထုတ်ပြနေပါတယ်။ ဆိုလိုတာက data က
+      မှန်နေပြီး၊ type တွေကပဲ data နဲ့ မကိုက်သေးတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (excess property checks)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-three-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-no-snack
+        type: expect.preview
+        at: { afterAction: expect-three-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'Module ''"./menu"'' has no exported member ''Snack''.'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-excess-sugar
+        type: expect.preview
+        at: { afterAction: expect-no-snack }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "'sugar' does not exist in type 'MenuItem'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-no-sugar
+        type: expect.preview
+        at: { afterAction: expect-excess-sugar }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-3 }
+        textContains: "Property 'sugar' does not exist on type 'MenuItem'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-tea-output
+        type: expect.preview
+        at: { afterAction: expect-no-sugar }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် 1500 ကျပ်၊ သကြား less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-mohinga-output
+        type: expect.preview
+        at: { afterAction: expect-tea-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "မုန့်ဟင်းခါး 2500 ကျပ်၊ အစပ် true"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: intersection
+    chapter: "Intersection"
+    narration: >
+      [[mark:open-menu-2]] menu ဖိုင်ကို ပြန်သွားပြီး drink ကနေ စပြင်ပါမယ်။ [[mark:type-intersection]]
+      menu item ရဲ့ နောက်မှာ ampersand သင်္ကေတနဲ့ သကြား property တစ်ခုတည်း ပါတဲ့ object type ကို
+      ဆက်ရေးလိုက်ပါမယ်။ ဒါကို intersection type လို့ ခေါ်ပြီး၊ ဘယ်ဘက် type ရဲ့ property တွေရော၊ ညာဘက်
+      type ရဲ့ property တွေရော အကုန် ပါရမယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ [[mark:read-intersection]] သကြားနဲ့
+      ပတ်သက်တဲ့ error နှစ်ခု ပျောက်သွားပြီး၊ snack error တစ်ခုပဲ ကျန်ပါတော့တယ်။ အခု drink မှာ နာမည်၊
+      ဈေးနှုန်းနဲ့ သကြား သုံးခုလုံး ရှိနေပါပြီ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Object Types (intersection types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#intersection-types",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (intersection types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: open-menu-2
+        type: workspace.openFile
+        at: { mark: open-menu-2 }
+        path: src/menu.ts
+      - id: type-intersection
+        type: editor.type
+        at: { mark: type-intersection }
+        target: { file: src/menu.ts, after: "export type Drink = MenuItem", occurrence: 1 }
+        text: " & { sugar: Sugar }"
+        cadence: fast-explainer
+      - id: expect-one-left
+        type: expect.preview
+        at: { afterAction: type-intersection }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-snack-left
+        type: expect.preview
+        at: { afterAction: expect-one-left }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "has no exported member 'Snack'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: never
+    narration: >
+      [[mark:type-both]] intersection ကို object type တွေနဲ့ သုံးရင် property တွေ ပေါင်းသွားတာ
+      မြင်ရပါပြီ။ ဒါဆို string နဲ့ number လို ရိုးရိုး type နှစ်ခုကို intersection လုပ်ရင် ဘာဖြစ်မလဲ။
+      type alias တစ်ခုနဲ့ ရေးပြီး query comment နဲ့ မေးကြည့်ရအောင်။ [[mark:read-both]] Types အပိုင်းမှာ
+      never လို့ ပြနေပါတယ်။ [[mark:board-sets]] type တစ်ခုကို အဲဒီ type ဖြစ်နိုင်တဲ့ တန်ဖိုးတွေရဲ့
+      အစုလို့ စဉ်းစားကြည့်ရအောင်။ string အစုထဲမှာ စာသားတွေ၊ number အစုထဲမှာ ဂဏန်းတွေ ရှိပါတယ်။
+      [[mark:draw-empty]] intersection က အစု နှစ်ခုလုံးထဲမှာ ရှိတဲ့ တန်ဖိုးကို လိုချင်တာပါ။ ဒါပေမဲ့
+      စာသားလည်း ဖြစ်၊ ဂဏန်းလည်း ဖြစ်တဲ့ တန်ဖိုး မရှိလို့၊ ဘာမှ မဝင်နိုင်တဲ့ never type ဖြစ်သွားတာပါ။
+      [[mark:draw-objects]] object type တွေကျတော့ နာမည်၊ ဈေးနှုန်းနဲ့ သကြား အကုန်ပါတဲ့ object တစ်ခုက
+      type နှစ်ခုလုံးထဲ ဝင်နိုင်လို့၊ property တွေ ပေါင်းထားတဲ့ type ဖြစ်လာတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (intersections of primitives)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (the never type)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#the-never-type",
+        }
+    actions:
+      - id: type-both
+        type: editor.type
+        at: { mark: type-both }
+        target:
+          {
+            file: src/menu.ts,
+            after: "export type Drink = MenuItem & { sugar: Sugar };\n",
+            occurrence: 1,
+          }
+        text: "\ntype Both = string & number;\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-both-never
+        type: expect.preview
+        at: { afterAction: type-both }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "type Both = never" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-sets }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-e1, b-e1-label, b-e1-ex, b-e2, b-e2-label, b-e2-ex]
+        drawMs: 3000
+      - id: draw-empty
+        type: whiteboard.apply
+        at: { mark: draw-empty }
+        upsertIds: [b-never]
+        drawMs: 1600
+      - id: draw-objects
+        type: whiteboard.apply
+        at: { mark: draw-objects }
+        upsertIds: [b-objects]
+        drawMs: 1400
+
+  - id: interface
+    chapter: "Interface နဲ့ extends"
+    narration: >
+      [[mark:close-board-b]] အခု ကျန်နေတဲ့ snack error ကို ဖြေရှင်းရအောင်။ ဒီတစ်ခါတော့ object type ကို
+      ချဲ့တဲ့ ဒုတိယ နည်းဖြစ်တဲ့ interface ကို သုံးပါမယ်။ [[mark:type-interface]] interface ဆိုတာ object
+      type တစ်ခုကို နာမည်ပေးတဲ့ နောက်ထပ် နည်းတစ်ခုပါ။ extends ဆိုတာကတော့ ရှိပြီးသား type ကို အခြေခံပြီး
+      ချဲ့တယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ဒီမှာ snack က menu item ကို ချဲ့ပြီး၊ စပ်မစပ် ဆိုတဲ့ property တစ်ခု
+      ထပ်ပါပါတယ်။ [[mark:read-interface]] Errors အပိုင်း ရှင်းသွားပါပြီ။ snack မှာ menu item ရဲ့
+      နာမည်နဲ့ ဈေးနှုန်းရော၊ အစပ်ရော ပါတဲ့အတွက် intersection နဲ့ ရလဒ် တူတူပါပဲ။ ဒါဆို ဘယ်ဟာကို
+      သုံးသင့်လဲ။ ကွာခြားချက်က property တွေ အချင်းချင်း မကိုက်တဲ့အခါ ပေါ်လာပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Object Types (extending types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#extending-types",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (interfaces, interface extends)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: close-board-b }
+        open: false
+      - id: type-interface
+        type: editor.type
+        at: { mark: type-interface }
+        target: { file: src/menu.ts, after: "//   ^?\n", occurrence: 1 }
+        text: "\nexport interface Snack extends MenuItem {\n  spicy: boolean;\n}\n"
+        cadence: block
+      - id: expect-no-errors
+        type: expect.preview
+        at: { afterAction: type-interface }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-two-lines
+        type: expect.preview
+        at: { afterAction: expect-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: conflict
+    chapter: "Property ချင်း မကိုက်ရင်"
+    narration: >
+      [[mark:type-promo]] ဥပမာအားဖြင့်၊ promotion ဈေးကို စာသားနဲ့ ပြချင်လို့ ဈေးနှုန်းကို string
+      ပြောင်းချင်တယ် ဆိုပါစို့။ drink ကို intersection နဲ့ ချဲ့ပြီး ဈေးနှုန်းကို string လို့ ပေးပါမယ်။
+      သူ့အောက်မှာ အဲဒီ type နဲ့ ကော်ဖီ object တစ်ခု ရေးပါမယ်။ [[mark:read-promo]] error ပေါ်တဲ့ နေရာကို
+      သတိထား ကြည့်ပါ။ type ကို ကြေညာတဲ့ line မှာ မဟုတ်ဘဲ object ထဲက ဈေးနှုန်းမှာ ပေါ်ပြီး၊ string ကို
+      never ထဲ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ ဈေးနှုန်းက number ရော string ရော ဖြစ်ရမယ် ဆိုတော့ never
+      ဖြစ်သွားတာပါ။ type ကို ရေးတုန်းက ဘာမှ မပြောဘဲ၊ သုံးမှ နားလည်ရ ခက်တဲ့ error ပေါ်လာတာပါ။
+      [[mark:type-promo-snack]] အလားတူ အမှားကို interface extends နဲ့ ရေးကြည့်ရအောင်။
+      [[mark:read-promo-snack]] ဒီတစ်ခါတော့ error က interface ကို ကြေညာတဲ့ နေရာမှာ တန်းပေါ်ပါတယ်။ snack
+      ကို မှန်မှန်ကန်ကန် မချဲ့ထားဘူး၊ ဈေးနှုန်းမှာ string ကို number နေရာမှာ ထည့်လို့ မရဘူးလို့
+      အကြောင်းရင်းကို တိတိကျကျ ပြောပါတယ်။ [[mark:why-faster]] နောက်ထပ် အချက် တစ်ခုက မြန်နှုန်းပါ။
+      interface ကို TypeScript က နာမည်နဲ့ မှတ်ထားပြီး စစ်ပြီးသား ရလဒ်တွေကို ပြန်သုံးနိုင်ပေမယ့်၊
+      intersection ကိုတော့ သုံးတဲ့ နေရာတိုင်းမှာ ပြန်ပေါင်းတွက်ရတာ များပါတယ်။ project ကြီးတွေမှာ ဒါက
+      editor နဲ့ type check ရဲ့ မြန်နှုန်းကို သက်ရောက်ပါတယ်။ [[mark:comment-out]] စမ်းထားတဲ့ line
+      သုံးကြောင်းကိုတော့ comment လုပ်ပြီး ပိတ်ထားလိုက်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (intersections vs interface extends)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript wiki: Performance (preferring interfaces over intersections)",
+          url: "https://github.com/microsoft/TypeScript/wiki/Performance#preferring-interfaces-over-intersections",
+        }
+    actions:
+      - id: type-promo
+        type: editor.type
+        at: { mark: type-promo }
+        target: { file: src/menu.ts, after: "  spicy: boolean;\n}\n", occurrence: 1 }
+        text: "\ntype Promo = Drink & { price: string };\nconst promo: Promo = { name: \"ကော်ဖီ\", price: \"1000\", sugar: \"less\" };\n"
+        cadence: line-by-line
+      - id: expect-promo-error
+        type: expect.preview
+        at: { afterAction: type-promo }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Type 'string' is not assignable to type 'never'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-promo-count
+        type: expect.preview
+        at: { afterAction: expect-promo-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-promo-price
+        type: editor.select
+        at: { mark: read-promo }
+        target: { file: src/menu.ts, text: 'price: "1000"', occurrence: 1 }
+      - id: type-promo-snack
+        type: editor.type
+        at: { mark: type-promo-snack }
+        target: { file: src/menu.ts, after: "sugar: \"less\" };\n", occurrence: 1 }
+        text: "interface PromoSnack extends Snack { price: string }\n"
+        cadence: line-by-line
+      - id: expect-extends-error
+        type: expect.preview
+        at: { afterAction: type-promo-snack }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Interface 'PromoSnack' incorrectly extends interface 'Snack'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-extends-bottom
+        type: expect.preview
+        at: { afterAction: expect-extends-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Type 'string' is not assignable to type 'number'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-two-errors
+        type: expect.preview
+        at: { afterAction: expect-extends-bottom }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-experiments
+        type: editor.select
+        at: { mark: comment-out }
+        target:
+          {
+            file: src/menu.ts,
+            text: "type Promo = Drink & { price: string };\nconst promo: Promo = { name: \"ကော်ဖီ\", price: \"1000\", sugar: \"less\" };\ninterface PromoSnack extends Snack { price: string }",
+            occurrence: 1,
+          }
+      - id: comment-promo-object
+        type: editor.type
+        at: { afterAction: select-experiments }
+        target:
+          { file: src/menu.ts, after: "type Promo = Drink & { price: string };\n", occurrence: 1 }
+        text: "// "
+        cadence: fast-explainer
+      - id: comment-promo
+        type: editor.type
+        at: { afterAction: comment-promo-object }
+        target: { file: src/menu.ts, after: "  spicy: boolean;\n}\n\n", occurrence: 1 }
+        text: "// "
+        cadence: fast-explainer
+      - id: comment-promo-snack
+        type: editor.type
+        at: { afterAction: comment-promo }
+        target: { file: src/menu.ts, after: "sugar: \"less\" };\n", occurrence: 1 }
+        text: "// "
+        cadence: fast-explainer
+      - id: expect-clean-again
+        type: expect.preview
+        at: { afterAction: comment-promo-snack }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: merge
+    chapter: "နာမည်တူ interface"
+    narration: >
+      [[mark:type-merge]] interface မှာ သိထားရမယ့် ထူးခြားချက် တစ်ခု ရှိပါသေးတယ်။ snack ဆိုတဲ့ နာမည်နဲ့
+      interface တစ်ခု ထပ်ရေးပြီး၊ သက်သတ်လွတ် ဟုတ်မဟုတ် ဆိုတဲ့ property ကို ထည့်ကြည့်ပါမယ်။
+      [[mark:read-merge]] menu ဖိုင်မှာ error မပေါ်ပါဘူး။ ဒါပေမဲ့ main ဖိုင်က မုန့်ဟင်းခါးမှာ သက်သတ်လွတ်
+      property မပါဘူး ဆိုတဲ့ error ပေါ်လာပါတယ်။ ဘာကြောင့်လဲဆိုတော့ နာမည်တူ interface နှစ်ခုကို
+      TypeScript က တစ်ခုတည်းအဖြစ် ပေါင်းလိုက်လို့ပါ။ ဒါကို declaration merging လို့ ခေါ်ပါတယ်။ သူ့ကို
+      သုံးရမယ့် နေရာတွေ ရှိပေမယ့်၊ ဖိုင်ကြီးတွေထဲမှာ မရည်ရွယ်ဘဲ ဖြစ်သွားရင် အကြောင်းရင်းကို ရှာရ
+      ခက်ပါတယ်။ [[mark:type-dup]] type alias ကိုကျတော့ နာမည်တူ နှစ်ခါ ရေးကြည့်ရအောင်။ [[mark:read-dup]]
+      ဒီတစ်ခါတော့ နာမည် ထပ်နေတယ် ဆိုတဲ့ error က နှစ်နေရာလုံးမှာ ချက်ချင်း ပေါ်လာပါတယ်။ ပေါင်းမသွားဘဲ
+      error ပြတဲ့အတွက် type alias က ပိုစိတ်ချရပါတယ်။ [[mark:comment-merge]] ဒီ line နှစ်ကြောင်းကိုလည်း
+      comment လုပ်ပြီး ပိတ်ထားလိုက်ပါမယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Declaration Merging (merging interfaces)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-merging.html#merging-interfaces",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (types vs interfaces, declaration merging)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: type-merge
+        type: editor.type
+        at: { mark: type-merge }
+        target:
+          {
+            file: src/menu.ts,
+            after: "// interface PromoSnack extends Snack { price: string }\n",
+            occurrence: 1,
+          }
+        text: "\nexport interface Snack { vegetarian: boolean }\n"
+        cadence: line-by-line
+      - id: expect-merge-error
+        type: expect.preview
+        at: { afterAction: type-merge }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'vegetarian' is missing in type '{ name: string; price: number; spicy: true; }' but required in type 'Snack'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-merge-file
+        type: expect.preview
+        at: { afterAction: expect-merge-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "src/main.ts" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-dup
+        type: editor.type
+        at: { mark: type-dup }
+        target:
+          {
+            file: src/menu.ts,
+            after: "export interface Snack { vegetarian: boolean }\n",
+            occurrence: 1,
+          }
+        text: "export type Drink = { hot: boolean };\n"
+        cadence: line-by-line
+      - id: expect-dup-count
+        type: expect.preview
+        at: { afterAction: type-dup }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-dup-error
+        type: expect.preview
+        at: { afterAction: expect-dup-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Duplicate identifier 'Drink'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-dup-error-2
+        type: expect.preview
+        at: { afterAction: expect-dup-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Duplicate identifier 'Drink'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: comment-merge
+        type: editor.type
+        at: { mark: comment-merge }
+        target:
+          {
+            file: src/menu.ts,
+            after: "// interface PromoSnack extends Snack { price: string }\n\n",
+            occurrence: 1,
+          }
+        text: "// "
+        cadence: fast-explainer
+      - id: comment-dup
+        type: editor.type
+        at: { afterAction: comment-merge }
+        target:
+          {
+            file: src/menu.ts,
+            after: "// export interface Snack { vegetarian: boolean }\n",
+            occurrence: 1,
+          }
+        text: "// "
+        cadence: fast-explainer
+      - id: expect-merge-clean
+        type: expect.preview
+        at: { afterAction: comment-dup }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: choose
+    chapter: "type လား၊ interface လား"
+    narration: >
+      [[mark:board-choose]] ဒါဆို type alias နဲ့ interface ကို ဘယ်လို ရွေးမလဲ။ [[mark:draw-type-col]]
+      type alias က union အပါအဝင် ဘယ် type ကိုမဆို နာမည်ပေးနိုင်ပါတယ်။ sugar type လို union ကို interface
+      နဲ့ ရေးလို့ မရပါဘူး။ ampersand နဲ့ ချဲ့ရင်တော့ မကိုက်တဲ့ property က သုံးမှ error ပေါ်ပြီး၊ နာမည်တူ
+      ထပ်ရေးရင် error ပြပါတယ်။ [[mark:draw-interface-col]] interface ကတော့ object type အတွက်ပဲ ဖြစ်ပြီး၊
+      extends နဲ့ ချဲ့တဲ့အခါ error ကို ကြေညာတဲ့ နေရာမှာ ပြပါတယ်။ နာမည်တူ ထပ်ရေးရင်တော့ ပေါင်းသွားပါတယ်။
+      [[mark:draw-default]] ဒါကြောင့် ဒီ course မှာ ပုံမှန်အားဖြင့် type alias ကို သုံးပြီး၊ object type
+      တစ်ခုကို ချဲ့ဖို့ လိုတဲ့အခါမှာတော့ interface extends ကို သုံးပါမယ်။ ဥပမာအားဖြင့် ခုနက intersection နဲ့
+      ရေးခဲ့တဲ့ drink ကိုလည်း interface extends နဲ့ ပြောင်းရေးလို့ ရပါတယ်၊ lesson ကို pause လုပ်ပြီး
+      ကိုယ်တိုင် စမ်းကြည့်ပါ။ interface ကို ပိုကြိုက်တဲ့
+      team တွေလည်း ရှိပြီး နှစ်ခုလုံး အလုပ်လုပ်ပါတယ်။ အရေးကြီးတာက project တစ်ခုထဲမှာ တစ်ပုံစံတည်း
+      သုံးဖို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (types vs interfaces)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (differences between type aliases and interfaces)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#differences-between-type-aliases-and-interfaces",
+        }
+    actions:
+      - id: open-board-c
+        type: whiteboard.apply
+        at: { mark: board-choose }
+        open: true
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-type-col
+        type: whiteboard.apply
+        at: { mark: draw-type-col }
+        upsertIds: [c-type-h, c-type-1, c-type-2, c-type-3]
+        drawMs: 2800
+      - id: draw-interface-col
+        type: whiteboard.apply
+        at: { mark: draw-interface-col }
+        upsertIds: [c-int-h, c-int-1, c-int-2, c-int-3]
+        drawMs: 2800
+      - id: draw-default
+        type: whiteboard.apply
+        at: { mark: draw-default }
+        upsertIds: [c-default]
+        drawMs: 1800
+
+  - id: recap
+    narration: >
+      [[mark:close-board-c]] ဒါဆို ပြန်ချုပ်ရရင်၊ intersection က ampersand နဲ့ type တွေကို ပေါင်းပြီး၊
+      object type တွေမှာဆိုရင် property အားလုံး ပါတဲ့ type ကို ပေးပါတယ်။ string နဲ့ number လို တန်ဖိုး
+      တစ်ခုမှ မထပ်တဲ့ type တွေကို ပေါင်းရင်တော့ never ရပါတယ်။ [[mark:recap-interface]] interface extends
+      ကလည်း object type ကို ချဲ့ပေးပြီး၊ မကိုက်တဲ့ property ကို ကြေညာတဲ့ နေရာမှာ ပြပေးတာ၊ စစ်ပြီးသား
+      ရလဒ်တွေကို ပြန်သုံးနိုင်တာတွေကြောင့် object တွေကို ချဲ့တဲ့အခါ ပိုသင့်တော်ပါတယ်။ နာမည်တူ interface တွေ
+      ပေါင်းသွားတတ်တာကိုတော့ သတိထားပါ။ နောက် lesson မှာတော့ ပစ္စည်း တစ်ခုစီရဲ့ လက်ကျန်လို key တွေကို
+      ကြိုမသိတဲ့ object တွေအတွက် dynamic key နဲ့ Record ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: close-board-c
+        type: whiteboard.apply
+        at: { mark: close-board-c }
+        open: false
+      - id: select-intersection-recap
+        type: editor.select
+        at: { afterAction: close-board-c }
+        target:
+          {
+            file: src/menu.ts,
+            text: "export type Drink = MenuItem & { sugar: Sugar };",
+            occurrence: 1,
+          }
+      - id: select-interface-recap
+        type: editor.select
+        at: { mark: recap-interface }
+        target:
+          {
+            file: src/menu.ts,
+            text: "export interface Snack extends MenuItem {\n  spicy: boolean;\n}",
+            occurrence: 1,
+          }
+      - id: expect-file-drink
+        type: expect.file
+        at: { afterAction: select-intersection-recap }
+        path: src/menu.ts
+        contains: "export type Drink = MenuItem & { sugar: Sugar };\n\ntype Both = string & number;\n//   ^?\n\nexport interface Snack extends MenuItem {\n  spicy: boolean;\n}\n"
+      - id: expect-file-commented
+        type: expect.file
+        at: { afterAction: expect-file-drink }
+        path: src/menu.ts
+        contains: "// type Promo = Drink & { price: string };\n// const promo: Promo = { name: \"ကော်ဖီ\", price: \"1000\", sugar: \"less\" };\n// interface PromoSnack extends Snack { price: string }\n\n// export interface Snack { vegetarian: boolean }\n// export type Drink = { hot: boolean };\n"
+checks:
+  - { type: timing.p95Ms, max: 300 }
