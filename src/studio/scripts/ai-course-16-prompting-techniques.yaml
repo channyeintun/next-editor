@@ -1,0 +1,2280 @@
+# AI course, lesson 16: prompting techniques (Burmese, hands-on, M4 recorded answers + recorded token counts).
+#
+# Start state (ws/): data/reviews.json + data/helper.json (COURSE-KIT §4.2/§4.5, sample data, copied
+# unchanged from datasets/); src/llm.js + data/responses.json + data/PROVENANCE.md (base-llm; every answer
+# recorded with tools/record-llm.ts, Gemma 4 E2B, greedy); src/show.js draws a recorded answer on its own
+# card with the recorded badge. Three tasks, one per file, each drawn by a call in src/main.js (the newest
+# call is typed above the others, so its cards land on top of the panel):
+#   src/sorter.js    the owner's message sorter: 8 sample messages, the shop's label, zero-shot and
+#                    few-shot labels (`ai-sorter`, badge recorded) and `ai-json` (answers that are bare JSON)
+#   src/announce.js  the weekend special announcement, direct and step by step (`ai-cot-tokens`,
+#                    `ai-direct`, `ai-cot`)
+#   src/reflect.js   lesson 15's final prompt for ထန်းလျက် ကော်ဖီ (src/prompt.js + src/assemble.js are lesson
+#                    15's final files), its first answer and the answer after a review request
+#                    (`ai-reflect-tokens`, `ai-first`, `ai-revised`)
+#
+# Edits (insert-only; prompt text in one block or one line, so no half-typed prompt is looked up):
+#   1. examples = … (sorter.js)        few-shot column filled; JSON only 3/8 → 8/8; r03 → praise; r40 still wrong
+#   2. await announce(); (main.js)     Direct outline, 57 answer tokens
+#   3. stepByStep = … (announce.js)    Step by step, 259 answer tokens
+#   4. await reflect(); (main.js)      First answer: only the first description names the coffee
+#   5. review = … (reflect.js)         After review: all three name it; second prompt 406 tokens
+#
+# Boards: (A) mini blueprint, Intelligence highlighted; (B) the four techniques, drawn at the start and
+# completed with when / cost in `choose`; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-16-prompting-techniques.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-16-prompting-techniques
+  title: "AI course 16: Prompting နည်းလမ်းတွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/sorter.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/PROVENANCE.md: |
+        # Where these answers come from
+
+        Every answer in `responses.json` is a real answer from a real model, recorded ahead of time with
+        `tools/record-llm.ts` on 2026-11-05. The lesson does not run the model live:
+        `src/llm.js` looks up the exact same messages here and returns the recorded answer.
+
+        - Model: Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF
+        - File: https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf (sha256 `b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f`, license apache-2.0)
+        - Runtime: node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1
+        - Prompt: the model's own chat template from the GGUF file, thinking off
+        - Decoding: greedy (temperature 0), at most 300 new tokens, so the same messages always give the same answer
+        - Answers: 20
+      data/helper.json: |
+        {
+         "note": "The staff's menu-description helper (lessons 07, 15-19), written for the AI course. newItems are the ideal inputs; evalSet adds the messy cases lessons 17-18 test with. checks lists the code checks that apply to each case.",
+         "contract": {
+          "input": "item name + လှလှ's notes + style (friendly or short)",
+          "output": "JSON {\"descriptions\": [\"…\", \"…\", \"…\"]}",
+          "constraints": ["exactly three descriptions", "each at most 60 graphemes (Intl.Segmenter)", "no price", "no phone number", "no claim the shop can't check (အကောင်းဆုံး, နံပါတ်တစ်, အခမဲ့, best, free)", "no emoji unless the style asks"]
+         },
+         "newItems": [
+          { "id": "n01", "name": "ထန်းလျက် ကော်ဖီ", "price": 2000, "notes": "ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်", "style": "friendly" },
+          { "id": "n02", "name": "ကြက်ဥ ပလာတာ", "price": 1800, "notes": "ကြက်ဥ နှစ်လုံး၊ ကြွပ်ကြွပ်၊ ပဲဟင်းနဲ့ တွဲပေးတယ်", "style": "short" },
+          { "id": "n03", "name": "အုန်းနို့ခေါက်ဆွဲ", "price": 3000, "notes": "သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်", "style": "friendly" },
+          { "id": "n04", "name": "မုန့်လက်ဆောင်း", "price": 1500, "notes": "နွေရာသီ အထူး၊ အုန်းနို့နဲ့ ထန်းလျက်ရည်", "style": "friendly" },
+          { "id": "n05", "name": "ထမင်းကြော် ပဲပြုတ်", "price": 2000, "notes": "မနက် ၁၀ နာရီ အထိပဲ ရမယ်", "style": "short" }
+         ],
+         "evalSet": [
+          { "id": "n01", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n02", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n03", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n04", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n05", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e01", "kind": "emoji notes", "name": "ဖာလူဒါ အထူး", "price": 3000, "notes": "😋🔥 ချိုချို", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e02", "kind": "English notes", "name": "လက်ဖက်ရည် အေး", "price": 1800, "notes": "less sweet, no condensed milk, iced", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e03", "kind": "very long notes", "name": "ရိုးရာ လက်ဖက်ရည်", "price": 1500, "notes": "လက်ဖက်ခြောက်ကို ရေနွေးနဲ့ ငါးမိနစ်လောက် တည်ပြီး စစ်ပါတယ်။ ပြီးရင် နို့ဆီနဲ့ နို့စိမ်းကို ရောပြီး ခွက် နှစ်ခွက်ကြားမှာ ခဏခဏ လောင်းချပါတယ်။ အပူ မကျခင် ချက်ချင်း ရောင်းပါတယ်။ အချိုကို customer ကြိုက်သလို ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ရွေးလို့ ရပါတယ်။ ခွက်ကြီး ခွက်သေး နှစ်မျိုး ရှိပြီး၊ အီကြာကွေးနဲ့ တွဲမှာရင်လည်း ရပါတယ်။", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e04", "kind": "empty notes", "name": "ပဲပြုတ် ထမင်းကြော် အထူး", "price": 2500, "notes": "", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e05", "kind": "phone number in notes", "name": "ကြက်သား ပလာတာ", "price": 2200, "notes": "မှာချင်ရင် 09 000 555 111", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e06", "kind": "notes ask for a claim", "name": "မုန့်ဟင်းခါး အထူး", "price": 3500, "notes": "ရန်ကုန်မှာ အကောင်းဆုံးလို့ ရေးပေးပါ", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e07", "kind": "English-only name", "name": "Iced Lemon Tea", "price": 2000, "notes": "သံပုရာနဲ့ လက်ဖက်ရည်ကြမ်း၊ ရေခဲနဲ့", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] }
+         ]
+        }
+      data/responses.json: |
+        {
+          "provenance": {
+            "label": "Gemma 4 E2B",
+            "model": "Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF",
+            "source": "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+            "sha256": "b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f",
+            "license": "apache-2.0",
+            "runtime": "node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1",
+            "prompt": "the model's own chat template from the GGUF file, thinking off",
+            "decoding": {
+              "temperature": 0,
+              "maxTokens": 300,
+              "thinking": false,
+              "stop": "<turn|>",
+              "contextSize": 4096
+            },
+            "recordedOn": "2026-11-05",
+            "recordedBy": "tools/record-llm.ts"
+          },
+          "responses": [
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "အရမ်း မြန်တာပဲ၊ နှစ်နာရီပဲ စောင့်ရတယ်။"
+                }
+              ],
+              "output": "```json\n{\"label\": \"complaint\"}\n```",
+              "promptTokens": 60,
+              "outputTokens": 12,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "Can I order 50 cups for an office event next Friday?"
+                }
+              ],
+              "output": "```json\n{\"label\": \"question\"}\n```",
+              "promptTokens": 58,
+              "outputTokens": 11,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "ညနေ ၈ နာရီ ထိ ဖွင့်လား။"
+                }
+              ],
+              "output": "```json\n{\"label\": \"question\"}\n```",
+              "promptTokens": 59,
+              "outputTokens": 11,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "ပလာတာက ကြွပ်ပြီး ကောင်းတယ်၊ ဒါပေမဲ့ ဆီ နည်းနည်း များတယ်။"
+                }
+              ],
+              "output": "```json\n{\"label\": \"complaint\"}\n```",
+              "promptTokens": 66,
+              "outputTokens": 12,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "👍👍👍"
+                }
+              ],
+              "output": "{\"label\": \"praise\"}",
+              "promptTokens": 47,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "Best tea in Bahan, but Sunday mornings are packed and slow."
+                }
+              ],
+              "output": "{\"label\": \"complaint\"}",
+              "promptTokens": 57,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "လက်ဖက်ရည်က ကောင်းတယ်၊ but it's hard to get a seat on Saturday morning."
+                }
+              ],
+              "output": "```json\n{\"label\": \"complaint\"}\n```",
+              "promptTokens": 67,
+              "outputTokens": 12,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "Laphet yay ka a cho lun tal."
+                }
+              ],
+              "output": "{\"label\": \"question\"}",
+              "promptTokens": 53,
+              "outputTokens": 6,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "အရမ်း မြန်တာပဲ၊ နှစ်နာရီပဲ စောင့်ရတယ်။"
+                }
+              ],
+              "output": "{\"label\": \"complaint\"}",
+              "promptTokens": 147,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "Can I order 50 cups for an office event next Friday?"
+                }
+              ],
+              "output": "{\"label\": \"question\"}",
+              "promptTokens": 145,
+              "outputTokens": 6,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "ညနေ ၈ နာရီ ထိ ဖွင့်လား။"
+                }
+              ],
+              "output": "{\"label\": \"question\"}",
+              "promptTokens": 146,
+              "outputTokens": 6,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "ပလာတာက ကြွပ်ပြီး ကောင်းတယ်၊ ဒါပေမဲ့ ဆီ နည်းနည်း များတယ်။"
+                }
+              ],
+              "output": "{\"label\": \"complaint\"}",
+              "promptTokens": 153,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "👍👍👍"
+                }
+              ],
+              "output": "{\"label\": \"praise\"}",
+              "promptTokens": 134,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "Best tea in Bahan, but Sunday mornings are packed and slow."
+                }
+              ],
+              "output": "{\"label\": \"praise\"}",
+              "promptTokens": 144,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "လက်ဖက်ရည်က ကောင်းတယ်၊ but it's hard to get a seat on Saturday morning."
+                }
+              ],
+              "output": "{\"label\": \"complaint\"}",
+              "promptTokens": 154,
+              "outputTokens": 7,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}\n\nExamples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}"
+                },
+                {
+                  "role": "user",
+                  "content": "Laphet yay ka a cho lun tal."
+                }
+              ],
+              "output": "{\"label\": \"question\"}",
+              "promptTokens": 140,
+              "outputTokens": 6,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You write short announcements for Shwe Tea House, a tea shop in Yangon. Use only the facts you are given."
+                },
+                {
+                  "role": "user",
+                  "content": "Plan a short announcement for the shop's page about this weekend's special: a heading under 60 characters and three bullet points, in Burmese.\nSpecial: မုန့်လက်ဆောင်း, a summer special with coconut milk and palm sugar syrup.\nOpen Saturday and Sunday, 7:00 to 21:00.\nUse only these facts."
+                }
+              ],
+              "output": "**အပတ်စဉ် အထူး**\n\n* မုန့်လက်ဆောင်း\n* နို့နဲ့ ထန်းရည်သကြားရည်\n* စနေ၊ တနင်္ဂနွေ၊ ၇:၀၀ မှ ၂၁:၀၀ အထိ ဖွင့်မည်။",
+              "promptTokens": 117,
+              "outputTokens": 57,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You write short announcements for Shwe Tea House, a tea shop in Yangon. Use only the facts you are given."
+                },
+                {
+                  "role": "user",
+                  "content": "Plan a short announcement for the shop's page about this weekend's special: a heading under 60 characters and three bullet points, in Burmese.\nSpecial: မုန့်လက်ဆောင်း, a summer special with coconut milk and palm sugar syrup.\nOpen Saturday and Sunday, 7:00 to 21:00.\nUse only these facts.\nThink step by step: first write the facts in short English notes, then the announcement."
+                }
+              ],
+              "output": "**Step 1: Analyze the facts and extract key information.**\n\n*   **Special:** မုန့်လက်ဆောင်း (Munt Let Saung) - Summer special with coconut milk and palm sugar syrup.\n*   **Availability:** Saturday and Sunday.\n*   **Hours:** 7:00 to 21:00.\n\n**Step 2: Draft the announcement structure based on the requirements.**\n\n*   Heading: Under 60 characters.\n*   Content: Three bullet points in Burmese.\n\n**Step 3: Draft the content in Burmese, ensuring it uses only the provided facts.**\n\n**Step 4: Final Review against constraints.** (Heading < 60 chars, 3 bullet points, uses only provided facts).\n\n***\n\n**Announcement:**\n\n**Step 5: Final Output Generation.**\n\n***\n\n**မြန်မာစာ ကြေညာချက် (Burmese Announcement):**\n\n**နွေရာသီ အထူး မုန့်လက်ဆောင်း**\n\n*   မုန့်လက်ဆောင်း အထူး\n*   အခါသမယ- စနေ၊ တနင်္ဂနွေ\n*   အချိန်- နံနက် ၇:၀၀ မှ ည ၉:၀၀ အထိ",
+              "promptTokens": 136,
+              "outputTokens": 259,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}\n\n### Constraints\nEach description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences."
+                },
+                {
+                  "role": "user",
+                  "content": "Item: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly"
+                }
+              ],
+              "output": "{\"descriptions\": [\"ထန်းလျက်နဲ့ ချိုတဲ့ ကော်ဖီလေး\", \"နို့ဆီမပါတဲ့ အရသာကောင်းလေး\", \"အေးအေး ပူပူနဲ့ သောက်လို့ကောင်း\"]}",
+              "promptTokens": 310,
+              "outputTokens": 46,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}\n\n### Constraints\nEach description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences."
+                },
+                {
+                  "role": "user",
+                  "content": "Item: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly"
+                },
+                {
+                  "role": "assistant",
+                  "content": "{\"descriptions\": [\"ထန်းလျက်နဲ့ ချိုတဲ့ ကော်ဖီလေး\", \"နို့ဆီမပါတဲ့ အရသာကောင်းလေး\", \"အေးအေး ပူပူနဲ့ သောက်လို့ကောင်း\"]}"
+                },
+                {
+                  "role": "user",
+                  "content": "Review your descriptions. A customer may see only one of them, so each one must name the item. Rewrite any that doesn't, under 60 characters each. Return the same JSON."
+                }
+              ],
+              "output": "{\"descriptions\": [\"ထန်းလျက် ကော်ဖီ ချိုတဲ့အရသာ\", \"နို့ဆီမပါတဲ့ ကော်ဖီလေး\", \"အေးအေး ပူပူ ထန်းလျက် ကော်ဖီ\"]}",
+              "promptTokens": 406,
+              "outputTokens": 50,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            }
+          ]
+        }
+      data/reviews.json: |
+        {
+         "note": "Synthetic sample reviews written for the AI course (not real customers). lang: my, en, mixed, my-latn (romanized Burmese). sentiment and type are the shop's own labels; tags mark edge cases.",
+         "reviews": [
+          { "id": "r01", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ချိုဆိမ့် တစ်ခွက်နဲ့ မနက်တိုင်း စတယ်။ အရသာ တစ်ခါမှ မပြောင်းဘူး။" },
+          { "id": "r02", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။" },
+          { "id": "r03", "item": "laphet-yay", "lang": "en", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Best tea in Bahan, but Sunday mornings are packed and slow." },
+          { "id": "r04", "item": "palata", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ပလာတာက ကြွပ်ပြီး ကောင်းတယ်၊ ဒါပေမဲ့ ဆီ နည်းနည်း များတယ်။" },
+          { "id": "r05", "item": "coffee", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "ကော်ဖီ ပူပူလေး သောက်ရတာ စိတ်ချမ်းသာတယ် ☕" },
+          { "id": "r06", "item": "shan-noodles", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မှာပြီးမှ ကုန်သွားပြီလို့ ပြောတယ်၊ ပိုက်ဆံ ပြန်ရဖို့ နှစ်ရက် စောင့်ရတယ်။" },
+          { "id": "r07", "item": "mohinga", "lang": "mixed", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Mohinga က အရမ်း ကောင်းတယ်၊ but the price went up again." },
+          { "id": "r08", "item": "lime-juice", "lang": "en", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Lime juice was too sweet for me." },
+          { "id": "r09", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။" },
+          { "id": "r10", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "👍👍👍" },
+          { "id": "r11", "item": "mohinga", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["sarcasm"], "text": "အရမ်း မြန်တာပဲ၊ နှစ်နာရီပဲ စောင့်ရတယ်။" },
+          { "id": "r12", "item": null, "lang": "en", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "Can I order 50 cups for an office event next Friday?" },
+          { "id": "r13", "item": "falooda", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နေပူတဲ့နေ့မှာ ဖာလူဒါ အေးအေးလေးက အကောင်းဆုံးပဲ။" },
+          { "id": "r14", "item": "mohinga", "lang": "my-latn", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "Mohinga ka a yan kg tl. Nout tit khout lr mal." },
+          { "id": "r15", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "ညနေ ၈ နာရီ ထိ ဖွင့်လား။" },
+          { "id": "r16", "item": "palata", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["pii"], "text": "အော်ဒါ မရောက်သေးဘူး။ 09 000 123 456 ကို ပြန်ဆက်ပေးပါ။" },
+          { "id": "r17", "item": "coffee", "lang": "en", "stars": 2, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Coffee tasted burnt today. Usually it's great." },
+          { "id": "r18", "item": "laphet-thoke", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "လက်ဖက်သုပ် အရသာ ပြည့်တယ်၊ နည်းနည်း စပ်တယ်။" },
+          { "id": "r19", "item": null, "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": ["long"], "text": "ဒီဆိုင်ကို ကျောင်းတက်ကတည်းက လာနေတာ ဆယ်နှစ်ကျော်ပြီ။ လက်ဖက်ရည် အရသာက အရင်အတိုင်း ကောင်းတုန်းပဲ။ ဒါပေမဲ့ စနေ တနင်္ဂနွေ မနက်ဆိုရင် ထိုင်ခုံ ရဖို့ ခက်တယ်၊ ကားရပ်ဖို့လည်း နေရာ မရှိဘူး။ delivery ကတော့ မြန်တယ်။" },
+          { "id": "r20", "item": "e-kya-kwe", "lang": "my", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "အီကြာကွေး မနက်က ကြော်ထားတာ ညနေ ရောက်တော့ ပျော့နေပြီ။" },
+          { "id": "r21", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["pii"], "text": "ကောင်တာက လှလှ က ကျွန်တော် မှာနေကျကို မှတ်မိနေတယ်၊ အရမ်း သဘောကျတယ်။" },
+          { "id": "r22", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "စမ်းချောင်းကို delivery ပို့ပေးလား။" },
+          { "id": "r23", "item": "mohinga", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The mohinga is rich and the fish broth tastes fresh." },
+          { "id": "r24", "item": "shan-noodles", "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "ရှမ်းခေါက်ဆွဲ အရသာ ကောင်းတယ်၊ ပမာဏ နည်းနည်း ထပ်ပေးရင် ပိုကောင်းမယ်။" },
+          { "id": "r25", "item": "laphet-yay", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The milk tea is strong and creamy, just how I like it." },
+          { "id": "r26", "item": "samosa", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "Crispy samosas, a little spicy, great with tea." },
+          { "id": "r27", "item": "nan-gyi-thoke", "lang": "en", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "The nan gyi thoke was too spicy and the noodles were soggy." },
+          { "id": "r28", "item": "mohinga", "lang": "en", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Tasty mohinga, but we waited forty minutes on Sunday." },
+          { "id": "r29", "item": "falooda", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "The falooda was cold and sweet, perfect for a hot afternoon." },
+          { "id": "r30", "item": "nan-gyi-thoke", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နန်းကြီးသုပ်က စပ်စပ်လေးနဲ့ အရမ်း စားကောင်းတယ်။" },
+          { "id": "r31", "item": "samosa", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "စမူဆာက ဆီစိမ်ပြီး အေးနေတယ်။" },
+          { "id": "r32", "item": "lime-juice", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "သံပုရာရည် ချဉ်ချဉ် အေးအေးလေး သောက်လို့ ကောင်းတယ်။" },
+          { "id": "r33", "item": "laphet-thoke", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "လက်ဖက်သုပ်က ငန်လွန်းတယ်၊ ပဲကြော်လည်း နည်းတယ်။" },
+          { "id": "r34", "item": "e-kya-kwe", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "အီကြာကွေး ပူပူ ကြွပ်ကြွပ်ကို လက်ဖက်ရည်နဲ့ တွဲစားရတာ အရမ်း ကောင်းတယ်။" },
+          { "id": "r35", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မုန့်ဟင်းခါး ဈေး တက်သွားပြီး ပမာဏက နည်းသွားတယ်။" },
+          { "id": "r36", "item": "coffee", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ကော်ဖီ အရသာ ကောင်းပေမယ့် ချိုလွန်းတယ်။" },
+          { "id": "r37", "item": "palata", "lang": "mixed", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "ပလာတာ ကြွပ်ကြွပ်လေး၊ really good with the bean curry." },
+          { "id": "r38", "item": "shan-noodles", "lang": "mixed", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Shan noodles ကုန်သွားပြန်ပြီ၊ third time this month." },
+          { "id": "r39", "item": "laphet-yay", "lang": "mixed", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "လက်ဖက်ရည်က ကောင်းတယ်၊ but it's hard to get a seat on Saturday morning." },
+          { "id": "r40", "item": "laphet-yay", "lang": "my-latn", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Laphet yay ka a cho lun tal." }
+         ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/announce.js: |
+        // The weekend special announcement: the same request, asked directly and step by step.
+        import { panel } from "ai-panel";
+        import { generate, tokensFor } from "./llm.js";
+        import { showAnswer } from "./show.js";
+
+        const system = "You write short announcements for Shwe Tea House, a tea shop in Yangon. Use only the facts you are given.";
+        const request = `Plan a short announcement for the shop's page about this weekend's special: a heading under 60 characters and three bullet points, in Burmese.
+        Special: မုန့်လက်ဆောင်း, a summer special with coconut milk and palm sugar syrup.
+        Open Saturday and Sunday, 7:00 to 21:00.
+        Use only these facts.`;
+
+        // Chain-of-thought: one more line that asks for the steps before the answer.
+        let stepByStep = "";
+
+        export async function announce() {
+          const direct = [{ role: "system", content: system }, { role: "user", content: request }];
+          const cot = [{ role: "system", content: system }, { role: "user", content: `${request}\n${stepByStep}` }];
+          const directAnswer = await generate(direct, { show: false });
+          const cotAnswer = stepByStep ? await generate(cot, { show: false }) : "";
+          panel.metrics("Answer tokens", { direct: tokensFor(direct)?.outputTokens ?? "—", "step by step": stepByStep ? tokensFor(cot)?.outputTokens ?? "—" : "—" }, { id: "cot-tokens" });
+          showAnswer("Direct", directAnswer, "direct");
+          if (stepByStep) showAnswer("Step by step", cotAnswer, "cot");
+        }
+      src/assemble.js: |
+        // Prompt assembly: plain code that turns the parts into the messages the model gets (no model here).
+        import { panel } from "ai-panel";
+
+        const NAMES = { context: "Context", instruction: "Instruction", input: "Input variables", format: "Output format", examples: "Examples", constraints: "Constraints" };
+        const section = ([part, text]) => `### ${NAMES[part] ?? part}\n${text}`;
+
+        // Every part, in the order it is written, as one user message.
+        export const oneMessage = (prompt) => [{ role: "user", content: Object.entries(prompt).map(section).join("\n\n") }];
+
+        // The stable parts as the system message; only the item of the moment as the user message.
+        export const systemAndUser = ({ input, ...stable }) => [
+          { role: "system", content: Object.entries(stable).map(section).join("\n\n") },
+          { role: "user", content: input },
+        ];
+
+        // The Prompt parts card (which message each part goes in) and the recorded token counts.
+        export function showParts(prompt, messages, tokens) {
+          const sentIn = (part) => (messages.length > 1 && part !== "input" ? "system" : "user");
+          panel.metrics("Tokens", { prompt: tokens?.promptTokens ?? "—", answer: tokens?.outputTokens ?? "—" }, { id: "tokens" });
+          panel.table("Prompt parts", Object.keys(prompt).map((part) => ({ part, "sent in": sentIn(part) })), { id: "parts", badge: "rules · AI မပါ" });
+        }
+      src/llm.js: |
+        // The lesson's stand-in for a model API.
+        // A real model is slow and can answer differently from run to run, so this lesson uses answers
+        // recorded ahead of time from a real model: data/responses.json (how: data/PROVENANCE.md).
+        // generate() returns the recorded answer for exactly these messages, and shows it in the panel.
+        import recorded from "../data/responses.json";
+        import { panel } from "ai-panel";
+
+        export const model = recorded.provenance;
+
+        const find = (messages) => {
+          const key = JSON.stringify(messages.map(({ role, content }) => ({ role, content })));
+          return recorded.responses.find((r) => JSON.stringify(r.messages) === key);
+        };
+
+        export async function generate(messages, { show = true } = {}) {
+          const hit = find(messages);
+          if (!hit) {
+            const error = new Error("No recorded answer for these exact messages yet.");
+            error.name = "CourseNotice";
+            throw error;
+          }
+          if (show) panel.output("Model answer", hit.output, { id: "answer", badge: `recorded · ${model.label} · greedy` });
+          return hit.output;
+        }
+
+        // The token counts the model's own tokenizer gave when the answer was recorded (the prompt includes
+        // the chat template's own tokens): { promptTokens, outputTokens }, or null when not recorded.
+        export function tokensFor(messages) {
+          const hit = find(messages);
+          return hit ? { promptTokens: hit.promptTokens, outputTokens: hit.outputTokens } : null;
+        }
+      src/main.js: |
+        import { sortMessages } from "./sorter.js";
+        import { announce } from "./announce.js";
+        import { reflect } from "./reflect.js";
+
+        // One task per technique; the newest one is drawn at the top of the panel.
+        await sortMessages();
+      src/prompt.js: |
+        // The description helper's prompt: the contract between the shop's page and the model.
+        // One line per part, so each part can be versioned, tested and improved on its own.
+        export const helperPrompt = (item) => ({
+          context: "You are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.",
+          instruction: "Write three short descriptions of this menu item for the shop's website, in Burmese.",
+          input: `Item: ${item.name}\nStaff notes: ${item.notes}\nStyle: ${item.style}`,
+          format: 'Return only JSON in this shape: {"descriptions": ["…", "…", "…"]}',
+          examples: `Item: လက်ဖက်ရည်
+        Staff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ
+        Style: friendly
+        {"descriptions": ["လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး", "နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ", "ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်"]}`,
+          constraints: "Each description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences.",
+        });
+      src/reflect.js: |
+        // Self-reflection: the helper's answer from lesson 15, then a request to review and rewrite it.
+        import { panel } from "ai-panel";
+        import helper from "../data/helper.json";
+        import { generate, tokensFor } from "./llm.js";
+        import { helperPrompt } from "./prompt.js";
+        import { systemAndUser } from "./assemble.js";
+        import { showAnswer } from "./show.js";
+
+        // Lesson 15's final prompt for ထန်းလျက် ကော်ဖီ: the system prompt and the item.
+        const messages = systemAndUser(helperPrompt(helper.newItems[0]));
+
+        // The review request, sent after the model's own first answer.
+        let review = "";
+
+        export async function reflect() {
+          const first = await generate(messages, { show: false });
+          const again = [...messages, { role: "assistant", content: first }, { role: "user", content: review }];
+          const revised = review ? await generate(again, { show: false }) : "";
+          panel.metrics("Tokens", { "1st answer": tokensFor(messages)?.outputTokens ?? "—", "2nd prompt": review ? tokensFor(again)?.promptTokens ?? "—" : "—", "2nd answer": review ? tokensFor(again)?.outputTokens ?? "—" : "—" }, { id: "reflect-tokens" });
+          showAnswer("First answer", first, "first");
+          if (review) showAnswer("After review", revised, "revised");
+        }
+      src/show.js: |
+        // Draws a recorded answer on its own card, with the same badge src/llm.js uses.
+        import { panel } from "ai-panel";
+        import { model } from "./llm.js";
+
+        export const badge = `recorded · ${model.label} · greedy`;
+        export const showAnswer = (label, text, id) => panel.output(label, text, { id, badge });
+      src/sorter.js: |
+        // The owner's message sorter: one label for each customer message.
+        import { panel } from "ai-panel";
+        import data from "../data/reviews.json";
+        import { generate } from "./llm.js";
+        import { badge } from "./show.js";
+
+        const MESSAGES = ["r11", "r12", "r15", "r04", "r10", "r03", "r39", "r40"];
+
+        // Zero-shot: the task, the labels and the format, nothing else.
+        const task = `You sort customer messages for Shwe Tea House into one label: praise, complaint or question.
+        Return only JSON: {"label": "…"}`;
+
+        // Few-shot: the same task, plus examples that show how it is done.
+        let examples = "";
+
+        // One row per message: ✓ when the model's label is the shop's own label.
+        function row(text, shopLabel, answer) {
+          const label = /"label"\s*:\s*"(\w+)"/.exec(answer)?.[1] ?? "?";
+          const notes = [label];
+          if (label !== shopLabel) notes.push(`shop: ${shopLabel}`);
+          if (answer.trim().startsWith("```")) notes.push("code fence");
+          return { name: text, pass: label === shopLabel, detail: notes.join(" · ") };
+        }
+
+        export async function sortMessages() {
+          const zero = [];
+          const few = [];
+          for (const id of MESSAGES) {
+            const { text, type } = data.reviews.find((r) => r.id === id);
+            zero.push(row(text, type, await generate([{ role: "system", content: task }, { role: "user", content: text }], { show: false })));
+            if (examples) few.push(row(text, type, await generate([{ role: "system", content: `${task}\n\n${examples}` }, { role: "user", content: text }], { show: false })));
+          }
+          if (examples) panel.evals("Few-shot", few, { id: "few", badge });
+          panel.evals("Zero-shot", zero, { id: "zero", badge });
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Intelligence is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 560,
+        height: 45,
+        text: "ဒီနေ့ · prompting နည်းလမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board B: the four techniques (violet = how the model is asked); "when" green, "cost" orange,
+    # added in the `choose` scene.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 560,
+        height: 50,
+        text: "Prompting နည်းလမ်း 4 မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-zero,
+        kind: rectangle,
+        x: 300,
+        y: 212,
+        width: 385,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-zero-n,
+        kind: text,
+        x: 318,
+        y: 222,
+        width: 300,
+        height: 40,
+        text: "zero-shot",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: t-zero-g,
+        kind: text,
+        x: 318,
+        y: 270,
+        width: 350,
+        height: 38,
+        text: "အလုပ်ကိုပဲ ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-zero-w,
+        kind: text,
+        x: 318,
+        y: 315,
+        width: 350,
+        height: 38,
+        text: "ရိုးရှင်းတဲ့ အလုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-zero-c,
+        kind: text,
+        x: 318,
+        y: 360,
+        width: 350,
+        height: 38,
+        text: "အသက်သာဆုံး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-few,
+        kind: rectangle,
+        x: 705,
+        y: 212,
+        width: 385,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-few-n,
+        kind: text,
+        x: 723,
+        y: 222,
+        width: 300,
+        height: 40,
+        text: "few-shot",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: t-few-g,
+        kind: text,
+        x: 723,
+        y: 270,
+        width: 350,
+        height: 38,
+        text: "နမူနာ နည်းနည်း ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-few-w,
+        kind: text,
+        x: 723,
+        y: 315,
+        width: 350,
+        height: 38,
+        text: "label · ပုံသေ format",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-few-c,
+        kind: text,
+        x: 723,
+        y: 360,
+        width: 350,
+        height: 38,
+        text: "prompt ရှည်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-cot,
+        kind: rectangle,
+        x: 300,
+        y: 427,
+        width: 385,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-cot-n,
+        kind: text,
+        x: 318,
+        y: 437,
+        width: 340,
+        height: 40,
+        text: "chain-of-thought",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: t-cot-g,
+        kind: text,
+        x: 318,
+        y: 485,
+        width: 350,
+        height: 38,
+        text: "အဆင့်တွေ အရင် ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-cot-w,
+        kind: text,
+        x: 318,
+        y: 530,
+        width: 350,
+        height: 38,
+        text: "အဆင့်များတဲ့ အလုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-cot-c,
+        kind: text,
+        x: 318,
+        y: 575,
+        width: 350,
+        height: 38,
+        text: "answer token 4 ဆ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-ref,
+        kind: rectangle,
+        x: 705,
+        y: 427,
+        width: 385,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-ref-n,
+        kind: text,
+        x: 723,
+        y: 437,
+        width: 330,
+        height: 40,
+        text: "self-reflection",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: t-ref-g,
+        kind: text,
+        x: 723,
+        y: 485,
+        width: 350,
+        height: 38,
+        text: "အဖြေကို ပြန်စစ် · ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-ref-w,
+        kind: text,
+        x: 723,
+        y: 530,
+        width: 350,
+        height: 38,
+        text: "prompt ကောင်းပြီးမှ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-ref-c,
+        kind: text,
+        x: 723,
+        y: 575,
+        width: 350,
+        height: 38,
+        text: "request 2 ခါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 520,
+        height: 45,
+        text: "few-shot က ဘယ်လို အလုပ်မှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 520,
+        height: 45,
+        text: "အသုံးဝင်ဆုံးလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 700,
+        height: 50,
+        text: "label · JSON လို ပုံသေ ပုံစံ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 700,
+        height: 40,
+        text: "ရှည်ပြီး ပွင့်တဲ့ စာ → example နဲ့ မလုံလောက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5116
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Prompting နည်းလမ်း လေးမျိုး"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ prompt ကို context၊ instruction၊ example၊ constraint လို
+      အပိုင်းတွေနဲ့ ဆောက်ပြီး၊ system prompt နဲ့ user prompt ကို ခွဲခဲ့ပါတယ်။ ဒီ lesson မှာတော့ model
+      တစ်ခုတည်းကို ခိုင်းပုံ မတူတဲ့ prompting နည်းလမ်း လေးမျိုးကို စမ်းကြည့်ပါမယ်။ [[mark:draw-mini]]
+      blueprint မှာဆိုရင် ဒါလည်း intelligence အလွှာထဲက model ကို ခိုင်းတဲ့ အလုပ်ပါ။ [[mark:draw-today]] model
+      နဲ့ အလုပ် တစ်ခုချင်းအတွက် ဘယ်နည်းက အကောင်းဆုံးလဲ ဆိုတာ ကြိုမသိနိုင်လို့၊ developer တွေက နည်းလမ်း
+      အမျိုးမျိုး စမ်းပြီးမှ ရွေးကြတာ များပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (common prompting techniques)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: techniques
+    narration: >
+      [[mark:draw-tech]] နည်းလမ်း လေးမျိုးကို အရင် ချရေးထားပါမယ်။ [[mark:draw-zero]] zero shot ဆိုတာ နမူနာ
+      မပေးဘဲ အလုပ်ကိုပဲ ပြောတာပါ။ အချက်အလက် တစ်ခု မေးတာလို ရိုးရှင်းတဲ့ အလုပ်ဆိုရင် ဒါနဲ့တင် လုံလောက်ပြီး၊
+      ဘယ်အလုပ်မှာမဆို အရင်ဆုံး စမ်းကြည့်ရမယ့် အစ ဖြစ်ပါတယ်။ ဒါပေမဲ့ လက်တွေ့ app အများစုမှာ prompt ကို ဒီထက်
+      ထပ်ဖြည့်ရပါတယ်။ [[mark:draw-few]] few shot ကတော့ နမူနာ အနည်းငယ် ပေးပြီး အဖြေကို ဘယ်လို ပုံစံနဲ့ ပေးရမလဲ
+      ပြတာပါ။ [[mark:draw-cot]] chain of thought က အဖြေ မပေးခင် တစ်ဆင့်ချင်း စဉ်းစားပြခိုင်းတာ ဖြစ်ပြီး၊
+      [[mark:draw-ref]] self reflection ကတော့ model ကို သူ့ အဖြေကို ပြန်စစ်ပြီး ပြင်ခိုင်းတာပါ။ ဒီနေ့ ဆိုင်ရဲ့
+      အလုပ် သုံးခုမှာ ဒီ နည်းလမ်းတွေကို တစ်ခုချင်း စမ်းကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (common prompting techniques)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-tech,
+          type: whiteboard.apply,
+          at: { mark: draw-tech },
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-zero,
+          type: whiteboard.apply,
+          at: { mark: draw-zero },
+          upsertIds: [t-zero, t-zero-n, t-zero-g],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-few,
+          type: whiteboard.apply,
+          at: { mark: draw-few },
+          upsertIds: [t-few, t-few-n, t-few-g],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-cot,
+          type: whiteboard.apply,
+          at: { mark: draw-cot },
+          upsertIds: [t-cot, t-cot-n, t-cot-g],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-ref,
+          type: whiteboard.apply,
+          at: { mark: draw-ref },
+          upsertIds: [t-ref, t-ref-n, t-ref-g],
+          drawMs: 1300,
+        }
+
+  - id: zero
+    chapter: "Zero shot နဲ့ few shot"
+    narration: >
+      [[mark:close-tech]] ပထမ အလုပ်က ဆိုင်ပိုင်ရှင် မြမြ ဆီ ရောက်လာတဲ့ customer စာတွေကို ချီးကျူးတာ၊
+      တိုင်ကြားတာ၊ မေးခွန်း ဆိုပြီး ခွဲတာပါ။ [[mark:open-sorter]] ဒါက sorter ဖိုင်ပါ။ customer စာ တစ်ခုချင်းကို model ဆီ request တစ်ခုစီ ပို့ပါတယ်။ [[mark:sel-task]] zero
+      shot prompt မှာ label သုံးမျိုးထဲက တစ်ခုကို ရွေးပြီး JSON နဲ့ ပြန်ပေးဖို့ပဲ ပြောထားပါတယ်။
+      [[mark:panel-ready]] AI panel ရဲ့ zero shot card မှာ customer စာ ရှစ်ခုကို ခွဲထားပါတယ်။ ဒီ စာတွေက lesson
+      အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ label တွေကတော့ ဒီ prompt နဲ့ ကြိုပြီး run ထားတုန်းက တကယ် ထွက်လာခဲ့တဲ့
+      အဖြေတွေပါ။ laptop ပေါ်က open model သေးသေးလေး တစ်ခုရဲ့ အဖြေကို ကြိုမှတ်ထားတာမို့ ဘယ်သူ ကြည့်ကြည့် အတူတူ
+      မြင်ရပါမယ်။ [[mark:read-zero]] အမှန်ခြစ်က model ရွေးတဲ့ label က ဆိုင်က ကပ်ထားတဲ့ label နဲ့ တူတယ် ဆိုတဲ့
+      အဓိပ္ပာယ်ပါ။ ရှစ်ခုထဲက ခြောက်ခု တူပြီး၊ နှစ်နာရီပဲ စောင့်ရတယ်လို့ ပြောင်းပြန် ပြောထားတဲ့ စာကိုတောင်
+      တိုင်ကြားတာလို့ မှန်မှန် ခွဲပါတယ်။ [[mark:read-json]] ဒါပေမဲ့ အဖြေ ငါးခုမှာ code fence ပါနေပါတယ်။ card က label ကို စာထဲကနေ ရှာထုတ်ပြီး ပြထားပေမယ့်၊ JSON သက်သက် မဟုတ်တော့လို့ program က တိုက်ရိုက် ဖတ်လို့ မရပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (zero-shot prompting)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - { id: close-tech, type: whiteboard.apply, at: { mark: close-tech }, open: false }
+      - {
+          id: open-sorter,
+          type: workspace.openFile,
+          at: { mark: open-sorter },
+          path: src/sorter.js,
+        }
+      - id: sel-task
+        type: editor.select
+        at: { mark: sel-task }
+        target:
+          {
+            file: src/sorter.js,
+            text: "const task = `You sort customer messages for Shwe Tea House into one label: praise, complaint or question.\nReturn only JSON: {\"label\": \"…\"}`;",
+            occurrence: 1,
+          }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-one-card
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-eight-rows
+        type: expect.preview
+        at: { afterAction: expect-one-card }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-zero }
+        attribute: { name: data-total, value: "8" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-zero-badge
+        type: expect.preview
+        at: { afterAction: expect-eight-rows }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-zero-badge }
+        textContains: "recorded · Gemma 4 E2B · greedy"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-zero-six
+        type: expect.preview
+        at: { mark: read-zero }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-zero }
+        attribute: { name: data-passed, value: "6" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-zero-sarcasm
+        type: expect.preview
+        at: { afterAction: expect-zero-six }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-zero-1 }
+        attribute: { name: data-pass, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-zero-fence
+        type: expect.preview
+        at: { mark: read-json }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-zero-1 }
+        textContains: "complaint · code fence"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: few
+    narration: >
+      [[mark:type-few]] ဒါကြောင့် few shot အတွက် example သုံးခု ထည့်ပါမယ်။ label တစ်မျိုးစီအတွက် card ထဲမှာ
+      မပါတဲ့ customer စာ တစ်ခုနဲ့ သူ့ရဲ့ JSON အဖြေကို ပြထားတာပါ။ [[mark:read-few]] အပေါ်ဆုံးမှာ few shot card
+      ပေါ်လာပြီး၊ ဘယ် အဖြေမှာမှ code fence မပါတော့ပါဘူး။ example တွေက label ကိုတင် မကဘဲ အဖြေ ပုံစံကိုပါ
+      ပြလိုက်လို့ပါ။ ရှစ်ခုထဲက ခုနစ်ခု တူလာပြီး၊ လက်ဖက်ရည်ကို ချီးကျူးပေမယ့် တနင်္ဂနွေ မနက် လူများတယ်လို့
+      ပြောတဲ့ အင်္ဂလိပ် စာကို ဆိုင်ရဲ့ label အတိုင်း ချီးကျူးတာလို့ ခွဲလာပါတယ်။ [[mark:read-miss]] ဒါပေမဲ့
+      နောက်ဆုံး စာကို ကြည့်ပါ။ လက်ဖက်ရည် ချိုလွန်းတယ် ဆိုတဲ့ မြန်မာ စကားကို အင်္ဂလိပ် စာလုံးနဲ့ ရေးထားလို့၊ နည်းလမ်း
+      နှစ်ခုလုံးက မေးခွန်းလို့ မှားခွဲပါတယ်။ example တွေက ဖြစ်နိုင်တဲ့ input အားလုံးကို မဖုံးနိုင်ပါဘူး။
+      [[mark:few-when]] ဆိုတော့ few shot က label ခွဲတာလို predictive AI နဲ့ ဆင်တဲ့ အလုပ်၊ ဖော်ပြချက်လို
+      ပုံစံ ရှင်းတဲ့ အလုပ်တွေမှာ အသုံးဝင်ပြီး၊ ရှည်ရှည် ကြိုက်သလို ရေးရတဲ့ စာမှာတော့ example နဲ့
+      မလုံလောက်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (few-shot prompting)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: type-few
+        type: editor.type
+        at: { mark: type-few }
+        target: { file: src/sorter.js, after: "let examples = \"\";\n", occurrence: 1 }
+        text: "examples = `Examples:\nMessage: ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။\n{\"label\": \"praise\"}\nMessage: delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။\n{\"label\": \"complaint\"}\nMessage: စမ်းချောင်းကို delivery ပို့ပေးလား။\n{\"label\": \"question\"}`;\n"
+        cadence: block
+      - id: expect-few-seven
+        type: expect.preview
+        at: { afterAction: type-few }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-few }
+        attribute: { name: data-passed, value: "7" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-few-no-fence
+        type: expect.preview
+        at: { afterAction: expect-few-seven }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-few-1 }
+        textContains: "စောင့်ရတယ်။complaint"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-few-mixed
+        type: expect.preview
+        at: { afterAction: expect-few-no-fence }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-few-6 }
+        attribute: { name: data-pass, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-two-cards
+        type: expect.preview
+        at: { afterAction: expect-few-mixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-few-miss
+        type: expect.preview
+        at: { mark: read-miss }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-few-8 }
+        textContains: "question · shop: complaint"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: cot
+    chapter: "Chain of thought"
+    narration: >
+      [[mark:open-main]] ဒုတိယ အလုပ်ကို main ဖိုင်မှာ ထည့်ပါမယ်။ [[mark:type-announce]] ဒီ စနေ တနင်္ဂနွေ အတွက်
+      အထူး menu ကြေညာချက် တစ်ခု ရေးခိုင်းတာ ဖြစ်ပြီး၊ အသစ်ထည့်တဲ့ အလုပ်က panel ရဲ့ အပေါ်ဆုံးမှာ ပေါ်ပါမယ်။
+      [[mark:read-direct]] Direct card မှာ ခေါင်းစဉ် တစ်ခုနဲ့ အချက် သုံးချက် ပါပြီး၊ Answer tokens card အရ token ၅၇ ခုပဲ ရှိပါတယ်။ ဒါပေမဲ့ အုန်းနို့ကို နို့ လို့ပဲ ရေးထားပါတယ်။ [[mark:open-announce]] ဒါကြောင့် announce
+      ဖိုင်မှာ chain of thought အတွက် စာကြောင်း တစ်ကြောင်း ထည့်ပါမယ်။ [[mark:type-cot]] ကြေညာချက် မရေးခင်
+      အချက်တွေကို အင်္ဂလိပ်လို မှတ်စု တိုတိုနဲ့ တစ်ဆင့်ချင်း အရင် ရေးခိုင်းတာပါ။ ဒီမှာ အဆင့် နှစ်ဆင့်ပဲ ပြောထားပြီး ကျန်တဲ့ အဆင့်တွေကို model ဘာသာ ခွဲခိုင်းထားပါတယ်။ အဆင့်တွေကို ကိုယ်တိုင် အသေးစိတ် ရေးပေးလို့လည်း
+      ရပါတယ်။ [[mark:read-cot-tokens]] Answer tokens card မှာ step by step က token ၂၅၉ ခု ဖြစ်လာပြီး၊ direct
+      ရဲ့ လေးဆ ကျော်ပါတယ်။ [[mark:scroll-cot]] Step by step card မှာ အင်္ဂလိပ်လို အချက်တွေနဲ့ အဆင့်တွေကို အရင် ရေးထားပြီး၊ အောက်ဆုံးမှ ကြေညာချက် ပါပါတယ်။ ခေါင်းစဉ်မှာ နွေရာသီ အထူး ဆိုတာ ပါလာပြီး၊ အချိန်ကိုလည်း မနက်နဲ့ ည ခွဲပြီး
+      ရှင်းရှင်း ရေးထားပါတယ်။ ဒါပေမဲ့ အုန်းနို့နဲ့ ထန်းလျက်ရည် ဆိုတဲ့ အချက်ကတော့ ပျောက်သွားပါတယ်။
+      [[mark:cot-when]] ဒီလို တိုတဲ့ ကြေညာချက်အတွက် token လေးဆ ပေးရတာ မတန်ပါဘူး။ chain of thought က အဆင့်
+      များများ ဆင်ခြင်ရတဲ့ အလုပ်တွေမှာ အသုံးဝင်ပြီး၊ အဖြေ မပေးခင် ဆင်ခြင်တဲ့ အဆင့်တွေကို အရင် ထုတ်ပေးတဲ့ reasoning model တွေရဲ့ အခြေခံ နည်းလည်း ဖြစ်ပါတယ်။ token များလေ ကြာလေ၊ ကုန်လေ ဖြစ်လို့ တကယ် လိုမှ သုံးပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (chain-of-thought prompting)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: src/main.js }
+      - id: type-announce
+        type: editor.type
+        at: { mark: type-announce }
+        target:
+          {
+            file: src/main.js,
+            after: "// One task per technique; the newest one is drawn at the top of the panel.\n",
+            occurrence: 1,
+          }
+        text: "await announce();\n"
+        cadence: line-by-line
+      - id: expect-direct
+        type: expect.preview
+        at: { afterAction: type-announce }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-direct }
+        textContains: "နို့နဲ့ ထန်းရည်သကြားရည်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-direct-tokens
+        type: expect.preview
+        at: { afterAction: expect-direct }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cot-tokens-1 }
+        attribute: { name: data-value, value: "57" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-four-cards
+        type: expect.preview
+        at: { afterAction: expect-direct-tokens }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - {
+          id: open-announce,
+          type: workspace.openFile,
+          at: { mark: open-announce },
+          path: src/announce.js,
+        }
+      - id: type-cot
+        type: editor.type
+        at: { mark: type-cot }
+        target: { file: src/announce.js, after: "let stepByStep = \"\";\n", occurrence: 1 }
+        text: "stepByStep = \"Think step by step: first write the facts in short English notes, then the announcement.\";\n"
+        cadence: line-by-line
+      - id: expect-cot-tokens
+        type: expect.preview
+        at: { afterAction: type-cot }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-cot-tokens-2 }
+        attribute: { name: data-value, value: "259" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cot-answer
+        type: expect.preview
+        at: { afterAction: expect-cot-tokens }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cot }
+        textContains: "နွေရာသီ အထူး မုန့်လက်ဆောင်း"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: scroll-cot
+        type: preview.scroll
+        at: { mark: scroll-cot }
+        timeoutMs: 5000
+        top: 480
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  - id: reflect
+    chapter: "Self reflection"
+    narration: >
+      [[mark:scroll-top]] တတိယ အလုပ်ကတော့ ပြီးခဲ့တဲ့ lesson ရဲ့ ဖော်ပြချက် helper ပါ။ [[mark:type-reflect]]
+      main ဖိုင်မှာ helper ရဲ့ အလုပ်ကို အပေါ်ဆုံး ထည့်ပါမယ်။ [[mark:read-first]] First answer card မှာ
+      ပြီးခဲ့တဲ့ lesson ရဲ့ နောက်ဆုံး prompt နဲ့ ရခဲ့တဲ့ ထန်းလျက် ကော်ဖီ ဖော်ပြချက် သုံးခု ပြန်ပေါ်လာပါတယ်။
+      ပထမ တစ်ခုမှာပဲ ကော်ဖီ ဆိုတဲ့ စကားလုံး ပါလို့၊ ကျန်တဲ့ နှစ်ခုကို သီးသန့် ဖတ်ရင် ဘာ item လဲ မသိနိုင်ပါဘူး။
+      [[mark:open-reflect]] ဒါကြောင့် reflect ဖိုင်မှာ self reflection အတွက် review request ကို ထည့်ပါမယ်။
+      [[mark:type-review]] customer က ဖော်ပြချက် တစ်ခုပဲ မြင်ရနိုင်လို့၊ တစ်ခုစီမှာ item နာမည် ပါမပါ ပြန်စစ်ပြီး မပါတာကို ပြန်ရေးခိုင်းတာပါ။ model ရဲ့ ပထမ အဖြေကို assistant message အဖြစ် ထည့်ပြီး၊ ဒီ request ကို နောက်က ပို့ပါတယ်။ [[mark:read-revised]] After
+      review card မှာ ဖော်ပြချက် သုံးခုလုံး ကော်ဖီ ဆိုတာ ပါလာပြီး၊ နှစ်ခုမှာ ထန်းလျက် ကော်ဖီ လို့ နာမည် အပြည့်
+      ပါပါတယ်။ [[mark:read-cost]] ကုန်ကျစရိတ်ကိုလည်း ကြည့်ပါ။ Tokens card မှာ ဒုတိယ request ရဲ့ prompt က token ၄၀၆ ခု ရှိပါတယ်။ system prompt နဲ့ ပထမ အဖြေကိုပါ ပြန်ပို့ရလို့ request တစ်ခုစာ ထပ်ကုန်တာပါ။ ဒါပေမဲ့ self reflection က request တစ်ခု ထပ်ထည့်ရုံနဲ့ ရလို့ ထည့်ရ မြန်ပြီး၊ အရည်အသွေးကိုလည်း သိသိသာသာ တက်စေနိုင်ပါတယ်။ prompt က ကောင်းကောင်း အလုပ်လုပ်နေပြီးမှ ပိုရှင်းအောင် ထပ်ညှိချင်တဲ့အခါ သုံးတာ သင့်တော်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (self-reflection prompting)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: scroll-top }
+        timeoutMs: 5000
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: type-reflect }, path: src/main.js }
+      - id: type-reflect
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target:
+          {
+            file: src/main.js,
+            after: "// One task per technique; the newest one is drawn at the top of the panel.\n",
+            occurrence: 1,
+          }
+        text: "await reflect();\n"
+        cadence: line-by-line
+      - id: expect-first
+        type: expect.preview
+        at: { afterAction: type-reflect }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-first }
+        textContains: "နို့ဆီမပါတဲ့ အရသာကောင်းလေး"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-seven-cards
+        type: expect.preview
+        at: { afterAction: expect-first }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "7" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - {
+          id: open-reflect,
+          type: workspace.openFile,
+          at: { mark: open-reflect },
+          path: src/reflect.js,
+        }
+      - id: type-review
+        type: editor.type
+        at: { mark: type-review }
+        target: { file: src/reflect.js, after: "let review = \"\";\n", occurrence: 1 }
+        text: "review = \"Review your descriptions. A customer may see only one of them, so each one must name the item. Rewrite any that doesn't, under 60 characters each. Return the same JSON.\";\n"
+        cadence: line-by-line
+      - id: expect-revised
+        type: expect.preview
+        at: { afterAction: type-review }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-revised }
+        textContains: "အေးအေး ပူပူ ထန်းလျက် ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-second-prompt
+        type: expect.preview
+        at: { mark: read-cost }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-reflect-tokens-2 }
+        attribute: { name: data-value, value: "406" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: choose
+    chapter: "ဘယ်နည်းကို ရွေးမလဲ"
+    narration: >
+      [[mark:draw-when]] ဒါဆို ဘယ်နည်းကို ဘယ်အချိန် သုံးမလဲ။ ရိုးရှင်းတဲ့ အလုပ်ဆိုရင် zero shot နဲ့ စပါ။ အဖြေ
+      ပုံစံ ပုံသေ လိုရင် few shot နဲ့ နမူနာ ပြပါ။ အဆင့်များတဲ့ ဆင်ခြင်မှု လိုမှ chain of thought ကို သုံးပြီး၊
+      prompt ကောင်းနေပြီးမှ self reflection နဲ့ ထပ်ညှိပါ။ [[mark:draw-cost]] ကုန်ကျစရိတ်လည်း မတူပါဘူး။ zero shot က prompt အတိုဆုံး ဖြစ်လို့ အသက်သာဆုံးပါ။ example
+      တွေက prompt ကို ရှည်စေပြီး၊ chain of thought က အဖြေကို ရှည်စေပါတယ်။ self reflection ကတော့ request ကို
+      နှစ်ခါ ပို့ရပါတယ်။ [[mark:draw-try]] prompting က စမ်းသပ်ရတဲ့ အလုပ် ဖြစ်လို့ တစ်ခါတည်းနဲ့ မပြီးပါဘူး။
+      အကြိမ်ကြိမ် ပြင်ပြီး စစ်မှ ရှင်းလင်းပြီး ယုံကြည်ရတဲ့ prompt ရလာပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (common prompting techniques, your takeaways)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-when,
+          type: whiteboard.apply,
+          at: { mark: draw-when },
+          open: true,
+          upsertIds: [t-zero-w, t-few-w, t-cot-w, t-ref-w],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-cost,
+          type: whiteboard.apply,
+          at: { mark: draw-cost },
+          upsertIds: [t-zero-c, t-few-c, t-cot-c, t-ref-c],
+          drawMs: 2000,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ few shot က ဘယ်လို အလုပ်မျိုးမှာ အသုံးဝင်ဆုံးလဲ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ label ခွဲတာ၊ JSON လို ပုံသေ ပုံစံ လိုတာ စတဲ့
+      ပုံစံ ရှင်းတဲ့ အလုပ်တွေပါ။ ဘာကြောင့်လဲဆိုတော့ example က အဖြေ ဘယ်လို ပုံစံ ရှိရမလဲ ဆိုတာကို တိုက်ရိုက်
+      ပြပေးလို့ပါ။ ရှည်ပြီး ကြိုက်သလို ရေးရတဲ့ စာအတွက်တော့ ဖြစ်နိုင်တာ အားလုံးကို example နဲ့ မဖုံးနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (Check your understanding)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ zero shot က အလုပ်ကိုပဲ ပြောတဲ့ အစ ဖြစ်ပါတယ်။ [[mark:sel-examples]]
+      few shot မှာ example တွေက အဖြေ ပုံစံကို တစ်ပုံစံတည်း ဖြစ်အောင် ပြပေးပါတယ်။ [[mark:sel-cot]] chain of
+      thought က အဆင့်တွေကို အရင် ရေးခိုင်းလို့ token ပိုကုန်ပါတယ်။ [[mark:sel-review]] self reflection ကတော့ model ကို သူ့ အဖြေကို ပြန်စစ်ပြီး ပြင်ခိုင်းတာပါ။ ဘယ်နည်းက ကိုယ့် အလုပ်နဲ့ ကိုက်လဲ ဆိုတာ စမ်းပြီး စစ်ကြည့်မှ သိရပါတယ်။ နောက် lesson
+      မှာတော့ prompt ကို စနစ်တကျ တိုးတက်အောင် လုပ်တဲ့ evaluation driven development ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (your takeaways)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - {
+          id: open-sorter-recap,
+          type: workspace.openFile,
+          at: { mark: sel-examples },
+          path: src/sorter.js,
+        }
+      - id: sel-examples
+        type: editor.select
+        at: { afterAction: open-sorter-recap }
+        target: { file: src/sorter.js, text: "examples = `Examples:", occurrence: 1 }
+      - {
+          id: open-announce-recap,
+          type: workspace.openFile,
+          at: { mark: sel-cot },
+          path: src/announce.js,
+        }
+      - id: sel-cot
+        type: editor.select
+        at: { afterAction: open-announce-recap }
+        target:
+          {
+            file: src/announce.js,
+            text: 'stepByStep = "Think step by step: first write the facts in short English notes, then the announcement.";',
+            occurrence: 1,
+          }
+      - {
+          id: open-reflect-recap,
+          type: workspace.openFile,
+          at: { mark: sel-review },
+          path: src/reflect.js,
+        }
+      - id: sel-review
+        type: editor.select
+        at: { afterAction: open-reflect-recap }
+        target:
+          {
+            file: src/reflect.js,
+            text: 'const again = [...messages, { role: "assistant", content: first }, { role: "user", content: review }];',
+            occurrence: 1,
+          }
+      - {
+          id: expect-final-main,
+          type: expect.file,
+          at: { afterAction: sel-review },
+          path: src/main.js,
+          contains: "await reflect();\nawait announce();\nawait sortMessages();\n",
+        }
+      - {
+          id: expect-final-review,
+          type: expect.file,
+          at: { afterAction: expect-final-main },
+          path: src/reflect.js,
+          contains: 'review = "Review your descriptions. A customer may see only one of them',
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
