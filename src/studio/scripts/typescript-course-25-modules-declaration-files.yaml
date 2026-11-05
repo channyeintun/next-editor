@@ -5,20 +5,26 @@
 # src/main.ts has no import or export, so TypeScript treats it as a script: `const name` clashes
 # with the DOM's global `name`, and TypeScript knows neither todaySpecial nor window.tableCount.
 # The program runs fine (the script tag really set the values): 3 errors, 3 correct Output lines.
-# src/globals.d.ts holds only a comment; src/menu.ts is a module whose generated .d.ts is shown in
-# the panel's Declaration output (data-dts). tsconfig.json starts without moduleDetection and
-# without skipLibCheck.
+# src/globals.d.ts and src/types/ms.d.ts hold only a comment; src/menu.ts is a module whose
+# generated .d.ts is shown in the panel's Declaration output (data-dts). tsconfig.json starts
+# without moduleDetection and without skipLibCheck. package.json pins the real npm package
+# ms@2.1.3, which ships no type declarations (no "types"/"typings" field, no .d.ts file);
+# course/modules-ms.js registers it for the panel's runner and vite.config.js pre-bundles it.
 #
 # Edits, all insert-only:
 #   1. tsconfig: "moduleDetection": "force" (block) -> the `name` clash disappears (2 errors).
 #   2. globals.d.ts: declare const todaySpecial (fast-explainer) -> 1 error.
 #   3. main.ts: declare global { interface Window { tableCount } } (block) -> 0 errors.
 #   4. main.ts: `^?` under window -> var window: Window & typeof globalThis (lib.dom).
-#   5. globals.d.ts: a function with a body (block, a deliberate experiment) -> TS1183.
-#   6. tsconfig: "skipLibCheck": true (block) -> the error is hidden, not fixed.
-#   7. globals.d.ts: `// ` comments the experiment out.
-# Boards: (A) script vs module scope; (B) where declaration files come from; (C) a package with no
-# types and declare module.
+#   5. main.ts: import ms from "ms" (fast-explainer) -> TS7016 "Could not find a declaration file".
+#   6. main.ts: brewTime = ms("3m") + `^?` + a log (line-by-line) -> const brewTime: any; Output
+#      prints 180000 (the package really runs).
+#   7. types/ms.d.ts: declare module "ms" { export default function ms(text: string): number; }
+#      (block) -> 0 errors, const brewTime: number, Output unchanged.
+#   8. globals.d.ts: a function with a body (block, a deliberate experiment) -> TS1183.
+#   9. tsconfig: "skipLibCheck": true (block) -> the error is hidden, not fixed.
+#  10. globals.d.ts: `// ` comments the experiment out.
+# Boards: (A) script vs module scope; (B) where declaration files come from.
 #
 # Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-25-modules-declaration-files.yaml
 schemaVersion: 1
@@ -277,6 +283,11 @@ lesson:
             },
           };
         }
+      course/modules-ms.js: |
+        // TypeScript course · the packages a lesson's program may import while it runs in the panel.
+        import ms from "ms";
+
+        window.__courseModules = { ...window.__courseModules, ms };
       course/panel.js: |
         // TypeScript course · panel (runs in the preview page).
         // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
@@ -602,7 +613,8 @@ lesson:
               var todaySpecial = { item: "မုန့်ဟင်းခါး", price: 2500 };
               window.tableCount = 12;
             </script>
-            <script type="module" src="/course/panel.js" data-modes="errors output dts types" data-dts="src/menu.ts"></script>
+            <script type="module" src="/course/modules-ms.js"></script>
+            <script type="module" src="/course/panel.js" data-modes="errors output types dts" data-dts="src/menu.ts"></script>
           </body>
         </html>
       package.json: |
@@ -617,6 +629,9 @@ lesson:
           "devDependencies": {
             "typescript": "6.0.3",
             "vite": "5.4.21"
+          },
+          "dependencies": {
+            "ms": "2.1.3"
           }
         }
       src/globals.d.ts: |
@@ -645,6 +660,8 @@ lesson:
           const item = menu.find((m) => m.name === name);
           return item ? item.price : 0;
         }
+      src/types/ms.d.ts: |
+        // ms package အတွက် type တွေ
       tsconfig.json: |
         {
           "compilerOptions": {
@@ -661,6 +678,8 @@ lesson:
 
         export default defineConfig({
           plugins: [courseTypeChecker()],
+          // Pre-bundle ms up front so Vite never discovers it mid-lesson and reloads.
+          optimizeDeps: { include: ["ms"] },
         });
   whiteboardAssets:
     # Board A: scripts share one global scope; every module has its own.
@@ -1002,106 +1021,6 @@ lesson:
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
-    # Board C: a package that ships no types.
-    - {
-        id: c-title,
-        kind: text,
-        x: 300,
-        y: 165,
-        width: 640,
-        height: 50,
-        text: "Type မပါတဲ့ package",
-        strokeColor: "#1e1e1e",
-        fontSize: 36,
-      }
-    - {
-        id: c-import,
-        kind: text,
-        x: 280,
-        y: 240,
-        width: 760,
-        height: 36,
-        text: 'import { print } from "tea-printer";',
-        strokeColor: "#1971c2",
-        fontSize: 28,
-      }
-    - {
-        id: c-error-1,
-        kind: text,
-        x: 280,
-        y: 290,
-        width: 760,
-        height: 36,
-        text: "Could not find a declaration file",
-        strokeColor: "#e03131",
-        fontSize: 28,
-      }
-    - {
-        id: c-error-2,
-        kind: text,
-        x: 280,
-        y: 330,
-        width: 760,
-        height: 36,
-        text: "for module 'tea-printer' … 'any'",
-        strokeColor: "#e03131",
-        fontSize: 28,
-      }
-    - {
-        id: c-first,
-        kind: text,
-        x: 280,
-        y: 395,
-        width: 760,
-        height: 36,
-        text: "① @types/tea-printer ရှိလား ရှာ",
-        strokeColor: "#2f9e44",
-        fontSize: 28,
-      }
-    - {
-        id: c-second,
-        kind: text,
-        x: 280,
-        y: 450,
-        width: 760,
-        height: 36,
-        text: "② မရှိရင် .d.ts ထဲမှာ ကိုယ်တိုင် ကြေညာ",
-        strokeColor: "#f08c00",
-        fontSize: 28,
-      }
-    - {
-        id: c-code-1,
-        kind: text,
-        x: 310,
-        y: 500,
-        width: 760,
-        height: 36,
-        text: 'declare module "tea-printer" {',
-        strokeColor: "#1971c2",
-        fontSize: 28,
-      }
-    - {
-        id: c-code-2,
-        kind: text,
-        x: 310,
-        y: 540,
-        width: 760,
-        height: 36,
-        text: "  export function print(text: string): void;",
-        strokeColor: "#1971c2",
-        fontSize: 28,
-      }
-    - {
-        id: c-code-3,
-        kind: text,
-        x: 310,
-        y: 580,
-        width: 760,
-        height: 36,
-        text: "}",
-        strokeColor: "#1971c2",
-        fontSize: 28,
-      }
 build:
   # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
   # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
@@ -1123,7 +1042,7 @@ scenes:
       ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ဖိုင် တစ်ဖိုင်ထဲက နာမည်တွေကို ဘယ် ဖိုင်တွေက မြင်ရလဲ ဆိုတာနဲ့၊ ကိုယ် မရေးထားတဲ့
       code ရဲ့ type တွေကို TypeScript က ဘယ်ကနေ သိလဲ ဆိုတာကို ကြည့်သွားပါမယ်။ [[mark:draw-script]] TypeScript က
       ဖိုင် တစ်ဖိုင်ကို ဖတ်တဲ့အခါ import ဒါမှမဟုတ် export ပါလား ဆိုတာ အရင် ကြည့်ပါတယ်။ တစ်ခုမှ မပါရင် အဲဒီ
-      ဖိုင်ကို script လို့ ယူဆပါတယ်။ script တွေက project ထဲက ဘယ်ဖိုင်ကမဆို မြင်ရတဲ့ global scope တစ်ခုတည်းကို
+      ဖိုင်ကို script လို့ ယူဆပါတယ်။ script တွေက ဘယ်ဖိုင်ကမဆို မြင်ရတဲ့ global scope တစ်ခုတည်းကို
       မျှသုံးကြပြီး၊ browser ရဲ့ window လို နာမည်တွေလည်း အဲဒီမှာပဲ ရှိပါတယ်။ [[mark:draw-module]] import
       ဒါမှမဟုတ် export ပါတဲ့ ဖိုင်ကတော့ module ပါ။ module တစ်ခုစီမှာ ကိုယ်ပိုင် scope ရှိလို့၊ export မလုပ်တဲ့
       နာမည်တွေကို တခြား ဖိုင်က မမြင်ရပါဘူး။ [[mark:draw-clash]] ဒါကြောင့် script ထဲမှာ browser က ရှိပြီးသား
@@ -1247,8 +1166,8 @@ scenes:
       က special ဟင်းလျာကို ရှာမတွေ့ဘူး၊ window ပေါ်မှာ စားပွဲ အရေအတွက် မရှိဘူးလို့ ပြောနေပါတယ်။ HTML ထဲက
       script ကို TypeScript မဖတ်လို့ပါ။ [[mark:read-redeclare]] ပထမ error ကတော့ name ဆိုတဲ့ variable ကို
       ထပ်ကြေညာလို့ မရဘူးလို့ ပြောပါတယ်။ ဒီ ဖိုင်ထဲမှာ တစ်ခါပဲ ကြေညာထားပေမယ့်၊ TypeScript က ဒီ ဖိုင်ကို script
-      လို့ ယူဆထားပါတယ်။ TypeScript ရဲ့ DOM type တွေထဲမှာလည်း browser ရဲ့ window မှာ ရှိတဲ့ name ဆိုတဲ့ global
-      ကို ကြေညာထားပြီးသား ဖြစ်တဲ့အတွက်၊ global scope ထဲမှာ name နှစ်ခု ဖြစ်သွားတာပါ။
+      လို့ ယူဆထားပါတယ်။ TypeScript ရဲ့ DOM type တွေထဲမှာလည်း browser ရဲ့ name ဆိုတဲ့ global ကို
+      ကြေညာထားပြီးသား ဖြစ်လို့၊ global scope ထဲမှာ name နှစ်ခု ဖြစ်သွားတာပါ။
     sources:
       - {
           title: 'Total TypeScript Essentials, ch. 13: "Cannot redeclare block-scoped variable"',
@@ -1337,12 +1256,11 @@ scenes:
   - id: module-detection
     narration: >
       ဒီလို ဖြစ်ရတာက၊ ဖိုင် တစ်ဖိုင်ကို module အနေနဲ့ run မလား၊ script အနေနဲ့ run မလား ဆိုတာ TypeScript
-      ကြိုမသိနိုင်ပါဘူး။ ဒါကြောင့် import နဲ့ export ကို ကြည့်ပြီး ခန့်မှန်းရတာပါ။ ဘာမှ မပါတဲ့ export
-      တစ်ကြောင်း ထည့်ရင် module ဖြစ်သွားပေမယ့်၊ ဖိုင်တိုင်းမှာ လိုက်ထည့်ရမှာပါ။ [[mark:open-tsconfig]] ဒါကြောင့် tsconfig ဖိုင်မှာ တစ်ခါတည်း သတ်မှတ်ပါမယ်။
+      ကြိုမသိနိုင်လို့၊ import နဲ့ export ကို ကြည့်ပြီး ခန့်မှန်းရတာပါ။ ဘာမှ မပါတဲ့ export တစ်ကြောင်း
+      ထည့်ရင် module ဖြစ်ပေမယ့်၊ ဖိုင်တိုင်းမှာ လိုက်ထည့်ရပါမယ်။ [[mark:open-tsconfig]] ဒါကြောင့် tsconfig ဖိုင်မှာ တစ်ခါတည်း သတ်မှတ်ပါမယ်။
       [[mark:type-force]] module detection option ကို force လို့ ထည့်လိုက်ပါမယ်။ [[mark:read-force]] name
-      error ပျောက်ပြီး error နှစ်ခုပဲ ကျန်ပါတော့တယ်။ force က ဖိုင်တိုင်းကို module လို့ ယူဆခိုင်းလို့၊ main
-      ဖိုင်ရဲ့ name က ကိုယ်ပိုင် scope ထဲ ရောက်သွားတာပါ။
-      ဒါပေမဲ့ declaration file တွေကိုတော့ force က module မဖြစ်စေပါဘူး။
+      error ပျောက်ပြီး error နှစ်ခုပဲ ကျန်ပါတော့တယ်။ force က declaration file မဟုတ်တဲ့ ဖိုင်တိုင်းကို module
+      လို့ ယူဆခိုင်းလို့၊ main ဖိုင်ရဲ့ name က ကိုယ်ပိုင် scope ထဲ ရောက်သွားတာပါ။
     sources:
       - {
           title: "TSConfig reference: moduleDetection",
@@ -1385,15 +1303,14 @@ scenes:
   - id: declare-const
     chapter: "Declaration file နဲ့ declare"
     narration: >
-      [[mark:open-globals]] special ဟင်းလျာအတွက်တော့ TypeScript မဖတ်တဲ့ script ထဲမှာ ဘာ ရှိလဲ ဆိုတာ ကိုယ်က
-      ပြောပြရပါမယ်။ ဒီ ဖိုင်က အဲဒီအတွက်ပါ။ နာမည်ရဲ့ နောက်ဆုံးမှာ D T S ပါတဲ့ ဒီလို ဖိုင်ကို declaration file
-      လို့ ခေါ်ပြီး၊ type တွေကိုပဲ ရေးရတဲ့ ဖိုင်ပါ။ JavaScript အဖြစ် ဘယ်တော့မှ မပြောင်းလို့၊ အလုပ်လုပ်မယ့်
-      code ထည့်လို့ မရပါဘူး။ [[mark:type-declare-const]] special ဟင်းလျာအတွက် declare const ကို ရေးပါမယ်။
+      [[mark:open-globals]] special ဟင်းလျာအတွက်တော့ TypeScript မဖတ်တဲ့ script ထဲမှာ ဘာ ရှိလဲ ဆိုတာ ဒီ
+      ဖိုင်မှာ ပြောပြရပါမယ်။ နာမည်ရဲ့ နောက်ဆုံးမှာ D T S ပါတဲ့ ဖိုင်ကို declaration file လို့ ခေါ်ပြီး၊
+      type တွေကိုပဲ ရေးရပါတယ်။ JavaScript အဖြစ် ဘယ်တော့မှ မပြောင်းလို့၊ အလုပ်လုပ်မယ့်
+      code ထည့်လို့ မရပါဘူး။ [[mark:type-declare-const]] declare const ကို ရေးပါမယ်။
       declare ဆိုတာ ဒီ နာမည်နဲ့ တန်ဖိုး တစ်ခု run တဲ့ အချိန်မှာ တကယ် ရှိပါတယ်၊ ဒါပေမဲ့ သူ့ကို တခြား နေရာမှာ
       ရေးထားပါတယ်လို့ ပြောတာပါ။ [[mark:read-declare-const]] error တစ်ခု ထပ်ပျောက်သွားပါပြီ။
-      main ဖိုင်က ဒီ ဖိုင်ကို import မလုပ်ဘဲ မြင်ရတာက၊ ဒီ ဖိုင်မှာ import export မပါတဲ့အပြင် force ကလည်း
-      declaration file ကို module မဖြစ်စေလို့ပါ။ ဒါကြောင့် ဒီက
-      ကြေညာချက်တွေက global scope ထဲ ရောက်သွားပါတယ်။ [[mark:warn-drift]] သတိထားရမှာက TypeScript က
+      ဒီ ဖိုင်မှာ import export မပါတဲ့အပြင် force ကလည်း declaration file ကို module မဖြစ်စေလို့၊ main
+      ဖိုင်က import မလုပ်ဘဲ ဒီ global ကို မြင်ရတာပါ။ သတိထားရမှာက TypeScript က
       ဒီ ကြေညာချက်ကို website ရဲ့ script နဲ့ တိုက်မစစ်နိုင်တာပါ။ script ပြောင်းသွားရင် ဒီ ဖိုင်ကို ကိုယ်တိုင်
       လိုက်ပြင်ရပါတယ်။
     sources:
@@ -1441,8 +1358,8 @@ scenes:
       ရဲ့ DOM type တွေထဲမှာ Window interface နဲ့ ကြေညာထားပြီး၊ စားပွဲ အရေအတွက် property မပါပါဘူး။ နာမည်တူ
       interface တွေ တစ်ခုတည်း ပေါင်းသွားတယ် ဆိုတာ lesson ၁၂ မှာ မြင်ခဲ့လို့၊ Window interface ကို
       ထပ်ရေးပြီး property ထည့်ပေးလို့ ရပါတယ်။ [[mark:type-declare-global]] ဒီတစ်ခါတော့ property ကို သုံးတဲ့
-      main ဖိုင်ထဲမှာပဲ ရေးပါမယ်။ main ဖိုင်က အခု module ဖြစ်နေလို့ ဒီတိုင်း ရေးရင် သူ့ scope ထဲမှာပဲ ကျန်မှာ
-      ဖြစ်တဲ့အတွက်၊ declare global block ထဲ ထည့်ပြီး global scope ထဲကို ထည့်ခိုင်းပါတယ်။
+      main ဖိုင်ထဲမှာပဲ ရေးပါမယ်။ main ဖိုင်က အခု module ဖြစ်နေလို့ ဒီတိုင်း ရေးရင် သူ့ scope ထဲမှာပဲ
+      ကျန်မှာမို့၊ declare global block ထဲ ထည့်ပြီး global scope ထဲကို ထည့်ခိုင်းပါတယ်။
       [[mark:read-declare-global]] Errors မှာ error တစ်ခုမှ
       မကျန်တော့ပါဘူး။
     sources:
@@ -1488,11 +1405,11 @@ scenes:
   - id: dts-output
     narration: >
       [[mark:open-menu]] declaration file ကို အမြဲ လက်နဲ့ ရေးရတာ မဟုတ်ပါဘူး။ ဒါက ဆိုင်ရဲ့ menu ဖိုင်ပါ။
-      [[mark:select-body]] ဈေးနှုန်း ရှာတဲ့ function ထဲမှာ အလုပ်လုပ်မယ့် code ရှိပါတယ်။ [[mark:read-dts]] panel ရဲ့ Declaration output အပိုင်းမှာ TypeScript က ဒီ ဖိုင်ကနေ
-      ထုတ်ပေးမယ့် declaration file ကို ပြထားပါတယ်။ type alias ကတော့ ဒီအတိုင်း ကျန်ပေမယ့်၊ menu array ထဲက တန်ဖိုးတွေနဲ့
-      function ရဲ့ code ပျောက်သွားပြီး type တွေပဲ ကျန်ပါတယ်။ [[mark:explain-library]] TypeScript နဲ့ ရေးတဲ့
-      library တွေက ဒီလိုပဲ JavaScript ဖိုင်နဲ့ declaration file ကို တွဲထုတ်ကြပါတယ်။ JavaScript ဖိုင်က run ဖို့
-      ဖြစ်ပြီး၊ declaration file က editor နဲ့ type checker ဖတ်ဖို့ပါ။
+      [[mark:select-body]] ဈေးနှုန်း ရှာတဲ့ function ထဲမှာ အလုပ်လုပ်မယ့် code ရှိပါတယ်။ [[mark:read-dts]] Declaration output အပိုင်းမှာ TypeScript က ဒီ ဖိုင်ကနေ
+      ထုတ်ပေးမယ့် declaration file ကို ပြထားပါတယ်။ menu array ထဲက တန်ဖိုးတွေနဲ့ function ရဲ့ code
+      ပျောက်သွားပြီး type တွေပဲ ကျန်ပါတယ်။ TypeScript နဲ့ ရေးတဲ့
+      library တွေက ဒီလိုပဲ run ဖို့ JavaScript ဖိုင်ရယ်၊ editor နဲ့ type checker ဖတ်ဖို့ declaration file ရယ်ကို
+      တွဲထုတ်ကြပါတယ်။
     sources:
       - {
           title: "Total TypeScript Essentials, ch. 13: Declaration files describe JavaScript",
@@ -1538,20 +1455,18 @@ scenes:
   - id: where-types-come-from
     chapter: "Type တွေ ဘယ်က လာလဲ"
     narration: >
-      [[mark:type-query-window]] main ဖိုင်ကို ပြန်ဖွင့်ပြီး window ကိုယ်တိုင်ရဲ့ type ကိုလည်း query comment
-      နဲ့ မေးကြည့်ရအောင်။
-      [[mark:read-query-window]] Types မှာ Window interface နဲ့ globalThis ကို ပေါင်းထားတဲ့ type ကို ပြပြီး၊
-      အောက်မှာ MDN link ပါတဲ့ ရှင်းလင်းချက်ပါ ပါလာပါတယ်။ ဒါတွေက TypeScript နဲ့ အတူ ပါလာတဲ့ lib dot dom ဆိုတဲ့
-      declaration file ထဲမှာ ရေးထားတာပါ။ VS Code မှာ Go to Definition လုပ်ရင် အဲဒီ ဖိုင်ကို
-      ဖွင့်ပေးပါမယ်။ [[mark:board-sources]] ဆိုတော့ declaration file တွေ ဘယ်က လာလဲ ဆိုတာကို လေးမျိုး ခွဲကြည့်ရအောင်။
+      [[mark:type-query-window]] window ကိုယ်တိုင်ရဲ့ type ကိုလည်း query comment နဲ့ မေးကြည့်ရအောင်။
+      [[mark:read-query-window]] Types မှာ Window interface နဲ့ globalThis ကို ပေါင်းထားတဲ့ type နဲ့ MDN
+      link ပါတဲ့ ရှင်းလင်းချက်ကို ပြပါတယ်။ ဒါတွေက TypeScript နဲ့ ပါလာတဲ့ lib dot dom ဆိုတဲ့
+      declaration file ထဲမှာ ရေးထားတာပါ။ [[mark:board-sources]] declaration file တွေ ဘယ်က လာလဲ ဆိုတော့
+      လေးမျိုး ရှိပါတယ်။
       [[mark:draw-lib]] ပထမက TypeScript မှာ ပါလာတဲ့ lib ဖိုင်တွေပါ။ JavaScript ရဲ့ built-in တွေရော browser ရဲ့
-      DOM တွေရော ဒီထဲမှာ ရှိပြီး၊ tsconfig ရဲ့ lib option က ဘယ်ဟာ သုံးမလဲ ရွေးပါတယ်။ မရေးထားရင် target ကို
+      DOM တွေရော ဒီထဲမှာ ရှိပြီး၊ tsconfig ရဲ့ lib option နဲ့ ရွေးလို့ ရပါတယ်။ မရေးထားရင် target ကို
       ကြည့်ပြီး DOM ပါ တွဲပေးပါတယ်။ [[mark:draw-packages]] ဒုတိယက Vite လို package တွေက သူ့ထဲမှာ ထည့်ပေးထားတဲ့
       type တွေ ဖြစ်ပြီး၊ package json ရဲ့ types field က အဲဒီ ဖိုင်ကို ညွှန်ပြပါတယ်။ [[mark:draw-definitely]]
       တတိယက DefinitelyTyped ပါ။ type မပါတဲ့ package တွေအတွက် community က at types package တွေ သီးသန့်
-      ထုတ်ပေးပြီး၊ ဥပမာ at types react ကို ထည့်ထားရင် React ကို import လုပ်တဲ့အခါ TypeScript က ရှာတွေ့ပါတယ်။
-      TypeScript ၆ ကစပြီး Node.js လို global type ထည့်ပေးတဲ့ package ကိုတော့ types option ထဲမှာ နာမည်
-      ရေးပေးရပါတယ်။ [[mark:draw-own]] စတုတ္ထကတော့ ခုနက ရေးခဲ့သလို ကိုယ်တိုင် ရေးတဲ့ declaration file တွေပါ။
+      ရေးပေးထားပါတယ်။ Node.js လို global type ထည့်ပေးတဲ့ package ကိုတော့ TypeScript ၆ ကစပြီး types
+      option ထဲမှာ နာမည် ရေးပေးရပါတယ်။ [[mark:draw-own]] စတုတ္ထကတော့ ခုနက ရေးခဲ့သလို ကိုယ်တိုင် ရေးတဲ့ declaration file တွေပါ။
     sources:
       - {
           title: "Total TypeScript Essentials, ch. 13: Declaration files you don't control, lib, DOM types, DefinitelyTyped",
@@ -1616,61 +1531,171 @@ scenes:
         drawMs: 1800
 
   - id: declare-module
+    chapter: "Type မပါတဲ့ package နဲ့ declare module"
     narration: >
-      [[mark:board-untyped]] declaration file ကို ကိုယ်တိုင် ရေးရတဲ့ နောက် အခြေအနေ တစ်ခုက type လုံးဝ မပါတဲ့
-      package ကို သုံးရတဲ့အခါပါ။ ဥပမာ JavaScript နဲ့ပဲ ရေးထားတဲ့ printer package တစ်ခုကို import လုပ်ရင်၊
-      declaration file ရှာမတွေ့လို့ any လို့ ယူဆရမယ် ဆိုပြီး TypeScript က error ပြပါတယ်။
-      [[mark:draw-types-first]] အဲဒီအခါ at types package ရှိမရှိ အရင် ရှာကြည့်ပါ။
-      [[mark:draw-declare-module]] မရှိရင်တော့ ကိုယ့် declaration file ထဲမှာ declare
-      module နဲ့ package နာမည်ကို ရေးပြီး၊ သုံးမယ့် function တွေရဲ့ type ကို အထဲမှာ ကြေညာပေးပါ။ block မပါဘဲ
-      package နာမည်ကိုပဲ တစ်ကြောင်းတည်း ကြေညာရင်တော့ error ပျောက်ပေမယ့် အားလုံး any
-      ဖြစ်သွားပါမယ်။
+      [[mark:close-board-b]] type မပါတဲ့ package ကို တကယ် သုံးကြည့်ရအောင်။ M S က စာသားနဲ့ ရေးထားတဲ့
+      အချိန်ကို မီလီစက္ကန့် ပြောင်းပေးတဲ့ JavaScript package လေးပါ။ [[mark:type-import]] main ဖိုင်မှာ သူ့ကို default import လုပ်ပါမယ်။
+      [[mark:read-import-error]] Errors မှာ M S အတွက် declaration file ရှာမတွေ့လို့ သူ့ JavaScript
+      ဖိုင်က any type ဖြစ်နေတယ် ဆိုတဲ့ error ပေါ်လာပါပြီ။ ဒုတိယ အပိုင်းက at types M S ရှိရင် ထည့်ဖို့၊ ဒါမှမဟုတ် declare module နဲ့ ကြေညာဖို့
+      အကြံပေးပါတယ်။ DefinitelyTyped မှာ at types M S ရှိလို့ ပုံမှန်ဆိုရင် အဲဒါ ထည့်ရုံပါပဲ။
+      [[mark:type-brew]] လက်ဖက်ရည် ဖျော်ချိန် သုံးမိနစ်ကို ပြောင်းကြည့်ပါမယ်။ [[mark:read-any]] Output
+      မှာ ၁၈၀၀၀၀ ထွက်လာလို့ package က တကယ် အလုပ်လုပ်ပါတယ်။ ဒါပေမဲ့ Types မှာ ဖျော်ချိန်က any ဖြစ်နေလို့
+      TypeScript က ဘာမှ မစစ်ပေးနိုင်ပါဘူး။ [[mark:open-ms-dts]] ဒီမှာတော့ type ကို ကိုယ်တိုင်
+      ရေးကြည့်ပါမယ်။ src folder ထဲက ဖိုင်မို့ tsconfig ရဲ့ include ထဲ ပါပြီး TypeScript က ဖတ်ပါတယ်။
+      [[mark:type-declare-module]] declare module နဲ့ package နာမည်ကို ရေးပြီး၊ ဆိုင်က ခေါ်သုံးတဲ့ ပုံစံကိုပဲ
+      ကြေညာပါမယ်။ စာသား ယူပြီး number ပြန်ပေးတဲ့ default export ပါ။ error ပျောက်ပြီး
+      ဖျော်ချိန်က number ဖြစ်သွားပါပြီ။ package နာမည်ကိုပဲ declare module နဲ့ တစ်ကြောင်းတည်း ရေးရင်လည်း
+      error ပျောက်ပေမယ့်၊ အားလုံး any ဖြစ်သွားပါမယ်။
     sources:
       - {
-          title: "Total TypeScript Essentials, ch. 13: declare module",
+          title: "npm: ms 2.1.3 (no types or typings field; the package ships index.js only)",
+          url: "https://www.npmjs.com/package/ms/v/2.1.3",
+        }
+      - {
+          title: "npm: @types/ms (DefinitelyTyped)",
+          url: "https://www.npmjs.com/package/@types/ms",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 13: declare module; DefinitelyTyped",
           url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
         }
       - {
-          title: "TypeScript Handbook: Modules .d.ts (ambient modules, shorthand ambient modules)",
+          title: "TypeScript Handbook: Modules reference, ambient modules (declare module)",
           url: "https://www.typescriptlang.org/docs/handbook/modules/reference.html#ambient-modules",
         }
       - {
-          title: "TypeScript Handbook: Consumption of declaration files (@types)",
-          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/consumption.html",
+          title: "TypeScript Handbook: Modules .d.ts template",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/templates/module-d-ts.html",
+        }
+      - {
+          title: "TypeScript Handbook: Publishing declaration files (types in the package or in @types)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/publishing.html",
+        }
+      - {
+          title: "TypeScript 2.0 release notes: shorthand ambient module declarations (every import is any)",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-0.html#shorthand-ambient-module-declarations",
         }
     actions:
-      - id: open-board-c
+      - id: close-board-b
         type: whiteboard.apply
-        at: { mark: board-untyped }
-        clear: true
-        upsertIds: [c-title, c-import, c-error-1, c-error-2]
-        drawMs: 2400
-      - id: draw-types-first
-        type: whiteboard.apply
-        at: { mark: draw-types-first }
-        upsertIds: [c-first]
-        drawMs: 1200
-      - id: draw-declare-module
-        type: whiteboard.apply
-        at: { mark: draw-declare-module }
-        upsertIds: [c-second, c-code-1, c-code-2, c-code-3]
-        drawMs: 2800
+        at: { mark: close-board-b }
+        open: false
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: src/main.ts, after: "// ဆိုင်ရဲ့ အော်ဒါ screen\n", occurrence: 1 }
+        text: "import ms from \"ms\";\n"
+        cadence: fast-explainer
+      - id: expect-import-error
+        type: expect.preview
+        at: { afterAction: type-import }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-import-code
+        type: expect.preview
+        at: { afterAction: expect-import-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "7016" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-import-message
+        type: expect.preview
+        at: { mark: read-import-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Could not find a declaration file for module 'ms'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-import-hint
+        type: expect.preview
+        at: { afterAction: expect-import-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Try `npm i --save-dev @types/ms` if it exists or add a new declaration (.d.ts) file containing `declare module 'ms';`"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-brew
+        type: editor.type
+        at: { mark: type-brew }
+        target:
+          { file: src/main.ts, after: "console.log(\"စားပွဲ\", tables, \"လုံး\");\n", occurrence: 1 }
+        text: "\nconst brewTime = ms(\"3m\");\n//    ^?\nconsole.log(\"လက်ဖက်ရည် ဖျော်ချိန်\", brewTime, \"မီလီစက္ကန့်\");\n"
+        cadence: line-by-line
+      - id: expect-brew-output
+        type: expect.preview
+        at: { afterAction: type-brew }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-brew-line
+        type: expect.preview
+        at: { afterAction: expect-brew-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "လက်ဖက်ရည် ဖျော်ချိန် 180000 မီလီစက္ကန့်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-brew-any
+        type: expect.preview
+        at: { afterAction: expect-brew-line }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const brewTime: any" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-brew-still-one
+        type: expect.preview
+        at: { afterAction: expect-brew-any }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-ms-dts
+        type: workspace.openFile
+        at: { mark: open-ms-dts }
+        path: src/types/ms.d.ts
+      - id: type-declare-module
+        type: editor.type
+        at: { mark: type-declare-module }
+        target: { file: src/types/ms.d.ts, after: "// ms package အတွက် type တွေ\n", occurrence: 1 }
+        text: "declare module \"ms\" {\n  export default function ms(text: string): number;\n}\n"
+        cadence: block
+      - id: expect-module-clean
+        type: expect.preview
+        at: { afterAction: type-declare-module }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-module-type
+        type: expect.preview
+        at: { afterAction: expect-module-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const brewTime: number" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-module-output
+        type: expect.preview
+        at: { afterAction: expect-module-type }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "လက်ဖက်ရည် ဖျော်ချိန် 180000 မီလီစက္ကန့်"
+        retry: { maxAttempts: 2, delayMs: 300 }
 
   - id: skiplibcheck
     chapter: "skipLibCheck ရဲ့ အားနည်းချက်"
     narration: >
-      [[mark:close-board-c]] declaration file ထဲမှာ run မယ့် code ထည့်လို့ မရဘူး ဆိုတာကို တကယ်
+      declaration file ထဲမှာ run မယ့် code ထည့်လို့ မရဘူး ဆိုတာကို တကယ်
       စမ်းကြည့်ရအောင်။ [[mark:type-impl]] ဈေးနှုန်းကို ကျပ် နဲ့ ပြတဲ့ function တစ်ခုကို၊ code ပါ ပါအောင်
-      တမင် ရေးကြည့်ပါမယ်။ [[mark:read-impl]] ambient context မှာ implementation ရေးလို့ မရဘူး ဆိုတဲ့
+      တမင် ရေးကြည့်ပါမယ်။ ambient context မှာ implementation ရေးလို့ မရဘူး ဆိုတဲ့
       error ပေါ်လာပါပြီ။ ambient ဆိုတာ code မပါဘဲ ရှိတယ်လို့ ကြေညာရုံ ကြေညာတာ ဖြစ်ပြီး၊ declaration file ထဲက
-      အရာအားလုံးက ambient ပါ။ [[mark:open-tsconfig-2]] အခု project အများစုမှာ ဖွင့်ထားတဲ့ skip lib check
+      အရာအားလုံးက ambient ပါ။ [[mark:open-tsconfig-2]] project အများစုမှာ ဖွင့်ထားတဲ့ skip lib check
       option ကို ထည့်ကြည့်ပါမယ်။ [[mark:type-skip]] ဒီ option က declaration file တွေကို type check မလုပ်ဖို့
-      ပြောတာပါ။ [[mark:read-skip]] error ပျောက်သွားပေမယ့် အမှားက ရှိနေတုန်းပါ။ package တွေရဲ့ type တွေကို
-      မစစ်တော့လို့ စစ်တာ ပိုမြန်ပြီး၊ ကိုယ် ပြင်လို့ မရတဲ့ package ထဲက error တွေလည်း မပေါ်တော့တာက သူ့ရဲ့
-      ကောင်းကွက်ပါ။ ကိုယ်တိုင် ရေးတဲ့ declaration file ကိုပါ မစစ်တော့တာကတော့ အားနည်းချက်ပါ။
-      [[mark:type-comment-impl]] ဒါကြောင့် စမ်းထားတဲ့ ဒီ line ကို ကိုယ်တိုင် comment လုပ်ပြီး ပိတ်ထားပါမယ်။ [[mark:advice]] project ထဲမှာ သုံးမယ့်
-      type တွေကိုလည်း declaration file ထဲမှာ မစုဘဲ၊ ရိုးရိုး TypeScript ဖိုင်မှာ ရေးပြီး export လုပ်ပါ။ အဲဒီ
-      ဖိုင်တွေကိုတော့ TypeScript က အမြဲ စစ်ပေးပါတယ်။
+      ပြောတာပါ။ [[mark:read-skip]] error ပျောက်သွားပေမယ့် အမှားက ရှိနေတုန်းပါ။ package တွေရဲ့ type ကို
+      မစစ်တော့လို့ ပိုမြန်ပြီး၊ ကိုယ် ပြင်လို့ မရတဲ့ package ထဲက error တွေ မပေါ်တော့တာက ကောင်းကွက်ပါ။
+      ကိုယ်တိုင် ရေးတဲ့ declaration file ကိုပါ မစစ်တော့တာကတော့ အားနည်းချက်ပါ။
+      [[mark:type-comment-impl]] ဒါကြောင့် စမ်းထားတဲ့ line ကို comment လုပ်ပြီး ပိတ်ထားပါမယ်။ ကိုယ့် project ရဲ့
+      type တွေကိုလည်း declaration file ထဲမှာ မစုဘဲ၊ TypeScript က အမြဲ စစ်ပေးတဲ့ ရိုးရိုး TypeScript ဖိုင်မှာ
+      ရေးပြီး export လုပ်ပါ။
     sources:
       - {
           title: "Total TypeScript Essentials, ch. 13: Declaration files can't contain implementations; skipLibCheck and its downsides; should you store your types in declaration files?",
@@ -1681,10 +1706,6 @@ scenes:
           url: "https://www.typescriptlang.org/tsconfig/#skipLibCheck",
         }
     actions:
-      - id: close-board-c
-        type: whiteboard.apply
-        at: { mark: close-board-c }
-        open: false
       - id: open-globals-2
         type: workspace.openFile
         at: { mark: type-impl }
@@ -1756,6 +1777,7 @@ scenes:
       မပါရင် global scope ကို မျှသုံးတဲ့ script ဖြစ်ပါတယ်။ module detection ကို force ထားရင်တော့
       declaration file ကလွဲရင် ဖိုင်တိုင်း module ဖြစ်ပါတယ်။ [[mark:recap-dts]] declaration file မှာ type ပဲ
       ပါပြီး၊ declare နဲ့ global တွေကို ကြေညာနိုင်သလို module ထဲကနေ declare global နဲ့လည်း ထည့်နိုင်ပါတယ်။
+      type မပါတဲ့ package ကိုတော့ at types ဒါမှမဟုတ် declare module နဲ့ type ပေးပါ။
       skip lib check က ကိုယ်ရေးတဲ့ declaration file တွေကိုပါ မစစ်တော့တာ သတိထားပါ။ နောက် lesson မှာတော့ tsconfig ကို
       အသေးစိတ် ပြင်ဆင်ပုံကို ကြည့်သွားပါမယ်။
     sources:
@@ -1783,5 +1805,15 @@ scenes:
         at: { afterAction: expect-file-globals }
         path: src/main.ts
         contains: "declare global {\n  interface Window {\n    tableCount: number;\n  }\n}\n"
+      - id: expect-file-main-ms
+        type: expect.file
+        at: { afterAction: expect-file-main }
+        path: src/main.ts
+        contains: "// ဆိုင်ရဲ့ အော်ဒါ screen\nimport ms from \"ms\";\n"
+      - id: expect-file-ms-dts
+        type: expect.file
+        at: { afterAction: expect-file-main-ms }
+        path: src/types/ms.d.ts
+        contains: "declare module \"ms\" {\n  export default function ms(text: string): number;\n}\n"
 checks:
   - { type: timing.p95Ms, max: 300 }
