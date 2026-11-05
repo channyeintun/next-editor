@@ -1139,8 +1139,8 @@ scenes:
       အတွက်ကတော့ MouseEvent ပါ။ angle bracket ထဲမှာတော့ ဘယ် element ရဲ့ event လဲ ဆိုတာကို button element လို့
       ပေးထားပါတယ်။ [[mark:select-current-target]] ဒါကြောင့် event ရဲ့ current target ဟာ button element ဖြစ်တယ်လို့
       TypeScript က သိပြီး၊ button element မှာ ရှိတဲ့ property တွေကို စိတ်ချ သုံးလို့ ရပါတယ်။
-      onClick ထဲမှာ arrow function နဲ့ တိုက်ရိုက် ရေးရင်တော့၊ event ရဲ့ type
-      ကို onClick ရဲ့ type ကနေ TypeScript က infer လုပ်ပေးလို့ ကိုယ်တိုင် ရေးစရာ မလိုပါဘူး။ [[mark:read-never]] ဒါပေမဲ့ အော်ဒါ စာရင်းထဲကို
+      on Click ထဲမှာ arrow function နဲ့ တိုက်ရိုက် ရေးရင်တော့၊ event ရဲ့ type
+      ကို on Click ရဲ့ type ကနေ TypeScript က infer လုပ်ပေးလို့ ကိုယ်တိုင် ရေးစရာ မလိုပါဘူး။ [[mark:read-never]] ဒါပေမဲ့ အော်ဒါ စာရင်းထဲကို
       လက်ဖက်ရည် ထည့်တဲ့ line မှာ error နှစ်ခု ပေါ်လာပါပြီ။ Order ကို never type ရှိရမယ့် နေရာမှာ ထည့်လို့ မရဘူးလို့
       ပြောနေပါတယ်။
     sources:
@@ -1267,16 +1267,16 @@ scenes:
   - id: button-props
     chapter: "Button ရဲ့ props တွေ"
     narration: >
-      [[mark:type-onclick]] state ပြဿနာ ပြေလည်သွားပြီ ဆိုတော့၊ ရေးထားတဲ့ function ကို ခလုတ်ရဲ့ onClick မှာ
+      [[mark:type-onclick]] state ပြဿနာ ပြေလည်သွားပြီ ဆိုတော့၊ ရေးထားတဲ့ function ကို ခလုတ်ရဲ့ on Click မှာ
       ချိတ်ပေးပါမယ်။ ဒါမှ ခလုတ်ကို နှိပ်လိုက်တိုင်း React က ဒီ function ကို event object နဲ့အတူ ခေါ်ပေးမှာပါ။ [[mark:read-onclick-error]]
-      error အသစ် တစ်ခု ပေါ်လာပါပြီ။ အောက်ဆုံး အပိုင်းကနေ ဖတ်ရင်၊ ခလုတ် component ရဲ့ props type မှာ onClick ဆိုတဲ့
+      error အသစ် တစ်ခု ပေါ်လာပါပြီ။ အောက်ဆုံး အပိုင်းကနေ ဖတ်ရင်၊ ခလုတ် component ရဲ့ props type မှာ on Click ဆိုတဲ့
       property မရှိဘူးလို့ ပြောနေပါတယ်။ ကိုယ့် props type မှာ name နဲ့ price နှစ်ခုပဲ ရေးထားလို့ပါ။ data testid
       လိုမျိုး dash ပါတဲ့ attribute တွေကိုတော့ JSX မှာ TypeScript က ချွင်းချက်အနေနဲ့ ခွင့်ပြုလို့ error မပြပါဘူး။
-      [[mark:open-components-3]] onClick ရယ်၊ disabled ရယ်၊ title ရယ် လိုမျိုး button element တစ်ခု လက်ခံတဲ့ props
+      [[mark:open-components-3]] on Click ရယ်၊ disabled ရယ်၊ title ရယ် လိုမျိုး button element တစ်ခု လက်ခံတဲ့ props
       တွေက အများကြီး ရှိလို့၊ တစ်ခုချင်း လိုက်ရေးနေရင်တော့ ဘယ်တော့မှ မပြီးနိုင်ပါဘူး။ [[mark:type-component-props]] ဒါကြောင့်
       React ရဲ့ ComponentProps ဆိုတဲ့ type ကို သုံးပြီး button element ရဲ့ props အားလုံးကို ယူလိုက်ပါမယ်။ ပြီးတော့
       intersection နဲ့ ကိုယ့်ရဲ့ name နဲ့ price ကို ပေါင်းထည့်ထားပါတယ်။ [[mark:read-props-merged]] error
-      ပျောက်သွားပါပြီ။ အခု onClick က button ရဲ့ props ထဲက တစ်ခု ဖြစ်လို့ TypeScript က လက်ခံပြီး၊ program run တဲ့အခါ
+      ပျောက်သွားပါပြီ။ အခု on Click က button ရဲ့ props ထဲက တစ်ခု ဖြစ်လို့ TypeScript က လက်ခံပြီး၊ program run တဲ့အခါ
       rest ထဲကို ဝင်လာပြီး button element ဆီ ရောက်သွားပါတယ်။
     sources:
       - {
@@ -1301,6 +1301,9 @@ scenes:
         at: { mark: type-onclick }
         target: { file: src/main.tsx, after: "        data-testid=\"tea\"\n", occurrence: 1 }
         text: "        onClick={handleOrder}\n"
+        # One insert: a half-typed attribute (onCli) is valid TSX, so the in-page run renders it and
+        # React logs "Unknown event handler property" (caught by the lead's re-verify sweep).
+        cadence: block
       - id: expect-onclick-count
         type: expect.preview
         at: { afterAction: type-onclick }
