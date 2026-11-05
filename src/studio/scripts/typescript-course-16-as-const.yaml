@@ -1,0 +1,1687 @@
+# TypeScript course, lesson 16: as const (Burmese).
+#
+# Start state (ws/): src/menu.ts holds CupSize, Sugar, Drink (with a nested `extras` object),
+# describe(drink), Ticket and printTickets(tickets: Ticket[]). src/main.ts builds `houseTea`
+# (size "large", extras { sugar "less", ice false }), prints describe(houseTea), then changes the
+# house sugar to "extra" and prints it. Panel (data-modes default "errors types output"): 1 error
+# on purpose — TS2345 at describe(houseTea), size widened to string — and Output
+# "လက်ဖက်ရည် · large · less" / "သကြား extra".
+#
+# Edits, all insert-only:
+#   1. `^?` under `const houseTea = {` -> the widened object type; ` as const` after the object ->
+#      every property readonly (nested too) with literal types; describe error gone, new TS2540
+#      at `houseTea.extras.sugar = "extra"` (deep); Output still "extra" (type-only); `// ` on
+#      that line -> 0 errors, Output "သကြား less" (houseTea stays as const, no annotation).
+#   2. a sample ticket `{ table: 5, size: "small" } as const` + `sample.table = 6` -> TS2540;
+#      `: Ticket` on the variable -> 0 errors (the annotation wins over as const); both lines
+#      commented out so the final code keeps no annotation + as const pair.
+#   3. a typed block: Object.freeze({ close, staff: { cashier } }) -> nested change passes
+#      (no error, Output "ငွေကိုင် မောင်မောင်"), `shop.close = 20` -> TS2540 and a runtime
+#      TypeError in Output (freeze = runtime, shallow); `// ` comments the line out. Board B.
+#   4. a typed priceTag(item, price) returning [item, price] with a `^?` on it ->
+#      `(string | number)[]` and TS2365 at `price + 300`; ` as const` on the return ->
+#      `readonly [string, number]`, 0 errors.
+#   5. a typed tickets array -> TS2345 (size widened); ` as const` on the array -> the
+#      readonly-to-mutable error; `readonly ` in printTickets' parameter -> 0 errors.
+# Board A: how deep Readonly and as const reach.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-16-as-const.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-16-as-const
+  title: "TypeScript course 16: as const"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { describe, printTickets, type Ticket } from "./menu";
+
+        const houseTea = {
+          item: "လက်ဖက်ရည်",
+          size: "large",
+          extras: { sugar: "less", ice: false },
+        };
+        console.log(describe(houseTea));
+        houseTea.extras.sugar = "extra";
+        console.log("သကြား", houseTea.extras.sugar);
+      src/menu.ts: |
+        export type CupSize = "small" | "large";
+        export type Sugar = "less" | "normal" | "extra";
+
+        export type Drink = {
+          item: string;
+          size: CupSize;
+          extras: { sugar: Sugar; ice: boolean };
+        };
+
+        export function describe(drink: Drink): string {
+          return `${drink.item} · ${drink.size} · ${drink.extras.sugar}`;
+        }
+
+        export type Ticket = { table: number; size: CupSize };
+
+        export function printTickets(tickets: Ticket[]) {
+          console.log("စားပွဲ", tickets.map((t) => `${t.table} ${t.size}`).join("၊ "));
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: an object in layers; Readonly reaches the outer layer, as const every layer.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "readonly က ဘယ်အထိ ရောက်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-outer,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 420,
+        height: 390,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-outer-label,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 160,
+        height: 36,
+        text: "houseTea",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-item,
+        kind: text,
+        x: 305,
+        y: 300,
+        width: 100,
+        height: 36,
+        text: "item",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-size,
+        kind: text,
+        x: 305,
+        y: 345,
+        width: 100,
+        height: 36,
+        text: "size",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-inner,
+        kind: rectangle,
+        x: 300,
+        y: 405,
+        width: 360,
+        height: 185,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-inner-label,
+        kind: text,
+        x: 320,
+        y: 420,
+        width: 120,
+        height: 36,
+        text: "extras",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-sugar,
+        kind: text,
+        x: 345,
+        y: 475,
+        width: 100,
+        height: 36,
+        text: "sugar",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-ice,
+        kind: text,
+        x: 345,
+        y: 525,
+        width: 80,
+        height: 36,
+        text: "ice",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-outer-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 282,
+        y: 288,
+        width: 150,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-readonly-name,
+        kind: text,
+        x: 725,
+        y: 255,
+        width: 170,
+        height: 36,
+        text: "Readonly",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-readonly-note,
+        kind: text,
+        x: 725,
+        y: 300,
+        width: 320,
+        height: 36,
+        text: "အပြင် အလွှာ ပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-inner-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 285,
+        y: 392,
+        width: 390,
+        height: 212,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-asconst-name,
+        kind: text,
+        x: 725,
+        y: 425,
+        width: 170,
+        height: 36,
+        text: "as const",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-asconst-note,
+        kind: text,
+        x: 725,
+        y: 470,
+        width: 320,
+        height: 36,
+        text: "အထဲအထိ အားလုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-literal-note,
+        kind: text,
+        x: 725,
+        y: 515,
+        width: 320,
+        height: 36,
+        text: "+ literal type",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board B: as const vs Object.freeze.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 50,
+        text: "as const နဲ့ Object.freeze",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-col1,
+        kind: text,
+        x: 540,
+        y: 245,
+        width: 170,
+        height: 36,
+        text: "as const",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-col2,
+        kind: text,
+        x: 810,
+        y: 245,
+        width: 240,
+        height: 36,
+        text: "Object.freeze",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-row1-label,
+        kind: text,
+        x: 280,
+        y: 330,
+        width: 220,
+        height: 36,
+        text: "ဘယ်အချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-row1-c1,
+        kind: text,
+        x: 540,
+        y: 330,
+        width: 240,
+        height: 36,
+        text: "type စစ်ချိန်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-row1-c2,
+        kind: text,
+        x: 810,
+        y: 330,
+        width: 170,
+        height: 36,
+        text: "runtime",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-row2-label,
+        kind: text,
+        x: 280,
+        y: 420,
+        width: 220,
+        height: 36,
+        text: "ဘယ်အထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-row2-c1,
+        kind: text,
+        x: 540,
+        y: 420,
+        width: 240,
+        height: 36,
+        text: "အထဲအထိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-row2-c2,
+        kind: text,
+        x: 810,
+        y: 420,
+        width: 270,
+        height: 36,
+        text: "အပြင် အလွှာ ပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3116
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "အထဲအထိ readonly"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ object ရဲ့ property တွေကို TypeScript က ကျယ်တဲ့ type နဲ့ infer
+      လုပ်တာနဲ့၊ Readonly utility type က အပြင်ဆုံး အဆင့်ကိုပဲ read only လုပ်ပေးတာကို မြင်ခဲ့ပါတယ်။ ဒီ lesson
+      မှာတော့ တန်ဖိုး တစ်ခုလုံးကို အထဲအထိ read only ဖြစ်စေပြီး၊ literal type တွေကိုပါ ထိန်းထားပေးတဲ့ as const
+      ကို ကြည့်သွားပါမယ်။ [[mark:draw-object]] ဆိုင်ရဲ့ ပုံမှန် လက်ဖက်ရည် object ကို အလွှာလိုက်
+      ပုံဆွဲကြည့်ရအောင်။ အပြင် အလွှာမှာ နာမည်ရယ်၊ size ရယ်၊ နောက်ထပ် object တစ်ခုရယ် ရှိပြီး၊ အဲဒီ အတွင်း
+      object ထဲမှာ သကြား ဘယ်လောက် ထည့်မလဲ၊ ရေခဲ ထည့်မလား ဆိုတာ ရှိပါတယ်။ [[mark:draw-readonly]] Readonly
+      utility type က အပြင် အလွှာက property တွေကိုပဲ read only လုပ်ပေးလို့၊ အတွင်း object ထဲက သကြားကိုတော့
+      ပြောင်းလို့ ရနေဆဲပါ။ [[mark:draw-as-const]] as const ကတော့ ဒီ အလွှာ အားလုံးကို အထဲဆုံးအထိ read only
+      လုပ်ပေးပါတယ်။ [[mark:draw-literal]] ပြီးတော့ string ဒါမှမဟုတ် number လို ကျယ်တဲ့ type အစား၊ ရေးထားတဲ့
+      တန်ဖိုး အတိအကျကို literal type အဖြစ် ထိန်းထားပေးပါတယ်။ ဘယ်တော့မှ မပြောင်းနိုင်တော့တဲ့ တန်ဖိုး ဖြစ်လို့
+      ကျယ်အောင် ယူစရာ မလိုတော့တာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (deep immutability with as const)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript 3.4 release notes: const assertions",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types (Readonly<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#readonlytype",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-object
+        type: whiteboard.apply
+        at: { mark: draw-object }
+        upsertIds: [a-outer, a-outer-label, a-item, a-size, a-inner, a-inner-label, a-sugar, a-ice]
+        drawMs: 3600
+      - id: draw-readonly
+        type: whiteboard.apply
+        at: { mark: draw-readonly }
+        upsertIds: [a-outer-circle, a-readonly-name, a-readonly-note]
+        drawMs: 2000
+      - id: draw-as-const
+        type: whiteboard.apply
+        at: { mark: draw-as-const }
+        upsertIds: [a-inner-circle, a-asconst-name, a-asconst-note]
+        drawMs: 2000
+      - id: draw-literal
+        type: whiteboard.apply
+        at: { mark: draw-literal }
+        upsertIds: [a-literal-note]
+        drawMs: 1000
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-menu]] menu ဖိုင်မှာ သောက်စရာ တစ်ခွက်ကို
+      ဖော်ပြတဲ့ Drink type ရှိပါတယ်။ [[mark:select-drink]] size က CupSize ဖြစ်ရပြီး၊ အတွင်း object ထဲက
+      သကြားကလည်း နည်း၊ ပုံမှန်၊ များ ဆိုတဲ့ သုံးမျိုးထဲက တစ်ခုပဲ ဖြစ်ရပါမယ်။ [[mark:select-describe]] အောက်က
+      function ကတော့ သောက်စရာ တစ်ခွက်ကို စာ တစ်ကြောင်းနဲ့ ဖော်ပြပေးပါတယ်။ [[mark:open-main]] main ဖိုင်မှာတော့
+      ဆိုင်ရဲ့ ပုံမှန် လက်ဖက်ရည် object ရှိပါတယ်။ [[mark:select-house-tea]] ခွက်ကြီး၊ သကြား နည်းနည်း၊ ရေခဲ
+      မပါတဲ့ လက်ဖက်ရည် ဖြစ်ပြီး၊ သူ့အောက်မှာ အဲဒီ function နဲ့ ထုတ်ပြပါတယ်။ [[mark:select-mutation]] ဒီ line
+      ကတော့ ပုံမှန် လက်ဖက်ရည်ရဲ့ သကြားကို များများ ဖြစ်အောင် ပြောင်းလိုက်ပြီး၊ နောက် line က သကြားကို
+      ထုတ်ပြပါတယ်။ ဒါပေမဲ့ ဆိုင်ရဲ့ ပုံမှန် အရသာ ဖြစ်လို့ ဘယ်သူမှ ပြောင်းလို့ မရသင့်တဲ့ တန်ဖိုးပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (object property inference)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-menu
+        type: workspace.openFile
+        at: { mark: open-menu }
+        path: src/menu.ts
+      - id: select-drink
+        type: editor.select
+        at: { mark: select-drink }
+        target:
+          {
+            file: src/menu.ts,
+            text: "  size: CupSize;\n  extras: { sugar: Sugar; ice: boolean };",
+            occurrence: 1,
+          }
+      - id: select-describe
+        type: editor.select
+        at: { mark: select-describe }
+        target:
+          {
+            file: src/menu.ts,
+            text: "export function describe(drink: Drink): string {",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-house-tea
+        type: editor.select
+        at: { mark: select-house-tea }
+        target:
+          {
+            file: src/main.ts,
+            text: "  size: \"large\",\n  extras: { sugar: \"less\", ice: false },",
+            occurrence: 1,
+          }
+      - id: select-mutation
+        type: editor.select
+        at: { mark: select-mutation }
+        target: { file: src/main.ts, text: 'houseTea.extras.sugar = "extra";', occurrence: 1 }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Errors မှာ error တစ်ခု ရှိပါတယ်။ ပုံမှန် လက်ဖက်ရည်ကို ဖော်ပြတဲ့ function ထဲ ပို့တဲ့
+      နေရာမှာ string ကို CupSize နေရာမှာ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ မြင်ခဲ့သလိုပဲ
+      object ရဲ့ property တွေကို TypeScript က ကျယ်တဲ့ type နဲ့ infer လုပ်လို့ပါ။ [[mark:read-start-output]]
+      Output မှာတော့ ပထမ line က ပုံမှန် လက်ဖက်ရည်ကို ဖော်ပြပြီး၊ ဒုတိယ line မှာ သကြားက extra ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (object property inference)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-error
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-size
+        type: expect.preview
+        at: { afterAction: expect-start-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Types of property 'size' are incompatible."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-start-size }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-describe
+        type: expect.preview
+        at: { afterAction: expect-start-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် · large · less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-extra
+        type: expect.preview
+        at: { afterAction: expect-start-describe }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "သကြား extra"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: as-const
+    chapter: "as const"
+    narration: >
+      [[mark:type-query]] object ရဲ့ နာမည် အောက်မှာ query comment ထည့်ပြီး TypeScript ဘယ်လို နားလည်ထားလဲ
+      ကြည့်ရအောင်။ [[mark:read-wide]] Types မှာ size နဲ့ သကြားက string ဖြစ်ပြီး၊ ရေခဲက boolean ဖြစ်နေပါတယ်။
+      ဒါကြောင့် ဖော်ပြတဲ့ function က လက်မခံတာပါ။ [[mark:type-as-const]] object ရဲ့ နောက်ဆုံးမှာ as const
+      ထည့်ပါမယ်။ [[mark:read-as-const]] Types ကို ကြည့်ပါ။ property တိုင်းရဲ့ ရှေ့မှာ read only ရောက်လာပြီး၊
+      type တွေကလည်း ရေးထားတဲ့ တန်ဖိုး အတိအကျ ဖြစ်တဲ့ literal type တွေ ဖြစ်သွားပါပြီ။ အတွင်း object ထဲက
+      သကြားနဲ့ ရေခဲအထိ read only ဖြစ်သွားတာကို သတိထား ကြည့်ပါ။ [[mark:read-deep-error]] function ခေါ်တဲ့ နေရာက
+      error ပျောက်သွားပြီး၊ သကြားကို ပြောင်းတဲ့ line မှာ read only property ကို တန်ဖိုး ထည့်လို့ မရဘူး ဆိုတဲ့
+      error အသစ် ပေါ်လာပါတယ်။ အထဲဆုံး အလွှာက property ကိုပါ ကာကွယ်ပေးနိုင်တာက Readonly နဲ့ မတူတဲ့ အချက်ပါ။
+      [[mark:read-still-extra]] ဒါပေမဲ့ Output မှာ သကြားက extra ဖြစ်နေတုန်းပါ။ as const ကလည်း read only လိုပဲ
+      type ပိုင်းမှာပဲ ရှိပြီး၊ run တဲ့ အချိန်မှာ ဘာမှ မလုပ်ပေးပါဘူး။ [[mark:type-comment-mutation]] ဆိုင်ရဲ့
+      ပုံမှန် အရသာကို ပြောင်းနေတဲ့ line ကို TypeScript က ပြပေးပြီ ဖြစ်လို့၊ အဲဒီ line ကို comment လုပ်ပြီး
+      ပိတ်လိုက်ပါမယ်။ [[mark:read-recipe-kept]] error ပျောက်သွားပြီး၊ Output မှာလည်း သကြားက less အတိုင်း
+      ကျန်ပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (deep immutability with as const)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript 3.4 release notes: const assertions",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (literal inference, as const)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-inference",
+        }
+    actions:
+      - id: type-query
+        type: editor.type
+        at: { mark: type-query }
+        target: { file: src/main.ts, after: "const houseTea = {\n", occurrence: 1 }
+        text: "//    ^?\n"
+      - id: expect-query-wide
+        type: expect.preview
+        at: { afterAction: type-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          {
+            name: data-type,
+            value: "const houseTea: {\n    item: string;\n    size: string;\n    extras: {\n        sugar: string;\n        ice: boolean;\n    };\n}",
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-as-const
+        type: editor.type
+        at: { mark: type-as-const }
+        target:
+          {
+            file: src/main.ts,
+            after: "  extras: { sugar: \"less\", ice: false },\n}",
+            occurrence: 1,
+          }
+        text: " as const"
+      - id: expect-query-const
+        type: expect.preview
+        at: { afterAction: type-as-const }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          {
+            name: data-type,
+            value: "const houseTea: {\n    readonly item: \"လက်ဖက်ရည်\";\n    readonly size: \"large\";\n    readonly extras: {\n        readonly sugar: \"less\";\n        readonly ice: false;\n    };\n}",
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-deep-error
+        type: expect.preview
+        at: { afterAction: expect-query-const }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot assign to 'sugar' because it is a read-only property."
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-deep-error-count
+        type: expect.preview
+        at: { afterAction: expect-deep-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-extra
+        type: expect.preview
+        at: { mark: read-still-extra }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "သကြား extra"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-comment-mutation
+        type: editor.type
+        at: { mark: type-comment-mutation }
+        target: { file: src/main.ts, after: "console.log(describe(houseTea));\n", occurrence: 1 }
+        text: "// "
+      - id: expect-recipe-clean
+        type: expect.preview
+        at: { afterAction: type-comment-mutation }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-recipe-kept
+        type: expect.preview
+        at: { afterAction: expect-recipe-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "သကြား less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: annotation
+    chapter: "Annotation က အနိုင်ယူတယ်"
+    narration: >
+      [[mark:type-sample]] ဒါဆို as const သုံးထားတဲ့ variable မှာ type annotation ပါ ထည့်လိုက်ရင် ဘာဖြစ်မလဲ။
+      စမ်းကြည့်ဖို့ စားပွဲ ငါးရဲ့ နမူနာ လက်မှတ် တစ်ခုကို as const နဲ့ ရေးပြီး၊ သူ့အောက်မှာ စားပွဲ နံပါတ်ကို
+      ပြောင်းကြည့်ပါမယ်။ [[mark:read-sample-error]] စားပွဲ နံပါတ်က read only ဖြစ်နေလို့ error ပေါ်လာပါတယ်။
+      ခုနက သကြားမှာ တွေ့ခဲ့တဲ့ error မျိုးပါ။ [[mark:type-annotation]] အခု ဒီ variable မှာ menu ဖိုင်က Ticket
+      ဆိုတဲ့ type annotation ထည့်ကြည့်ပါမယ်။ [[mark:read-annotation]] error ပျောက်သွားပါပြီ။
+      ဘာကြောင့်လဲဆိုတော့၊ variable မှာ type annotation ရှိရင် TypeScript က အဲဒီ type ကိုပဲ variable ရဲ့ type
+      အဖြစ် ယူလို့ပါ။ as const က တန်ဖိုးရဲ့ type ကို ကျဉ်းအောင် လုပ်ပေးပေမယ့်၊ အဲဒီ တန်ဖိုးက Ticket နဲ့
+      ကိုက်တယ် ဆိုတာ စစ်ပြီးတာနဲ့ variable ကတော့ Ticket ပဲ ဖြစ်သွားပါတယ်။ ဒါကြောင့် read only တွေနဲ့ literal
+      type တွေ ပျောက်ပြီး၊ စားပွဲ နံပါတ်ကို ပြန်ပြောင်းလို့ ရသွားတာပါ။ [[mark:read-annotation-rule]] ဆိုတော့
+      type annotation နဲ့ as const ကို တွဲသုံးရင် annotation က အနိုင်ယူတယ် လို့ မှတ်ထားပါ။ type နဲ့ စစ်ပြီး
+      as const ကိုလည်း ထိန်းထားချင်ရင် သုံးလို့ ရတဲ့ satisfies ကိုတော့ နောက်ပိုင်း lesson မှာ လေ့လာပါမယ်။
+      [[mark:type-comment-sample]] စမ်းကြည့်တဲ့ line နှစ်ကြောင်းကိုတော့ comment လုပ်ပြီး ပိတ်ထားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (as const vs variable annotation)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (type annotations on variables)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-annotations-on-variables",
+        }
+    actions:
+      - id: type-sample
+        type: editor.type
+        at: { mark: type-sample }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(\"သကြား\", houseTea.extras.sugar);\n",
+            occurrence: 1,
+          }
+        text: "\nconst sample = { table: 5, size: \"small\" } as const;\nsample.table = 6;\n"
+        cadence: line-by-line
+      - id: expect-sample-error
+        type: expect.preview
+        at: { afterAction: type-sample }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-sample-readonly
+        type: expect.preview
+        at: { afterAction: expect-sample-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot assign to 'table' because it is a read-only property."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-annotation
+        type: editor.type
+        at: { mark: type-annotation }
+        target: { file: src/main.ts, after: "const sample", occurrence: 1 }
+        text: ": Ticket"
+      - id: expect-annotation-clean
+        type: expect.preview
+        at: { afterAction: type-annotation }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-comment-sample-change
+        type: editor.type
+        at: { mark: type-comment-sample }
+        target: { file: src/main.ts, after: "size: \"small\" } as const;\n", occurrence: 1 }
+        text: "// "
+      - id: type-comment-sample
+        type: editor.type
+        at: { afterAction: type-comment-sample-change }
+        target: { file: src/main.ts, after: "houseTea.extras.sugar);\n\n", occurrence: 1 }
+        text: "// "
+      - id: expect-sample-commented
+        type: expect.preview
+        at: { afterAction: type-comment-sample }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-sample-output
+        type: expect.preview
+        at: { afterAction: expect-sample-commented }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: freeze
+    chapter: "as const နဲ့ Object.freeze"
+    narration: >
+      [[mark:type-freeze]] run တဲ့ အချိန်မှာပါ တကယ် ကာကွယ်ချင်ရင်တော့ JavaScript ရဲ့ Object.freeze ကို
+      သုံးလို့ ရပါတယ်။ ဆိုင် ပိတ်ချိန်နဲ့ ငွေကိုင် ဝန်ထမ်း ပါတဲ့ object ကို freeze လုပ်ပြီး၊ ငွေကိုင်ကို
+      လှလှကနေ မောင်မောင် ပြောင်းတာရယ်၊ ပိတ်ချိန်ကို ပြောင်းတာရယ် ရေးကြည့်ပါမယ်။ [[mark:read-freeze-error]]
+      Errors မှာ ပိတ်ချိန် ပြောင်းတဲ့ line အတွက်ပဲ read only error ပေါ်ပါတယ်။ TypeScript က Object.freeze
+      ရဲ့ ရလဒ်ကို Readonly utility type နဲ့ ဖော်ပြလို့၊ အပြင်ဆုံး အလွှာကိုပဲ ကာကွယ်ပြီး ငွေကိုင် ပြောင်းတာကိုတော့
+      ခွင့်ပြုထားတာပါ။
+      [[mark:read-freeze-output]] Output ကို ကြည့်ပါ။ ငွေကိုင်က မောင်မောင် ဖြစ်သွားပေမယ့်၊ ပိတ်ချိန်
+      ပြောင်းတဲ့ နေရာမှာတော့ အနီရောင် TypeError နဲ့ program ရပ်သွားပါတယ်။ ဒါက type မဟုတ်ဘဲ JavaScript
+      ကိုယ်တိုင်က run နေတဲ့ အချိန်မှာ freeze လုပ်ထားတဲ့ property ကို ပြောင်းခွင့် မပေးတာပါ။
+      [[mark:type-comment-close]] ပိတ်ချိန် ပြောင်းတဲ့ line ကို comment လုပ်ပြီး ပိတ်ထားပါမယ်။
+      [[mark:board-compare]] as const နဲ့ Object.freeze ကို နှိုင်းယှဉ်ကြည့်ရအောင်။ [[mark:draw-when]] as const က type စစ်တဲ့ အချိန်မှာပဲ အလုပ်လုပ်ပြီး၊
+      Object.freeze ကတော့ program run နေတဲ့ အချိန်မှာ တကယ် ကာကွယ်ပါတယ်။ [[mark:draw-depth]] ဒါပေမဲ့ as const က
+      အထဲအထိ ကာကွယ်ပြီး၊ Object.freeze က အပြင်ဆုံး အလွှာကိုပဲ ကာကွယ်ပါတယ်။ as const က run တဲ့ JavaScript ထဲကို
+      ဘာမှ မထပ်ပေါင်းတဲ့အတွက် များသောအားဖြင့် as const ကို သုံးပြီး၊ runtime မှာပါ တကယ် ပိတ်ဖို့ လိုမှသာ
+      Object.freeze ကို သုံးကြပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (comparing as const with Object.freeze)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "MDN: Object.freeze() (shallow freeze, TypeError in strict mode)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze",
+        }
+    actions:
+      - id: type-freeze
+        type: editor.type
+        at: { mark: type-freeze }
+        target: { file: src/main.ts, after: "// sample.table = 6;\n", occurrence: 1 }
+        text: "\nconst shop = Object.freeze({ close: 18, staff: { cashier: \"လှလှ\" } });\nshop.staff.cashier = \"မောင်မောင်\";\nconsole.log(\"ငွေကိုင်\", shop.staff.cashier);\nshop.close = 20;\n"
+        cadence: line-by-line
+      - id: expect-freeze-error-count
+        type: expect.preview
+        at: { afterAction: type-freeze }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-freeze-error
+        type: expect.preview
+        at: { afterAction: expect-freeze-error-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot assign to 'close' because it is a read-only property."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-freeze-cashier
+        type: expect.preview
+        at: { afterAction: expect-freeze-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "ငွေကိုင် မောင်မောင်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-freeze-crash
+        type: expect.preview
+        at: { afterAction: expect-freeze-cashier }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "Uncaught TypeError: Cannot assign to read only property 'close'"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-freeze-crash-level
+        type: expect.preview
+        at: { afterAction: expect-freeze-crash }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        attribute: { name: data-level, value: "error" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-comment-close
+        type: editor.type
+        at: { mark: type-comment-close }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(\"ငွေကိုင်\", shop.staff.cashier);\n",
+            occurrence: 1,
+          }
+        text: "// "
+      - id: expect-close-clean
+        type: expect.preview
+        at: { afterAction: type-comment-close }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-close-output
+        type: expect.preview
+        at: { afterAction: expect-close-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: board-compare
+        type: whiteboard.apply
+        at: { mark: board-compare }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-col1, b-col2]
+      - id: draw-when
+        type: whiteboard.apply
+        at: { mark: draw-when }
+        upsertIds: [b-row1-label, b-row1-c1, b-row1-c2]
+        drawMs: 1800
+      - id: draw-depth
+        type: whiteboard.apply
+        at: { mark: draw-depth }
+        upsertIds: [b-row2-label, b-row2-c1, b-row2-c2]
+        drawMs: 1800
+
+  - id: tuple
+    chapter: "Function က tuple ပြန်ပေးခြင်း"
+    narration: >
+      [[mark:type-price-tag]] as const ကို function က တန်ဖိုး နှစ်ခု တွဲပြီး ပြန်ပေးတဲ့ အခါမှာလည်း သုံးပါတယ်။
+      ပစ္စည်း နာမည်နဲ့ ဈေးနှုန်းကို array တစ်ခုထဲ ထည့်ပြီး ပြန်ပေးတဲ့ function ရေးပြီး၊ ခေါ်တဲ့ နေရာမှာ နှစ်ခု
+      ခွဲထုတ်ပါမယ်။ function နာမည်ရဲ့ အောက်မှာ query comment ပါ ထည့်ထားပါတယ်။ [[mark:read-tag-error]] ဈေးနှုန်းကို
+      ၃၀၀ ပေါင်းတဲ့ နေရာမှာ error ပေါ်လာပါတယ်။ ဈေးနှုန်းက string ဖြစ်နိုင်သလို number လည်း ဖြစ်နိုင်လို့
+      ပေါင်းလို့ မရဘူးလို့ ပြောနေတာပါ။ Output မှာတော့ ၂၁၀၀ ကျပ် မှန်မှန် ထွက်နေပေမယ့်၊ TypeScript က အဲဒါကို
+      ကြိုမသိနိုင်ပါဘူး။ [[mark:read-tag-type]] Types ကို ကြည့်ရင်၊ function က string ဒါမှမဟုတ် number တွေ
+      ပါတဲ့ ရိုးရိုး array ကို ပြန်ပေးတယ်လို့ infer လုပ်ထားပါတယ်။ array ကို နောက်မှ ပြောင်းလို့ ရတဲ့အတွက်၊ ပထမ
+      နေရာမှာ နာမည်၊ ဒုတိယ နေရာမှာ ဈေး ဆိုတဲ့ အစီအစဉ်ကို TypeScript က မမှတ်ထားတာပါ။ [[mark:type-tag-as-const]]
+      ပြန်ပေးတဲ့ array ရဲ့ နောက်မှာ as const ထည့်ပါမယ်။ [[mark:read-tag-fixed]] error ပျောက်သွားပြီး၊
+      ပြန်ပေးတဲ့ type က ပထမ နေရာမှာ string ရယ်၊ ဒုတိယ နေရာမှာ number ရယ် ဆိုတဲ့ read only tuple ဖြစ်သွားပါပြီ။
+      as const မသုံးဘဲ ဒီ tuple type ကို function ရဲ့ return type အဖြစ် ကိုယ်တိုင် ရေးပေးတာလည်း နောက်ထပ် နည်း
+      တစ်ခုပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (returning a tuple from a function)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (readonly tuple types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#readonly-tuple-types",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: type-price-tag }
+        open: false
+      - id: type-price-tag
+        type: editor.type
+        at: { afterAction: close-board-b }
+        target: { file: src/main.ts, after: "// shop.close = 20;\n", occurrence: 1 }
+        text: "\nfunction priceTag(item: string, price: number) {\n//       ^?\n  return [item, price];\n}\nconst [item, price] = priceTag(\"ကော်ဖီ\", 1800);\nconsole.log(item, price + 300);\n"
+        cadence: line-by-line
+      - id: expect-tag-error
+        type: expect.preview
+        at: { afterAction: type-price-tag }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Operator '+' cannot be applied to types 'string | number' and 'number'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tag-array
+        type: expect.preview
+        at: { afterAction: expect-tag-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute:
+          {
+            name: data-type,
+            value: "function priceTag(item: string, price: number): (string | number)[]",
+          }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-tag-runs
+        type: expect.preview
+        at: { afterAction: expect-tag-array }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "ကော်ဖီ 2100"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-tag-as-const
+        type: editor.type
+        at: { mark: type-tag-as-const }
+        target: { file: src/main.ts, after: "  return [item, price]", occurrence: 1 }
+        text: " as const"
+      - id: expect-tag-clean
+        type: expect.preview
+        at: { afterAction: type-tag-as-const }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tag-tuple
+        type: expect.preview
+        at: { afterAction: expect-tag-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute:
+          {
+            name: data-type,
+            value: "function priceTag(item: string, price: number): readonly [string, number]",
+          }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: object-array
+    chapter: "Object array နဲ့ as const"
+    narration: >
+      [[mark:type-tickets]] နောက်ဆုံး ဥပမာက စားပွဲ နံပါတ်နဲ့ size ပါတဲ့ အော်ဒါ လက်မှတ် စာရင်းပါ။ object တွေ
+      ပါတဲ့ array တစ်ခု ရေးပြီး၊ menu ဖိုင်က လက်မှတ် ထုတ်တဲ့ function ထဲ ပို့ပါမယ်။
+      [[mark:read-tickets-error]] lesson အစက error မျိုး ပြန်ပေါ်လာပါပြီ။ array ထဲက object တွေရဲ့ size ကလည်း
+      string အဖြစ် ကျယ်သွားလို့ပါ။ [[mark:type-tickets-as-const]] array တစ်ခုလုံးရဲ့ နောက်မှာ as const
+      ထည့်ကြည့်ပါမယ်။ [[mark:read-tickets-readonly]] error ပြောင်းသွားပါပြီ။ error ထဲမှာ စားပွဲ နံပါတ်နဲ့ size
+      တွေက literal type အဖြစ် ကျန်နေတာ တွေ့ရပါတယ်။ ဒါပေမဲ့ စာရင်းက read only tuple ဖြစ်သွားပြီး၊ function
+      ကတော့ ပြောင်းလို့ ရတဲ့ array ကို လိုချင်နေလို့ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ
+      တွေ့ခဲ့တဲ့ ပြဿနာပါ။ [[mark:type-readonly-param]] ဒါကြောင့် menu ဖိုင်က function ရဲ့ parameter ကို read
+      only လုပ်ပေးပါမယ်။ [[mark:read-tickets-clean]] Errors ရှင်းသွားပြီး၊ Output မှာ စားပွဲ ၃ နဲ့ စားပွဲ ၈
+      ရဲ့ လက်မှတ်တွေ ထွက်နေပါတယ်။ array ကို push လုပ်ဖို့ လိုသေးတယ် ဆိုရင်တော့၊ array တစ်ခုလုံးရဲ့ နောက်မှာ
+      မဟုတ်ဘဲ object တစ်ခုချင်းစီရဲ့ နောက်မှာ as const ထည့်တာလည်း နည်း တစ်ခုပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (inferring literal values in arrays)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (the ReadonlyArray type)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#the-readonlyarray-type",
+        }
+    actions:
+      - id: type-tickets
+        type: editor.type
+        at: { mark: type-tickets }
+        target: { file: src/main.ts, after: "console.log(item, price + 300);\n", occurrence: 1 }
+        text: "\nconst tickets = [\n  { table: 3, size: \"large\" },\n  { table: 8, size: \"small\" },\n];\nprintTickets(tickets);\n"
+        cadence: line-by-line
+      - id: expect-tickets-error
+        type: expect.preview
+        at: { afterAction: type-tickets }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Type 'string' is not assignable to type 'CupSize'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tickets-output
+        type: expect.preview
+        at: { afterAction: expect-tickets-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "စားပွဲ 3 large၊ 8 small"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-tickets-as-const
+        type: editor.type
+        at: { mark: type-tickets-as-const }
+        target: { file: src/main.ts, after: "  { table: 8, size: \"small\" },\n]", occurrence: 1 }
+        text: " as const"
+      - id: expect-tickets-readonly
+        type: expect.preview
+        at: { afterAction: type-tickets-as-const }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "is 'readonly' and cannot be assigned to the mutable type 'Ticket[]'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tickets-literal
+        type: expect.preview
+        at: { afterAction: expect-tickets-readonly }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'readonly [{ readonly table: 3; readonly size: "large"; }, { readonly table: 8; readonly size: "small"; }]'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-menu-2
+        type: workspace.openFile
+        at: { mark: type-readonly-param }
+        path: src/menu.ts
+      - id: type-readonly-param
+        type: editor.type
+        at: { afterAction: open-menu-2 }
+        target: { file: src/menu.ts, after: "printTickets(tickets: ", occurrence: 1 }
+        text: "readonly "
+      - id: expect-tickets-clean
+        type: expect.preview
+        at: { afterAction: type-readonly-param }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tickets-printed
+        type: expect.preview
+        at: { afterAction: expect-tickets-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "စားပွဲ 3 large၊ 8 small"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap-as-const]] ဒါဆို ပြန်ချုပ်ရရင်၊ as const က တန်ဖိုး တစ်ခုလုံးကို အထဲအထိ read only လုပ်ပြီး
+      literal type တွေကို ထိန်းထားပေးပါတယ်။ variable မှာ type annotation ပါရင်တော့ annotation က အနိုင်ယူပါတယ်။
+      [[mark:recap-freeze]] as const က type ပိုင်းမှာပဲ အလုပ်လုပ်ပြီး အထဲအထိ ရောက်ပါတယ်။ Object.freeze ကတော့
+      runtime မှာ တကယ် ကာကွယ်ပေမယ့် အပြင်ဆုံး အလွှာကိုပဲ ကာကွယ်ပါတယ်။ [[mark:recap-tuple]] function က tuple
+      ပြန်ပေးချင်ရင် as const ဒါမှမဟုတ် return type ကို သုံးပြီး၊ object array မှာ literal type တွေ
+      ထိန်းချင်ရင်လည်း as const ကို သုံးလို့ ရပါတယ်။ နောက် lesson မှာတော့ class တွေကို TypeScript နဲ့ ဘယ်လို
+      ရေးမလဲ ဆိုတာ စကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (deep immutability with as const)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript 3.4 release notes: const assertions",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions",
+        }
+    actions:
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: recap-as-const }
+        path: src/main.ts
+      - id: select-recap-as-const
+        type: editor.select
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, text: "} as const;", occurrence: 1 }
+      - id: select-recap-freeze
+        type: editor.select
+        at: { mark: recap-freeze }
+        target: { file: src/main.ts, text: "Object.freeze", occurrence: 1 }
+      - id: select-recap-tuple
+        type: editor.select
+        at: { mark: recap-tuple }
+        target: { file: src/main.ts, text: "return [item, price] as const;", occurrence: 1 }
+      - id: expect-file-house-tea
+        type: expect.file
+        at: { afterAction: select-recap-tuple }
+        path: src/main.ts
+        contains: "const houseTea = {\n//    ^?\n"
+      - id: expect-file-recipe
+        type: expect.file
+        at: { afterAction: expect-file-house-tea }
+        path: src/main.ts
+        contains: "} as const;\nconsole.log(describe(houseTea));\n// houseTea.extras.sugar = \"extra\";"
+      - id: expect-file-sample
+        type: expect.file
+        at: { afterAction: expect-file-recipe }
+        path: src/main.ts
+        contains: "// const sample: Ticket = { table: 5, size: \"small\" } as const;\n// sample.table = 6;"
+      - id: expect-file-freeze
+        type: expect.file
+        at: { afterAction: expect-file-sample }
+        path: src/main.ts
+        contains: "// shop.close = 20;"
+      - id: expect-file-tuple
+        type: expect.file
+        at: { afterAction: expect-file-freeze }
+        path: src/main.ts
+        contains: "  return [item, price] as const;"
+      - id: expect-file-tickets
+        type: expect.file
+        at: { afterAction: expect-file-tuple }
+        path: src/main.ts
+        contains: "  { table: 8, size: \"small\" },\n] as const;\nprintTickets(tickets);"
+      - id: expect-file-param
+        type: expect.file
+        at: { afterAction: expect-file-tickets }
+        path: src/menu.ts
+        contains: "export function printTickets(tickets: readonly Ticket[]) {"
+checks:
+  - { type: timing.p95Ms, max: 300 }
