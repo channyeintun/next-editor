@@ -1,0 +1,2691 @@
+# AI course, lesson 06: generative AI and tokens (Burmese, hands-on).
+#
+# Start state (ws/): data/phrases.json (80 short tea-shop phrases written for this lesson, words
+# separated by spaces); src/bigram.js (pinned toy word-bigram model: trainBigram counts neighbouring
+# words, nextWords gives the next-word probabilities shaped by temperature, writeOn samples with
+# rng(seed) from the pinned ml.js); src/report.js (pinned) draws the cards and the two rows of page
+# controls; src/llm.js + data/responses.json + data/PROVENANCE.md (base-llm) give tokensFor(), the
+# prompt-token counts Gemma 4 E2B's own tokenizer gave when two messages were recorded with
+# tools/record-llm.ts. src/main.js holds an empty toy-model section, then showSplit (ai-split) and
+# showTokenCounts (ai-counts) with the Burmese pre-order message only.
+#
+# Edits, all insert-only and line-by-line (no half-typed line ever runs):
+#   1. the English message row      ai-counts 1 → 2 rows: မြန်မာ 32, English 24 (recorded counts)
+#   2. trainBigram + showModel      ai-toy: phrases 80 · vocabulary 51 · word pairs 166
+#   3. showNextWords (above showModel, so its card is on top)   ai-next: ချိုဆိမ့် 0.2778, ပေါ့ဆိမ့် 0.1667, five more at 0.1111
+#   4. showContinuations (below showNextWords)   ai-runs (temperature 1, max tokens 8) + the controls in #app
+# Clicks (after the last edit): temperature 0 → ချိုဆိမ့် 1, both runs the same; temperature 2 →
+# ချိုဆိမ့် 0.2026, odd runs; max tokens 4 → runs cut. All values measured with tools/sim.ts and verify.
+# Mechanisms: M1 (the toy bigram, trained in the page, badge "ဒီ page ထဲမှာ train ထားတဲ့ model"),
+# M0 (the split, badge "rules · AI မပါ"), M4 recorded token counts (badge "recorded · Gemma 4 E2B tokenizer").
+#
+# Boards: (A) the mini blueprint with Intelligence highlighted; (B) what generative AI makes;
+# (C) predictive's two labels vs the next-word fan, and the scale; (D) the generative loop, today's
+# step highlighted; (Z) the quiz. The board is a modal: the panel is seen from `tokens` to `max-tokens`
+# and in the recap.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-06-generative-tokens.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-06-generative-tokens
+  title: "AI course 06: Generative AI နဲ့ token"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/PROVENANCE.md: |
+        # Where these answers come from
+
+        Every answer in `responses.json` is a real answer from a real model, recorded ahead of time with
+        `tools/record-llm.ts` on 2026-11-05. The lesson does not run the model live:
+        `src/llm.js` looks up the exact same messages here and returns the recorded answer.
+
+        - Model: Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF
+        - File: https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf (sha256 `b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f`, license apache-2.0)
+        - Runtime: node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1
+        - Prompt: the model's own chat template from the GGUF file, thinking off
+        - Decoding: greedy (temperature 0), at most 300 new tokens, so the same messages always give the same answer
+        - Answers: 2
+      data/phrases.json: |
+        {
+         "note": "80 short phrases from the tea shop menu, written for AI course lesson 06 (sample data). Words are separated by spaces so the toy model can count them.",
+         "phrases": [
+          "လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး",
+          "လက်ဖက်ရည် ချိုဆိမ့် တစ်ခွက်",
+          "လက်ဖက်ရည် ချိုဆိမ့် အီကြာကွေးနဲ့",
+          "လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး မနက်တိုင်း",
+          "လက်ဖက်ရည် ပေါ့ဆိမ့် တစ်ခွက်",
+          "လက်ဖက်ရည် ပေါ့ဆိမ့် ပူပူလေး",
+          "လက်ဖက်ရည် ကျဆိမ့် ပူပူလေး",
+          "လက်ဖက်ရည် ကျဆိမ့် တစ်ခွက်",
+          "လက်ဖက်ရည် နို့စိမ်း တစ်ခွက်",
+          "လက်ဖက်ရည် အေးအေး ရေခဲနဲ့",
+          "လက်ဖက်ရည် ပူပူလေး မနက်တိုင်း",
+          "လက်ဖက်ရည် တစ်ခွက် ပလာတာနဲ့",
+          "လက်ဖက်ရည် တစ်ခွက် အီကြာကွေးနဲ့",
+          "ကော်ဖီ ပူပူလေး နို့ဆီနဲ့",
+          "ကော်ဖီ ပူပူလေး တစ်ခွက်",
+          "ကော်ဖီ အေးအေး ရေခဲနဲ့",
+          "ကော်ဖီ နို့ဆီနဲ့ ချိုချို",
+          "ကော်ဖီ တစ်ခွက် မနက်တိုင်း",
+          "သံပုရာရည် အေးအေး ချဉ်ချဉ်",
+          "သံပုရာရည် ရေခဲနဲ့ တစ်ခွက်",
+          "သံပုရာရည် ချဉ်ချဉ် အေးအေး",
+          "ဖာလူဒါ အေးအေး ချိုချို",
+          "ဖာလူဒါ ရေခဲမုန့်နဲ့ အေးအေး",
+          "ဖာလူဒါ ချိုချို တစ်ခွက်",
+          "မုန့်ဟင်းခါး ဟင်းရည် ပူပူ",
+          "မုန့်ဟင်းခါး ပဲကြော်နဲ့ တစ်ပွဲ",
+          "မုန့်ဟင်းခါး မနက်စာ အတွက်",
+          "မုန့်ဟင်းခါး ငါးဟင်းရည် ပူပူ",
+          "မုန့်ဟင်းခါး ဟင်းရည် ပူပူ တစ်ပွဲ",
+          "ပလာတာ ကြွပ်ကြွပ် ပဲဟင်းနဲ့",
+          "ပလာတာ ပူပူ ပဲဟင်းနဲ့",
+          "ပလာတာ တစ်ချပ် ပဲဟင်းနဲ့",
+          "ပလာတာ ကြွပ်ကြွပ် မနက်စာ အတွက်",
+          "ရှမ်းခေါက်ဆွဲ ကြက်သားနဲ့ တစ်ပွဲ",
+          "ရှမ်းခေါက်ဆွဲ ဟင်းရည် ပူပူ",
+          "ရှမ်းခေါက်ဆွဲ ကြက်သားနဲ့ ချိုချို",
+          "နန်းကြီးသုပ် စပ်စပ် ကြက်သားနဲ့",
+          "နန်းကြီးသုပ် ကြက်သားနဲ့ တစ်ပွဲ",
+          "နန်းကြီးသုပ် စပ်စပ် ငရုတ်သီးနဲ့",
+          "လက်ဖက်သုပ် စပ်စပ် ပဲကြော်နဲ့",
+          "လက်ဖက်သုပ် ပဲကြော်နဲ့ တစ်ပွဲ",
+          "လက်ဖက်သုပ် နှမ်းနဲ့ ပဲကြော်နဲ့",
+          "အီကြာကွေး ကြွပ်ကြွပ် လက်ဖက်ရည်နဲ့",
+          "အီကြာကွေး ပူပူ မနက်စာ အတွက်",
+          "အီကြာကွေး နှစ်ချောင်း မုန့်ဟင်းခါးနဲ့",
+          "စမူဆာ စပ်စပ် ပူပူ",
+          "စမူဆာ ကြွပ်ကြွပ် နှစ်ခု",
+          "စမူဆာ ပူပူ ကော်ဖီနဲ့",
+          "မနက်စာ အတွက် အီကြာကွေး",
+          "မနက်စာ အတွက် ပလာတာ",
+          "မနက်စာ အတွက် မုန့်ဟင်းခါး",
+          "ညနေ အတွက် စမူဆာ",
+          "နေပူတဲ့ နေ့မှာ ဖာလူဒါ",
+          "နေပူတဲ့ နေ့မှာ သံပုရာရည်",
+          "မိုးရွာတဲ့ နေ့မှာ လက်ဖက်ရည် ပူပူလေး",
+          "မိုးရွာတဲ့ နေ့မှာ မုန့်ဟင်းခါး",
+          "လက်ဖက်ရည် နို့စိမ်း ပူပူလေး",
+          "လက်ဖက်ရည် ချိုဆိမ့် ပလာတာနဲ့",
+          "လက်ဖက်ရည် ပေါ့ဆိမ့် အီကြာကွေးနဲ့",
+          "ကော်ဖီ ပူပူလေး အီကြာကွေးနဲ့",
+          "သံပုရာရည် တစ်ခွက် အေးအေး",
+          "ဖာလူဒါ အေးအေး နေပူတဲ့ နေ့မှာ",
+          "မုန့်ဟင်းခါး ပူပူ မနက်တိုင်း",
+          "ပလာတာ ပူပူ လက်ဖက်ရည်နဲ့",
+          "ရှမ်းခေါက်ဆွဲ နေ့လယ်စာ အတွက်",
+          "နန်းကြီးသုပ် နေ့လယ်စာ အတွက်",
+          "လက်ဖက်သုပ် စပ်စပ် နေ့လယ်စာ အတွက်",
+          "အီကြာကွေး ကြွပ်ကြွပ် ကော်ဖီနဲ့",
+          "စမူဆာ စပ်စပ် ညနေ အတွက်",
+          "နေ့လယ်စာ အတွက် ရှမ်းခေါက်ဆွဲ",
+          "နေ့လယ်စာ အတွက် နန်းကြီးသုပ်",
+          "ညနေ အတွက် လက်ဖက်သုပ်",
+          "မိုးရွာတဲ့ နေ့မှာ ကော်ဖီ",
+          "နေပူတဲ့ နေ့မှာ လက်ဖက်ရည် အေးအေး",
+          "ကော်ဖီ ပူပူလေး မိုးရွာတဲ့ နေ့မှာ",
+          "မုန့်ဟင်းခါး ပဲကြော်နဲ့ ပူပူ",
+          "ဖာလူဒါ ချိုချို ညနေ အတွက်",
+          "သံပုရာရည် ချဉ်ချဉ် နေ့လယ်စာ အတွက်",
+          "ပလာတာ တစ်ချပ် လက်ဖက်ရည်နဲ့",
+          "စမူဆာ နှစ်ခု လက်ဖက်ရည်နဲ့"
+         ]
+        }
+      data/responses.json: |
+        {
+          "provenance": {
+            "label": "Gemma 4 E2B",
+            "model": "Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF",
+            "source": "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+            "sha256": "b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f",
+            "license": "apache-2.0",
+            "runtime": "node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1",
+            "prompt": "the model's own chat template from the GGUF file, thinking off",
+            "decoding": {
+              "temperature": 0,
+              "maxTokens": 300,
+              "thinking": false,
+              "stop": "<turn|>",
+              "contextSize": 4096
+            },
+            "recordedOn": "2026-11-05",
+            "recordedBy": "tools/record-llm.ts"
+          },
+          "responses": [
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "မနက်ဖြန် မနက်အတွက် လက်ဖက်ရည် နှစ်ခွက် ကြိုမှာချင်ပါတယ်။"
+                }
+              ],
+              "output": "ဟုတ်ကဲ့၊ မနက်ဖြန် မနက်အတွက် လက်ဖက်ရည် နှစ်ခွက် ကြိုမှာပေးပါမယ်။ ဘယ်အချိန်မှာ လိုချင်ပါသလဲ?",
+              "promptTokens": 32,
+              "outputTokens": 40,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "I'd like to pre-order two milk teas for tomorrow morning."
+                }
+              ],
+              "output": "I understand you'd like to pre-order two milk teas for tomorrow morning.\n\nHowever, as an AI, I don't have the ability to directly place orders with a specific shop or cafe.\n\n**To help you, could you please tell me:**\n\n1. **Which shop or cafe** are you planning to order from?\n2. **How would you like to place the order?** (e.g., Do you need a phone number, an app, or a website link?)\n\nIf you tell me the name of the place, I might be able to help you find their ordering information!",
+              "promptTokens": 24,
+              "outputTokens": 127,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            }
+          ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/bigram.js: |
+        // A toy next-word model for this lesson (a "word bigram"), trained in the page: it counts which
+        // word follows which in the shop's phrases, then writes text by picking the next word again and
+        // again. Real language models do the same job, next token after next token, with a neural network
+        // trained on billions of examples instead of a table of counts.
+        import { rng } from "./ml.js";
+
+        // The end of a phrase is a token too: the model can pick it, then start a new phrase.
+        export const END = "။";
+
+        // Split text into this model's tokens: one word between spaces, and the end mark on its own.
+        export function splitWords(text) {
+          return text.replace(/။/g, " ။ ").split(/\s+/).filter(Boolean);
+        }
+
+        // Count every pair of neighbouring words (and which words start and end a phrase).
+        export function trainBigram(phrases) {
+          const next = {};
+          const vocab = new Set();
+          for (const phrase of phrases) {
+            let prev = END;
+            for (const word of [...splitWords(phrase), END]) {
+              vocab.add(word);
+              next[prev] ??= {};
+              next[prev][word] = (next[prev][word] ?? 0) + 1;
+              prev = word;
+            }
+          }
+          const pairs = Object.values(next).reduce((n, followers) => n + Object.keys(followers).length, 0);
+          return { phrases: phrases.length, words: vocab.size, pairs, next };
+        }
+
+        // The probability of each next word after `word`. Temperature reshapes the counted probabilities:
+        // 1 keeps them, lower makes the likely word more likely (0 = always the most likely one), higher
+        // flattens them so unlikely words are picked more often.
+        export function nextWords(model, word, temperature = 1) {
+          const followers = Object.entries(model.next[word] ?? {});
+          if (!followers.length) return {};
+          if (temperature === 0) {
+            const top = Math.max(...followers.map(([, count]) => count));
+            const first = followers.find(([, count]) => count === top)[0];
+            return Object.fromEntries(followers.map(([w]) => [w, w === first ? 1 : 0]));
+          }
+          const weights = followers.map(([w, count]) => [w, count ** (1 / temperature)]);
+          const total = weights.reduce((s, [, x]) => s + x, 0);
+          return Object.fromEntries(weights.map(([w, x]) => [w, x / total]));
+        }
+
+        // Write on from `start`: pick each next word by its probability, up to `maxTokens` new tokens.
+        // The seed fixes the random numbers, so a run gives the same text every time it is replayed.
+        export function writeOn(model, start, { temperature = 1, maxTokens = 8, seed = 1 } = {}) {
+          const random = rng(seed);
+          const words = [start];
+          let word = start;
+          for (let i = 0; i < maxTokens; i++) {
+            const probs = Object.entries(nextWords(model, word, temperature));
+            if (!probs.length) break;
+            let r = random();
+            let pick = probs[probs.length - 1][0];
+            for (const [w, p] of probs) {
+              if ((r -= p) < 0) {
+                pick = w;
+                break;
+              }
+            }
+            words.push(pick);
+            word = pick;
+          }
+          return words.join(" ").replace(/ ။/g, "။");
+        }
+      src/llm.js: |
+        // The lesson's stand-in for a model API.
+        // A real model is slow and can answer differently from run to run, so this lesson uses answers
+        // recorded ahead of time from a real model: data/responses.json (how: data/PROVENANCE.md).
+        // generate() returns the recorded answer for exactly these messages, and shows it in the panel.
+        import recorded from "../data/responses.json";
+        import { panel } from "ai-panel";
+
+        export const model = recorded.provenance;
+
+        const find = (messages) => {
+          const key = JSON.stringify(messages.map(({ role, content }) => ({ role, content })));
+          return recorded.responses.find((r) => JSON.stringify(r.messages) === key);
+        };
+
+        export async function generate(messages, { show = true } = {}) {
+          const hit = find(messages);
+          if (!hit) {
+            const error = new Error("No recorded answer for these exact messages yet.");
+            error.name = "CourseNotice";
+            throw error;
+          }
+          if (show) panel.output("Model answer", hit.output, { id: "answer", badge: `recorded · ${model.label} · greedy` });
+          return hit.output;
+        }
+
+        // The token counts the model's own tokenizer gave when the answer was recorded (the prompt includes
+        // the chat template's own tokens): { promptTokens, outputTokens }, or null when not recorded.
+        export function tokensFor(messages) {
+          const hit = find(messages);
+          return hit ? { promptTokens: hit.promptTokens, outputTokens: hit.outputTokens } : null;
+        }
+      src/main.js: |
+        import data from "../data/phrases.json";
+        import { trainBigram } from "./bigram.js";
+        import { showSplit, showTokenCounts, showModel, showNextWords, showContinuations } from "./report.js";
+
+        // A toy next-word model, trained here in the page on the shop's phrases:
+
+        // Tokens: the toy model splits a text at its spaces, one word per token.
+        showSplit("လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး");
+
+        // One customer message in two languages, counted by a real model's own tokenizer.
+        const messages = [
+          ["မြန်မာ", "မနက်ဖြန် မနက်အတွက် လက်ဖက်ရည် နှစ်ခွက် ကြိုမှာချင်ပါတယ်။"],
+        ];
+        showTokenCounts(messages);
+      src/ml.js: |
+        // Tiny machine learning in plain JavaScript: everything here runs in the page, with no
+        // downloads, and gives the same numbers every time.
+
+        // Burmese has no spaces between words, so the models count syllables instead.
+        // A syllable starts at a consonant, unless that consonant is stacked under the one
+        // before it (္) or killed by an asat (်) and so ends the syllable before it.
+        const STARTS = /[က-ဪဿ၌-၏]/;
+        export function syllables(word) {
+          const chars = [...word];
+          const out = [];
+          for (let i = 0; i < chars.length; i++) {
+            const next = chars[i + 1] === "့" ? chars[i + 2] : chars[i + 1];
+            const starts = STARTS.test(chars[i]) && chars[i - 1] !== "္" && next !== "်" && next !== "္";
+            if (starts || !out.length) out.push(chars[i]);
+            else out[out.length - 1] += chars[i];
+          }
+          return out;
+        }
+
+        export function tokenize(text) {
+          const tokens = [];
+          for (const [piece] of text.toLowerCase().matchAll(/[a-z0-9']+|[၀-၉]+|[က-ဿ၌-႟]+/g)) {
+            if (/^[က-ဿ၌-႟]/.test(piece)) tokens.push(...syllables(piece));
+            else tokens.push(piece);
+          }
+          return tokens;
+        }
+
+        // Naive Bayes: count how often each token appears with each label, then score a new
+        // text by how well its tokens fit each label.
+        export function trainNaiveBayes(examples) {
+          const labels = {};
+          const vocab = new Set();
+          for (const { text, label } of examples) {
+            const c = (labels[label] ??= { docs: 0, tokens: 0, counts: {} });
+            c.docs += 1;
+            for (const t of tokenize(text)) {
+              c.counts[t] = (c.counts[t] ?? 0) + 1;
+              c.tokens += 1;
+              vocab.add(t);
+            }
+          }
+          return { labels, vocab, total: examples.length };
+        }
+
+        export function predict(model, text) {
+          const tokens = tokenize(text).filter((t) => model.vocab.has(t));
+          const logs = {};
+          for (const [label, c] of Object.entries(model.labels)) {
+            let score = Math.log(c.docs / model.total);
+            for (const t of tokens) score += Math.log(((c.counts[t] ?? 0) + 1) / (c.tokens + model.vocab.size));
+            logs[label] = score;
+          }
+          const max = Math.max(...Object.values(logs));
+          const sum = Object.values(logs).reduce((s, v) => s + Math.exp(v - max), 0);
+          return Object.fromEntries(Object.entries(logs).map(([label, v]) => [label, Math.exp(v - max) / sum]));
+        }
+
+        export function topLabel(scores) {
+          return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+        }
+
+        // k nearest neighbours: find the training texts that share the most tokens with a new one.
+        function vector(text) {
+          const v = {};
+          for (const t of tokenize(text)) v[t] = (v[t] ?? 0) + 1;
+          return v;
+        }
+        function cosine(a, b) {
+          let dot = 0;
+          for (const t in a) if (t in b) dot += a[t] * b[t];
+          const norm = (v) => Math.sqrt(Object.values(v).reduce((s, x) => s + x * x, 0));
+          return dot === 0 ? 0 : dot / (norm(a) * norm(b));
+        }
+        export function nearest(examples, text, k = 3) {
+          const q = vector(text);
+          return examples
+            .map((e, i) => ({ ...e, similarity: cosine(q, vector(e.text)), i }))
+            .sort((a, b) => b.similarity - a.similarity || a.i - b.i)
+            .slice(0, k)
+            .map(({ i, ...rest }) => rest);
+        }
+        export function knnPredict(examples, text, k = 3) {
+          const votes = {};
+          for (const e of examples) votes[e.label] = 0;
+          for (const n of nearest(examples, text, k)) votes[n.label] += 1 / k;
+          return votes;
+        }
+
+        // A straight line through a series (least squares): the simplest forecast.
+        export function fitLine(ys) {
+          const n = ys.length;
+          const mx = (n - 1) / 2;
+          const my = ys.reduce((s, y) => s + y, 0) / n;
+          let num = 0;
+          let den = 0;
+          ys.forEach((y, x) => {
+            num += (x - mx) * (y - my);
+            den += (x - mx) ** 2;
+          });
+          const slope = den === 0 ? 0 : num / den;
+          const intercept = my - slope * mx;
+          return { slope, intercept, at: (x) => intercept + slope * x };
+        }
+
+        export function meanAbsoluteError(actual, predicted) {
+          return actual.reduce((s, a, i) => s + Math.abs(a - predicted[i]), 0) / actual.length;
+        }
+
+        // Accuracy, precision, recall and F1 for one label (the "positive" class).
+        export function scoreReport(rows, positive) {
+          let tp = 0, fp = 0, fn = 0, correct = 0;
+          for (const { expected, predicted } of rows) {
+            if (expected === predicted) correct += 1;
+            if (predicted === positive && expected === positive) tp += 1;
+            if (predicted === positive && expected !== positive) fp += 1;
+            if (predicted !== positive && expected === positive) fn += 1;
+          }
+          const precision = tp + fp === 0 ? 0 : tp / (tp + fp);
+          const recall = tp + fn === 0 ? 0 : tp / (tp + fn);
+          const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+          return { accuracy: correct / rows.length, precision, recall, f1 };
+        }
+
+        // A shuffle that gives the same order every time for the same seed.
+        export function shuffle(list, seed = 1) {
+          let s = seed >>> 0;
+          const random = () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+          const out = [...list];
+          for (let i = out.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1));
+            [out[i], out[j]] = [out[j], out[i]];
+          }
+          return out;
+        }
+
+        // A seeded random number generator (0 ≤ x < 1): the same seed gives the same numbers every time.
+        export function rng(seed = 1) {
+          let s = seed >>> 0;
+          return () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        // Logistic regression for tabular data: one weight per input column, learned by gradient descent
+        // from zero, on columns scaled to mean 0 and spread 1. Same data and settings → same weights.
+        //   const model = trainLogistic(rows, { columns: ["visits_30d", "days_since_last"], label: "stopped" });
+        //   model.weights → { visits_30d: -1.2, days_since_last: 1.9 } (on the scaled columns)
+        //   model.probability(row) → 0.72
+        export function trainLogistic(rows, { columns, label, epochs = 400, rate = 0.5 } = {}) {
+          const n = rows.length;
+          const mean = {};
+          const spread = {};
+          for (const c of columns) {
+            mean[c] = rows.reduce((s, r) => s + Number(r[c]), 0) / n;
+            const v = rows.reduce((s, r) => s + (Number(r[c]) - mean[c]) ** 2, 0) / n;
+            spread[c] = Math.sqrt(v) || 1;
+          }
+          const scaled = (r) => columns.map((c) => (Number(r[c]) - mean[c]) / spread[c]);
+          const xs = rows.map(scaled);
+          const ys = rows.map((r) => Number(r[label]));
+          const w = columns.map(() => 0);
+          let b = 0;
+          const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+          for (let e = 0; e < epochs; e++) {
+            const gw = columns.map(() => 0);
+            let gb = 0;
+            for (let i = 0; i < n; i++) {
+              const p = sigmoid(xs[i].reduce((s, x, j) => s + x * w[j], b));
+              const err = p - ys[i];
+              for (let j = 0; j < w.length; j++) gw[j] += err * xs[i][j];
+              gb += err;
+            }
+            for (let j = 0; j < w.length; j++) w[j] -= (rate * gw[j]) / n;
+            b -= (rate * gb) / n;
+          }
+          const probability = (r) => sigmoid(scaled(r).reduce((s, x, j) => s + x * w[j], b));
+          return { columns, label, weights: Object.fromEntries(columns.map((c, j) => [c, w[j]])), bias: b, probability };
+        }
+
+        // Rows → { expected, predicted } at a threshold, ready for scoreReport(rows, "yes").
+        export function atThreshold(model, rows, threshold = 0.5) {
+          return rows.map((r) => ({
+            ...r,
+            probability: model.probability(r),
+            expected: Number(r[model.label]) === 1 ? "yes" : "no",
+            predicted: model.probability(r) >= threshold ? "yes" : "no",
+          }));
+        }
+      src/report.js: |
+        // Draws this lesson's cards on the AI panel and the two rows of buttons above it.
+        import { panel } from "ai-panel";
+        import { tokensFor, model as recorded } from "./llm.js";
+        import { splitWords, nextWords, writeOn } from "./bigram.js";
+        import { choices } from "./ui.js";
+
+        const TOY = "ဒီ page ထဲမှာ train ထားတဲ့ model";
+
+        // How this lesson's toy model splits a text into tokens (plain code, no model needed).
+        export function showSplit(text) {
+          const tokens = splitWords(text);
+          panel.output(`Toy model tokens: ${tokens.length}`, tokens.join("  ·  "), { id: "split", badge: "rules · AI မပါ" });
+        }
+
+        // Each message's prompt tokens, as the real model's own tokenizer counted them when its answers
+        // were recorded (data/PROVENANCE.md). The count includes the chat template's tokens around it.
+        export function showTokenCounts(messages) {
+          const rows = messages.map(([language, text]) => {
+            const counted = tokensFor([{ role: "user", content: text }]);
+            return { language, tokens: counted ? counted.promptTokens : "not recorded" };
+          });
+          panel.table("Prompt tokens", rows, { id: "counts", columns: ["language", "tokens"], badge: `recorded · ${recorded.label} tokenizer` });
+        }
+
+        export function showModel(model) {
+          panel.metrics("Toy next-word model", { phrases: model.phrases, vocabulary: model.words, "word pairs": model.pairs }, { id: "toy", badge: TOY });
+        }
+
+        // The two settings every generation takes; the buttons above the panel change them.
+        const settings = { temperature: 1, maxTokens: 8 };
+        // Two runs of the same start word, each with its own random numbers (seeds 16 and 22).
+        const SEEDS = [16, 22];
+        let next = null;
+
+        const drawNext = () =>
+          panel.scores(`Next word after ${next.start} · temperature ${settings.temperature}`, nextWords(next.model, next.start, settings.temperature), { id: "next", badge: TOY });
+
+        export function showNextWords(model, start) {
+          next = { model, start };
+          drawNext();
+        }
+
+        export function showContinuations(model, start) {
+          const drawRuns = () =>
+            panel.table(
+              `Two runs · temperature ${settings.temperature} · max tokens ${settings.maxTokens}`,
+              SEEDS.map((seed, i) => ({ run: i + 1, text: writeOn(model, start, { ...settings, seed }) })),
+              { id: "runs", columns: ["run", "text"], badge: TOY },
+            );
+          const redraw = () => {
+            if (next) drawNext();
+            drawRuns();
+          };
+          choices("temperature", [0, 1, 2], (t) => ((settings.temperature = t), redraw()), { selected: settings.temperature });
+          choices("max-tokens", [4, 8, 16], (n) => ((settings.maxTokens = n), redraw()), { label: "max tokens", selected: settings.maxTokens });
+          drawRuns();
+        }
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Intelligence is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 560,
+        height: 45,
+        text: "ဒီနေ့ · generative AI နဲ့ token",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board B: what generative AI makes (violet = what a model produces), our tea-shop example in white.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Generative AI · အသစ် ဖန်တီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-write,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 385,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-write-t,
+        kind: text,
+        x: 318,
+        y: 244,
+        width: 300,
+        height: 40,
+        text: "စာ ရေး · ပြင်",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: g-write-e,
+        kind: text,
+        x: 318,
+        y: 292,
+        width: 350,
+        height: 38,
+        text: "menu ဖော်ပြချက် မူကြမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-sum,
+        kind: rectangle,
+        x: 705,
+        y: 230,
+        width: 390,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-sum-t,
+        kind: text,
+        x: 723,
+        y: 244,
+        width: 300,
+        height: 40,
+        text: "အနှစ်ချုပ်",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: g-sum-e,
+        kind: text,
+        x: 723,
+        y: 292,
+        width: 350,
+        height: 38,
+        text: "review ရှည်ရှည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-code,
+        kind: rectangle,
+        x: 300,
+        y: 370,
+        width: 385,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-code-t,
+        kind: text,
+        x: 318,
+        y: 384,
+        width: 300,
+        height: 40,
+        text: "code ရေး",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: g-code-e,
+        kind: text,
+        x: 318,
+        y: 432,
+        width: 350,
+        height: 38,
+        text: "developer tool",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-image,
+        kind: rectangle,
+        x: 705,
+        y: 370,
+        width: 390,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-image-t,
+        kind: text,
+        x: 723,
+        y: 384,
+        width: 300,
+        height: 40,
+        text: "ပုံ",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: g-image-e,
+        kind: text,
+        x: 723,
+        y: 432,
+        width: 350,
+        height: 38,
+        text: "page ရဲ့ banner",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-vs,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 700,
+        height: 40,
+        text: "predictive · ခန့်မှန်း  →  generative · အသစ် ထုတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: predictive's two labels (left) vs the next-word fan (right); the numbers are the toy
+    # model's real probabilities at temperature 1 (ai-next) and Gemma's measured vocabulary.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 600,
+        height: 50,
+        text: "နောက် token ကို ခန့်မှန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-pred-t,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 230,
+        height: 38,
+        text: "member model",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: c-yes, kind: rectangle, x: 300, y: 275, width: 200, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: c-yes-t,
+        kind: text,
+        x: 318,
+        y: 287,
+        width: 160,
+        height: 38,
+        text: "ဆက်လာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-no, kind: rectangle, x: 300, y: 350, width: 200, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: c-no-t,
+        kind: text,
+        x: 318,
+        y: 362,
+        width: 160,
+        height: 38,
+        text: "မလာတော့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-pred-n,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 220,
+        height: 38,
+        text: "label 2 ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-gen-t,
+        kind: text,
+        x: 580,
+        y: 225,
+        width: 250,
+        height: 38,
+        text: "language model",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-start,
+        kind: text,
+        x: 580,
+        y: 300,
+        width: 160,
+        height: 38,
+        text: "လက်ဖက်ရည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 745,
+        y: 300,
+        width: 50,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-w1,
+        kind: text,
+        x: 810,
+        y: 265,
+        width: 260,
+        height: 38,
+        text: "ချိုဆိမ့်  27.8%",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-w2,
+        kind: text,
+        x: 810,
+        y: 305,
+        width: 260,
+        height: 38,
+        text: "ပေါ့ဆိမ့်  16.7%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-w3,
+        kind: text,
+        x: 810,
+        y: 345,
+        width: 260,
+        height: 38,
+        text: "ကျဆိမ့်  11.1%",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-w4,
+        kind: text,
+        x: 810,
+        y: 385,
+        width: 260,
+        height: 38,
+        text: "…",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-scale,
+        kind: text,
+        x: 580,
+        y: 450,
+        width: 480,
+        height: 38,
+        text: "Gemma · token 262,144 ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-data,
+        kind: text,
+        x: 580,
+        y: 500,
+        width: 480,
+        height: 38,
+        text: "train · နမူနာ သန်းထောင်ချီ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board D: the generative loop, top to bottom; today's step (inference) in orange.
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 460,
+        height: 50,
+        text: "Generative AI loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-define,
+        kind: rectangle,
+        x: 300,
+        y: 210,
+        width: 480,
+        height: 52,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-define-t,
+        kind: text,
+        x: 320,
+        y: 218,
+        width: 300,
+        height: 38,
+        text: "define",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 264,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-base,
+        kind: rectangle,
+        x: 300,
+        y: 290,
+        width: 480,
+        height: 52,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-base-t,
+        kind: text,
+        x: 320,
+        y: 298,
+        width: 300,
+        height: 38,
+        text: "base model",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 344,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-prompt,
+        kind: rectangle,
+        x: 300,
+        y: 370,
+        width: 480,
+        height: 52,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-prompt-t,
+        kind: text,
+        x: 320,
+        y: 378,
+        width: 340,
+        height: 38,
+        text: "prompt · context",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 424,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-infer,
+        kind: rectangle,
+        x: 300,
+        y: 450,
+        width: 480,
+        height: 52,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-infer-t,
+        kind: text,
+        x: 320,
+        y: 458,
+        width: 440,
+        height: 38,
+        text: "inference · post-processing",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 520,
+        y: 504,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-eval,
+        kind: rectangle,
+        x: 300,
+        y: 530,
+        width: 480,
+        height: 52,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-eval-t,
+        kind: text,
+        x: 320,
+        y: 538,
+        width: 400,
+        height: 38,
+        text: "evaluation · feedback",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l-back,
+        kind: text,
+        x: 810,
+        y: 540,
+        width: 280,
+        height: 38,
+        text: "↻ define ကို ပြန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l-today,
+        kind: text,
+        x: 810,
+        y: 420,
+        width: 280,
+        height: 38,
+        text: "ဒီနေ့ ·",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-today-2,
+        kind: text,
+        x: 810,
+        y: 456,
+        width: 280,
+        height: 38,
+        text: "temperature",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-today-3,
+        kind: text,
+        x: 810,
+        y: 492,
+        width: 280,
+        height: 38,
+        text: "max tokens",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-next,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 640,
+        height: 38,
+        text: "နောက် lesson · feature တစ်ခုနဲ့ အဆင့်တိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 45,
+        text: "member model နဲ့ language model",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 560,
+        height: 45,
+        text: "output က ဘာကွာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a1,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 640,
+        height: 45,
+        text: "predictive · label အနည်းငယ်ထဲက ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a2,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 720,
+        height: 45,
+        text: "generative · token အများကြီးထဲက ဆက်ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 640,
+        height: 40,
+        text: "ဒါကြောင့် စာအသစ် ရေးနိုင်ပါတယ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5106
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Generative AI ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ member တစ်ယောက်ချင်းစီ ဆိုင် ဆက်မလာတော့နိုင်တဲ့ ဖြစ်နိုင်ခြေကို model က
+      ရာခိုင်နှုန်းနဲ့ ခန့်မှန်းပေးတာ မြင်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ အဲဒီလို ခန့်မှန်းတဲ့ အလုပ်ကိုပဲ အများကြီး
+      ပိုကြီးတဲ့ အတိုင်းအတာနဲ့ လုပ်ပြီး၊ စာအသစ်တွေ ရေးပေးတဲ့ generative AI ကို လေ့လာပါမယ်။ [[mark:draw-mini]]
+      blueprint မှာ ကြည့်ရင်၊ ဒီနေ့ အဓိက ကြည့်မှာက Solution ထဲက intelligence အလွှာပါ။ [[mark:draw-today]] model က
+      စာကို ဘယ်လို ခွဲဖတ်ပြီး နောက် စကားလုံးကို ဘယ်လို ရွေးလဲ ဆိုတာ model သေးသေးလေး တစ်ခုနဲ့ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: generative
+    narration: >
+      [[mark:draw-gen]] generative AI ဆိုတာ သင်ယူထားတဲ့ pattern တွေကနေ စာ၊ ပုံ၊ code လို အသစ်တွေ ဖန်တီးပေးတဲ့
+      AI ပါ။ predictive AI က ရှိပြီးသား data ကနေ နောက် ဖြစ်လာမယ့်အရာကို ခန့်မှန်းပေမယ့်၊ generative AI ကတော့
+      မရှိသေးတဲ့ အရာ တစ်ခုကို ထုတ်ပေးတာပါ။ [[mark:draw-write]] ဥပမာ ဝန်ထမ်းတွေအတွက် menu ဖော်ပြချက် မူကြမ်း
+      ရေးပေးတာ၊ ရေးပြီးသား စာကို ပိုသပ်ရပ်အောင် ပြင်ပေးတာ၊ [[mark:draw-sum]] customer review ရှည်ရှည်တွေကို
+      အတိုချုပ်ပေးတာ၊ [[mark:draw-code]] developer တွေအတွက် code ရေးပေးတာ၊ [[mark:draw-image]] ဆိုင်ရဲ့ page
+      အတွက် banner ပုံ ဖန်တီးပေးတာ စတာတွေ ရှိပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "web.dev Learn AI: Glossary and concepts (generative AI)",
+          url: "https://web.dev/learn/ai/glossary",
+        }
+    actions:
+      - {
+          id: draw-gen,
+          type: whiteboard.apply,
+          at: { mark: draw-gen },
+          clear: true,
+          upsertIds: [g-title, g-vs],
+        }
+      - {
+          id: draw-write,
+          type: whiteboard.apply,
+          at: { mark: draw-write },
+          upsertIds: [g-write, g-write-t, g-write-e],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-sum,
+          type: whiteboard.apply,
+          at: { mark: draw-sum },
+          upsertIds: [g-sum, g-sum-t, g-sum-e],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-code,
+          type: whiteboard.apply,
+          at: { mark: draw-code },
+          upsertIds: [g-code, g-code-t, g-code-e],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-image,
+          type: whiteboard.apply,
+          at: { mark: draw-image },
+          upsertIds: [g-image, g-image-t, g-image-e],
+          drawMs: 1100,
+        }
+
+  - id: scale
+    chapter: "Predictive နဲ့ ဘာကွာလဲ"
+    narration: >
+      [[mark:draw-next]] ဒီလို model အများစုကို neural network နဲ့ transformer လို့ ခေါ်တဲ့ ပုံစံတွေနဲ့ ဆောက်ထားပါတယ်။
+      သူတို့ train လုပ်ရင်း သင်ယူတာက ရှေ့က အပိုင်းတွေကို ကြည့်ပြီး နောက် အပိုင်း တစ်ခုကို ခန့်မှန်းတာပါ။ စာမှာဆိုရင်
+      အဲဒီ အပိုင်းလေးတွေကို token လို့ ခေါ်ပါတယ်။ token ဆိုတာ model က စာသားကို ဖတ်တဲ့အခါ ခွဲဖတ်တဲ့ အပိုင်းလေးတွေ
+      ဖြစ်ပြီး၊ စကားလုံး တစ်လုံး ဖြစ်ချင်မှ ဖြစ်ပါတယ်။ [[mark:draw-pred]] သင်္ချာအရ ကြည့်ရင် predictive AI နဲ့ သိပ်
+      မကွာပါဘူး။ member model က ဆက်လာမယ်၊ မလာတော့ဘူး ဆိုတဲ့ label နှစ်ခုထဲက တစ်ခုကို ရွေးပါတယ်။ [[mark:draw-fan]]
+      language model ကတော့ လက်ဖက်ရည် နောက်မှာ ချိုဆိမ့် လာမလား၊ ပေါ့ဆိမ့် လာမလား ဆိုတာကို token တစ်ခုချင်းရဲ့
+      ဖြစ်နိုင်ခြေနဲ့ ရွေးပါတယ်။ board ပေါ်က ဖြစ်နိုင်ခြေတွေကတော့ ခဏနေ train လုပ်မယ့် model သေးသေးလေးဆီက
+      ယူထားတာပါ။ [[mark:draw-scale]] ကွာတာက အတိုင်းအတာပါ။ ဒီ course ရဲ့ ကြိုမှတ်ထားတဲ့ အဖြေတွေကို ထုတ်ပေးခဲ့တဲ့
+      Gemma model ဆိုရင် ရွေးစရာ token နှစ်သိန်း ခြောက်သောင်းကျော် ရှိပါတယ်။ ဒီလို model တွေကို စာ နမူနာ
+      သန်းထောင်ချီနဲ့ train လုပ်ထားလို့၊ မမြင်ဖူးတဲ့ စာအသစ်တွေကိုတောင် ရေးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (the generative AI loop)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "Machine Learning Glossary: token",
+          url: "https://developers.google.com/machine-learning/glossary#token",
+        }
+      - {
+          title: "Gemma 4 E2B GGUF (tokenizer vocabulary: 262,144 tokens, read from the file's metadata)",
+          url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF",
+        }
+    actions:
+      - {
+          id: draw-next,
+          type: whiteboard.apply,
+          at: { mark: draw-next },
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-pred,
+          type: whiteboard.apply,
+          at: { mark: draw-pred },
+          upsertIds: [c-pred-t, c-yes, c-yes-t, c-no, c-no-t, c-pred-n],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-fan,
+          type: whiteboard.apply,
+          at: { mark: draw-fan },
+          upsertIds: [c-gen-t, c-start, c-arrow, c-w1, c-w2, c-w3, c-w4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-scale,
+          type: whiteboard.apply,
+          at: { mark: draw-scale },
+          upsertIds: [c-scale, c-data],
+          drawMs: 1500,
+        }
+
+  - id: tokens
+    chapter: "Token ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:close-scale]] ဒီ token တွေကို panel မှာ တကယ် ကြည့်ရအောင်။ [[mark:panel-ready]] ညာဘက် AI panel ရဲ့ ပထမ
+      card က ဆိုင်ရဲ့ စကားစု တစ်ခုကို token တွေ ခွဲထားတာပါ။ [[mark:sel-split]] ဒီ lesson ရဲ့ model သေးသေးလေးက
+      စာကို space နေရာတိုင်းမှာ ခွဲပြီး၊ စကားလုံး တစ်လုံးကို token တစ်ခုအဖြစ် ယူပါတယ်။ ဒါကြောင့် လက်ဖက်ရည်၊ ချိုဆိမ့်၊
+      ပူပူလေး ဆိုပြီး token သုံးခု ရပါတယ်။ စာ ခွဲတာ သက်သက်မို့ card ရဲ့ badge ကလည်း AI မပါဘူးလို့ ပြနေပါတယ်။
+      [[mark:read-counts]] တကယ့် model တွေကတော့ စာသားကို token တွေ ခွဲပေးတဲ့ tokenizer နဲ့ ခွဲပါတယ်။ အောက်က card ရဲ့
+      ဂဏန်းက Gemma ရဲ့ tokenizer ရေတွက်ခဲ့တာပါ။ model ရဲ့ အဖြေတွေကို ကြိုပြီး မှတ်ထားတုန်းက တစ်ခါတည်း ထွက်လာခဲ့လို့
+      badge ကလည်း ကြိုမှတ်ထားတာလို့ ပြနေပါတယ်။ [[mark:sel-burmese]] မနက်ဖြန် မနက်အတွက် လက်ဖက်ရည် နှစ်ခွက် ကြိုမှာချင်တယ်
+      ဆိုတဲ့ customer စာက token ၃၂ ခု ရှိပါတယ်။ [[mark:type-english]] အဓိပ္ပာယ် တူတဲ့ English စာကိုလည်း စာရင်းထဲ
+      ထည့်ကြည့်ရအောင်။ [[mark:read-english]] English စာကတော့ token ၂၄ ခုပဲ ရှိပါတယ်။ ဂဏန်း နှစ်ခုလုံးမှာ model ဆီ ပို့တဲ့အခါ စာရဲ့
+      အရှေ့နောက်မှာ ထည့်ရတဲ့ token တွေ အတူတူ ပါလို့၊ ကွာတဲ့ ရှစ်ခုက စာ ကိုယ်တိုင်ကြောင့်ပါ။ [[mark:why-tokens]] ဒါက
+      အရေးကြီးပါတယ်။ server ပေါ်က model API အများစုက token အရေအတွက်ပေါ် မူတည်ပြီး ငွေ
+      တောင်းပြီး၊ token များလေ အဖြေ ရဖို့ ကြာလေ
+      ဖြစ်လို့ပါ။ model တစ်ခါ ဖတ်နိုင်တဲ့ token အရေအတွက်ကိုလည်း ကန့်သတ်ထားလို့၊ မြန်မာလို သုံးမယ့် feature တွေမှာ ဒါကို
+      ကြိုတွက်ထားရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "Gemini API: Understand and count tokens (cost and limits per token)",
+          url: "https://aistudio.google.com/docs/tokens",
+        }
+    actions:
+      - { id: close-scale, type: whiteboard.apply, at: { mark: close-scale }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-two-cards
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - {
+          id: open-main,
+          type: workspace.openFile,
+          at: { afterAction: expect-two-cards },
+          path: src/main.js,
+        }
+      - id: sel-split
+        type: editor.select
+        at: { mark: sel-split }
+        target: { file: src/main.js, text: 'showSplit("လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး");', occurrence: 1 }
+      - id: expect-split
+        type: expect.preview
+        at: { afterAction: sel-split }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-split }
+        attribute: { name: data-label, value: "Toy model tokens: 3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-counts-1
+        type: expect.preview
+        at: { mark: read-counts }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-counts }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: sel-burmese
+        type: editor.select
+        at: { mark: sel-burmese }
+        target:
+          { file: src/main.js, text: '"မနက်ဖြန် မနက်အတွက် လက်ဖက်ရည် နှစ်ခွက် ကြိုမှာချင်ပါတယ်။"', occurrence: 1 }
+      - id: expect-burmese-32
+        type: expect.preview
+        at: { afterAction: sel-burmese }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-counts-1 }
+        textContains: "မြန်မာ32"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-english
+        type: editor.type
+        at: { mark: type-english }
+        target:
+          {
+            file: src/main.js,
+            after: "  [\"မြန်မာ\", \"မနက်ဖြန် မနက်အတွက် လက်ဖက်ရည် နှစ်ခွက် ကြိုမှာချင်ပါတယ်။\"],\n",
+            occurrence: 1,
+          }
+        text: "  [\"English\", \"I'd like to pre-order two milk teas for tomorrow morning.\"],\n"
+        cadence: line-by-line
+      - id: expect-counts-2
+        type: expect.preview
+        at: { afterAction: type-english }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-counts }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-english-24
+        type: expect.preview
+        at: { afterAction: expect-counts-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-counts-2 }
+        textContains: "English24"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-counts-badge
+        type: expect.preview
+        at: { mark: read-english }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-counts-badge }
+        textContains: "recorded · Gemma 4 E2B tokenizer"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: toy
+    chapter: "Model သေးသေးလေး train လုပ်ရအောင်"
+    narration: >
+      [[mark:type-train]] အခု ဆိုင်ရဲ့ စကားစုတွေနဲ့ နောက် token ကို ခန့်မှန်းတဲ့ model တစ်ခု train လုပ်ပါမယ်။ ဒီ
+      lesson အတွက် ရေးထားတဲ့ model သေးသေးလေး ဖြစ်ပြီး၊ ဒီ page ထဲမှာပဲ train လုပ်တာပါ။ [[mark:read-toy]] Toy model
+      card မှာ lesson အတွက် ရေးထားတဲ့ နမူနာ စကားစု ၈၀ ထဲမှာ မတူတဲ့ token ၅၁ ခု ရှိပြီး၊ ဘယ် token နောက်မှာ ဘယ် token
+      လာလဲ ဆိုတဲ့ အတွဲ ၁၆၆ မျိုး တွေ့တယ်လို့ ပြနေပါတယ်။ ဒီ model က အဲဒီ အတွဲတွေကို ရေတွက်ထားရုံပါပဲ။ token ၅၁ ခုနဲ့
+      နှစ်သိန်းကျော်၊ စကားစု ၈၀ နဲ့ သန်းထောင်ချီ ဆိုတော့ အတိုင်းအတာ ဘယ်လောက် ကွာလဲ မြင်နိုင်ပါတယ်။ [[mark:type-next]] ဒါဆို လက်ဖက်ရည် နောက်မှာ ဘာလာနိုင်လဲ
+      ကြည့်ရအောင်။ [[mark:read-next]] Next word card မှာ ဖြစ်နိုင်ခြေ အများဆုံးက
+      ချိုဆိမ့် ဖြစ်ပြီး ၂၈ ရာခိုင်နှုန်းလောက် ရှိပါတယ်။ ပေါ့ဆိမ့် က ၁၇ ရာခိုင်နှုန်းလောက် ရှိပြီး၊ ကျန်တဲ့ ငါးခုက ၁၁
+      ရာခိုင်နှုန်းစီ ပါ။ စကားစုတွေထဲမှာ လက်ဖက်ရည် နောက်က ချိုဆိမ့် အများဆုံး လိုက်လာလို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (the generative AI loop)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - id: type-train
+        type: editor.type
+        at: { mark: type-train }
+        target:
+          {
+            file: src/main.js,
+            after: "// A toy next-word model, trained here in the page on the shop's phrases:\n",
+            occurrence: 1,
+          }
+        text: "const model = trainBigram(data.phrases);\nshowModel(model);\n"
+        cadence: line-by-line
+      - id: expect-three-cards
+        type: expect.preview
+        at: { afterAction: type-train }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-phrases
+        type: expect.preview
+        at: { afterAction: expect-three-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-toy-1 }
+        attribute: { name: data-value, value: "80" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-vocab
+        type: expect.preview
+        at: { afterAction: expect-phrases }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-toy-2 }
+        attribute: { name: data-value, value: "51" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-pairs
+        type: expect.preview
+        at: { afterAction: expect-vocab }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-toy-3 }
+        attribute: { name: data-value, value: "166" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-next
+        type: editor.type
+        at: { mark: type-next }
+        target:
+          { file: src/main.js, after: "const model = trainBigram(data.phrases);\n", occurrence: 1 }
+        text: "showNextWords(model, \"လက်ဖက်ရည်\");\n"
+        cadence: line-by-line
+      - id: expect-next-top
+        type: expect.preview
+        at: { afterAction: type-next }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-next }
+        attribute: { name: data-top, value: "ချိုဆိမ့်" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-next-count
+        type: expect.preview
+        at: { afterAction: expect-next-top }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-next }
+        attribute: { name: data-count, value: "7" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-next-1
+        type: expect.preview
+        at: { afterAction: expect-next-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-next-1 }
+        attribute: { name: data-score, value: "0.2778" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-next-2
+        type: expect.preview
+        at: { afterAction: expect-next-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-next-2 }
+        attribute: { name: data-score, value: "0.1667" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-next-3
+        type: expect.preview
+        at: { afterAction: expect-next-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-next-7 }
+        attribute: { name: data-score, value: "0.1111" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: sampling
+    chapter: "Temperature နဲ့ max tokens"
+    narration: >
+      [[mark:type-runs]] ဒါဆို model ကို လက်ဖက်ရည် ကနေ စပြီး ဆက်ရေးခိုင်းကြည့်ရအောင်။ [[mark:read-runs]] model က နောက်
+      token ကို ဖြစ်နိုင်ခြေအလိုက် ကျပန်း ရွေးပြီး၊ ရွေးပြီးသား token နောက်မှာ ထပ်ရွေးတာကို ဆက်တိုက် လုပ်သွားပါတယ်။
+      ဒီလို ဖြစ်နိုင်ခြေအလိုက် ရွေးတာကို sampling လို့ ခေါ်ပါတယ်။ [[mark:read-diff]] Two runs card မှာ တူတူပဲ နှစ်ခါ
+      ရေးခိုင်းထားပေမယ့်၊ နှစ်ခုလုံး လက်ဖက်ရည် နို့စိမ်း တစ်ခွက် နဲ့ စပြီး ပထမက သံပုရာရည် ဘက်၊ ဒုတိယက ကော်ဖီ ဘက်
+      ရောက်သွားပါတယ်။ ဒါကြောင့် generative AI က deterministic မဟုတ်ပါဘူး။ input တူရင်တောင် output တူမယ်လို့ အာမ
+      မခံနိုင်ပါဘူး။ ဒီ lesson မှာတော့ ပြန်ကြည့်တိုင်း တူအောင် run တစ်ခုစီကို seed ဂဏန်း ပုံသေ ပေးထားပါတယ်။
+      [[mark:read-controls]] panel ရဲ့ အပေါ်မှာ program က ဆွဲထားတဲ့ ခလုတ် နှစ်တန်းလည်း ပေါ်လာပါပြီ။ temperature ဆိုတာ
+      နောက် token ကို ရွေးတဲ့အခါ ဘယ်လောက် ကွဲကွဲပြားပြား ရွေးမလဲ ထိန်းတဲ့ setting ပါ။ max tokens ကတော့ အဖြေ ဘယ်လောက်
+      ရှည်ခွင့် ရှိလဲ ကန့်သတ်တဲ့ setting ဖြစ်ပြီး၊ အခု temperature တစ်၊ max tokens ရှစ် ကို ရွေးထားပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (inference and post-processing)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "web.dev Learn AI: Glossary and concepts (deterministic software)",
+          url: "https://web.dev/learn/ai/glossary",
+        }
+    actions:
+      - id: type-runs
+        type: editor.type
+        at: { mark: type-runs }
+        target: { file: src/main.js, after: "showNextWords(model, \"လက်ဖက်ရည်\");\n", occurrence: 1 }
+        text: "showContinuations(model, \"လက်ဖက်ရည်\");\n"
+        cadence: line-by-line
+      - id: expect-four-cards
+        type: expect.preview
+        at: { afterAction: type-runs }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-run-1
+        type: expect.preview
+        at: { afterAction: expect-four-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-1 }
+        textContains: "လက်ဖက်ရည် နို့စိမ်း တစ်ခွက် အီကြာကွေးနဲ့။ သံပုရာရည်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-run-2
+        type: expect.preview
+        at: { afterAction: expect-run-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-2 }
+        textContains: "လက်ဖက်ရည် နို့စိမ်း တစ်ခွက်။ ကော်ဖီ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-t1-pressed
+        type: expect.preview
+        at: { mark: read-controls }
+        timeoutMs: 5000
+        target: { by: testId, value: temperature-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-max8-pressed
+        type: expect.preview
+        at: { afterAction: expect-t1-pressed }
+        timeoutMs: 5000
+        target: { by: testId, value: max-tokens-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: temperature
+    narration: >
+      [[mark:click-t0]] temperature ကို သုည နှိပ်ကြည့်ပါမယ်။ [[mark:read-t0]] Next word card မှာ ချိုဆိမ့် က ၁၀၀
+      ရာခိုင်နှုန်း ဖြစ်သွားပြီး ကျန်တာ အားလုံး သုည ဖြစ်သွားပါပြီ။ ဒါကြောင့် run နှစ်ခုလုံးက လက်ဖက်ရည် ချိုဆိမ့်
+      ပူပူလေး ဆိုတာကိုပဲ ထပ်ခါထပ်ခါ ရေးပါတယ်။ temperature နိမ့်ရင် အဖြေကို ကြိုသိရ လွယ်ပြီး၊ သုည ဆိုရင် အမြဲ
+      တူပါတယ်။ ဒါပေမဲ့ ဒီလို စာကြောင်း တစ်ကြောင်းတည်းကို ပြန်ပြန်ရေးနေတတ်ပါတယ်။ [[mark:click-t2]] အခု temperature ကို နှစ် ပြောင်းကြည့်ပါမယ်။ [[mark:read-t2]]
+      ဖြစ်နိုင်ခြေတွေ ပိုညီလာပြီး၊ ချိုဆိမ့် က ၂၀ ရာခိုင်နှုန်းလောက်ပဲ ကျန်ပါတော့တယ်။ ဒါကြောင့် ဖြစ်နိုင်ခြေ နည်းတဲ့
+      token တွေကိုလည်း ပိုရွေးလာပြီး၊ စာကြောင်းတွေ ပိုကွဲပြားလာပါတယ်။ [[mark:read-odd]] ဒါပေမဲ့ ထူးဆန်းတာတွေလည်း
+      ပါလာပါတယ်။ ပထမ run က မုန့်ဟင်းခါးကို ပဲဟင်းနဲ့ တွဲပေးထားပြီး၊ ဒုတိယ run က လက်ဖက်ရည်ကို
+      အေးအေး ချဉ်ချဉ် လို့ ရေးထားပါတယ်။ ဆိုင်မှာ ဒီလို မရောင်းပါဘူး။ ကပ်လျက် စကားလုံး နှစ်လုံးတိုင်းကို စကားစုတွေထဲမှာ တွေ့ဖူးပေမယ့်၊ model
+      က menu ကို တကယ် မသိဘဲ ဖြစ်နိုင်တဲ့ token တွေကို ဆက်ရုံပဲ ဖြစ်လို့ပါ။ မှန်သလိုလို ထင်ရပေမယ့် မမှန်တာကို
+      ထုတ်ပေးတဲ့ hallucination က ဒီလိုနဲ့ စတာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (inference and post-processing; common pitfalls)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - id: click-t0
+        type: preview.click
+        at: { mark: click-t0 }
+        target: { by: testId, value: temperature-1 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-t0-next
+        type: expect.preview
+        at: { afterAction: click-t0 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-next-1 }
+        attribute: { name: data-score, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-t0-run-1
+        type: expect.preview
+        at: { afterAction: expect-t0-next }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-1 }
+        textContains: "လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး။ လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး။"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-t0-run-2
+        type: expect.preview
+        at: { afterAction: expect-t0-run-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-2 }
+        textContains: "လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး။ လက်ဖက်ရည် ချိုဆိမ့် ပူပူလေး။"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-t2
+        type: preview.click
+        at: { mark: click-t2 }
+        target: { by: testId, value: temperature-3 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-t2-next
+        type: expect.preview
+        at: { afterAction: click-t2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-next-1 }
+        attribute: { name: data-score, value: "0.2026" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-t2-cards
+        type: expect.preview
+        at: { afterAction: expect-t2-next }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-t2-run-1
+        type: expect.preview
+        at: { mark: read-odd }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-1 }
+        textContains: "မုန့်ဟင်းခါး ဟင်းရည် ပူပူ ပဲဟင်းနဲ့"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-t2-run-2
+        type: expect.preview
+        at: { afterAction: expect-t2-run-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-2 }
+        textContains: "လက်ဖက်ရည် အေးအေး ချဉ်ချဉ်။"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: max-tokens
+    narration: >
+      [[mark:click-max]] နောက်ဆုံး max tokens ကို လေး နှိပ်ကြည့်ပါမယ်။ [[mark:read-max]] run တိုင်းက token အသစ်
+      လေးခု ပြည့်တာနဲ့ ရပ်သွားပါတယ်။ ဒုတိယ run ဆိုရင် သံပုရာရည် ဆိုပြီး စကားစု အသစ် စတုန်းမှာပဲ ပြတ်သွားပါတယ်။
+      max tokens က အဖြေ ရှည်တာကို ကန့်သတ်ပေမယ့်၊ model က စာကို ပြီးအောင် ရေးပေးတာ မဟုတ်ဘဲ ကန့်သတ်ချက်
+      ရောက်တာနဲ့ ရပ်ရုံပါ။ token နည်းလေ ငွေ သက်သာပြီး မြန်လေ ဖြစ်ပေမယ့်၊ အဖြေ မပြည့်စုံမှာကိုလည်း ချိန်ဆရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (inference and post-processing)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - id: click-max
+        type: preview.click
+        at: { mark: click-max }
+        target: { by: testId, value: max-tokens-1 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-max-label
+        type: expect.preview
+        at: { afterAction: click-max }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs }
+        attribute: { name: data-label, value: "Two runs · temperature 2 · max tokens 4" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-max-run-2
+        type: expect.preview
+        at: { afterAction: expect-max-label }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-runs-2 }
+        textContains: "လက်ဖက်ရည် အေးအေး ချဉ်ချဉ်။ သံပုရာရည်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-max-pressed
+        type: expect.preview
+        at: { mark: read-max }
+        timeoutMs: 5000
+        target: { by: testId, value: max-tokens-1 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: loop
+    chapter: "Generative AI loop"
+    narration: >
+      [[mark:draw-loop]] ဒီ model သေးသေးလေးက generative AI ရဲ့ အဆင့် တစ်ဆင့်ကိုပဲ ပြတာပါ။ တကယ့် generative feature
+      တစ်ခုကို predictive AI လိုပဲ loop နဲ့ ဆောက်ပါတယ်။ use case ကို သတ်မှတ်၊ base model ကို ရွေး၊ prompt နဲ့ context
+      ကို ပြင်ဆင်ပြီး၊ model ကို run တဲ့ inference နဲ့ အဖြေကို စစ်ပြင်တဲ့ post processing ကို လုပ်ပါတယ်။ ပြီးရင်
+      evaluation လုပ်ပြီး user တွေရဲ့ feedback နဲ့ ပြန်ပတ်ပါတယ်။ [[mark:draw-loop-today]] ဒီနေ့ နှိပ်ကြည့်ခဲ့တဲ့
+      temperature နဲ့ max tokens က inference အဆင့်မှာ ညှိရတဲ့ setting တွေပါ။ [[mark:draw-loop-next]] ကျန်တဲ့
+      အဆင့်တွေကိုတော့ နောက် lesson မှာ ဆိုင်ရဲ့ feature တစ်ခုနဲ့ တစ်ဆင့်ချင်း ဆောက်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (the generative AI loop)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - {
+          id: draw-loop,
+          type: whiteboard.apply,
+          at: { mark: draw-loop },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              l-title,
+              l-define,
+              l-define-t,
+              l-a1,
+              l-base,
+              l-base-t,
+              l-a2,
+              l-prompt,
+              l-prompt-t,
+              l-a3,
+              l-infer,
+              l-infer-t,
+              l-a4,
+              l-eval,
+              l-eval-t,
+              l-back,
+            ],
+          drawMs: 4500,
+        }
+      - {
+          id: draw-loop-today,
+          type: whiteboard.apply,
+          at: { mark: draw-loop-today },
+          upsertIds: [l-today, l-today-2, l-today-3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-loop-next,
+          type: whiteboard.apply,
+          at: { mark: draw-loop-next },
+          upsertIds: [l-next],
+          drawMs: 900,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ member တွေကို သတိပေးတဲ့ model နဲ့ စာ ဆက်ရေးတဲ့ language model ရဲ့ output
+      က အဓိက ဘာကွာလဲ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ language model က
+      ရွေးစရာ အများကြီးထဲကနေ စာအသစ် ဖန်တီးတာပါ။ ဘာကြောင့်လဲဆိုတော့ member model က ကြိုသတ်မှတ်ထားတဲ့ label
+      နှစ်ခုထဲက တစ်ခုကိုပဲ ရွေးပေမယ့်၊ language model ကတော့ token အများကြီးထဲက နောက် token ကို တစ်ခုချင်း ဆက်တိုက်
+      ရွေးသွားလို့ပါ။ ဒါကြောင့် ဘယ်မှာမှ မရှိသေးတဲ့ စာကြောင်း အသစ်တွေ ထွက်လာပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (Check your understanding)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a1, z-a2, z-a-note],
+          drawMs: 2000,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ generative AI က predictive AI လိုပဲ ခန့်မှန်းပေမယ့်၊ token အများကြီးထဲက
+      နောက် token ကို တစ်ခုချင်း ရွေးပြီး စာအသစ် ရေးပါတယ်။ [[mark:sel-counts]] ကုန်ကျစရိတ်နဲ့ အချိန်က token
+      အရေအတွက်ပေါ် မူတည်ပြီး၊ ဒီ ဥပမာမှာတော့ မြန်မာစာက token ပိုများပါတယ်။ [[mark:sel-runs]] temperature က ရွေးတာကို
+      ကြိုသိရ ပိုလွယ်အောင် ဒါမှမဟုတ် ပိုကွဲပြားအောင် ညှိပြီး၊ max tokens က အရှည်ကို ကန့်သတ်ပါတယ်။ model က
+      ဖြစ်နိုင်တာကိုပဲ ဆက်ရေးလို့ မမှန်တာလည်း ရေးနိုင်ပါတယ်။ နောက် lesson မှာတော့ generative AI ရဲ့ loop ကို
+      ဝန်ထမ်းတွေအတွက် menu ဖော်ပြချက် helper တစ်ခုနဲ့ အဆင့်လိုက် ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-counts
+        type: editor.select
+        at: { mark: sel-counts }
+        target: { file: src/main.js, text: "showTokenCounts(messages);", occurrence: 1 }
+      - id: sel-runs
+        type: editor.select
+        at: { mark: sel-runs }
+        target: { file: src/main.js, text: 'showContinuations(model, "လက်ဖက်ရည်");', occurrence: 1 }
+      - {
+          id: expect-final-code,
+          type: expect.file,
+          at: { afterAction: sel-runs },
+          path: src/main.js,
+          contains: "const model = trainBigram(data.phrases);\nshowNextWords(model, \"လက်ဖက်ရည်\");\nshowContinuations(model, \"လက်ဖက်ရည်\");\nshowModel(model);\n",
+        }
+      - {
+          id: expect-final-english,
+          type: expect.file,
+          at: { afterAction: expect-final-code },
+          path: src/main.js,
+          contains: "  [\"English\", \"I'd like to pre-order two milk teas for tomorrow morning.\"],\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
