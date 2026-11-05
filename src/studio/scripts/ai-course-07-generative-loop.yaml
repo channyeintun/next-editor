@@ -1,0 +1,2308 @@
+# AI course, lesson 07: the generative AI loop (Burmese, hands-on).
+#
+# Start state (ws/): data/helper.json (datasets/, COURSE-KIT §4.5–4.6, sample data); src/llm.js +
+# data/responses.json + data/PROVENANCE.md (base-llm; three answers of Gemma 4 E2B, greedy, recorded with
+# tools/record-llm.ts); src/page.js (pinned) draws the item buttons in #app (ui.js choices), the
+# picked item's counter notes below them (`item-notes`, so the narration about the notes is on screen), and the
+# cards `ai-checked` (each description, its letters, the first rule it fails; badge `rules · AI မပါ`)
+# and, once called, `ai-staff` (only the passing descriptions, badge `AI ရေးထားတာ · စည်းကမ်း N ခုနဲ့
+# စစ်ထားပါတယ်`). src/main.js: the system prompt, the request (instruction + item name), an empty
+# rules list, describe(item) → generate() (`ai-answer`, badge `recorded · Gemma 4 E2B · greedy`) and
+# showChecked; the first item (n03 အုန်းနို့ခေါက်ဆွဲ) is described when the page runs.
+#
+# Edits, all insert-only and line-by-line (no half-typed line ever runs or is looked up):
+#   1. the notes line in the request     answer: generic + "နို့ထွက်ပရိုတင်း" → Friday, chicken, thick broth, + invented "စပ်စပ်"
+#   2. the claim rule                     Checked · rules: 1, all ✓
+#   3. the length rule                    Checked · rules: 2, all ✓ (21 / 27 / 28 letters)
+#   4. showForStaff                       For လှလှ: three lines, the transparency badge
+# Click (after the last edit): item-2 (e06 မုန့်ဟင်းခါး အထူး) → its answer has "အကောင်းဆုံး" in line 2:
+# Checked row 2 "✗ no claim", For လှလှ keeps two lines. All recorded answers are in ws/data/responses.json.
+#
+# Boards: (A) mini blueprint, Intelligence highlighted; (B) the helper's loop, filled step by step
+# (define and base model at the start, the rest after the hands-on part); (C) evaluation and feedback;
+# (D) pitfalls → fixes; (Z) the quiz. The board is a modal: the panel is seen from `prompt` to `post`
+# and in the recap.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-07-generative-loop.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-07-generative-loop
+  title: "AI course 07: Generative AI ရဲ့ loop"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/PROVENANCE.md: |
+        # Where these answers come from
+
+        Every answer in `responses.json` is a real answer from a real model, recorded ahead of time with
+        `tools/record-llm.ts` on 2026-11-05. The lesson does not run the model live:
+        `src/llm.js` looks up the exact same messages here and returns the recorded answer.
+
+        - Model: Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF
+        - File: https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf (sha256 `b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f`, license apache-2.0)
+        - Runtime: node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1
+        - Prompt: the model's own chat template from the GGUF file, thinking off
+        - Decoding: greedy (temperature 0), at most 300 new tokens, so the same messages always give the same answer
+        - Answers: 3
+      data/helper.json: |
+        {
+         "note": "The staff's menu-description helper (lessons 07, 15-19), written for the AI course. newItems are the ideal inputs; evalSet adds the messy cases lessons 17-18 test with. checks lists the code checks that apply to each case.",
+         "contract": {
+          "input": "item name + လှလှ's notes + style (friendly or short)",
+          "output": "JSON {\"descriptions\": [\"…\", \"…\", \"…\"]}",
+          "constraints": ["exactly three descriptions", "each at most 60 graphemes (Intl.Segmenter)", "no price", "no phone number", "no claim the shop can't check (အကောင်းဆုံး, နံပါတ်တစ်, အခမဲ့, best, free)", "no emoji unless the style asks"]
+         },
+         "newItems": [
+          { "id": "n01", "name": "ထန်းလျက် ကော်ဖီ", "price": 2000, "notes": "ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်", "style": "friendly" },
+          { "id": "n02", "name": "ကြက်ဥ ပလာတာ", "price": 1800, "notes": "ကြက်ဥ နှစ်လုံး၊ ကြွပ်ကြွပ်၊ ပဲဟင်းနဲ့ တွဲပေးတယ်", "style": "short" },
+          { "id": "n03", "name": "အုန်းနို့ခေါက်ဆွဲ", "price": 3000, "notes": "သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်", "style": "friendly" },
+          { "id": "n04", "name": "မုန့်လက်ဆောင်း", "price": 1500, "notes": "နွေရာသီ အထူး၊ အုန်းနို့နဲ့ ထန်းလျက်ရည်", "style": "friendly" },
+          { "id": "n05", "name": "ထမင်းကြော် ပဲပြုတ်", "price": 2000, "notes": "မနက် ၁၀ နာရီ အထိပဲ ရမယ်", "style": "short" }
+         ],
+         "evalSet": [
+          { "id": "n01", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n02", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n03", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n04", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n05", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e01", "kind": "emoji notes", "name": "ဖာလူဒါ အထူး", "price": 3000, "notes": "😋🔥 ချိုချို", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e02", "kind": "English notes", "name": "လက်ဖက်ရည် အေး", "price": 1800, "notes": "less sweet, no condensed milk, iced", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e03", "kind": "very long notes", "name": "ရိုးရာ လက်ဖက်ရည်", "price": 1500, "notes": "လက်ဖက်ခြောက်ကို ရေနွေးနဲ့ ငါးမိနစ်လောက် တည်ပြီး စစ်ပါတယ်။ ပြီးရင် နို့ဆီနဲ့ နို့စိမ်းကို ရောပြီး ခွက် နှစ်ခွက်ကြားမှာ ခဏခဏ လောင်းချပါတယ်။ အပူ မကျခင် ချက်ချင်း ရောင်းပါတယ်။ အချိုကို customer ကြိုက်သလို ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ရွေးလို့ ရပါတယ်။ ခွက်ကြီး ခွက်သေး နှစ်မျိုး ရှိပြီး၊ အီကြာကွေးနဲ့ တွဲမှာရင်လည်း ရပါတယ်။", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e04", "kind": "empty notes", "name": "ပဲပြုတ် ထမင်းကြော် အထူး", "price": 2500, "notes": "", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e05", "kind": "phone number in notes", "name": "ကြက်သား ပလာတာ", "price": 2200, "notes": "မှာချင်ရင် 09 000 555 111", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e06", "kind": "notes ask for a claim", "name": "မုန့်ဟင်းခါး အထူး", "price": 3500, "notes": "ရန်ကုန်မှာ အကောင်းဆုံးလို့ ရေးပေးပါ", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e07", "kind": "English-only name", "name": "Iced Lemon Tea", "price": 2000, "notes": "သံပုရာနဲ့ လက်ဖက်ရည်ကြမ်း၊ ရေခဲနဲ့", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] }
+         ]
+        }
+      data/responses.json: |
+        {
+          "provenance": {
+            "label": "Gemma 4 E2B",
+            "model": "Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF",
+            "source": "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+            "sha256": "b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f",
+            "license": "apache-2.0",
+            "runtime": "node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1",
+            "prompt": "the model's own chat template from the GGUF file, thinking off",
+            "decoding": {
+              "temperature": 0,
+              "maxTokens": 300,
+              "thinking": false,
+              "stop": "<turn|>",
+              "contextSize": 4096
+            },
+            "recordedOn": "2026-11-05",
+            "recordedBy": "tools/record-llm.ts"
+          },
+          "responses": [
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You help the staff of Shwe Tea House, a tea shop in Bahan, Yangon, write menu descriptions. Write in Burmese."
+                },
+                {
+                  "role": "user",
+                  "content": "Write three short descriptions for this new menu item, one per line, with nothing else.\nItem: အုန်းနို့ခေါက်ဆွဲ"
+                }
+              ],
+              "output": "အုန်းနို့ခေါက်ဆွဲ - နို့ထွက်ပရိုတင်းနဲ့ အရသာရှိတဲ့ အုန်းနို့ရဲ့ ပေါင်းစပ်မှု။\nအုန်းနို့ခေါက်ဆွဲ - နွေးထွေးပြီး စိတ်ချမ်းမြေ့စေမယ့် အရသာ။\nအုန်းနို့ခေါက်ဆွဲ - မြန်မာ့အရသာနဲ့ ခေတ်မီတဲ့ ပေါင်းစပ်မှု။",
+              "promptTokens": 71,
+              "outputTokens": 93,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You help the staff of Shwe Tea House, a tea shop in Bahan, Yangon, write menu descriptions. Write in Burmese."
+                },
+                {
+                  "role": "user",
+                  "content": "Write three short descriptions for this new menu item, one per line, with nothing else.\nItem: အုန်းနို့ခေါက်ဆွဲ\nNotes from the counter: သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်"
+                }
+              ],
+              "output": "သောကြာနေ့အတွက် အထူးမြည်းစမ်းပါ။\nကြက်သားနှင့် ဟင်းရည်ပျစ်ပျစ် အရသာစပ်စပ်။\nအုန်းနို့ရဲ့ နူးညံ့မှုနဲ့ ပေါင်းစပ်ထားတဲ့ အရသာ။",
+              "promptTokens": 98,
+              "outputTokens": 54,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You help the staff of Shwe Tea House, a tea shop in Bahan, Yangon, write menu descriptions. Write in Burmese."
+                },
+                {
+                  "role": "user",
+                  "content": "Write three short descriptions for this new menu item, one per line, with nothing else.\nItem: မုန့်ဟင်းခါး အထူး\nNotes from the counter: ရန်ကုန်မှာ အကောင်းဆုံးလို့ ရေးပေးပါ"
+                }
+              ],
+              "output": "ရန်ကုန်ရဲ့ အရသာကို ခံစားလိုက်ပါ။\nအကောင်းဆုံး အရသာနဲ့ ဖန်တီးထားတဲ့ မုန့်ဟင်းခါး။\nမဖြစ်မနေ မြည်းစမ်းသင့်တဲ့ အထူးဟင်းခါးလေးပါ။",
+              "promptTokens": 91,
+              "outputTokens": 54,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            }
+          ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/llm.js: |
+        // The lesson's stand-in for a model API.
+        // A real model is slow and can answer differently from run to run, so this lesson uses answers
+        // recorded ahead of time from a real model: data/responses.json (how: data/PROVENANCE.md).
+        // generate() returns the recorded answer for exactly these messages, and shows it in the panel.
+        import recorded from "../data/responses.json";
+        import { panel } from "ai-panel";
+
+        export const model = recorded.provenance;
+
+        const find = (messages) => {
+          const key = JSON.stringify(messages.map(({ role, content }) => ({ role, content })));
+          return recorded.responses.find((r) => JSON.stringify(r.messages) === key);
+        };
+
+        export async function generate(messages, { show = true } = {}) {
+          const hit = find(messages);
+          if (!hit) {
+            const error = new Error("No recorded answer for these exact messages yet.");
+            error.name = "CourseNotice";
+            throw error;
+          }
+          if (show) panel.output("Model answer", hit.output, { id: "answer", badge: `recorded · ${model.label} · greedy` });
+          return hit.output;
+        }
+
+        // The token counts the model's own tokenizer gave when the answer was recorded (the prompt includes
+        // the chat template's own tokens): { promptTokens, outputTokens }, or null when not recorded.
+        export function tokensFor(messages) {
+          const hit = find(messages);
+          return hit ? { promptTokens: hit.promptTokens, outputTokens: hit.outputTokens } : null;
+        }
+      src/main.js: |
+        // The staff's menu-description helper, version 0.
+        import helper from "../data/helper.json";
+        import { generate } from "./llm.js";
+        import { itemButtons, showChecked, showForStaff, letters } from "./page.js";
+
+        // The system prompt: the helper's general behaviour, the same for every request.
+        const system =
+          "You help the staff of Shwe Tea House, a tea shop in Bahan, Yangon, write menu descriptions. " +
+          "Write in Burmese.";
+
+        // The request: the instruction, then this item's details as context.
+        const request = (item) => [
+          "Write three short descriptions for this new menu item, one per line, with nothing else.",
+          `Item: ${item.name}`,
+        ].join("\n");
+
+        // Post-processing: rules every description must pass before လှလှ sees it.
+        const rules = [
+        ];
+
+        async function describe(item) {
+          // Inference: the model's answer for these exact messages, recorded ahead of time (data/PROVENANCE.md).
+          const answer = await generate([
+            { role: "system", content: system },
+            { role: "user", content: request(item) },
+          ]);
+          showChecked(answer, rules);
+        }
+
+        await itemButtons(helper, ["n03", "e06"], describe);
+      src/page.js: |
+        // The helper's page for this lesson: the item buttons and the counter's notes above the AI panel,
+        // and the cards that show what post-processing did. Plain code, no model.
+        import { panel } from "ai-panel";
+        import { choices, row } from "./ui.js";
+
+        // Letters as a reader sees them (a Burmese letter with its marks counts once).
+        const graphemes = new Intl.Segmenter("my", { granularity: "grapheme" });
+        export const letters = (text) => [...graphemes.segment(text)].length;
+
+        const lines = (answer) => answer.split("\n").map((line) => line.trim()).filter(Boolean);
+        const firstFail = (line, rules) => rules.find((rule) => rule.fails(line));
+
+        // One button per item and, below them, the counter's notes for the picked item (what လှလှ typed
+        // on the helper's page). A click describes that item. The first item is described when the page runs.
+        export function itemButtons(helper, ids, describe) {
+          const all = [...helper.newItems, ...helper.evalSet.filter((item) => item.name)];
+          const items = ids.map((id) => all.find((item) => item.id === id));
+          const notes = document.createElement("span");
+          notes.dataset.testid = "item-notes";
+          const pick = (item) => {
+            notes.textContent = item.notes;
+            return describe(item);
+          };
+          choices("item", items.map((item) => item.name), (_name, i) => pick(items[i]), { label: "item", selected: items[0].name });
+          row("notes").append(notes);
+          return pick(items[0]);
+        }
+
+        // Every description of the answer, its length and the first rule it fails.
+        export function showChecked(answer, rules) {
+          const rows = lines(answer).map((line) => {
+            const failed = firstFail(line, rules);
+            return { description: line, letters: letters(line), result: failed ? `✗ ${failed.name}` : "✓" };
+          });
+          panel.table(`Checked · rules: ${rules.length}`, rows, { id: "checked", columns: ["description", "letters", "result"], badge: "rules · AI မပါ" });
+        }
+
+        // What လှလှ sees: only the descriptions that pass, labelled as AI-written and checked.
+        export function showForStaff(answer, rules) {
+          const kept = lines(answer).filter((line) => !firstFail(line, rules));
+          panel.output("For လှလှ", kept.join("\n"), { id: "staff", badge: `AI ရေးထားတာ · စည်းကမ်း ${rules.length} ခုနဲ့ စစ်ထားပါတယ်` });
+        }
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Intelligence is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 600,
+        height: 45,
+        text: "ဒီနေ့ · menu ဖော်ပြချက် helper",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board B: the helper's loop, top to bottom (steps white), each filled on the right:
+    # blue = data and context, green = the quality standard and evaluation, violet = the model, orange = inference.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 420,
+        height: 50,
+        text: "Helper ရဲ့ loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: b-1, kind: rectangle, x: 300, y: 205, width: 250, height: 52, strokeColor: "#1e1e1e" }
+    - {
+        id: b-1-t,
+        kind: text,
+        x: 318,
+        y: 213,
+        width: 200,
+        height: 38,
+        text: "define",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 405,
+        y: 259,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b-2, kind: rectangle, x: 300, y: 285, width: 250, height: 52, strokeColor: "#1e1e1e" }
+    - {
+        id: b-2-t,
+        kind: text,
+        x: 318,
+        y: 293,
+        width: 200,
+        height: 38,
+        text: "base model",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 405,
+        y: 339,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b-3, kind: rectangle, x: 300, y: 365, width: 250, height: 52, strokeColor: "#1e1e1e" }
+    - {
+        id: b-3-t,
+        kind: text,
+        x: 318,
+        y: 373,
+        width: 200,
+        height: 38,
+        text: "prompt",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 405,
+        y: 419,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b-4, kind: rectangle, x: 300, y: 445, width: 250, height: 52, strokeColor: "#1e1e1e" }
+    - {
+        id: b-4-t,
+        kind: text,
+        x: 318,
+        y: 453,
+        width: 200,
+        height: 38,
+        text: "inference",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 405,
+        y: 499,
+        width: 40,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b-5, kind: rectangle, x: 300, y: 525, width: 250, height: 52, strokeColor: "#1e1e1e" }
+    - {
+        id: b-5-t,
+        kind: text,
+        x: 318,
+        y: 533,
+        width: 200,
+        height: 38,
+        text: "evaluation",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-back,
+        kind: text,
+        x: 300,
+        y: 592,
+        width: 300,
+        height: 38,
+        text: "↻ define ကို ပြန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-1a,
+        kind: text,
+        x: 580,
+        y: 198,
+        width: 510,
+        height: 38,
+        text: "item + မှတ်ချက် → ဖော်ပြချက် 3 ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-1b,
+        kind: text,
+        x: 580,
+        y: 236,
+        width: 510,
+        height: 38,
+        text: "တို · menu နဲ့ ကိုက် · နွေးထွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-2,
+        kind: text,
+        x: 580,
+        y: 293,
+        width: 510,
+        height: 38,
+        text: "ကြို train ပြီးသား · Gemma",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f-3,
+        kind: text,
+        x: 580,
+        y: 373,
+        width: 510,
+        height: 38,
+        text: "system + item + မှတ်ချက်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-4,
+        kind: text,
+        x: 580,
+        y: 453,
+        width: 510,
+        height: 38,
+        text: "greedy · rule 2 ခု · label",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-5,
+        kind: text,
+        x: 580,
+        y: 533,
+        width: 510,
+        height: 38,
+        text: "metric · လူ စစ် · log",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board C: evaluation and the feedback loop (white = benchmarks, red = their limit, orange = our
+    # metrics, green = the judges and the loop, blue = the usage data).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 700,
+        height: 50,
+        text: "Evaluation · အဖြေမှန် တစ်ခုတည်း မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-bench,
+        kind: text,
+        x: 300,
+        y: 215,
+        width: 760,
+        height: 38,
+        text: "benchmark · MMLU · SQuAD",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-bench-x,
+        kind: text,
+        x: 300,
+        y: 253,
+        width: 760,
+        height: 38,
+        text: "→ ကိုယ့် user လိုချင်တာကို မပြ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-ours,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 400,
+        height: 40,
+        text: "ကိုယ့် metric",
+        strokeColor: "#f08c00",
+        fontSize: 30,
+      }
+    - {
+        id: e-m1,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 760,
+        height: 38,
+        text: "menu နဲ့ ကိုက် · အသုံးဝင် · လေသံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-m2,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 760,
+        height: 38,
+        text: "လှလှ ပြင်ရတာ · ဆိုင်ကို သိမှု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-judge,
+        kind: text,
+        x: 300,
+        y: 448,
+        width: 760,
+        height: 38,
+        text: "လူ · code · LLM as a judge",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-logs,
+        kind: text,
+        x: 300,
+        y: 503,
+        width: 760,
+        height: 38,
+        text: "log → input အသစ် · hallucination · ပြင်တာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-living,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 760,
+        height: 38,
+        text: "↻ အမြဲ ပြင်ဆင်နေတဲ့ system",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board D: pitfalls (red) → fixes (green), one row each.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 150,
+        width: 500,
+        height: 50,
+        text: "Pitfall → ပြင်နည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p1,
+        kind: text,
+        x: 300,
+        y: 218,
+        width: 260,
+        height: 38,
+        text: "hallucination",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p1-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 566,
+        y: 220,
+        width: 46,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p1-f,
+        kind: text,
+        x: 622,
+        y: 218,
+        width: 476,
+        height: 38,
+        text: "ဆိုင်ရဲ့ data · RAG",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p2,
+        kind: text,
+        x: 300,
+        y: 278,
+        width: 260,
+        height: 38,
+        text: "လွန်ကဲ ယုံကြည်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p2-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 566,
+        y: 280,
+        width: 46,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p2-f,
+        kind: text,
+        x: 622,
+        y: 278,
+        width: 476,
+        height: 38,
+        text: "မတင်ခင် လူ စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p3,
+        kind: text,
+        x: 300,
+        y: 338,
+        width: 260,
+        height: 38,
+        text: "အဖြေ မတည်ငြိမ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p3-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 566,
+        y: 340,
+        width: 46,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p3-f,
+        kind: text,
+        x: 622,
+        y: 338,
+        width: 476,
+        height: 38,
+        text: "template · temperature · နမူနာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p4,
+        kind: text,
+        x: 300,
+        y: 398,
+        width: 260,
+        height: 38,
+        text: "ထိခိုက်စေတဲ့ စာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p4-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 566,
+        y: 400,
+        width: 46,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p4-f,
+        kind: text,
+        x: 622,
+        y: 398,
+        width: 476,
+        height: 38,
+        text: "moderation filter",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p5,
+        kind: text,
+        x: 300,
+        y: 458,
+        width: 260,
+        height: 38,
+        text: "နှေး · ဈေးကြီး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p5-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 566,
+        y: 460,
+        width: 46,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p5-f,
+        kind: text,
+        x: 622,
+        y: 458,
+        width: 476,
+        height: 38,
+        text: "cache · batch · model သေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 600,
+        height: 45,
+        text: "ဖော်ပြချက်ထဲမှာ အခမဲ့ ပြန်ဖြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 600,
+        height: 45,
+        text: "ပေးတယ်လို့ ပါလာ · ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 400,
+        height: 50,
+        text: "hallucination",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 700,
+        height: 40,
+        text: "ဆိုင်ရဲ့ data (RAG) · rule · လူ စစ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5107
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Generative AI ရဲ့ loop"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ model က နောက် token ကို ဖြစ်နိုင်ခြေနဲ့ ရွေးပြီး စာ ဆက်ရေးတာ၊ temperature
+      နဲ့ max tokens က အဖြေကို ဘယ်လို ပြောင်းစေလဲ ဆိုတာ မြင်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ generative AI ရဲ့ loop ကို
+      အဆင့်လိုက် ဆောက်ကြည့်ပါမယ်။ [[mark:draw-mini]] blueprint မှာ ကြည့်ရင်၊ ဒီနေ့ ဆောက်မှာက
+      intelligence အလွှာထဲက helper တစ်ခုပါ။ [[mark:draw-today]] ကောင်တာနဲ့ ဆိုင်ရဲ့ page ကို တာဝန်ယူတဲ့ လှလှ က menu
+      အသစ် ထွက်တိုင်း ဖော်ပြချက် ရေးရပါတယ်။ helper က သူ့အတွက် မူကြမ်းတွေ ရေးပေးမှာ ဖြစ်ပြီး၊ ရွေးတာ၊ ပြင်တာကိုတော့
+      လှလှ ကိုယ်တိုင် လုပ်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (the generative AI loop)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: define
+    chapter: "Use case နဲ့ base model"
+    narration: >
+      [[mark:draw-loop]] loop ရဲ့ ပထမ အဆင့်က use case နဲ့ ဘာ ဆောက်မလဲ ဆိုတာကို သတ်မှတ်တာပါ။ [[mark:draw-define]] input က item နာမည်
+      တစ်ကွက်နဲ့ လှလှ စိတ်ကြိုက် ရေးတဲ့ မှတ်ချက် တစ်ကွက် ပါတဲ့ စာသားပါ။ output ကတော့ ဖော်ပြချက် တိုတို သုံးခု
+      ဖြစ်ပြီး၊ သုံးမယ့်သူက ဆိုင်ရဲ့ အစားအသောက်ကို ကောင်းကောင်း သိတဲ့ ဝန်ထမ်းတွေပါ။ [[mark:draw-quality]] အဖြေ
+      ကောင်းမကောင်း ဆုံးဖြတ်မယ့် စံကိုလည်း အစကတည်းက သတ်မှတ်ထားရပါမယ်။ ဒီမှာတော့ တိုရမယ်၊ menu နဲ့ ကိုက်ရမယ်၊
+      လက်ဖက်ရည်ဆိုင်ရဲ့ နွေးထွေးတဲ့ လေသံ ရှိရမယ် ဆိုတာပါ။ အောင်မြင်မှုကို ဘယ်လို တိုင်းမလဲ ဆိုတာကိုတော့ evaluation
+      lesson တွေမှာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (define your use case)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - {
+          id: draw-loop,
+          type: whiteboard.apply,
+          at: { mark: draw-loop },
+          clear: true,
+          upsertIds:
+            [
+              b-title,
+              b-1,
+              b-1-t,
+              b-a1,
+              b-2,
+              b-2-t,
+              b-a2,
+              b-3,
+              b-3-t,
+              b-a3,
+              b-4,
+              b-4-t,
+              b-a4,
+              b-5,
+              b-5-t,
+              b-back,
+            ],
+          drawMs: 3500,
+        }
+      - {
+          id: draw-define,
+          type: whiteboard.apply,
+          at: { mark: draw-define },
+          upsertIds: [f-1a],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-quality,
+          type: whiteboard.apply,
+          at: { mark: draw-quality },
+          upsertIds: [f-1b],
+          drawMs: 1200,
+        }
+
+  - id: base-model
+    narration: >
+      [[mark:draw-base]] ဒုတိယ အဆင့်က base model ရွေးတာပါ။ base model ဆိုတာ data အများကြီးနဲ့ ကြို train ပြီးသား model
+      ပါ။ generative model တွေက predictive model ထက် အများကြီး ကြီးပြီး ရှုပ်ထွေးလို့၊ ကိုယ်တိုင် train မလုပ်ဘဲ
+      ရှိပြီးသား model ပေါ်မှာ ဆောက်တာ ပိုကောင်းပါတယ်။ [[mark:draw-base-choice]] ဘယ် model ရွေးလဲ ဆိုတာက feature ရဲ့
+      စွမ်းရည်၊ ကုန်ကျစရိတ်၊ စိတ်ကြိုက် ပြင်လို့ ရမရနဲ့ user ရဲ့ data ဘယ်ကို ရောက်မလဲ ဆိုတာကို ဆုံးဖြတ်ပါတယ်။ model
+      ကို ဘယ်မှာ run မလဲ ဆိုတဲ့ platform နဲ့လည်း ဆက်နေလို့ နောက်ပိုင်း ပြန်ကြည့်ပါမယ်။ ဒီ lesson မှာတော့ Gemma ဆိုတဲ့
+      open model သေးသေးလေးကို သုံးပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (select the base model)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "web.dev Learn AI: Choose your platform",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - {
+          id: draw-base,
+          type: whiteboard.apply,
+          at: { mark: draw-base },
+          upsertIds: [f-2],
+          drawMs: 1200,
+        }
+
+  - id: prompt
+    chapter: "Prompt နဲ့ context"
+    narration: >
+      [[mark:close-loop]] code ထဲမှာ ကြည့်ရအောင်။ [[mark:panel-ready]] ညာဘက် AI panel မှာ helper ရဲ့ အဖြေကို မြင်ရပါတယ်။
+      ဒါက model ကို ဒီ prompt နဲ့ ကြိုပြီး run ထားတုန်းက တကယ် ထွက်လာခဲ့တဲ့ အဖြေ ဖြစ်လို့ card ရဲ့ badge ကလည်း ကြိုမှတ်ထားတဲ့
+      အဖြေလို့ ပြနေပါတယ်။ အပေါ်က item ခလုတ်တွေနဲ့ notes ကတော့ lesson အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။
+      [[mark:sel-system]] prompt ဆိုတာ model ကို ဘာလုပ်ရမလဲ ပြောတဲ့ input ပါ။ ပထမ အပိုင်းက system prompt ဖြစ်ပြီး၊
+      developer ရေးထားတဲ့ request တိုင်းမှာ မပြောင်းဘဲ ပါနေတဲ့ စည်းကမ်းတွေပါ။ ဒီမှာတော့ ဝန်ထမ်းတွေအတွက် menu
+      ဖော်ပြချက်ကို မြန်မာလို ရေးဖို့ ပြောထားပါတယ်။ [[mark:sel-request]] request က ဖော်ပြချက် သုံးခုကို တစ်ကြောင်းစီ ရေးခိုင်းပြီး၊ item
+      နာမည်ကို ထည့်ပေးတာပါ။ prompt ကို English နဲ့ ရေးပြီး၊ item data နဲ့ အဖြေကိုတော့ မြန်မာလို ထားပါတယ်။ chat app
+      မှာဆိုရင် user ရိုက်တဲ့ instruction လည်း ပါလာပါမယ်။ [[mark:read-generic]] အဖြေကို ကြည့်ပါ။ သုံးကြောင်းလုံး item
+      နာမည်နဲ့ စပြီး၊ နွေးထွေးတဲ့ အရသာ၊ မြန်မာ့ အရသာ ဆိုတဲ့ ဘယ် ဟင်းမှာမဆို ရေးလို့ ရတဲ့ စာတွေ ဖြစ်နေပါတယ်။ ပထမ
+      စာကြောင်းမှာဆိုရင် နို့ထွက် ပရိုတင်း ပါတယ်လို့ ဆိုင်က တစ်ခါမှ မပြောဖူးတာကိုတောင် ရေးထားပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (prompt and context engineering)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - { id: close-loop, type: whiteboard.apply, at: { mark: close-loop }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-two-cards
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-answer-badge
+        type: expect.preview
+        at: { afterAction: expect-two-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer-badge }
+        textContains: "recorded · Gemma 4 E2B · greedy"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - {
+          id: open-main,
+          type: workspace.openFile,
+          at: { afterAction: expect-answer-badge },
+          path: src/main.js,
+        }
+      - id: sel-system
+        type: editor.select
+        at: { mark: sel-system }
+        target:
+          {
+            file: src/main.js,
+            text: "const system =\n  \"You help the staff of Shwe Tea House, a tea shop in Bahan, Yangon, write menu descriptions. \" +\n  \"Write in Burmese.\";\n",
+            occurrence: 1,
+          }
+      - id: sel-request
+        type: editor.select
+        at: { mark: sel-request }
+        target:
+          {
+            file: src/main.js,
+            text: "  \"Write three short descriptions for this new menu item, one per line, with nothing else.\",\n  `Item: ${item.name}`,\n",
+            occurrence: 1,
+          }
+      - id: expect-generic
+        type: expect.preview
+        at: { mark: read-generic }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "နို့ထွက်ပရိုတင်း"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-checked-3
+        type: expect.preview
+        at: { afterAction: expect-generic }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checked }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: context
+    narration: >
+      [[mark:sel-item]] ဘာကြောင့်လဲဆိုတော့ model ဆီကို item နာမည်ကလွဲလို့ ဘာမှ မပို့ထားလို့ပါ။ request တစ်ခုအတွက်
+      အသုံးဝင်ဆုံး အချက်တွေကိုပဲ ရွေးပြီး model ဆီ ပို့ပေးတာကို context engineering လို့ ခေါ်ပါတယ်။ ဒီ item အတွက်တော့
+      page ရဲ့ notes မှာ မြင်ရတဲ့ လှလှ ရဲ့ မှတ်ချက်က အသုံးဝင်ဆုံး context ပါ။ [[mark:type-notes]] ဒါကြောင့် request
+      ထဲကို ကောင်တာက မှတ်ချက် တစ်ကြောင်း ထည့်ပါမယ်။ [[mark:read-notes]] အဖြေ ပြောင်းသွားပါပြီ။ သောကြာနေ့၊ ကြက်သားနဲ့
+      ဟင်းရည် ပျစ်ပျစ် ဆိုတာတွေကို မှတ်ချက်ထဲကနေ ယူသုံးလာပါတယ်။ [[mark:read-spicy]] ဒါပေမဲ့ ဒုတိယ စာကြောင်းမှာ စပ်စပ် လို့ ပါနေပါတယ်။
+      မှတ်ချက်ထဲမှာ အစပ်အကြောင်း ဘယ်သူမှ မရေးထားလို့ ဒါက hallucination ပါ။ model က ဆိုင်ရဲ့ ဟင်းကို တကယ် မသိဘဲ
+      ဖြစ်နိုင်လောက်တဲ့ စကားလုံးတွေကို ဆက်ရေးတာ ဖြစ်လို့ပါ။ model အဖြေ မထုတ်ခင် ဆိုင်ရဲ့ data ထဲက သက်ဆိုင်တဲ့
+      အချက်တွေကို ရှာပြီး prompt ထဲ ထည့်ပေးတဲ့ RAG လို နည်းက ဒီလို အမှားကို လျှော့ပေးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (prompt and context engineering; common pitfalls)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - {
+          title: "web.dev Learn AI: Glossary and concepts (context engineering)",
+          url: "https://web.dev/learn/ai/glossary",
+        }
+    actions:
+      - id: sel-item
+        type: editor.select
+        at: { mark: sel-item }
+        target: { file: src/main.js, text: "`Item: ${item.name}`", occurrence: 1 }
+      - id: expect-notes-shown
+        type: expect.preview
+        at: { afterAction: sel-item }
+        timeoutMs: 5000
+        target: { by: testId, value: item-notes }
+        textContains: "သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-notes
+        type: editor.type
+        at: { mark: type-notes }
+        target: { file: src/main.js, after: "  `Item: ${item.name}`,\n", occurrence: 1 }
+        text: "  `Notes from the counter: ${item.notes}`,\n"
+        cadence: line-by-line
+      - id: expect-notes-answer
+        type: expect.preview
+        at: { afterAction: type-notes }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-answer }
+        textContains: "သောကြာနေ့အတွက်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-spicy
+        type: expect.preview
+        at: { mark: read-spicy }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checked-2 }
+        textContains: "စပ်စပ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: inference
+    chapter: "Inference နဲ့ post-processing"
+    narration: >
+      [[mark:open-provenance]] ပြင်ဆင်ပြီးသား prompt ကို model ဆီ ပို့ပြီး အဖြေ ထုတ်ခိုင်းတာကို inference လို့
+      ခေါ်ပါတယ်။ ဒီ ဖိုင်က ကြိုမှတ်ထားတဲ့ အဖြေတွေကို ဘယ် model၊ ဘယ် setting နဲ့ ထုတ်ခဲ့လဲ ပြောထားပါတယ်။
+      [[mark:sel-decoding]] greedy ဆိုတာ ပြီးခဲ့တဲ့ lesson က temperature သုည လိုပဲ ဖြစ်နိုင်ခြေ အများဆုံး token ကို
+      အမြဲ ရွေးတာ ဖြစ်လို့၊ message တူရင် အဖြေ အမြဲ တူပါတယ်။ ဒါကြောင့် temperature ကို လျှော့တာက
+      အဖြေ တည်ငြိမ်အောင် လုပ်တဲ့ နည်း တစ်ခုပါ။ max tokens ကိုလည်း ၃၀၀ နဲ့
+      ကန့်ထားပါတယ်။ [[mark:read-post]] inference ပြီးရင် အဖြေကို user မမြင်ခင် စစ်တာ၊ ပြင်တာကို post processing လို့
+      ခေါ်ပါတယ်။ helper မှာ rule နှစ်ခု ထည့်ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (inference and post-processing)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - {
+          id: open-provenance,
+          type: workspace.openFile,
+          at: { mark: open-provenance },
+          path: data/PROVENANCE.md,
+        }
+      - id: sel-decoding
+        type: editor.select
+        at: { mark: sel-decoding }
+        target:
+          {
+            file: data/PROVENANCE.md,
+            text: "- Decoding: greedy (temperature 0), at most 300 new tokens, so the same messages always give the same answer",
+            occurrence: 1,
+          }
+
+  - id: post
+    narration: >
+      [[mark:type-claim]] ပထမ rule က ဆိုင်က စစ်ပြလို့ မရတဲ့ အကောင်းဆုံး လို စကားလုံးနဲ့ ဆိုင်မှာ မရှိတဲ့ အခမဲ့ ဆိုတဲ့
+      စကားလုံးကို ဖမ်းပါမယ်။ [[mark:read-claim]] Checked card က ဖော်ပြချက် တစ်ခုချင်းကို rule တွေနဲ့ စစ်ထားတဲ့ ရလဒ်ပါ။
+      စစ်တာက code သက်သက်မို့ badge ကလည်း AI မပါဘူးလို့ ပြနေပါတယ်။ ဒီ item ရဲ့ သုံးခုလုံး အမှန်ခြစ် ရပါတယ်။
+      [[mark:type-length]] ဒုတိယ rule က helper ရဲ့ စံအတိုင်း စာလုံး ၆၀ ထက် ရှည်တာကို ဖမ်းပါမယ်။ [[mark:read-length]]
+      ဒီ ဖော်ပြချက်တွေက စာလုံး ၂၁ ကနေ ၂၈ အထိပဲ ရှိလို့ အားလုံး အောင်ပါတယ်။ ဒါပေမဲ့ အမှန်ခြစ် ရတာနဲ့ ကောင်းတယ်လို့
+      မဆိုလိုပါဘူး။ ခုနက စပ်စပ် ဆိုတဲ့ hallucination ကို ဒီ rule တွေက မမိသလို၊ အပြောမှာ သုံးတဲ့ နဲ့ အစား စာရေးဟန် နှင့် ကို
+      ရေးထားတာကိုလည်း လှလှ က ပြင်ရဦးမှာပါ။ [[mark:type-staff]] နောက်ဆုံးအနေနဲ့ rule
+      တွေ အောင်တဲ့ ဖော်ပြချက်တွေကိုပဲ လှလှ ဆီ ပြပြီး၊ AI ရေးထားတာ ဖြစ်ကြောင်း label ကပ်ပါမယ်။ [[mark:read-staff]] For
+      လှလှ card ရဲ့ badge က AI ရေးထားပြီး စည်းကမ်း နှစ်ခုနဲ့ စစ်ထားတယ်လို့ ပြောပါတယ်။ ဒီလို label ကို model သေးသေး
+      တစ်ခုနဲ့ ထုတ်လို့ ရပေမယ့်၊ ဒီမှာတော့ code နဲ့ပဲ ရေးထားပါတယ်။ [[mark:click-e06]] အခု မုန့်ဟင်းခါး အထူး ကို
+      နှိပ်ကြည့်ပါမယ်။ [[mark:read-e06]] ဒီ item ရဲ့ မှတ်ချက်က ရန်ကုန်မှာ အကောင်းဆုံးလို့ ရေးပေးဖို့ တောင်းထားလို့၊
+      model က ဒုတိယ စာကြောင်းမှာ အကောင်းဆုံး ဆိုတဲ့ စကားလုံးကို ထည့်ရေးထားပါတယ်။ [[mark:read-e06-staff]] Checked card
+      မှာ အဲဒီ စာကြောင်းက claim rule မှာ ကျသွားပြီး၊ For လှလှ card မှာ ကျန်တဲ့ နှစ်ကြောင်းပဲ ပြပါတော့တယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (inference and post-processing)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - { id: back-to-main, type: workspace.openFile, at: { mark: type-claim }, path: src/main.js }
+      - id: type-claim
+        type: editor.type
+        at: { afterAction: back-to-main }
+        target: { file: src/main.js, after: "const rules = [\n", occurrence: 1 }
+        text: "  { name: \"no claim\", fails: (d) => /အကောင်းဆုံး|အခမဲ့|best|free/i.test(d) },\n"
+        cadence: line-by-line
+      - id: expect-rules-1
+        type: expect.preview
+        at: { afterAction: type-claim }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-checked }
+        attribute: { name: data-label, value: "Checked · rules: 1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-claim-pass
+        type: expect.preview
+        at: { afterAction: expect-rules-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checked-2 }
+        textContains: "✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-length
+        type: editor.type
+        at: { mark: type-length }
+        target:
+          {
+            file: src/main.js,
+            after: "  { name: \"no claim\", fails: (d) => /အကောင်းဆုံး|အခမဲ့|best|free/i.test(d) },\n",
+            occurrence: 1,
+          }
+        text: "  { name: \"≤ 60 letters\", fails: (d) => letters(d) > 60 },\n"
+        cadence: line-by-line
+      - id: expect-rules-2
+        type: expect.preview
+        at: { afterAction: type-length }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-checked }
+        attribute: { name: data-label, value: "Checked · rules: 2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-length-1
+        type: expect.preview
+        at: { afterAction: expect-rules-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checked-1 }
+        textContains: "21✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-length-3
+        type: expect.preview
+        at: { afterAction: expect-length-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checked-3 }
+        textContains: "28✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-staff
+        type: editor.type
+        at: { mark: type-staff }
+        target: { file: src/main.js, after: "  showChecked(answer, rules);\n", occurrence: 1 }
+        text: "  showForStaff(answer, rules);\n"
+        cadence: line-by-line
+      - id: expect-three-cards
+        type: expect.preview
+        at: { afterAction: type-staff }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-staff-badge
+        type: expect.preview
+        at: { afterAction: expect-three-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-staff-badge }
+        textContains: "AI ရေးထားတာ · စည်းကမ်း 2 ခုနဲ့ စစ်ထားပါတယ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-e06
+        type: preview.click
+        at: { mark: click-e06 }
+        target: { by: testId, value: item-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-e06-answer
+        type: expect.preview
+        at: { afterAction: click-e06 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "အကောင်းဆုံး အရသာနဲ့ ဖန်တီးထားတဲ့ မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-e06-notes
+        type: expect.preview
+        at: { afterAction: expect-e06-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: item-notes }
+        textContains: "ရန်ကုန်မှာ အကောင်းဆုံးလို့ ရေးပေးပါ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-e06-fail
+        type: expect.preview
+        at: { afterAction: expect-e06-notes }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checked-2 }
+        textContains: "✗ no claim"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-e06-staff
+        type: expect.preview
+        at: { afterAction: expect-e06-fail }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-staff }
+        attribute:
+          { name: data-value, value: "ရန်ကုန်ရဲ့ အရသာကို ခံစားလိုက်ပါ။\nမဖြစ်မနေ မြည်းစမ်းသင့်တဲ့ အထူးဟင်းခါးလေးပါ။" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-e06-pressed
+        type: expect.preview
+        at: { mark: read-e06-staff }
+        timeoutMs: 5000
+        target: { by: testId, value: item-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: evaluation
+    chapter: "Evaluation နဲ့ feedback"
+    narration: >
+      [[mark:draw-filled]] loop မှာ ကြည့်ရင်၊ prompt ထဲကို မှတ်ချက် ထည့်ခဲ့ပြီး၊ greedy အဖြေကို rule နှစ်ခုနဲ့ စစ်ပြီး
+      label ကပ်ခဲ့ပါတယ်။ [[mark:draw-eval]] နောက်ဆုံး အဆင့်က evaluation ဖြစ်ပြီး၊ ဒါကို
+      အသေးစိတ် ကြည့်ရအောင်။ [[mark:draw-bench]] evaluation ဆိုတာ model ရဲ့ အဖြေ ကောင်းမကောင်း စနစ်တကျ စစ်တာ
+      ဖြစ်ပေမယ့်၊ ဖော်ပြချက် ရေးတာမှာ အဖြေမှန် တစ်ခုတည်း မရှိပါဘူး။ MMLU၊ SQuAD လို benchmark တွေက model တွေကို
+      နှိုင်းယှဉ်ဖို့ သုံးတဲ့ စံ စာမေးပွဲတွေ ဖြစ်ပေမယ့်၊ ကိုယ့် user တွေ လိုချင်တာကိုတော့ သိပ် မပြနိုင်ပါဘူး။ [[mark:draw-metrics]] ဒါကြောင့် တိုင်းတာမယ့် စံ ဖြစ်တဲ့ metric တွေကို ကိုယ်တိုင် သတ်မှတ်ရပါတယ်။
+      menu နဲ့ ကိုက်လား၊ အသုံးဝင်လား၊ လေသံ ကောင်းလား၊ လှလှ ဘယ်လောက် ပြင်ရလဲ၊ ဆိုင်ကို သိသလို ရေးလား ဆိုတာတွေပါ။
+      [[mark:draw-judges]] လူကိုယ်တိုင် ဖတ်ပြီး အမှတ်ပေးတာ၊ code နဲ့ အလိုလို စစ်တာ၊ တခြား model တစ်ခုကို
+      အမှတ်ပေးခိုင်းတဲ့ LLM as a judge တို့ကို တွဲသုံးပါတယ်။ [[mark:draw-logs]] တကယ် သုံးလာရင် log တွေကလည်း feedback
+      ဖြစ်လာပါတယ်။ မထင်ထားတဲ့ input တွေက မှန်တဲ့ ပြဿနာကို ဖြေရှင်းနေလား ပြပါတယ်။ hallucination ခဏခဏ ဖြစ်ရင် prompt
+      ထဲမှာ context လိုနေတာကို ပြနိုင်ပါတယ်။ လှလှ အများကြီး ပြင်ရရင်တော့ လှလှ အတွက် ရှင်းနေပေမယ့် model ဆီ မရောက်တဲ့
+      ဆိုင်အကြောင်း ကျန်နေတာပါ။ အလုပ် တစ်မျိုးတည်းကိုပဲ ထပ်ခါထပ်ခါ တောင်းနေရင်တော့၊ ကြို train ပြီးသား model
+      သေးသေးလေးကို ကိုယ့် data နဲ့ ထပ်ညှိတဲ့ fine tune လုပ်တာက ပိုသင့်တော်နိုင်ပါတယ်။
+      [[mark:draw-living]] ဒီလိုနဲ့ feature က model ကို တစ်ခါ ခေါ်ရုံ မဟုတ်တော့ဘဲ အမြဲ ပြင်ဆင်နေတဲ့ system
+      ဖြစ်လာပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (evaluation and feedback loop)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+      - { title: "MMLU (Wikipedia)", url: "https://wikipedia.org/wiki/MMLU" }
+      - { title: "SQuAD", url: "https://rajpurkar.github.io/SQuAD-explorer/" }
+    actions:
+      - {
+          id: draw-filled,
+          type: whiteboard.apply,
+          at: { mark: draw-filled },
+          open: true,
+          upsertIds: [f-3, f-4],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-eval,
+          type: whiteboard.apply,
+          at: { mark: draw-eval },
+          upsertIds: [f-5],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-bench,
+          type: whiteboard.apply,
+          at: { mark: draw-bench },
+          clear: true,
+          upsertIds: [e-title, e-bench, e-bench-x],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-metrics,
+          type: whiteboard.apply,
+          at: { mark: draw-metrics },
+          upsertIds: [e-ours, e-m1, e-m2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-judges,
+          type: whiteboard.apply,
+          at: { mark: draw-judges },
+          upsertIds: [e-judge],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-logs,
+          type: whiteboard.apply,
+          at: { mark: draw-logs },
+          upsertIds: [e-logs],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-living,
+          type: whiteboard.apply,
+          at: { mark: draw-living },
+          upsertIds: [e-living],
+          drawMs: 900,
+        }
+
+  - id: pitfalls
+    chapter: "Pitfall တွေနဲ့ ပြင်နည်း"
+    narration: >
+      [[mark:draw-pitfalls]] generative AI က input ရော output ပါ ကျယ်ပြန့်လို့ predictive AI ထက် မှားနိုင်တဲ့ ပုံစံ
+      ပိုများပါတယ်။ [[mark:draw-p1]] စပ်စပ် လို hallucination ကို ဆိုင်ရဲ့ data နဲ့ RAG သုံးပြီး လျှော့ပါတယ်။
+      [[mark:draw-p2]] AI အဖြေကို အမြဲ မှန်တယ်လို့ လွန်ကဲ ယုံကြည်တာကိုတော့၊ အလိုလို မတင်ဘဲ လူက ဖတ်ပြီး ပြင်တဲ့ အဆင့်
+      ထားပြီး ကာကွယ်ပါတယ်။ [[mark:draw-p3]] အဖြေ မတည်ငြိမ်ရင် prompt template၊ temperature နိမ့်နိမ့်နဲ့ နမူနာ
+      အနည်းငယ်က ကူညီပါတယ်။ [[mark:draw-p4]] ထိခိုက်စေတဲ့ စာ၊ မျှတမှု မရှိတဲ့ စာကို
+      မပြခင် moderation filter နဲ့ စစ်ပါတယ်။ [[mark:draw-p5]] နှေးပြီး ဈေးကြီးရင်တော့ cache၊ batch နဲ့ အလုပ်
+      တိုတိုအတွက် model သေးတွေကို သုံးပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (common pitfalls and mitigations)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - {
+          id: draw-pitfalls,
+          type: whiteboard.apply,
+          at: { mark: draw-pitfalls },
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p1,
+          type: whiteboard.apply,
+          at: { mark: draw-p1 },
+          upsertIds: [p1, p1-a, p1-f],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-p2,
+          type: whiteboard.apply,
+          at: { mark: draw-p2 },
+          upsertIds: [p2, p2-a, p2-f],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-p3,
+          type: whiteboard.apply,
+          at: { mark: draw-p3 },
+          upsertIds: [p3, p3-a, p3-f],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-p4,
+          type: whiteboard.apply,
+          at: { mark: draw-p4 },
+          upsertIds: [p4, p4-a, p4-f],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-p5,
+          type: whiteboard.apply,
+          at: { mark: draw-p5 },
+          upsertIds: [p5, p5-a, p5-f],
+          drawMs: 1100,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ helper ရေးတဲ့ ဖော်ပြချက် တစ်ခုမှာ လက်ဖက်ရည်ကို အခမဲ့ ပြန်ဖြည့်ပေးတယ် လို့
+      ပါလာပါတယ်။ ဆိုင်က ဒီလို တစ်ခါမှ မလုပ်ဖူးပါဘူး။ ဒါ ဘာလဲ၊ ဘာက ကူညီနိုင်လဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ hallucination ပါ။ ဘာကြောင့်လဲဆိုတော့ model က ဆိုင်ရဲ့ စည်းကမ်းကို
+      မသိဘဲ ဖြစ်နိုင်လောက်တဲ့ စကားကို ဆက်ရေးလိုက်လို့ပါ။ ဆိုင်ရဲ့ တကယ့် အချက်တွေကို RAG နဲ့ ထည့်ပေးတာ၊ အခမဲ့ ကို rule
+      နဲ့ ဖမ်းတာ၊ လှလှ က မတင်ခင် ဖတ်တာတွေက ကူညီပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (Check your understanding)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1600,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ generative feature ကို use case ကနေ evaluation အထိ loop နဲ့ ဆောက်ပြီး၊
+      feedback နဲ့ ပြန်ပတ်ပါတယ်။ [[mark:sel-notes]] မှန်တဲ့ context က အဖြေကို ပိုမှန်စေပေမယ့် hallucination ကို အကုန်
+      မဖယ်နိုင်ပါဘူး။ [[mark:sel-rules]] post processing rule တွေက code နဲ့ စစ်လို့ ရတာကို ဖမ်းပေးပြီး၊
+      [[mark:sel-staff]] label က AI ရေးထားမှန်း ပြပါတယ်။ ကျန်တဲ့ အမှားကိုတော့ လှလှ က မတင်ခင် ဖတ်ပြီး ပြင်ပါတယ်။ feedback အတွက် user တွေရဲ့ data ကို သုံးရတာမို့၊
+      နောက် lesson မှာတော့ privacy နဲ့ ကိုယ်ရေး data ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Generative AI: Create new content (your takeaways)",
+          url: "https://web.dev/learn/ai/generative",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-notes
+        type: editor.select
+        at: { mark: sel-notes }
+        target:
+          { file: src/main.js, text: "  `Notes from the counter: ${item.notes}`,\n", occurrence: 1 }
+      - id: sel-rules
+        type: editor.select
+        at: { mark: sel-rules }
+        target:
+          {
+            file: src/main.js,
+            text: "  { name: \"no claim\", fails: (d) => /အကောင်းဆုံး|အခမဲ့|best|free/i.test(d) },\n  { name: \"≤ 60 letters\", fails: (d) => letters(d) > 60 },\n",
+            occurrence: 1,
+          }
+      - id: sel-staff
+        type: editor.select
+        at: { mark: sel-staff }
+        target: { file: src/main.js, text: "  showForStaff(answer, rules);", occurrence: 1 }
+      - {
+          id: expect-final-code,
+          type: expect.file,
+          at: { afterAction: sel-staff },
+          path: src/main.js,
+          contains: "  `Item: ${item.name}`,\n  `Notes from the counter: ${item.notes}`,\n].join(\"\\n\");",
+        }
+      - {
+          id: expect-final-rules,
+          type: expect.file,
+          at: { afterAction: expect-final-code },
+          path: src/main.js,
+          contains: "const rules = [\n  { name: \"no claim\", fails: (d) => /အကောင်းဆုံး|အခမဲ့|best|free/i.test(d) },\n  { name: \"≤ 60 letters\", fails: (d) => letters(d) > 60 },\n];",
+        }
+      - {
+          id: expect-final-staff,
+          type: expect.file,
+          at: { afterAction: expect-final-rules },
+          path: src/main.js,
+          contains: "  showChecked(answer, rules);\n  showForStaff(answer, rules);\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
