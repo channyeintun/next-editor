@@ -1,0 +1,1725 @@
+# TypeScript course, lesson 17: classes (Burmese).
+#
+# Start state (ws/): src/order.ts holds a TeaOrder class written the JavaScript way — a constructor
+# that puts item and price on `this`, and a markReady() method that sets `this.status` — with no
+# property declarations, so the panel (data-modes "errors types output") lists 3 errors
+# (TS2339 "Property 'item' / 'price' / 'status' does not exist on type 'TeaOrder'") while Output
+# already prints the object `TeaOrder { item: 'လက်ဖက်ရည်', price: 1500 }` (JavaScript is fine with it).
+# src/main.ts creates one order with `new` and prints it.
+# Edits, all insert-only: declare `item; price;` (types inferred from the constructor, ^? query),
+# initializers `cups = 1; status = "pending";` (^? → string), `note: string;` (TS2564) then `?`,
+# a `total` getter + a printReceipt(order: TeaOrder) function (^? → class as a type), an outside
+# `order.price = 0;` then `readonly` (TS2540, Output still 0: type-only) then `// `, a
+# `private discount` (TS2341, Output still changes: type-only), the switch to `#discount` (the
+# outside assignment no longer reaches it), a `discount` setter (cap 500), and a method passed
+# around on its own (runtime TypeError, no type error) fixed by turning it into an arrow property.
+# Boards: (A) a class is a form template, `new` fills in objects; (B) what `this` is.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-17-classes.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-17-classes
+  title: "TypeScript course 17: Class တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { TeaOrder } from "./order";
+
+        const order = new TeaOrder("လက်ဖက်ရည်", 1500);
+        console.log(order);
+      src/order.ts: |
+        export class TeaOrder {
+          constructor(item: string, price: number) {
+            this.item = item;
+            this.price = price;
+          }
+
+          markReady() {
+            this.status = "ready";
+          }
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: a class is the blank form; `new` fills in one object per customer.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "Class ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-class-box,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 300,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-class-name,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 260,
+        height: 36,
+        text: "class TeaOrder",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-class-props,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 260,
+        height: 36,
+        text: "item · price",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-class-method,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 260,
+        height: 36,
+        text: "markReady()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-class-sub,
+        kind: text,
+        x: 290,
+        y: 415,
+        width: 260,
+        height: 36,
+        text: "ဖောင် ပုံစံ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 275,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-new,
+        kind: text,
+        x: 585,
+        y: 333,
+        width: 70,
+        height: 36,
+        text: "new",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 395,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-obj-1,
+        kind: rectangle,
+        x: 660,
+        y: 240,
+        width: 420,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-obj-1-text,
+        kind: text,
+        x: 680,
+        y: 272,
+        width: 380,
+        height: 36,
+        text: "လက်ဖက်ရည် · 1500  (မြမြ)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-obj-2,
+        kind: rectangle,
+        x: 660,
+        y: 370,
+        width: 420,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-obj-2-text,
+        kind: text,
+        x: 680,
+        y: 402,
+        width: 380,
+        height: 36,
+        text: "ကော်ဖီ · 1800  (အောင်အောင်)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-ts,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 800,
+        height: 40,
+        text: "TypeScript → type၊ readonly၊ private စစ်ဆေးချက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board B: `this` depends on how the method is called.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 520,
+        height: 50,
+        text: "Method ထဲက this",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-dot,
+        kind: text,
+        x: 270,
+        y: 270,
+        width: 800,
+        height: 40,
+        text: "order.markReady()  →  this = order",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-alone,
+        kind: text,
+        x: 270,
+        y: 370,
+        width: 800,
+        height: 40,
+        text: "ready()  →  this = undefined",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow,
+        kind: text,
+        x: 270,
+        y: 470,
+        width: 800,
+        height: 40,
+        text: "arrow function  →  this = ဒီ object အမြဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 1717
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Class ဆိုတာ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ as const နဲ့ တန်ဖိုး တစ်ခုလုံးကို ပြန်ပြင်လို့ မရအောင်
+      ပိတ်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ JavaScript ရဲ့ class တွေကို TypeScript နဲ့ ဘယ်လို ရေးရလဲ ကြည့်သွားပါမယ်။
+      [[mark:draw-class]] ဆိုင်မှာ အော်ဒါ မှာတိုင်း ဖြည့်ရတဲ့ ဖောင် ပုံစံ တစ်ခု ရှိတယ် ဆိုပါစို့။ ပုံစံမှာ ဘာ
+      မှာလဲ၊ ဈေးနှုန်း ဘယ်လောက်လဲ ဆိုတဲ့ အကွက်တွေ ပါပြီး၊ ဖျော်ပြီးရင် အဆင်သင့် ဖြစ်ပြီလို့ မှတ်ဖို့ နေရာလည်း
+      ပါပါတယ်။ class ဆိုတာ ဒီ ပုံစံနဲ့ တူပါတယ်။ object တစ်ခုမှာ ဘယ် property တွေ ပါမလဲ၊ ဘာ အလုပ်တွေ လုပ်မလဲ
+      ဆိုတာကို တစ်နေရာတည်းမှာ စုရေးထားတာ ဖြစ်ပြီး၊ class ထဲက function တွေကိုတော့ method လို့ ခေါ်ပါတယ်။
+      [[mark:draw-new]] ဖောင် အလွတ် တစ်စောင်ကို ဖြည့်သလိုပဲ၊ new keyword နဲ့ class ကို ခေါ်လိုက်တိုင်း ပုံစံ
+      တူတဲ့ object အသစ် တစ်ခု ထွက်လာပါတယ်။ မြမြရဲ့ လက်ဖက်ရည် အော်ဒါရော၊ အောင်အောင်ရဲ့ ကော်ဖီ အော်ဒါရော
+      property တွေ တူပြီး တန်ဖိုးတွေပဲ ကွဲပါတယ်။ [[mark:draw-ts]] class က JavaScript မှာ ရှိပြီးသား feature
+      ဖြစ်ပြီး၊ TypeScript က သူ့ပေါ်မှာ type တွေနဲ့ ပြင်ခွင့်၊ သုံးခွင့် စစ်ဆေးချက်တွေကို ထပ်ထည့်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (creating a class)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html",
+        }
+      - {
+          title: "MDN: Classes",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-class
+        type: whiteboard.apply
+        at: { mark: draw-class }
+        upsertIds: [a-class-box, a-class-name, a-class-props, a-class-method, a-class-sub]
+        drawMs: 3000
+      - id: draw-new
+        type: whiteboard.apply
+        at: { mark: draw-new }
+        upsertIds: [a-arrow-1, a-new, a-arrow-2, a-obj-1, a-obj-1-text, a-obj-2, a-obj-2-text]
+        drawMs: 3600
+      - id: draw-ts
+        type: whiteboard.apply
+        at: { mark: draw-ts }
+        upsertIds: [a-ts]
+        drawMs: 1500
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒါဆို ဆိုင်ရဲ့ code ထဲမှာ ကြည့်ရအောင်။ [[mark:open-order]] ဒါက အော်ဒါ class ကို JavaScript မှာ
+      ရေးနေကျ ပုံစံအတိုင်း ရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-constructor]] constructor ဆိုတာ new နဲ့ object
+      ဆောက်တိုင်း အလိုအလျောက် run တဲ့ function ပါ။ ဒီ constructor က ပစ္စည်း နာမည်နဲ့ ဈေးနှုန်းကို argument အနေနဲ့
+      လက်ခံပြီး၊ parameter တွေမှာ type ရေးထားပါတယ်။ [[mark:select-assign]] ပြီးတော့ အဲဒီ တန်ဖိုး နှစ်ခုကို
+      this ပေါ်မှာ သိမ်းပါတယ်။ this ဆိုတာ အခု ဆောက်နေတဲ့ object ကိုယ်တိုင်ပါ။ [[mark:select-method]] အောက်က
+      method ကတော့ အော်ဒါရဲ့ status ကို အဆင်သင့် ဖြစ်ပြီလို့ ပြောင်းပေးပါတယ်။ [[mark:open-main]] main
+      ဖိုင်မှာတော့ လက်ဖက်ရည် အော်ဒါ တစ်ခုကို new နဲ့ ဆောက်ပြီး၊ [[mark:select-log]] အဲဒီ object ကို Output မှာ
+      ထုတ်ပြပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (adding a constructor, constructor arguments)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "MDN: constructor",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/constructor",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-order
+        type: workspace.openFile
+        at: { mark: open-order }
+        path: src/order.ts
+      - id: select-constructor
+        type: editor.select
+        at: { mark: select-constructor }
+        target:
+          { file: src/order.ts, text: "constructor(item: string, price: number)", occurrence: 1 }
+      - id: select-assign
+        type: editor.select
+        at: { mark: select-assign }
+        target:
+          {
+            file: src/order.ts,
+            text: "    this.item = item;\n    this.price = price;",
+            occurrence: 1,
+          }
+      - id: select-method
+        type: editor.select
+        at: { mark: select-method }
+        target:
+          {
+            file: src/order.ts,
+            text: "  markReady() {\n    this.status = \"ready\";\n  }",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-new
+        type: editor.select
+        at: { afterAction: open-main }
+        target: { file: src/main.ts, text: 'new TeaOrder("လက်ဖက်ရည်", 1500)', occurrence: 1 }
+      - id: select-log
+        type: editor.select
+        at: { mark: select-log }
+        target: { file: src/main.ts, text: "console.log(order);", occurrence: 1 }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output မှာ class ရဲ့ နာမည်နဲ့အတူ ပစ္စည်း နာမည်နဲ့ ဈေးနှုန်း ပါတဲ့
+      object ကို မြင်ရပါတယ်။ JavaScript အနေနဲ့ ဒီ code က ကောင်းကောင်း အလုပ်လုပ်ပါတယ်။ [[mark:read-errors]]
+      ဒါပေမဲ့ Errors မှာ error သုံးခု ရှိပါတယ်။ ပစ္စည်း နာမည်၊ ဈေးနှုန်းနဲ့ status ဆိုတဲ့ property တွေ
+      TeaOrder type ပေါ်မှာ မရှိဘူးလို့ ပြောနေတာပါ။ TypeScript က class မှာ ဘယ် property တွေ ရှိလဲ ဆိုတာကို
+      class ထဲမှာ ကြိုပြီး ကြေညာထားစေချင်လို့ပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Classes (fields)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#fields",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-three-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-missing-item
+        type: expect.preview
+        at: { afterAction: expect-three-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'item' does not exist on type 'TeaOrder'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-missing-status
+        type: expect.preview
+        at: { afterAction: expect-missing-item }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-3 }
+        textContains: "Property 'status' does not exist on type 'TeaOrder'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-missing-status }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "TeaOrder { item: 'လက်ဖက်ရည်', price: 1500 }"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: declare
+    chapter: "Property တွေ ကြေညာခြင်း"
+    narration: >
+      [[mark:open-order-2]] အော်ဒါ ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:type-fields]] class ရဲ့ အစမှာ property
+      နှစ်ခုကို နာမည်ပဲ ရေးပြီး ကြေညာလိုက်ပါမယ်။ type ကိုတော့ မရေးထားပါဘူး။ [[mark:read-fields]] error နှစ်ခု
+      ပျောက်ပြီး status ရဲ့ error ပဲ ကျန်ပါတော့တယ်။ [[mark:type-query-item]] type မရေးထားတော့ ဘာ type
+      ဖြစ်နေလဲ၊ query comment နဲ့ ကြည့်ရအောင်။ [[mark:read-query-item]] ပစ္စည်း နာမည်က string လို့ ပြနေပါတယ်။
+      constructor ထဲမှာ string parameter ကို ဒီ property ထဲ ထည့်ထားတာကို ဖတ်ပြီး TypeScript က infer
+      လုပ်ထားတာပါ။ ဒါကြောင့် type ကို အမြဲ ရေးစရာ မလိုပေမယ့်၊ ဖတ်တဲ့သူ ချက်ချင်း မြင်ရအောင် ကိုယ်တိုင်
+      ရေးထားတာလည်း အသုံးများပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (you don't always need to type class properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript 4.0 release notes: class property inference from constructors",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-0.html#class-property-inference-from-constructors",
+        }
+    actions:
+      - id: open-order-2
+        type: workspace.openFile
+        at: { mark: open-order-2 }
+        path: src/order.ts
+      - id: type-fields
+        type: editor.type
+        at: { mark: type-fields }
+        target: { file: src/order.ts, after: "export class TeaOrder {\n", occurrence: 1 }
+        text: "  item;\n  price;\n\n"
+      - id: expect-one-error
+        type: expect.preview
+        at: { afterAction: type-fields }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-status-left
+        type: expect.preview
+        at: { afterAction: expect-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'status' does not exist on type 'TeaOrder'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-query-item
+        type: editor.type
+        at: { mark: type-query-item }
+        target: { file: src/order.ts, after: "  item;\n", occurrence: 1 }
+        text: "  // ^?\n"
+      - id: expect-item-type
+        type: expect.preview
+        at: { afterAction: type-query-item }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "(property) TeaOrder.item: string" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: initializers
+    narration: >
+      [[mark:type-defaults]] ခွက်ရေနဲ့ status ကိုတော့ ကြေညာတဲ့ နေရာမှာပဲ စ တန်ဖိုး ပေးလိုက်ပါမယ်။ ခွက်ရေ
+      တစ်ခွက်နဲ့ status pending ကနေ စပါမယ်။ [[mark:read-defaults]] error အားလုံး ပျောက်ပြီး၊ Output က object
+      မှာလည်း ခွက်ရေနဲ့ status ပါလာပါပြီ။ ဒီ စ တန်ဖိုးတွေက constructor ရဲ့ code မ run ခင် object ထဲ
+      ရောက်နေပါတယ်။ [[mark:type-query-status]] status ရဲ့ type ကိုလည်း ကြည့်ရအောင်။ [[mark:read-query-status]]
+      pending ဆိုတဲ့ literal type မဟုတ်ဘဲ string လို့ ပြနေပါတယ်။ class property က နောက်မှ ပြောင်းလို့
+      ရတဲ့အတွက် type ကို ကျယ်ကျယ် infer လုပ်တာပါ။ ဒါကြောင့် method ထဲမှာ ready ကို ထည့်လို့ ရတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (class property initializers)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (fields, initializers)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#fields",
+        }
+      - {
+          title: "MDN: Public class fields",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/Public_class_fields",
+        }
+    actions:
+      - id: type-defaults
+        type: editor.type
+        at: { mark: type-defaults }
+        target: { file: src/order.ts, after: "  price;\n", occurrence: 1 }
+        text: "  cups = 1;\n  status = \"pending\";\n"
+        cadence: fast-explainer
+      - id: expect-no-errors-1
+        type: expect.preview
+        at: { afterAction: type-defaults }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-defaults-output
+        type: expect.preview
+        at: { afterAction: expect-no-errors-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "cups: 1, status: 'pending'"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-query-status
+        type: editor.type
+        at: { mark: type-query-status }
+        target: { file: src/order.ts, after: "  status = \"pending\";\n", occurrence: 1 }
+        text: "  // ^?\n"
+      - id: expect-status-type
+        type: expect.preview
+        at: { afterAction: type-query-status }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "(property) TeaOrder.status: string" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: optional
+    narration: >
+      [[mark:type-note]] အော်ဒါ တချို့မှာ ပါတတ်တဲ့ မှတ်ချက် property ကို string type နဲ့ ထည့်ပါမယ်။
+      constructor ထဲမှာတော့ ဘာမှ မထည့်ပါဘူး။ [[mark:read-note-error]] error အသစ် ပေါ်လာပါပြီ။ မှတ်ချက်ကို စ
+      တန်ဖိုးလည်း မပေး၊ constructor ထဲမှာလည်း မထည့်ထားဘူးလို့ ပြောနေတာပါ။ Output မှာလည်း မှတ်ချက်က undefined
+      ဖြစ်နေပါတယ်။ string လို့ ကြေညာထားပေမယ့် တကယ်တမ်း တန်ဖိုး မရှိတာကို သတိပေးနေတာပါ။ [[mark:type-optional]] မှတ်ချက်က
+      မပါလည်း ရတဲ့ property ဖြစ်လို့ နာမည်နောက်မှာ question mark ထည့်ပြီး optional လုပ်လိုက်ပါမယ်။
+      [[mark:read-optional]] error ပျောက်ပြီး၊ မှတ်ချက်ရဲ့ type က string ဒါမှမဟုတ် undefined
+      ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (optional class properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TSConfig: strictPropertyInitialization",
+          url: "https://www.typescriptlang.org/tsconfig/#strictPropertyInitialization",
+        }
+    actions:
+      - id: type-note
+        type: editor.type
+        at: { mark: type-note }
+        target: { file: src/order.ts, after: "  status = \"pending\";\n  // ^?\n", occurrence: 1 }
+        text: "  note: string;\n"
+      - id: expect-note-count
+        type: expect.preview
+        at: { afterAction: type-note }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-note-error
+        type: expect.preview
+        at: { afterAction: expect-note-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2564" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-note-message
+        type: expect.preview
+        at: { afterAction: expect-note-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'note' has no initializer and is not definitely assigned in the constructor."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-note-undefined
+        type: expect.preview
+        at: { afterAction: expect-note-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "note: undefined"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-optional
+        type: editor.type
+        at: { mark: type-optional }
+        target: { file: src/order.ts, after: "  note", occurrence: 1 }
+        text: "?"
+      - id: expect-no-errors-2
+        type: expect.preview
+        at: { afterAction: type-optional }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: getter
+    chapter: "Getter နဲ့ class type"
+    narration: >
+      [[mark:type-getter]] အခု ကျသင့်ငွေကို တွက်ပေးတဲ့ getter ထည့်ပါမယ်။ getter ဆိုတာ ရှေ့မှာ get keyword
+      ပါတဲ့ method ပါ။ ကွင်းနဲ့ မခေါ်ဘဲ property လိုပဲ ဖတ်ရပြီး၊ ဖတ်လိုက်တိုင်း ဈေးနှုန်းကို ခွက်ရေနဲ့
+      မြှောက်ပြီး တွက်ပေးပါတယ်။ [[mark:open-main-2]] main ဖိုင်မှာ ဘောင်ချာ ထုတ်တဲ့ function တစ်ခု ရေးပါမယ်။
+      [[mark:type-receipt]] ဒီ function ရဲ့ parameter ကို TeaOrder လို့ ကြေညာထားပါတယ်။ class ကို
+      ကြေညာလိုက်တာနဲ့ သူ့နာမည်က type တစ်ခုလည်း ဖြစ်သွားလို့ပါ။ [[mark:read-receipt]] Output မှာ လက်ဖက်ရည်
+      တစ်ခွက် ၁၅၀၀ ကျပ် ဆိုတဲ့ ဘောင်ချာ ပေါ်လာပါပြီ။ ဆိုတော့ class နာမည် တစ်ခုတည်းကို
+      object ဆောက်ဖို့ရော၊ type အနေနဲ့ပါ သုံးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (using a class as a type)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (getters / setters)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#getters--setters",
+        }
+      - {
+          title: "MDN: get",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/get",
+        }
+    actions:
+      - id: type-getter
+        type: editor.type
+        at: { mark: type-getter }
+        target: { file: src/order.ts, after: "    this.price = price;\n  }\n", occurrence: 1 }
+        text: "\n  get total() {\n    return this.price * this.cups;\n  }\n"
+        cadence: line-by-line
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: src/main.ts
+      - id: type-receipt
+        type: editor.type
+        at: { mark: type-receipt }
+        target: { file: src/main.ts, after: "console.log(order);\n", occurrence: 1 }
+        text: "\nfunction printReceipt(order: TeaOrder) {\n  console.log(order.item, order.cups, \"ခွက်\", order.total, \"ကျပ်\");\n}\nprintReceipt(order);\n"
+        cadence: line-by-line
+      - id: expect-receipt
+        type: expect.preview
+        at: { afterAction: type-receipt }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "လက်ဖက်ရည် 1 ခွက် 1500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-receipt-clean
+        type: expect.preview
+        at: { afterAction: expect-receipt }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: readonly
+    chapter: "readonly၊ private နဲ့ hash field"
+    narration: >
+      [[mark:type-free]] အော်ဒါ ဆောက်ပြီးမှ တစ်ယောက်ယောက်က ဈေးနှုန်းကို သုည ပြောင်းလိုက်ရင် ဘာဖြစ်မလဲ
+      ကြည့်ရအောင်။ [[mark:read-free]] error မပေါ်ဘဲ ဘောင်ချာက သုည ကျပ် ဖြစ်သွားပါပြီ။ ဆိုင်အတွက်တော့ bug ပါ။
+      [[mark:open-order-3]] ဒါကြောင့် အော်ဒါ ဖိုင်မှာ ဈေးနှုန်းရဲ့ ရှေ့မှာ read only လို့ ထည့်ပါမယ်။ read only
+      property ကို constructor ထဲမှာ ထည့်လို့ ရပေမယ့် ပြီးရင် ပြန်ပြင်ခွင့် မရှိပါဘူး။ [[mark:read-readonly]]
+      main ဖိုင်က line မှာ read only property ကို တန်ဖိုး အသစ် ပေးလို့ မရဘူး ဆိုတဲ့ error ပေါ်လာပါပြီ။ ဒါပေမဲ့ Output
+      မှာ သုည ကျပ် ဆက်ဖြစ်နေတာ သတိထား ကြည့်ပါ။ read only က type ပိုင်းက စစ်ဆေးချက် ဖြစ်လို့ runtime မှာ ဘာမှ
+      မတားပါဘူး။ [[mark:open-main-3]] ဒါကြောင့် ဒီ line ကို comment လုပ်ပြီး ပိတ်လိုက်ပါမယ်။
+      [[mark:read-comment-free]] ဘောင်ချာက ၁၅၀၀ ကျပ် ပြန်ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (readonly class properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (readonly)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#readonly",
+        }
+    actions:
+      - id: type-free
+        type: editor.type
+        at: { mark: type-free }
+        target: { file: src/main.ts, after: "new TeaOrder(\"လက်ဖက်ရည်\", 1500);\n", occurrence: 1 }
+        text: "order.price = 0;\n"
+        cadence: fast-explainer
+      - id: expect-free
+        type: expect.preview
+        at: { afterAction: type-free }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "လက်ဖက်ရည် 1 ခွက် 0 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-free-no-error
+        type: expect.preview
+        at: { afterAction: expect-free }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-order-3
+        type: workspace.openFile
+        at: { mark: open-order-3 }
+        path: src/order.ts
+      - id: type-readonly
+        type: editor.type
+        at: { afterAction: open-order-3 }
+        target: { file: src/order.ts, after: "  // ^?\n  ", occurrence: 1 }
+        text: "readonly "
+      - id: expect-readonly-count
+        type: expect.preview
+        at: { afterAction: type-readonly }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-readonly-error
+        type: expect.preview
+        at: { afterAction: expect-readonly-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2540" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-readonly-message
+        type: expect.preview
+        at: { afterAction: expect-readonly-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot assign to 'price' because it is a read-only property."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-free
+        type: expect.preview
+        at: { afterAction: expect-readonly-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 0 ကျပ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: src/main.ts
+      - id: type-comment-free
+        type: editor.type
+        at: { afterAction: open-main-3 }
+        target: { file: src/main.ts, after: "1500);\n", occurrence: 1 }
+        text: "// "
+      - id: expect-no-errors-3
+        type: expect.preview
+        at: { afterAction: type-comment-free }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-price-back
+        type: expect.preview
+        at: { afterAction: expect-no-errors-3 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 1500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: private
+    narration: >
+      [[mark:open-order-4]] ဆက်ပြီး လျှော့ဈေး property တစ်ခု ထည့်ပါမယ်။ class ရဲ့ property တွေက default
+      အားဖြင့် public ဖြစ်လို့ ဘယ်ကနေမဆို သုံးလို့ ရပါတယ်။ public keyword ကို ရေးရေး မရေးရေး အတူတူပါပဲ။
+      [[mark:type-private]] လျှော့ဈေးကို class ထဲကပဲ စီမံချင်လို့ ရှေ့မှာ private လို့ ရေးထားပါတယ်။ private ဆိုတာ class ရဲ့
+      အပြင်ကနေ သုံးခွင့် မပေးတဲ့ property ပါ။ [[mark:type-subtract]] getter မှာလည်း လျှော့ဈေးကို နုတ်ပေးပါမယ်။ getter က class ထဲက code ဖြစ်လို့ private
+      property ကို သုံးခွင့် ရှိပါတယ်။
+      [[mark:open-main-4]] အခု main ဖိုင်ကနေ လျှော့ဈေး ၈၀၀ ကျပ် ထည့်ကြည့်ရအောင်။ [[mark:read-private]] private
+      ဖြစ်လို့ class ထဲမှာပဲ သုံးလို့ ရတယ် ဆိုတဲ့ error ပေါ်လာပါပြီ။ ဒါပေမဲ့ Output မှာ ဘောင်ချာက ၇၀၀ ကျပ်
+      ဖြစ်သွားပြီး၊ object ထဲမှာလည်း ၈၀၀ ကို မြင်ရပါတယ်။ ဆိုတော့ private ကလည်း type ပိုင်းက စစ်ဆေးချက် သက်သက်
+      ဖြစ်ပြီး၊ runtime မှာ ဘယ်သူမဆို ပြင်လို့ ရနေဆဲပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (public and private properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (private)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#private",
+        }
+    actions:
+      - id: open-order-4
+        type: workspace.openFile
+        at: { mark: open-order-4 }
+        path: src/order.ts
+      - id: type-private
+        type: editor.type
+        at: { mark: type-private }
+        target: { file: src/order.ts, after: "  note?: string;\n", occurrence: 1 }
+        text: "  private discount = 0;\n"
+        cadence: fast-explainer
+      - id: type-subtract
+        type: editor.type
+        at: { mark: type-subtract }
+        target: { file: src/order.ts, after: "return this.price * this.cups", occurrence: 1 }
+        text: " - this.discount"
+        cadence: fast-explainer
+      - id: open-main-4
+        type: workspace.openFile
+        at: { mark: open-main-4 }
+        path: src/main.ts
+      - id: type-discount
+        type: editor.type
+        at: { afterAction: open-main-4 }
+        target: { file: src/main.ts, after: "// order.price = 0;\n", occurrence: 1 }
+        text: "order.discount = 800;\n"
+        cadence: fast-explainer
+      - id: expect-private-count
+        type: expect.preview
+        at: { afterAction: type-discount }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-private-error
+        type: expect.preview
+        at: { afterAction: expect-private-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2341" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-private-message
+        type: expect.preview
+        at: { afterAction: expect-private-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'discount' is private and only accessible within class 'TeaOrder'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-private-total
+        type: expect.preview
+        at: { afterAction: expect-private-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 700 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-private-visible
+        type: expect.preview
+        at: { afterAction: expect-private-total }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "discount: 800"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: hash
+    narration: >
+      [[mark:open-order-5]] runtime မှာပါ တကယ် ပိတ်ချင်ရင် JavaScript ရဲ့ private field ကို သုံးရပါတယ်။
+      [[mark:type-hash]] နာမည်ရဲ့ ရှေ့မှာ hash သင်္ကေတ ပါတဲ့ field ပါ။ private line ကို comment လုပ်ပြီး hash
+      နဲ့ line အသစ် ရေးပါမယ်။ getter ထဲမှာလည်း အဲဒီ နာမည်ကို ပြောင်းသုံးပါမယ်။ [[mark:read-hash]] main ဖိုင်က
+      error က TeaOrder မှာ ဒီ property မရှိဘူးလို့ ပြောင်းသွားပြီး၊ ဘောင်ချာက ၁၅၀၀ ကျပ် ပြန်ဖြစ်သွားပါပြီ။
+      object ထဲက ၈၀၀ ကတော့ အပြင်က code ထည့်လိုက်တဲ့ သီးသန့် property ပဲ ဖြစ်ပါတယ်။ hash field ကို class
+      အပြင်ကနေ ဖတ်တာ ပြင်တာကို JavaScript ကိုယ်တိုင်က ခွင့်မပြုလို့ပါ။ [[mark:type-setter]] ဒါဆို အပြင်ကနေ
+      လျှော့ဈေး ပေးချင်ရင် setter ကို သုံးလို့ ရပါတယ်။ setter ဆိုတာ ရှေ့မှာ set keyword ပါတဲ့ method ဖြစ်ပြီး၊
+      ဒီ နာမည်ကို တန်ဖိုး ထည့်တိုင်း run ပါတယ်။ ဒီ setter က လျှော့ဈေးကို ၅၀၀ ကျပ်ထက် မပိုအောင် ကန့်သတ်ပါတယ်။
+      [[mark:read-setter]] error ပျောက်ပြီး ဘောင်ချာက ၁၀၀၀ ကျပ် ဖြစ်သွားပါပြီ။ ၈၀၀ ထည့်ပေမယ့် setter က ၅၀၀ ပဲ
+      လက်ခံလိုက်တာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (runtime private properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "MDN: Private properties",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/Private_properties",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (caveats: private vs #)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#caveats",
+        }
+      - {
+          title: "MDN: set",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/set",
+        }
+    actions:
+      - id: open-order-5
+        type: workspace.openFile
+        at: { mark: open-order-5 }
+        path: src/order.ts
+      - id: type-hash
+        type: editor.type
+        at: { mark: type-hash }
+        target: { file: src/order.ts, after: "  note?: string;\n  ", occurrence: 1 }
+        text: "#discount = 0;\n  // "
+        cadence: block
+      - id: type-hash-getter
+        type: editor.type
+        at: { afterAction: type-hash }
+        target: { file: src/order.ts, after: "this.cups - this.", occurrence: 1 }
+        text: "#"
+        cadence: fast-explainer
+      - id: expect-hash-error
+        type: expect.preview
+        at: { afterAction: type-hash-getter }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-hash-message
+        type: expect.preview
+        at: { afterAction: expect-hash-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'discount' does not exist on type 'TeaOrder'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-hash-total
+        type: expect.preview
+        at: { afterAction: expect-hash-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 1500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-hash-stray
+        type: expect.preview
+        at: { afterAction: expect-hash-total }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "discount: 800"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-setter
+        type: editor.type
+        at: { mark: type-setter }
+        target: { file: src/order.ts, after: "this.cups - this.#discount;\n  }\n", occurrence: 1 }
+        text: "\n  set discount(amount: number) {\n    this.#discount = Math.min(amount, 500);\n  }\n"
+        cadence: line-by-line
+      - id: expect-no-errors-4
+        type: expect.preview
+        at: { afterAction: type-setter }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-setter-total
+        type: expect.preview
+        at: { afterAction: expect-no-errors-4 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 1000 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: this
+    chapter: "Method နဲ့ this"
+    narration: >
+      [[mark:open-main-5]] နောက်ဆုံး အော်ဒါကို အဆင်သင့် ဖြစ်ပြီလို့ မှတ်ကြည့်ရအောင်။ [[mark:type-detach]]
+      ဒီတစ်ခါ method ကို variable တစ်ခုထဲ ခွဲထုတ်ပြီးမှ ခေါ်ပါမယ်။ ခလုတ် နှိပ်ရင် ခေါ်ဖို့ method ကို
+      ပို့ပေးတဲ့အခါ ဒီလို ဖြစ်တတ်ပါတယ်။ [[mark:read-crash]] Output ရဲ့ နောက်ဆုံးမှာ undefined ပေါ်မှာ status
+      ကို ထည့်လို့ မရဘူး ဆိုတဲ့ အနီရောင် error နဲ့ program ရပ်သွားပါတယ်။ Errors မှာတော့ error တစ်ခုမှ
+      မရှိပါဘူး။ TypeScript က ဖမ်းမပေးနိုင်တဲ့ ပြဿနာ ဖြစ်လို့ပါ။ [[mark:board-this]] ဘာကြောင့်လဲဆိုတော့ method ထဲက this က method ကို
+      ဘယ်လို ခေါ်လဲ ဆိုတာပေါ် မူတည်လို့ပါ။ [[mark:draw-this-dot]] object ကနေ တိုက်ရိုက် ခေါ်ရင် this က အဲဒီ
+      object ပါ။ [[mark:draw-this-alone]] သီးသန့် ခေါ်ရင်တော့ ရှေ့မှာ object မရှိလို့ this က undefined
+      ဖြစ်သွားပါတယ်။ [[mark:draw-this-arrow]] arrow function ကတော့ this ကို သူ့ကို ဖန်တီးတဲ့ နေရာကနေ
+      ယူထားလို့၊ class ထဲမှာ arrow function property အနေနဲ့ ရေးရင် ဘယ်လိုပဲ ခေါ်ခေါ် this က ဒီ object ပဲ
+      ဖြစ်ပါတယ်။ [[mark:close-board-this]] ဒါဆို method ကို arrow function property ပြောင်းကြည့်ရအောင်။
+      [[mark:type-arrow]] method ရဲ့ နာမည်နောက်မှာ arrow function ကို တန်ဖိုး အဖြစ် ပေးလိုက်တာ ဖြစ်ပြီး၊ ထဲက
+      code ကတော့ အရင်အတိုင်းပါပဲ။ [[mark:read-arrow]] အနီရောင် error ပျောက်ပြီး နောက်ဆုံး line မှာ ready
+      ပေါ်လာပါပြီ။ ပထမ line က object ထဲမှာလည်း ဒီ function ကို မြင်ရပါတယ်။ arrow function property က object
+      တစ်ခုစီမှာ ကိုယ်ပိုင် function ရှိပြီး၊ သာမန် method ကိုတော့ object အားလုံးက မျှသုံးလို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes (arrow functions or class methods?)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (this at runtime, arrow functions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#arrow-functions",
+        }
+      - {
+          title: "MDN: this (class context, callbacks)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/this",
+        }
+    actions:
+      - id: open-main-5
+        type: workspace.openFile
+        at: { mark: open-main-5 }
+        path: src/main.ts
+      - id: type-detach
+        type: editor.type
+        at: { mark: type-detach }
+        target: { file: src/main.ts, after: "printReceipt(order);\n", occurrence: 1 }
+        text: "\nconst ready = order.markReady;\nready();\nconsole.log(order.status);\n"
+        cadence: line-by-line
+      - id: expect-crash
+        type: expect.preview
+        at: { afterAction: type-detach }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "Uncaught TypeError: Cannot set properties of undefined (setting 'status')"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-crash-level
+        type: expect.preview
+        at: { afterAction: expect-crash }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        attribute: { name: data-level, value: "error" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-crash-no-error
+        type: expect.preview
+        at: { afterAction: expect-crash-level }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-this }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-this-dot
+        type: whiteboard.apply
+        at: { mark: draw-this-dot }
+        upsertIds: [b-dot]
+        drawMs: 1400
+      - id: draw-this-alone
+        type: whiteboard.apply
+        at: { mark: draw-this-alone }
+        upsertIds: [b-alone]
+        drawMs: 1400
+      - id: draw-this-arrow
+        type: whiteboard.apply
+        at: { mark: draw-this-arrow }
+        upsertIds: [b-arrow]
+        drawMs: 1400
+      - id: close-board-this
+        type: whiteboard.apply
+        at: { mark: close-board-this }
+        open: false
+      - id: open-order-6
+        type: workspace.openFile
+        at: { mark: close-board-this, offsetMs: 700 }
+        path: src/order.ts
+      - id: type-arrow-equals
+        type: editor.type
+        at: { mark: type-arrow }
+        target: { file: src/order.ts, after: "  markReady", occurrence: 1 }
+        text: " = "
+        cadence: fast-explainer
+      - id: type-arrow-head
+        type: editor.type
+        at: { afterAction: type-arrow-equals }
+        target: { file: src/order.ts, after: "  markReady = ()", occurrence: 1 }
+        text: " =>"
+        cadence: fast-explainer
+      - id: type-arrow-semicolon
+        type: editor.type
+        at: { afterAction: type-arrow-head }
+        target: { file: src/order.ts, after: "    this.status = \"ready\";\n  }", occurrence: 1 }
+        text: ";"
+        cadence: fast-explainer
+      - id: expect-ready
+        type: expect.preview
+        at: { afterAction: type-arrow-semicolon }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "ready"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-ready-level
+        type: expect.preview
+        at: { afterAction: expect-ready }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        attribute: { name: data-level, value: "log" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-arrow-own
+        type: expect.preview
+        at: { afterAction: expect-ready-level }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "markReady: [Function: markReady]"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-no-errors-5
+        type: expect.preview
+        at: { afterAction: expect-arrow-own }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ class က property တွေ၊ constructor နဲ့ method တွေကို စုထားတဲ့ ပုံစံ
+      ဖြစ်ပြီး new နဲ့ object ဆောက်ပါတယ်။ property တွေကို class ထဲမှာ ကြေညာရပြီး type ကို infer
+      လုပ်နိုင်ပါတယ်။ class နာမည်ကလည်း type တစ်ခုပါ။ [[mark:recap-private]] read only နဲ့ private က type
+      ပိုင်းမှာပဲ တားပြီး၊ hash field က runtime မှာပါ ပိတ်ပါတယ်။ getter နဲ့ setter က property လို သုံးရတဲ့
+      method တွေ ဖြစ်ပြီး၊ this မပျောက်စေချင်ရင် arrow function property ကို သုံးပါတယ်။ နောက် lesson မှာတော့
+      class တစ်ခုကနေ အမွေဆက်ခံတဲ့ class inheritance ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 8: Classes",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/classes",
+        }
+      - {
+          title: "TypeScript Handbook: Classes",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html",
+        }
+    actions:
+      - id: select-recap
+        type: editor.select
+        at: { mark: recap }
+        target: { file: src/order.ts, text: "  readonly price;", occurrence: 1 }
+      - id: select-recap-private
+        type: editor.select
+        at: { mark: recap-private }
+        target: { file: src/order.ts, text: "  #discount = 0;", occurrence: 1 }
+      - id: expect-file-fields
+        type: expect.file
+        at: { afterAction: select-recap-private }
+        path: src/order.ts
+        contains: "  item;\n  // ^?\n  readonly price;\n  cups = 1;\n  status = \"pending\";\n  // ^?\n  note?: string;\n  #discount = 0;\n  // private discount = 0;\n"
+      - id: expect-file-accessors
+        type: expect.file
+        at: { afterAction: expect-file-fields }
+        path: src/order.ts
+        contains: "  get total() {\n    return this.price * this.cups - this.#discount;\n  }\n\n  set discount(amount: number) {\n    this.#discount = Math.min(amount, 500);\n  }\n"
+      - id: expect-file-arrow
+        type: expect.file
+        at: { afterAction: expect-file-accessors }
+        path: src/order.ts
+        contains: "  markReady = () => {\n    this.status = \"ready\";\n  };\n"
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: expect-file-arrow }
+        path: src/main.ts
+        contains: "// order.price = 0;\norder.discount = 800;\nconsole.log(order);\n"
+checks:
+  - { type: timing.p95Ms, max: 300 }
