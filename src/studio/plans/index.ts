@@ -12,7 +12,11 @@ import { parseLessonScript, type LessonScript } from "../script/schema";
  */
 export type StudioLessonSource = { load: () => LessonScript };
 
-const scriptYamls = import.meta.glob<string>("../scripts/*.yaml", {
+// No `<string>` type argument on the call: Vitest's on-disk module cache keys a
+// module on its own text and skips any module containing `import.meta.glob(`,
+// whose expansion depends on the directory. The type argument hid the call from
+// that check, so a cached copy kept the old lesson list after new YAML landed.
+const scriptYamls: Record<string, string> = import.meta.glob("../scripts/*.yaml", {
   eager: true,
   query: "?raw",
   import: "default",
