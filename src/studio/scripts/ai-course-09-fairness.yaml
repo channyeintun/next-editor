@@ -1,0 +1,4412 @@
+# AI course, lesson 09: fairness and bias (Burmese, hands-on, M2 + M1).
+#
+# Start state (ws/, copied from base-transformers): course/modules-transformers.js (Transformers.js
+# 4.3.2 from jsDelivr, pinned); data/members.json (COURSE-KIT §4.3, sample data, from datasets/);
+# data/pairs.json (written for this lesson, COURSE-KIT §4.7: ten paired inputs with metadata);
+# src/prepare.js, src/ml.js, src/ui.js (pinned from base/); src/features.js (lesson 05's perVisit);
+# src/report.js (pinned) draws the panel. src/main.js holds lesson 05's member data steps and three
+# input features (township kept in the data as 0/1 columns), then the review model
+# (Xenova/mobilebert-uncased-mnli, q8, 27.7 MB, English) and the paired tests: the panel starts with
+# the MODEL card and, once the model is ready, the Paired tests table.
+#
+# Edits, all insert-only, one line each (line-by-line):
+#   1. showTokens        What the model reads: p04 English words, p05 four [UNK] tokens, p08 English fragments
+#   2. showStatement     the coverage statement (a note card)
+#   3. showMemberModel   at the top: township buttons in #app, Member model · test set (0.9 / 0.75 / 0.8182),
+#                        M0023 · only the township changed (26.9% in every township)
+#   clicks: township ထည့် → the same test metrics, M0023 from 50.0% (ကမာရွတ်) to 1.8% (ရန်ကင်း);
+#           township မထည့် → back to 26.9% everywhere (the decision).
+# M2: the review model runs live in the page (scores: assert labels and order, never digits).
+# M1: the small logistic regression in the pinned ml.js, trained in the page.
+#
+# Boards: (A) the mini blueprint with Governance highlighted; (B) where bias comes from (born in
+# data, amplified by the model, seen in the UX) and the shop's two questions; (C) the data layer;
+# (D) the intelligence and UX layers; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-09-fairness.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-09-fairness
+  title: "AI course 09: Fairness နဲ့ bias"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/modules-transformers.js: |
+        // AI course · Transformers.js for lesson code (runs in the preview page, pinned, never typed).
+        // Lesson code writes `import { pipeline } from "@huggingface/transformers"` as in any app; the
+        // panel resolves that import to this exact build from jsDelivr. (An npm install of the package
+        // would add onnxruntime-node and onnxruntime-web, about 430 MB, to every WebContainer install.)
+        // Two course defaults keep runs repeatable: one WebAssembly thread on the CPU ("wasm"), unless the
+        // lesson asks for another device, and one loaded pipeline per (task, model, options), reused by
+        // every re-run, so editing the code does not load the model again. Each pipeline() call draws a
+        // MODEL card in the AI panel: what is downloading, how much, and when it is ready.
+        const VERSION = "4.3.2";
+        const SRC = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${VERSION}/dist/transformers.min.js`;
+
+        const loaders = (window.__courseModuleLoaders ??= {});
+        loaders["@huggingface/transformers"] = async () => {
+          const lib = await import(/* @vite-ignore */ SRC);
+          lib.env.allowLocalModels = false;
+          lib.env.backends.onnx.wasm.numThreads = 1;
+          const loaded = new Map();
+          const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
+
+          function load(task, model, options) {
+            const entry = { info: { task, model, dtype: options.dtype ?? "default", device: options.device, status: "downloading", files: {} }, listeners: new Set() };
+            const notify = () => { for (const fn of entry.listeners) fn(entry); };
+            const progress = (p) => {
+              if (p.status === "progress" && p.file) {
+                entry.info.files[p.file] = { loaded: p.loaded ?? 0, total: p.total ?? 0 };
+                notify();
+              }
+            };
+            const started = performance.now();
+            entry.promise = lib.pipeline(task, model, { ...options, progress_callback: progress }).then(
+              (pipe) => {
+                entry.info.status = "ready";
+                entry.info.loadMs = Math.round(performance.now() - started);
+                notify();
+                return pipe;
+              },
+              (error) => {
+                entry.info.status = "failed";
+                entry.info.error = String(error?.message ?? error);
+                notify();
+                loaded.delete(entry.key);
+                throw error;
+              },
+            );
+            return entry;
+          }
+
+          function describe(entry) {
+            const files = Object.values(entry.info.files);
+            const total = files.reduce((s, f) => s + (f.total || 0), 0);
+            const done = files.reduce((s, f) => s + (f.loaded || 0), 0);
+            const row = { model: entry.info.model, task: entry.info.task, dtype: entry.info.dtype, device: entry.info.device };
+            if (entry.info.status === "ready") row.size = total ? `${mb(total)} downloaded` : "from the browser cache";
+            else if (entry.info.status === "downloading") row.download = total ? `${mb(done)} of ${mb(total)}` : "starting…";
+            else row.error = entry.info.error;
+            row.status = entry.info.status;
+            return row;
+          }
+
+          function pipeline(task, model, options = {}) {
+            const opts = { device: "wasm", ...options };
+            delete opts.progress_callback;
+            const key = JSON.stringify([task, model ?? null, opts]);
+            let entry = loaded.get(key);
+            if (!entry) {
+              entry = load(task, model, opts);
+              entry.key = key;
+              loaded.set(key, entry);
+            }
+            const run = window.__coursePanel?.current;
+            if (run && !run.dead) {
+              run.models = (run.models ?? 0) + 1;
+              const card = run.panel.model("Model", describe(entry), { id: `model-${run.models}` });
+              if (entry.info.status !== "ready") {
+                // At most four redraws a second while downloading (keeps the recording small), then the last.
+                let last = 0;
+                let pending = null;
+                const update = () => {
+                  const now = performance.now();
+                  if (entry.info.status !== "downloading" || now - last >= 250) {
+                    last = now;
+                    clearTimeout(pending);
+                    card?.set(describe(entry));
+                  } else if (!pending) {
+                    pending = setTimeout(() => { pending = null; last = performance.now(); card?.set(describe(entry)); }, 250);
+                  }
+                };
+                entry.listeners.add(update);
+                entry.promise.finally(() => entry.listeners.delete(update)).catch(() => {});
+              }
+            }
+            return entry.promise;
+          }
+
+          return { ...lib, pipeline };
+        };
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/members.json: |
+        {
+         "note": "Synthetic sample data written for the AI course (not real customers). ရွှေ members exported last month; stopped = 1 when the member did not come in the next 30 days. Typed in partly by hand: some messy rows on purpose.",
+         "columns": [
+          "member_id",
+          "phone",
+          "township",
+          "member_type",
+          "visits_30d",
+          "avg_order_kyat",
+          "days_since_last",
+          "delivery_share",
+          "complaints_90d",
+          "stopped"
+         ],
+         "rows": [
+          {
+           "member_id": "M0001",
+           "phone": "09 000 905 587",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 12,
+           "avg_order_kyat": 1600,
+           "days_since_last": 7,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0002",
+           "phone": "09 000 728 657",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 14,
+           "avg_order_kyat": 1700,
+           "days_since_last": 11,
+           "delivery_share": 30,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0003",
+           "phone": "09 000 497 521",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 21,
+           "avg_order_kyat": 1300,
+           "days_since_last": 3,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0004",
+           "phone": "09 000 935 851",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 0,
+           "avg_order_kyat": 5000,
+           "days_since_last": 11,
+           "delivery_share": 70,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0005",
+           "phone": "09 000 962 753",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 4,
+           "avg_order_kyat": 2400,
+           "days_since_last": 3,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0006",
+           "phone": "09 000 333 572",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 7,
+           "avg_order_kyat": 5600,
+           "days_since_last": 13,
+           "delivery_share": 50,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0007",
+           "phone": "09 000 012 345",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 24,
+           "avg_order_kyat": 2800,
+           "days_since_last": 1,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0008",
+           "phone": "09 000 835 919",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 30,
+           "avg_order_kyat": 4600,
+           "days_since_last": 5,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0009",
+           "phone": "09 000 126 451",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 4,
+           "avg_order_kyat": 2700,
+           "days_since_last": 10,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0010",
+           "phone": "09 000 438 569",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 30,
+           "avg_order_kyat": 4200,
+           "days_since_last": 4,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0011",
+           "phone": "09 000 089 119",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 15,
+           "avg_order_kyat": 1300,
+           "days_since_last": 2,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0012",
+           "phone": "09 000 441 979",
+           "township": "Bahan",
+           "member_type": "card",
+           "visits_30d": 6,
+           "avg_order_kyat": 2400,
+           "days_since_last": 3,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0013",
+           "phone": "09 000 353 977",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 1,
+           "avg_order_kyat": 3500,
+           "days_since_last": 11,
+           "delivery_share": 100,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0014",
+           "phone": "09 000 893 523",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 17,
+           "avg_order_kyat": 1700,
+           "days_since_last": 0,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0015",
+           "phone": "09 000 956 927",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 10,
+           "avg_order_kyat": 1500,
+           "days_since_last": 6,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0016",
+           "phone": "09 000 866 993",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 28,
+           "avg_order_kyat": 4100,
+           "days_since_last": 4,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0017",
+           "phone": "09 000 263 512",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 2,
+           "avg_order_kyat": 2200,
+           "days_since_last": 41,
+           "delivery_share": 90,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0018",
+           "phone": "09 000 205 330",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 9,
+           "avg_order_kyat": 3900,
+           "days_since_last": 7,
+           "delivery_share": 70,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0019",
+           "phone": "09 000 034 112",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 3,
+           "avg_order_kyat": 4500,
+           "days_since_last": 21,
+           "delivery_share": 90,
+           "complaints_90d": 1,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0020",
+           "phone": "09 000 441 965",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 13,
+           "avg_order_kyat": 2700,
+           "days_since_last": 5,
+           "delivery_share": 70,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0021",
+           "phone": "09 000 946 528",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 13,
+           "avg_order_kyat": 2300,
+           "days_since_last": 11,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0022",
+           "phone": "09 000 280 460",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 30,
+           "avg_order_kyat": 3800,
+           "days_since_last": 1,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0023",
+           "phone": "09 000 041 870",
+           "township": "Bahan",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": "2,500",
+           "days_since_last": 2,
+           "delivery_share": 0,
+           "complaints_90d": 4,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0024",
+           "phone": "09 000 577 033",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 14,
+           "avg_order_kyat": 4600,
+           "days_since_last": 11,
+           "delivery_share": 40,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0025",
+           "phone": "09 000 374 257",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 29,
+           "avg_order_kyat": 3500,
+           "days_since_last": 0,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0026",
+           "phone": "09 000 195 247",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 4,
+           "avg_order_kyat": 2900,
+           "days_since_last": 6,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0027",
+           "phone": "09 000 143 799",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 2,
+           "avg_order_kyat": 3400,
+           "days_since_last": 31,
+           "delivery_share": 20,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0028",
+           "phone": "09 000 707 052",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 25,
+           "avg_order_kyat": 2900,
+           "days_since_last": 2,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0029",
+           "phone": "09 000 853 364",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 19,
+           "avg_order_kyat": 2000,
+           "days_since_last": 4,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0030",
+           "phone": "09 000 594 222",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 1,
+           "avg_order_kyat": 4500,
+           "days_since_last": 40,
+           "delivery_share": 10,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0031",
+           "phone": "09 000 055 204",
+           "township": null,
+           "member_type": "app",
+           "visits_30d": 1,
+           "avg_order_kyat": 1800,
+           "days_since_last": 38,
+           "delivery_share": 100,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0032",
+           "phone": "09 000 534 505",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 21,
+           "avg_order_kyat": 2100,
+           "days_since_last": 5,
+           "delivery_share": 10,
+           "complaints_90d": 2,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0033",
+           "phone": "09 000 082 351",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 7,
+           "avg_order_kyat": 1800,
+           "days_since_last": 4,
+           "delivery_share": 10,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0034",
+           "phone": "09 000 585 844",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 0,
+           "avg_order_kyat": 4300,
+           "days_since_last": 44,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0035",
+           "phone": "09 000 602 727",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 25,
+           "avg_order_kyat": 3500,
+           "days_since_last": 5,
+           "delivery_share": 20,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0036",
+           "phone": "09 000 124 369",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 26,
+           "avg_order_kyat": 1900,
+           "days_since_last": 0,
+           "delivery_share": 30,
+           "complaints_90d": 4,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0037",
+           "phone": "09 000 484 364",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 1,
+           "avg_order_kyat": 3100,
+           "days_since_last": 24,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0038",
+           "phone": "09 000 909 112",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 2100,
+           "days_since_last": 1,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0039",
+           "phone": "09 000 893 557",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 2200,
+           "days_since_last": 3,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0040",
+           "phone": "09 000 824 976",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 11,
+           "avg_order_kyat": 4500,
+           "days_since_last": 3,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0041",
+           "phone": "09 000 914 617",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 10,
+           "avg_order_kyat": 2700,
+           "days_since_last": 9,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0042",
+           "phone": "09 000 067 931",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 9,
+           "avg_order_kyat": 3200,
+           "days_since_last": 6,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0043",
+           "phone": "09 000 769 656",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 13,
+           "avg_order_kyat": 4500,
+           "days_since_last": 14,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0044",
+           "phone": "09 000 324 798",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 2,
+           "avg_order_kyat": 4200,
+           "days_since_last": 18,
+           "delivery_share": 0,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0045",
+           "phone": "09 000 463 319",
+           "township": "Kamayut",
+           "member_type": "card",
+           "visits_30d": 12,
+           "avg_order_kyat": 2800,
+           "days_since_last": 10,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0046",
+           "phone": "09 000 912 262",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 19,
+           "avg_order_kyat": 1700,
+           "days_since_last": 2,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0047",
+           "phone": "09 000 138 456",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 3,
+           "avg_order_kyat": 2500,
+           "days_since_last": 29,
+           "delivery_share": 30,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0048",
+           "phone": "09 000 087 011",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 21,
+           "avg_order_kyat": 4000,
+           "days_since_last": 1,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0049",
+           "phone": "09 000 636 211",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 6,
+           "avg_order_kyat": 2900,
+           "days_since_last": 4,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0050",
+           "phone": "09 000 762 643",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 21,
+           "avg_order_kyat": 3800,
+           "days_since_last": 4,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0051",
+           "phone": "09 000 442 357",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 22,
+           "avg_order_kyat": 5600,
+           "days_since_last": 1,
+           "delivery_share": 60,
+           "complaints_90d": 5,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0052",
+           "phone": "09 000 851 288",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 14,
+           "avg_order_kyat": 4500,
+           "days_since_last": 7,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0053",
+           "phone": "09 000 015 455",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 30,
+           "avg_order_kyat": 1300,
+           "days_since_last": 1,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0054",
+           "phone": "09 000 074 046",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 0,
+           "avg_order_kyat": 3000,
+           "days_since_last": 33,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0055",
+           "phone": "09 000 361 857",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 10,
+           "avg_order_kyat": 1600,
+           "days_since_last": 6,
+           "delivery_share": 10,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0056",
+           "phone": "09 000 076 854",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 27,
+           "avg_order_kyat": 3400,
+           "days_since_last": 4,
+           "delivery_share": 50,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0057",
+           "phone": "09 000 595 461",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 1,
+           "avg_order_kyat": 3300,
+           "days_since_last": 17,
+           "delivery_share": 70,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0058",
+           "phone": "09 000 625 660",
+           "township": null,
+           "member_type": "app",
+           "visits_30d": 22,
+           "avg_order_kyat": 1500,
+           "days_since_last": 3,
+           "delivery_share": 20,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0059",
+           "phone": "09 000 003 536",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 13,
+           "avg_order_kyat": 2900,
+           "days_since_last": 9,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0060",
+           "phone": "09 000 688 721",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 3,
+           "avg_order_kyat": 1200,
+           "days_since_last": 40,
+           "delivery_share": 30,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0061",
+           "phone": "09 000 511 286",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 4,
+           "avg_order_kyat": 2700,
+           "days_since_last": 9,
+           "delivery_share": 20,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0062",
+           "phone": "09 000 448 151",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 12,
+           "avg_order_kyat": 3600,
+           "days_since_last": 15,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0063",
+           "phone": "09 000 958 404",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 4500,
+           "days_since_last": 1,
+           "delivery_share": 0,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0064",
+           "phone": "09 000 857 438",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 29,
+           "avg_order_kyat": "4,000",
+           "days_since_last": 0,
+           "delivery_share": 100,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0065",
+           "phone": "09 000 251 199",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 20,
+           "avg_order_kyat": 1800,
+           "days_since_last": 4,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0066",
+           "phone": "09 000 590 846",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 2700,
+           "days_since_last": 3,
+           "delivery_share": 0,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0067",
+           "phone": "09 000 065 453",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 20,
+           "avg_order_kyat": 4000,
+           "days_since_last": 3,
+           "delivery_share": 80,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0068",
+           "phone": "09 000 435 416",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 4200,
+           "days_since_last": 2,
+           "delivery_share": 0,
+           "complaints_90d": 5,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0069",
+           "phone": "09 000 495 886",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 7,
+           "avg_order_kyat": 1700,
+           "days_since_last": 15,
+           "delivery_share": 50,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0070",
+           "phone": "09 000 644 461",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 19,
+           "avg_order_kyat": 3600,
+           "days_since_last": 5,
+           "delivery_share": 70,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0071",
+           "phone": "09 000 082 677",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 26,
+           "avg_order_kyat": 2900,
+           "days_since_last": 3,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0072",
+           "phone": "09 000 448 328",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 4,
+           "avg_order_kyat": 3400,
+           "days_since_last": 4,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0073",
+           "phone": "09 000 964 911",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 10,
+           "avg_order_kyat": 1900,
+           "days_since_last": 6,
+           "delivery_share": 70,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0074",
+           "phone": "09 000 035 549",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 9,
+           "avg_order_kyat": 3300,
+           "days_since_last": 6,
+           "delivery_share": 50,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0075",
+           "phone": "09 000 410 860",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 9,
+           "avg_order_kyat": 4100,
+           "days_since_last": 2,
+           "delivery_share": 100,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0076",
+           "phone": "09 000 070 992",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 22,
+           "avg_order_kyat": 1200,
+           "days_since_last": 4,
+           "delivery_share": 0,
+           "complaints_90d": 2,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0077",
+           "phone": "09 000 176 653",
+           "township": "Hlaing",
+           "member_type": "card",
+           "visits_30d": 14,
+           "avg_order_kyat": 3500,
+           "days_since_last": 14,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0078",
+           "phone": "09 000 173 412",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 12,
+           "avg_order_kyat": 2900,
+           "days_since_last": 9,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0079",
+           "phone": "09 000 967 167",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 8,
+           "avg_order_kyat": 1600,
+           "days_since_last": 6,
+           "delivery_share": 30,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0080",
+           "phone": "09 000 512 366",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 5,
+           "avg_order_kyat": 6000,
+           "days_since_last": 7,
+           "delivery_share": 60,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0081",
+           "phone": "09 000 044 440",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": 2300,
+           "days_since_last": 0,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0082",
+           "phone": "09 000 124 614",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 11,
+           "avg_order_kyat": 4100,
+           "days_since_last": 13,
+           "delivery_share": 90,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0083",
+           "phone": "09 000 308 637",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 0,
+           "avg_order_kyat": 4000,
+           "days_since_last": 15,
+           "delivery_share": 20,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0084",
+           "phone": "09 000 886 049",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 20,
+           "avg_order_kyat": 1800,
+           "days_since_last": 1,
+           "delivery_share": 30,
+           "complaints_90d": 4,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0085",
+           "phone": "09 000 640 971",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 2,
+           "avg_order_kyat": 2800,
+           "days_since_last": 16,
+           "delivery_share": 30,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0086",
+           "phone": "09 000 075 736",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 6,
+           "avg_order_kyat": 1200,
+           "days_since_last": 11,
+           "delivery_share": 40,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0087",
+           "phone": "09 000 229 469",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 27,
+           "avg_order_kyat": 5400,
+           "days_since_last": 4,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0088",
+           "phone": "09 000 020 746",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": 3500,
+           "days_since_last": 4,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0088",
+           "phone": "09 000 020 746",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": 3500,
+           "days_since_last": 4,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0089",
+           "phone": "09 000 825 078",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 3,
+           "avg_order_kyat": 1300,
+           "days_since_last": 21,
+           "delivery_share": 10,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0090",
+           "phone": "09 000 915 971",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 5,
+           "avg_order_kyat": 1600,
+           "days_since_last": 14,
+           "delivery_share": 30,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0091",
+           "phone": "09 000 772 576",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 2,
+           "avg_order_kyat": 3800,
+           "days_since_last": 11,
+           "delivery_share": 30,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0092",
+           "phone": "09 000 082 923",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 0,
+           "avg_order_kyat": 4000,
+           "days_since_last": 27,
+           "delivery_share": 20,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0093",
+           "phone": "09 000 683 182",
+           "township": null,
+           "member_type": "card",
+           "visits_30d": 8,
+           "avg_order_kyat": 1900,
+           "days_since_last": 6,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0094",
+           "phone": "09 000 296 848",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 19,
+           "avg_order_kyat": 3300,
+           "days_since_last": 5,
+           "delivery_share": 30,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0095",
+           "phone": "09 000 212 248",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 19,
+           "avg_order_kyat": 4000,
+           "days_since_last": 1,
+           "delivery_share": 60,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0096",
+           "phone": "09 000 617 384",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 23,
+           "avg_order_kyat": 4700,
+           "days_since_last": 3,
+           "delivery_share": 50,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0097",
+           "phone": "09 000 200 011",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 25,
+           "avg_order_kyat": 3100,
+           "days_since_last": 1,
+           "delivery_share": 0,
+           "complaints_90d": 4,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0098",
+           "phone": "09 000 923 096",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 7,
+           "avg_order_kyat": 4400,
+           "days_since_last": 10,
+           "delivery_share": 0,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0099",
+           "phone": "09 000 601 316",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 11,
+           "avg_order_kyat": 4200,
+           "days_since_last": 9,
+           "delivery_share": 30,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0100",
+           "phone": "09 000 591 033",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 11,
+           "avg_order_kyat": 2500,
+           "days_since_last": 11,
+           "delivery_share": 0,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0101",
+           "phone": "09 000 804 946",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 9,
+           "avg_order_kyat": 3900,
+           "days_since_last": 13,
+           "delivery_share": 30,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0102",
+           "phone": "09 000 964 947",
+           "township": "Kamayut",
+           "member_type": "card",
+           "visits_30d": 5,
+           "avg_order_kyat": 1800,
+           "days_since_last": 9,
+           "delivery_share": 40,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0103",
+           "phone": "09 000 965 874",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 16,
+           "avg_order_kyat": 6000,
+           "days_since_last": 3,
+           "delivery_share": 20,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0104",
+           "phone": "09 000 310 317",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 13,
+           "avg_order_kyat": 5600,
+           "days_since_last": 5,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0105",
+           "phone": "09 000 310 297",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": 2200,
+           "days_since_last": 5,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0106",
+           "phone": "09 000 127 872",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 3,
+           "avg_order_kyat": 2900,
+           "days_since_last": 36,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0107",
+           "phone": "09 000 424 753",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 12,
+           "avg_order_kyat": 3900,
+           "days_since_last": 9,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0108",
+           "phone": "09 000 610 386",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 10,
+           "avg_order_kyat": 1700,
+           "days_since_last": 8,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0109",
+           "phone": "09 000 128 802",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 24,
+           "avg_order_kyat": 2300,
+           "days_since_last": 0,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0110",
+           "phone": "09 000 021 829",
+           "township": "တာမွေ",
+           "member_type": "app",
+           "visits_30d": 11,
+           "avg_order_kyat": 6000,
+           "days_since_last": 6,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0111",
+           "phone": "09 000 322 110",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 4,
+           "avg_order_kyat": 2600,
+           "days_since_last": 7,
+           "delivery_share": 90,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0112",
+           "phone": "09 000 209 247",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 5,
+           "avg_order_kyat": 3400,
+           "days_since_last": 9,
+           "delivery_share": 60,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0113",
+           "phone": "09 000 382 840",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 23,
+           "avg_order_kyat": 3800,
+           "days_since_last": 0,
+           "delivery_share": 90,
+           "complaints_90d": 5,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0114",
+           "phone": "09 000 401 352",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 12,
+           "avg_order_kyat": 3500,
+           "days_since_last": 8,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0115",
+           "phone": "09 000 170 740",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 12,
+           "avg_order_kyat": 2000,
+           "days_since_last": 2,
+           "delivery_share": 10,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0116",
+           "phone": "09 000 669 162",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 16,
+           "avg_order_kyat": 3700,
+           "days_since_last": 0,
+           "delivery_share": 10,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0117",
+           "phone": "09 000 795 170",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 14,
+           "avg_order_kyat": 5300,
+           "days_since_last": 15,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0118",
+           "phone": "09 000 521 808",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 4200,
+           "days_since_last": 2,
+           "delivery_share": 0,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0119",
+           "phone": "09 000 341 710",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 28,
+           "avg_order_kyat": 2300,
+           "days_since_last": 2,
+           "delivery_share": 100,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0120",
+           "phone": "09 000 109 665",
+           "township": "ကမာရွတ်",
+           "member_type": "app",
+           "visits_30d": 19,
+           "avg_order_kyat": "1,300",
+           "days_since_last": 5,
+           "delivery_share": 50,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0121",
+           "phone": "09 000 957 942",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 25,
+           "avg_order_kyat": 2000,
+           "days_since_last": 5,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0122",
+           "phone": "09 000 395 767",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 13,
+           "avg_order_kyat": 3800,
+           "days_since_last": 11,
+           "delivery_share": 20,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0123",
+           "phone": "09 000 787 583",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 23,
+           "avg_order_kyat": 5700,
+           "days_since_last": 5,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0124",
+           "phone": "09 000 546 866",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 9,
+           "avg_order_kyat": 3100,
+           "days_since_last": 14,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0125",
+           "phone": "09 000 072 085",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 6,
+           "avg_order_kyat": 5200,
+           "days_since_last": 6,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0126",
+           "phone": "09 000 615 996",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 15,
+           "avg_order_kyat": 1200,
+           "days_since_last": 4,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0127",
+           "phone": "09 000 013 585",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 25,
+           "avg_order_kyat": 3800,
+           "days_since_last": 3,
+           "delivery_share": 30,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0128",
+           "phone": "09 000 263 635",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 27,
+           "avg_order_kyat": 3600,
+           "days_since_last": 4,
+           "delivery_share": 30,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0129",
+           "phone": "09 000 852 882",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 23,
+           "avg_order_kyat": 3300,
+           "days_since_last": 2,
+           "delivery_share": 40,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0130",
+           "phone": "09 000 139 645",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 3,
+           "avg_order_kyat": 2700,
+           "days_since_last": 32,
+           "delivery_share": 50,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0131",
+           "phone": "09 000 178 729",
+           "township": "Tamwe",
+           "member_type": "app",
+           "visits_30d": 23,
+           "avg_order_kyat": 1400,
+           "days_since_last": 1,
+           "delivery_share": 50,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0132",
+           "phone": "09 000 244 688",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 25,
+           "avg_order_kyat": 1200,
+           "days_since_last": 3,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0133",
+           "phone": "09 000 868 476",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 4,
+           "avg_order_kyat": 2200,
+           "days_since_last": 11,
+           "delivery_share": 100,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0134",
+           "phone": "09 000 809 903",
+           "township": "ရန်ကင်း",
+           "member_type": "card",
+           "visits_30d": 8,
+           "avg_order_kyat": 3800,
+           "days_since_last": 6,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0135",
+           "phone": "09 000 856 135",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 28,
+           "avg_order_kyat": 2500,
+           "days_since_last": 5,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0136",
+           "phone": "09 000 881 141",
+           "township": "လှိုင်",
+           "member_type": "app",
+           "visits_30d": 2,
+           "avg_order_kyat": 2700,
+           "days_since_last": 29,
+           "delivery_share": 100,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0137",
+           "phone": "09 000 758 715",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 9,
+           "avg_order_kyat": 2100,
+           "days_since_last": 6,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0138",
+           "phone": "09 000 275 815",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 23,
+           "avg_order_kyat": 3300,
+           "days_since_last": 5,
+           "delivery_share": 40,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0139",
+           "phone": "09 000 313 000",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 27,
+           "avg_order_kyat": 1600,
+           "days_since_last": 0,
+           "delivery_share": 70,
+           "complaints_90d": 4,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0140",
+           "phone": "09 000 548 303",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 2,
+           "avg_order_kyat": 2900,
+           "days_since_last": 29,
+           "delivery_share": 80,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0141",
+           "phone": "09 000 179 259",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 2,
+           "avg_order_kyat": 2100,
+           "days_since_last": 37,
+           "delivery_share": 50,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0142",
+           "phone": "09 000 133 359",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 1,
+           "avg_order_kyat": 4100,
+           "days_since_last": 40,
+           "delivery_share": 40,
+           "complaints_90d": 2,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0143",
+           "phone": "09 000 274 252",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 0,
+           "avg_order_kyat": 3200,
+           "days_since_last": 27,
+           "delivery_share": 0,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0144",
+           "phone": "09 000 956 619",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 0,
+           "avg_order_kyat": 4900,
+           "days_since_last": 18,
+           "delivery_share": 60,
+           "complaints_90d": 2,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0145",
+           "phone": "09 000 456 208",
+           "township": "စမ်းချောင်း",
+           "member_type": "app",
+           "visits_30d": 7,
+           "avg_order_kyat": 4300,
+           "days_since_last": 7,
+           "delivery_share": 90,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0146",
+           "phone": "09 000 177 863",
+           "township": null,
+           "member_type": "card",
+           "visits_30d": 15,
+           "avg_order_kyat": 2900,
+           "days_since_last": 4,
+           "delivery_share": 10,
+           "complaints_90d": 3,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0147",
+           "phone": "09 000 169 179",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 19,
+           "avg_order_kyat": 1200,
+           "days_since_last": 3,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0148",
+           "phone": "09 000 453 916",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": 1600,
+           "days_since_last": 5,
+           "delivery_share": 30,
+           "complaints_90d": 1,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0149",
+           "phone": "09 000 062 205",
+           "township": "တာမွေ",
+           "member_type": "card",
+           "visits_30d": 2,
+           "avg_order_kyat": 2700,
+           "days_since_last": 12,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0150",
+           "phone": "09 000 898 189",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 9,
+           "avg_order_kyat": 2400,
+           "days_since_last": 16,
+           "delivery_share": 10,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0150",
+           "phone": "09 000 898 189",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 9,
+           "avg_order_kyat": 2400,
+           "days_since_last": 16,
+           "delivery_share": 10,
+           "complaints_90d": 4,
+           "stopped": 1
+          },
+          {
+           "member_id": "M0151",
+           "phone": "09 000 855 318",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 25,
+           "avg_order_kyat": 1900,
+           "days_since_last": 2,
+           "delivery_share": 30,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0152",
+           "phone": "09 000 322 464",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 5,
+           "avg_order_kyat": 1500,
+           "days_since_last": 2,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0153",
+           "phone": "09 000 502 288",
+           "township": "စမ်းချောင်း",
+           "member_type": "card",
+           "visits_30d": 9,
+           "avg_order_kyat": 2400,
+           "days_since_last": 7,
+           "delivery_share": 20,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0154",
+           "phone": "09 000 226 141",
+           "township": "ရန်ကင်း",
+           "member_type": "app",
+           "visits_30d": 14,
+           "avg_order_kyat": 2400,
+           "days_since_last": 7,
+           "delivery_share": 80,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0155",
+           "phone": "09 000 719 106",
+           "township": "လှိုင်",
+           "member_type": "card",
+           "visits_30d": 16,
+           "avg_order_kyat": 3000,
+           "days_since_last": 3,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0156",
+           "phone": "09 000 887 841",
+           "township": "ကမာရွတ်",
+           "member_type": "card",
+           "visits_30d": 19,
+           "avg_order_kyat": 1900,
+           "days_since_last": 3,
+           "delivery_share": 40,
+           "complaints_90d": 2,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0157",
+           "phone": "09 000 219 946",
+           "township": "ဗဟန်း",
+           "member_type": "app",
+           "visits_30d": 14,
+           "avg_order_kyat": 5500,
+           "days_since_last": 14,
+           "delivery_share": 70,
+           "complaints_90d": 0,
+           "stopped": 0
+          },
+          {
+           "member_id": "M0158",
+           "phone": "09 000 294 306",
+           "township": "ဗဟန်း",
+           "member_type": "card",
+           "visits_30d": 18,
+           "avg_order_kyat": 3700,
+           "days_since_last": 5,
+           "delivery_share": 10,
+           "complaints_90d": 0,
+           "stopped": 0
+          }
+         ]
+        }
+      data/pairs.json: |
+        {
+         "note": "Sample review pairs written for the AI course (lesson 09), not real customers. Each test changes one thing only: a pronoun, the language, the script, or a name. Metadata on every row: lang (en, my, my-latn), item, channel.",
+         "rows": [
+          { "id": "p01", "test": "pronoun", "lang": "en", "item": "mohinga", "channel": "website", "text": "She said the mohinga was cold." },
+          { "id": "p02", "test": "pronoun", "lang": "en", "item": "mohinga", "channel": "website", "text": "He said the mohinga was cold." },
+          { "id": "p03", "test": "pronoun", "lang": "en", "item": "mohinga", "channel": "website", "text": "They said the mohinga was cold." },
+          { "id": "p04", "test": "language", "lang": "en", "item": "laphet-yay", "channel": "website", "text": "The tea is really good." },
+          { "id": "p05", "test": "language", "lang": "my", "item": "laphet-yay", "channel": "website", "text": "လက်ဖက်ရည် အရမ်း ကောင်းတယ်။" },
+          { "id": "p06", "test": "language", "lang": "en", "item": "palata", "channel": "app", "text": "The palata is too oily." },
+          { "id": "p07", "test": "language", "lang": "my", "item": "palata", "channel": "app", "text": "ပလာတာ ဆီ များလွန်းတယ်။" },
+          { "id": "p08", "test": "script", "lang": "my-latn", "item": "laphet-yay", "channel": "app", "text": "Laphet yay ka a yan kg tl." },
+          { "id": "p09", "test": "name", "lang": "my", "item": "mohinga", "channel": "website", "text": "မြမြ မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။" },
+          { "id": "p10", "test": "name", "lang": "my", "item": "mohinga", "channel": "website", "text": "အောင်အောင် မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။" }
+         ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/modules-transformers.js"></script>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/features.js: |
+        // A new input feature made from two columns the data already has:
+        //   rows = perVisit(rows, "complaints_90d");  → every row gets complaints_per_visit,
+        // the complaints divided by the visits in the month (at least 1, so a member with no visits
+        // is not divided by zero). Plain code, no model.
+        export function perVisit(rows, column) {
+          const name = `${column.replace(/_90d$/, "")}_per_visit`;
+          return rows.map((r) => ({ ...r, [name]: r[column] / Math.max(1, r.visits_30d) }));
+        }
+      src/main.js: |
+        import { pipeline } from "@huggingface/transformers";
+        import data from "../data/members.json";
+        import pairs from "../data/pairs.json";
+        import { TOWNSHIP_SPELLINGS, dropDuplicates, normalize, fillMissing, toNumber, dropColumn, encode, split, oneHot } from "./prepare.js";
+        import { perVisit } from "./features.js";
+        import { showMemberModel, showPairs, showTokens, showStatement } from "./report.js";
+
+        // Lesson 05's member model: lesson 04's steps (sample data written for the course), the per-visit
+        // column and its three input features. Township is still in the data, as 0/1 columns.
+        let rows = data.rows;
+        rows = dropDuplicates(rows);
+        rows = normalize(rows, "township", TOWNSHIP_SPELLINGS);
+        rows = fillMissing(rows, "township", "မသိ");
+        rows = toNumber(rows, "avg_order_kyat");
+        rows = dropColumn(rows, "phone");
+        rows = encode(rows, "member_type", { card: 0, app: 1 });
+        rows = perVisit(rows, "complaints_90d");
+        const wide = oneHot(rows, "township");
+        const sets = split(wide.rows, { seed: 5104 });
+        const columns = ["visits_30d", "days_since_last", "complaints_per_visit"];
+
+        // The review model: an English model from the Hugging Face Hub that scores how well each label fits.
+        const classify = await pipeline("zero-shot-classification", "Xenova/mobilebert-uncased-mnli", { dtype: "q8" });
+        const labels = ["positive", "negative"];
+
+        // Paired tests: reviews that differ in one thing only (data/pairs.json, with metadata on every row).
+        await showPairs(classify, labels, pairs.rows);
+      src/ml.js: |
+        // Tiny machine learning in plain JavaScript: everything here runs in the page, with no
+        // downloads, and gives the same numbers every time.
+
+        // Burmese has no spaces between words, so the models count syllables instead.
+        // A syllable starts at a consonant, unless that consonant is stacked under the one
+        // before it (္) or killed by an asat (်) and so ends the syllable before it.
+        const STARTS = /[က-ဪဿ၌-၏]/;
+        export function syllables(word) {
+          const chars = [...word];
+          const out = [];
+          for (let i = 0; i < chars.length; i++) {
+            const next = chars[i + 1] === "့" ? chars[i + 2] : chars[i + 1];
+            const starts = STARTS.test(chars[i]) && chars[i - 1] !== "္" && next !== "်" && next !== "္";
+            if (starts || !out.length) out.push(chars[i]);
+            else out[out.length - 1] += chars[i];
+          }
+          return out;
+        }
+
+        export function tokenize(text) {
+          const tokens = [];
+          for (const [piece] of text.toLowerCase().matchAll(/[a-z0-9']+|[၀-၉]+|[က-ဿ၌-႟]+/g)) {
+            if (/^[က-ဿ၌-႟]/.test(piece)) tokens.push(...syllables(piece));
+            else tokens.push(piece);
+          }
+          return tokens;
+        }
+
+        // Naive Bayes: count how often each token appears with each label, then score a new
+        // text by how well its tokens fit each label.
+        export function trainNaiveBayes(examples) {
+          const labels = {};
+          const vocab = new Set();
+          for (const { text, label } of examples) {
+            const c = (labels[label] ??= { docs: 0, tokens: 0, counts: {} });
+            c.docs += 1;
+            for (const t of tokenize(text)) {
+              c.counts[t] = (c.counts[t] ?? 0) + 1;
+              c.tokens += 1;
+              vocab.add(t);
+            }
+          }
+          return { labels, vocab, total: examples.length };
+        }
+
+        export function predict(model, text) {
+          const tokens = tokenize(text).filter((t) => model.vocab.has(t));
+          const logs = {};
+          for (const [label, c] of Object.entries(model.labels)) {
+            let score = Math.log(c.docs / model.total);
+            for (const t of tokens) score += Math.log(((c.counts[t] ?? 0) + 1) / (c.tokens + model.vocab.size));
+            logs[label] = score;
+          }
+          const max = Math.max(...Object.values(logs));
+          const sum = Object.values(logs).reduce((s, v) => s + Math.exp(v - max), 0);
+          return Object.fromEntries(Object.entries(logs).map(([label, v]) => [label, Math.exp(v - max) / sum]));
+        }
+
+        export function topLabel(scores) {
+          return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+        }
+
+        // k nearest neighbours: find the training texts that share the most tokens with a new one.
+        function vector(text) {
+          const v = {};
+          for (const t of tokenize(text)) v[t] = (v[t] ?? 0) + 1;
+          return v;
+        }
+        function cosine(a, b) {
+          let dot = 0;
+          for (const t in a) if (t in b) dot += a[t] * b[t];
+          const norm = (v) => Math.sqrt(Object.values(v).reduce((s, x) => s + x * x, 0));
+          return dot === 0 ? 0 : dot / (norm(a) * norm(b));
+        }
+        export function nearest(examples, text, k = 3) {
+          const q = vector(text);
+          return examples
+            .map((e, i) => ({ ...e, similarity: cosine(q, vector(e.text)), i }))
+            .sort((a, b) => b.similarity - a.similarity || a.i - b.i)
+            .slice(0, k)
+            .map(({ i, ...rest }) => rest);
+        }
+        export function knnPredict(examples, text, k = 3) {
+          const votes = {};
+          for (const e of examples) votes[e.label] = 0;
+          for (const n of nearest(examples, text, k)) votes[n.label] += 1 / k;
+          return votes;
+        }
+
+        // A straight line through a series (least squares): the simplest forecast.
+        export function fitLine(ys) {
+          const n = ys.length;
+          const mx = (n - 1) / 2;
+          const my = ys.reduce((s, y) => s + y, 0) / n;
+          let num = 0;
+          let den = 0;
+          ys.forEach((y, x) => {
+            num += (x - mx) * (y - my);
+            den += (x - mx) ** 2;
+          });
+          const slope = den === 0 ? 0 : num / den;
+          const intercept = my - slope * mx;
+          return { slope, intercept, at: (x) => intercept + slope * x };
+        }
+
+        export function meanAbsoluteError(actual, predicted) {
+          return actual.reduce((s, a, i) => s + Math.abs(a - predicted[i]), 0) / actual.length;
+        }
+
+        // Accuracy, precision, recall and F1 for one label (the "positive" class).
+        export function scoreReport(rows, positive) {
+          let tp = 0, fp = 0, fn = 0, correct = 0;
+          for (const { expected, predicted } of rows) {
+            if (expected === predicted) correct += 1;
+            if (predicted === positive && expected === positive) tp += 1;
+            if (predicted === positive && expected !== positive) fp += 1;
+            if (predicted !== positive && expected === positive) fn += 1;
+          }
+          const precision = tp + fp === 0 ? 0 : tp / (tp + fp);
+          const recall = tp + fn === 0 ? 0 : tp / (tp + fn);
+          const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+          return { accuracy: correct / rows.length, precision, recall, f1 };
+        }
+
+        // A shuffle that gives the same order every time for the same seed.
+        export function shuffle(list, seed = 1) {
+          let s = seed >>> 0;
+          const random = () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+          const out = [...list];
+          for (let i = out.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1));
+            [out[i], out[j]] = [out[j], out[i]];
+          }
+          return out;
+        }
+
+        // A seeded random number generator (0 ≤ x < 1): the same seed gives the same numbers every time.
+        export function rng(seed = 1) {
+          let s = seed >>> 0;
+          return () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        // Logistic regression for tabular data: one weight per input column, learned by gradient descent
+        // from zero, on columns scaled to mean 0 and spread 1. Same data and settings → same weights.
+        //   const model = trainLogistic(rows, { columns: ["visits_30d", "days_since_last"], label: "stopped" });
+        //   model.weights → { visits_30d: -1.2, days_since_last: 1.9 } (on the scaled columns)
+        //   model.probability(row) → 0.72
+        export function trainLogistic(rows, { columns, label, epochs = 400, rate = 0.5 } = {}) {
+          const n = rows.length;
+          const mean = {};
+          const spread = {};
+          for (const c of columns) {
+            mean[c] = rows.reduce((s, r) => s + Number(r[c]), 0) / n;
+            const v = rows.reduce((s, r) => s + (Number(r[c]) - mean[c]) ** 2, 0) / n;
+            spread[c] = Math.sqrt(v) || 1;
+          }
+          const scaled = (r) => columns.map((c) => (Number(r[c]) - mean[c]) / spread[c]);
+          const xs = rows.map(scaled);
+          const ys = rows.map((r) => Number(r[label]));
+          const w = columns.map(() => 0);
+          let b = 0;
+          const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+          for (let e = 0; e < epochs; e++) {
+            const gw = columns.map(() => 0);
+            let gb = 0;
+            for (let i = 0; i < n; i++) {
+              const p = sigmoid(xs[i].reduce((s, x, j) => s + x * w[j], b));
+              const err = p - ys[i];
+              for (let j = 0; j < w.length; j++) gw[j] += err * xs[i][j];
+              gb += err;
+            }
+            for (let j = 0; j < w.length; j++) w[j] -= (rate * gw[j]) / n;
+            b -= (rate * gb) / n;
+          }
+          const probability = (r) => sigmoid(scaled(r).reduce((s, x, j) => s + x * w[j], b));
+          return { columns, label, weights: Object.fromEntries(columns.map((c, j) => [c, w[j]])), bias: b, probability };
+        }
+
+        // Rows → { expected, predicted } at a threshold, ready for scoreReport(rows, "yes").
+        export function atThreshold(model, rows, threshold = 0.5) {
+          return rows.map((r) => ({
+            ...r,
+            probability: model.probability(r),
+            expected: Number(r[model.label]) === 1 ? "yes" : "no",
+            predicted: model.probability(r) >= threshold ? "yes" : "no",
+          }));
+        }
+      src/prepare.js: |
+        // Data preparation for tabular data, in small steps a lesson can add one line at a time:
+        // every function takes rows (plain objects) and returns new rows, never changing the input.
+        //   rows = dropDuplicates(rows);  rows = normalize(rows, "township", TOWNSHIP_SPELLINGS);
+        //   rows = toNumber(rows, "avg_order_kyat");  rows = dropColumn(rows, "phone");
+        //   rows = encode(rows, "member_type", { card: 0, app: 1 });  const sets = split(rows, { seed: 5104 });
+        //   const { rows: wide, columns } = oneHot(rows, "township");   // township=ဗဟန်း, … as 0/1 columns
+        import { shuffle } from "./ml.js";
+
+        // The township names typed in Latin letters at the counter, and the spelling the website uses.
+        export const TOWNSHIP_SPELLINGS = { Bahan: "ဗဟန်း", Kamayut: "ကမာရွတ်", Sanchaung: "စမ်းချောင်း", Tamwe: "တာမွေ", Yankin: "ရန်ကင်း", Hlaing: "လှိုင်" };
+
+        /** Rows that are exact copies of an earlier row are dropped. */
+        export function dropDuplicates(rows) {
+          const seen = new Set();
+          return rows.filter((r) => {
+            const key = JSON.stringify(r);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
+
+        /** Replace spellings: `mapping` = { written: wanted }. Values not in it stay as they are. */
+        export function normalize(rows, column, mapping) {
+          return rows.map((r) => (r[column] in mapping ? { ...r, [column]: mapping[r[column]] } : r));
+        }
+
+        /** Fill an empty value (null, undefined or "") with `value`. */
+        export function fillMissing(rows, column, value) {
+          return rows.map((r) => (r[column] == null || r[column] === "" ? { ...r, [column]: value } : r));
+        }
+
+        /** Text such as "2,500" becomes the number 2500. */
+        export function toNumber(rows, column) {
+          return rows.map((r) => ({ ...r, [column]: typeof r[column] === "number" ? r[column] : Number(String(r[column]).replace(/[^0-9.-]/g, "")) }));
+        }
+
+        /** Leave a column out of every row. */
+        export function dropColumn(rows, column) {
+          return rows.map(({ [column]: _dropped, ...rest }) => rest);
+        }
+
+        /** Categories become numbers: encode(rows, "member_type", { card: 0, app: 1 }). */
+        export function encode(rows, column, mapping) {
+          return rows.map((r) => ({ ...r, [column]: mapping[r[column]] }));
+        }
+
+        /** One 0/1 column per value of a category column (`township=ဗဟန်း`, …); the original column goes.
+         *  Returns { rows, columns } so the new column names can be passed to trainLogistic. */
+        export function oneHot(rows, column) {
+          const values = [...new Set(rows.map((r) => r[column]))].sort();
+          const columns = values.map((v) => `${column}=${v}`);
+          const out = rows.map(({ [column]: value, ...rest }) => ({ ...rest, ...Object.fromEntries(values.map((v, i) => [columns[i], value === v ? 1 : 0])) }));
+          return { rows: out, columns };
+        }
+
+        /** How many rows have no value in each column. */
+        export function countMissing(rows) {
+          const columns = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+          return Object.fromEntries(columns.map((c) => [c, rows.filter((r) => r[c] == null || r[c] === "").length]));
+        }
+
+        /** Values that are not numbers in a column that should hold numbers. */
+        export function countText(rows, column) {
+          return rows.filter((r) => typeof r[column] !== "number").length;
+        }
+
+        /** A seeded split into training, validation and test sets (default 70 / 10 / 20). */
+        export function split(rows, { seed = 1, train = 0.7, validation = 0.1 } = {}) {
+          const mixed = shuffle(rows, seed);
+          const a = Math.round(mixed.length * train);
+          const b = a + Math.round(mixed.length * validation);
+          return { train: mixed.slice(0, a), validation: mixed.slice(a, b), test: mixed.slice(b) };
+        }
+      src/report.js: |
+        import { panel } from "ai-panel";
+        import { trainLogistic, atThreshold, scoreReport } from "./ml.js";
+        import { choices } from "./ui.js";
+
+        // What the panel shows in lesson 09. The review model runs in this page (Transformers.js); the
+        // member model is the small logistic regression in ml.js, trained in this page.
+        const pct = (p) => `${(p * 100).toFixed(1)}%`;
+
+        // Every paired input goes through the review model with the labels; the table shows the label
+        // that fits best and its score (the two scores add up to 100%).
+        export async function showPairs(classify, labels, rows) {
+          const out = [];
+          for (const r of rows) {
+            const result = await classify(r.text, labels);
+            out.push({ text: r.text, result: `${result.labels[0]} ${pct(result.scores[0])}` });
+          }
+          panel.table("Paired tests", out, { id: "pairs" });
+        }
+
+        // What the model really receives: the pieces its tokenizer makes of each text (lesson 06's tokens).
+        export function showTokens(classify, rows, ids) {
+          const pieces = (text) => classify.tokenizer.encode(text, { add_special_tokens: false }).map((id) => classify.tokenizer.decode([id])).join(" ");
+          panel.table("What the model reads", rows.filter((r) => ids.includes(r.id)).map((r) => ({ lang: r.lang, tokens: pieces(r.text) })), { id: "tokens" });
+        }
+
+        // The coverage statement the shop shows next to the feature.
+        export function showStatement(text) {
+          panel.note(text, { id: "statement" });
+        }
+
+        // Lesson 05's member model, with township left out or put in (a page control), and the probability
+        // it gives member M0023 when nothing but the township changes.
+        const TOWNSHIPS = ["ဗဟန်း", "ကမာရွတ်", "စမ်းချောင်း", "တာမွေ", "ရန်ကင်း", "လှိုင်"];
+        export function showMemberModel(wide, sets, columns) {
+          const draw = (withTownship) => {
+            const model = trainLogistic(sets.train, { columns: withTownship ? [...columns, ...wide.columns] : columns, label: "stopped" });
+            const { precision, recall, f1 } = scoreReport(atThreshold(model, sets.test, 0.5), "yes");
+            panel.metrics("Member model · test set", { precision, recall, f1 }, { id: "member-model", badge: "ဒီ page ထဲမှာ train ထားတဲ့ model" });
+            const member = wide.rows.find((r) => r.member_id === "M0023");
+            panel.table("M0023 · only the township changed", TOWNSHIPS.map((t) => {
+              const row = { ...member, ...Object.fromEntries(wide.columns.map((c) => [c, c === `township=${t}` ? 1 : 0])) };
+              return { township: t, weight: withTownship ? model.weights[`township=${t}`] : "—", stops: pct(model.probability(row)) };
+            }), { id: "township" });
+          };
+          choices("township", ["မထည့်", "ထည့်"], (choice) => draw(choice === "ထည့်"), { selected: "မထည့်" });
+          draw(false);
+        }
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Governance is today's dimension (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-gov-f,
+        kind: text,
+        x: 600,
+        y: 442,
+        width: 200,
+        height: 38,
+        text: "fairness",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 720,
+        height: 45,
+        text: "ဒီနေ့ · fairness · data → model → UX",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board B: where bias comes from (blue data, violet model, orange the UX where it is seen), the
+    # high-stakes domains (red) and the shop's two questions.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 560,
+        height: 50,
+        text: "Bias ဘယ်ကလာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-harm,
+        kind: text,
+        x: 300,
+        y: 212,
+        width: 640,
+        height: 40,
+        text: "အလုပ်ခန့် · ဥပဒေ · ငွေကြေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-data,
+        kind: rectangle,
+        x: 300,
+        y: 280,
+        width: 230,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-data-t,
+        kind: text,
+        x: 318,
+        y: 292,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-data-v,
+        kind: text,
+        x: 318,
+        y: 338,
+        width: 190,
+        height: 38,
+        text: "မွေးလာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 318,
+        width: 50,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-intel,
+        kind: rectangle,
+        x: 600,
+        y: 280,
+        width: 250,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-intel-t,
+        kind: text,
+        x: 618,
+        y: 292,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-intel-v,
+        kind: text,
+        x: 618,
+        y: 338,
+        width: 200,
+        height: 38,
+        text: "ပိုချဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 858,
+        y: 318,
+        width: 50,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b-ux, kind: rectangle, x: 918, y: 280, width: 170, height: 110, strokeColor: "#f08c00" }
+    - {
+        id: b-ux-t,
+        kind: text,
+        x: 936,
+        y: 292,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-ux-v,
+        kind: text,
+        x: 936,
+        y: 338,
+        width: 130,
+        height: 38,
+        text: "မြင်ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-shop1,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 700,
+        height: 40,
+        text: "review model · မြန်မာ review ကို မျှလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-shop2,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 40,
+        text: "member model · မြို့နယ်ကြောင့် ကွာလား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board C: the data layer (orange the statement, violet the paired test, green the result we
+    # want, blue the metadata, green balance).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 400,
+        height: 50,
+        text: "Data အလွှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-stmt,
+        kind: text,
+        x: 300,
+        y: 215,
+        width: 720,
+        height: 40,
+        text: "coverage statement · ဘယ်မှာ အားနည်းလဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-pair,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 640,
+        height: 40,
+        text: "paired test · တစ်နေရာပဲ ကွာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-pair-ex,
+        kind: text,
+        x: 330,
+        y: 320,
+        width: 700,
+        height: 40,
+        text: "She / He / They said the mohinga was cold.",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-same,
+        kind: text,
+        x: 330,
+        y: 365,
+        width: 400,
+        height: 40,
+        text: "→ အဖြေ တူရမယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-meta,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 680,
+        height: 40,
+        text: "metadata · lang · item · channel",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-bal,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 680,
+        height: 40,
+        text: "train လုပ်ရင် အုပ်စုတိုင်း မျှမျှ ပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board D: the intelligence layer (violet, the proxy in red) and the UX layer (green).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 480,
+        height: 50,
+        text: "Intelligence · UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-test,
+        kind: text,
+        x: 300,
+        y: 212,
+        width: 700,
+        height: 40,
+        text: "bias ကို ပုံမှန် စစ် · filter · drift",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-proxy,
+        kind: text,
+        x: 300,
+        y: 257,
+        width: 640,
+        height: 40,
+        text: "proxy · township ≈ ဝင်ငွေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-rank,
+        kind: text,
+        x: 300,
+        y: 302,
+        width: 760,
+        height: 40,
+        text: "အဖြေ များများ ထုတ် → ဘက်မလိုက်ဆုံး ရွေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule,
+        kind: text,
+        x: 300,
+        y: 347,
+        width: 560,
+        height: 40,
+        text: "stereotype တားတဲ့ rule",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-why,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 760,
+        height: 40,
+        text: "ဘာကြောင့်လဲ · မှာနေကျ အချိန်ကို ကြည့်ပြီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-control,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 620,
+        height: 40,
+        text: "tone · အရှည် ကိုယ်တိုင် ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-report,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 560,
+        height: 40,
+        text: "bias report ခလုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-loop,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 620,
+        height: 40,
+        text: "ဘာပြင်လိုက်လဲ ပြန်ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 640,
+        height: 45,
+        text: "intelligence အလွှာမှာ ဘာလုပ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 640,
+        height: 40,
+        text: "A · data မှာ bias မရှိဘူးလို့ ယူဆ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 320,
+        y: 336,
+        width: 640,
+        height: 40,
+        text: "B · model ရဲ့ မူလအတိုင်း ထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o3,
+        kind: text,
+        x: 320,
+        y: 382,
+        width: 640,
+        height: 40,
+        text: "C · အဖြေ များများ ထုတ်ပြီး ရွေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 305,
+        y: 372,
+        width: 560,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 700,
+        height: 45,
+        text: "C · ဘက်မလိုက်ဆုံး၊ အမျိုးမျိုး ပါဆုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-note,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 640,
+        height: 40,
+        text: "A နဲ့ B က ပြဿနာကို ဖုံးထား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5109
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Fairness ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ browser အပြင်ကို ထွက်သွားမယ့် data ထဲက ဖုန်းနံပါတ်နဲ့ နာမည်ကို
+      မပို့ခင် ဖယ်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ governance ရဲ့ နောက်တစ်ချက် ဖြစ်တဲ့ fairness ကို လေ့လာပါမယ်။
+      [[mark:draw-mini]] blueprint မှာ fairness က governance ထဲမှာ ရှိပေမယ့် data၊ intelligence၊ U X အလွှာ
+      သုံးခုလုံးနဲ့ ဆိုင်ပါတယ်။ [[mark:draw-today]] fairness ဆိုတာ AI က လူ အားလုံးကို မျှမျှတတ ဆက်ဆံတာပါ။
+      ဒီနေ့ ဆိုင်ရဲ့ model နှစ်ခုကို တကယ် စစ်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+              a-gov-f,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: bias
+    narration: >
+      [[mark:draw-bias]] bias ဆိုတာ training data ထဲက မမျှတတဲ့ အမြင်တွေကို model က လိုက်ယူ ဒါမှမဟုတ်
+      ပိုချဲ့ပြီး၊ လူ တချို့ကို မတရား ဆက်ဆံမိတာပါ။ အလုပ်ခန့်တာ၊ ဥပဒေ၊ ငွေကြေး လို လူတွေရဲ့ ဘဝကို တိုက်ရိုက်
+      ထိတဲ့ နေရာတွေမှာ အန္တရာယ် အများဆုံးပါ။ ဥပမာ အရင်က အလုပ်ခန့်ခဲ့တဲ့ မှတ်တမ်းတွေနဲ့ train လုပ်ထားတဲ့ model
+      က လူ အုပ်စု တချို့ကို မသိမသာ နှိမ်ခဲ့တဲ့ အရင် ပုံစံအတိုင်း ဆက်ခန့်မှန်းသွားနိုင်ပါတယ်။
+      [[mark:draw-born]] bias က data ထဲမှာ မွေးလာပါတယ်။ [[mark:draw-amp]] model က အဲဒီ ပုံစံကို သင်ယူရင်း
+      ပိုချဲ့ပါတယ်။ [[mark:draw-seen]] နောက်ဆုံး user တွေက U X ထဲမှာ အဲဒီ အကျိုးဆက်ကို မြင်ရပါတယ်။ ဒါကြောင့်
+      အလွှာ သုံးခုလုံးမှာ ကာကွယ်ရပါတယ်။ [[mark:draw-shop]] ကိုယ်တို့ ဆိုင်မှာ စစ်စရာ နှစ်ခု ရှိပါတယ်။ review
+      တွေကို positive လား negative လား ခွဲမယ့် model က မြန်မာလို ရေးတဲ့ customer တွေကိုလည်း မျှမျှတတ
+      ဆက်ဆံရဲ့လား၊ ပြီးခဲ့တဲ့ lesson တွေက member model က နေတဲ့ မြို့နယ်ကို ကြည့်ပြီး ခွဲခြားနေသလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-bias,
+          type: whiteboard.apply,
+          at: { mark: draw-bias },
+          clear: true,
+          upsertIds: [b-title, b-harm],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-born,
+          type: whiteboard.apply,
+          at: { mark: draw-born },
+          upsertIds: [b-data, b-data-t, b-data-v],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-amp,
+          type: whiteboard.apply,
+          at: { mark: draw-amp },
+          upsertIds: [b-arrow-1, b-intel, b-intel-t, b-intel-v],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-seen,
+          type: whiteboard.apply,
+          at: { mark: draw-seen },
+          upsertIds: [b-arrow-2, b-ux, b-ux-t, b-ux-v],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-shop,
+          type: whiteboard.apply,
+          at: { mark: draw-shop },
+          upsertIds: [b-shop1, b-shop2],
+          drawMs: 1600,
+        }
+
+  - id: model
+    chapter: "Review model ကို စစ်ရအောင်"
+    narration: >
+      [[mark:close-bias]] review model ကို code မှာ ကြည့်ရအောင်။ [[mark:panel-ready]] ပထမဆုံး စစ်မှာက
+      customer review တွေကို ခွဲမယ့် model ပါ။ [[mark:sel-pipeline]] ဒီ စာကြောင်းက Hugging Face Hub
+      ပေါ်က အင်္ဂလိပ် model သေးသေးလေး တစ်ခုကို ယူသုံးတာပါ။ အရွယ်အစား ၂၈ megabyte လောက်ရှိပြီး ဒီ page ထဲမှာပဲ
+      Transformers.js နဲ့ run ပါတယ်။ [[mark:sel-labels]] label နှစ်ခု ပေးလိုက်ရင် review တစ်ခုချင်းစီအတွက် ဘယ်
+      label က ပိုကိုက်လဲ အမှတ်ပေးပါတယ်။ ကိုယ်တိုင် train မလုပ်ဘဲ label ကိုပဲ ပေးလိုက်တာမို့ ဆိုင်က ချက်ချင်း
+      သုံးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: data)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "Hugging Face: Xenova/mobilebert-uncased-mnli",
+          url: "https://huggingface.co/Xenova/mobilebert-uncased-mnli",
+        }
+      - {
+          title: "Hugging Face: typeform/mobilebert-uncased-mnli (model card: English, fine-tuned on MNLI)",
+          url: "https://huggingface.co/typeform/mobilebert-uncased-mnli",
+        }
+    actions:
+      - { id: close-bias, type: whiteboard.apply, at: { mark: close-bias }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-model-card
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 10000
+        target: { by: testId, value: ai-model-1 }
+        attribute: { name: data-label, value: "Model" }
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - { id: open-main, type: workspace.openFile, at: { mark: sel-pipeline }, path: src/main.js }
+      - id: sel-pipeline
+        type: editor.select
+        at: { afterAction: open-main }
+        target:
+          {
+            file: src/main.js,
+            text: 'await pipeline("zero-shot-classification", "Xenova/mobilebert-uncased-mnli", { dtype: "q8" })',
+            occurrence: 1,
+          }
+      - id: sel-labels
+        type: editor.select
+        at: { mark: sel-labels }
+        target:
+          { file: src/main.js, text: 'const labels = ["positive", "negative"];', occurrence: 1 }
+
+  - id: data-layer
+    narration: >
+      [[mark:draw-data]] data အလွှာကနေ စကြည့်ရအောင်။ training data က လက်တွေ့ ဘဝကနေ စုထားတဲ့ အပိုင်းအစတွေ
+      ဖြစ်လို့ အဲဒီက bias တွေ ပါလာနိုင်သလို၊ bias အသစ်လည်း ဝင်လာနိုင်ပါတယ်။ [[mark:draw-statement]] ပထမ
+      နည်းက model ကို ဘယ် data နဲ့ train ထားလဲ၊ ဘယ်နေရာမှာ အားနည်းလဲ ဆိုတာကို user တွေ မြင်အောင် coverage
+      statement တိုတိုလေး ရေးပြတာပါ။ ခုနက model ရဲ့ Hugging Face ပေါ်က model card မှာလည်း အင်္ဂလိပ်စာ အတွက်လို့ ရေးထားပါတယ်။
+      [[mark:draw-paired]] ဒုတိယက diagnostic check တွေ run တာပါ။ paired test ဆိုတာ စာသား တစ်နေရာတည်းပဲ ကွာတဲ့
+      input နှစ်ခုကို model ဆီ ပေးပြီး အဖြေ ကွာမကွာ စစ်တာပါ။ ဥပမာ she၊ he၊ they ပဲ ကွာတဲ့ စာကြောင်းတွေမှာ အဖြေ
+      မတူရင် bias ရှိနိုင်လို့ သတိထားရပါမယ်။ [[mark:draw-meta]] တတိယက row တိုင်းမှာ ဘာသာစကား၊ menu item၊ ဘယ်
+      channel က ရောက်လာလဲ ဆိုတဲ့ metadata ကပ်ထားတာပါ။ ဒါမှ နောက်ပိုင်း ဘယ် အုပ်စုမှာ မှားလဲ ခွဲစစ်နိုင်ပါတယ်။
+      [[mark:draw-balance]] ကိုယ်တိုင် train လုပ်မယ်ဆိုရင်တော့ အုပ်စု အားလုံး မျှမျှ ပါအောင် data ကို
+      စုရပါမယ်။ model ဆောက်ပြီးမှ ပြင်တာထက် အများကြီး ပိုထိရောက်လို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: data)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "Hugging Face: typeform/mobilebert-uncased-mnli (model card: English)",
+          url: "https://huggingface.co/typeform/mobilebert-uncased-mnli",
+        }
+    actions:
+      - {
+          id: draw-data,
+          type: whiteboard.apply,
+          at: { mark: draw-data },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+          drawMs: 600,
+        }
+      - {
+          id: draw-statement,
+          type: whiteboard.apply,
+          at: { mark: draw-statement },
+          upsertIds: [c-stmt],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-paired,
+          type: whiteboard.apply,
+          at: { mark: draw-paired },
+          upsertIds: [c-pair, c-pair-ex, c-same],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-meta,
+          type: whiteboard.apply,
+          at: { mark: draw-meta },
+          upsertIds: [c-meta],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-balance,
+          type: whiteboard.apply,
+          at: { mark: draw-balance },
+          upsertIds: [c-bal],
+          drawMs: 1000,
+        }
+
+  - id: pairs-data
+    narration: >
+      [[mark:close-data]] ကိုယ်တို့ရဲ့ paired test တွေကို ကြည့်ရအောင်။ [[mark:open-pairs]] ဒါတွေက lesson အတွက်
+      ရေးထားတဲ့ နမူနာ review တွေပါ။ test တစ်ခုချင်းမှာ pronoun၊ ဘာသာစကား၊ ရေးတဲ့ စာလုံး၊ နာမည် ဆိုပြီး
+      တစ်ချက်ပဲ ပြောင်းထားပါတယ်။ ကျောင်းသား မောင်မောင် လို customer တွေ ရိုက်တတ်တဲ့ အင်္ဂလိပ် စာလုံးနဲ့ ရေးတဲ့
+      မြန်မာစကား review လည်း ပါပါတယ်။ [[mark:sel-meta]] row တိုင်းမှာ metadata ကိုလည်း ကပ်ထားပါတယ်။ [[mark:sel-names]] နောက်ဆုံး နှစ်ကြောင်းကတော့ ဆိုင်ပိုင်ရှင် မြမြ နဲ့ member အောင်အောင် ဆိုပြီး
+      အမျိုးသမီး နာမည်နဲ့ အမျိုးသား နာမည်ပဲ ကွာတဲ့ မြန်မာ review တွေပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: diagnostic checks, metadata)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-data, type: whiteboard.apply, at: { mark: close-data }, open: false }
+      - {
+          id: open-pairs,
+          type: workspace.openFile,
+          at: { mark: open-pairs },
+          path: data/pairs.json,
+        }
+      - id: sel-meta
+        type: editor.select
+        at: { mark: sel-meta }
+        target:
+          {
+            file: data/pairs.json,
+            text: '"lang": "my", "item": "palata", "channel": "app"',
+            occurrence: 1,
+          }
+      - id: sel-names
+        type: editor.select
+        at: { mark: sel-names }
+        target:
+          { file: data/pairs.json, text: '"text": "မြမြ မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။"', occurrence: 1 }
+
+  - id: results
+    chapter: "Paired test ရလဒ်"
+    narration: >
+      [[mark:read-pairs]] AI panel ရဲ့ Paired tests table မှာ model က ဒီ page ထဲမှာ တွက်ထားတဲ့ ရလဒ်တွေ
+      ပေါ်လာပါပြီ။ she၊ he၊ they စာကြောင်း သုံးကြောင်းလုံး negative ဖြစ်ပြီး အမှတ်တွေလည်း အတူတူနီးပါး
+      ဖြစ်ပါတယ်၊ ဒီ test မှာတော့ ကွာခြားမှု မတွေ့ရပါဘူး။ [[mark:read-lang]] အင်္ဂလိပ် review နှစ်ခုကိုလည်း
+      မှန်မှန် ခွဲပါတယ်၊ လက်ဖက်ရည် ကောင်းတာက positive၊ ပလာတာ ဆီများတာက negative ပါ။ ဒါပေမဲ့ အဲဒီ နှစ်ခုနဲ့
+      အဓိပ္ပာယ် တူတဲ့ မြန်မာ review တွေကတော့ ချီးကျူးတာရော တိုင်ကြားတာရော positive ဘက်ကို နည်းနည်းပဲ
+      ယိမ်းတဲ့ အမှတ် အတူတူ ရနေပါတယ်။ [[mark:read-name]] မြမြ နဲ့ အောင်အောင် review နှစ်ခုလည်း အမှတ် တစ်ထပ်တည်း
+      ဖြစ်ပြီး၊ မုန့်ဟင်းခါး အေးနေတယ် ဆိုတဲ့ တိုင်ကြားချက်ကို positive လို့ ခွဲထားပါတယ်။ နာမည် ပြောင်းတာနဲ့
+      အဖြေ မပြောင်းတာက မျှတလို့ မဟုတ်ဘဲ၊ model က မြန်မာစာကို လုံးဝ မဖတ်နိုင်လို့ ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: run diagnostic checks)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "Transformers.js: zero-shot classification",
+          url: "https://huggingface.co/docs/transformers.js/api/pipelines#module_pipelines.ZeroShotClassificationPipeline",
+        }
+    actions:
+      - id: wait-model
+        type: expect.preview
+        at: { mark: read-pairs }
+        timeoutMs: 120000
+        target: { by: testId, value: ai-model-1 }
+        attribute: { name: data-status, value: "ready" }
+        retry: { maxAttempts: 3, delayMs: 45000 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: wait-model }
+        timeoutMs: 60000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 25000 }
+      - id: expect-pairs-10
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs }
+        attribute: { name: data-count, value: "10" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      # The whole table on the first screen (rows 9 and 10 sit below 600 px under the MODEL card).
+      - id: scroll-pairs
+        type: preview.scroll
+        at: { afterAction: expect-pairs-10 }
+        top: 230
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-she
+        type: expect.preview
+        at: { afterAction: scroll-pairs }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-1 }
+        textContains: "cold.negative"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-they
+        type: expect.preview
+        at: { afterAction: expect-she }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-3 }
+        textContains: "cold.negative"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-tea-en
+        type: expect.preview
+        at: { mark: read-lang }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-4 }
+        textContains: "good.positive"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-palata-en
+        type: expect.preview
+        at: { afterAction: expect-tea-en }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-6 }
+        textContains: "oily.negative"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-palata-my
+        type: expect.preview
+        at: { afterAction: expect-palata-en }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-7 }
+        textContains: "များလွန်းတယ်။positive"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-name-1
+        type: expect.preview
+        at: { mark: read-name }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-9 }
+        textContains: "အေးနေတယ်။positive"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-name-2
+        type: expect.preview
+        at: { afterAction: expect-name-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-pairs-10 }
+        textContains: "အေးနေတယ်။positive"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: tokens
+    narration: >
+      [[mark:type-tokens]] model က တကယ် ဘာကို ဖတ်ရလဲ သိဖို့ tokenizer က ခွဲပေးတဲ့ token တွေကို ပြခိုင်းပါမယ်။
+      [[mark:read-tokens]] အောက်ဆုံးက table မှာ အင်္ဂလိပ် စာကြောင်းက စကားလုံး token တွေ ဖြစ်ပေမယ့်၊
+      မြန်မာ စာကြောင်းကတော့ UNK ဆိုတဲ့ token လေးခုပဲ ဖြစ်နေပါတယ်။ UNK ဆိုတာ model ရဲ့ စကားလုံး စာရင်းထဲမှာ
+      မရှိတဲ့ စာပါ။ ဆိုလိုတာက model က မြန်မာ စကားလုံး တစ်လုံးမှ မမြင်ရလို့ ချီးကျူးတာနဲ့ တိုင်ကြားတာ အမှတ်
+      တူနေတာပါ။ အင်္ဂလိပ် စာလုံးနဲ့ ရေးတဲ့ review ကလည်း အဓိပ္ပာယ် မရှိတဲ့ အင်္ဂလိပ် အပိုင်းအစတွေ ဖြစ်သွားလို့၊
+      positive ရတာ မှန်ပေမယ့် ယုံလို့ မရပါဘူး။ [[mark:type-statement]] ဒါကြောင့် ဒီ feature ဘေးမှာ ပြမယ့်
+      coverage statement ကို ထည့်ပါမယ်။ [[mark:read-statement]] panel အောက်ဆုံးမှာ ဒီ model ကို
+      မြန်မာ review တွေအတွက် မသုံးဘူး ဆိုတဲ့ statement ပေါ်လာပါပြီ။ အင်္ဂလိပ် model
+      တစ်ခုက ဘာသာစကား တစ်ခုလုံးကို မမျှမတ ဆက်ဆံမိနိုင်လို့၊ မြန်မာ review တွေအတွက် တခြား နည်းကို platform
+      lesson တွေမှာ ရွေးပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: document your data sources and coverage)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "Hugging Face: typeform/mobilebert-uncased-mnli (model card: English)",
+          url: "https://huggingface.co/typeform/mobilebert-uncased-mnli",
+        }
+    actions:
+      - { id: open-main-2, type: workspace.openFile, at: { mark: type-tokens }, path: src/main.js }
+      - id: type-tokens
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target:
+          {
+            file: src/main.js,
+            after: "await showPairs(classify, labels, pairs.rows);\n",
+            occurrence: 1,
+          }
+        text: "showTokens(classify, pairs.rows, [\"p04\", \"p05\", \"p08\"]);\n"
+        cadence: line-by-line
+      - id: expect-tokens
+        type: expect.preview
+        at: { afterAction: type-tokens }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-tokens-2 }
+        textContains: "[UNK] [UNK] [UNK] [UNK]"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: scroll-tokens
+        type: preview.scroll
+        at: { mark: read-tokens }
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: type-statement
+        type: editor.type
+        at: { mark: type-statement }
+        target:
+          {
+            file: src/main.js,
+            after: "showTokens(classify, pairs.rows, [\"p04\", \"p05\", \"p08\"]);\n",
+            occurrence: 1,
+          }
+        text: "showStatement(\"ဒီ model ကို အင်္ဂလိပ်စာနဲ့ပဲ train ထားလို့ မြန်မာလို review တွေအတွက် မသုံးပါ။\");\n"
+        cadence: line-by-line
+      - id: expect-statement
+        type: expect.preview
+        at: { afterAction: type-statement }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-statement }
+        textContains: "အင်္ဂလိပ်စာနဲ့ပဲ train ထားလို့"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: scroll-statement
+        type: preview.scroll
+        at: { mark: read-statement }
+        top: 5000
+        retry: { maxAttempts: 2, delayMs: 250 }
+
+  - id: proxy
+    chapter: "Township က proxy ဖြစ်နေလား"
+    narration: >
+      intelligence အလွှာမှာ predictive model တွေအတွက် အထူး သတိထားရမယ့် အချက်က proxy ပါ။ proxy ဆိုတာ တိုက်ရိုက်
+      မမေးပေမယ့် လူမျိုး၊ လူတန်းစား လို အရေးကြီးတဲ့ အချက်ကို သွယ်ဝိုက်ပြီး ပြနေတဲ့ column ပါ။ နေရပ်၊ ပညာရေး၊
+      ဝင်ငွေ လို column တွေက ဒီလို ဖြစ်နိုင်ပြီး၊ lesson ၄ မှာ ထားခဲ့တဲ့ township ကလည်း နေရပ်ကို ပြတဲ့ column ပါ။
+      [[mark:type-member]] lesson ၅ ရဲ့ member model ကို panel ရဲ့ ထိပ်ဆုံးမှာ ပြခိုင်းပါမယ်။
+      [[mark:read-member]] Member model card မှာ lesson ၅ ရဲ့ model သေးသေးလေးကို ဒီ page ထဲမှာ ပြန် train
+      လုပ်ထားလို့ precision ၉၀၊ recall ၇၅ ရာခိုင်နှုန်းကို ပြန်မြင်ရပါတယ်။ အောက်က table ကတော့ ဒီ model အတွက်
+      paired test ပါ၊ ပြီးခဲ့တဲ့ lesson တွေက member တစ်ယောက်တည်းရဲ့ township ကိုပဲ ပြောင်းပြီး model ကို
+      ပေးကြည့်တာပါ။ township ကို model ထဲ မထည့်ရသေးလို့ ဘယ်မြို့နယ်ပဲ ဖြစ်ဖြစ် ၂၇ ရာခိုင်နှုန်းလောက်
+      ဖြစ်နေပါတယ်။ [[mark:click-with]] township ကို ထည့်တဲ့ ခလုတ်ကို နှိပ်ကြည့်ပါမယ်။ [[mark:read-with]] test
+      set ရဲ့ precision နဲ့ recall က လုံးဝ မပြောင်းပါဘူး။ ဒါပေမဲ့ model က မြို့နယ်တွေကို weight ပေးလိုက်လို့
+      member တစ်ယောက်တည်းပဲ ဖြစ်ပေမယ့် ကမာရွတ် မှာ နေရင် ၅၀ ရာခိုင်နှုန်း၊ ရန်ကင်း မှာ နေရင် ၂
+      ရာခိုင်နှုန်းလောက်ပဲ ဖြစ်သွားပါတယ်။ [[mark:read-why]] ဒီ နမူနာ data မှာ township က member ဆက်လာမလာနဲ့
+      မဆိုင်ပေမယ့်၊ model က data ထဲက မတော်တဆ ကွာခြားမှုတွေကို သင်ယူသွားတာပါ။ ဒီ ကွာခြားမှုက ဘာမှ မကူညီဘဲ နေတဲ့
+      နေရာကြောင့် member တွေကို မတရား ဆက်ဆံနိုင်ပါတယ်။ ဒါကြောင့် township ကို member
+      model ထဲ မထည့်ဖို့ ဆုံးဖြတ်ပြီး၊ [[mark:click-without]] မထည့် ခလုတ်ကို ပြန်နှိပ်ပါမယ်။ [[mark:read-without]] မြို့နယ် အားလုံး အရင်လို
+      တူသွားပါပြီ။ ဒီ ဆုံးဖြတ်ချက်ရဲ့ အကြောင်းရင်းက accuracy မဟုတ်ဘဲ fairness ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: intelligence, sensitive data)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - id: type-member
+        type: editor.type
+        at: { mark: type-member }
+        target:
+          {
+            file: src/main.js,
+            after: "const columns = [\"visits_30d\", \"days_since_last\", \"complaints_per_visit\"];\n",
+            occurrence: 1,
+          }
+        text: "showMemberModel(wide, sets, columns);\n"
+        cadence: line-by-line
+      - id: expect-member-model
+        type: expect.preview
+        at: { afterAction: type-member }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-member-model-2 }
+        attribute: { name: data-value, value: "0.75" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: scroll-top
+        type: preview.scroll
+        at: { mark: read-member }
+        top: 0
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-precision-before
+        type: expect.preview
+        at: { afterAction: scroll-top }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-member-model-1 }
+        attribute: { name: data-value, value: "0.9" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-same-before
+        type: expect.preview
+        at: { afterAction: expect-precision-before }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-township-2 }
+        textContains: "ကမာရွတ်—26.9%"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-with
+        type: preview.click
+        at: { mark: click-with }
+        target: { by: testId, value: township-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-with-recall
+        type: expect.preview
+        at: { afterAction: click-with }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-member-model-2 }
+        attribute: { name: data-value, value: "0.75" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-with-precision
+        type: expect.preview
+        at: { afterAction: expect-with-recall }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-member-model-1 }
+        attribute: { name: data-value, value: "0.9" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-kamayut
+        type: expect.preview
+        at: { afterAction: expect-with-precision }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-township-2 }
+        textContains: "ကမာရွတ်0.570350.0%"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-yankin
+        type: expect.preview
+        at: { afterAction: expect-kamayut }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-township-5 }
+        textContains: "ရန်ကင်း-0.81431.8%"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-with-pressed
+        type: expect.preview
+        at: { afterAction: expect-yankin }
+        timeoutMs: 5000
+        target: { by: testId, value: township-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-without
+        type: preview.click
+        at: { mark: click-without }
+        target: { by: testId, value: township-1 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-without
+        type: expect.preview
+        at: { afterAction: click-without }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-township-5 }
+        textContains: "ရန်ကင်း—26.9%"
+        retry: { maxAttempts: 3, delayMs: 500 }
+
+  - id: intel-ux
+    narration: >
+      [[mark:draw-intel]] intelligence အလွှာမှာ township လို proxy ကို သတိထားတာအပြင် တခြား
+      လုပ်စရာတွေလည်း ရှိပါတယ်။ ခုနက paired test လို bias
+      စစ်တာကို model ပြောင်းတိုင်း ပုံမှန် ပြန် run ရပါမယ်။ ကျား မ ခွဲတဲ့ စကားလုံး၊ လူ တချို့ကို ချန်ထားတဲ့
+      စကားလုံးတွေကို filter နဲ့ ဖမ်းပြီး၊ အချိန်ကြာလာရင် drift ဖြစ်မဖြစ်လည်း စောင့်ကြည့်ရပါမယ်။
+      [[mark:draw-rank]] generative model ဆိုရင် အဖြေ အများကြီး ထုတ်ခိုင်းပြီး ဘက်မလိုက်ဆုံး၊ အမျိုးမျိုး
+      ပါဆုံး ဟာကို ရွေးလို့ ရသလို၊ လူ အုပ်စု တစ်ခုကို ပုံသေ ကြည့်တဲ့ stereotype
+      ကို တားတဲ့ rule တွေလည်း ထည့်နိုင်ပါတယ်။ [[mark:draw-ux]] U X
+      အလွှာမှာတော့ AI ရဲ့ အဖြေ ဘေးမှာ ဘာကြောင့်လဲ ဆိုတာ ပြပါ။ ဥပမာ menu အကြံပြုချက်မှာ ပုံမှန် မှာနေကျ
+      အချိန်ကို ကြည့်ပြီး အကြံပြုထားပါတယ် လို့ ပြတာမျိုးပါ။ tone၊ အရှည် လို setting တွေကိုလည်း user ကိုယ်တိုင်
+      ရွေးခွင့် ပေးပါ။ [[mark:draw-report]] bias တွေ့ရင် report လုပ်ဖို့ ခလုတ် ထားပြီး၊ report တွေကို retrain
+      ဒါမှမဟုတ် rule ပြင်ဖို့ သုံးရပါမယ်။ ဘာပြင်လိုက်လဲ ဆိုတာကိုလည်း user ကို ပြန်ပြောပြရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness: intelligence, user experience)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-intel,
+          type: whiteboard.apply,
+          at: { mark: draw-intel },
+          open: true,
+          clear: true,
+          upsertIds: [d-title, d-test, d-proxy],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-rank,
+          type: whiteboard.apply,
+          at: { mark: draw-rank },
+          upsertIds: [d-rank, d-rule],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-ux,
+          type: whiteboard.apply,
+          at: { mark: draw-ux },
+          upsertIds: [d-why, d-control],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-report,
+          type: whiteboard.apply,
+          at: { mark: draw-report },
+          upsertIds: [d-report, d-loop],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ fairness အတွက် intelligence အလွှာမှာ ဘာလုပ်သင့်လဲ။ training data
+      မှာ bias မရှိဘူးလို့ ယူဆတာလား၊ model ရဲ့ မူလ အတိုင်းပဲ ထားတာလား၊ အဖြေ အများကြီး ထုတ်ပြီး ရွေးတာလား။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ အဖြေ အများကြီး ထုတ်ပြီး
+      ဘက်မလိုက်ဆုံး၊ အမျိုးမျိုး ပါဆုံး ဟာကို ရွေးတာပါ။ ဘာကြောင့်လဲဆိုတော့ intelligence အလွှာက model ရဲ့
+      အဖြေကို စစ်ပြီး ထိန်းတဲ့ နေရာ ဖြစ်လို့ပါ။ data မှာ bias မရှိဘူးလို့ ယူဆတာ၊ model ကို မူလအတိုင်း
+      ထားတာတွေကတော့ ခုနက မြန်မာ review ပြဿနာလို အမှားကို မမြင်ရအောင် ဖုံးထားတာပါပဲ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (Check your understanding)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-ring, z-a, z-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ bias ဟာ data မှာ မွေး၊ model မှာ ပိုကြီး၊ U X မှာ ပေါ်လာတာမို့ အလွှာ
+      သုံးခုလုံးမှာ ကာကွယ်ရပါတယ်။ [[mark:sel-final-pairs]] paired test နဲ့ စစ်တော့ အင်္ဂလိပ် model က မြန်မာ
+      review တွေကို မဖတ်နိုင်တာ တွေ့ရလို့၊ [[mark:sel-final-statement]] coverage statement နဲ့
+      ပွင့်ပွင့်လင်းလင်း ပြောပြပါတယ်။ [[mark:sel-final-member]] member model မှာတော့ township က proxy
+      ဖြစ်နိုင်လို့ fairness အတွက် မထည့်ဖို့ ဆုံးဖြတ်ခဲ့ပါတယ်။ နောက် lesson မှာတော့ user တွေက AI ကို
+      သင့်တင့်တဲ့ အတိုင်းအတာနဲ့ ယုံနိုင်အောင် လုပ်တဲ့ trust နဲ့ transparency ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (fairness summary)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-final-pairs
+        type: editor.select
+        at: { mark: sel-final-pairs }
+        target:
+          {
+            file: src/main.js,
+            text: "await showPairs(classify, labels, pairs.rows);",
+            occurrence: 1,
+          }
+      - id: sel-final-statement
+        type: editor.select
+        at: { mark: sel-final-statement }
+        target: { file: src/main.js, text: "showStatement(", occurrence: 1 }
+      - id: sel-final-member
+        type: editor.select
+        at: { mark: sel-final-member }
+        target: { file: src/main.js, text: "showMemberModel(wide, sets, columns);", occurrence: 1 }
+      - {
+          id: expect-final-code,
+          type: expect.file,
+          at: { afterAction: sel-final-member },
+          path: src/main.js,
+          contains: "const columns = [\"visits_30d\", \"days_since_last\", \"complaints_per_visit\"];\nshowMemberModel(wide, sets, columns);\n",
+        }
+      - {
+          id: expect-final-statement,
+          type: expect.file,
+          at: { afterAction: expect-final-code },
+          path: src/main.js,
+          contains: "await showPairs(classify, labels, pairs.rows);\nshowTokens(classify, pairs.rows, [\"p04\", \"p05\", \"p08\"]);\nshowStatement(",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
