@@ -1,0 +1,1591 @@
+# TypeScript course, lesson 30: generic functions (Burmese).
+#
+# Start state (ws/): src/types.ts holds `Order` (id, item, quantity). src/utils.ts — the shop's
+# utils — holds a one-line `lastOf(list: any[])` that returns the last item. src/main.ts takes the
+# latest of two orders with it and prints `latest.item` and `latest.qty` (the Order field is
+# really `quantity`; `any` hides that). Panel (data-modes "errors output types"): 0 errors, Output
+# "ကော်ဖီ undefined ခွက်".
+# Edits, all insert-only:
+#   - a ^? query on the call: `(alias) lastOf(list: any[]): any`
+#   - one block in utils.ts: the generic `lastOf<T>(list: T[]): T` above the old line, which becomes
+#     a comment -> query `lastOf<Order>(list: Order[]): Order`, TS2339 "Property 'qty' does not
+#     exist on type 'Order'." (Output still undefined); "uanti" turns qty into quantity -> 0 errors,
+#     Output "ကော်ဖီ 1 ခွက်"
+#   - a second call with names -> query `lastOf<string>(list: string[]): string`
+#   - `lastOf<string>(orders)` -> TS2345 (explicit beats inference), then commented out
+#   - `queueOf<T>(...items: T[]): T[]`; `queueOf()` -> `unknown[]`; default ` = Order` ->
+#     `Order[]`; `queueOf("လက်ဖက်ရည်", "ကော်ဖီ")` -> `string[]`
+#   - `findById<T>` -> TS2339 "Property 'id' does not exist on type 'T'."; ` extends { id: number }`
+#     -> 0; `findById(orders, 2)` -> `Order | undefined`, Output the coffee order
+# Boards: (A) any loses the input type, a type parameter keeps it; (B) type parameter, type
+# argument, generic function.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-30-generic-functions.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-30-generic-functions
+  title: "TypeScript course 30: Generic function"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors output types"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import type { Order } from "./types";
+        import { lastOf } from "./utils";
+
+        const orders: Order[] = [
+          { id: 1, item: "လက်ဖက်ရည်", quantity: 2 },
+          { id: 2, item: "ကော်ဖီ", quantity: 1 },
+        ];
+
+        // နောက်ဆုံး ဝင်လာတဲ့ အော်ဒါ
+        const latest = lastOf(orders);
+        console.log(latest.item, latest.qty, "ခွက်");
+      src/types.ts: |
+        export type Order = { id: number; item: string; quantity: number };
+      src/utils.ts: |
+        import type { Order } from "./types";
+
+        // ဆိုင်ရဲ့ utils · ဘယ်နေရာမှာမဆို ပြန်သုံးတဲ့ function တွေ
+        export function lastOf(list: any[]) { return list[list.length - 1]; }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: with any the output forgets the input type; with a type parameter it follows it.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "Input ကို လိုက်တဲ့ output",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-any-in,
+        kind: text,
+        x: 270,
+        y: 262,
+        width: 125,
+        height: 40,
+        text: "Order[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-any-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 398,
+        y: 260,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-any-box,
+        kind: rectangle,
+        x: 455,
+        y: 245,
+        width: 350,
+        height: 72,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-any-fn,
+        kind: text,
+        x: 472,
+        y: 262,
+        width: 320,
+        height: 40,
+        text: "lastOf(list: any[])",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-any-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 813,
+        y: 260,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-any-out,
+        kind: text,
+        x: 870,
+        y: 262,
+        width: 70,
+        height: 40,
+        text: "any",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-any-note,
+        kind: text,
+        x: 270,
+        y: 335,
+        width: 760,
+        height: 40,
+        text: "any · ဘာ ဝင်လာလဲ ဆိုတာ မေ့သွား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-gen-in,
+        kind: text,
+        x: 270,
+        y: 452,
+        width: 125,
+        height: 40,
+        text: "Order[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-gen-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 398,
+        y: 450,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-gen-box,
+        kind: rectangle,
+        x: 455,
+        y: 435,
+        width: 370,
+        height: 72,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-gen-fn,
+        kind: text,
+        x: 472,
+        y: 452,
+        width: 340,
+        height: 40,
+        text: "lastOf<T>(list: T[])",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-gen-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 833,
+        y: 450,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-gen-out,
+        kind: text,
+        x: 890,
+        y: 452,
+        width: 100,
+        height: 40,
+        text: "Order",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-gen-note,
+        kind: text,
+        x: 270,
+        y: 525,
+        width: 760,
+        height: 40,
+        text: "T = Order · output က input ကို လိုက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: the three words.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 50,
+        text: "စကားလုံး သုံးလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-param-code,
+        kind: text,
+        x: 270,
+        y: 235,
+        width: 560,
+        height: 40,
+        text: "function lastOf<T>(list: T[]): T",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-param-desc,
+        kind: text,
+        x: 310,
+        y: 277,
+        width: 700,
+        height: 40,
+        text: "T = type parameter · ကြေညာတဲ့ နာမည်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-arg-code,
+        kind: text,
+        x: 270,
+        y: 340,
+        width: 680,
+        height: 40,
+        text: "lastOf<Order>(orders) · lastOf(orders)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-arg-desc,
+        kind: text,
+        x: 310,
+        y: 382,
+        width: 760,
+        height: 40,
+        text: "Order = type argument · ကိုယ်တိုင် ပေး / infer",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-fn-desc,
+        kind: text,
+        x: 270,
+        y: 450,
+        width: 800,
+        height: 40,
+        text: "generic function = type parameter ရှိတဲ့ function",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-no-word,
+        kind: text,
+        x: 270,
+        y: 520,
+        width: 600,
+        height: 40,
+        text: "generic တစ်ခု လို့ မပြောဘဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-words,
+        kind: text,
+        x: 270,
+        y: 570,
+        width: 800,
+        height: 40,
+        text: "type parameter · type argument · generic function",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3030
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Function တွေမှာ type parameter"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ mapped type နဲ့ key တွေကို တစ်ခုချင်း loop ပတ်ပြီး object
+      type အသစ် ဆောက်ခဲ့ပြီး၊ Partial နဲ့ Readonly ကိုလည်း type parameter T နဲ့ ကိုယ်တိုင်
+      ရေးကြည့်ခဲ့ပါတယ်။ lesson ၂၇ ကစပြီး type parameter ကို type တွေမှာပဲ သုံးခဲ့တာ ဖြစ်လို့၊ ဒီ lesson
+      မှာတော့ function တွေမှာ သုံးတဲ့ generic function ကို ကြည့်သွားပါမယ်။ [[mark:utils-folder]] project
+      အများစုမှာ နေရာ အများကြီးက ပြန်ခေါ်သုံးတဲ့ function လေးတွေကို စုထားတဲ့ utils folder ရှိတတ်ပြီး၊
+      အဲဒီ function တွေက type အမျိုးမျိုးနဲ့ အလုပ်လုပ်ရလို့ generic function တွေ အရမ်း အသုံးဝင်ပါတယ်။
+      [[mark:draw-any]] ဥပမာအားဖြင့် array ရဲ့ နောက်ဆုံး item ကို ပြန်ပေးတဲ့ function ကို parameter မှာ
+      any နဲ့ ရေးထားတယ် ဆိုပါစို့။ ဘယ် array ကိုမဆို လက်ခံပေမယ့်၊ အော်ဒါ array ကို ထည့်ပေးလိုက်ရင်
+      ပြန်ထွက်လာတာက any ဖြစ်သွားပြီး၊ ဘာ ဝင်လာလဲ ဆိုတာကို TypeScript က မေ့သွားပါတယ်။
+      [[mark:draw-generic]] function မှာ type parameter T ကို ထည့်လိုက်ရင်တော့၊ အော်ဒါ array ကို
+      ထည့်တဲ့အခါ T က Order ဖြစ်သွားပြီး၊ ပြန်ထွက်လာတာကလည်း Order ဖြစ်ပါတယ်။ ဆိုလိုတာက output ရဲ့ type က
+      input ရဲ့ type ကို လိုက်သွားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (generic functions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (generic functions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#generic-functions",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-any
+        type: whiteboard.apply
+        at: { mark: draw-any }
+        upsertIds:
+          [a-any-in, a-any-arrow-1, a-any-box, a-any-fn, a-any-arrow-2, a-any-out, a-any-note]
+        drawMs: 3400
+      - id: draw-generic
+        type: whiteboard.apply
+        at: { mark: draw-generic }
+        upsertIds:
+          [a-gen-in, a-gen-arrow-1, a-gen-box, a-gen-fn, a-gen-arrow-2, a-gen-out, a-gen-note]
+        drawMs: 3400
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-utils]] ဒါက ဆိုင်ရဲ့ utils ဖိုင်ပါ။
+      [[mark:select-lastof]] array တစ်ခုရဲ့ နောက်ဆုံး item ကို ပြန်ပေးတဲ့ function ကို တစ်ကြောင်းတည်းနဲ့
+      ရေးထားပါတယ်။ parameter ကို any array လို့ ကြေညာထားလို့ ဘယ်လို array ကိုမဆို လက်ခံပါတယ်။
+      [[mark:open-main]] main ဖိုင်ကို ကြည့်ရအောင်။ [[mark:select-orders]] အော်ဒါ နှစ်ခု ပါတဲ့ array
+      ရှိပြီး၊ [[mark:select-latest]] နောက်ဆုံး ဝင်လာတဲ့ အော်ဒါကို ဒီ function နဲ့ ယူထားပါတယ်။
+      [[mark:select-print]] နောက်ဆုံး line က အဲဒီ အော်ဒါရဲ့ ပစ္စည်း နာမည်နဲ့ အရေအတွက်ကို ထုတ်ပြပါတယ်။
+      ဒါပေမဲ့ အရေအတွက်ကို နာမည်အတိုနဲ့ ရေးထားပြီး၊ Order type ထဲမှာတော့ quantity လို့ အပြည့်အစုံ နာမည်
+      ပေးထားတာကို သတိထား ကြည့်ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (the problem generic functions solve)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (hello world of generics, any)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-utils
+        type: workspace.openFile
+        at: { mark: open-utils }
+        path: src/utils.ts
+      - id: select-lastof
+        type: editor.select
+        at: { mark: select-lastof }
+        target:
+          {
+            file: src/utils.ts,
+            text: "export function lastOf(list: any[]) { return list[list.length - 1]; }",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-orders
+        type: editor.select
+        at: { mark: select-orders }
+        target:
+          {
+            file: src/main.ts,
+            text: "  { id: 1, item: \"လက်ဖက်ရည်\", quantity: 2 },\n  { id: 2, item: \"ကော်ဖီ\", quantity: 1 },",
+            occurrence: 1,
+          }
+      - id: select-latest
+        type: editor.select
+        at: { mark: select-latest }
+        target: { file: src/main.ts, text: "const latest = lastOf(orders);", occurrence: 1 }
+      - id: select-print
+        type: editor.select
+        at: { mark: select-print }
+        target:
+          { file: src/main.ts, text: 'console.log(latest.item, latest.qty, "ခွက်");', occurrence: 1 }
+
+  - id: any-problem
+    narration: >
+      [[mark:panel-ready]] panel ရဲ့ Output မှာ ကော်ဖီ ဆိုတာ မှန်ပေမယ့်၊ အရေအတွက် နေရာမှာတော့ undefined
+      ထွက်နေပါတယ်။ ဒါပေမဲ့ Errors မှာ ဘာ error မှ မရှိပါဘူး။ [[mark:type-call-query]] function ကို
+      ခေါ်ထားတဲ့ နေရာအောက်မှာ query comment ထည့်ပြီး ဘာ ဖြစ်နေလဲ ကြည့်ရအောင်။ [[mark:read-any]] Types
+      မှာ ဒီ function က any array ကို လက်ခံပြီး any ကို ပြန်ပေးတယ်လို့ ပြနေပါတယ်။ ဆိုတော့ အော်ဒါ array ကို
+      ထည့်ပေးလိုက်ပေမယ့်၊ ပြန်ထွက်လာတာက any ဖြစ်သွားပြီး TypeScript က အော်ဒါ ဆိုတာကို မေ့သွားပါတယ်။ any
+      ပေါ်မှာ ဘာ property ကို ယူယူ မစစ်တော့တဲ့ အတွက်၊ နာမည် မှားနေတာကိုလည်း ပြောမပြနိုင်တော့တာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (the problem generic functions solve)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (any)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#any",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-clean
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-undefined
+        type: expect.preview
+        at: { afterAction: expect-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "ကော်ဖီ undefined ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-call-query
+        type: editor.type
+        at: { mark: type-call-query }
+        target: { file: src/main.ts, after: "const latest = lastOf(orders);\n", occurrence: 1 }
+        text: "//             ^?\n"
+        cadence: fast-explainer
+      - id: expect-any-query
+        type: expect.preview
+        at: { afterAction: type-call-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "lastOf(list: any[]): any"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: type-param
+    chapter: "Type parameter ထည့်ခြင်း"
+    narration: >
+      [[mark:open-utils-2]] ဒါကြောင့် utils ဖိုင်မှာ ဒီ function ကို type parameter နဲ့ ပြန်ရေးပါမယ်။
+      [[mark:type-generic]] function အသစ်ကို အပေါ်မှာ ထည့်ပြီး၊ any နဲ့ ရေးထားတဲ့ အဟောင်းကိုတော့ comment
+      အဖြစ် ချန်ထားပါမယ်။ [[mark:select-t]] function နာမည်ရဲ့ နောက်က angle bracket ထဲမှာ T ကို
+      ကြေညာထားပါတယ်။ ဒါက type parameter ပါ။ ရိုးရိုး parameter တွေက တန်ဖိုးကို လက်ခံသလို၊ type parameter
+      က type တစ်ခုကို လက်ခံပြီး၊ function ကို ခေါ်တိုင်း T နေရာမှာ type တစ်ခု ဝင်လာပါတယ်။
+      [[mark:select-list-t]] parameter ကို T array လို့ ရေးပြီး၊ ပြန်ပေးမယ့် type ကိုလည်း T လို့
+      ရေးထားပါတယ်။ ဆိုလိုတာက ဝင်လာတဲ့ array ရဲ့ item type နဲ့ ပြန်ထွက်မယ့် type က အမြဲ တူရမယ် ဆိုတာပါ။
+      [[mark:read-generic]] Types ကို ကြည့်ပါ၊ T နေရာမှာ Order ဝင်သွားပြီး function က Order ကို
+      ပြန်ပေးတယ်လို့ ပြောင်းသွားပါပြီ။ ဒါကြောင့် Errors မှာ error အသစ် တစ်ခု ပေါ်လာပါတယ်။ Order type မှာ
+      အဲဒီ နာမည်အတိုနဲ့ property မရှိဘူးလို့ ပြောနေတာပါ။ any က ဖုံးထားခဲ့တဲ့ အမှားကို TypeScript က အခုမှ
+      တွေ့သွားတာပါ။ Output မှာတော့ undefined အတိုင်း ရှိနေပါသေးတယ်။ type တွေက program run တဲ့ ပုံကို
+      မပြောင်းလို့ပါ။ [[mark:type-fix-qty]] main ဖိုင်မှာ နာမည်အတိုကို အပြည့်အစုံ ဖြစ်အောင်
+      ပြင်လိုက်ပါမယ်။ [[mark:read-fixed]] error ပျောက်ပြီး၊ Output မှာ ကော်ဖီ တစ်ခွက် ဆိုတာ မှန်မှန်
+      ထွက်လာပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (what makes a function generic)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (working with generic type variables)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#working-with-generic-type-variables",
+        }
+    actions:
+      - id: open-utils-2
+        type: workspace.openFile
+        at: { mark: open-utils-2 }
+        path: src/utils.ts
+      - id: type-generic
+        type: editor.type
+        at: { mark: type-generic }
+        target: { file: src/utils.ts, after: "ပြန်သုံးတဲ့ function တွေ\n", occurrence: 1 }
+        text: "export function lastOf<T>(list: T[]): T {\n  return list[list.length - 1];\n}\n// "
+        cadence: block
+      - id: expect-qty-error
+        type: expect.preview
+        at: { afterAction: type-generic }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-qty-text
+        type: expect.preview
+        at: { afterAction: expect-qty-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'qty' does not exist on type 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-order-query
+        type: expect.preview
+        at: { afterAction: expect-qty-text }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "lastOf<Order>(list: Order[]): Order"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-undefined
+        type: expect.preview
+        at: { afterAction: expect-order-query }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "ကော်ဖီ undefined ခွက်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-t
+        type: editor.select
+        at: { mark: select-t }
+        target: { file: src/utils.ts, text: "<T>", occurrence: 1 }
+      - id: select-list-t
+        type: editor.select
+        at: { mark: select-list-t }
+        target: { file: src/utils.ts, text: "(list: T[]): T", occurrence: 1 }
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: type-fix-qty }
+        path: src/main.ts
+      - id: type-fix-qty
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "latest.q", occurrence: 1 }
+        text: "uanti"
+      - id: expect-fixed
+        type: expect.preview
+        at: { afterAction: type-fix-qty }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-one-cup
+        type: expect.preview
+        at: { afterAction: expect-fixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "ကော်ဖီ 1 ခွက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: inference
+    chapter: "Type argument ကို infer လုပ်ခြင်း"
+    narration: >
+      [[mark:read-inferred]] ဒီမှာ စိတ်ဝင်စားစရာ တစ်ခု ရှိပါတယ်။ function ကို ခေါ်တဲ့အခါ T က Order
+      ဖြစ်ရမယ်လို့ ကိုယ် ဘယ်နေရာမှာမှ မရေးခဲ့ပါဘူး။ ထည့်ပေးလိုက်တဲ့ argument က Order array ဖြစ်နေတာကို
+      TypeScript က ကြည့်ပြီး၊ T ကို Order လို့ သူ့ဘာသာ infer လုပ်ပေးတာပါ။ query comment ဒါမှမဟုတ် VS
+      Code မှာ mouse တင်ကြည့်တာက၊ function နာမည်ရဲ့ နောက်က angle bracket ထဲမှာ ဘယ် type ကို infer
+      လုပ်ထားလဲ ဆိုတာ ပြပေးလို့ generic function တွေကို debug လုပ်တဲ့အခါ အရမ်း အသုံးဝင်ပါတယ်။
+      [[mark:type-names]] customer နာမည်တွေ ပါတဲ့ string array နဲ့ ထပ်ခေါ်ကြည့်ရအောင်။
+      [[mark:read-names]] ဒီတစ်ခါ T က string ဖြစ်သွားပြီး၊ function က string ကို ပြန်ပေးပါတယ်။ function
+      ကို တစ်ခါပဲ ရေးထားပေမယ့်၊ ထည့်ပေးတဲ့ array အလိုက် ပြန်ထွက်တဲ့ type က လိုက်ပြောင်းနေတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (inference, debugging the inferred type)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (inference)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#inference",
+        }
+    actions:
+      - id: select-call
+        type: editor.select
+        at: { mark: read-inferred }
+        target: { file: src/main.ts, text: "lastOf(orders)", occurrence: 1 }
+      - id: type-names
+        type: editor.type
+        at: { mark: type-names }
+        target: { file: src/main.ts, after: "latest.quantity, \"ခွက်\");\n", occurrence: 1 }
+        text: "\nconst lastName = lastOf([\"မြမြ\", \"အောင်အောင်\"]);\n//               ^?\n"
+        cadence: line-by-line
+      - id: expect-names-count
+        type: expect.preview
+        at: { afterAction: type-names }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-types }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-names-query
+        type: expect.preview
+        at: { afterAction: expect-names-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        textContains: "lastOf<string>(list: string[]): string"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: explicit
+    chapter: "Type argument ကို ကိုယ်တိုင် ပေးခြင်း"
+    narration: >
+      type argument ကို ကိုယ်တိုင်လည်း ပေးလို့ ရပါတယ်။ lesson ၆ မှာ Set ကို number ပေးခဲ့သလိုပဲ၊
+      function နာမည်ရဲ့ နောက်မှာ angle bracket နဲ့ ရေးရပါတယ်။ [[mark:type-explicit]] ကိုယ်တိုင် ပေးတဲ့
+      type နဲ့ argument မကိုက်ရင် ဘာ ဖြစ်လဲ မြင်ရအောင်၊ အော်ဒါ array ကို ထည့်ပေးပြီး T ကိုတော့ string
+      လို့ ပေးကြည့်ပါမယ်။ [[mark:read-explicit]] Errors မှာ Order array ကို string array နေရာမှာ
+      ထည့်လို့ မရဘူး ဆိုတဲ့ error ပေါ်လာပါပြီ။ TypeScript က argument ကို ကြည့်ပြီး infer မလုပ်တော့ဘဲ၊
+      ကိုယ် ပေးလိုက်တဲ့ string ကို အမှန်လို့ ယူပြီး argument ကို အဲဒါနဲ့ စစ်လိုက်တာပါ။ ဆိုတော့
+      ကိုယ်တိုင် ပေးတဲ့ type argument က infer လုပ်တာကို အမြဲ နိုင်ပါတယ်။ [[mark:type-comment-explicit]]
+      စမ်းကြည့်တဲ့ ဒီ line ကို comment လုပ်လိုက်ပါမယ်။ [[mark:read-explicit-gone]] error
+      ပျောက်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (specified types beat inferred types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (specifying type arguments)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#specifying-type-arguments",
+        }
+    actions:
+      - id: type-explicit
+        type: editor.type
+        at: { mark: type-explicit }
+        target:
+          { file: src/main.ts, after: "\"အောင်အောင်\"]);\n//               ^?\n", occurrence: 1 }
+        text: "const check = lastOf<string>(orders);\n"
+        cadence: fast-explainer
+      - id: expect-explicit-error
+        type: expect.preview
+        at: { afterAction: type-explicit }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-explicit-text
+        type: expect.preview
+        at: { afterAction: expect-explicit-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Argument of type 'Order[]' is not assignable to parameter of type 'string[]'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-comment-explicit
+        type: editor.type
+        at: { mark: type-comment-explicit }
+        target:
+          { file: src/main.ts, after: "\"အောင်အောင်\"]);\n//               ^?\n", occurrence: 1 }
+        text: "// "
+        cadence: fast-explainer
+      - id: expect-explicit-gone
+        type: expect.preview
+        at: { afterAction: type-comment-explicit }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: words
+    chapter: "Type parameter နဲ့ type argument"
+    narration: >
+      [[mark:board-words]] ဒီ lesson ထဲက စကားလုံးတွေကို ပုံနဲ့ ပြန်စီကြည့်ရအောင်။ [[mark:draw-param]]
+      function ကို ကြေညာတဲ့ နေရာမှာ angle bracket ထဲ ရေးထားတဲ့ T က type parameter ပါ။ ရိုးရိုး parameter
+      လိုပဲ နာမည် တစ်ခု ဖြစ်လို့၊ T အစား lesson ၂၇ မှာလို ပိုရှည်တဲ့ နာမည်လည်း ပေးလို့ ရပါတယ်။
+      [[mark:draw-args]] function ကို ခေါ်တဲ့အခါ T နေရာမှာ တကယ် ဝင်သွားတဲ့ type ကတော့ type argument ပါ။
+      ကိုယ်တိုင် ရေးပေးရင်လည်း type argument ဖြစ်ပြီး၊ TypeScript က infer လုပ်ပေးရင်လည်း type argument
+      ပါပဲ။ [[mark:draw-generic-word]] type parameter ရှိတဲ့ function ကိုတော့ generic function လို့
+      ခေါ်ပါတယ်။ lesson ၂၇ က generic type ဆိုတာလည်း type parameter ရှိတဲ့ type ကို ပြောတာပါ။
+      [[mark:draw-no-word]] လူတွေက generic တစ်ခု လို့ အတိုချုံ့ ပြောလေ့ ရှိပေမယ့်၊ အဲဒါက type parameter
+      ကို ပြောတာလား၊ type argument ကို ပြောတာလား၊ function ကို ပြောတာလား မရှင်းပါဘူး။ ဒါကြောင့် ဒီ
+      course မှာ type parameter ရယ်၊ type argument ရယ်၊ generic function ရယ် လို့ ခွဲပြီး ပြောပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (there is no such thing as 'a generic')",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html",
+        }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-words }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-param
+        type: whiteboard.apply
+        at: { mark: draw-param }
+        upsertIds: [b-param-code, b-param-desc]
+        drawMs: 2000
+      - id: draw-args
+        type: whiteboard.apply
+        at: { mark: draw-args }
+        upsertIds: [b-arg-code, b-arg-desc]
+        drawMs: 2200
+      - id: draw-generic-word
+        type: whiteboard.apply
+        at: { mark: draw-generic-word }
+        upsertIds: [b-fn-desc]
+        drawMs: 1400
+      - id: draw-no-word
+        type: whiteboard.apply
+        at: { mark: draw-no-word }
+        upsertIds: [b-no-word, b-words]
+        drawMs: 2000
+
+  - id: default-type
+    chapter: "Default type"
+    narration: >
+      [[mark:close-board-b]] utils ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:type-queue]] အော်ဒါတွေကို
+      တန်းစီထားဖို့ queue ဆောက်ပေးတဲ့ function တစ်ခု ထပ်ရေးပါမယ်။ ထည့်ပေးတဲ့ item တွေကို array အနေနဲ့
+      ပြန်ပေးတဲ့ generic function ပါ။ [[mark:open-main-3]] main ဖိုင်မှာ ဒီ function ကို import
+      လုပ်ပါမယ်။ ပြီးတော့ မီးဖိုချောင် queue ကို ဗလာနဲ့ စချင်လို့ item တစ်ခုမှ မထည့်ဘဲ ခေါ်ကြည့်ပြီး၊
+      query comment နဲ့ type ကို ကြည့်ပါမယ်။ [[mark:read-unknown]] Types မှာ unknown array လို့
+      ပြနေပါတယ်။ argument မရှိတဲ့အတွက် TypeScript က ဘာကနေမှ infer လုပ်လို့ မရဘဲ၊ T ကို unknown လို့
+      ယူလိုက်တာပါ။ ဒီ queue ထဲက item ကို သုံးမယ်ဆိုရင် အရင် narrow လုပ်ရမှာ ဖြစ်လို့ အဆင်မပြေပါဘူး။
+      [[mark:type-default]] ဒါကြောင့် type parameter မှာ default type ပေးပါမယ်။ T ရဲ့ နောက်မှာ Order ကို
+      ပေးလိုက်ရင်၊ T ကို ဘာ type လို့ မသိရတဲ့ အခါ Order ကို သုံးမယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါ။
+      [[mark:read-default]] Types မှာ Order array ဖြစ်သွားပါပြီ။ [[mark:type-drinks]] default က T ကို
+      ကန့်သတ်တာ မဟုတ်ပါဘူး။ ဒါကို မြင်ရအောင် သောက်စရာ နာမည် နှစ်ခုနဲ့ ထပ်ခေါ်ကြည့်ပါမယ်။
+      [[mark:read-drinks]] ဒီတစ်ခါ string array ဖြစ်ပါတယ်။ argument ရှိရင် TypeScript က infer လုပ်တာကို
+      ဦးစားပေးပြီး၊ default ကိုတော့ infer လုပ်စရာ မရှိမှပဲ သုံးတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (type parameter defaults)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic parameter defaults)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-parameter-defaults",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: close-board-b }
+        open: false
+      - id: open-utils-3
+        type: workspace.openFile
+        at: { mark: type-queue }
+        path: src/utils.ts
+      - id: type-queue
+        type: editor.type
+        at: { afterAction: open-utils-3 }
+        target: { file: src/utils.ts, after: "list[list.length - 1]; }\n", occurrence: 1 }
+        text: "\nexport function queueOf<T>(...items: T[]): T[] {\n  return items;\n}\n"
+        cadence: line-by-line
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: src/main.ts
+      - id: type-import-queue
+        type: editor.type
+        at: { afterAction: open-main-3 }
+        target: { file: src/main.ts, after: "import { lastOf", occurrence: 1 }
+        text: ", queueOf"
+        cadence: fast-explainer
+      - id: type-kitchen
+        type: editor.type
+        at: { afterAction: type-import-queue }
+        target:
+          { file: src/main.ts, after: "// const check = lastOf<string>(orders);\n", occurrence: 1 }
+        text: "\nconst kitchen = queueOf();\n//    ^?\n"
+        cadence: fast-explainer
+      - id: expect-unknown
+        type: expect.preview
+        at: { afterAction: type-kitchen }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute: { name: data-type, value: "const kitchen: unknown[]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-utils-4
+        type: workspace.openFile
+        at: { mark: type-default }
+        path: src/utils.ts
+      - id: type-default
+        type: editor.type
+        at: { afterAction: open-utils-4 }
+        target: { file: src/utils.ts, after: "queueOf<T", occurrence: 1 }
+        text: " = Order"
+      - id: expect-default
+        type: expect.preview
+        at: { afterAction: type-default }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute: { name: data-type, value: "const kitchen: Order[]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-4
+        type: workspace.openFile
+        at: { mark: type-drinks }
+        path: src/main.ts
+      - id: type-drinks
+        type: editor.type
+        at: { afterAction: open-main-4 }
+        target:
+          { file: src/main.ts, after: "const kitchen = queueOf();\n//    ^?\n", occurrence: 1 }
+        text: "const drinks = queueOf(\"လက်ဖက်ရည်\", \"ကော်ဖီ\");\n//    ^?\n"
+        cadence: fast-explainer
+      - id: expect-drinks
+        type: expect.preview
+        at: { afterAction: type-drinks }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-4 }
+        attribute: { name: data-type, value: "const drinks: string[]" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: constraint
+    chapter: "Constraint"
+    narration: >
+      [[mark:open-utils-5]] နောက်ဆုံး အနေနဲ့ utils ဖိုင်မှာ id နဲ့ ရှာပေးတဲ့ function ကို generic
+      function အဖြစ် ရေးကြည့်ပါမယ်။ [[mark:type-find]] list ထဲက item တစ်ခုချင်းရဲ့ id ကို ယှဉ်ပြီး
+      ရှာတာပါ။ [[mark:read-find-error]] Errors မှာ T ပေါ်မှာ id ဆိုတဲ့ property မရှိဘူးလို့ error
+      ပေါ်လာပါတယ်။ T က ဘယ် type မဆို ဖြစ်နိုင်လို့၊ string လို id မရှိတဲ့ type ဝင်လာရင် မှားမှာ
+      ဖြစ်တဲ့အတွက် TypeScript က ခွင့်မပြုတာပါ။ [[mark:type-constraint]] ဒါကြောင့် T ရဲ့ နောက်မှာ extends
+      နဲ့ constraint ထည့်ပါမယ်။ lesson ၂၇ မှာလိုပဲ T ဟာ number ဖြစ်တဲ့ id property ပါတဲ့ object ပဲ
+      ဖြစ်ရမယ်လို့ ကန့်သတ်လိုက်တာပါ။ [[mark:read-constraint]] error ပျောက်သွားပါပြီ။ T မှာ id အမြဲ
+      ရှိမယ် ဆိုတာ TypeScript သိသွားလို့ပါ။ [[mark:open-main-5]] main ဖိုင်မှာ import လုပ်ပြီး၊ id
+      နံပါတ် ၂ ဖြစ်တဲ့ အော်ဒါကို ရှာကြည့်ရအောင်။ [[mark:read-found]] Types မှာ Order ဒါမှမဟုတ် undefined
+      လို့ ပြနေပြီး၊ Output မှာလည်း ကော်ဖီ အော်ဒါ ထွက်လာပါပြီ။ array ရဲ့ find က မတွေ့ရင် undefined
+      ပြန်ပေးလို့ undefined ပါနေတာပါ။ [[mark:read-extra]] constraint က id ကိုပဲ တောင်းတာ ဖြစ်လို့၊
+      ပစ္စည်း နာမည်နဲ့ အရေအတွက်လို property အပိုတွေ ပါလည်း ရပါတယ်။ ပြန်ထွက်တဲ့ type ကလည်း id ပါတဲ့
+      object သက်သက် မဟုတ်ဘဲ Order အပြည့်အစုံ ဖြစ်နေတာကို သတိထား ကြည့်ပါ။ id မပါတဲ့ array ကို ထည့်ရင်တော့
+      ခေါ်တဲ့ နေရာမှာ error ပြပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development (constraining type parameters)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (constraints)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#constraints",
+        }
+      - {
+          title: "MDN: Array.prototype.find() (returns undefined when nothing matches)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/find",
+        }
+    actions:
+      - id: open-utils-5
+        type: workspace.openFile
+        at: { mark: open-utils-5 }
+        path: src/utils.ts
+      - id: type-find
+        type: editor.type
+        at: { mark: type-find }
+        target: { file: src/utils.ts, after: "  return items;\n}\n", occurrence: 1 }
+        text: "\nexport function findById<T>(list: T[], id: number) {\n  return list.find((entry) => entry.id === id);\n}\n"
+        cadence: line-by-line
+      - id: expect-find-error
+        type: expect.preview
+        at: { afterAction: type-find }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-find-text
+        type: expect.preview
+        at: { afterAction: expect-find-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'id' does not exist on type 'T'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-constraint
+        type: editor.type
+        at: { mark: type-constraint }
+        target: { file: src/utils.ts, after: "findById<T", occurrence: 1 }
+        text: " extends { id: number }"
+        cadence: fast-explainer
+      - id: expect-constraint-clean
+        type: expect.preview
+        at: { afterAction: type-constraint }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-5
+        type: workspace.openFile
+        at: { mark: open-main-5 }
+        path: src/main.ts
+      - id: type-import-find
+        type: editor.type
+        at: { afterAction: open-main-5 }
+        target: { file: src/main.ts, after: "import { lastOf, queueOf", occurrence: 1 }
+        text: ", findById"
+        cadence: fast-explainer
+      - id: type-found
+        type: editor.type
+        at: { afterAction: type-import-find }
+        target: { file: src/main.ts, after: "\"ကော်ဖီ\");\n//    ^?\n", occurrence: 1 }
+        text: "\nconst found = findById(orders, 2);\n//    ^?\nconsole.log(found);\n"
+        cadence: line-by-line
+      - id: expect-found-type
+        type: expect.preview
+        at: { afterAction: type-found }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-5 }
+        attribute: { name: data-type, value: "const found: Order | undefined" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-found-output
+        type: expect.preview
+        at: { afterAction: expect-found-type }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "{ id: 2, item: 'ကော်ဖီ', quantity: 1 }"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-found-clean
+        type: expect.preview
+        at: { afterAction: expect-found-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ generic function က type parameter ကို ကြေညာထားပြီး၊ ဝင်လာတဲ့ type
+      အလိုက် ပြန်ထွက်တဲ့ type ကို လိုက်ပြောင်းပေးပါတယ်။ any အစား type parameter ကို သုံးရင် TypeScript က
+      ဘာ ဝင်လာလဲ ဆိုတာ မမေ့တော့ပါဘူး။ type argument ကို များသောအားဖြင့် TypeScript က infer လုပ်ပေးပြီး၊
+      ကိုယ်တိုင် ပေးရင်တော့ ကိုယ် ပေးတာက နိုင်ပါတယ်။ [[mark:recap-default]] default type က infer
+      လုပ်စရာ မရှိတဲ့ အခါ သုံးဖို့ ဖြစ်ပြီး၊ constraint ကတော့ T မှာ ဘာ ရှိရမလဲ ဆိုတာကို သတ်မှတ်ပေးပါတယ်။
+      နောက် lesson မှာတော့ type predicate ရယ်၊ assertion function ရယ်၊ overload ရယ် ဆိုတဲ့ function တွေကို
+      type ပေးတဲ့ နောက်ထပ် နည်းတွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 16: Utility Folder Development",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/utility-folder-development-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (guidelines for writing good generic functions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#guidelines-for-writing-good-generic-functions",
+        }
+    actions:
+      - id: select-generic-final
+        type: editor.select
+        at: { mark: recap }
+        target: { file: src/main.ts, text: "const latest = lastOf(orders);", occurrence: 1 }
+      - id: open-utils-6
+        type: workspace.openFile
+        at: { mark: recap-default }
+        path: src/utils.ts
+      - id: select-utils-final
+        type: editor.select
+        at: { afterAction: open-utils-6 }
+        target: { file: src/utils.ts, text: "<T extends { id: number }>", occurrence: 1 }
+      - id: expect-file-lastof
+        type: expect.file
+        at: { afterAction: select-generic-final }
+        path: src/utils.ts
+        contains: "export function lastOf<T>(list: T[]): T {\n  return list[list.length - 1];\n}\n// export function lastOf(list: any[])"
+      - id: expect-file-queue
+        type: expect.file
+        at: { afterAction: expect-file-lastof }
+        path: src/utils.ts
+        contains: "export function queueOf<T = Order>(...items: T[]): T[] {"
+      - id: expect-file-find
+        type: expect.file
+        at: { afterAction: expect-file-queue }
+        path: src/utils.ts
+        contains: "export function findById<T extends { id: number }>(list: T[], id: number) {"
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: expect-file-find }
+        path: src/main.ts
+        contains: 'console.log(latest.item, latest.quantity, "ခွက်");'
+checks:
+  - { type: timing.p95Ms, max: 300 }
