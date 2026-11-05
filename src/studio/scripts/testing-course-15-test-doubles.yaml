@@ -1,0 +1,2372 @@
+# Testing course, lesson 15: test doubles and vi.fn (Burmese).
+#
+# Teaches: why a test replaces a real dependency (the kitchen printer prints paper and is not
+# there on a test machine; a booking database is slow and holds real data; a service may not exist
+# yet) with a test double; dependency injection (createKitchen takes its printer, createBookings its
+# store) is what makes that possible without touching the code; vi.fn() makes a mock function that
+# records every call; toHaveBeenCalledWith (with mockName for readable messages, then
+# expect.objectContaining to check only what the test cares about), toHaveBeenCalledTimes and
+# mock.calls; Vitest 5 clears call history before every test (clearMocks, A09); the family — dummy
+# (null), stub (mockResolvedValue), spy and mock (vi.fn), fake (an in-memory store); state versus
+# behaviour verification, and the two warnings: keep a test with the real dependency, never replace
+# the code under test.
+#
+# Start state (ws/): src/printer.js, whose printTicket throws "the kitchen printer is not
+# connected" (no printer on a test machine); src/kitchen.js, the canonical createKitchen({ print });
+# src/kitchen.test.js, one test "numbers the tickets from 1" that passes the REAL printer;
+# src/booking.js, the canonical createBookings(store) + memoryStore(); src/booking.test.js, one
+# test "rejects table 13" that passes null as the store (a dummy). Panel (data-modes "tests errors
+# summary"): FAIL, Tests 1 failed | 1 passed (2), "Error: the kitchen printer is not connected" with
+# its frame in src/printer.js:4:9.
+#
+# Then, insert-only:
+#   1. kitchen.test.js, keystrokes, one insert that replaces the line: const print = vi.fn(); above
+#      the old line, which becomes a comment -> PASS, Tests 2 passed (2).
+#   2. kitchen.test.js, one block: "prints the order on a ticket" with vi.fn().mockName("print")
+#      and toHaveBeenCalledWith(order) (exact, on purpose) -> FAIL: expected "print" to be called
+#      with arguments: [ { table: 5, item: 'tea' } ], Received: 1st print call, + "no": 1,
+#      Number of calls: 1.
+#   3. kitchen.test.js, one block that replaces the assertion line: toHaveBeenCalledWith(
+#      expect.objectContaining(order)) -> PASS, Tests 3 passed (3).
+#   4. kitchen.test.js, one block: "prints one ticket per order" (toHaveBeenCalledTimes(2),
+#      mock.calls[1][0].table is 8) -> PASS, Tests 4 passed (4).
+#   5. booking.test.js, one block: "rejects a table that is taken", a stub store whose get
+#      resolves "မြမြ" -> PASS, Tests 5 passed (5).
+#   6. booking.test.js, one block: "rejects a second booking" with the fake memoryStore() ->
+#      PASS, Tests 6 passed (6).
+# Boards: (A) a real dependency in a test (the printer, the database, a missing service) and the
+# test double; (B) the test-double family with the tool that makes each; (C) state versus
+# behaviour, prefer state, and the two warnings.
+#
+# Build: bun ~/Documents/testing-course-work/tools/build-lesson.ts template.yaml ws testing-course-15-test-doubles.yaml
+# Adapted from web.dev Learn Testing (Sam Thorogood et al.; text CC BY 4.0, code Apache 2.0) and the
+# Vitest docs (MIT); every example is new.
+schemaVersion: 1
+lesson:
+  slug: testing-course-15-test-doubles
+  title: "Testing course 15: Test double တွေနဲ့ vi.fn"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Testing course
+    entryFilePath: src/kitchen.js
+    files:
+      course/panel.js: |
+        // Testing course · Vitest panel (runs in the preview page; pinned, never edited).
+        // Draws what course/vitest-bridge.js reports from the real Vitest, laid out like Vitest's own
+        // terminal reporter: the test tree (✓ × ↓ □), the failures (FAIL, the error line, - Expected /
+        // + Received, the ❯ file:line:col code frame), the Test Files / Tests summary, console output,
+        // snapshots and coverage. Plain DOM only, so the studio's recording replays it exactly.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="tests errors summary console" data-app="src/app.js"></script>
+        //
+        // data-modes: the sections, drawn in the order listed: tests errors summary console snapshot coverage
+        //             lint (ESLint on src/, when the workspace installs eslint).
+        // data-app:   a module whose default export mounts the lesson's UI: mount(rootElement). It is drawn
+        //             in #app above the report and mounted again whenever its code changes.
+        const EVENT = "course:vitest";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const MODES = ["tests", "errors", "summary", "console", "snapshot", "coverage", "lint"];
+        const modes = (script?.dataset.modes || "tests errors summary console").split(/\s+/).filter((m) => MODES.includes(m));
+        const appEntry = script?.dataset.app || "";
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #1b1d23; }
+        #app { color-scheme: light; font: 15px/1.5 system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #1f2328; background: #f7f4ee; }
+        #app:empty { display: none; }
+        #vt-panel { font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d6d9df; padding: 0 0 24px; }
+        #vt-panel * { box-sizing: border-box; }
+        .vt-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: #23262e; border-bottom: 1px solid #30343d; }
+        .vt-logo { font-weight: 700; color: #1b1d23; background: #fcc72b; border-radius: 4px; padding: 0 6px; font-size: 12px; }
+        .vt-title { font-weight: 600; color: #fff; }
+        .vt-status { margin-left: auto; font-weight: 700; padding: 1px 10px; border-radius: 4px; font-size: 12px; letter-spacing: .04em; }
+        .vt-status[data-state="pass"] { background: #2ea043; color: #fff; }
+        .vt-status[data-state="fail"] { background: #da3633; color: #fff; }
+        .vt-status[data-state="running"], .vt-status[data-state="waiting"] { background: #1f6feb; color: #fff; }
+        .vt-sec { padding: 8px 14px 2px; }
+        .vt-sec[data-empty] { display: none; }
+        .vt-row { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .vt-pass { color: #3fb950; } .vt-fail { color: #f85149; } .vt-skip, .vt-todo { color: #d29922; } .vt-dim { color: #8b929e; }
+        .vt-note { color: #8b929e; }
+        .vt-bar { color: #f85149; margin: 8px 0 6px; white-space: nowrap; overflow: hidden; }
+        .vt-err { margin: 0 0 14px; }
+        .vt-badge { display: inline-block; background: #da3633; color: #fff; font-weight: 700; padding: 0 5px; margin-right: 6px; border-radius: 2px; }
+        .vt-msg { color: #ff7b72; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+        .vt-msg b { font-weight: 700; }
+        .vt-diff { margin: 8px 0 0; }
+        .vt-diff > div { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .vt-exp { color: #3fb950; } .vt-rec { color: #f85149; }
+        .vt-at { color: #79c0ff; margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .vt-at.vt-other { color: #8b929e; margin-top: 0; }
+        .vt-frame { position: relative; overflow-x: auto; font-size: 12px; color: #c9d1d9; margin: 2px 0 0; }
+        .vt-frame > div { white-space: pre; }
+        .vt-frame .vt-ln { color: #6e7681; }
+        .vt-frame .vt-caret { color: #f85149; }
+        .vt-frame .vt-pad::before { content: attr(data-pad); visibility: hidden; }
+        .vt-plugin { color: #d29922; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+        .vt-sum { white-space: pre; }
+        .vt-log { margin: 0 0 8px; }
+        .vt-log-head { color: #8b929e; overflow-wrap: anywhere; }
+        .vt-log-body { white-space: pre-wrap; overflow-wrap: anywhere; color: #e6edf3; }
+        .vt-log[data-type="stderr"] .vt-log-head { color: #d29922; }
+        .vt-snap { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: #23262e; border: 1px solid #30343d; border-radius: 4px; padding: 6px 8px; margin: 4px 0 8px; }
+        .vt-cov { border-collapse: collapse; font-size: 12px; width: 100%; }
+        .vt-cov th, .vt-cov td { padding: 1px 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #30343d; }
+        .vt-cov th:first-child, .vt-cov td:first-child { text-align: left; }
+        .vt-cov th { color: #8b929e; font-weight: 600; }
+        .vt-cov .vt-low { color: #f85149; } .vt-cov .vt-mid { color: #d29922; } .vt-cov .vt-high { color: #3fb950; }
+        .vt-lint-file { color: #e6edf3; text-decoration: underline; margin-top: 4px; }
+        .vt-lint-row { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 2ch; }
+        .vt-lint-row .vt-sev-error { color: #f85149; } .vt-lint-row .vt-sev-warning { color: #d29922; }
+        .vt-lint-row .vt-rule { color: #8b929e; }
+        .vt-lint-sum { margin-top: 6px; font-weight: 700; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        let app = null;
+        if (appEntry) {
+          app = el("div", { id: "app", "data-testid": "app" });
+          document.body.append(app);
+        }
+        const panel = el("section", { id: "vt-panel", "data-seq": "0", "aria-label": "Vitest" });
+        document.body.append(panel);
+        const status = el("span", { class: "vt-status", "data-testid": "vt-status", "data-state": "waiting" }, "starting");
+        panel.append(el("div", { class: "vt-head" }, el("span", { class: "vt-logo" }, "V"), el("span", { class: "vt-title" }, "Vitest"), status));
+
+        const sections = {};
+        for (const mode of modes) {
+          const body = el("div", { "data-testid": `vt-${mode === "tests" ? "tests" : mode}` });
+          const wrap = el("div", { class: "vt-sec", "data-section": mode }, body);
+          sections[mode] = { wrap, body };
+          panel.append(wrap);
+        }
+        const show = (mode, visible) => {
+          const s = sections[mode];
+          if (!s) return;
+          if (visible) s.wrap.removeAttribute("data-empty");
+          else s.wrap.setAttribute("data-empty", "");
+        };
+
+        // ---------------------------------------------------------------- the tree
+        const ICON = { pass: "✓", fail: "×", skip: "↓", todo: "□", pending: "·" };
+        const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+        function renderTests(report) {
+          const s = sections.tests;
+          if (!s) return;
+          let fileNo = 0;
+          let suiteNo = 0;
+          let testNo = 0;
+          const rows = [];
+          const row = (depth, attrs, icon, cls, text) =>
+            el("div", { class: "vt-row", style: `padding-left:${depth * 2}ch`, ...attrs }, el("span", { class: cls }, icon), ` ${text}`);
+          const walk = (nodes, depth, file) => {
+            for (const n of nodes) {
+              if (n.kind === "suite") {
+                suiteNo += 1;
+                const icon = n.state === "fail" ? "❯" : n.state === "skip" ? "↓" : "✓";
+                rows.push(row(depth, { "data-testid": `vt-suite-${suiteNo}`, "data-state": n.state, "data-name": n.fullName, "data-file": file }, icon, `vt-${n.state}`, `${n.name} (${n.count})`));
+                walk(n.children, depth + 1, file);
+              } else {
+                testNo += 1;
+                rows.push(row(depth, { "data-testid": `vt-test-${testNo}`, "data-state": n.state, "data-name": n.fullName, "data-file": file, "data-line": n.line || null }, ICON[n.state] ?? "·", `vt-${n.state}`, n.name));
+              }
+            }
+          };
+          for (const f of report.files ?? []) {
+            fileNo += 1;
+            const parts = [plural(f.count, "test")];
+            if (f.failed) parts.push(`${f.failed} failed`);
+            if (f.skipped) parts.push(`${f.skipped} skipped`);
+            if (f.todo) parts.push(`${f.todo} todo`);
+            const icon = f.state === "fail" ? "❯" : f.state === "skip" ? "↓" : "✓";
+            // Type tests (Vitest's typecheck, *.test-d.ts) carry Vitest's " TS " label.
+            rows.push(row(0, { "data-testid": `vt-file-${fileNo}`, "data-state": f.state, "data-file": f.file, "data-typecheck": f.typecheck ? "true" : null }, icon, `vt-${f.state}`, `${f.typecheck ? "TS " : ""}${f.file} (${parts.join(" | ")})`));
+            walk(f.tests, 1, f.file);
+          }
+          if (!rows.length) rows.push(el("div", { class: "vt-note" }, report.note || "No test files found."));
+          s.body.dataset.count = String(testNo);
+          s.body.dataset.files = String(fileNo);
+          s.body.replaceChildren(...joinLines(rows));
+        }
+
+        // ---------------------------------------------------------------- failures
+        const GROUPS = { start: "Startup Error", suite: "Failed Suites", test: "Failed Tests", unhandled: "Unhandled Errors" };
+
+        // Block elements plus "\n" text nodes: the layout is unchanged and textContent reads like the terminal.
+        const joinLines = (nodes) => nodes.flatMap((node, i) => (i ? ["\n", node] : [node]));
+
+        function diffLines(diff) {
+          return joinLines(
+            diff.split("\n").map((line) => {
+              const cls = line.startsWith("-") ? "vt-exp" : line.startsWith("+") ? "vt-rec" : null;
+              return el("div", { class: cls }, line === "" ? "\u00a0" : line);
+            }),
+          );
+        }
+
+        function frameBlock(frame, n, near) {
+          if (!frame?.length) return null;
+          const width = Math.max(...frame.filter((l) => l.no).map((l) => String(l.no).length), 2);
+          const code = frame.map((l) => l.text);
+          const indent = Math.min(...code.filter((t, i) => frame[i].no && t.trim()).map((t) => t.match(/^ */)[0].length));
+          const cut = Number.isFinite(indent) ? indent : 0;
+          // The caret sits under the column it names: an invisible copy of the code before it (Burmese
+          // vowel signs are narrower than one monospace cell, so counting characters would drift).
+          const failing = frame.findIndex((l) => !l.no) - 1;
+          const lines = frame.map((l) => {
+            const gutter = el("span", { class: "vt-ln" }, `${l.no ? String(l.no).padStart(width) : " ".repeat(width)}| `);
+            if (l.no) return el("div", {}, gutter, l.text.slice(cut));
+            const pad = (frame[failing]?.text ?? "").slice(cut, cut + Math.max(0, l.text.length - 1 - cut));
+            return el("div", {}, gutter, el("span", { class: "vt-pad", "data-pad": pad }), el("span", { class: "vt-caret" }, "^"));
+          });
+          return el(
+            "div",
+            { class: "vt-frame", "data-testid": `vt-frame-${n}`, "data-file": near.file, "data-line": near.line, "data-col": near.col },
+            joinLines(lines),
+          );
+        }
+
+        function renderErrors(report) {
+          const s = sections.errors;
+          const failures = report.failures ?? [];
+          if (!s) return;
+          s.body.dataset.count = String(failures.length);
+          show("errors", failures.length > 0);
+          const out = [];
+          let group = null;
+          failures.forEach((f, i) => {
+            const n = i + 1;
+            if (f.kind !== group) {
+              group = f.kind;
+              const count = failures.filter((x) => x.kind === group).length;
+              out.push(el("div", { class: "vt-bar" }, `⎯⎯⎯ ${GROUPS[group] ?? "Errors"} ${count} ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`));
+            }
+            // The heading is Vitest's: "FAIL <file> > <test>", "FAIL <file> [ <file> ]", or the type of an
+            // unhandled error ("Unhandled Error", "Unhandled Rejection") after an ERROR badge.
+            const parts = [
+              el("div", { class: "vt-row" }, el("span", { class: "vt-badge" }, f.kind === "unhandled" ? "ERROR" : "FAIL"), " ", f.title),
+              el("div", { class: "vt-msg" }, el("b", {}, f.name), `: ${f.message}`),
+            ];
+            if (f.plugin) parts.push(el("div", { class: "vt-plugin" }, `  Plugin: ${f.plugin}\n  File: ${f.pluginFile ?? ""}${f.pluginFrame ? `\n${f.pluginFrame}` : ""}`));
+            if (f.codeFrame) parts.push(el("div", { class: "vt-plugin" }, f.codeFrame));
+            if (f.diff) parts.push(el("div", { class: "vt-diff", "data-testid": `vt-diff-${n}` }, diffLines(f.diff)));
+            (f.frames ?? []).forEach((fr, k) => {
+              parts.push(el("div", { class: k === 0 ? "vt-at" : "vt-at vt-other" }, ` ❯ ${fr.method ? `${fr.method} ` : ""}${fr.file}:${fr.line}:${fr.col}`));
+              if (k === 0) parts.push(frameBlock(f.frame, n, fr));
+            });
+            out.push(
+              el(
+                "div",
+                {
+                  class: "vt-err",
+                  "data-testid": `vt-error-${n}`,
+                  "data-kind": f.kind,
+                  "data-test": f.test || null,
+                  "data-name": f.name,
+                  "data-message": f.message,
+                  "data-expected": f.expected,
+                  "data-actual": f.actual,
+                  "data-file": f.file || null,
+                  "data-line": f.line || null,
+                },
+                joinLines(parts.filter(Boolean)),
+              ),
+            );
+          });
+          s.body.replaceChildren(...joinLines(out));
+          // A long failing line: scroll its frame sideways so the caret stays in view (Vitest's terminal
+          // cuts such lines off instead).
+          for (const frame of s.body.querySelectorAll(".vt-frame")) {
+            const caret = frame.querySelector(".vt-caret");
+            if (caret && caret.offsetLeft > frame.clientWidth - 24) frame.scrollLeft = Math.round(caret.offsetLeft - frame.clientWidth * 0.6);
+          }
+        }
+
+        // ---------------------------------------------------------------- summary
+        function renderSummary(report) {
+          const s = sections.summary;
+          if (!s) return;
+          const { files, tests } = report.summary ?? { files: {}, tests: {} };
+          const f = [files.failed && `${files.failed} failed`, files.passed && `${files.passed} passed`, files.skipped && `${files.skipped} skipped`].filter(Boolean);
+          const t = [tests.failed && `${tests.failed} failed`, tests.passed && `${tests.passed} passed`, tests.skipped && `${tests.skipped} skipped`, tests.todo && `${tests.todo} todo`].filter(Boolean);
+          const lines = [
+            ` Test Files  ${f.length ? f.join(" | ") : "no tests"} (${files.total ?? 0})`,
+            `      Tests  ${tests.total ? t.join(" | ") : "no tests"} (${tests.total ?? 0})`,
+          ];
+          const snap = report.snapshot;
+          if (snap && snap.written + snap.matched + snap.failed + snap.updated + snap.obsolete > 0) {
+            const p = [snap.failed && `${snap.failed} failed`, snap.written && `${snap.written} written`, snap.updated && `${snap.updated} updated`, snap.obsolete && `${snap.obsolete} obsolete`, snap.matched && `${snap.matched} passed`].filter(Boolean);
+            lines.push(`  Snapshots  ${p.join(" | ")}`);
+          }
+          const attrs = {
+            "data-files-failed": files.failed ?? 0,
+            "data-files-passed": files.passed ?? 0,
+            "data-files-total": files.total ?? 0,
+            "data-tests-failed": tests.failed ?? 0,
+            "data-tests-passed": tests.passed ?? 0,
+            "data-tests-skipped": tests.skipped ?? 0,
+            "data-tests-todo": tests.todo ?? 0,
+            "data-tests-total": tests.total ?? 0,
+          };
+          for (const [k, v] of Object.entries(attrs)) s.body.setAttribute(k, String(v));
+          s.body.replaceChildren(...joinLines(lines.map((line) => el("div", { class: "vt-sum" }, line))));
+        }
+
+        // ---------------------------------------------------------------- console
+        function renderConsole(report) {
+          const s = sections.console;
+          if (!s) return;
+          const logs = report.console ?? [];
+          s.body.dataset.count = String(logs.length);
+          show("console", logs.length > 0);
+          s.body.replaceChildren(
+            ...logs.map((log, i) =>
+              el(
+                "div",
+                { class: "vt-log", "data-testid": `vt-log-${i + 1}`, "data-type": log.type, "data-file": log.file, "data-test": log.test || null, "data-content": log.content },
+                el("div", { class: "vt-log-head" }, `${log.type} | ${log.file}${log.test ? ` > ${log.test}` : ""}`),
+                "\n",
+                el("div", { class: "vt-log-body" }, log.content),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- snapshots
+        function renderSnapshot(report) {
+          const s = sections.snapshot;
+          if (!s) return;
+          const snap = report.snapshot ?? { files: [] };
+          for (const k of ["written", "matched", "failed", "updated", "obsolete"]) s.body.setAttribute(`data-${k}`, String(snap[k] ?? 0));
+          s.body.dataset.count = String(snap.files?.length ?? 0);
+          show("snapshot", (snap.files?.length ?? 0) > 0);
+          s.body.replaceChildren(
+            ...(snap.files ?? []).flatMap((file, i) => [
+              el("div", { class: "vt-dim" }, file.file),
+              el("div", { class: "vt-snap", "data-testid": `vt-snap-${i + 1}`, "data-file": file.file }, file.content.replace(/^\/\/ Vitest Snapshot[^\n]*\n\n?/, "").replace(/\n+$/, "")),
+            ]),
+          );
+        }
+
+        // ---------------------------------------------------------------- coverage
+        function renderCoverage(report) {
+          const s = sections.coverage;
+          if (!s) return;
+          const cov = report.coverage;
+          show("coverage", !!cov);
+          if (!cov) {
+            s.body.dataset.count = "0";
+            s.body.replaceChildren();
+            return;
+          }
+          s.body.dataset.count = String(cov.rows.length);
+          const grade = (p) => (p >= 80 ? "vt-high" : p >= 50 ? "vt-mid" : "vt-low");
+          const cells = (r) => ["statements", "branches", "functions", "lines"].map((k) => el("td", { class: grade(r[k]) }, String(r[k])));
+          const attrs = (r) => ({ "data-statements": r.statements, "data-branches": r.branches, "data-functions": r.functions, "data-lines": r.lines });
+          s.body.replaceChildren(
+            el(
+              "table",
+              { class: "vt-cov" },
+              el("thead", {}, el("tr", {}, ["File", "% Stmts", "% Branch", "% Funcs", "% Lines", "Uncovered"].map((h) => el("th", {}, h)))),
+              el(
+                "tbody",
+                {},
+                el("tr", { "data-testid": "vt-cov-all", ...attrs(cov.all) }, el("td", {}, "All files"), cells(cov.all), el("td", {}, "")),
+                cov.rows.map((r, i) => el("tr", { "data-testid": `vt-cov-${i + 1}`, "data-file": r.file, "data-uncovered": r.uncovered, ...attrs(r) }, el("td", {}, ` ${r.file.replace(/^src\//, "")}`), cells(r), el("td", {}, r.uncovered))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- ESLint
+        // Laid out like ESLint's default "stylish" formatter.
+        let lastLint = null;
+        function renderLint(report) {
+          const s = sections.lint;
+          if (!s) return;
+          const lint = report.lint;
+          const key = JSON.stringify(lint ?? null);
+          if (key === lastLint) return;
+          lastLint = key;
+          const messages = lint?.messages ?? [];
+          s.body.dataset.count = String(messages.length);
+          s.body.dataset.errors = String(lint?.errors ?? 0);
+          s.body.dataset.warnings = String(lint?.warnings ?? 0);
+          const out = [el("div", { class: "vt-dim" }, "ESLint")];
+          if (lint?.error) out.push(el("div", { class: "vt-msg" }, lint.error));
+          let file = null;
+          messages.forEach((m, i) => {
+            if (m.file !== file) {
+              file = m.file;
+              out.push(el("div", { class: "vt-lint-file" }, m.file));
+            }
+            out.push(
+              el(
+                "div",
+                { class: "vt-lint-row", "data-testid": `vt-lint-${i + 1}`, "data-file": m.file, "data-line": m.line, "data-col": m.col, "data-rule": m.rule, "data-severity": m.severity, "data-message": m.message },
+                `${m.line}:${m.col}  `,
+                el("span", { class: `vt-sev-${m.severity}` }, m.severity),
+                `  ${m.message}  `,
+                el("span", { class: "vt-rule" }, m.rule),
+              ),
+            );
+          });
+          const n = messages.length;
+          out.push(
+            el(
+              "div",
+              { class: `vt-lint-sum ${n ? (lint.errors ? "vt-fail" : "vt-skip") : "vt-pass"}` },
+              n ? `✖ ${n} problem${n === 1 ? "" : "s"} (${lint.errors} error${lint.errors === 1 ? "" : "s"}, ${lint.warnings} warning${lint.warnings === 1 ? "" : "s"})` : lint ? "✓ no problems" : "…",
+            ),
+          );
+          s.body.replaceChildren(...joinLines(out));
+        }
+
+        // ---------------------------------------------------------------- the app
+        let mountedVersion = null;
+        async function mountApp(state) {
+          if (!app || !state?.version || state.version === mountedVersion) return;
+          mountedVersion = state.version;
+          const fresh = el("div", { id: "app", "data-testid": "app" });
+          app.replaceWith(fresh);
+          app = fresh;
+          try {
+            const mod = await import(/* @vite-ignore */ `/@course-app/${state.version}/${state.entry}`);
+            if (mountedVersion !== state.version) return;
+            if (typeof mod.default === "function") await mod.default(fresh);
+          } catch (error) {
+            if (mountedVersion === state.version) fresh.replaceChildren(el("div", { style: "padding:8px 14px;color:#b42318;font:13px ui-monospace,monospace" }, `${error?.name ?? "Error"}: ${error?.message ?? error}`));
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = -1;
+        function render(report) {
+          if (!report) return;
+          const state = report.running ? "running" : report.state;
+          status.dataset.state = state;
+          status.textContent = { waiting: "starting", running: "running", pass: "PASS", fail: "FAIL" }[state] ?? state;
+          if (report.seq !== lastSeq) {
+            lastSeq = report.seq;
+            panel.dataset.seq = String(report.seq);
+            renderTests(report);
+            renderErrors(report);
+            renderSummary(report);
+            renderConsole(report);
+            renderSnapshot(report);
+            renderCoverage(report);
+          }
+          renderLint(report);
+          void mountApp(report.app);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { app: appEntry, lint: modes.includes("lint") });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/vitest-bridge.js: |
+        // Testing course · Vitest bridge (a Vite plugin that runs in the dev server; pinned, never edited).
+        //
+        // Starts the real Vitest (its Node API, watch mode) inside the dev-server process and sends the
+        // results of every test run to the preview page (course/panel.js) over Vite's HMR socket: test
+        // files → suites → tests with their state (pass / fail / skip / todo), each failure with Vitest's
+        // own error name, message, Expected / Received diff and the ❯ file:line:col code frame, errors
+        // outside tests (a syntax error, a failed import), console output from tests, the Test Files /
+        // Tests summary, snapshots and, when the config turns it on, coverage. Nothing is invented here:
+        // every value comes from Vitest's reporter API (TestModule / TestCase / onCoverage).
+        //
+        // Runs follow the dev server's file watcher. Typing in the studio writes a file chunk by chunk, so
+        // the bridge runs once the files have been quiet for QUIET_MS (the studio's natural typing pauses
+        // at most ~960 ms between keys), or for SYNTAX_QUIET_MS while a changed script does not parse yet
+        // (line-by-line typing pauses up to ~1.4 s between lines) — a real syntax error still shows.
+        // Vitest's own Vite server watches nothing, so it never reruns half-typed code by itself. Which
+        // tests rerun is Vitest's own watch-mode decision (vitest.watcher). An edit of vitest.config.js
+        // restarts Vitest with the new config; the page never reloads.
+        //
+        // The dev server starts listening only after the first test run has finished, so the first report
+        // is ready when the preview opens; a page that loads later asks for the latest report ("hello").
+        //
+        // A file watcher can miss a write: macOS FSEvents drops events under heavy disk I/O (it asks the
+        // consumer to rescan, which chokidar 3 does not do), and one lost event left a lesson's panel on an
+        // old report for the rest of a replay. So every POLL_MS the bridge also compares src/ and the
+        // Vitest config with what it last handed to Vitest (modification time and size), and treats a file
+        // that changed at least MISSED_AFTER_MS ago without any watcher event exactly like a watcher event
+        // (once per state of the file). When the watcher works, every change is already pending or handed
+        // over, and the check does nothing.
+        import { createHash } from "node:crypto";
+        import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+        import { isAbsolute, join, posix, relative } from "node:path";
+        import { PassThrough, Writable } from "node:stream";
+        import { pathToFileURL } from "node:url";
+        import * as vite from "vite";
+
+        const EVENT = "course:vitest";
+        const QUIET_MS = 1000;
+        const SYNTAX_QUIET_MS = 2500;
+        const NO_RUN_GRACE_MS = 700;
+        const POLL_MS = 500;
+        const MISSED_AFTER_MS = 300;
+        const FIRST_RUN_LIMIT_MS = 45000;
+        const CONFIG_FILES = ["vitest.config.js", "vitest.config.mjs", "vitest.config.ts"];
+        const SCRIPT = /\.(c|m)?(js|jsx|ts|tsx)$/;
+        const APP_PREFIX = "/@course-app/";
+        const OUTPUT_DIR = "node_modules/.course";
+
+        export default function courseVitestBridge() {
+          let bridge = null;
+          return {
+            name: "course-vitest-bridge",
+            enforce: "pre",
+            // Only in the dev server: Vitest's own Vite server runs in mode "test" and never applies it.
+            apply: (_config, env) => env.command === "serve" && env.mode !== "test",
+            async configureServer(server) {
+              bridge = createBridge(server);
+              await bridge.firstRun();
+            },
+            resolveId(id, importer) {
+              if (id.startsWith(APP_PREFIX)) return id.split("?")[0];
+              // A relative import inside the app copy stays inside the same immutable copy.
+              if (importer?.startsWith(APP_PREFIX) && id.startsWith(".")) return posix.join(posix.dirname(importer), id.split("?")[0]);
+              return null;
+            },
+            load(id) {
+              return id.startsWith(APP_PREFIX) ? (bridge?.appModule(id) ?? null) : null;
+            },
+            async buildEnd() {
+              await bridge?.close();
+            },
+          };
+        }
+
+        function createBridge(server) {
+          const root = server.config.root;
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const inProject = (file) => {
+            const r = relative(root, file);
+            return !!r && !r.startsWith("..") && !isAbsolute(r);
+          };
+          // Snapshot files are Vitest's own output: a write of one is no reason to run again (Vitest's own
+          // watch mode does not rerun for them either, since no test imports a .snap file).
+          const ignored = (file) =>
+            !inProject(file) || file.endsWith(".snap") || rel(file).split("/").some((part) => part === "node_modules" || part === ".git");
+
+          let current = null; // the Vitest instance (set in onInit, before its first run ends)
+          let starting = null; // a (re)start in progress
+          let closed = false;
+          let seq = 0; // finished runs
+          let running = true; // edits are waiting or a run is in flight
+          let latest = { seq: 0, state: "waiting", note: "Vitest is starting…", files: [], failures: [], console: [], summary: emptySummary(), snapshot: null, coverage: null, app: null };
+          let coverage = null;
+          let runStarted = false;
+          const vitestLog = [];
+
+          // ------------------------------------------------------------------ the page
+          const view = () => ({ ...latest, running });
+          const broadcast = () => server.ws.send({ type: "custom", event: EVENT, data: view() });
+          const setRunning = (value) => {
+            if (running === value) return;
+            running = value;
+            broadcast();
+          };
+          server.ws.on(`${EVENT}:hello`, async (data, client) => {
+            const app = typeof data?.app === "string" && data.app ? data.app : null;
+            if (app !== wantsApp || (app && !latest.app)) {
+              wantsApp = app;
+              latest = { ...latest, app: await appState() };
+            }
+            if (data?.lint && !wantsLint) {
+              wantsLint = true;
+              latest = { ...latest, lint: await lintNow() };
+            }
+            client.send(EVENT, view());
+          });
+
+          // ------------------------------------------------------------------ Vitest
+          // One reporter per Vitest instance: a closing instance (a restart) can still report a late run,
+          // and only the current instance's events may reach the page.
+          const makeReporter = () => {
+            let mine = null;
+            const live = () => mine !== null && mine === current;
+            return {
+              onInit(instance) {
+                mine = instance;
+                current = instance;
+                // Vitest's own file watcher is closed: only this bridge decides when to rerun.
+                void instance.vite?.watcher?.close();
+              },
+              onTestRunStart() {
+                if (!live()) return;
+                runStarted = true;
+                setRunning(true);
+              },
+              onCoverage(map) {
+                if (live()) coverage = summarizeCoverage(map, rel);
+              },
+              async onTestRunEnd(_modules, unhandledErrors) {
+                if (!live()) return;
+                const report = buildReport(current, unhandledErrors, { seq: seq + 1, root, rel, inProject });
+                report.coverage = current?.config?.coverage?.enabled ? coverage : null;
+                report.app = await appState();
+                report.lint = wantsLint ? await lintNow() : null;
+                if (!live()) return;
+                seq += 1;
+                report.seq = seq;
+                latest = report;
+                const t = latest.summary.tests;
+                process.stdout.write(
+                  `[course] vitest run ${seq}: ${latest.state === "pass" ? "PASS" : "FAIL"} · Tests ${t.failed} failed | ${t.passed} passed | ${t.skipped + t.todo} skipped (${t.total})\n`,
+                );
+                running = pending.size > 0;
+                broadcast();
+              },
+            };
+          };
+
+          // Vitest's own terminal output (and its Vite server's log) goes here, not to the dev terminal:
+          // the studio's verify step reads that terminal, and the panel already shows every result.
+          const remember = (text) => {
+            for (const line of String(text).split(/\r?\n/)) {
+              const clean = stripAnsi(line).trimEnd();
+              if (clean) vitestLog.push(clean);
+            }
+            if (vitestLog.length > 200) vitestLog.splice(0, vitestLog.length - 200);
+          };
+          const sink = new Writable({
+            write(chunk, _encoding, done) {
+              remember(chunk);
+              done();
+            },
+          });
+          const viteLogger = {
+            hasWarned: false,
+            info: remember,
+            warn: (text) => ((viteLogger.hasWarned = true), remember(text)),
+            warnOnce: (text) => ((viteLogger.hasWarned = true), remember(text)),
+            error: (text) => remember(text?.message ?? text),
+            clearScreen: () => {},
+            hasErrorLogged: () => false,
+          };
+
+          // Typecheck mode: Vitest's watch mode would run `tsc --watch`, which reruns on every write by
+          // itself (half-typed code, outside the quiet window). So with `typecheck.enabled` every rerun is a
+          // fresh one-off `vitest run` instead (tsc runs once per quiet window; 1.6–3 s locally).
+          const typecheckWanted = async (configFile) => {
+            try {
+              const config = (await import(`${pathToFileURL(configFile).href}?t=${Date.now()}`)).default;
+              const resolved = typeof config === "function" ? await config({ command: "serve", mode: "test" }) : config;
+              return resolved?.test?.typecheck?.enabled === true;
+            } catch {
+              return false;
+            }
+          };
+
+          const start = async () => {
+            const configFile = CONFIG_FILES.map((name) => join(root, name)).find((file) => existsSync(file));
+            coverage = null;
+            vitestLog.length = 0;
+            const before = seq;
+            try {
+              const watch = !(configFile && (await typecheckWanted(configFile)));
+              const { startVitest } = await import("vitest/node");
+              const instance = await startVitest(
+                [],
+                {
+                  root,
+                  config: configFile ?? false,
+                  watch,
+                  reporters: [makeReporter()],
+                  includeTaskLocation: true,
+                  // Node imports vitest.config.js itself: a broken config throws one error into the panel
+                  // instead of esbuild printing "✘ [ERROR]" lines into the dev terminal.
+                  configLoader: "native",
+                  // Coverage files stay out of the project: the studio would sync them into the editor.
+                  coverage: { reportsDirectory: join(root, OUTPUT_DIR, "coverage"), reporter: [["json-summary", {}]] },
+                },
+                { clearScreen: false, customLogger: viteLogger },
+                { stdin: new PassThrough(), stdout: sink, stderr: sink },
+              );
+              if (closed) {
+                await instance?.close();
+                return;
+              }
+              current = instance ?? current;
+              if (seq === before) await failStart(vitestLog);
+            } catch (error) {
+              const message = stripAnsi(error?.message ?? error);
+              await failStart([...vitestLog, /^\w*Error:/.test(message) ? message : `${error?.name ?? "Error"}: ${message}`]);
+            }
+          };
+
+          const failStart = async (log) => {
+            seq += 1;
+            const message = stripAnsi(log.filter(Boolean).slice(-12).join("\n")).split(`${root}/`).join("") || "Vitest did not start.";
+            latest = {
+              seq,
+              state: "fail",
+              note: "Vitest did not start.",
+              files: [],
+              failures: [{ kind: "start", title: "Vitest could not start", test: "", name: "Error", message, expected: null, actual: null, diff: "", plugin: null, pluginFile: null, pluginFrame: null, codeFrame: null, frames: [], file: "", line: 0, col: 0, frame: null }],
+              console: [],
+              summary: emptySummary(),
+              snapshot: null,
+              coverage: null,
+              app: await appState(),
+            };
+            running = pending.size > 0;
+            broadcast();
+          };
+
+          // `starting` covers the old instance's close too, so no second restart can begin meanwhile.
+          const restart = async () => {
+            setRunning(true);
+            const old = current;
+            current = null;
+            starting = (async () => {
+              await old?.close().catch(() => {});
+              await start();
+            })();
+            await starting;
+            starting = null;
+          };
+
+          // ------------------------------------------------------------------ edits
+          const pending = new Map(); // file -> "add" | "change" | "unlink"
+          let timer = null;
+          let noRunTimer = null;
+          let lastChangeAt = 0;
+          const schedule = (delay) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => void flush(), delay);
+          };
+
+          const flush = async () => {
+            timer = null;
+            if (starting) return schedule(QUIET_MS);
+            const quiet = Date.now() - lastChangeAt;
+            if (quiet < SYNTAX_QUIET_MS && (await Promise.all([...pending.keys()].map(parses))).includes(false)) {
+              return schedule(SYNTAX_QUIET_MS - quiet);
+            }
+            const changes = [...pending.entries()];
+            pending.clear();
+            if (!changes.length) return;
+            for (const [file] of changes) if (inPollScope(rel(file))) handled.set(rel(file), stamp(rel(file))?.sig ?? null);
+            // Typecheck mode reruns as a fresh one-off run (see typecheckWanted); a config edit restarts.
+            if (!current || current.config?.typecheck?.enabled || changes.some(([file]) => CONFIG_FILES.includes(rel(file)))) return restart();
+            runStarted = false;
+            for (const [file, event] of changes) {
+              if (event === "unlink") current.watcher.onFileDelete(file);
+              else if (event === "add") current.watcher.onFileCreate(file);
+              else current.watcher.onFileChange(file);
+            }
+            // A change that no test depends on runs nothing: show the last report as it was.
+            clearTimeout(noRunTimer);
+            noRunTimer = setTimeout(async () => {
+              if (runStarted || pending.size || starting) return;
+              if (wantsLint) latest = { ...latest, lint: await lintNow() };
+              running = false;
+              broadcast();
+            }, NO_RUN_GRACE_MS);
+          };
+
+          const onWatch = (event, file) => {
+            if (closed || !["add", "change", "unlink"].includes(event) || ignored(file)) return;
+            lastChangeAt = Date.now();
+            pending.set(file, pending.get(file) === "add" && event === "change" ? "add" : event);
+            setRunning(true);
+            schedule(QUIET_MS);
+          };
+          server.watcher.on("all", onWatch);
+
+          // The safety net for a missed watcher event (see the header), keyed by project-relative path:
+          // `handled` is each file of src/ and each config file as last handed to Vitest ("mtime:size",
+          // null = absent); `reported` is the state the check last reported for a file, so it reports a
+          // state at most once.
+          const inPollScope = (path) =>
+            CONFIG_FILES.includes(path) ||
+            (path.startsWith("src/") && !path.split("/").some((part) => part === "node_modules" || part.startsWith(".")) && !path.endsWith(".snap"));
+          const stamp = (path) => {
+            try {
+              const stats = statSync(join(root, path));
+              return stats.isFile() ? { sig: `${stats.mtimeMs}:${stats.size}`, mtimeMs: stats.mtimeMs } : null;
+            } catch {
+              return null;
+            }
+          };
+          const onDisk = () => {
+            const files = new Map();
+            const walk = (dir) => {
+              let entries;
+              try {
+                entries = readdirSync(join(root, dir), { withFileTypes: true });
+              } catch {
+                return;
+              }
+              for (const entry of entries) {
+                const path = `${dir}/${entry.name}`;
+                if (entry.isDirectory()) {
+                  if (entry.name !== "node_modules" && !entry.name.startsWith(".")) walk(path);
+                } else if (inPollScope(path)) {
+                  const now = stamp(path);
+                  if (now) files.set(path, now);
+                }
+              }
+            };
+            walk("src");
+            for (const path of CONFIG_FILES) {
+              const now = stamp(path);
+              if (now) files.set(path, now);
+            }
+            return files;
+          };
+          const handled = new Map([...onDisk()].map(([path, now]) => [path, now.sig]));
+          const reported = new Map();
+          const poll = setInterval(() => {
+            if (closed) return;
+            const disk = onDisk();
+            const waiting = new Set([...pending.keys()].map(rel));
+            const caught = [];
+            for (const [path, now] of disk) {
+              if (waiting.has(path) || Date.now() - now.mtimeMs < MISSED_AFTER_MS) continue;
+              const before = handled.get(path);
+              if (before === now.sig || reported.get(path) === now.sig) continue;
+              caught.push([before ? "change" : "add", path, now.sig]);
+            }
+            for (const [path, before] of handled) {
+              if (before && !disk.has(path) && !waiting.has(path) && reported.get(path) !== null) caught.push(["unlink", path, null]);
+            }
+            for (const [event, path, sig] of caught) {
+              reported.set(path, sig);
+              process.stdout.write(`[course] the file watcher missed ${event === "unlink" ? "the removal of" : "a change to"} ${path}; the bridge's own check caught it\n`);
+              onWatch(event, join(root, path));
+            }
+          }, POLL_MS);
+          poll.unref?.();
+
+          // ------------------------------------------------------------------ the #app region
+          // The page never imports a project file itself (half-typed code would raise Vite errors in it).
+          // The bridge serves an immutable copy of src/ under /@course-app/<version>/ instead, taken when
+          // a report is sent and only from files that parse, so the app is the code Vitest just tested.
+          let wantsApp = null;
+          const apps = new Map(); // version -> Map(path -> text)
+          let lastApp = null;
+          const appState = async () => {
+            if (!wantsApp) return null;
+            const files = new Map();
+            const walk = (dir) => {
+              if (!existsSync(dir)) return;
+              for (const name of readdirSync(dir).sort()) {
+                if (name === "node_modules" || name.startsWith(".")) continue;
+                const path = join(dir, name);
+                if (statSync(path).isDirectory()) walk(path);
+                else if (/\.(c|m)?(js|jsx|ts|tsx)$|\.(css|json|svg)$/.test(name)) files.set(rel(path), readFileSync(path, "utf8"));
+              }
+            };
+            walk(join(root, "src"));
+            if (!files.has(wantsApp)) return { entry: wantsApp, version: lastApp?.version ?? null, error: `${wantsApp} not found` };
+            const hash = createHash("sha256");
+            for (const [path, text] of files) hash.update(`${path}\0${text}\0`);
+            const version = hash.digest("hex").slice(0, 12);
+            if (apps.has(version)) return { entry: wantsApp, version, error: "" };
+            const scripts = [...files.keys()].filter((path) => SCRIPT.test(path));
+            if ((await Promise.all(scripts.map((path) => parses(join(root, path))))).includes(false)) {
+              return { entry: wantsApp, version: lastApp?.version ?? null, error: "" };
+            }
+            apps.set(version, files);
+            if (apps.size > 40) apps.delete(apps.keys().next().value);
+            lastApp = { version };
+            return { entry: wantsApp, version, error: "" };
+          };
+          const appModule = (id) => {
+            const rest = id.slice(APP_PREFIX.length);
+            const slash = rest.indexOf("/");
+            return apps.get(rest.slice(0, slash))?.get(rest.slice(slash + 1)) ?? null;
+          };
+
+          // ------------------------------------------------------------------ ESLint (data-modes "lint")
+          // The project's own ESLint (its eslint.config.js) on src/, through ESLint's Node API.
+          let wantsLint = false;
+          let eslint = null;
+          const lintNow = async () => {
+            try {
+              eslint ??= new (await import("eslint")).ESLint({ cwd: root });
+              const results = await eslint.lintFiles(["src"]);
+              const messages = results
+                .flatMap((r) => r.messages.map((m) => ({ file: rel(r.filePath), line: m.line ?? 0, col: m.column ?? 0, rule: m.ruleId ?? "", severity: m.severity === 2 ? "error" : "warning", message: m.message })))
+                .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.col - b.col);
+              return { messages, errors: messages.filter((m) => m.severity === "error").length, warnings: messages.filter((m) => m.severity === "warning").length, error: "" };
+            } catch (error) {
+              eslint = null;
+              return { messages: [], errors: 0, warnings: 0, error: stripAnsi(error?.message ?? error).split(`${root}/`).join("") };
+            }
+          };
+
+          // ------------------------------------------------------------------ lifecycle
+          // The server listens once the first run has finished, or after FIRST_RUN_LIMIT_MS with a note
+          // in the panel (a first run that never ends usually means a test loops forever or Vitest hangs).
+          let firstRunPromise = null;
+          const firstRun = () =>
+            (firstRunPromise ??= Promise.race([
+              (starting = start()).finally(() => (starting = null)),
+              new Promise((done) =>
+                setTimeout(() => {
+                  if (!seq) latest = { ...latest, note: `Vitest's first run has not finished after ${FIRST_RUN_LIMIT_MS / 1000} s.` };
+                  done();
+                }, FIRST_RUN_LIMIT_MS),
+              ),
+            ]));
+          const close = async () => {
+            closed = true;
+            clearInterval(poll);
+            clearTimeout(timer);
+            clearTimeout(noRunTimer);
+            await starting?.catch(() => {});
+            await current?.close().catch(() => {});
+            current = null;
+          };
+          server.httpServer?.once("close", () => void close());
+
+          return { firstRun, close, appModule };
+        }
+
+        // Does a changed script parse yet? Vite 7: rollup's parser for JavaScript / JSX, esbuild for
+        // TypeScript (rollup cannot read types); Vite 8 would use oxc's parseSync for all of them.
+        async function parses(file) {
+          if (!SCRIPT.test(file) || !existsSync(file)) return true;
+          try {
+            const code = readFileSync(file, "utf8");
+            if (typeof vite.parseSync === "function") return !vite.parseSync(file, code).errors?.length;
+            if (/\.(c|m)?tsx?$/.test(file)) {
+              await vite.transformWithEsbuild(code, file, { loader: /x$/.test(file) ? "tsx" : "ts" });
+              return true;
+            }
+            vite.parseAst(code, { jsx: /x$/.test(file) });
+            return true;
+          } catch {
+            return false;
+          }
+        }
+
+        // -------------------------------------------------------------------- the report
+        const stripAnsi = (text) => String(text ?? "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+        const flatten = (nodes) => nodes.flatMap((n) => (n.kind === "suite" ? flatten(n.children) : [n]));
+
+        function emptySummary() {
+          return {
+            files: { failed: 0, passed: 0, skipped: 0, total: 0 },
+            tests: { failed: 0, passed: 0, skipped: 0, todo: 0, total: 0 },
+          };
+        }
+
+        function testState(testCase) {
+          const { state } = testCase.result();
+          if (state === "passed") return "pass";
+          if (state === "failed") return "fail";
+          if (state === "skipped") return testCase.options.mode === "todo" ? "todo" : "skip";
+          return "pending";
+        }
+
+        function buildReport(vitest, unhandledErrors, { seq, root, rel, inProject }) {
+          const local = (text) => stripAnsi(text).split(`${root}/`).join("");
+          const modules = (vitest?.state.getTestModules() ?? []).slice().sort((a, b) => a.relativeModuleId.localeCompare(b.relativeModuleId));
+          const summary = emptySummary();
+          const files = [];
+          const suiteFailures = [];
+          const testFailures = [];
+          const consoleLines = [];
+          const projectFile = (file) => !!file && inProject(file) && !file.split("/").includes("node_modules");
+
+          const framesOf = (error) => {
+            let frames = (error.stacks ?? []).map((s) => ({ method: s.method || "", file: s.file, line: s.line, col: s.column }));
+            if (!frames.length) frames = parseStack([error.stack, error.runnerError?.stack].filter(Boolean).join("\n"));
+            return frames.filter((f) => projectFile(f.file)).map((f) => ({ ...f, file: rel(f.file) }));
+          };
+
+          const entry = (kind, title, test, error) => {
+            const frames = framesOf(error);
+            const near = frames[0] ?? null;
+            const rollup = error.__vitest_rollup_error__;
+            return {
+              kind,
+              title: kind === "unhandled" && typeof error.type === "string" && error.type ? error.type : title,
+              test,
+              name: error.name || "Error",
+              message: local(error.message ?? String(error)),
+              expected: typeof error.expected === "string" ? local(error.expected) : null,
+              actual: typeof error.actual === "string" ? local(error.actual) : null,
+              diff: error.diff ? local(error.diff) : "",
+              plugin: rollup?.plugin ?? null,
+              pluginFile: rollup?.id ? `${rel(rollup.id)}${rollup.loc ? `:${rollup.loc.line}:${rollup.loc.column}` : ""}` : null,
+              pluginFrame: rollup?.frame ? local(rollup.frame) : null,
+              codeFrame: error.codeFrame ? local(error.codeFrame) : null,
+              frames,
+              file: near?.file ?? "",
+              line: near?.line ?? 0,
+              col: near?.col ?? 0,
+              frame: near ? codeFrame(join(root, near.file), near.line, near.col) : null,
+            };
+          };
+
+          const logsOf = (entity, file, test) => {
+            for (const log of entity.logs?.() ?? []) {
+              consoleLines.push({ type: log.type, file, test, content: local(log.content).replace(/\n$/, "") });
+            }
+          };
+
+          const walk = (collection, file) => {
+            const nodes = [];
+            for (const child of collection) {
+              if (child.type === "suite") {
+                logsOf(child, file, child.fullName);
+                const children = walk(child.children, file);
+                const states = flatten(children).map((n) => n.state);
+                const errors = child.errors();
+                nodes.push({
+                  kind: "suite",
+                  name: child.name,
+                  fullName: child.fullName,
+                  line: child.location?.line ?? 0,
+                  state: states.includes("fail") || errors.length ? "fail" : states.length && states.every((s) => s === "skip" || s === "todo") ? "skip" : "pass",
+                  count: states.length,
+                  children,
+                });
+                for (const error of errors) suiteFailures.push(entry("suite", `${file} > ${child.fullName}`, child.fullName, error));
+                continue;
+              }
+              const state = testState(child);
+              summary.tests.total += 1;
+              if (state === "pass") summary.tests.passed += 1;
+              else if (state === "fail") summary.tests.failed += 1;
+              else if (state === "todo") summary.tests.todo += 1;
+              else if (state === "skip") summary.tests.skipped += 1;
+              logsOf(child, file, child.fullName);
+              nodes.push({ kind: "test", name: child.name, fullName: child.fullName, line: child.location?.line ?? 0, state });
+              if (state === "fail") {
+                for (const error of child.result().errors ?? []) testFailures.push(entry("test", `${file} > ${child.fullName}`, child.fullName, error));
+              }
+            }
+            return nodes;
+          };
+
+          for (const module of modules) {
+            const file = module.relativeModuleId;
+            logsOf(module, file, "");
+            const tests = walk(module.children, file);
+            const moduleErrors = module.errors();
+            const flat = flatten(tests);
+            const count = (state) => flat.filter((n) => n.state === state).length;
+            const state = moduleErrors.length || count("fail") || !flat.length ? "fail" : flat.every((n) => n.state === "skip" || n.state === "todo") ? "skip" : "pass";
+            summary.files.total += 1;
+            summary.files[state === "fail" ? "failed" : state === "skip" ? "skipped" : "passed"] += 1;
+            let pool = "";
+            try {
+              pool = module.toTestSpecification().pool;
+            } catch {
+              // An older Vitest: no specification on the module.
+            }
+            files.push({ file, state, typecheck: pool === "typescript", count: flat.length, failed: count("fail"), skipped: count("skip"), todo: count("todo"), tests });
+            for (const error of moduleErrors) suiteFailures.push(entry("suite", `${file} [ ${file} ]`, "", error));
+            if (!flat.length && !moduleErrors.length) {
+              suiteFailures.push(entry("suite", `${file} [ ${file} ]`, "", { name: "Error", message: `No test suite found in file ${file}` }));
+            }
+          }
+          const unhandled = (unhandledErrors ?? []).map((error) => entry("unhandled", "Unhandled Error", "", error));
+          const failures = [...suiteFailures, ...testFailures, ...unhandled];
+
+          const s = vitest?.snapshot?.summary;
+          const snapshot = {
+            written: s?.added ?? 0,
+            matched: s?.matched ?? 0,
+            failed: s?.unmatched ?? 0,
+            updated: s?.updated ?? 0,
+            obsolete: s?.unchecked ?? 0,
+            files: snapshotFiles(root, rel),
+          };
+
+          const ok = modules.length && !failures.length && !summary.tests.failed && !summary.files.failed;
+          return {
+            seq,
+            state: ok ? "pass" : "fail",
+            note: modules.length ? "" : "No test files found.",
+            files,
+            failures,
+            console: consoleLines.slice(-60),
+            summary,
+            snapshot,
+            coverage: null,
+          };
+        }
+
+        function parseStack(stack) {
+          const frames = [];
+          for (const line of String(stack).split("\n")) {
+            const m = /^\s*at (?:(.+?) \()?(?:file:\/\/)?(\/[^():]+):(\d+):(\d+)\)?\s*$/.exec(line);
+            if (!m) continue;
+            const method = (m[1] ?? "").replace(/^async /, "");
+            frames.push({ method, file: m[2], line: Number(m[3]), col: Number(m[4]) });
+          }
+          return frames;
+        }
+
+        // Vitest's code frame: two lines either side of the failing line and a caret under its column.
+        function codeFrame(file, line, col) {
+          if (!existsSync(file)) return null;
+          const lines = readFileSync(file, "utf8").split(/\r?\n/);
+          const out = [];
+          for (let n = line - 2; n <= line + 2; n++) {
+            if (n < 1 || n > lines.length) continue;
+            out.push({ no: n, text: lines[n - 1].replace(/\t/g, " ") });
+            if (n === line) out.push({ no: null, text: `${" ".repeat(Math.max(0, col - 1))}^` });
+          }
+          return out;
+        }
+
+        function snapshotFiles(root, rel) {
+          const found = [];
+          const walk = (dir) => {
+            if (!existsSync(dir)) return;
+            for (const name of readdirSync(dir).sort()) {
+              if (name === "node_modules" || name.startsWith(".")) continue;
+              const path = join(dir, name);
+              if (statSync(path).isDirectory()) walk(path);
+              else if (name.endsWith(".snap")) found.push({ file: rel(path), content: readFileSync(path, "utf8") });
+            }
+          };
+          walk(join(root, "src"));
+          return found;
+        }
+
+        function summarizeCoverage(map, rel) {
+          if (!map || typeof map.files !== "function") return null;
+          const rows = [];
+          const total = { statements: [0, 0], branches: [0, 0], functions: [0, 0], lines: [0, 0] };
+          for (const file of map.files().sort()) {
+            const fc = map.fileCoverageFor(file);
+            const s = fc.toSummary();
+            const pct = (k) => (s[k].total ? Math.round((s[k].covered / s[k].total) * 10000) / 100 : 100);
+            for (const k of Object.keys(total)) {
+              total[k][0] += s[k].covered;
+              total[k][1] += s[k].total;
+            }
+            rows.push({ file: rel(file), statements: pct("statements"), branches: pct("branches"), functions: pct("functions"), lines: pct("lines"), uncovered: ranges(fc.getUncoveredLines().map(Number)) });
+          }
+          const all = (k) => (total[k][1] ? Math.round((total[k][0] / total[k][1]) * 10000) / 100 : 100);
+          return { rows, all: { statements: all("statements"), branches: all("branches"), functions: all("functions"), lines: all("lines") } };
+        }
+
+        function ranges(numbers) {
+          const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+          const out = [];
+          for (let i = 0; i < sorted.length; i++) {
+            let j = i;
+            while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+            out.push(i === j ? String(sorted[i]) : `${sorted[i]}-${sorted[j]}`);
+            i = j;
+          }
+          return out.join(",");
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>Testing course</title>
+          </head>
+          <body>
+            <script type="module" src="/course/panel.js" data-modes="tests errors summary"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "testing-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+            "test": "vitest"
+          },
+          "devDependencies": {
+            "vite": "7.3.7",
+            "vitest": "5.1.0"
+          }
+        }
+      src/booking.js: |
+        // `store` is where the bookings are kept: the shop's database in the
+        // real app, or memoryStore() below.
+        export function createBookings(store) {
+          return {
+            async book(table, time, customer) {
+              if (table < 1 || table > 12) {
+                throw new Error(`table ${table} does not exist`);
+              }
+              const key = `${table}@${time}`;
+              if (await store.get(key)) {
+                throw new Error(`table ${table} is taken at ${time}`);
+              }
+              await store.set(key, customer);
+              return { table, time, customer };
+            },
+          };
+        }
+
+        // Keeps the bookings in a Map in memory instead of a database.
+        export function memoryStore() {
+          const data = new Map();
+          return {
+            get: async (key) => data.get(key),
+            set: async (key, value) => void data.set(key, value),
+          };
+        }
+      src/booking.test.js: |
+        import { expect, test, vi } from "vitest";
+        import { createBookings, memoryStore } from "./booking.js";
+
+        test("rejects table 13", async () => {
+          const bookings = createBookings(null);
+
+          const booking = bookings.book(13, "18:00", "လှလှ");
+          await expect(booking).rejects.toThrow("does not exist");
+        });
+      src/kitchen.js: |
+        export function createKitchen({ print }) {
+          const queue = [];
+          let lastNo = 0;
+          return {
+            add(order) {
+              lastNo += 1;
+              const ticket = { no: lastNo, ...order };
+              queue.push(ticket);
+              print(ticket);
+              return ticket;
+            },
+            next: () => queue.shift(),
+            size: () => queue.length,
+          };
+        }
+      src/kitchen.test.js: |
+        import { expect, test, vi } from "vitest";
+        import { createKitchen } from "./kitchen.js";
+        import { printTicket } from "./printer.js";
+
+        test("numbers the tickets from 1", () => {
+          const print = printTicket;
+          const kitchen = createKitchen({ print });
+
+          const ticket = kitchen.add({ table: 5, item: "tea" });
+
+          expect(ticket.no).toBe(1);
+        });
+      src/printer.js: |
+        // Sends a ticket to the printer in the kitchen. The printer is plugged
+        // into the shop's own computer; anywhere else it is not connected.
+        export function printTicket(ticket) {
+          throw new Error("the kitchen printer is not connected");
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseVitestBridge from "./course/vitest-bridge.js";
+
+        // The course panel: the dev server runs the real Vitest and the preview shows its results.
+        export default defineConfig({
+          plugins: [courseVitestBridge()],
+        });
+      vitest.config.js: |
+        import { defineConfig } from "vitest/config";
+
+        export default defineConfig({
+          test: {
+          },
+        });
+  whiteboardAssets:
+    # Board A: a real dependency inside a test, and the test double that stands in for it.
+    - {
+        id: a-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "dependency အစစ်နဲ့ test",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-code-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 300,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-code,
+        kind: text,
+        x: 305,
+        y: 265,
+        width: 260,
+        height: 40,
+        text: "ဆိုင်ရဲ့ code",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 592,
+        y: 265,
+        width: 66,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-dep-box,
+        kind: rectangle,
+        x: 670,
+        y: 240,
+        width: 420,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-dep,
+        kind: text,
+        x: 695,
+        y: 265,
+        width: 380,
+        height: 40,
+        text: "printer အစစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-prob-1,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 800,
+        height: 40,
+        text: "× test တိုင်း စက္ကူ ထွက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-prob-2,
+        kind: text,
+        x: 290,
+        y: 405,
+        width: 800,
+        height: 40,
+        text: "× printer မရှိရင် code မှန်လည်း ကျ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-prob-3,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 800,
+        height: 40,
+        text: "database: နှေး · service: မရှိသေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-double-box,
+        kind: rectangle,
+        x: 280,
+        y: 515,
+        width: 810,
+        height: 115,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-double-1,
+        kind: text,
+        x: 305,
+        y: 530,
+        width: 770,
+        height: 40,
+        text: "test double = အစစ်နေရာမှာ ထည့်တဲ့ အတု",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-double-2,
+        kind: text,
+        x: 305,
+        y: 578,
+        width: 770,
+        height: 40,
+        text: "ရုပ်ရှင်မှာ မင်းသားအစား ဝင်ရိုက်ပေးသူလို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: the test-double family, each with what it does and what makes it in this lesson.
+    - {
+        id: b-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Test double မိသားစု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-dummy,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 130,
+        height: 40,
+        text: "dummy",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-dummy-what,
+        kind: text,
+        x: 430,
+        y: 240,
+        width: 320,
+        height: 40,
+        text: "ထည့်ရပေမဲ့ မသုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-dummy-tool,
+        kind: text,
+        x: 740,
+        y: 240,
+        width: 340,
+        height: 40,
+        text: "null",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-stub,
+        kind: text,
+        x: 290,
+        y: 305,
+        width: 130,
+        height: 40,
+        text: "stub",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-stub-what,
+        kind: text,
+        x: 430,
+        y: 305,
+        width: 320,
+        height: 40,
+        text: "ကြိုပေးထားတဲ့ အဖြေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-stub-tool,
+        kind: text,
+        x: 740,
+        y: 305,
+        width: 340,
+        height: 40,
+        text: "mockResolvedValue",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-spy,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 130,
+        height: 40,
+        text: "spy",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-spy-what,
+        kind: text,
+        x: 430,
+        y: 370,
+        width: 320,
+        height: 40,
+        text: "ခေါ်ပုံကို မှတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-spy-tool,
+        kind: text,
+        x: 740,
+        y: 370,
+        width: 340,
+        height: 40,
+        text: "vi.fn()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-mock,
+        kind: text,
+        x: 290,
+        y: 435,
+        width: 130,
+        height: 40,
+        text: "mock",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-mock-what,
+        kind: text,
+        x: 430,
+        y: 435,
+        width: 320,
+        height: 40,
+        text: "ခေါ်ပုံကိုပါ စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-mock-tool,
+        kind: text,
+        x: 740,
+        y: 435,
+        width: 340,
+        height: 40,
+        text: "toHaveBeenCalledWith",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-fake,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 130,
+        height: 40,
+        text: "fake",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-fake-what,
+        kind: text,
+        x: 430,
+        y: 500,
+        width: 320,
+        height: 40,
+        text: "အလုပ်လုပ်တဲ့ အတု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-fake-tool,
+        kind: text,
+        x: 740,
+        y: 500,
+        width: 340,
+        height: 40,
+        text: "memoryStore()",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-note-box,
+        kind: rectangle,
+        x: 280,
+        y: 565,
+        width: 810,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-note,
+        kind: text,
+        x: 305,
+        y: 580,
+        width: 770,
+        height: 40,
+        text: "vi.fn() တစ်ခုတည်း → stub · spy · mock",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board C: what to check with a double — the result (state) or the calls (behaviour).
+    - {
+        id: c-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "ဘာကို စစ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-state-box,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 395,
+        height: 170,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-state-head,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 350,
+        height: 44,
+        text: "state",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: c-state-1,
+        kind: text,
+        x: 305,
+        y: 305,
+        width: 350,
+        height: 40,
+        text: "ရလဒ်ကို စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-state-2,
+        kind: text,
+        x: 305,
+        y: 350,
+        width: 350,
+        height: 40,
+        text: "ticket.no · rejects",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-beh-box,
+        kind: rectangle,
+        x: 695,
+        y: 235,
+        width: 395,
+        height: 170,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-beh-head,
+        kind: text,
+        x: 720,
+        y: 250,
+        width: 350,
+        height: 44,
+        text: "behaviour",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: c-beh-1,
+        kind: text,
+        x: 720,
+        y: 305,
+        width: 350,
+        height: 40,
+        text: "ခေါ်ပုံကို စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-beh-2,
+        kind: text,
+        x: 720,
+        y: 350,
+        width: 350,
+        height: 40,
+        text: "print ကို ခေါ်လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-prefer,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 800,
+        height: 40,
+        text: "✓ state ကို ဦးစားပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-prefer-2,
+        kind: text,
+        x: 290,
+        y: 475,
+        width: 800,
+        height: 40,
+        text: "ခေါ်တာကိုယ်တိုင် အလုပ်ဆိုမှ ခေါ်ပုံ စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-warn-1,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 800,
+        height: 40,
+        text: "! dependency အစစ်နဲ့ test တစ်ခု ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-warn-2,
+        kind: text,
+        x: 290,
+        y: 588,
+        width: 800,
+        height: 40,
+        text: "! စစ်နေတဲ့ code ကို အတု မလုပ်နဲ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 5115
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: open
+    chapter: "Test double ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ ဘာကို အရင် test လုပ်သင့်လဲ၊ function ရဲ့ contract နဲ့
+      အစွန်းတွေကို အပြင်ကနေ ဘယ်လို စစ်မလဲ ဆိုတာ ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ကိုယ့် code က
+      printer လို၊ database လို တခြား အရာတွေကို မှီခိုနေတဲ့အခါ ဘယ်လို test လုပ်မလဲ ဆိုတာ ကြည့်ပါမယ်။
+      [[mark:draw-code]] မီးဖိုချောင်မှာ အော်ဒါ တစ်ခု ဝင်လာတိုင်း၊ ဆိုင်ရဲ့ code က printer ကို ခေါ်ပြီး
+      အော်ဒါ စာရွက် ထုတ်ခိုင်းပါတယ်။ ဒီလို ကိုယ့် code အလုပ်လုပ်ဖို့ လိုအပ်တဲ့ တခြား အရာကို
+      dependency လို့ ခေါ်ပါတယ်။ [[mark:draw-problems]] test ထဲမှာ printer အစစ်ကို သုံးရင်၊ test run
+      တိုင်း စက္ကူ တကယ် ထွက်လာပြီး၊ printer မရှိတဲ့ ကွန်ပျူတာမှာ ဆိုရင် code မှန်နေတာတောင် test က
+      ကျသွားပါလိမ့်မယ်။ booking တွေ သိမ်းထားတဲ့ database ကလည်း နှေးနိုင်ပြီး data အစစ်ကို
+      ပြောင်းသွားစေနိုင်သလို၊ တချို့ service တွေဆိုရင် မရေးရသေးတာတောင် ဖြစ်နိုင်ပါတယ်။
+      [[mark:draw-double]] တကယ်တမ်း စစ်ချင်တာက printer ကိုယ်တိုင် မဟုတ်ဘဲ၊ ကိုယ့် code က မှန်ကန်တဲ့
+      စာရွက်ကို printer ဆီ ပို့လား ဆိုတာပါ။ ဒါကြောင့် test လုပ်တဲ့အခါ printer အစစ်အစား၊
+      ပို့လာသမျှကို မှတ်ထားပေးတဲ့ အတု တစ်ခုကို ထည့်ပေးပါမယ်။ ဒီလို dependency အစစ်ရဲ့ နေရာမှာ test
+      အတွက် အစားထိုး ထည့်တဲ့ အတုကို test double လို့ ခေါ်ပါတယ်။ ရုပ်ရှင်မှာ အန္တရာယ်များတဲ့ အခန်းကို
+      မင်းသားအစား၊ သူနဲ့ တူအောင် ပြင်ထားတဲ့ တခြားလူက ဝင်ရိုက်ပေးသလိုပါပဲ။ [[mark:close-board]]
+      ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ ဒါက kitchen ဖိုင်ပါ။
+      [[mark:select-param]] kitchen ကို ဆောက်ပေးတဲ့ ဒီ function က printer ကို သူ့ဘာသာ မဆောက်ဘဲ၊ print
+      ဆိုတဲ့ function တစ်ခုကို အပြင်ကနေ လက်ခံပါတယ်။ ဒီလို dependency ကို အထဲမှာ ကိုယ်တိုင်
+      မဆောက်ဘဲ အပြင်ကနေ ထည့်ပေးတာကို dependency injection လို့ ခေါ်ပါတယ်။ [[mark:select-print]]
+      အော်ဒါ တစ်ခု ထည့်လိုက်တိုင်း၊ နံပါတ် တပ်ထားတဲ့ စာရွက်နဲ့ ဒီ line မှာ print ကို ခေါ်ပါတယ်။
+      [[mark:open-test]] ဒါကတော့ kitchen ရဲ့ test ဖိုင်ပါ။ ပထမ စာရွက်ရဲ့ နံပါတ်က ၁ ဖြစ်ရမယ်လို့
+      စစ်ထားပါတယ်။ [[mark:select-real]] ဒါပေမဲ့ ဒီ line က printer ဖိုင်ထဲက printer အစစ်ကိုပဲ kitchen
+      ဆီ ထည့်ပေးထားပါတယ်။ printer ဖိုင်က ဆိုင်ရဲ့ ကွန်ပျူတာမှာ printer ချိတ်ထားမှ အလုပ်လုပ်ပြီး၊
+      တခြား နေရာမှာ ဆိုရင် error throw လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Testing: Component testing in practice, Mock fetch (what mocking is)",
+          url: "https://web.dev/learn/testing/get-started/component-testing#mock_fetch",
+        }
+      - {
+          title: "web.dev Learn Testing: Welcome (coming soon: test doubles)",
+          url: "https://web.dev/learn/testing/welcome",
+        }
+      - {
+          title: "Martin Fowler: Test Double (facts C06)",
+          url: "https://martinfowler.com/bliki/TestDouble.html",
+        }
+      - { title: "Vitest: Mock Functions", url: "https://vitest.dev/guide/learn/mock-functions" }
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-code
+        type: whiteboard.apply
+        at: { mark: draw-code }
+        upsertIds: [a-code-box, a-code, a-arrow, a-dep-box, a-dep]
+        drawMs: 3000
+      - id: draw-problems
+        type: whiteboard.apply
+        at: { mark: draw-problems }
+        upsertIds: [a-prob-1, a-prob-2, a-prob-3]
+        drawMs: 4500
+      - id: draw-double
+        type: whiteboard.apply
+        at: { mark: draw-double }
+        upsertIds: [a-double-box, a-double-1, a-double-2]
+        drawMs: 3500
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: select-param
+        type: editor.select
+        at: { mark: select-param }
+        target: { file: src/kitchen.js, text: "createKitchen({ print })", occurrence: 1 }
+      - id: select-print
+        type: editor.select
+        at: { mark: select-print }
+        target: { file: src/kitchen.js, text: "print(ticket);", occurrence: 1 }
+      - id: open-test
+        type: workspace.openFile
+        at: { mark: open-test }
+        path: src/kitchen.test.js
+      - id: select-real
+        type: editor.select
+        at: { mark: select-real }
+        target: { file: src/kitchen.test.js, text: "const print = printTicket;", occurrence: 1 }
+
+  - id: panel
+    narration: >
+      [[mark:ready]] code ပြောင်းတိုင်း Vitest က သူ့ဘာသာ ပြန် run ပြီး ရလဒ်ကို ပြပေးတဲ့ panel ကို
+      ကြည့်ရအောင်။ [[mark:read-red]] booking test က pass ဖြစ်နေပေမဲ့၊ kitchen test ကတော့ ကြက်ခြေခတ်နဲ့
+      fail ဖြစ်ပြီး၊ Failed Tests အပိုင်းမှာ မီးဖိုချောင် printer ကို ချိတ်မထားဘူး ဆိုတဲ့ error ကို
+      ပြနေပါတယ်။ [[mark:read-stack]] code frame က printer ဖိုင်ထဲက line ကို ညွှန်ပြပြီး၊ သူ့အောက်မှာ kitchen ကနေ ခေါ်သွားတဲ့ လမ်းကြောင်းကို ပြပေးပါတယ်။ ဆိုလိုတာက
+      kitchen ရဲ့ code မှားလို့ မဟုတ်ဘဲ၊ printer အစစ် မရှိလို့ test က ကျနေတာပါ။
+    sources:
+      - {
+          title: "Vitest: Writing Tests, reading test output",
+          url: "https://vitest.dev/guide/learn/writing-tests#reading-test-output",
+        }
+      - {
+          title: "web.dev Learn Testing: Test types, integration tests and fake services",
+          url: "https://web.dev/learn/testing/get-started/test-types#integration_tests",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-fail
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-status }
+        attribute: { name: data-state, value: fail }
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: expect-start-count
+        type: expect.preview
+        at: { afterAction: expect-start-fail }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-failed, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-start-message
+        type: expect.preview
+        at: { afterAction: expect-start-count }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-error-1 }
+        attribute: { name: data-message, value: "the kitchen printer is not connected" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-start-frame
+        type: expect.preview
+        at: { afterAction: expect-start-message }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-frame-1 }
+        attribute: { name: data-file, value: src/printer.js }
+        retry: { maxAttempts: 2, delayMs: 500 }
+
+  - id: spy
+    chapter: "Mock function နဲ့ vi.fn"
+    narration: >
+      [[mark:type-fn]] printer အစစ်ရဲ့ နေရာမှာ အတုကို ထည့်ကြည့်ရအောင်။ vi ဆိုတာ test double တွေ
+      ဖန်တီးဖို့ Vitest က ပေးထားတဲ့ helper object ဖြစ်ပြီး၊ ဖိုင်ရဲ့ ထိပ်မှာ import လုပ်ထားပြီးသားပါ။
+      vi fn က mock function တစ်ခုကို ဖန်တီးပေးပါတယ်။ သူ့ကို ခေါ်ရင် undefined ပဲ ပြန်ပေးပေမဲ့၊
+      ဘယ်နှခါ ခေါ်ခံရလဲ၊ ဘယ် argument တွေနဲ့ ခေါ်ခံရလဲ ဆိုတာကိုတော့ အကုန် မှတ်ထားပါတယ်။ line
+      အဟောင်းကိုတော့ comment အဖြစ် ချန်ထားပါတယ်။ [[mark:read-green]] panel ကို ကြည့်ပါ။ kitchen test
+      လည်း pass ဖြစ်သွားပြီး၊ အပေါ်မှာ အစိမ်းရောင် PASS ပေါ်လာပါပြီ။ kitchen ရဲ့ code ကို
+      တစ်လုံးမှ မပြင်ခဲ့ပါဘူး။ printer ကို အပြင်ကနေ လက်ခံထားလို့၊ test ကနေ အတုကို
+      ထည့်ပေးလိုက်ရုံပါပဲ။
+    sources:
+      - { title: "Vitest: vi.fn", url: "https://vitest.dev/api/vi#vi-fn" }
+      - { title: "Vitest: Mocking Functions", url: "https://vitest.dev/guide/mocking/functions" }
+      - {
+          title: "web.dev Learn Testing: What to test, opaque versus clear box (callbacks and mocks)",
+          url: "https://web.dev/learn/testing/get-started/what-to-test",
+        }
+    actions:
+      - id: type-fn
+        type: editor.type
+        at: { mark: type-fn }
+        target:
+          {
+            file: src/kitchen.test.js,
+            after: "test(\"numbers the tickets from 1\", () => {\n  ",
+            occurrence: 1,
+          }
+        text: "const print = vi.fn();\n  // "
+      - id: expect-green
+        type: expect.preview
+        at: { afterAction: type-fn }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-status }
+        attribute: { name: data-state, value: pass }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-green-count
+        type: expect.preview
+        at: { afterAction: expect-green }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+
+  - id: calls
+    narration: >
+      စာရွက်ကို printer ဆီ ပို့တာကလည်း kitchen ရဲ့ အလုပ် ဖြစ်ပါတယ်။ [[mark:type-call-test]] ဒီ test က စားပွဲ နံပါတ် ၅ က လက်ဖက်ရည် မှာတဲ့ အော်ဒါကို ထည့်ပြီး၊ printer ဆီ ဘာ ရောက်သွားလဲ စစ်ပါတယ်။ [[mark:select-name]] mock function ကိုတော့ mock Name နဲ့ print လို့ နာမည် ပေးထားပါတယ်။ test ကျရင်
+      message မှာ ဒီ နာမည်နဲ့ ပြပေးလို့ ဖတ်ရတာ ပိုရှင်းပါတယ်။ [[mark:select-called-with]] to Have Been
+      Called With က mock function ကို ဒီ argument နဲ့ ခေါ်ခဲ့လားလို့ စစ်ပါတယ်။ kitchen က စာရွက်မှာ
+      နံပါတ် ထပ်တပ်မယ် ဆိုတာ သိပေမဲ့၊ call မကိုက်ရင် Vitest က ဘယ်လို ပြလဲ မြင်ရအောင်၊ အော်ဒါ
+      အတိုင်း အတိအကျ ဖြစ်ရမယ်လို့ တမင် စစ်ထားပါတယ်။ [[mark:read-call-red]] test အသစ်က fail
+      ဖြစ်ပါပြီ။ message က print ကို ဒီ argument နဲ့ ခေါ်ရမယ်လို့ ပြောပြီး၊ Received အပိုင်းမှာ print
+      ရဲ့ ပထမ call ကို ပြထားပါတယ်။ printer ဆီ ရောက်သွားတဲ့ စာရွက်မှာ နံပါတ် ၁ ဆိုတဲ့ field တစ်ခု
+      ပိုပါနေပြီး၊ print ကို တစ်ခါ ခေါ်ခဲ့တယ်လို့လည်း ပြနေပါတယ်။ [[mark:decide]] နံပါတ် တပ်တာက
+      kitchen ရဲ့ အလုပ်ပဲ ဖြစ်ပြီး၊ ပထမ test က စစ်ပြီးသားပါ။ ဒီ test က ဘယ် စားပွဲက ဘာ မှာလဲ ဆိုတာ
+      printer ဆီ ရောက်လား ဆိုတာကိုပဲ စစ်ချင်တာ ဖြစ်လို့၊ ပြီးခဲ့တဲ့ lesson ကလို လိုတာထက်
+      ပိုမစစ်သင့်ပါဘူး။ [[mark:type-containing]] ဒါကြောင့် ဒီ line ကို object Containing နဲ့ အစားထိုးပြီး၊ line အဟောင်းကို comment အဖြစ် ချန်ထားပါမယ်။ [[mark:select-containing]] object Containing က ပေးထားတဲ့ field တွေ ပါလားလို့ပဲ
+      စစ်ပြီး၊ ပိုပါနေတဲ့ field တွေကိုတော့ ဂရုမစိုက်ပါဘူး။ [[mark:read-call-green]] test သုံးခုလုံး pass
+      ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Vitest: expect, toHaveBeenCalledWith",
+          url: "https://vitest.dev/api/expect#tohavebeencalledwith",
+        }
+      - {
+          title: "Vitest: expect.objectContaining",
+          url: "https://vitest.dev/api/expect#expect-objectcontaining",
+        }
+      - { title: "Vitest: mockName", url: "https://vitest.dev/api/mock#mockname" }
+      - {
+          title: "Kent C. Dodds: Testing Implementation Details (facts C13)",
+          url: "https://kentcdodds.com/blog/testing-implementation-details",
+        }
+    actions:
+      - id: type-call-test
+        type: editor.type
+        at: { mark: type-call-test }
+        target:
+          { file: src/kitchen.test.js, after: "  expect(ticket.no).toBe(1);\n});\n", occurrence: 1 }
+        text: "\ntest(\"prints the order on a ticket\", () => {\n  const print = vi.fn().mockName(\"print\");\n  const kitchen = createKitchen({ print });\n  const order = { table: 5, item: \"tea\" };\n\n  kitchen.add(order);\n\n  expect(print).toHaveBeenCalledWith(order);\n});\n"
+        cadence: block
+      - id: expect-call-red
+        type: expect.preview
+        at: { afterAction: type-call-test }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-status }
+        attribute: { name: data-state, value: fail }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-call-red-count
+        type: expect.preview
+        at: { afterAction: expect-call-red }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-total, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-call-red-message
+        type: expect.preview
+        at: { afterAction: expect-call-red-count }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-error-1 }
+        attribute:
+          {
+            name: data-message,
+            value: "expected \"print\" to be called with arguments: [ { table: 5, item: 'tea' } ]\n\nReceived:\n\n  1st print call:\n\n  [\n    {\n      \"item\": \"tea\",\n+     \"no\": 1,\n      \"table\": 5,\n    },\n  ]\n\n\nNumber of calls: 1\n",
+          }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-call-red-test
+        type: expect.preview
+        at: { afterAction: expect-call-red-message }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-test-3 }
+        attribute: { name: data-state, value: fail }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: select-name
+        type: editor.select
+        at: { mark: select-name }
+        target: { file: src/kitchen.test.js, text: 'vi.fn().mockName("print")', occurrence: 1 }
+      - id: select-called-with
+        type: editor.select
+        at: { mark: select-called-with }
+        target:
+          {
+            file: src/kitchen.test.js,
+            text: "expect(print).toHaveBeenCalledWith(order);",
+            occurrence: 1,
+          }
+      - id: type-containing
+        type: editor.type
+        at: { mark: type-containing }
+        target: { file: src/kitchen.test.js, after: "  kitchen.add(order);\n\n  ", occurrence: 1 }
+        text: "expect(print).toHaveBeenCalledWith(\n    expect.objectContaining(order),\n  );\n  // "
+        cadence: block
+      - id: expect-call-green
+        type: expect.preview
+        at: { afterAction: type-containing }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-status }
+        attribute: { name: data-state, value: pass }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-call-green-count
+        type: expect.preview
+        at: { afterAction: expect-call-green }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: select-containing
+        type: editor.select
+        at: { mark: select-containing }
+        target: { file: src/kitchen.test.js, text: "expect.objectContaining(order)", occurrence: 1 }
+
+  - id: count
+    narration: >
+      [[mark:type-count-test]] နောက် test တစ်ခုမှာတော့ စားပွဲ နံပါတ် ၅ နဲ့ ၈ က အော်ဒါ နှစ်ခုကို ဆက်တိုက် ထည့်ပါမယ်။
+      [[mark:select-times]] to Have Been Called Times က ဘယ်နှခါ ခေါ်ခံရလဲ ရေတွက်ပြီး၊ အော်ဒါ နှစ်ခုအတွက်
+      နှစ်ခါ ဖြစ်ရပါမယ်။ [[mark:select-calls]] mock function တိုင်းမှာ mock calls ဆိုတဲ့ စာရင်း ရှိပြီး၊
+      call တစ်ခုစီရဲ့ argument တွေကို အစဉ်လိုက် မှတ်ထားပါတယ်။ ဒီမှာ ဒုတိယ call ရဲ့ ပထမ argument
+      ဖြစ်တဲ့ ဒုတိယ စာရွက်က စားပွဲ နံပါတ် ၈ အတွက် ဖြစ်ရမယ်လို့ စစ်ထားပါတယ်။ [[mark:read-count]] test
+      လေးခုလုံး pass ဖြစ်ပါပြီ။ mock function တစ်ခုကို test တွေကြား မျှသုံးထားရင်တောင်၊ Vitest ၅ က
+      test တိုင်း မစခင် call စာရင်းကို ရှင်းပေးလို့ ရှေ့ test က call တွေ ပါမလာပါဘူး။ clear Mocks ဆိုတဲ့
+      option ကို default အနေနဲ့ ဖွင့်ထားလို့ပါ။
+    sources:
+      - { title: "Vitest: mock.calls", url: "https://vitest.dev/api/mock#mock-calls" }
+      - {
+          title: "Vitest: expect, toHaveBeenCalledTimes",
+          url: "https://vitest.dev/api/expect#tohavebeencalledtimes",
+        }
+      - { title: "Vitest: clearMocks (facts A09)", url: "https://vitest.dev/config/clearmocks" }
+    actions:
+      - id: type-count-test
+        type: editor.type
+        at: { mark: type-count-test }
+        target:
+          {
+            file: src/kitchen.test.js,
+            after: "  // expect(print).toHaveBeenCalledWith(order);\n});\n",
+            occurrence: 1,
+          }
+        text: "\ntest(\"prints one ticket per order\", () => {\n  const print = vi.fn();\n  const kitchen = createKitchen({ print });\n\n  kitchen.add({ table: 5, item: \"tea\" });\n  kitchen.add({ table: 8, item: \"coffee\" });\n\n  expect(print).toHaveBeenCalledTimes(2);\n  expect(print.mock.calls[1][0].table).toBe(8);\n});\n"
+        cadence: block
+      - id: expect-count-passed
+        type: expect.preview
+        at: { afterAction: type-count-test }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-count-test
+        type: expect.preview
+        at: { afterAction: expect-count-passed }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-test-4 }
+        attribute: { name: data-name, value: "prints one ticket per order" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: select-times
+        type: editor.select
+        at: { mark: select-times }
+        target: { file: src/kitchen.test.js, text: "toHaveBeenCalledTimes(2)", occurrence: 1 }
+      - id: select-calls
+        type: editor.select
+        at: { mark: select-calls }
+        target: { file: src/kitchen.test.js, text: "print.mock.calls[1][0].table", occurrence: 1 }
+      - id: expect-kitchen-file
+        type: expect.file
+        at: { afterAction: select-calls }
+        path: src/kitchen.test.js
+        contains: "  const print = vi.fn();\n  // const print = printTicket;\n"
+
+  - id: stub
+    chapter: "Stub၊ fake နဲ့ dummy"
+    narration: >
+      [[mark:open-booking]] booking ဖိုင်ကို ကြည့်ရအောင်။ သူကလည်း booking တွေ သိမ်းမယ့် store ကို အပြင်ကနေ လက်ခံပြီး၊ ဆိုင်မှာ အဲဒါက database ပါ။ [[mark:select-get]] store ကို
+      အရင် မေးပြီး၊ အဲဒီ စားပွဲမှာ အဲဒီ အချိန်အတွက် လူ ရှိပြီးသား ဆိုရင် error throw လုပ်ပါတယ်။
+      [[mark:select-memory]] အောက်ဆုံးမှာ booking တွေကို memory ထဲမှာ မှတ်ထားတဲ့ store သေးသေးလေးလည်း ပါပါတယ်။ [[mark:open-booking-test]] test ဖိုင်ကို ဖွင့်ကြည့်ရအောင်။
+      [[mark:select-dummy]] ရှိပြီးသား test က စားပွဲ နံပါတ် ၁၃ ကို ငြင်းရမယ်လို့ စစ်ပြီး၊ store နေရာမှာ
+      null ကို ထည့်ထားပါတယ်။ ဆိုင်မှာ စားပွဲ ၁၂ လုံးပဲ ရှိလို့၊ code က store ကို မမေးခင်ကတည်းက
+      ငြင်းပါတယ်။ ဒီလို ထည့်ပေးရပေမဲ့ ဘယ်တော့မှ မသုံးတဲ့ double ကို dummy လို့ ခေါ်ပါတယ်။
+      [[mark:type-stub]] တခြားလူ booking လုပ်ထားပြီးသား စားပွဲကို စစ်ဖို့အတွက်တော့၊ store ကို မေးတဲ့ function ကို mock function နဲ့ အစားထိုးပြီး၊ မြမြ booking လုပ်ထားတယ် ဆိုတဲ့ အဖြေကို ကြိုသတ်မှတ်ပါမယ်။
+      [[mark:select-resolved]] mock Resolved Value က ခေါ်တိုင်း ဒီ အဖြေနဲ့ resolve ဖြစ်တဲ့ Promise ကို
+      ပြန်ပေးပါတယ်။ async မဟုတ်တဲ့ function ဆိုရင်တော့ mock Return Value ကို သုံးပါတယ်။ ဒီလို
+      ကြိုသတ်မှတ်ထားတဲ့ အဖြေကို ပြန်ပေးတဲ့ double ကို stub လို့ ခေါ်ပါတယ်။ [[mark:read-stub]] test
+      ငါးခုလုံး pass ဖြစ်ပါပြီ။ stub က မြမြ ရှိတယ်လို့ ဖြေလို့၊ လှလှ ရဲ့ booking ကို code က
+      ငြင်းလိုက်တာပါ။
+    sources:
+      - { title: "Vitest: mockResolvedValue", url: "https://vitest.dev/api/mock#mockresolvedvalue" }
+      - {
+          title: "Vitest: Mock Functions, mock return values",
+          url: "https://vitest.dev/guide/learn/mock-functions#mock-return-values",
+        }
+      - {
+          title: "Martin Fowler: Test Double, dummy and stub (facts C06)",
+          url: "https://martinfowler.com/bliki/TestDouble.html",
+        }
+    actions:
+      - id: open-booking
+        type: workspace.openFile
+        at: { mark: open-booking }
+        path: src/booking.js
+      - id: select-get
+        type: editor.select
+        at: { mark: select-get }
+        target: { file: src/booking.js, text: "if (await store.get(key)) {", occurrence: 1 }
+      - id: select-memory
+        type: editor.select
+        at: { mark: select-memory }
+        target:
+          {
+            file: src/booking.js,
+            text: "export function memoryStore() {\n  const data = new Map();",
+            occurrence: 1,
+          }
+      - id: open-booking-test
+        type: workspace.openFile
+        at: { mark: open-booking-test }
+        path: src/booking.test.js
+      - id: select-dummy
+        type: editor.select
+        at: { mark: select-dummy }
+        target: { file: src/booking.test.js, text: "createBookings(null)", occurrence: 1 }
+      - id: type-stub
+        type: editor.type
+        at: { mark: type-stub }
+        target:
+          {
+            file: src/booking.test.js,
+            after: "  await expect(booking).rejects.toThrow(\"does not exist\");\n});\n",
+            occurrence: 1,
+          }
+        text: "\ntest(\"rejects a table that is taken\", async () => {\n  const store = { get: vi.fn().mockResolvedValue(\"မြမြ\") };\n  const bookings = createBookings(store);\n\n  const booking = bookings.book(5, \"18:00\", \"လှလှ\");\n  await expect(booking).rejects.toThrow(\"is taken\");\n});\n"
+        cadence: block
+      - id: expect-stub-passed
+        type: expect.preview
+        at: { afterAction: type-stub }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "5" }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-stub-test
+        type: expect.preview
+        at: { afterAction: expect-stub-passed }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-test-2 }
+        attribute: { name: data-name, value: "rejects a table that is taken" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: select-resolved
+        type: editor.select
+        at: { mark: select-resolved }
+        target:
+          { file: src/booking.test.js, text: 'vi.fn().mockResolvedValue("မြမြ")', occurrence: 1 }
+
+  - id: fake
+    narration: >
+      [[mark:type-fake]] ဒီတစ်ခါ memory store ကို ထည့်ပေးပြီး၊ မြမြ booking လုပ်ပြီးမှ လှလှ အဲဒီ
+      စားပွဲကို အဲဒီ အချိန်မှာ ထပ် booking လုပ်ကြည့်ပါမယ်။ [[mark:read-fake]] test ခြောက်ခုလုံး pass
+      ဖြစ်ပါပြီ။ ဒီတစ်ခါ ဘယ် အဖြေကိုမှ ကြိုမသတ်မှတ်ထားဘဲ၊ ပထမ booking ကို store ထဲ တကယ် ရေးပြီး
+      ဒုတိယ booking က အဲဒါကို တကယ် ပြန်တွေ့လို့ ငြင်းတာပါ။ ဒီလို အစစ်လို အလုပ်လုပ်တဲ့ ရိုးရှင်းတဲ့ အစားထိုးကို fake လို့ ခေါ်ပြီး၊ ကိုယ်တိုင် ရေးတဲ့ ရိုးရိုး code ပါ။
+    sources:
+      - {
+          title: "Martin Fowler: Test Double, fake (facts C06)",
+          url: "https://martinfowler.com/bliki/TestDouble.html",
+        }
+      - {
+          title: "web.dev Learn Testing: Test types, integration tests and fake services",
+          url: "https://web.dev/learn/testing/get-started/test-types#integration_tests",
+        }
+    actions:
+      - id: type-fake
+        type: editor.type
+        at: { mark: type-fake }
+        target:
+          {
+            file: src/booking.test.js,
+            after: "  await expect(booking).rejects.toThrow(\"is taken\");\n});\n",
+            occurrence: 1,
+          }
+        text: "\ntest(\"rejects a second booking\", async () => {\n  const bookings = createBookings(memoryStore());\n\n  await bookings.book(5, \"18:00\", \"မြမြ\");\n  const second = bookings.book(5, \"18:00\", \"လှလှ\");\n  await expect(second).rejects.toThrow(\"is taken\");\n});\n"
+        cadence: block
+      - id: expect-fake-passed
+        type: expect.preview
+        at: { afterAction: type-fake }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "6" }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-fake-test
+        type: expect.preview
+        at: { afterAction: expect-fake-passed }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-test-3 }
+        attribute: { name: data-name, value: "rejects a second booking" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: select-fake
+        type: editor.select
+        at: { mark: read-fake }
+        target: { file: src/booking.test.js, text: "createBookings(memoryStore())", occurrence: 1 }
+      - id: expect-booking-file
+        type: expect.file
+        at: { afterAction: select-fake }
+        path: src/booking.test.js
+        contains: 'const store = { get: vi.fn().mockResolvedValue("မြမြ") };'
+
+  - id: family
+    narration: >
+      [[mark:board-family]] ခုနက test double တွေကို စုကြည့်ရအောင်။ [[mark:draw-dummy-stub]]
+      dummy က ထည့်ပေးရပေမဲ့ မသုံးတဲ့ null လို အရာ ဖြစ်ပြီး၊ stub က ကြိုသတ်မှတ်ထားတဲ့ အဖြေ ပြန်ပေးပါတယ်။ [[mark:draw-spy-mock]] spy က ခေါ်ပုံကို မှတ်ထားပြီး၊ mock ကတော့ ခေါ်ပုံကိုပါ စစ်ပါတယ်။ print အတုကို to Have Been Called With နဲ့ စစ်တော့ mock ပုံစံ ဖြစ်သွားတာပါ။ [[mark:draw-fake]] fake ကတော့ memory store လို တကယ် အလုပ်လုပ်တဲ့ အသေးစား အစားထိုးပါ။ Vitest မှာ vi fn တစ်ခုတည်းက stub ရော spy ရော mock ပါ လုပ်ပေးပြီး၊ dummy နဲ့ fake ကတော့ ရိုးရိုး code ပါ။
+    sources:
+      - {
+          title: "Martin Fowler: Test Double (facts C06)",
+          url: "https://martinfowler.com/bliki/TestDouble.html",
+        }
+      - { title: "Vitest: Mocking", url: "https://vitest.dev/guide/mocking" }
+    actions:
+      - id: board-family
+        type: whiteboard.apply
+        at: { mark: board-family }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-dummy-stub
+        type: whiteboard.apply
+        at: { mark: draw-dummy-stub }
+        upsertIds: [b-dummy, b-dummy-what, b-dummy-tool, b-stub, b-stub-what, b-stub-tool]
+        drawMs: 3500
+      - id: draw-spy-mock
+        type: whiteboard.apply
+        at: { mark: draw-spy-mock }
+        upsertIds: [b-spy, b-spy-what, b-spy-tool, b-mock, b-mock-what, b-mock-tool]
+        drawMs: 3500
+      - id: draw-fake
+        type: whiteboard.apply
+        at: { mark: draw-fake }
+        upsertIds: [b-fake, b-fake-what, b-fake-tool, b-note-box, b-note]
+        drawMs: 3500
+
+  - id: what-to-check
+    chapter: "ရလဒ်လား၊ ခေါ်ပုံလား"
+    narration: >
+      [[mark:board-check]] double နဲ့ test ရေးရင် ဘာကို စစ်မလဲ။
+      [[mark:draw-state]] တစ်နည်းက ရလဒ်ကို စစ်တာပါ။ စာရွက် နံပါတ်၊ booking ကို ငြင်းတာ ဆိုတာမျိုး
+      ဖြစ်ပြီး၊ ဒါကို state verification လို့ ခေါ်ပါတယ်။ [[mark:draw-behaviour]] နောက်တစ်နည်းက double
+      ကို ဘယ်လို ခေါ်ခဲ့လဲ စစ်တာ ဖြစ်ပြီး၊ behaviour verification လို့ ခေါ်ပါတယ်။ [[mark:draw-prefer]]
+      ဖြစ်နိုင်ရင် ရလဒ်ကို စစ်တာကို ဦးစားပေးပါ။ ခေါ်ပုံကို စစ်တဲ့ test က code ရဲ့ အတွင်းပိုင်းနဲ့
+      ကပ်နေလို့၊ ရလဒ် မပြောင်းဘဲ code ကို ပြင်ရုံနဲ့ ကျတတ်ပါတယ်။ ခေါ်တာကိုယ်တိုင်က လုပ်ရမယ့် အလုပ်
+      ဖြစ်မှသာ ခေါ်ပုံကို စစ်ပါ။ printer ဆီ စာရွက် ပို့တာက အဲဒီလို အလုပ်မျိုးပါ။ [[mark:draw-warnings]]
+      သတိထားစရာ နှစ်ခုလည်း ရှိပါတယ်။ double နဲ့ စစ်တာက ဆိုင်မှာ တကယ် run တဲ့ ပုံစံ မဟုတ်လို့၊
+      ဆိုင်ရဲ့ ကွန်ပျူတာမှာ printer အစစ်နဲ့ စစ်တာလို test တစ်ခုကို အနည်းဆုံး ထားပါ။ ပြီးတော့ ကိုယ် စစ်နေတဲ့ code ကိုယ်တိုင်ကို ဘယ်တော့မှ double နဲ့ မလဲပါနဲ့။ ဒါဆို ကိုယ့် code ကို မစစ်ဘဲ အတုကိုပဲ စစ်နေမှာပါ။
+    sources:
+      - {
+          title: "Martin Fowler: Mocks Aren't Stubs, state and behavior verification (facts C08)",
+          url: "https://martinfowler.com/articles/mocksArentStubs.html",
+        }
+      - {
+          title: "Gerard Meszaros: Test Double, xUnit Test Patterns (facts C07)",
+          url: "http://xunitpatterns.com/Test%20Double.html",
+        }
+      - {
+          title: "Vitest: Writing Tests with AI, testing behavior or implementation",
+          url: "https://vitest.dev/guide/learn/writing-tests-with-ai#are-they-testing-behavior-or-implementation",
+        }
+    actions:
+      - id: board-check
+        type: whiteboard.apply
+        at: { mark: board-check }
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-state
+        type: whiteboard.apply
+        at: { mark: draw-state }
+        upsertIds: [c-state-box, c-state-head, c-state-1, c-state-2]
+        drawMs: 3000
+      - id: draw-behaviour
+        type: whiteboard.apply
+        at: { mark: draw-behaviour }
+        upsertIds: [c-beh-box, c-beh-head, c-beh-1, c-beh-2]
+        drawMs: 3000
+      - id: draw-prefer
+        type: whiteboard.apply
+        at: { mark: draw-prefer }
+        upsertIds: [c-prefer, c-prefer-2]
+        drawMs: 2500
+      - id: draw-warnings
+        type: whiteboard.apply
+        at: { mark: draw-warnings }
+        upsertIds: [c-warn-1, c-warn-2]
+        drawMs: 2500
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ dependency အစစ်က နှေးတာ၊ မရှိသေးတာ ဒါမှမဟုတ် စက္ကူ ထွက်တာလို တကယ့်
+      အကျိုးဆက် ရှိတာ ဆိုရင်၊ test ထဲမှာ test double နဲ့ အစားထိုးပါတယ်။ dependency ကို အပြင်ကနေ ထည့်ပေးထားရင် code ပြင်စရာ မလိုပါဘူး။ vi fn က stub ရော spy ရော mock ပါ ဖန်တီးပေးပြီး၊ စစ်တဲ့အခါ ရလဒ်ကို ဦးစားပေးပါ။ [[mark:recap-next]] နောက် lesson
+      မှာတော့ argument အနေနဲ့ ထည့်ပေးလို့ မရတဲ့ dependency တွေကို၊ ဥပမာ fetch လို global တစ်ခု၊ module
+      တစ်ခုလုံး ဒါမှမဟုတ် object ရဲ့ method တစ်ခုကို နေရာမှာတင် အစားထိုးနည်းကို ကြည့်သွားပါမယ်။
+    sources:
+      - { title: "Vitest: Mock Functions", url: "https://vitest.dev/guide/learn/mock-functions" }
+      - {
+          title: "web.dev Learn Testing: Welcome (coming soon: test doubles)",
+          url: "https://web.dev/learn/testing/welcome",
+        }
+    actions:
+      - id: close-check
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+checks:
+  - { type: timing.p95Ms, max: 300 }
