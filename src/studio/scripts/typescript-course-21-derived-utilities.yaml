@@ -1,0 +1,1650 @@
+# TypeScript course, lesson 21: deriving types from functions, and transforming unions (Burmese).
+#
+# Start state (ws/): src/delivery.ts plays a delivery company's library: it exports deliveryFee
+# (an address with township, street and phone, plus an optional express flag; returns fee and
+# minutes) and the async bookRider (returns the rider, minutes and the phone to call), but no
+# types. src/main.ts copied the address shape by hand before the library added `phone`, so the
+# panel shows two TS2345 errors (phone missing at both calls) and Output prints
+# "မောင်မောင် က undefined ကို ဖုန်းဆက်ပါမယ်". src/kitchen.ts holds an OrderStatus union and a
+# KitchenEvent discriminated union (it sorts before main.ts, so its queries are listed first).
+#
+# Edits, all insert-only:
+#   1. `type FeeArgs = Parameters<deliveryFee>;` -> TS2749 (a value used as a type); `typeof `
+#      -> error gone; a query shows the labelled tuple (express?: boolean | undefined).
+#   2. one block: `type Address = FeeArgs[0];` above the copied type, which becomes a comment ->
+#      the error moves to the home object (TS2741, phone missing); `phone` added -> 0 errors,
+#      Output prints the phone number.
+#   3. `type Quote = ReturnType<typeof deliveryFee>;` + query.
+#   4. `type Booking = ReturnType<typeof bookRider>;` + query (Promise<…>); `Awaited<` + `>`
+#      back to back -> the plain object.
+#   5. `type Express = FeeArgs[1];` + query (boolean | undefined); `NonNullable<` + `>` -> boolean.
+#   6. kitchen.ts: `OnScreen = Exclude<OrderStatus, "paid">` + query; `Bell = Extract<KitchenEvent,
+#      { type: "done" }>` + query.
+# Boards: (A) a library that exports functions but no types -> Parameters / ReturnType / Awaited;
+# (B) derive what must change together, keep separate what has a different job (form vs row).
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-21-derived-utilities.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-21-derived-utilities
+  title: "TypeScript course 21: Function ကနေ type ထုတ်ယူခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors types output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/delivery.ts: |
+        // ပို့ဆောင်ရေး library (type တွေကို export မလုပ်ထားပါ)
+        export function deliveryFee(
+          address: { township: string; street: string; phone: string },
+          express = false,
+        ) {
+          return { fee: express ? 3000 : 1500, minutes: express ? 20 : 45 };
+        }
+
+        export async function bookRider(address: { township: string; street: string; phone: string }) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return { rider: "မောင်မောင်", minutes: 15, callTo: address.phone };
+        }
+      src/kitchen.ts: |
+        // မီးဖိုချောင် screen
+        export type OrderStatus = "pending" | "brewing" | "ready" | "paid";
+
+        export type KitchenEvent =
+          | { type: "ordered"; item: string }
+          | { type: "done"; item: string; minutes: number }
+          | { type: "cancelled"; reason: string };
+      src/main.ts: |
+        import { bookRider, deliveryFee } from "./delivery";
+
+        // ပို့ရမယ့် လိပ်စာ
+        type Address = { township: string; street: string };
+
+        const home: Address = {
+          township: "ဗဟန်း",
+          street: "ရွှေဂုံတိုင် လမ်း",
+        };
+
+        const quote = deliveryFee(home, true);
+        console.log("ပို့ခ", quote.fee, "ကျပ်၊", quote.minutes, "မိနစ်");
+
+        async function main() {
+          const booking = await bookRider(home);
+          console.log(booking.rider, "က", booking.callTo, "ကို ဖုန်းဆက်ပါမယ်");
+        }
+        main();
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: a library exports functions, not types; derive the types from the functions.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Function ကနေ type ထုတ်ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-lib-box,
+        kind: rectangle,
+        x: 270,
+        y: 245,
+        width: 270,
+        height: 190,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-lib-label,
+        kind: text,
+        x: 295,
+        y: 262,
+        width: 220,
+        height: 36,
+        text: "library",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-fn-fee,
+        kind: text,
+        x: 295,
+        y: 318,
+        width: 230,
+        height: 36,
+        text: "deliveryFee()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-fn-rider,
+        kind: text,
+        x: 295,
+        y: 372,
+        width: 230,
+        height: 36,
+        text: "bookRider()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-no-types,
+        kind: text,
+        x: 270,
+        y: 465,
+        width: 520,
+        height: 36,
+        text: "type တွေ export မလုပ်ထား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 550,
+        y: 250,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 550,
+        y: 320,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-arrow-3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 550,
+        y: 390,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-params,
+        kind: text,
+        x: 620,
+        y: 252,
+        width: 470,
+        height: 36,
+        text: "Parameters · parameter တွေ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-return,
+        kind: text,
+        x: 620,
+        y: 322,
+        width: 470,
+        height: 36,
+        text: "ReturnType · ပြန်ပေးတဲ့ type",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-awaited,
+        kind: text,
+        x: 620,
+        y: 392,
+        width: 470,
+        height: 36,
+        text: "Awaited · Promise ထဲက type",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-follow,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 760,
+        height: 36,
+        text: "library ပြောင်းရင် ကိုယ့် type လည်း လိုက်ပြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board B: derive what must change together; keep separate what has a different job.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "ထုတ်ယူမလား၊ သီးသန့် ရေးမလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-derive,
+        kind: text,
+        x: 280,
+        y: 245,
+        width: 800,
+        height: 36,
+        text: "① အတူ ပြောင်းရမယ့် type → ထုတ်ယူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-derive-ex,
+        kind: text,
+        x: 320,
+        y: 300,
+        width: 760,
+        height: 36,
+        text: "library ရဲ့ လိပ်စာ → Address",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-decouple,
+        kind: text,
+        x: 280,
+        y: 385,
+        width: 800,
+        height: 36,
+        text: "② အလုပ် မတူတဲ့ type → သီးသန့် ရေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-form,
+        kind: text,
+        x: 320,
+        y: 440,
+        width: 760,
+        height: 36,
+        text: "form · customer ရိုက်တဲ့ စာသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-row,
+        kind: text,
+        x: 320,
+        y: 492,
+        width: 760,
+        height: 36,
+        text: "database row · id နဲ့ ဖန်တီးတဲ့ အချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-question,
+        kind: text,
+        x: 280,
+        y: 580,
+        width: 800,
+        height: 36,
+        text: "မေးရမှာ · ဒီ နှစ်ခု အတူ ပြောင်းရမှာလား",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3121
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Function ကနေ type ထုတ်ယူ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ key of ရယ်၊ type of ရယ်၊ indexed access ရယ်ကို သုံးပြီး၊
+      object တွေနဲ့ တန်ဖိုးတွေကနေ type ကို ထုတ်ယူခဲ့ပါတယ်။ ဒီ lesson မှာတော့ function တစ်ခုကနေ type
+      ထုတ်ယူပုံနဲ့၊ union type တွေကို ပြောင်းပေးတဲ့ utility type တွေကို ကြည့်သွားပါမယ်။
+      [[mark:draw-lib]] ဆိုင်က အော်ဒါတွေကို အိမ်အရောက် ပို့ဖို့၊ ပို့ဆောင်ရေး ကုမ္ပဏီ တစ်ခုရဲ့ library
+      ကို သုံးတယ် ဆိုပါစို့။ အဲဒီ library မှာ ပို့ခ တွက်တဲ့ function နဲ့ ပို့ဆောင်သူကို ခေါ်တဲ့ function
+      ပါပါတယ်။ [[mark:draw-no-types]] ပြဿနာက function တွေကိုပဲ export လုပ်ပြီး၊ လိပ်စာ ပုံစံ၊ ရလဒ် ပုံစံ
+      ဆိုတဲ့ type တွေကိုတော့ export မလုပ်ထားတာပါ။ library တွေမှာ ဒီလို မကြာခဏ ကြုံရလို့၊ အဲဒီ
+      ပုံစံတွေကို လက်နဲ့ ကူးရေးလိုက်ချင်စိတ် ပေါ်လာပါတယ်။ [[mark:draw-derive]] ဒါပေမဲ့ TypeScript မှာ
+      function ရဲ့ parameter တွေကို ထုတ်ပေးတဲ့ Parameters ရယ်၊ ပြန်ပေးတဲ့ type ကို ထုတ်ပေးတဲ့ ReturnType
+      ရယ်၊ Promise ထဲက type ကို ထုတ်ပေးတဲ့ Awaited ရယ် ဆိုတဲ့ utility type တွေ ပါပြီးသားပါ။
+      [[mark:draw-follow]] ဒါတွေနဲ့ ထုတ်ယူထားရင်၊ library က ပုံစံ ပြောင်းတဲ့အခါ ကိုယ့် type တွေလည်း
+      အလိုလို လိုက်ပြောင်းသွားပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (deriving types from functions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-lib
+        type: whiteboard.apply
+        at: { mark: draw-lib }
+        upsertIds: [a-lib-box, a-lib-label, a-fn-fee, a-fn-rider]
+        drawMs: 2400
+      - id: draw-no-types
+        type: whiteboard.apply
+        at: { mark: draw-no-types }
+        upsertIds: [a-no-types]
+        drawMs: 1400
+      - id: draw-derive
+        type: whiteboard.apply
+        at: { mark: draw-derive }
+        upsertIds: [a-arrow-1, a-params, a-arrow-2, a-return, a-arrow-3, a-awaited]
+        drawMs: 4200
+      - id: draw-follow
+        type: whiteboard.apply
+        at: { mark: draw-follow }
+        upsertIds: [a-follow]
+        drawMs: 1500
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-delivery]] ဒါက ပို့ဆောင်ရေး library
+      ပါ။ တခြား အဖွဲ့ ရေးထားတဲ့ package တစ်ခုလို့ သဘောထားပါ။ [[mark:select-address-param]] ပို့ခ တွက်တဲ့
+      function က မြို့နယ်၊ လမ်းနဲ့ ဖုန်းနံပါတ် ပါတဲ့ လိပ်စာ တစ်ခုကို ယူပါတယ်။ [[mark:select-express]]
+      ဒုတိယ parameter ကတော့ အမြန် ပို့မလား ဆိုတာ ဖြစ်ပြီး၊ default တန်ဖိုး ရှိလို့ မထည့်လည်း ရပါတယ်။
+      [[mark:select-fee-return]] ပြီးတော့ ပို့ခနဲ့ ကြာမယ့် မိနစ်ကို object တစ်ခုနဲ့ ပြန်ပေးပါတယ်။
+      [[mark:select-book-rider]] အောက်က async function ကတော့ ပို့ဆောင်သူကို ခေါ်ပြီး၊ သူ့ နာမည်၊
+      ရောက်မယ့် မိနစ်နဲ့ ဖုန်းဆက်ရမယ့် နံပါတ်ကို ပြန်ပေးပါတယ်။ [[mark:open-main]] main ဖိုင်ကို
+      ကြည့်ရအောင်။ [[mark:select-copied]] ဒီ type က library ထဲက လိပ်စာ ပုံစံကို ကိုယ်တိုင် ကူးရေးထားတာ
+      ဖြစ်ပြီး၊ မြို့နယ်နဲ့ လမ်းပဲ ပါပါတယ်။ [[mark:select-calls]] အောက်မှာ အိမ်လိပ်စာကို ဒီ type နဲ့
+      ရေးပြီး၊ ပို့ခ တွက်တာ၊ ပို့ဆောင်သူ ခေါ်တာတွေကို လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: More on Functions (optional and default parameters)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#optional-parameters",
+        }
+      - {
+          title: "MDN: async function",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-delivery
+        type: workspace.openFile
+        at: { mark: open-delivery }
+        path: src/delivery.ts
+      - id: select-address-param
+        type: editor.select
+        at: { mark: select-address-param }
+        target:
+          {
+            file: src/delivery.ts,
+            text: "address: { township: string; street: string; phone: string }",
+            occurrence: 1,
+          }
+      - id: select-express
+        type: editor.select
+        at: { mark: select-express }
+        target: { file: src/delivery.ts, text: "express = false", occurrence: 1 }
+      - id: select-fee-return
+        type: editor.select
+        at: { mark: select-fee-return }
+        target:
+          {
+            file: src/delivery.ts,
+            text: "return { fee: express ? 3000 : 1500, minutes: express ? 20 : 45 };",
+            occurrence: 1,
+          }
+      - id: select-book-rider
+        type: editor.select
+        at: { mark: select-book-rider }
+        target:
+          {
+            file: src/delivery.ts,
+            text: 'return { rider: "မောင်မောင်", minutes: 15, callTo: address.phone };',
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-copied
+        type: editor.select
+        at: { mark: select-copied }
+        target:
+          {
+            file: src/main.ts,
+            text: "type Address = { township: string; street: string };",
+            occurrence: 1,
+          }
+      - id: select-calls
+        type: editor.select
+        at: { mark: select-calls }
+        target: { file: src/main.ts, text: "const home: Address = {", occurrence: 1 }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output ကို အရင် ကြည့်ပါ။ ပို့ခက ၃၀၀၀ ကျပ်၊ မိနစ် ၂၀ နဲ့
+      မှန်ပေမယ့်၊ ဒုတိယ line မှာ ပို့ဆောင်သူက undefined ကို ဖုန်းဆက်မယ်လို့ ပြနေပါတယ်။ ကိုယ့်
+      လိပ်စာထဲမှာ ဖုန်းနံပါတ် မပါလို့ပါ။ [[mark:read-errors]] Errors မှာလည်း function နှစ်ခုလုံးကို
+      လိပ်စာ ပို့တဲ့ နေရာမှာ၊ ဖုန်းနံပါတ် မပါဘူး ဆိုတဲ့ error နှစ်ခု ရှိပါတယ်။ [[mark:read-why]] library
+      ရဲ့ version အသစ်မှာ လိပ်စာထဲကို ဖုန်းနံပါတ် ထပ်ထည့်လိုက်ပေမယ့်၊ ကိုယ် ကူးရေးထားတဲ့ type ကတော့
+      အဟောင်းအတိုင်း ကျန်နေခဲ့တာပါ။ ကူးရေးထားတဲ့ type က မူရင်းနဲ့ ချိတ်မထားလို့၊ မူရင်း ပြောင်းတိုင်း
+      ကိုယ်တိုင် လိုက်ပြင်ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (why derive types from functions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-two-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-fee-call
+        type: expect.preview
+        at: { afterAction: expect-two-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'phone' is missing in type 'Address' but required in type"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-rider-call
+        type: expect.preview
+        at: { afterAction: expect-fee-call }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Property 'phone' is missing in type 'Address' but required in type"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-fee-output
+        type: expect.preview
+        at: { afterAction: expect-rider-call }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "ပို့ခ 3000 ကျပ်၊ 20 မိနစ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-undefined-phone
+        type: expect.preview
+        at: { afterAction: expect-fee-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "မောင်မောင် က undefined ကို ဖုန်းဆက်ပါမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: parameters
+    chapter: "Parameters နဲ့ typeof"
+    narration: >
+      [[mark:type-params]] ဒါဆို library ရဲ့ function ကနေ parameter type တွေကို တိုက်ရိုက်
+      ထုတ်ယူကြည့်ရအောင်။ ပထမဆုံး Parameters ထဲကို ပို့ခ တွက်တဲ့ function ရဲ့ နာမည်ကို ဒီအတိုင်း ထည့်ကြည့်ပါမယ်။
+      [[mark:read-value-error]] Errors ရဲ့ အပေါ်ဆုံးမှာ error အသစ် ပေါ်လာပါတယ်။ ဒီ နာမည်က တန်ဖိုး တစ်ခု
+      ဖြစ်ပေမယ့် type နေရာမှာ သုံးထားတယ်၊ type of ကို ဆိုလိုတာလား လို့ မေးနေတာပါ။ function က runtime မှာ
+      ရှိတဲ့ တန်ဖိုး ဖြစ်လို့ type ပိုင်းမှာ တိုက်ရိုက် သုံးလို့ မရပါဘူး။ [[mark:type-typeof]] ဒါကြောင့်
+      ရှေ့မှာ type of ထည့်ပြီး function ရဲ့ type ကို ယူပေးရပါမယ်။ [[mark:read-typeof]] ဒီ error
+      ပျောက်သွားပြီး၊ ဖုန်းနံပါတ် error နှစ်ခုပဲ ကျန်ပါတော့တယ်။ [[mark:type-params-query]] ဘာ ရလာလဲ query
+      comment နဲ့ ကြည့်ရအောင်။ [[mark:read-tuple]] Types မှာ tuple တစ်ခု
+      ပေါ်လာပါပြီ။ parameter တစ်ခုစီက tuple ထဲက နေရာ တစ်ခုစီ ဖြစ်ပြီး၊ နာမည်တွေကိုလည်း label အနေနဲ့
+      ထိန်းထားပါတယ်။ ဒုတိယ နေရာကတော့ မထည့်လည်း ရတဲ့ parameter ဖြစ်လို့၊ question mark ပါပြီး undefined
+      လည်း ဖြစ်နိုင်တယ်လို့ ပြထားပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Parameters<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#parameterstype",
+        }
+      - {
+          title: "TypeScript Handbook: Typeof Type Operator",
+          url: "https://www.typescriptlang.org/docs/handbook/2/typeof-types.html",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (Parameters)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: type-params
+        type: editor.type
+        at: { mark: type-params }
+        target:
+          {
+            file: src/main.ts,
+            after: "import { bookRider, deliveryFee } from \"./delivery\";\n\n",
+            occurrence: 1,
+          }
+        text: "type FeeArgs = Parameters<deliveryFee>;\n\n"
+        cadence: line-by-line
+      - id: expect-value-error
+        type: expect.preview
+        at: { afterAction: type-params }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-value-code
+        type: expect.preview
+        at: { afterAction: expect-value-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2749" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-value-text
+        type: expect.preview
+        at: { afterAction: expect-value-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'deliveryFee' refers to a value, but is being used as a type here. Did you mean 'typeof deliveryFee'?"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-typeof
+        type: editor.type
+        at: { mark: type-typeof }
+        target: { file: src/main.ts, after: "type FeeArgs = Parameters<", occurrence: 1 }
+        text: "typeof "
+        cadence: fast-explainer
+      - id: expect-typeof-fixed
+        type: expect.preview
+        at: { afterAction: type-typeof }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-params-query
+        type: editor.type
+        at: { mark: type-params-query }
+        target:
+          {
+            file: src/main.ts,
+            after: "type FeeArgs = Parameters<typeof deliveryFee>;\n",
+            occurrence: 1,
+          }
+        text: "//   ^?\n"
+      - id: expect-tuple
+        type: expect.preview
+        at: { afterAction: type-params-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "type FeeArgs = [address: {"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-tuple-optional
+        type: expect.preview
+        at: { afterAction: expect-tuple }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    phone: string;\n}, express?: boolean | undefined]"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: derive-address
+    narration: >
+      [[mark:type-derive]] အခု ကူးရေးထားတဲ့ လိပ်စာ type ကို ဒီ tuple ရဲ့ ပထမ နေရာနဲ့ အစားထိုးပါမယ်။
+      indexed access နဲ့ ပထမ နေရာကို ယူတဲ့ line အသစ် ရေးပြီး၊ အဟောင်းကို comment ပိတ်လိုက်ပါမယ်။
+      [[mark:read-moved]] function ခေါ်တဲ့ နေရာက error နှစ်ခု ပျောက်သွားပြီး၊ အိမ်လိပ်စာမှာ ဖုန်းနံပါတ်
+      မပါဘူး ဆိုတဲ့ error တစ်ခုတည်း ကျန်ပါတော့တယ်။ ကိုယ့် type က library နဲ့ ချိတ်မိသွားလို့၊ error က
+      တကယ် ပြင်ရမယ့် နေရာကို ရောက်လာတာပါ။ [[mark:type-phone]] အိမ်လိပ်စာထဲကို ဖုန်းနံပါတ်
+      ထည့်လိုက်ပါမယ်။ ပို့ဆောင်သူက အိမ်ရောက်တဲ့အခါ ဒီ နံပါတ်ကို ဖုန်းဆက်မှာ ဖြစ်လို့၊ library က မဖြစ်မနေ
+      တောင်းတာပါ။ [[mark:read-phone-fixed]] error မကျန်တော့ဘဲ၊ Output မှာလည်း undefined အစား ဖုန်းနံပါတ်
+      အမှန် ပေါ်လာပါပြီ။ library က လိပ်စာကို ထပ်ပြောင်းရင်လည်း၊ ဒီ type က အလိုလို လိုက်ပြောင်းသွားမှာပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Indexed Access Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/indexed-access-types.html",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (a single source of truth)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: type-derive
+        type: editor.type
+        at: { mark: type-derive }
+        target: { file: src/main.ts, after: "// ပို့ရမယ့် လိပ်စာ\n", occurrence: 1 }
+        text: "type Address = FeeArgs[0];\n// "
+        cadence: block
+      - id: expect-derive-one
+        type: expect.preview
+        at: { afterAction: type-derive }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-derive-code
+        type: expect.preview
+        at: { afterAction: expect-derive-one }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2741" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-derive-text
+        type: expect.preview
+        at: { afterAction: expect-derive-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'phone' is missing in type '{ township: string; street: string; }' but required in type"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-phone
+        type: editor.type
+        at: { mark: type-phone }
+        target: { file: src/main.ts, after: "  street: \"ရွှေဂုံတိုင် လမ်း\",\n", occurrence: 1 }
+        text: "  phone: \"09 450 123 456\",\n"
+        cadence: fast-explainer
+      - id: expect-phone-fixed
+        type: expect.preview
+        at: { afterAction: type-phone }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-phone-output
+        type: expect.preview
+        at: { afterAction: expect-phone-fixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "မောင်မောင် က 09 450 123 456 ကို ဖုန်းဆက်ပါမယ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: return-type
+    chapter: "ReturnType နဲ့ Awaited"
+    narration: >
+      [[mark:type-quote]] function ပြန်ပေးတဲ့ type ကိုတော့ ReturnType နဲ့ ထုတ်ယူပါတယ်။ ပို့ခ တွက်တဲ့
+      function အတွက် ရေးပြီး query comment နဲ့ ကြည့်ပါမယ်။ [[mark:read-quote]] ပို့ခနဲ့ မိနစ် ပါတဲ့
+      object type ကို ပြနေပါတယ်။ library က ဒီ type ကို ရေးမထားဘဲ TypeScript က infer လုပ်ထားတာ
+      ဖြစ်ပေမယ့်၊ ReturnType က အဲဒီ type ကို ယူပေးနိုင်ပါတယ်။ ပို့ခကို ပြတဲ့ function တစ်ခု ရေးရင်၊
+      parameter ကို ဒီ type နဲ့ ကြေညာလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (ReturnType<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#returntypetype",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (ReturnType)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: type-quote
+        type: editor.type
+        at: { mark: type-quote }
+        target:
+          {
+            file: src/main.ts,
+            after: "type FeeArgs = Parameters<typeof deliveryFee>;\n//   ^?\n",
+            occurrence: 1,
+          }
+        text: "type Quote = ReturnType<typeof deliveryFee>;\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-quote
+        type: expect.preview
+        at: { afterAction: type-quote }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute:
+          { name: data-type, value: "type Quote = {\n    fee: number;\n    minutes: number;\n}" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: awaited
+    narration: >
+      [[mark:type-booking]] ပို့ဆောင်သူ ခေါ်တဲ့ function အတွက်လည်း ReturnType နဲ့ ထုတ်ကြည့်ရအောင်။
+      [[mark:read-promise]] ဒီတစ်ခါတော့ object ကို Promise နဲ့ ပတ်ထားပါတယ်။ async function က Promise ကို
+      ပြန်ပေးလို့ပါ။ ဒါပေမဲ့ ကိုယ့် code မှာ သုံးရမှာက await လုပ်ပြီးမှ ရမယ့် object ပါ။
+      [[mark:type-awaited]] ဒါကြောင့် Awaited နဲ့ ထပ်ပတ်လိုက်ပါမယ်။ [[mark:read-awaited]] Promise
+      ပျောက်သွားပြီး၊ ပို့ဆောင်သူရဲ့ နာမည်၊ မိနစ်နဲ့ ဖုန်းနံပါတ် ပါတဲ့ object ကိုပဲ ပြပါတော့တယ်။ Awaited
+      က တန်ဖိုး ပိုင်းမှာ await လုပ်တာကို type ပိုင်းမှာ လုပ်ပေးတာပါ။ async function တွေမှာ ReturnType
+      နဲ့ Awaited ကို ဒီလို တွဲသုံးတာ မကြာခဏ တွေ့ရပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Awaited<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#awaitedtype",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (Awaited)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: type-booking
+        type: editor.type
+        at: { mark: type-booking }
+        target:
+          {
+            file: src/main.ts,
+            after: "type Quote = ReturnType<typeof deliveryFee>;\n//   ^?\n",
+            occurrence: 1,
+          }
+        text: "type Booking = ReturnType<typeof bookRider>;\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-promise
+        type: expect.preview
+        at: { afterAction: type-booking }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute:
+          {
+            name: data-type,
+            value: "type Booking = Promise<{\n    rider: string;\n    minutes: number;\n    callTo: string;\n}>",
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-awaited
+        type: editor.type
+        at: { mark: type-awaited }
+        target: { file: src/main.ts, after: "type Booking = ", occurrence: 1 }
+        text: "Awaited<"
+        cadence: fast-explainer
+      - id: type-awaited-close
+        type: editor.type
+        at: { afterAction: type-awaited }
+        target: { file: src/main.ts, after: "ReturnType<typeof bookRider>", occurrence: 1 }
+        text: ">"
+        cadence: fast-explainer
+      - id: expect-awaited
+        type: expect.preview
+        at: { afterAction: type-awaited-close }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        attribute:
+          {
+            name: data-type,
+            value: "type Booking = {\n    rider: string;\n    minutes: number;\n    callTo: string;\n}",
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-awaited-clean
+        type: expect.preview
+        at: { afterAction: expect-awaited }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: non-nullable
+    chapter: "Union ကို ပြောင်းတဲ့ utility type"
+    narration: >
+      [[mark:type-express]] ထုတ်ယူထားတဲ့ type တွေကို ထပ်ပြောင်းလို့လည်း ရပါတယ်။ tuple ရဲ့ ဒုတိယ နေရာကို
+      ယူပြီး query comment နဲ့ ကြည့်ပါမယ်။ [[mark:read-express-union]] boolean နဲ့ undefined ရဲ့ union
+      ဖြစ်နေပါတယ်။ ဆိုင်ရဲ့ setting ထဲမှာ အမြန် ပို့မလား ဆိုတာကို true ဒါမှမဟုတ် false နဲ့ အမြဲ
+      သိမ်းချင်ရင်တော့၊ undefined မပါတဲ့ type လိုပါတယ်။ [[mark:type-nonnullable]] ဒါကြောင့် NonNullable
+      နဲ့ ပတ်လိုက်ပါမယ်။ [[mark:read-nonnullable]] undefined ပျောက်ပြီး boolean တစ်ခုတည်း ကျန်ပါတော့တယ်။
+      NonNullable က union ထဲက null နဲ့ undefined ကို ဖယ်ပေးတဲ့ utility type ပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (NonNullable<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#nonnullabletype",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (transforming derived types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: type-express
+        type: editor.type
+        at: { mark: type-express }
+        target:
+          {
+            file: src/main.ts,
+            after: "type Booking = Awaited<ReturnType<typeof bookRider>>;\n//   ^?\n",
+            occurrence: 1,
+          }
+        text: "type Express = FeeArgs[1];\n//   ^?\n"
+        cadence: line-by-line
+      - id: expect-express-union
+        type: expect.preview
+        at: { afterAction: type-express }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-4 }
+        attribute: { name: data-type, value: "type Express = boolean | undefined" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-nonnullable
+        type: editor.type
+        at: { mark: type-nonnullable }
+        target: { file: src/main.ts, after: "type Express = ", occurrence: 1 }
+        text: "NonNullable<"
+        cadence: fast-explainer
+      - id: type-nonnullable-close
+        type: editor.type
+        at: { afterAction: type-nonnullable }
+        target: { file: src/main.ts, after: "NonNullable<FeeArgs[1]", occurrence: 1 }
+        text: ">"
+        cadence: fast-explainer
+      - id: expect-nonnullable
+        type: expect.preview
+        at: { afterAction: type-nonnullable-close }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-4 }
+        attribute: { name: data-type, value: "type Express = boolean" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-nonnullable-clean
+        type: expect.preview
+        at: { afterAction: expect-nonnullable }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: exclude-extract
+    narration: >
+      [[mark:open-kitchen]] union ကို ပြောင်းပေးတဲ့ utility type နောက်ထပ် နှစ်ခုကို မီးဖိုချောင် screen
+      ဖိုင်မှာ ကြည့်ရအောင်။ [[mark:select-status]] ဒါက အော်ဒါ အခြေအနေ လေးမျိုးရဲ့ union ပါ။
+      [[mark:type-exclude]] မီးဖိုချောင် screen မှာ ငွေချေပြီးသား အော်ဒါတွေကို မပြချင်လို့၊ Exclude နဲ့
+      paid ကို ဖယ်ပြီး query comment နဲ့ ကြည့်ပါမယ်။ [[mark:read-exclude]] Types ရဲ့ အပေါ်ဆုံးမှာ
+      ကျန်တဲ့ အခြေအနေ သုံးမျိုးပဲ ပြနေပါတယ်။ Exclude က union ထဲကနေ ပေးလိုက်တဲ့ type နဲ့ ကိုက်တဲ့ member
+      တွေကို ဖယ်ထုတ်ပါတယ်။ [[mark:select-events]] အောက်က union ကတော့ type ဆိုတဲ့ property နဲ့ ခွဲထားတဲ့
+      မီးဖိုချောင် event သုံးမျိုးပါ။ [[mark:type-extract]] ဖျော်ပြီးလို့ ခေါင်းလောင်း တီးရမယ့် event
+      ကိုပဲ Extract နဲ့ ရွေးထုတ်ပါမယ်။ member တစ်ခုလုံး မရေးဘဲ၊ type က done ဖြစ်တဲ့ object ပုံစံလောက်ပဲ
+      ပေးလိုက်ပါတယ်။ [[mark:read-extract]] Types မှာ done event တစ်ခုတည်းကို ပစ္စည်းနဲ့ မိနစ်
+      အပြည့်အစုံနဲ့ ပြနေပါတယ်။ Extract က Exclude ရဲ့ ပြောင်းပြန် ဖြစ်ပြီး၊ ကိုက်တဲ့ member တွေကိုပဲ
+      ချန်ထားပါတယ်။ [[mark:union-vs-object]] သတိထားရမှာက၊ ဒီ utility type သုံးခုက union ရဲ့ member
+      တွေနဲ့ အလုပ်လုပ်ပြီး၊ Pick နဲ့ Omit ကတော့ object ရဲ့ property တွေနဲ့ အလုပ်လုပ်တာပါ။ ဒါကြောင့်
+      union ထဲက member တစ်ခုကို ရွေးချင်ရင် Pick မဟုတ်ဘဲ Extract ကို သုံးရပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Exclude<UnionType, ExcludedMembers>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#excludeuniontype-excludedmembers",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types (Extract<Type, Union>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#extracttype-union",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (Exclude, Extract)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: open-kitchen
+        type: workspace.openFile
+        at: { mark: open-kitchen }
+        path: src/kitchen.ts
+      - id: select-status
+        type: editor.select
+        at: { mark: select-status }
+        target:
+          { file: src/kitchen.ts, text: '"pending" | "brewing" | "ready" | "paid"', occurrence: 1 }
+      - id: type-exclude
+        type: editor.type
+        at: { mark: type-exclude }
+        target:
+          {
+            file: src/kitchen.ts,
+            after: "export type OrderStatus = \"pending\" | \"brewing\" | \"ready\" | \"paid\";\n",
+            occurrence: 1,
+          }
+        text: "export type OnScreen = Exclude<OrderStatus, \"paid\">;\n//          ^?\n"
+        cadence: line-by-line
+      - id: expect-exclude
+        type: expect.preview
+        at: { afterAction: type-exclude }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: 'type OnScreen = "pending" | "brewing" | "ready"' }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-exclude-count
+        type: expect.preview
+        at: { afterAction: expect-exclude }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-types }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-events
+        type: editor.select
+        at: { mark: select-events }
+        target:
+          {
+            file: src/kitchen.ts,
+            text: "  | { type: \"ordered\"; item: string }\n  | { type: \"done\"; item: string; minutes: number }\n  | { type: \"cancelled\"; reason: string };",
+            occurrence: 1,
+          }
+      - id: type-extract
+        type: editor.type
+        at: { mark: type-extract }
+        target:
+          {
+            file: src/kitchen.ts,
+            after: "  | { type: \"cancelled\"; reason: string };\n",
+            occurrence: 1,
+          }
+        text: "\nexport type Bell = Extract<KitchenEvent, { type: \"done\" }>;\n//          ^?\n"
+        cadence: line-by-line
+      - id: expect-extract
+        type: expect.preview
+        at: { afterAction: type-extract }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute:
+          {
+            name: data-type,
+            value: "type Bell = {\n    type: \"done\";\n    item: string;\n    minutes: number;\n}",
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-extract-count
+        type: expect.preview
+        at: { afterAction: expect-extract }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-types }
+        attribute: { name: data-count, value: "6" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: derive-or-decouple
+    chapter: "ထုတ်ယူမလား၊ သီးသန့် ရေးမလား"
+    narration: >
+      [[mark:board-decide]] ဒါဆို type တိုင်းကို ထုတ်ယူသင့်သလား။ အမြဲတော့ မဟုတ်ပါဘူး။ ထုတ်ယူထားတဲ့ type
+      က မူရင်းနဲ့ ချိတ်ထားလို့၊ မူရင်း ပြောင်းတိုင်း လိုက်ပြောင်းပါတယ်။ [[mark:draw-derive-side]] အတူတူ
+      ပြောင်းရမယ့် type တွေဆိုရင် ထုတ်ယူပါ။ ဒီနေ့ ကြည့်ခဲ့တဲ့ library ရဲ့ လိပ်စာနဲ့ ကိုယ့် လိပ်စာ type လိုမျိုး၊
+      တစ်ခု ပြောင်းရင် နောက်တစ်ခုလည်း မဖြစ်မနေ ပြောင်းရမှာ ဖြစ်လို့၊ ချိတ်ထားတာက အလုပ် သက်သာစေပါတယ်။
+      [[mark:draw-decouple-side]] ဒါပေမဲ့ အလုပ် မတူတဲ့ type တွေကိုတော့ သီးသန့် ရေးတာ ပိုကောင်းပါတယ်။
+      ဥပမာအားဖြင့်၊ customer ဖြည့်တဲ့ အော်ဒါ form ရဲ့ type နဲ့ database ထဲက အော်ဒါ row ရဲ့ type ကို
+      စဉ်းစားကြည့်ပါ။ form ကနေ ရတဲ့ တန်ဖိုးတွေက စာသား ဖြစ်ပြီး၊ row မှာတော့ id နဲ့ ဖန်တီးတဲ့ အချိန်
+      ပါပါတယ်။ [[mark:decouple-why]] form type ကို row type ကနေ Omit နဲ့ ထုတ်ယူထားရင်၊ database မှာ
+      column အသစ် ထည့်တိုင်း form type ထဲကိုလည်း ရောက်လာပြီး၊ form မှာ မမေးတဲ့ အချက်ကိုတောင်
+      ထည့်ပေးရမယ်လို့ error ပြပါလိမ့်မယ်။ [[mark:draw-question]] ဒါကြောင့် ဆုံးဖြတ်ရ ခက်ရင်၊ ဒီ type
+      နှစ်ခုက အမြဲ အတူတူ ပြောင်းရမှာလား လို့ မေးကြည့်ပါ။ ဟုတ်ရင် ထုတ်ယူပြီး၊ မဟုတ်ရင်တော့ code နည်းနည်း
+      ထပ်နေပါစေ၊ သီးသန့်ပဲ ရေးထားပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types (deriving vs decoupling)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-decide }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-derive-side
+        type: whiteboard.apply
+        at: { mark: draw-derive-side }
+        upsertIds: [b-derive, b-derive-ex]
+        drawMs: 2400
+      - id: draw-decouple-side
+        type: whiteboard.apply
+        at: { mark: draw-decouple-side }
+        upsertIds: [b-decouple, b-form, b-row]
+        drawMs: 3200
+      - id: draw-question
+        type: whiteboard.apply
+        at: { mark: draw-question }
+        upsertIds: [b-question]
+        drawMs: 1600
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ Parameters နဲ့ ReturnType က function ရဲ့ parameter တွေနဲ့
+      ပြန်ပေးတဲ့ type ကို ထုတ်ပေးပြီး၊ function ရဲ့ နာမည်ကို type of နဲ့ ထည့်ပေးရပါတယ်။ async function
+      ဆိုရင်တော့ Awaited နဲ့ Promise ထဲက type ကို ယူပါတယ်။ [[mark:recap-unions]] union တွေမှာတော့
+      Exclude က member တွေကို ဖယ်ပြီး Extract က ရွေးယူပါတယ်။ NonNullable ကတော့ null နဲ့ undefined ကို
+      ဖယ်ပါတယ်။ အတူတူ ပြောင်းရမယ့် type တွေကို ထုတ်ယူပြီး၊ အလုပ် မတူတဲ့ type တွေကိုတော့ သီးသန့် ထားပါ။
+      နောက် lesson မှာတော့ type annotation ရယ်၊ satisfies ရယ်၊ as ရယ် ဘယ်လို ကွာလဲ ဆိုတာနဲ့၊ error
+      တွေကို ပိတ်တဲ့ နည်းတွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: recap }
+        open: false
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: recap, offsetMs: 700 }
+        path: src/main.ts
+      - id: select-derived
+        type: editor.select
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, text: "type Address = FeeArgs[0];", occurrence: 1 }
+      - id: select-unions
+        type: editor.select
+        at: { mark: recap-unions }
+        target:
+          { file: src/main.ts, text: "type Express = NonNullable<FeeArgs[1]>;", occurrence: 1 }
+      - id: expect-file-derived
+        type: expect.file
+        at: { afterAction: select-unions }
+        path: src/main.ts
+        contains: "type FeeArgs = Parameters<typeof deliveryFee>;\n//   ^?\ntype Quote = ReturnType<typeof deliveryFee>;\n//   ^?\ntype Booking = Awaited<ReturnType<typeof bookRider>>;\n//   ^?\ntype Express = NonNullable<FeeArgs[1]>;\n"
+      - id: expect-file-address
+        type: expect.file
+        at: { afterAction: expect-file-derived }
+        path: src/main.ts
+        contains: "type Address = FeeArgs[0];\n// type Address = { township: string; street: string };"
+      - id: expect-file-kitchen
+        type: expect.file
+        at: { afterAction: expect-file-address }
+        path: src/kitchen.ts
+        contains: 'export type Bell = Extract<KitchenEvent, { type: "done" }>;'
+checks:
+  - { type: timing.p95Ms, max: 300 }
