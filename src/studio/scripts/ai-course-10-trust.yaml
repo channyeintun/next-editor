@@ -1,0 +1,2485 @@
+# AI course, lesson 10: trust and transparency (Burmese, hands-on, M1 + M0).
+#
+# Start state (ws/): data/reviews.json and data/support.json (COURSE-KIT §4.2, §4.4, unchanged) and
+# src/data.js's older labelled reviews (from base/); src/messages.js (pinned) builds the sorter's
+# sample data: seven new messages for မြမြ's inbox (r18 r22 q15 q13 r23 r11 q27), 16 messages she
+# checked by hand last week, and 89 labelled training messages; src/inbox.js (pinned) draws the inbox
+# in #app (group chips; the badge and the "why" button when view() adds them; the line choices) and
+# the panel cards `ai-about` (input "Training data": sources, languages, version, where it is weak) and
+# `ai-checks` (metrics "Past checks", badge `ဒီ page ထဲမှာ train ထားတဲ့ model`: right 12 / 16, then the
+# sure / check split); src/main.js trains the naive Bayes sorter (src/ml.js) in the page and has
+# view(text, line) with an empty "Trust cues" section.
+#
+# Edits, all insert-only, one line each (line-by-line), inside view():
+#   1. card.check = sure < line;                     badges: 3 sure, 4 check; Past checks 10 / 11 · 2 / 5
+#   2. if (sure < 0.6) card.group = "unsorted";      q13 (48%, wrongly a complaint) → မခွဲရသေးတာ
+#   3. card.why = explain(sorter, text);             a ဘာကြောင့်လဲ button on every message
+# Clicks (after the last edit): why-6 → "အရမ်း · မြန်တာပဲ ကြောင့် ချီးကျူး 92%" (the sarcastic complaint,
+# confidently wrong); line-2 (95%) → message 6 asks for a check too; Past checks 7 / 7 · 5 / 9.
+# M1: the sorter is trained in the page (deterministic: sim = verify); M0: the cues and the UI.
+#
+# Boards: (A) the mini blueprint, Governance highlighted; (P) predictable apps vs AI's failures;
+# (D) the trust dial; (U) UX techniques; (T) the module's takeaways; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-10-trust.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-10-trust
+  title: "AI course 10: Trust နဲ့ transparency"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/reviews.json: |
+        {
+         "note": "Synthetic sample reviews written for the AI course (not real customers). lang: my, en, mixed, my-latn (romanized Burmese). sentiment and type are the shop's own labels; tags mark edge cases.",
+         "reviews": [
+          { "id": "r01", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ချိုဆိမ့် တစ်ခွက်နဲ့ မနက်တိုင်း စတယ်။ အရသာ တစ်ခါမှ မပြောင်းဘူး။" },
+          { "id": "r02", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။" },
+          { "id": "r03", "item": "laphet-yay", "lang": "en", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Best tea in Bahan, but Sunday mornings are packed and slow." },
+          { "id": "r04", "item": "palata", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ပလာတာက ကြွပ်ပြီး ကောင်းတယ်၊ ဒါပေမဲ့ ဆီ နည်းနည်း များတယ်။" },
+          { "id": "r05", "item": "coffee", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "ကော်ဖီ ပူပူလေး သောက်ရတာ စိတ်ချမ်းသာတယ် ☕" },
+          { "id": "r06", "item": "shan-noodles", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မှာပြီးမှ ကုန်သွားပြီလို့ ပြောတယ်၊ ပိုက်ဆံ ပြန်ရဖို့ နှစ်ရက် စောင့်ရတယ်။" },
+          { "id": "r07", "item": "mohinga", "lang": "mixed", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Mohinga က အရမ်း ကောင်းတယ်၊ but the price went up again." },
+          { "id": "r08", "item": "lime-juice", "lang": "en", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Lime juice was too sweet for me." },
+          { "id": "r09", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။" },
+          { "id": "r10", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "👍👍👍" },
+          { "id": "r11", "item": "mohinga", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["sarcasm"], "text": "အရမ်း မြန်တာပဲ၊ နှစ်နာရီပဲ စောင့်ရတယ်။" },
+          { "id": "r12", "item": null, "lang": "en", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "Can I order 50 cups for an office event next Friday?" },
+          { "id": "r13", "item": "falooda", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နေပူတဲ့နေ့မှာ ဖာလူဒါ အေးအေးလေးက အကောင်းဆုံးပဲ။" },
+          { "id": "r14", "item": "mohinga", "lang": "my-latn", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "Mohinga ka a yan kg tl. Nout tit khout lr mal." },
+          { "id": "r15", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "ညနေ ၈ နာရီ ထိ ဖွင့်လား။" },
+          { "id": "r16", "item": "palata", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["pii"], "text": "အော်ဒါ မရောက်သေးဘူး။ 09 000 123 456 ကို ပြန်ဆက်ပေးပါ။" },
+          { "id": "r17", "item": "coffee", "lang": "en", "stars": 2, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Coffee tasted burnt today. Usually it's great." },
+          { "id": "r18", "item": "laphet-thoke", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "လက်ဖက်သုပ် အရသာ ပြည့်တယ်၊ နည်းနည်း စပ်တယ်။" },
+          { "id": "r19", "item": null, "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": ["long"], "text": "ဒီဆိုင်ကို ကျောင်းတက်ကတည်းက လာနေတာ ဆယ်နှစ်ကျော်ပြီ။ လက်ဖက်ရည် အရသာက အရင်အတိုင်း ကောင်းတုန်းပဲ။ ဒါပေမဲ့ စနေ တနင်္ဂနွေ မနက်ဆိုရင် ထိုင်ခုံ ရဖို့ ခက်တယ်၊ ကားရပ်ဖို့လည်း နေရာ မရှိဘူး။ delivery ကတော့ မြန်တယ်။" },
+          { "id": "r20", "item": "e-kya-kwe", "lang": "my", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "အီကြာကွေး မနက်က ကြော်ထားတာ ညနေ ရောက်တော့ ပျော့နေပြီ။" },
+          { "id": "r21", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["pii"], "text": "ကောင်တာက လှလှ က ကျွန်တော် မှာနေကျကို မှတ်မိနေတယ်၊ အရမ်း သဘောကျတယ်။" },
+          { "id": "r22", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "စမ်းချောင်းကို delivery ပို့ပေးလား။" },
+          { "id": "r23", "item": "mohinga", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The mohinga is rich and the fish broth tastes fresh." },
+          { "id": "r24", "item": "shan-noodles", "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "ရှမ်းခေါက်ဆွဲ အရသာ ကောင်းတယ်၊ ပမာဏ နည်းနည်း ထပ်ပေးရင် ပိုကောင်းမယ်။" },
+          { "id": "r25", "item": "laphet-yay", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The milk tea is strong and creamy, just how I like it." },
+          { "id": "r26", "item": "samosa", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "Crispy samosas, a little spicy, great with tea." },
+          { "id": "r27", "item": "nan-gyi-thoke", "lang": "en", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "The nan gyi thoke was too spicy and the noodles were soggy." },
+          { "id": "r28", "item": "mohinga", "lang": "en", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Tasty mohinga, but we waited forty minutes on Sunday." },
+          { "id": "r29", "item": "falooda", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "The falooda was cold and sweet, perfect for a hot afternoon." },
+          { "id": "r30", "item": "nan-gyi-thoke", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နန်းကြီးသုပ်က စပ်စပ်လေးနဲ့ အရမ်း စားကောင်းတယ်။" },
+          { "id": "r31", "item": "samosa", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "စမူဆာက ဆီစိမ်ပြီး အေးနေတယ်။" },
+          { "id": "r32", "item": "lime-juice", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "သံပုရာရည် ချဉ်ချဉ် အေးအေးလေး သောက်လို့ ကောင်းတယ်။" },
+          { "id": "r33", "item": "laphet-thoke", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "လက်ဖက်သုပ်က ငန်လွန်းတယ်၊ ပဲကြော်လည်း နည်းတယ်။" },
+          { "id": "r34", "item": "e-kya-kwe", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "အီကြာကွေး ပူပူ ကြွပ်ကြွပ်ကို လက်ဖက်ရည်နဲ့ တွဲစားရတာ အရမ်း ကောင်းတယ်။" },
+          { "id": "r35", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မုန့်ဟင်းခါး ဈေး တက်သွားပြီး ပမာဏက နည်းသွားတယ်။" },
+          { "id": "r36", "item": "coffee", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ကော်ဖီ အရသာ ကောင်းပေမယ့် ချိုလွန်းတယ်။" },
+          { "id": "r37", "item": "palata", "lang": "mixed", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "ပလာတာ ကြွပ်ကြွပ်လေး၊ really good with the bean curry." },
+          { "id": "r38", "item": "shan-noodles", "lang": "mixed", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Shan noodles ကုန်သွားပြန်ပြီ၊ third time this month." },
+          { "id": "r39", "item": "laphet-yay", "lang": "mixed", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "လက်ဖက်ရည်က ကောင်းတယ်၊ but it's hard to get a seat on Saturday morning." },
+          { "id": "r40", "item": "laphet-yay", "lang": "my-latn", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Laphet yay ka a cho lun tal." }
+         ]
+        }
+      data/support.json: |
+        {
+         "note": "Synthetic customer messages and the shop's FAQ answers, written for the AI course. route: routine (the FAQ answers it) or complex (a person or a stronger model on the server). Order 2417 is အောင်အောင်'s delivery order (a mohinga and a laphet-yay, paid twice by mistake).",
+         "faq": {
+          "hours": "တနင်္လာကနေ သောကြာအထိ မနက် ၆ နာရီကနေ ည ၈ နာရီအထိ၊ စနေ တနင်္ဂနွေမှာ မနက် ၇ နာရီကနေ ည ၉ နာရီအထိ ဖွင့်ပါတယ်။",
+          "delivery-area": "ဗဟန်း၊ ကမာရွတ်၊ စမ်းချောင်း၊ တာမွေ မြို့နယ်တွေကိုပဲ delivery ပို့ပေးပါတယ်။",
+          "delivery-fee": "အော်ဒါ တစ်ခုကို delivery ခ 1,000 ကျပ် ယူပါတယ်။",
+          "price": "ဈေးနှုန်း အားလုံးကို website ရဲ့ menu မှာ ကြည့်လို့ ရပါတယ်။",
+          "location": "ဆိုင်က အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန် မှာ ရှိပါတယ်။",
+          "payment": "ငွေသား ဒါမှမဟုတ် mobile banking နဲ့ လွှဲပြီး ပေးလို့ ရပါတယ်။",
+          "preorder": "website မှာ ကြိုမှာထားလို့ ရပါတယ်။ ဆိုင်ဖွင့်ချိန်ထဲက အချိန် တစ်ခုကို ရွေးပေးပါ။",
+          "refund-sold-out": "မှာထားတာ ကုန်သွားရင် ကောင်တာက အဲဒီနေ့မှာပဲ ငွေ ပြန်အမ်းပေးပါတယ်။"
+         },
+         "messages": [
+          { "id": "q01", "route": "routine", "intent": "hours", "text": "ဆိုင် ဘယ်နှနာရီ ဖွင့်လဲ" },
+          { "id": "q02", "route": "routine", "intent": "hours", "text": "စနေနေ့ ဖွင့်လား" },
+          { "id": "q03", "route": "routine", "intent": "hours", "text": "ညနေ ဘယ်အချိန် ပိတ်လဲ" },
+          { "id": "q04", "route": "routine", "intent": "hours", "text": "What time do you open on Sunday?" },
+          { "id": "q05", "route": "routine", "intent": "hours", "text": "မနက် ၆ နာရီဆို ဖွင့်ပြီလား" },
+          { "id": "q06", "route": "routine", "intent": "delivery-area", "text": "စမ်းချောင်းကို delivery ပို့လား" },
+          { "id": "q07", "route": "routine", "intent": "delivery-area", "text": "Do you deliver to Kamayut?" },
+          { "id": "q08", "route": "routine", "intent": "delivery-area", "text": "လှိုင်ကို ပို့ပေးလို့ ရလား" },
+          { "id": "q09", "route": "routine", "intent": "delivery-area", "text": "တာမွေ ဘက်ကို delivery ရလား" },
+          { "id": "q10", "route": "routine", "intent": "delivery-fee", "text": "delivery ခ ဘယ်လောက်လဲ" },
+          { "id": "q11", "route": "routine", "intent": "delivery-fee", "text": "delivery ခ အခမဲ့လား" },
+          { "id": "q12", "route": "routine", "intent": "delivery-fee", "text": "How much is delivery?" },
+          { "id": "q13", "route": "routine", "intent": "price", "text": "လက်ဖက်ရည် တစ်ခွက် ဘယ်လောက်လဲ" },
+          { "id": "q14", "route": "routine", "intent": "price", "text": "မုန့်ဟင်းခါး ဘယ်လောက်လဲ" },
+          { "id": "q15", "route": "routine", "intent": "price", "text": "How much is the tea leaf salad?" },
+          { "id": "q16", "route": "routine", "intent": "price", "text": "ရှမ်းခေါက်ဆွဲ ဈေးနှုန်း သိချင်လို့ပါ" },
+          { "id": "q17", "route": "routine", "intent": "location", "text": "ဆိုင် ဘယ်မှာလဲ" },
+          { "id": "q18", "route": "routine", "intent": "location", "text": "ဆိုင်လိပ်စာ ပို့ပေးပါ" },
+          { "id": "q19", "route": "routine", "intent": "location", "text": "Where is the shop?" },
+          { "id": "q20", "route": "routine", "intent": "payment", "text": "mobile banking နဲ့ ငွေချေလို့ ရလား" },
+          { "id": "q21", "route": "routine", "intent": "payment", "text": "ငွေသားနဲ့ပဲ ပေးရမလား" },
+          { "id": "q22", "route": "routine", "intent": "payment", "text": "Can I pay by bank transfer?" },
+          { "id": "q23", "route": "routine", "intent": "preorder", "text": "ကြိုမှာလို့ ရလား" },
+          { "id": "q24", "route": "routine", "intent": "preorder", "text": "မနက်ဖြန် မနက် ၇ နာရီအတွက် ကြိုမှာထားလို့ ရလား" },
+          { "id": "q25", "route": "routine", "intent": "refund-sold-out", "text": "မှာတာ ကုန်သွားရင် ပိုက်ဆံ ပြန်ရလား" },
+          { "id": "q26", "route": "routine", "intent": "refund-sold-out", "text": "ရှမ်းခေါက်ဆွဲ ကုန်သွားလို့ ပိုက်ဆံ ဘယ်လို ပြန်ယူရမလဲ" },
+          { "id": "q27", "route": "complex", "intent": "double-charge", "text": "ငွေ နှစ်ခါ ဖြတ်သွားတယ်" },
+          { "id": "q28", "route": "complex", "intent": "double-charge", "text": "I was charged twice for one order." },
+          { "id": "q29", "route": "complex", "intent": "wrong-order", "text": "မှာတာ မှားပို့တယ်၊ ပြန်လဲပေးပါ" },
+          { "id": "q30", "route": "complex", "intent": "bulk-order", "text": "ရုံးအတွက် ခွက် ၅၀ မှာရင် ဈေးလျှော့ပေးလား" },
+          { "id": "q31", "route": "complex", "intent": "health", "text": "နို့ မတည့်ဘူး၊ ဘာ သောက်လို့ ရမလဲ" },
+          { "id": "q32", "route": "complex", "intent": "health", "text": "ကလေးက မြေပဲ မတည့်ဘူး၊ စမူဆာထဲမှာ မြေပဲ ပါလား" },
+          { "id": "q33", "route": "complex", "intent": "order-status", "text": "အော်ဒါ 2417 ဘယ်ရောက်ပြီလဲ" },
+          { "id": "q34", "route": "complex", "intent": "missing-order", "text": "delivery လာပို့တဲ့သူက အော်ဒါ မပေးဘဲ ပြန်သွားတယ်" }
+         ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/data.js: |
+        // ရွှေလက်ဖက်ရည်ဆိုင် — reviews customers left, labelled by the shop, and cups of milk tea sold.
+        export const reviews = [
+          { text: "လက်ဖက်ရည် အရမ်းကောင်းတယ်၊ အချိုလည်း နေတော်ပဲ။", label: "positive" },
+          { text: "မုန့်ဟင်းခါး ဟင်းရည်က အရသာရှိတယ်။", label: "positive" },
+          { text: "ဝန်ထမ်းတွေ ယဉ်ကျေးပြီး မြန်မြန်ဆန်ဆန် လုပ်ပေးတယ်။", label: "positive" },
+          { text: "ပလာတာ ပူပူနွေးနွေးနဲ့ ကြွပ်ကြွပ်လေး ကောင်းတယ်။", label: "positive" },
+          { text: "ဆိုင်က သန့်ရှင်းပြီး ထိုင်ရတာ အေးဆေးတယ်။", label: "positive" },
+          { text: "ဈေးနှုန်း သင့်တော်တယ်၊ နောက်လည်း လာဦးမယ်။", label: "positive" },
+          { text: "လက်ဖက်သုပ် အရမ်းစားကောင်းတယ်။", label: "positive" },
+          { text: "မနက်စာ စားဖို့ အကောင်းဆုံးဆိုင်ပါ။", label: "positive" },
+          { text: "ကော်ဖီ မွှေးပြီး အရသာ ပြည့်တယ်။", label: "positive" },
+          { text: "ဝန်ထမ်းတွေ ဖော်ရွေတယ်၊ ကလေးတွေနဲ့ လာရတာ အဆင်ပြေတယ်။", label: "positive" },
+          { text: "မုန့်ဟင်းခါး များများထည့်ပေးပြီး ဈေးသက်သာတယ်။", label: "positive" },
+          { text: "ပူတဲ့နေ့မှာ လက်ဖက်ရည်အေး သောက်ရတာ အရမ်းကောင်းတယ်။", label: "positive" },
+          { text: "ဒီဆိုင်ရဲ့ ဆမူဆာက ရန်ကုန်မှာ အကောင်းဆုံးပဲ။", label: "positive" },
+          { text: "မှာပြီး ခဏလေးနဲ့ ရောက်လာတယ်၊ အရမ်းမြန်တယ်။", label: "positive" },
+          { text: "လက်ဖက်ရည် ချိုလွန်းတယ်။", label: "negative" },
+          { text: "မုန့်ဟင်းခါး အေးနေပြီး ငန်လွန်းတယ်။", label: "negative" },
+          { text: "နာရီဝက်လောက် စောင့်ရတယ်၊ အရမ်းကြာတယ်။", label: "negative" },
+          { text: "စားပွဲတွေ ညစ်ပတ်နေတယ်။", label: "negative" },
+          { text: "ဝန်ထမ်းက မေးတာကို မဖြေဘူး၊ မျက်နှာထားလည်း မကောင်းဘူး။", label: "negative" },
+          { text: "ဈေးကြီးလွန်းပြီး နည်းနည်းလေးပဲ ထည့်ပေးတယ်။", label: "negative" },
+          { text: "ပလာတာ ဆီများလွန်းတယ်။", label: "negative" },
+          { text: "ကော်ဖီ ခါးလွန်းပြီး အေးနေတယ်။", label: "negative" },
+          { text: "မှာတာနဲ့ ရတာ မတူဘူး။", label: "negative" },
+          { text: "ဆိုင်ထဲ ဆူညံလွန်းလို့ စကားပြောလို့ မရဘူး။", label: "negative" },
+          { text: "ပိုက်ဆံရှင်းတာ အရမ်းကြာတယ်။", label: "negative" },
+          { text: "လက်ဖက်သုပ် မလတ်ဆတ်ဘူး။", label: "negative" },
+          { text: "ပန်းကန်ခွက်ယောက်တွေ မသန့်ဘူး။", label: "negative" },
+          { text: "စိတ်ပျက်တယ်၊ နောက်ထပ် မလာတော့ဘူး။", label: "negative" },
+        ];
+
+        // Reviews the model never sees while it learns: we test it on these.
+        export const testReviews = [
+          { text: "လက်ဖက်ရည် မွှေးပြီး ကောင်းတယ်။", label: "positive" },
+          { text: "ဆမူဆာ အေးနေတယ်၊ စိတ်ပျက်တယ်။", label: "negative" },
+          { text: "ဝန်ထမ်းတွေ မြန်ပြီး ယဉ်ကျေးတယ်။", label: "positive" },
+          { text: "စောင့်ရတာ ကြာလွန်းတယ်။", label: "negative" },
+          { text: "ဈေးသက်သာပြီး စားကောင်းတယ်။", label: "positive" },
+          { text: "ခွက်တွေ ညစ်ပတ်နေတယ်။", label: "negative" },
+          { text: "မုန့်ဟင်းခါး အရသာ ပြည့်တယ်၊ နောက်လည်း လာမယ်။", label: "positive" },
+          { text: "ဆိုင်က လှပေမယ့် လက်ဖက်ရည် မကောင်းဘူး။", label: "negative" },
+          { text: "စောင့်ရတာ ကြာပေမယ့် လက်ဖက်ရည်ကတော့ ကောင်းတယ်။", label: "positive" },
+          { text: "ဆိုင်က သန့်ရှင်းတယ်၊ ဒါပေမဲ့ ဈေးကြီးတယ်။", label: "negative" },
+        ];
+
+        // Cups of milk tea sold on each of the last 14 days.
+        export const cupsPerDay = [182, 190, 187, 201, 205, 199, 214, 220, 216, 229, 233, 228, 241, 246];
+      src/inbox.js: |
+        // မြမြ's inbox in #app, and the AI panel's cards about the sorter. The sorter itself is in main.js.
+        import { panel } from "ai-panel";
+        import { predict, tokenize, topLabel } from "./ml.js";
+        import { choices } from "./ui.js";
+
+        const GROUP = { praise: "ချီးကျူး", complaint: "တိုင်ကြား", question: "မေးခွန်း", unsorted: "မခွဲရသေးတာ" };
+        const pct = (p) => `${Math.round(p * 100)}%`;
+        const count = (list, test) => list.filter(test).length;
+
+        // Why the sorter picked its group: the words of the message whose syllables push it there most,
+        // compared with the next best group (how much more often they appear in that group's examples).
+        export function explain(model, text) {
+          const scores = predict(model, text);
+          const [top, next] = Object.entries(scores).sort((a, b) => b[1] - a[1]).map(([label]) => label);
+          const weight = (label, t) => Math.log(((model.labels[label].counts[t] ?? 0) + 1) / (model.labels[label].tokens + model.vocab.size));
+          const words = text
+            .split(/\s+/)
+            .map((word) => ({
+              word: word.replace(/[။၊.,!?]/g, ""),
+              push: tokenize(word).filter((t) => model.vocab.has(t)).reduce((s, t) => s + weight(top, t) - weight(next, t), 0),
+            }))
+            .filter((w) => w.word && w.push > 0)
+            .sort((a, b) => b.push - a.push)
+            .slice(0, 2);
+          return { group: top, sure: scores[top], words: words.map((w) => w.word) };
+        }
+
+        // The AI panel: what the sorter was trained on (data provenance), and how it did on the messages
+        // မြမြ checked by hand.
+        export function showAbout(training, checked, model) {
+          const n = (key, value) => count(training, (m) => m[key] === value);
+          const en = checked.filter((m) => m.lang === "en");
+          const enRight = count(en, (m) => topLabel(predict(model, m.text)) === m.label);
+          panel.input("Training data", [
+            `${training.length} labelled messages · reviews ${n("source", "review")} · customer messages ${n("source", "message")} · older reviews ${n("source", "older")}`,
+            `Burmese ${n("lang", "my")} · English ${n("lang", "en")} · mixed ${n("lang", "mixed")} · romanized ${n("lang", "my-latn")}`,
+            "version 1 · updated 2026-11-05",
+            `weak at · English, ${enRight} of ${en.length} right in past checks`,
+          ].join("\n"), { id: "about" });
+        }
+
+        function showChecks(checked, view, model, line) {
+          const rows = checked.map((m) => ({ card: view(m.text, line), right: topLabel(predict(model, m.text)) === m.label }));
+          const values = { right: `${count(rows, (r) => r.right)} / ${rows.length}` };
+          if (rows.every((r) => "check" in r.card)) {
+            const sure = rows.filter((r) => !r.card.check);
+            const check = rows.filter((r) => r.card.check);
+            values["sure · right"] = `${count(sure, (r) => r.right)} / ${sure.length}`;
+            values["check · right"] = `${count(check, (r) => r.right)} / ${check.length}`;
+          }
+          panel.metrics("Past checks", values, { id: "checks", badge: "ဒီ page ထဲမှာ train ထားတဲ့ model" });
+        }
+
+        const STYLE = `
+        #app .ib-head { padding: 8px 12px 0; font: 600 13px/1.45 system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; color: #f1f3f5; }
+        #app .ib-note { padding: 0 12px 2px; font: 12px/1.45 system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; color: #ffc078; }
+        #app .ib-list { padding: 0 12px; display: flex; flex-direction: column; font: 13px/1.45 system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; color: #d9dce2; }
+        #app .ib-row { border-bottom: 1px solid #262a33; padding: 2px 0; }
+        #app .ib-chip { display: inline-block; font-size: 11px; border-radius: 4px; padding: 0 5px; margin-right: 5px; background: #2d323c; color: #e9ecef; }
+        #app .ib-chip[data-group="praise"] { background: #1f3d2a; color: #8fe0a6; }
+        #app .ib-chip[data-group="complaint"] { background: #4a1f24; color: #ffb3b8; }
+        #app .ib-chip[data-group="question"] { background: #1f2f4a; color: #a5d8ff; }
+        #app .ib-chip[data-group="unsorted"] { background: #3a3a3a; color: #dee2e6; }
+        #app .ib-badge { display: inline-block; white-space: nowrap; font-size: 11px; margin-left: 5px; color: #8ce99a; }
+        #app .ib-badge[data-check="true"] { color: #ffc078; }
+        #app .ib-why { display: inline-block; white-space: nowrap; font: 11px/1.4 system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; margin-left: 5px; color: #d0bfff; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+        #app .ib-reason { font-size: 12px; color: #d0bfff; padding: 0 0 0 4px; }
+        `;
+
+        const el = (tag, cls, text, testid) => {
+          const node = document.createElement(tag);
+          node.className = cls;
+          if (text !== undefined) node.textContent = text;
+          if (testid) node.dataset.testid = testid;
+          return node;
+        };
+
+        // The inbox: one row per new message with the group the sorter picked, and whatever cues view()
+        // adds (a confidence badge that asks for a check, a "why" button). Clicks redraw it in place.
+        export function showInbox(inbox, checked, view, model) {
+          if (!document.getElementById("ib-style")) {
+            const style = el("style", "", STYLE);
+            style.id = "ib-style";
+            document.head.append(style);
+          }
+          const app = document.getElementById("app");
+          let line = 0.8;
+          const open = new Set();
+          const list = el("div", "ib-list", undefined, "inbox");
+          app.append(
+            el("div", "ib-head", "မြမြ ရဲ့ message တွေ · AI က ခွဲထားတာပါ"),
+            el("div", "ib-note", "အင်္ဂလိပ်လို ရေးထားတာကို မှားတတ်ပါတယ်", "limits"),
+            list,
+          );
+          const draw = () => {
+            list.replaceChildren(
+              ...inbox.map((m, i) => {
+                const n = i + 1;
+                const card = view(m.text, line);
+                const row = el("div", "ib-row", undefined, `msg-${n}`);
+                row.dataset.group = card.group;
+                const chip = el("span", "ib-chip", GROUP[card.group], `group-${n}`);
+                chip.dataset.group = card.group;
+                row.append(chip, m.text);
+                if ("check" in card) {
+                  const badge = el("span", "ib-badge", card.check ? "သေချာမှု နိမ့် · စစ်ပေးပါ" : "သေချာမှု မြင့်", `badge-${n}`);
+                  badge.dataset.check = String(card.check);
+                  row.append(badge);
+                }
+                if (card.why) {
+                  const why = el("button", "ib-why", "ဘာကြောင့်လဲ", `why-${n}`);
+                  why.type = "button";
+                  why.addEventListener("click", () => {
+                    if (open.has(n)) open.delete(n);
+                    else open.add(n);
+                    draw();
+                  });
+                  row.append(why);
+                  if (open.has(n)) {
+                    const { group, sure, words } = card.why;
+                    row.append(el("div", "ib-reason", `${words.join(" · ")} ကြောင့် ${GROUP[group]} ${pct(sure)}`, `reason-${n}`));
+                  }
+                }
+                return row;
+              }),
+            );
+            showChecks(checked, view, model, line);
+          };
+          draw();
+          if ("check" in view(inbox[0].text, line)) {
+            choices("line", ["80%", "95%"], (_choice, i) => {
+              line = [0.8, 0.95][i];
+              draw();
+            }, { label: "စစ်ခိုင်းမယ့် မျဉ်း", selected: "80%" });
+          }
+        }
+      src/main.js: |
+        import { trainNaiveBayes, predict, topLabel } from "./ml.js";
+        import { training, inbox, checked } from "./messages.js";
+        import { explain, showAbout, showInbox } from "./inbox.js";
+
+        // The sorter: a small model trained in this page on the shop's labelled messages.
+        const sorter = trainNaiveBayes(training);
+
+        // What မြမြ sees for one message: the group the sorter picked, and cues that say how sure it is.
+        function view(text, line) {
+          const scores = predict(sorter, text);
+          const group = topLabel(scores);
+          const sure = scores[group];
+          const card = { group };
+          // Trust cues:
+
+          return card;
+        }
+
+        showInbox(inbox, checked, view, sorter);
+        showAbout(training, checked, sorter);
+      src/messages.js: |
+        // The sorter's data, all sample data written for the course (not real customers): the shop's
+        // reviews (data/reviews.json, labelled praise / complaint / question), the customers' messages
+        // (data/support.json; a double charge, a wrong or a missing order count as complaints, the rest as
+        // questions) and older labelled reviews (src/data.js: positive → praise, negative → complaint).
+        import reviewData from "../data/reviews.json";
+        import support from "../data/support.json";
+        import { reviews as older, testReviews as olderTest } from "./data.js";
+        import { shuffle } from "./ml.js";
+
+        const COMPLAINTS = ["double-charge", "wrong-order", "missing-order"];
+        const lang = (text) => (/[က-႟]/.test(text) ? "my" : "en");
+        const all = [
+          ...reviewData.reviews.map((r) => ({ id: r.id, text: r.text, label: r.type, lang: r.lang, source: "review" })),
+          ...support.messages.map((m) => ({
+            id: m.id, text: m.text, label: COMPLAINTS.includes(m.intent) ? "complaint" : "question", lang: lang(m.text), source: "message",
+          })),
+        ];
+
+        // This morning's new messages in မြမြ's inbox.
+        const NEW = ["r18", "r22", "q15", "q13", "r23", "r11", "q27"];
+        export const inbox = NEW.map((id) => all.find((m) => m.id === id));
+
+        // The rest: 16 messages မြမြ checked by hand last week, and the training data.
+        const rest = shuffle(all.filter((m) => !NEW.includes(m.id)), 5110);
+        export const checked = rest.slice(0, 16);
+        export const training = [
+          ...rest.slice(16),
+          ...[...older, ...olderTest].map((r) => ({ text: r.text, label: r.label === "positive" ? "praise" : "complaint", lang: "my", source: "older" })),
+        ];
+      src/ml.js: |
+        // Tiny machine learning in plain JavaScript: everything here runs in the page, with no
+        // downloads, and gives the same numbers every time.
+
+        // Burmese has no spaces between words, so the models count syllables instead.
+        // A syllable starts at a consonant, unless that consonant is stacked under the one
+        // before it (္) or killed by an asat (်) and so ends the syllable before it.
+        const STARTS = /[က-ဪဿ၌-၏]/;
+        export function syllables(word) {
+          const chars = [...word];
+          const out = [];
+          for (let i = 0; i < chars.length; i++) {
+            const next = chars[i + 1] === "့" ? chars[i + 2] : chars[i + 1];
+            const starts = STARTS.test(chars[i]) && chars[i - 1] !== "္" && next !== "်" && next !== "္";
+            if (starts || !out.length) out.push(chars[i]);
+            else out[out.length - 1] += chars[i];
+          }
+          return out;
+        }
+
+        export function tokenize(text) {
+          const tokens = [];
+          for (const [piece] of text.toLowerCase().matchAll(/[a-z0-9']+|[၀-၉]+|[က-ဿ၌-႟]+/g)) {
+            if (/^[က-ဿ၌-႟]/.test(piece)) tokens.push(...syllables(piece));
+            else tokens.push(piece);
+          }
+          return tokens;
+        }
+
+        // Naive Bayes: count how often each token appears with each label, then score a new
+        // text by how well its tokens fit each label.
+        export function trainNaiveBayes(examples) {
+          const labels = {};
+          const vocab = new Set();
+          for (const { text, label } of examples) {
+            const c = (labels[label] ??= { docs: 0, tokens: 0, counts: {} });
+            c.docs += 1;
+            for (const t of tokenize(text)) {
+              c.counts[t] = (c.counts[t] ?? 0) + 1;
+              c.tokens += 1;
+              vocab.add(t);
+            }
+          }
+          return { labels, vocab, total: examples.length };
+        }
+
+        export function predict(model, text) {
+          const tokens = tokenize(text).filter((t) => model.vocab.has(t));
+          const logs = {};
+          for (const [label, c] of Object.entries(model.labels)) {
+            let score = Math.log(c.docs / model.total);
+            for (const t of tokens) score += Math.log(((c.counts[t] ?? 0) + 1) / (c.tokens + model.vocab.size));
+            logs[label] = score;
+          }
+          const max = Math.max(...Object.values(logs));
+          const sum = Object.values(logs).reduce((s, v) => s + Math.exp(v - max), 0);
+          return Object.fromEntries(Object.entries(logs).map(([label, v]) => [label, Math.exp(v - max) / sum]));
+        }
+
+        export function topLabel(scores) {
+          return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+        }
+
+        // k nearest neighbours: find the training texts that share the most tokens with a new one.
+        function vector(text) {
+          const v = {};
+          for (const t of tokenize(text)) v[t] = (v[t] ?? 0) + 1;
+          return v;
+        }
+        function cosine(a, b) {
+          let dot = 0;
+          for (const t in a) if (t in b) dot += a[t] * b[t];
+          const norm = (v) => Math.sqrt(Object.values(v).reduce((s, x) => s + x * x, 0));
+          return dot === 0 ? 0 : dot / (norm(a) * norm(b));
+        }
+        export function nearest(examples, text, k = 3) {
+          const q = vector(text);
+          return examples
+            .map((e, i) => ({ ...e, similarity: cosine(q, vector(e.text)), i }))
+            .sort((a, b) => b.similarity - a.similarity || a.i - b.i)
+            .slice(0, k)
+            .map(({ i, ...rest }) => rest);
+        }
+        export function knnPredict(examples, text, k = 3) {
+          const votes = {};
+          for (const e of examples) votes[e.label] = 0;
+          for (const n of nearest(examples, text, k)) votes[n.label] += 1 / k;
+          return votes;
+        }
+
+        // A straight line through a series (least squares): the simplest forecast.
+        export function fitLine(ys) {
+          const n = ys.length;
+          const mx = (n - 1) / 2;
+          const my = ys.reduce((s, y) => s + y, 0) / n;
+          let num = 0;
+          let den = 0;
+          ys.forEach((y, x) => {
+            num += (x - mx) * (y - my);
+            den += (x - mx) ** 2;
+          });
+          const slope = den === 0 ? 0 : num / den;
+          const intercept = my - slope * mx;
+          return { slope, intercept, at: (x) => intercept + slope * x };
+        }
+
+        export function meanAbsoluteError(actual, predicted) {
+          return actual.reduce((s, a, i) => s + Math.abs(a - predicted[i]), 0) / actual.length;
+        }
+
+        // Accuracy, precision, recall and F1 for one label (the "positive" class).
+        export function scoreReport(rows, positive) {
+          let tp = 0, fp = 0, fn = 0, correct = 0;
+          for (const { expected, predicted } of rows) {
+            if (expected === predicted) correct += 1;
+            if (predicted === positive && expected === positive) tp += 1;
+            if (predicted === positive && expected !== positive) fp += 1;
+            if (predicted !== positive && expected === positive) fn += 1;
+          }
+          const precision = tp + fp === 0 ? 0 : tp / (tp + fp);
+          const recall = tp + fn === 0 ? 0 : tp / (tp + fn);
+          const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+          return { accuracy: correct / rows.length, precision, recall, f1 };
+        }
+
+        // A shuffle that gives the same order every time for the same seed.
+        export function shuffle(list, seed = 1) {
+          let s = seed >>> 0;
+          const random = () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+          const out = [...list];
+          for (let i = out.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1));
+            [out[i], out[j]] = [out[j], out[i]];
+          }
+          return out;
+        }
+
+        // A seeded random number generator (0 ≤ x < 1): the same seed gives the same numbers every time.
+        export function rng(seed = 1) {
+          let s = seed >>> 0;
+          return () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        // Logistic regression for tabular data: one weight per input column, learned by gradient descent
+        // from zero, on columns scaled to mean 0 and spread 1. Same data and settings → same weights.
+        //   const model = trainLogistic(rows, { columns: ["visits_30d", "days_since_last"], label: "stopped" });
+        //   model.weights → { visits_30d: -1.2, days_since_last: 1.9 } (on the scaled columns)
+        //   model.probability(row) → 0.72
+        export function trainLogistic(rows, { columns, label, epochs = 400, rate = 0.5 } = {}) {
+          const n = rows.length;
+          const mean = {};
+          const spread = {};
+          for (const c of columns) {
+            mean[c] = rows.reduce((s, r) => s + Number(r[c]), 0) / n;
+            const v = rows.reduce((s, r) => s + (Number(r[c]) - mean[c]) ** 2, 0) / n;
+            spread[c] = Math.sqrt(v) || 1;
+          }
+          const scaled = (r) => columns.map((c) => (Number(r[c]) - mean[c]) / spread[c]);
+          const xs = rows.map(scaled);
+          const ys = rows.map((r) => Number(r[label]));
+          const w = columns.map(() => 0);
+          let b = 0;
+          const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+          for (let e = 0; e < epochs; e++) {
+            const gw = columns.map(() => 0);
+            let gb = 0;
+            for (let i = 0; i < n; i++) {
+              const p = sigmoid(xs[i].reduce((s, x, j) => s + x * w[j], b));
+              const err = p - ys[i];
+              for (let j = 0; j < w.length; j++) gw[j] += err * xs[i][j];
+              gb += err;
+            }
+            for (let j = 0; j < w.length; j++) w[j] -= (rate * gw[j]) / n;
+            b -= (rate * gb) / n;
+          }
+          const probability = (r) => sigmoid(scaled(r).reduce((s, x, j) => s + x * w[j], b));
+          return { columns, label, weights: Object.fromEntries(columns.map((c, j) => [c, w[j]])), bias: b, probability };
+        }
+
+        // Rows → { expected, predicted } at a threshold, ready for scoreReport(rows, "yes").
+        export function atThreshold(model, rows, threshold = 0.5) {
+          return rows.map((r) => ({
+            ...r,
+            probability: model.probability(r),
+            expected: Number(r[model.label]) === 1 ? "yes" : "no",
+            predicted: model.probability(r) >= threshold ? "yes" : "no",
+          }));
+        }
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Governance is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 620,
+        height: 45,
+        text: "ဒီနေ့ · trust နဲ့ transparency",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board P: what users expect from an app (green), how AI differs (orange), its failures (red).
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "User တွေ ဘာ မျှော်လင့်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-btn,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 640,
+        height: 40,
+        text: "ခလုတ် နှိပ် → အမြဲ အတူတူ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p-ai,
+        kind: text,
+        x: 300,
+        y: 296,
+        width: 640,
+        height: 40,
+        text: "AI → ပြောင်းလဲ · မှားနိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-f1,
+        kind: text,
+        x: 330,
+        y: 348,
+        width: 640,
+        height: 40,
+        text: "language model → hallucinate",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p-f2,
+        kind: text,
+        x: 330,
+        y: 394,
+        width: 640,
+        height: 40,
+        text: "predictive model → label မှား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p-f3,
+        kind: text,
+        x: 330,
+        y: 440,
+        width: 640,
+        height: 40,
+        text: "agent → လမ်းလွဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p-last,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 700,
+        height: 45,
+        text: "user = နောက်ဆုံး ဖမ်းမိသူ",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    # Board D: the trust dial (both ends red, the middle green and ringed).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "ယုံကြည်မှု အတိုင်းအတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-under,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 250,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-under-t,
+        kind: text,
+        x: 316,
+        y: 252,
+        width: 225,
+        height: 40,
+        text: "ယုံကြည်မှု နည်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-under-e,
+        kind: text,
+        x: 316,
+        y: 298,
+        width: 225,
+        height: 40,
+        text: "မြမြ · မသုံးတော့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-cal,
+        kind: rectangle,
+        x: 565,
+        y: 240,
+        width: 240,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-cal-t,
+        kind: text,
+        x: 581,
+        y: 252,
+        width: 215,
+        height: 40,
+        text: "calibrated",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-cal-e,
+        kind: text,
+        x: 581,
+        y: 298,
+        width: 215,
+        height: 40,
+        text: "သုံး + စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-over,
+        kind: rectangle,
+        x: 820,
+        y: 240,
+        width: 270,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-over-t,
+        kind: text,
+        x: 836,
+        y: 252,
+        width: 240,
+        height: 40,
+        text: "လွန်ကဲ ယုံ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-over-e,
+        kind: text,
+        x: 836,
+        y: 298,
+        width: 240,
+        height: 40,
+        text: "လှလှ · မဖတ်ဘဲ ပို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 552,
+        y: 226,
+        width: 266,
+        height: 138,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-goal,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 700,
+        height: 45,
+        text: "design နဲ့ အလယ်ကို ဆွဲခေါ်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    # Board U: UX techniques that calibrate trust.
+    - {
+        id: u-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "UX · ယုံကြည်မှု ညှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: u-guide,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 780,
+        height: 40,
+        text: "user အသစ် → ရှင်းပြချက် · ကျွမ်း → badge",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-disclose,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 780,
+        height: 40,
+        text: "AI က ခွဲထားတာပါ → ဘာကြောင့်လဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: u-feedback,
+        kind: text,
+        x: 300,
+        y: 336,
+        width: 780,
+        height: 40,
+        text: "ပြင်ပေးတာ → ဘာ ပြောင်းပြီလဲ ပြ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: u-error,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 780,
+        height: 40,
+        text: "မှားရင် ဝန်ခံ · မသုံးခင် စစ်ခိုင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: u-path,
+        kind: text,
+        x: 300,
+        y: 444,
+        width: 780,
+        height: 40,
+        text: "ပြန်စမ်း · ပြင် · AI မပါတဲ့ ပုံစံ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: u-steps,
+        kind: text,
+        x: 300,
+        y: 498,
+        width: 780,
+        height: 40,
+        text: "အဆင့်တိုင်း ဘာ ပြောင်းလဲ ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: the module's takeaways.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Governance · ဘယ်က စမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 760,
+        height: 42,
+        text: "1 · အရေးကြီးဆုံး နေရာကနေ စ",
+        strokeColor: "#f08c00",
+        fontSize: 30,
+      }
+    - {
+        id: t-2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 760,
+        height: 42,
+        text: "2 · ကိုယ့် governance ကို ကိုယ် သတ်မှတ်",
+        strokeColor: "#f08c00",
+        fontSize: 30,
+      }
+    - {
+        id: t-3,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 760,
+        height: 42,
+        text: "3 · version တိုင်း၊ feedback တိုင်း ပြန်ပြင်",
+        strokeColor: "#f08c00",
+        fontSize: 30,
+      }
+    - {
+        id: t-ptf,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 700,
+        height: 45,
+        text: "privacy · fairness · trust",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    # Board Z: the quiz (question white, the answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 640,
+        height: 45,
+        text: "calibrated trust နဲ့ သုံးတာ ဘယ်ဟာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 700,
+        height: 40,
+        text: "A · မစစ်ဘဲ အကုန် ယုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 320,
+        y: 336,
+        width: 700,
+        height: 40,
+        text: "B · တစ်ခါ မှားလို့ လုံးဝ မသုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o3,
+        kind: text,
+        x: 320,
+        y: 382,
+        width: 700,
+        height: 40,
+        text: "C · သုံးရင်း ရလဒ်ကို ကိုယ်တိုင် စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 305,
+        y: 372,
+        width: 470,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 700,
+        height: 45,
+        text: "C · အချိန် သက်သာ + တာဝန်ယူ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-note,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 760,
+        height: 40,
+        text: "A က လွန်ကဲ ယုံ · B က ယုံကြည်မှု နည်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5110
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Trust ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ model ကို ဘယ်လို data နဲ့ train ထားလဲ၊ ဘယ်နေရာမှာ အားနည်းလဲ
+      ဆိုတာကို coverage statement နဲ့ ပွင့်ပွင့်လင်းလင်း ပြောပြခဲ့ပါတယ်။ ဒီ lesson မှာတော့ governance ရဲ့ တတိယ
+      အချက် ဖြစ်တဲ့ trust နဲ့ transparency ကို ကြည့်ပါမယ်။ [[mark:draw-mini]] blueprint မှာ ဒီ အချက်ကလည်း
+      Governance ထဲမှာ ရှိပေမယ့်၊ data၊ intelligence၊ U X အလွှာ သုံးခုလုံးနဲ့ ဆိုင်ပါတယ်။ [[mark:draw-today]]
+      trust ဆိုတာ user တွေက product ကို ယုံပြီး ဆက်သုံးမလား ဆိုတာပါ။ transparency ကတော့ AI ဘာလုပ်နေလဲ၊
+      ဘယ်လောက် သေချာလဲ ဆိုတာကို user မြင်အောင် ပွင့်ပွင့်လင်းလင်း ပြတာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust and transparency)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: predictable
+    narration: >
+      [[mark:draw-pred]] user တွေက app တစ်ခုကို အမြဲ တစ်ပုံစံတည်း အလုပ်လုပ်မယ်လို့ မျှော်လင့်ကြပါတယ်။ ဥပမာ
+      ဆိုင်ရဲ့ website မှာ အော်ဒါ ခလုတ်ကို ဘယ်နှခါ နှိပ်နှိပ် အော်ဒါ page ကိုပဲ ရောက်ပါတယ်။ [[mark:draw-ai]] AI ကတော့
+      ဒီလို မဟုတ်ပါဘူး။ language model တွေက မရှိတာကို ရှိသလို hallucinate ဖြစ်တတ်ပြီး၊ predictive model တွေက
+      label မှားကပ်တတ်ပါတယ်။ ကိုယ့်ဘာသာ အဆင့်တွေ ဆုံးဖြတ်တဲ့ agent တွေလည်း လမ်းလွဲသွားတတ်ပါတယ်။
+      [[mark:draw-last]] ဒါကြောင့် ဒီ အမှားတွေကို နောက်ဆုံး ဖမ်းမိမယ့်သူက user ကိုယ်တိုင်ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust and transparency)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-pred,
+          type: whiteboard.apply,
+          at: { mark: draw-pred },
+          clear: true,
+          upsertIds: [p-title, p-btn],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-ai,
+          type: whiteboard.apply,
+          at: { mark: draw-ai },
+          upsertIds: [p-ai, p-f1, p-f2, p-f3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-last,
+          type: whiteboard.apply,
+          at: { mark: draw-last },
+          upsertIds: [p-last],
+          drawMs: 1000,
+        }
+
+  - id: dial
+    narration: >
+      [[mark:draw-dial]] user ရဲ့ ယုံကြည်မှုကို အစွန်း နှစ်ဖက် ရှိတဲ့ အတိုင်းအတာ တစ်ခုလို စဉ်းစားကြည့်ရအောင်။
+      [[mark:draw-under]] တစ်ဖက်စွန်းမှာ ယုံကြည်မှု နည်းလွန်းလို့ မသုံးတော့တာ ရှိပါတယ်။ ဆိုင်ပိုင်ရှင် မြမြ က
+      AI တစ်ခါ မှားတာ မြင်ပြီး dashboard ကို လုံးဝ မဖွင့်တော့တာမျိုးပါ။ [[mark:draw-over]] နောက်တစ်ဖက်စွန်းမှာ
+      လွန်ကဲ ယုံကြည်တာ ရှိပါတယ်။ ကောင်တာက လှလှ က AI ရေးပေးတဲ့ စာကို မဖတ်ဘဲ customer ဆီ ပို့လိုက်တာမျိုးပါ။
+      [[mark:draw-calibrated]] ကိုယ် လိုချင်တာက အလယ်က calibrated trust ပါ။ AI ကို အချိန်ကုန်သက်သာဖို့
+      သုံးရင်းနဲ့ နောက်ဆုံး အဖြေကိုတော့ ကိုယ်တိုင် စစ်ပြီး တာဝန်ယူတဲ့ သင့်တင့်တဲ့ ယုံကြည်မှုပါ။ user တွေကို
+      အစွန်း နှစ်ဖက်ကနေ အလယ်ကို ရောက်အောင် ကိုယ့် design က ကူညီရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (calibrated trust)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-dial,
+          type: whiteboard.apply,
+          at: { mark: draw-dial },
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-under,
+          type: whiteboard.apply,
+          at: { mark: draw-under },
+          upsertIds: [d-under, d-under-t, d-under-e],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-over,
+          type: whiteboard.apply,
+          at: { mark: draw-over },
+          upsertIds: [d-over, d-over-t, d-over-e],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-calibrated,
+          type: whiteboard.apply,
+          at: { mark: draw-calibrated },
+          upsertIds: [d-cal, d-cal-t, d-cal-e, d-ring, d-goal],
+          drawMs: 2400,
+        }
+
+  - id: inbox
+    chapter: "Message တွေကို ခွဲရအောင်"
+    narration: >
+      [[mark:close-dial]] ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ [[mark:panel-ready]] မြမြ ဆီကို review တွေ၊ customer
+      message တွေ နေ့တိုင်း ရောက်လာလို့၊ ချီးကျူးတာ၊ တိုင်ကြားတာ၊ မေးခွန်း ဆိုပြီး model က အုပ်စု ခွဲပေးပါတယ်။
+      [[mark:open-main]] ဒီ model က lesson အတွက် ရေးထားတဲ့ model သေးသေးလေး ဖြစ်ပြီး၊ ဒီ page ထဲမှာပဲ train
+      လုပ်တာပါ။ [[mark:sel-view]] view function က message တစ်ခုချင်းအတွက် model ရွေးတဲ့ အုပ်စုကိုပဲ
+      ပြန်ပေးပါတယ်။ [[mark:read-inbox]] panel အပေါ်မှာ ဒီမနက် ရောက်လာတဲ့ message ခုနစ်ခုကို အုပ်စုနဲ့
+      ပြထားပါတယ်။ ဒီ message တွေက lesson အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ [[mark:read-wrong]] အများစု
+      မှန်ပေမယ့်၊ လက်ဖက်ရည် တစ်ခွက် ဘယ်လောက်လဲ ဆိုတဲ့ မေးခွန်းကို တိုင်ကြားတာလို့ ခွဲထားပါတယ်။ အရမ်း မြန်တာပဲ၊
+      နှစ်နာရီပဲ စောင့်ရတယ် လို့ ရွဲ့ပြီး တိုင်ကြားထားတာကိုလည်း ချီးကျူးတာလို့ ခွဲထားပါတယ်။ ဘယ်ဟာကို
+      စစ်ရမလဲ ဆိုတာကိုတော့ page က မြမြ ကို ဘာမှ မပြောပြပါဘူး။ [[mark:read-past-all]] အောက်က Past checks card ကတော့
+      မြမြ ပြီးခဲ့တဲ့ အပတ်က လက်နဲ့ စစ်ထားတဲ့ message ၁၆ ခုမှာ model က ၁၂ ခု မှန်ခဲ့တယ်လို့ ပြနေပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust and transparency)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-dial, type: whiteboard.apply, at: { mark: close-dial }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-two-cards
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: src/main.js }
+      - id: sel-train
+        type: editor.select
+        at: { afterAction: open-main }
+        target:
+          { file: src/main.js, text: "const sorter = trainNaiveBayes(training);", occurrence: 1 }
+      - id: sel-view
+        type: editor.select
+        at: { mark: sel-view }
+        target: { file: src/main.js, text: "  const card = { group };", occurrence: 1 }
+      - id: expect-seven
+        type: expect.preview
+        at: { mark: read-inbox }
+        timeoutMs: 5000
+        target: { by: testId, value: msg-7 }
+        textContains: "ငွေ နှစ်ခါ ဖြတ်သွားတယ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-price-complaint
+        type: expect.preview
+        at: { mark: read-wrong }
+        timeoutMs: 5000
+        target: { by: testId, value: msg-4 }
+        attribute: { name: data-group, value: "complaint" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-sarcasm-praise
+        type: expect.preview
+        at: { afterAction: expect-price-complaint }
+        timeoutMs: 5000
+        target: { by: testId, value: msg-6 }
+        attribute: { name: data-group, value: "praise" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-past-12
+        type: expect.preview
+        at: { mark: read-past-all }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checks-1 }
+        attribute: { name: data-value, value: "12 / 16" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: data
+    narration: >
+      [[mark:read-data]] data အလွှာမှာ trust ရဖို့ data ဘယ်က လာလဲ၊ ဘယ်လောက် လတ်ဆတ်လဲ ဆိုတာကို ရှင်းရှင်း
+      ပြောပြရပါမယ်။ [[mark:read-sources]] Training data card မှာ label ကပ်ထားတဲ့ message ၈၉ ခုကို ဆိုင်ရဲ့
+      review တွေ၊ customer message တွေနဲ့ အရင်က review တွေကနေ ယူထားတယ်လို့ ပြထားပါတယ်။ မြန်မာစာက ၇၃ ခု
+      ရှိပြီး အင်္ဂလိပ်စာက ၁၂ ခုပဲ ပါပါတယ်။ [[mark:read-weak]] model ဘယ်နေရာမှာ အားနည်းလဲ ဆိုတာလည်း ပါပါတယ်။ စစ်ထားတဲ့
+      အင်္ဂလိပ် message က သုံးခုပဲ ရှိပေမယ့် တစ်ခုပဲ မှန်ခဲ့လို့၊ inbox ရဲ့ ခေါင်းစဉ်အောက်မှာလည်း အင်္ဂလိပ်လို
+      ရေးထားတာကို မှားတတ်ပါတယ် လို့ ကြိုပြောထားပါတယ်။ [[mark:read-version]] version နဲ့ update လုပ်တဲ့ ရက်လည်း
+      ပါပါတယ်။ model ကို ပြန် train လုပ်တိုင်း version အသစ် ပေးပြီး အဲဒီ အချိန်က data ကို သိမ်းထားရင်၊ အဖြေတွေ
+      ဘာကြောင့် ပြောင်းသွားလဲ နောက်မှ ရှင်းပြနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust: data)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - id: sel-about
+        type: editor.select
+        at: { mark: read-data }
+        target: { file: src/main.js, text: "showAbout(training, checked, sorter);", occurrence: 1 }
+      - id: expect-about-89
+        type: expect.preview
+        at: { mark: read-sources }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-about }
+        textContains: "89 labelled messages · reviews 24 · customer messages 27 · older reviews 38"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-about-langs
+        type: expect.preview
+        at: { afterAction: expect-about-89 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-about }
+        textContains: "Burmese 73 · English 12"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-about-weak
+        type: expect.preview
+        at: { mark: read-weak }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-about }
+        textContains: "weak at · English, 1 of 3 right in past checks"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-limits
+        type: expect.preview
+        at: { afterAction: expect-about-weak }
+        timeoutMs: 5000
+        target: { by: testId, value: limits }
+        textContains: "အင်္ဂလိပ်လို ရေးထားတာကို မှားတတ်ပါတယ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-version
+        type: expect.preview
+        at: { mark: read-version }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-about }
+        textContains: "version 1 · updated 2026-11-05"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: confidence
+    chapter: "ဘယ်လောက် သေချာလဲ ပြရအောင်"
+    narration: >
+      intelligence အလွှာမှာ ပထမ နည်းက confidence indicator ပါ။ confidence ဆိုတာ model က ဒီ
+      အဖြေကို ဘယ်လောက် သေချာလဲ ဆိုတဲ့ ခန့်မှန်းချက်ပါ။ ဒီ model က အုပ်စု တစ်ခုစီအတွက် ဖြစ်နိုင်ခြေ ထုတ်ပေးလို့
+      အဲဒါကို သုံးပါမယ်။ [[mark:type-check]] ဖြစ်နိုင်ခြေက threshold မျဉ်းထက် နိမ့်ရင် စစ်ပေးဖို့ မှတ်ထားတဲ့ စာကြောင်း
+      ရေးပါမယ်။ [[mark:read-badges]] message တိုင်းမှာ badge ပေါ်လာပြီး၊ အောက်မှာ မျဉ်း ရွေးတဲ့ ခလုတ်လည်း
+      ပါလာပါပြီ။ ၈၀ ရာခိုင်နှုန်း မျဉ်းထက် မြင့်တဲ့ သုံးခုက သေချာမှု မြင့်လို့ ပြပြီး၊ ကျန်တဲ့ လေးခုကတော့
+      သေချာမှု နိမ့်၊ စစ်ပေးပါ လို့ ပြနေပါတယ်။ [[mark:read-past]] ဒီ badge ကို ယုံလို့ ရလား ဆိုတာ Past checks
+      card မှာ ကြည့်လို့ ရပါတယ်။ စစ်ထားတဲ့ ၁၆ ခုထဲမှာ သေချာမှု မြင့်တဲ့ ၁၁ ခုထဲက ၁၀ ခု မှန်ပြီး၊ သေချာမှု
+      နိမ့်တဲ့ ငါးခုမှာတော့ နှစ်ခုပဲ မှန်ခဲ့ပါတယ်။ အရင်က ဘယ်လောက် မှန်ခဲ့လဲ ဆိုတာကလည်း confidence ကို
+      ခန့်မှန်းတဲ့ နည်း တစ်ခုပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust: intelligence, confidence indicators)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - id: type-check
+        type: editor.type
+        at: { mark: type-check }
+        target: { file: src/main.js, after: "  // Trust cues:\n", occurrence: 1 }
+        text: "  card.check = sure < line;\n"
+        cadence: line-by-line
+      - id: expect-badge-sure
+        type: expect.preview
+        at: { afterAction: type-check }
+        timeoutMs: 8000
+        target: { by: testId, value: badge-1 }
+        attribute: { name: data-check, value: "false" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-badge-check
+        type: expect.preview
+        at: { afterAction: expect-badge-sure }
+        timeoutMs: 5000
+        target: { by: testId, value: badge-3 }
+        attribute: { name: data-check, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-badge-sarcasm
+        type: expect.preview
+        at: { afterAction: expect-badge-check }
+        timeoutMs: 5000
+        target: { by: testId, value: badge-6 }
+        attribute: { name: data-check, value: "false" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-line-80
+        type: expect.preview
+        at: { mark: read-badges }
+        timeoutMs: 5000
+        target: { by: testId, value: line-1 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-sure-10-11
+        type: expect.preview
+        at: { mark: read-past }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checks-2 }
+        attribute: { name: data-value, value: "10 / 11" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-check-2-5
+        type: expect.preview
+        at: { afterAction: expect-sure-10-11 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checks-3 }
+        attribute: { name: data-value, value: "2 / 5" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: fallback
+    narration: >
+      အရမ်း မသေချာတဲ့ အဖြေအတွက်တော့ safe fallback လိုပါတယ်။ fallback ဆိုတာ တစ်ခု မရရင်
+      သုံးဖို့ ပြင်ထားတဲ့ အစားထိုး လမ်းပါ။ [[mark:type-fallback]] ဖြစ်နိုင်ခြေ ၆၀ ရာခိုင်နှုန်း မရောက်ရင်
+      အုပ်စု မခွဲဘဲ မခွဲရသေးတာ ထဲ ပို့တဲ့ စာကြောင်း ထည့်ပါမယ်။ [[mark:read-fallback]] လက်ဖက်ရည် ဈေးမေးတဲ့
+      message က တိုင်ကြားတာ အုပ်စုကနေ မခွဲရသေးတာ ကို ရောက်သွားပါပြီ။ မှားမှား ခွဲထားတာထက် မသေချာဘူးလို့
+      ဝန်ခံတာက မြမြ ရဲ့ ယုံကြည်မှုကို ပိုထိန်းပေးပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust: safe fallbacks)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - id: type-fallback
+        type: editor.type
+        at: { mark: type-fallback }
+        target: { file: src/main.js, after: "  card.check = sure < line;\n", occurrence: 1 }
+        text: "  if (sure < 0.6) card.group = \"unsorted\";\n"
+        cadence: line-by-line
+      - id: expect-unsorted
+        type: expect.preview
+        at: { afterAction: type-fallback }
+        timeoutMs: 8000
+        target: { by: testId, value: group-4 }
+        textContains: "မခွဲရသေးတာ"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: why
+    chapter: "ဘာကြောင့်လဲ ပြရအောင်"
+    narration: >
+      နောက်တစ်ချက်က သုံးနေရင်းနဲ့ပဲ ချက်ချင်း ဖတ်လို့ ရတဲ့ ရှင်းပြချက် တိုတိုလေးပါ။ လူတွေက
+      လမ်းညွှန်စာကို အရင် မဖတ်ဘဲ တန်း သုံးကြလို့ပါ။ [[mark:type-why]] model ရွေးတဲ့ အုပ်စုဆီ အများဆုံး
+      တွန်းပို့တဲ့ စကားလုံးတွေကိုပါ ပြန်ပေးတဲ့ စာကြောင်း ထည့်ပါမယ်။ [[mark:read-why]] message တိုင်းမှာ ဘာကြောင့်လဲ ခလုတ်
+      ပေါ်လာပါပြီ။ [[mark:click-why]] ရွဲ့ပြီး တိုင်ကြားထားတဲ့ message ရဲ့ ခလုတ်ကို နှိပ်ကြည့်ပါမယ်။
+      [[mark:read-reason]] အရမ်း နဲ့ မြန်တာပဲ ဆိုတဲ့ စကားလုံးတွေကြောင့် ချီးကျူးတာလို့ ၉၂ ရာခိုင်နှုန်း
+      ခွဲထားတာပါ။ model က စကားလုံးတွေ ဘယ် အုပ်စုမှာ ခဏခဏ ပါလဲ ဆိုတာကိုပဲ ကြည့်တာမို့ ရွဲ့ပြောတာကို ခွဲထုတ်လို့
+      မရပါဘူး။ ဒါကြောင့်
+      သေချာမှု မြင့်တာနဲ့ မှန်တာ မတူပါဘူး။ ဘာကြောင့် ဒီ အဖြေ ထွက်လာလဲ ရှင်းပြနိုင်ရင် မြမြ က အမှားကို မြန်မြန်
+      တွေ့ပါတယ်။ [[mark:click-line]] မျဉ်းကို ၉၅ ရာခိုင်နှုန်း တင်ကြည့်ရင်၊ [[mark:read-line]] ဒီ message ပါ
+      စစ်ပေးပါ ဖြစ်သွားပြီး၊ Past checks မှာလည်း သေချာမှု မြင့်တဲ့ ခုနစ်ခုလုံး မှန်ပါတယ်။ ဒါပေမဲ့ ၁၆ ခုမှာ
+      စစ်ရမယ့်ဟာ ကိုးခု ဖြစ်သွားပါတယ်။ ဒါကြောင့် မျဉ်းကို ဘယ်မှာ ထားမလဲ ဆိုတာက မှားရင် ဘယ်လောက် နစ်နာလဲ၊ မြမြ
+      မှာ အချိန် ဘယ်လောက် ရှိလဲ ဆိုတာပေါ် မူတည်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust: just-in-time explanations)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "Laws of UX: Paradox of the Active User",
+          url: "https://lawsofux.com/paradox-of-the-active-user/",
+        }
+    actions:
+      - id: type-why
+        type: editor.type
+        at: { mark: type-why }
+        target:
+          {
+            file: src/main.js,
+            after: "  if (sure < 0.6) card.group = \"unsorted\";\n",
+            occurrence: 1,
+          }
+        text: "  card.why = explain(sorter, text);\n"
+        cadence: line-by-line
+      - id: expect-why-button
+        type: expect.preview
+        at: { afterAction: type-why }
+        timeoutMs: 8000
+        target: { by: testId, value: why-6 }
+        textContains: "ဘာကြောင့်လဲ"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: click-why
+        type: preview.click
+        at: { mark: click-why }
+        target: { by: testId, value: why-6 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-reason
+        type: expect.preview
+        at: { afterAction: click-why }
+        timeoutMs: 5000
+        target: { by: testId, value: reason-6 }
+        textContains: "အရမ်း · မြန်တာပဲ ကြောင့် ချီးကျူး 92%"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: click-line
+        type: preview.click
+        at: { mark: click-line }
+        target: { by: testId, value: line-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-line-95
+        type: expect.preview
+        at: { afterAction: click-line }
+        timeoutMs: 5000
+        target: { by: testId, value: line-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-sarcasm-check
+        type: expect.preview
+        at: { mark: read-line }
+        timeoutMs: 5000
+        target: { by: testId, value: badge-6 }
+        attribute: { name: data-check, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-sure-7-7
+        type: expect.preview
+        at: { afterAction: expect-sarcasm-check }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checks-2 }
+        attribute: { name: data-value, value: "7 / 7" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-check-5-9
+        type: expect.preview
+        at: { afterAction: expect-sure-7-7 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-checks-3 }
+        attribute: { name: data-value, value: "5 / 9" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: ux
+    chapter: "UX နဲ့ ယုံကြည်မှု ညှိရအောင်"
+    narration: >
+      [[mark:draw-ux]] U X အလွှာမှာ ယုံကြည်မှုကို ညှိဖို့ နည်းတွေ ရှိပါသေးတယ်။ AI အကြောင်း မသိသေးတဲ့ user အတွက်
+      ရှင်းပြချက် ပိုပေးပြီး၊ ကျွမ်းကျင်တဲ့ user အတွက်တော့ badge လို အမှတ်အသား တိုတိုလေးပဲ ပေးပါ။
+      [[mark:draw-ux-disclose]] AI က ခွဲထားတာပါ ဆိုတဲ့ စာ တိုတိုနဲ့ စပြီး၊ ဘာကြောင့်လဲ နှိပ်မှ အသေးစိတ် ပြတာက
+      progressive disclosure ပါ။ [[mark:draw-ux-feedback]] မြမြ ပြင်ပေးတဲ့ အုပ်စုတွေကို နောက် version မှာ ထည့်သုံးပြီး၊
+      ဘာ ပြောင်းသွားလဲ ပြန်ပြောပြပါ။ ဥပမာ ဈေးမေးတဲ့ message တွေကို အခု မေးခွန်းထဲ ခွဲပါပြီ လို့ ပြတာမျိုးပါ။
+      feedback က အလကား မဖြစ်ဘူးလို့ မြင်ရရင် ပိုယုံပါတယ်။
+      [[mark:draw-ux-error]] AI မှားတဲ့အခါ ဝန်ခံပြီး၊ ဒီ အကြံက မှားနိုင်ပါတယ်၊ မသုံးခင် စစ်ပါ လို့ user ကို
+      စစ်ခိုင်းပါ။ ပြန်စမ်းတာ၊ ပြင်တာ၊ AI မပါတဲ့ ပုံစံကို ပြန်သွားတာ လုပ်လို့ ရရပါမယ်။ [[mark:draw-ux-steps]]
+      အဆင့် တစ်ဆင့်ချင်း ခွဲလုပ်တဲ့ system ဆိုရင်လည်း အဆင့် တစ်ခုစီက ဘာ ပြောင်းလိုက်လဲ ပြောပြရင်
+      ပိုရှင်းပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (trust: user experience)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-ux,
+          type: whiteboard.apply,
+          at: { mark: draw-ux },
+          open: true,
+          clear: true,
+          upsertIds: [u-title, u-guide],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-ux-disclose,
+          type: whiteboard.apply,
+          at: { mark: draw-ux-disclose },
+          upsertIds: [u-disclose],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-ux-feedback,
+          type: whiteboard.apply,
+          at: { mark: draw-ux-feedback },
+          upsertIds: [u-feedback],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-ux-error,
+          type: whiteboard.apply,
+          at: { mark: draw-ux-error },
+          upsertIds: [u-error, u-path],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-ux-steps,
+          type: whiteboard.apply,
+          at: { mark: draw-ux-steps },
+          upsertIds: [u-steps],
+          drawMs: 1000,
+        }
+
+  - id: takeaways
+    narration: >
+      [[mark:draw-take]] governance အပိုင်း တစ်ခုလုံးကို ကြည့်ရင်၊ privacy၊ fairness၊ trust ကို တစ်ခါတည်း အကုန်
+      ပြည့်စုံအောင် လုပ်စရာ မလိုပါဘူး။ [[mark:draw-take-1]] ကိုယ့် product မှာ အရေးကြီးဆုံး နေရာကနေ စပြီး၊
+      [[mark:draw-take-2]] ကိုယ့် team အတွက် governance နည်းလမ်းကို ကိုယ်တိုင် သတ်မှတ်ပါ။ [[mark:draw-take-3]]
+      version အသစ်တိုင်း၊ user feedback တိုင်းကနေ ဘယ်မှာ guardrail၊ ရှင်းပြချက် ထပ်လိုလဲ သင်ယူပြီး
+      ဆက်ပြင်သွားရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (your takeaways)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-take,
+          type: whiteboard.apply,
+          at: { mark: draw-take },
+          clear: true,
+          upsertIds: [t-title, t-ptf],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-take-1,
+          type: whiteboard.apply,
+          at: { mark: draw-take-1 },
+          upsertIds: [t-1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-take-2,
+          type: whiteboard.apply,
+          at: { mark: draw-take-2 },
+          upsertIds: [t-2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-take-3,
+          type: whiteboard.apply,
+          at: { mark: draw-take-3 },
+          upsertIds: [t-3],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မြမြ က ဒီ model ကို calibrated trust နဲ့ သုံးတယ် ဆိုတာ ဘယ်လို
+      သုံးတာလဲ။ ခွဲထားတာတွေကို မစစ်ဘဲ အကုန် ယုံတာလား၊ တစ်ခါ မှားလို့ လုံးဝ မသုံးတော့တာလား၊ model ကို
+      သုံးရင်းနဲ့ ရလဒ်ကို ကိုယ်တိုင် စစ်တာလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
+      အဖြေကတော့ model ကို အချိန် သက်သာဖို့ သုံးရင်းနဲ့ ရလဒ်ကို ကိုယ်တိုင် စစ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ model က
+      အသုံးဝင်ပေမယ့် မှားနိုင်လို့၊ ခုနက ရွဲ့ပြီး တိုင်ကြားထားတာလို အမှားကို မြမြ ကပဲ နောက်ဆုံး ဖမ်းနိုင်လို့ပါ။
+      အကုန် ယုံတာက လွန်ကဲ ယုံကြည်တာ ဖြစ်ပြီး၊ လုံးဝ မသုံးတာက ယုံကြည်မှု နည်းလွန်းတာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (Check your understanding)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-ring, z-a, z-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ AI က မှားနိုင်လို့ user ကို အလယ်က calibrated trust ဆီ ရောက်အောင်
+      ကူညီရပါတယ်။ [[mark:sel-final-about]] data မှာ ဘယ်က လာလဲ၊ ဘယ်မှာ အားနည်းလဲ ပြောပြပါတယ်။
+      [[mark:sel-final-check]] intelligence မှာ
+      မသေချာရင် စစ်ခိုင်းပြီး၊ [[mark:sel-final-fallback]] အရမ်း မသေချာရင် အုပ်စု မခွဲဘဲ ထားပါတယ်။
+      [[mark:sel-final-why]] ဘာကြောင့်လဲ ဆိုတာကိုလည်း ချက်ချင်း ပြပြီး၊ U X မှာ အတိုကနေ အသေးစိတ်ကို
+      ဖွင့်ကြည့်ခွင့် ပေးပါတယ်။ နောက် lesson မှာတော့ model ကို ဘယ်မှာ run မလဲ၊ client side လား server side လား
+      ဆိုတာကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-final-about
+        type: editor.select
+        at: { mark: sel-final-about }
+        target: { file: src/main.js, text: "showAbout(training, checked, sorter);", occurrence: 1 }
+      - id: sel-final-check
+        type: editor.select
+        at: { mark: sel-final-check }
+        target: { file: src/main.js, text: "  card.check = sure < line;", occurrence: 1 }
+      - id: sel-final-fallback
+        type: editor.select
+        at: { mark: sel-final-fallback }
+        target:
+          { file: src/main.js, text: '  if (sure < 0.6) card.group = "unsorted";', occurrence: 1 }
+      - id: sel-final-why
+        type: editor.select
+        at: { mark: sel-final-why }
+        target: { file: src/main.js, text: "  card.why = explain(sorter, text);", occurrence: 1 }
+      - {
+          id: expect-final-code,
+          type: expect.file,
+          at: { afterAction: sel-final-why },
+          path: src/main.js,
+          contains: "  // Trust cues:\n  card.check = sure < line;\n  if (sure < 0.6) card.group = \"unsorted\";\n  card.why = explain(sorter, text);\n\n  return card;\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
