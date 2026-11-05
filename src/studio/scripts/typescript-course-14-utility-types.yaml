@@ -1,0 +1,1488 @@
+# TypeScript course, lesson 14: utility types — Partial, Required, Omit, Pick (Burmese).
+#
+# Start state (ws/): src/order.ts has an Order type (with a nested customer object whose table is
+# optional) and createOrder / updateOrder, both typed with the whole Order; src/main.ts creates
+# မြမြ's order without an id and updates only its sugar, so the panel shows two TS2345 errors
+# (id missing; four properties missing) while Output prints "1 လက်ဖက်ရည် normal" and
+# "1 လက်ဖက်ရည် less". src/bill.ts (named so the checker lists it first) has a Payment union
+# (cash | kpay) and `NewPayment = Omit<Payment, "id">`, unused at the start.
+#
+# Edits, all insert-only (each new alias goes right under Order, so its query is listed first):
+#   1. `OrderChanges = Partial<Order>` + query (every property `?`, customer.name still required);
+#      `Changes` appended to `changes: Order` -> 1 error.
+#   2. `Receipt = Required<Order>` + query (note required, customer.table still optional).
+#   3. `NewOrder = Omit<Order, "id">`; `New` before `Order` in createOrder -> 0 errors.
+#   4. `KitchenTicket = Pick<Order, "item" | "sugar" | "status">` + query -> TS2344 (no status
+#      key; status: unknown); ` | "status"` in the Omit keys -> no new error (Omit is loose).
+#   5. a `status` property in Order -> Pick error gone, every derived type gains status, and
+#      createOrder's return lacks status (TS2741); `, status: "pending"` -> 0 errors.
+#   6. bill.ts: a cash payment typed NewPayment -> TS2353 ('received' does not exist); a query
+#      shows the collapsed `{ method: "cash" | "kpay" }`; a two-line DistributiveOmit and
+#      `Distributive` before `Omit<Payment` -> 0 errors, the query shows both members.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-14-utility-types.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-14-utility-types
+  title: "TypeScript course 14: Partial၊ Pick၊ Omit"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors types output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/bill.ts: |
+        // ငွေချေပုံ နှစ်မျိုး · ငွေသား ဒါမှမဟုတ် KBZPay
+        type Payment =
+          | { id: number; method: "cash"; received: number }
+          | { id: number; method: "kpay"; phone: string };
+
+        // မှတ်တမ်း မတင်ရသေးတဲ့ ငွေချေမှု · id မပါသေး
+        type NewPayment = Omit<Payment, "id">;
+      src/main.ts: |
+        import { createOrder, updateOrder } from "./order";
+
+        const order = createOrder({
+          item: "လက်ဖက်ရည်",
+          quantity: 2,
+          sugar: "normal",
+          customer: { name: "မြမြ", table: 5 },
+        });
+        const changed = updateOrder(order, { sugar: "less" });
+
+        console.log(order.id, order.item, order.sugar);
+        console.log(changed.id, changed.item, changed.sugar);
+      src/order.ts: |
+        export type Order = {
+          id: number;
+          item: string;
+          quantity: number;
+          sugar: "less" | "normal" | "extra";
+          note?: string;
+          customer: { name: string; table?: number };
+        };
+
+        let nextId = 1;
+
+        export function createOrder(data: Order): Order {
+          return { ...data, id: nextId++ };
+        }
+
+        export function updateOrder(order: Order, changes: Order): Order {
+          return { ...order, ...changes };
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: one Order type, several shapes of it; copying by hand vs deriving.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Order တစ်ခုကနေ type အသစ်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-order-box,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 190,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-order-label,
+        kind: text,
+        x: 318,
+        y: 345,
+        width: 100,
+        height: 36,
+        text: "Order",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 470,
+        y: 250,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 470,
+        y: 340,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-arrow-3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 470,
+        y: 430,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-shape-1,
+        kind: text,
+        x: 555,
+        y: 252,
+        width: 520,
+        height: 36,
+        text: "ပြင်တဲ့ form · တချို့ပဲ ပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-shape-2,
+        kind: text,
+        x: 555,
+        y: 342,
+        width: 520,
+        height: 36,
+        text: "အော်ဒါ အသစ် · id မပါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-shape-3,
+        kind: text,
+        x: 555,
+        y: 432,
+        width: 520,
+        height: 36,
+        text: "မီးဖိုချောင် · နှစ်ခု သုံးခုပဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-copy,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 780,
+        height: 36,
+        text: "လက်နဲ့ ကူးရေး → Order ပြောင်းတိုင်း လိုက်ပြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-derive,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 780,
+        height: 36,
+        text: "utility type နဲ့ ထုတ်ယူ → အလိုလို လိုက်ပြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3114
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Type တစ်ခုကနေ type အသစ်တွေ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ key တွေကို ကြိုမသိတဲ့ object တွေအတွက် index signature နဲ့ Record
+      ကို သုံးခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ရှိပြီးသား object type တစ်ခုကနေ ပုံစံ နည်းနည်းစီ ကွဲတဲ့ type
+      အသစ်တွေကို ထုတ်ယူပုံကို ကြည့်သွားပါမယ်။ [[mark:draw-order]] ဆိုင်မှာ အော်ဒါ type တစ်ခု ရှိတယ်
+      ဆိုပါစို့။ [[mark:draw-shapes]] အော်ဒါ ပြင်တဲ့ form က ပြောင်းချင်တဲ့ property တချို့ကိုပဲ ပို့ပါတယ်။
+      အော်ဒါ အသစ် ဖန်တီးတဲ့အခါ id ကို ဆိုင်က ပေးမှာ ဖြစ်လို့ customer ဘက်က id မပါပါဘူး။ မီးဖိုချောင်ကတော့
+      ဘာ ဖျော်ရမလဲ သိဖို့ property နှစ်ခု သုံးခုလောက်ပဲ လိုပါတယ်။ ဆိုတော့ တကယ်တမ်းမှာ အော်ဒါ တစ်ခုတည်းကို
+      ပုံစံ အမျိုးမျိုးနဲ့ သုံးနေတာပါ။ [[mark:draw-copy]] ဒီ ပုံစံ တစ်ခုချင်းစီအတွက် type အသစ်ကို လက်နဲ့
+      ကူးရေးမယ် ဆိုရင်၊ အော်ဒါမှာ property တစ်ခု ပြောင်းတိုင်း ကူးထားတဲ့ နေရာတိုင်းမှာ လိုက်ပြင်ရပါမယ်။
+      တစ်နေရာ မေ့သွားရင် type တွေ တစ်ခုနဲ့ တစ်ခု မကိုက်တော့ပါဘူး။ [[mark:draw-derive]] TypeScript မှာတော့
+      type တစ်ခုကနေ type အသစ် ထုတ်ပေးတဲ့ built-in type တွေ ပါပြီးသားပါ။ အဲဒါတွေကို utility type လို့
+      ခေါ်ပြီး၊ ပြီးခဲ့တဲ့ lesson က Record လည်း utility type တစ်ခုပါပဲ။ utility type နဲ့ ထုတ်ယူထားရင်၊ မူလ
+      type ပြောင်းတာနဲ့ ထုတ်ယူထားတဲ့ type တွေ အလိုလို လိုက်ပြောင်းသွားပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (reducing duplication with utility types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-order
+        type: whiteboard.apply
+        at: { mark: draw-order }
+        upsertIds: [a-order-box, a-order-label]
+        drawMs: 1200
+      - id: draw-shapes
+        type: whiteboard.apply
+        at: { mark: draw-shapes }
+        upsertIds: [a-arrow-1, a-shape-1, a-arrow-2, a-shape-2, a-arrow-3, a-shape-3]
+        drawMs: 4200
+      - id: draw-copy
+        type: whiteboard.apply
+        at: { mark: draw-copy }
+        upsertIds: [a-copy]
+        drawMs: 1600
+      - id: draw-derive
+        type: whiteboard.apply
+        at: { mark: draw-derive }
+        upsertIds: [a-derive]
+        drawMs: 1600
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-order]] ဒါက အော်ဒါ type နဲ့ အော်ဒါကို
+      ဖန်တီးတဲ့၊ ပြင်တဲ့ function တွေ ရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-order-type]] အော်ဒါ တစ်ခုမှာ id ရယ်၊
+      ပစ္စည်း ရယ်၊ အရေအတွက် ရယ်၊ သကြား ရယ်၊ မပါလည်း ရတဲ့ မှတ်ချက် ရယ်၊ customer ရယ် ပါပါတယ်။
+      [[mark:select-customer]] customer ကတော့ အော်ဒါထဲမှာ ထပ်ပါတဲ့ object တစ်ခုပါ။ နာမည်နဲ့ စားပွဲ
+      နံပါတ် ပါပြီး၊ စားပွဲ နံပါတ်ကတော့ မပါလည်း ရပါတယ်။ ဒီ အတွင်းက object ကို နောက်မှ ပြန်ကြည့်ပါမယ်။ [[mark:select-create]] ဖန်တီးတဲ့ function က
+      အော်ဒါ data ကို ယူပြီး id အသစ် တပ်ပေးပါတယ်။ [[mark:select-update]] ပြင်တဲ့ function ကတော့ အော်ဒါ
+      အဟောင်းပေါ်ကို ပြောင်းချင်တဲ့ property တွေ ထပ်ဖုံးပြီး အော်ဒါ အသစ် ပြန်ပေးပါတယ်။ [[mark:open-main]]
+      main ဖိုင်မှာတော့ မြမြ အတွက် လက်ဖက်ရည် နှစ်ခွက် အော်ဒါကို ဖန်တီးပါတယ်။ [[mark:select-update-call]]
+      ပြီးတော့ သကြား နည်းနည်းပဲ ထည့်ဖို့ ပြင်ပြီး၊ အော်ဒါ နှစ်ခုလုံးကို ထုတ်ပြပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Object Types (optional properties)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#optional-properties",
+        }
+      - {
+          title: "MDN: Spread syntax (object literals)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_syntax",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-order
+        type: workspace.openFile
+        at: { mark: open-order }
+        path: src/order.ts
+      - id: select-order-type
+        type: editor.select
+        at: { mark: select-order-type }
+        target:
+          {
+            file: src/order.ts,
+            text: "  id: number;\n  item: string;\n  quantity: number;\n  sugar: \"less\" | \"normal\" | \"extra\";\n  note?: string;",
+            occurrence: 1,
+          }
+      - id: select-customer
+        type: editor.select
+        at: { mark: select-customer }
+        target: { file: src/order.ts, text: "{ name: string; table?: number }", occurrence: 1 }
+      - id: select-create
+        type: editor.select
+        at: { mark: select-create }
+        target: { file: src/order.ts, text: "return { ...data, id: nextId++ };", occurrence: 1 }
+      - id: select-update
+        type: editor.select
+        at: { mark: select-update }
+        target: { file: src/order.ts, text: "return { ...order, ...changes };", occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-create-call
+        type: editor.select
+        at: { afterAction: open-main }
+        target: { file: src/main.ts, text: "const order = createOrder({", occurrence: 1 }
+      - id: select-update-call
+        type: editor.select
+        at: { mark: select-update-call }
+        target: { file: src/main.ts, text: 'updateOrder(order, { sugar: "less" })', occurrence: 1 }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] Output ရဲ့ ပထမ line မှာ id တစ်၊ လက်ဖက်ရည်၊ သကြား normal ဆိုပြီး ထွက်လာပြီး၊
+      ပြင်ပြီးတဲ့ အော်ဒါမှာတော့ သကြားက less ဖြစ်သွားပါတယ်။ program ကတော့ မှန်မှန် အလုပ်လုပ်နေပါတယ်။
+      [[mark:read-errors]] ဒါပေမဲ့ Errors မှာ main ဖိုင်ထဲက error နှစ်ခု ရှိပါတယ်။ ပထမ error က ဖန်တီးတဲ့
+      function ကို ပို့တဲ့ data မှာ id မပါဘူးလို့ ပြောပါတယ်။ ဒုတိယ error ကတော့ ပြင်တဲ့ function ကို သကြား
+      တစ်ခုတည်း ပို့လိုက်လို့ ကျန်တဲ့ property လေးခု မပါဘူးလို့ ပြောပါတယ်။ [[mark:read-why]] ပြဿနာက function
+      နှစ်ခုလုံးရဲ့ parameter ကို အော်ဒါ type အပြည့်အစုံနဲ့ ကြေညာထားလို့ပါ။ တကယ်တော့ ဖန်တီးတဲ့အခါ id မပါတဲ့
+      အော်ဒါကို၊ ပြင်တဲ့အခါ property တချို့ပဲ ပါတဲ့ အော်ဒါကို လက်ခံရမှာပါ။ အဲဒီ type တွေကို အော်ဒါ type ကနေ ထုတ်ယူကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (reducing duplication with utility types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-two-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-id-missing
+        type: expect.preview
+        at: { afterAction: expect-two-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'id' is missing in type"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-four-missing
+        type: expect.preview
+        at: { afterAction: expect-id-missing }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "is missing the following properties from type 'Order': id, item, quantity, customer"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-first-order
+        type: expect.preview
+        at: { afterAction: expect-four-missing }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "1 လက်ဖက်ရည် normal"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-changed-order
+        type: expect.preview
+        at: { afterAction: expect-first-order }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 လက်ဖက်ရည် less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: partial
+    chapter: "Partial နဲ့ Required"
+    narration: >
+      [[mark:open-order-2]] အော်ဒါ ဖိုင်ကို ပြန်သွားရအောင်။ [[mark:type-partial]] ပြင်တဲ့ form အတွက် type ကို
+      Partial နဲ့ ထုတ်ယူပြီး၊ သူ့ အောက်မှာ query comment ထည့်ပါမယ်။ Partial ဆိုတာ type တစ်ခုရဲ့ property
+      အားလုံးကို မပါလည်း ရတဲ့ property တွေ ဖြစ်အောင် ပြောင်းပေးတဲ့ utility type ပါ။ [[mark:read-partial]]
+      Types မှာ property တိုင်းရဲ့ နာမည်နောက်မှာ question mark ပါလာပြီး၊ type ထဲမှာလည်း undefined ကို ပေါင်းထည့်ထားတာ မြင်ရပါတယ်။ [[mark:type-use-partial]] အခု ပြင်တဲ့ function ရဲ့ parameter ကို ဒီ type နဲ့
+      ကြေညာလိုက်ပါမယ်။ [[mark:read-partial-fixed]] ဒုတိယ error ပျောက်သွားပါပြီ။ သကြား တစ်ခုတည်း ပို့လည်း
+      TypeScript က လက်ခံပါပြီ။ [[mark:read-partial-nested]] ဒါပေမဲ့ Types ထဲက customer ကို ကြည့်ပါ။ customer
+      တစ်ခုလုံးကတော့ မပါလည်း ရသွားပေမယ့်၊ သူ့ထဲက နာမည်ကတော့ question mark မပါဘဲ ရှိကို ရှိရဆဲပါ။ Partial
+      က အပြင်ဆုံး အဆင့် တစ်ဆင့်ကိုပဲ ပြောင်းပေးလို့ပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Partial<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#partialtype",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (Partial, shallow)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: open-order-2
+        type: workspace.openFile
+        at: { mark: open-order-2 }
+        path: src/order.ts
+      - id: type-partial
+        type: editor.type
+        at: { mark: type-partial }
+        target:
+          {
+            file: src/order.ts,
+            after: "  customer: { name: string; table?: number };\n};\n\n",
+            occurrence: 1,
+          }
+        text: "export type OrderChanges = Partial<Order>;\n//          ^?\n\n"
+        cadence: line-by-line
+      - id: expect-partial-type
+        type: expect.preview
+        at: { afterAction: type-partial }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: 'sugar?: "less" | "normal" | "extra" | undefined;'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-partial-nested
+        type: expect.preview
+        at: { afterAction: expect-partial-type }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "customer?: {\n        name: string;\n        table?: number;\n    } | undefined;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-use-partial
+        type: editor.type
+        at: { mark: type-use-partial }
+        target: { file: src/order.ts, after: "changes: Order", occurrence: 1 }
+        text: "Changes"
+        cadence: fast-explainer
+      - id: expect-partial-fixed
+        type: expect.preview
+        at: { afterAction: type-use-partial }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-id-left
+        type: expect.preview
+        at: { afterAction: expect-partial-fixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'id' is missing in type"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: required
+    narration: >
+      [[mark:type-required]] Partial ရဲ့ ပြောင်းပြန်ကတော့ Required ပါ။ ဥပမာအားဖြင့်၊ ဘောင်ချာ ထုတ်တဲ့အခါ
+      မှတ်ချက် အပါအဝင် property အားလုံး ရှိရမယ် ဆိုပါစို့။ ဒီ type ကိုလည်း query comment နဲ့ ကြည့်ရအောင်။
+      [[mark:read-required]] Types ရဲ့ အပေါ်ဆုံးမှာ မှတ်ချက်ရဲ့ question mark ပျောက်သွားပြီး၊ မဖြစ်မနေ
+      ရှိရမယ့် string ဖြစ်သွားပါပြီ။ [[mark:read-required-nested]] ဒါပေမဲ့ customer ထဲက စားပွဲ နံပါတ်ကတော့
+      question mark နဲ့ ကျန်နေဆဲပါ။ Required ကလည်း Partial လိုပဲ အပြင်ဆုံး အဆင့် တစ်ဆင့်ကိုပဲ ပြောင်းလို့ပါ။
+      အတွင်းထဲက object တွေထိ ပြောင်းချင်ရင်တော့ ကိုယ်တိုင် ရေးရပါမယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Required<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#requiredtype",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (Required, one level deep)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: type-required
+        type: editor.type
+        at: { mark: type-required }
+        target:
+          {
+            file: src/order.ts,
+            after: "  customer: { name: string; table?: number };\n};\n\n",
+            occurrence: 1,
+          }
+        text: "export type Receipt = Required<Order>;\n//          ^?\n\n"
+        cadence: line-by-line
+      - id: expect-required-note
+        type: expect.preview
+        at: { afterAction: type-required }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    note: string;"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-required-nested
+        type: expect.preview
+        at: { afterAction: expect-required-note }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    customer: {\n        name: string;\n        table?: number;\n    };"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: omit
+    chapter: "Omit နဲ့ Pick"
+    narration: >
+      [[mark:type-omit]] အခု အော်ဒါ အသစ် ဖန်တီးဖို့ type ကို Omit နဲ့ ထုတ်ယူပါမယ်။ Omit က type တစ်ခုထဲကနေ
+      ကိုယ် ပေးလိုက်တဲ့ key တွေကို ဖယ်ထုတ်ပြီး ကျန်တာကို ပြန်ပေးပါတယ်။ ဒီမှာတော့ id ကို ဖယ်လိုက်တာပါ။
+      [[mark:type-use-omit]] ဖန်တီးတဲ့ function ရဲ့ parameter ကို ဒီ type နဲ့ ကြေညာလိုက်ပါမယ်။
+      [[mark:read-omit-fixed]] Errors မှာ error တစ်ခုမှ မကျန်တော့ပါဘူး။ customer ဘက်က id မပို့ဘဲ အော်ဒါ
+      ဖန်တီးလို့ ရသွားပြီး၊ id ကိုတော့ function ထဲမှာ ဆိုင်က တပ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Omit<Type, Keys>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#omittype-keys",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (Omit)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: type-omit
+        type: editor.type
+        at: { mark: type-omit }
+        target:
+          {
+            file: src/order.ts,
+            after: "  customer: { name: string; table?: number };\n};\n\n",
+            occurrence: 1,
+          }
+        text: "export type NewOrder = Omit<Order, \"id\">;\n\n"
+        cadence: line-by-line
+      - id: type-use-omit
+        type: editor.type
+        at: { mark: type-use-omit }
+        target: { file: src/order.ts, after: "createOrder(data: ", occurrence: 1 }
+        text: "New"
+        cadence: fast-explainer
+      - id: expect-omit-fixed
+        type: expect.preview
+        at: { afterAction: type-use-omit }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: pick
+    narration: >
+      [[mark:type-pick]] Omit ရဲ့ ပြောင်းပြန်ကတော့ Pick ပါ။ Pick က ကိုယ် ရွေးပေးတဲ့ key တွေကိုပဲ ယူပါတယ်။
+      မီးဖိုချောင် လက်မှတ်မှာ ပစ္စည်း၊ သကြားနဲ့ အော်ဒါ အခြေအနေ ပါစေချင်ပါတယ်။ အော်ဒါ အခြေအနေ ဆိုတဲ့ status
+      ကိုတော့ အော်ဒါ type ထဲ မထည့်ရသေးပါဘူး။ မထည့်ခင်မှာ Pick နဲ့ Omit က မရှိသေးတဲ့ key ကို ဘယ်လို
+      ဆက်ဆံလဲ အရင် ကြည့်ရအောင်။ [[mark:read-pick-error]] Errors မှာ error တစ်ခု ပေါ်လာပါတယ်။ status ဆိုတဲ့ key က
+      အော်ဒါ type ရဲ့ key တွေထဲမှာ မရှိဘူးလို့ ပြောနေတာပါ။ Types မှာလည်း status ကို unknown လို့ ပြနေပါတယ်။ Pick က ကိုယ် ရွေးတဲ့ key တွေ
+      တကယ် ရှိမရှိ စစ်ပေးတာပါ။ [[mark:type-omit-status]] Omit ကိုလည်း စမ်းကြည့်ရအောင်။ အော်ဒါ အသစ်ရဲ့ status
+      ကိုလည်း ဆိုင်ကပဲ သတ်မှတ်မှာ ဖြစ်လို့၊ Omit ရဲ့ key တွေထဲကို status ထည့်လိုက်ပါမယ်။
+      [[mark:read-omit-loose]] error အသစ် မပေါ်လာပါဘူး။ Omit က မရှိတဲ့ key ကို ပေးလည်း လက်ခံလို့ပါ။
+      ဒါကြောင့် Omit ထဲမှာ key နာမည်ကို စာလုံးပေါင်း မှားရေးမိရင်၊ TypeScript က သတိမပေးဘဲ ဖယ်ချင်တဲ့ property
+      က ဆက်ကျန်နေနိုင်တာကို သတိထားပါ။
+    sources:
+      - {
+          title: "TypeScript Handbook: Utility Types (Pick<Type, Keys>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#picktype-keys",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (Omit is loose, Pick is strict)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+    actions:
+      - id: type-pick
+        type: editor.type
+        at: { mark: type-pick }
+        target:
+          {
+            file: src/order.ts,
+            after: "  customer: { name: string; table?: number };\n};\n\n",
+            occurrence: 1,
+          }
+        text: "export type KitchenTicket = Pick<Order, \"item\" | \"sugar\" | \"status\">;\n//          ^?\n\n"
+        cadence: line-by-line
+      - id: expect-pick-error
+        type: expect.preview
+        at: { afterAction: type-pick }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-pick-code
+        type: expect.preview
+        at: { afterAction: expect-pick-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2344" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-pick-text
+        type: expect.preview
+        at: { afterAction: expect-pick-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'Type ''"status"'' is not assignable to type ''keyof Order''.'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-pick-unknown
+        type: expect.preview
+        at: { afterAction: expect-pick-text }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    status: unknown;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-omit-status
+        type: editor.type
+        at: { mark: type-omit-status }
+        target: { file: src/order.ts, after: 'Omit<Order, "id"', occurrence: 1 }
+        text: ' | "status"'
+        cadence: fast-explainer
+      - id: expect-omit-loose
+        type: expect.preview
+        at: { afterAction: type-omit-status }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-omit-loose-code
+        type: expect.preview
+        at: { afterAction: expect-omit-loose }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2344" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: add-status
+    narration: >
+      [[mark:type-status]] အခု အော်ဒါ type ထဲကို status property ကို တကယ် ထည့်ပါမယ်။ [[mark:read-status]]
+      Pick ရဲ့ error ပျောက်သွားပြီး၊ Types အပေါ်ဆုံးက မီးဖိုချောင် လက်မှတ်မှာ unknown အစား
+      status ရဲ့ တန်ဖိုး လေးမျိုး ပေါ်လာပါပြီ။ သူ့ အောက်က
+      Required နဲ့ ထုတ်ထားတဲ့ type မှာလည်း status က အလိုလို ပါလာပါတယ်။ ထုတ်ယူထားတဲ့ type တွေကို တစ်ခုမှ
+      ပြင်စရာ မလိုပါဘူး။ [[mark:read-return-error]] Errors မှာတော့ error အသစ် တစ်ခု ပေါ်လာပါတယ်။ ဖန်တီးတဲ့
+      function က ပြန်ပေးတဲ့ အော်ဒါမှာ status မပါဘူးလို့ ပြောနေတာပါ။ Omit က status ကို ဖယ်ထားလို့ customer
+      ဆီက မလာတော့တဲ့အတွက်၊ ဆိုင်ကပဲ ထည့်ပေးရပါမယ်။ [[mark:type-set-status]] အော်ဒါ အသစ်တိုင်းကို pending
+      နဲ့ စပေးလိုက်ပါမယ်။ [[mark:read-status-fixed]] error မကျန်တော့ပါဘူး။ ဆိုတော့ အော်ဒါ type
+      တစ်နေရာတည်းကို ပြင်လိုက်တာနဲ့ ထုတ်ယူထားတဲ့ type တွေ အကုန် လိုက်ပြောင်းသွားပြီး၊ ပြင်ရမယ့် ကျန်တဲ့
+      နေရာကိုလည်း TypeScript က ပြပေးသွားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (derived types follow the source type)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html",
+        }
+    actions:
+      - id: type-status
+        type: editor.type
+        at: { mark: type-status }
+        target: { file: src/order.ts, after: "  quantity: number;\n", occurrence: 1 }
+        text: "  status: \"pending\" | \"brewing\" | \"ready\" | \"paid\";\n"
+        cadence: line-by-line
+      - id: expect-status-code
+        type: expect.preview
+        at: { afterAction: type-status }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2741" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-status-one
+        type: expect.preview
+        at: { afterAction: expect-status-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-status-missing
+        type: expect.preview
+        at: { afterAction: expect-status-one }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'status' is missing in type"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-ticket-status
+        type: expect.preview
+        at: { afterAction: expect-status-missing }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: '    status: "pending" | "brewing" | "ready" | "paid";'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-full-status
+        type: expect.preview
+        at: { afterAction: expect-ticket-status }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        textContains: '    status: "pending" | "brewing" | "ready" | "paid";'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-set-status
+        type: editor.type
+        at: { mark: type-set-status }
+        target: { file: src/order.ts, after: "id: nextId++", occurrence: 1 }
+        text: ', status: "pending"'
+        cadence: fast-explainer
+      - id: expect-status-fixed
+        type: expect.preview
+        at: { afterAction: type-set-status }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: union
+    chapter: "Union ပေါ်က Omit"
+    narration: >
+      [[mark:open-bill]] နောက်ဆုံးအနေနဲ့ Omit နဲ့ Pick မှာ သတိထားရမယ့် အချက် တစ်ခုကို ငွေချေတဲ့ ဖိုင်မှာ
+      ကြည့်ရအောင်။ [[mark:select-payment]] ငွေချေပုံကို union နဲ့ ရေးထားပါတယ်။ ငွေသားနဲ့ ချေရင် လက်ခံရတဲ့ ငွေ
+      ပါပြီး၊ KBZPay နဲ့ ချေရင် ဖုန်းနံပါတ် ပါပါတယ်။ [[mark:select-new-payment]] အောက်က type ကတော့
+      မှတ်တမ်း မတင်ရသေးတဲ့ ငွေချေမှုအတွက် id ကို Omit နဲ့ ဖယ်ထားတာပါ။ [[mark:type-cash]] ဒီ type နဲ့ ငွေသား
+      ၅၀၀၀ ကျပ် ချေတဲ့ ငွေချေမှု တစ်ခု ရေးကြည့်ရအောင်။ [[mark:read-cash-error]] error တစ်ခု ပေါ်လာပါတယ်။
+      လက်ခံရတဲ့ ငွေ ဆိုတဲ့ property က ဒီ type ထဲမှာ မရှိဘူးလို့ ပြောနေပါတယ်။ [[mark:type-payment-query]]
+      ဘာဖြစ်လို့လဲ ဆိုတာ query comment နဲ့ ကြည့်ရအောင်။ [[mark:read-collapse]] Types အပေါ်ဆုံးမှာ ငွေချေပုံ
+      ဆိုတဲ့ property တစ်ခုတည်းပဲ ကျန်ပြီး၊ လက်ခံရတဲ့ ငွေရော ဖုန်းနံပါတ်ရော ပျောက်သွားပါပြီ။ union ပေါ်မှာ
+      Omit ကို သုံးရင်၊ member တစ်ခုချင်းစီကို သီးသန့် မပြောင်းဘဲ member အားလုံးမှာ တူတဲ့ property တွေကိုပဲ
+      ချန်ထားလို့ပါ။ Pick ကလည်း ဒီ အတိုင်းပဲ ဖြစ်ပါတယ်။ [[mark:type-distributive]] ပြင်နည်းကတော့ member
+      တစ်ခုချင်းစီပေါ်မှာ Omit ကို သုံးပေးတဲ့ distributive version တစ်ခု ရေးတာပါ။ ဒီ နှစ်ကြောင်းက conditional
+      type ကို သုံးထားလို့၊ အသေးစိတ်ကို နောက်ပိုင်း conditional type lesson မှာ ရှင်းပါမယ်။
+      [[mark:type-use-distributive]] အောက်က type မှာ ဒီ version ကို သုံးလိုက်ပါမယ်။ [[mark:read-distributive]]
+      error ပျောက်သွားပါပြီ။ Types မှာလည်း member နှစ်ခုကို Omit တစ်ခုစီနဲ့ သီးသန့် ပတ်ထားတာ ပြနေပါတယ်။
+      ဆိုတော့ ငွေသားဘက်မှာ လက်ခံရတဲ့ ငွေ၊ KBZPay ဘက်မှာ ဖုန်းနံပါတ် ကိုယ်စီ ကျန်ပြီး၊ id ကိုပဲ တစ်ခုချင်းစီကနေ
+      ဖယ်ထားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects (Omit and Pick don't distribute; DistributiveOmit)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Conditional Types (distributive conditional types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types",
+        }
+    actions:
+      - id: open-bill
+        type: workspace.openFile
+        at: { mark: open-bill }
+        path: src/bill.ts
+      - id: select-payment
+        type: editor.select
+        at: { mark: select-payment }
+        target:
+          {
+            file: src/bill.ts,
+            text: "  | { id: number; method: \"cash\"; received: number }\n  | { id: number; method: \"kpay\"; phone: string };",
+            occurrence: 1,
+          }
+      - id: select-new-payment
+        type: editor.select
+        at: { mark: select-new-payment }
+        target: { file: src/bill.ts, text: 'type NewPayment = Omit<Payment, "id">;', occurrence: 1 }
+      - id: type-cash
+        type: editor.type
+        at: { mark: type-cash }
+        target:
+          { file: src/bill.ts, after: "type NewPayment = Omit<Payment, \"id\">;\n", occurrence: 1 }
+        text: "\nconst cash: NewPayment = { method: \"cash\", received: 5000 };\n"
+        cadence: line-by-line
+      - id: expect-cash-error
+        type: expect.preview
+        at: { afterAction: type-cash }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cash-text
+        type: expect.preview
+        at: { afterAction: expect-cash-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'received' does not exist in type 'NewPayment'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-payment-query
+        type: editor.type
+        at: { mark: type-payment-query }
+        target:
+          { file: src/bill.ts, after: "type NewPayment = Omit<Payment, \"id\">;\n", occurrence: 1 }
+        text: "//   ^?\n"
+        cadence: fast-explainer
+      - id: expect-collapse
+        type: expect.preview
+        at: { afterAction: type-payment-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          { name: data-type, value: "type NewPayment = {\n    method: \"cash\" | \"kpay\";\n}" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-distributive
+        type: editor.type
+        at: { mark: type-distributive }
+        target:
+          {
+            file: src/bill.ts,
+            after: "  | { id: number; method: \"kpay\"; phone: string };\n\n",
+            occurrence: 1,
+          }
+        text: "type DistributiveOmit<T, K extends PropertyKey> =\n  T extends any ? Omit<T, K> : never;\n\n"
+        cadence: line-by-line
+      - id: type-use-distributive
+        type: editor.type
+        at: { mark: type-use-distributive }
+        target: { file: src/bill.ts, after: "type NewPayment = ", occurrence: 1 }
+        text: "Distributive"
+        cadence: fast-explainer
+      - id: expect-distributive-fixed
+        type: expect.preview
+        at: { afterAction: type-use-distributive }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cash-member
+        type: expect.preview
+        at: { afterAction: expect-distributive-fixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    method: \"cash\";\n    received: number;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-kpay-member
+        type: expect.preview
+        at: { afterAction: expect-cash-member }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "    method: \"kpay\";\n    phone: string;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap-partial]] ဒါဆို ပြန်ချုပ်ရရင်၊ Partial က property အားလုံးကို မပါလည်း ရအောင် ပြောင်းပြီး၊
+      Required က အားလုံး ရှိရအောင် ပြောင်းပါတယ်။ နှစ်ခုလုံး အပြင်ဆုံး အဆင့် တစ်ဆင့်ကိုပဲ ပြောင်းပါတယ်။
+      [[mark:recap-omit]] Omit က key တွေကို ဖယ်ပြီး၊ Pick က key တွေကို ရွေးယူပါတယ်။ Pick က မရှိတဲ့ key ကို
+      ငြင်းပေမယ့်၊ Omit ကတော့ လက်ခံပါတယ်။ union ပေါ်မှာ သုံးရင်တော့ member တွေကို တစ်ခုတည်း ပေါင်းချလိုက်လို့၊ distributive version ကို သုံးရပါတယ်။ နောက် lesson မှာတော့ တန်ဖိုးတွေကို ပြောင်းလဲခွင့် ပေးမလား မပေးဘူးလား ဆိုတဲ့ mutability
+      နဲ့ read only ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 6: Objects",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/objects",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html",
+        }
+    actions:
+      - id: open-order-3
+        type: workspace.openFile
+        at: { mark: recap-partial }
+        path: src/order.ts
+      - id: select-derived
+        type: editor.select
+        at: { afterAction: open-order-3 }
+        target:
+          { file: src/order.ts, text: "export type Receipt = Required<Order>;", occurrence: 1 }
+      - id: select-omit-pick
+        type: editor.select
+        at: { mark: recap-omit }
+        target:
+          {
+            file: src/order.ts,
+            text: 'export type KitchenTicket = Pick<Order, "item" | "sugar" | "status">;',
+            occurrence: 1,
+          }
+      - id: expect-file-order
+        type: expect.file
+        at: { afterAction: select-omit-pick }
+        path: src/order.ts
+        contains: 'export type NewOrder = Omit<Order, "id" | "status">;'
+      - id: expect-file-functions
+        type: expect.file
+        at: { afterAction: expect-file-order }
+        path: src/order.ts
+        contains: "export function createOrder(data: NewOrder): Order {\n  return { ...data, id: nextId++, status: \"pending\" };\n}\n\nexport function updateOrder(order: Order, changes: OrderChanges): Order {"
+      - id: expect-file-receipt
+        type: expect.file
+        at: { afterAction: expect-file-functions }
+        path: src/order.ts
+        contains: "export type Receipt = Required<Order>;\n//          ^?\n"
+      - id: expect-file-bill
+        type: expect.file
+        at: { afterAction: expect-file-receipt }
+        path: src/bill.ts
+        contains: 'type NewPayment = DistributiveOmit<Payment, "id">;'
+checks:
+  - { type: timing.p95Ms, max: 300 }
