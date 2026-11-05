@@ -1,0 +1,1923 @@
+# AI course, lesson 02: finding AI opportunities (Burmese, concept lesson).
+#
+# A concept lesson (no deck, lead decision 2026-11-05): whiteboard boards carry the lists and the
+# diagrams; the AI panel shows one static table card drawn by pinned code. No code is typed.
+#
+# Start state (ws/): notes.md (the key lines, highlighted in the recap); src/journey.js, the shop's
+# user journey as a plan: one row per AI idea (stage, category of value, idea, AI needed or not;
+# COURSE-KIT §3.2 drawn long, 13 rows); src/main.js draws it as the table card `ai-journey`
+# ("Customer journey"). No model runs anywhere (M0, nothing computed but the table itself).
+# The runtime starts at the first mark only to show that card (≥ 1,000 board characters before
+# runtime.waitForReady).
+#
+# Boards: (A) the mini blueprint with Opportunity highlighted and the developer's two views; (V) the
+# five value categories with tea-shop examples, the risk arrow and "start here"; (P) the four people,
+# each with one need (personas); (S) where ideas come from; (Z) the quiz. The board is a modal: the
+# panel is seen in `journey` and `journey-rest`, the editor (notes.md) in the recap.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-02-opportunities.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-02-opportunities
+  title: "AI course 02: AI သုံးဖို့ အခွင့်အလမ်း ရှာခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      notes.md: |
+        # AI သုံးဖို့ အခွင့်အလမ်း ရှာခြင်း
+
+        - AI ကို ထည့်တဲ့ အကြောင်း — အထင်ကြီးစရာ ကောင်းလို့ မဟုတ်ဘဲ user အတွက် ပိုလွယ်၊ ပိုမြန်၊ ပိုပျော်စရာ ကောင်းအောင်
+        - အကျိုးကျေးဇူး 5 မျိုး — insights · convenience · automation · augmentation · personalization
+        - အောက်ကို ဆင်းလေ ရှုပ်ထွေးမှု၊ risk၊ impact များလေ · ဆိုင်ထဲ insights ကနေ စ
+        - user ကို အရင် သိ — persona · user ရဲ့ လိုအပ်ချက်ကနေ စ · team နဲ့ ပြိုင်ဘက်ရဲ့ idea ကို user နဲ့ စစ်
+        - user journey — ရှာ → ရွေး → မှာ၊ ငွေချေ → ရပြီးနောက် · အဆင့်တိုင်းမှာ အခွင့်အလမ်း မတူ
+
+        ဒီ lesson ထဲက စကားလုံး အသစ်တွေ: insights · convenience · automation · augmentation ·
+        personalization · persona · user journey
+
+        နောက် lesson: Idea ကို ပုံဖော်ပြီး prototype လုပ်ခြင်း
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/journey.js: |
+        // ရွှေလက်ဖက်ရည်ဆိုင်'s user journey: the AI ideas at each stage, one row per idea (a plan, not code).
+        // category = the kind of value the idea gives. false at the end = plain code does it, no AI needed.
+        const idea = (stage, category, text, ai = true) => ({ stage, category, idea: text, "AI လို": ai });
+
+        export const journey = [
+          idea("ရှာ", "insights", "ရှာမတွေ့တဲ့ search တွေ"),
+          idea("ရှာ", "convenience", "ကိုယ့်စကားနဲ့ ရှာ"),
+          idea("ရှာ", "personalization", "ကိုယ့်အတွက် အကြံပြု"),
+          idea("ရွေး", "convenience", "review အနှစ်ချုပ်"),
+          idea("ရွေး", "augmentation", "တွဲစားရင် ကောင်းတာ"),
+          idea("ရွေး", "personalization", "အချိုအဆိမ့် မှတ်ထား", false),
+          idea("မှာ၊ ငွေချေ", "convenience", "မှာနေကျ ပြန်မှာ", false),
+          idea("မှာ၊ ငွေချေ", "automation", "ငွေ 2 ခါ ဖြတ်ရင် သတိပေး"),
+          idea("ရပြီးနောက်", "insights", "message တွေ ခွဲပြီး စုပြ"),
+          idea("ရပြီးနောက်", "insights", "မလာတော့မယ့် member"),
+          idea("ရပြီးနောက်", "automation", "မေးတာ အလိုလို ဖြေ"),
+          // The shop's own side, not the customer's journey:
+          idea("ဆိုင်ဘက်", "insights", "မနက်ဖြန် ဘယ်နှပွဲ"),
+          idea("ဆိုင်ဘက်", "augmentation", "ဖော်ပြချက် မူကြမ်း"),
+        ];
+      src/main.js: |
+        import { panel } from "ai-panel";
+        import { journey } from "./journey.js";
+
+        // The journey table as one static card: no model runs here, the rows are the plan in journey.js.
+        panel.table("Customer journey", journey, { id: "journey" });
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Opportunity is today's layer (orange), the rest white;
+    # the developer's two views (white) and why AI at all (green).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-opp-d,
+        kind: text,
+        x: 560,
+        y: 232,
+        width: 330,
+        height: 38,
+        text: "use case · အကျိုးကျေးဇူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 600,
+        height: 45,
+        text: "ဒီနေ့ · AI သုံးဖို့ အခွင့်အလမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-two,
+        kind: text,
+        x: 300,
+        y: 562,
+        width: 640,
+        height: 40,
+        text: "ဆောက်လို့ ရလား + user အတွက် ကောင်းလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-why,
+        kind: text,
+        x: 300,
+        y: 606,
+        width: 520,
+        height: 40,
+        text: "ပိုလွယ် · ပိုမြန် · ပိုပျော်စရာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board V: the five categories of value, top to bottom (complexity, risk and impact grow downward:
+    # the red arrow); our examples in white; start at the top (green); light personalization (orange).
+    - {
+        id: v-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 560,
+        height: 50,
+        text: "AI ရဲ့ အကျိုးကျေးဇူး 5 မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: v-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 270,
+        y: 228,
+        width: 40,
+        height: 280,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: v-ins,
+        kind: text,
+        x: 330,
+        y: 228,
+        width: 270,
+        height: 40,
+        text: "insights",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-ins-ex,
+        kind: text,
+        x: 610,
+        y: 230,
+        width: 380,
+        height: 40,
+        text: "customer ဘာ တိုင်ကြားလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-start,
+        kind: text,
+        x: 990,
+        y: 228,
+        width: 100,
+        height: 40,
+        text: "ဒီက စ",
+        strokeColor: "#2f9e44",
+        fontSize: 30,
+      }
+    - {
+        id: v-start-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 318,
+        y: 218,
+        width: 240,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: v-conv,
+        kind: text,
+        x: 330,
+        y: 288,
+        width: 270,
+        height: 40,
+        text: "convenience",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-conv-ex,
+        kind: text,
+        x: 610,
+        y: 290,
+        width: 400,
+        height: 40,
+        text: "ကိုယ့်စကားနဲ့ ရှာ တွေ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-auto,
+        kind: text,
+        x: 330,
+        y: 348,
+        width: 270,
+        height: 40,
+        text: "automation",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-auto-ex,
+        kind: text,
+        x: 610,
+        y: 350,
+        width: 440,
+        height: 40,
+        text: "ခဏခဏ မေးတာ အလိုလို ဖြေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-aug,
+        kind: text,
+        x: 330,
+        y: 408,
+        width: 270,
+        height: 40,
+        text: "augmentation",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-aug-ex,
+        kind: text,
+        x: 610,
+        y: 410,
+        width: 420,
+        height: 40,
+        text: "menu ဖော်ပြချက် မူကြမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-pers,
+        kind: text,
+        x: 330,
+        y: 468,
+        width: 270,
+        height: 40,
+        text: "personalization",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-pers-ex,
+        kind: text,
+        x: 610,
+        y: 470,
+        width: 420,
+        height: 40,
+        text: "ကိုယ့်အတွက် menu အကြံပြု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-risk,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 700,
+        height: 40,
+        text: "အောက်ဆင်းလေ ရှုပ်ထွေးမှု · risk · impact များလေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: v-light,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 720,
+        height: 40,
+        text: "personalization အပေါ့စား · မခက်၊ risk နည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board P: the four people (personas), each with one need (orange); the rule (green).
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 520,
+        height: 50,
+        text: "ကိုယ့် user တွေ · persona",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-mm-box,
+        kind: rectangle,
+        x: 285,
+        y: 220,
+        width: 395,
+        height: 140,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-mm,
+        kind: text,
+        x: 303,
+        y: 236,
+        width: 360,
+        height: 40,
+        text: "မြမြ · ဆိုင်ပိုင်ရှင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-mm-need,
+        kind: text,
+        x: 303,
+        y: 296,
+        width: 360,
+        height: 40,
+        text: "ဘာ မကျေနပ်လဲ သိချင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-hh-box,
+        kind: rectangle,
+        x: 700,
+        y: 220,
+        width: 395,
+        height: 140,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-hh,
+        kind: text,
+        x: 718,
+        y: 236,
+        width: 360,
+        height: 40,
+        text: "လှလှ · ကောင်တာ၊ page",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-hh-need,
+        kind: text,
+        x: 718,
+        y: 296,
+        width: 360,
+        height: 40,
+        text: "ဖော်ပြချက် ရေးရ ကြာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-aa-box,
+        kind: rectangle,
+        x: 285,
+        y: 380,
+        width: 395,
+        height: 140,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-aa,
+        kind: text,
+        x: 303,
+        y: 396,
+        width: 360,
+        height: 40,
+        text: "အောင်အောင် · member",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-aa-need,
+        kind: text,
+        x: 303,
+        y: 456,
+        width: 360,
+        height: 40,
+        text: "မှာနေကျ မြန်မြန် မှာချင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-mg-box,
+        kind: rectangle,
+        x: 700,
+        y: 380,
+        width: 395,
+        height: 140,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-mg,
+        kind: text,
+        x: 718,
+        y: 396,
+        width: 360,
+        height: 40,
+        text: "မောင်မောင် · ကျောင်းသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-mg-need,
+        kind: text,
+        x: 718,
+        y: 456,
+        width: 360,
+        height: 40,
+        text: "ကိုယ့်စကားနဲ့ ရှာ မတွေ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-first,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 640,
+        height: 45,
+        text: "user ရဲ့ လိုအပ်ချက် → use case",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    # Board S: where ideas come from: user needs (green, the best: a check), the team's own ideas
+    # (orange: validate quickly), competitors (red: different customers, validate early).
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 520,
+        height: 50,
+        text: "Idea တွေ ဘယ်က လာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-user,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 440,
+        height: 45,
+        text: "1. user ရဲ့ လိုအပ်ချက်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: s-user-check,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 228,
+        width: 50,
+        height: 55,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-user-ex,
+        kind: text,
+        x: 340,
+        y: 287,
+        width: 440,
+        height: 40,
+        text: "မောင်မောင် ရှာမတွေ့တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-team,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 440,
+        height: 45,
+        text: "2. team ရဲ့ idea",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: s-team-ex,
+        kind: text,
+        x: 340,
+        y: 407,
+        width: 440,
+        height: 40,
+        text: "user နဲ့ အမြန် စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-rival,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 440,
+        height: 45,
+        text: "3. ပြိုင်ဘက် ဆိုင်",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: s-rival-ex,
+        kind: text,
+        x: 340,
+        y: 527,
+        width: 520,
+        height: 40,
+        text: "customer မတူ · စောစော စမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question in white, the answer added in green, the reason in violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 470,
+        height: 45,
+        text: "လှလှ က menu ဖော်ပြချက် အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 470,
+        height: 45,
+        text: "ရေးဖို့ AI အကူအညီ လိုချင်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q3,
+        kind: text,
+        x: 300,
+        y: 344,
+        width: 470,
+        height: 45,
+        text: "ဘယ် အမျိုးအစားလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 360,
+        height: 50,
+        text: "augmentation",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 780,
+        height: 40,
+        text: "လှလှ ကိုယ်တိုင် ရွေး၊ ပြင်၊ ဆုံးဖြတ် → automation မဟုတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5102
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Opportunity ကို ရှာရအောင်"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ AI feature တစ်ခုကို Opportunity၊ Solution နဲ့ Governance
+      ဆိုတဲ့ blueprint နဲ့ စီစဉ်ရမယ်လို့ ပြောခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ပထမ အပိုင်းဖြစ်တဲ့ Opportunity
+      ကို ဘယ်လို ရှာမလဲ ဆိုတာ ကြည့်သွားပါမယ်။ [[mark:draw-mini]] blueprint မှာ ကြည့်ရင်၊ ဒီနေ့ အလုပ်က
+      အပေါ်ဆုံးက Opportunity အကွက်ပါ။ ဘယ် user ရဲ့ ဘယ် ပြဿနာကို ဖြေရှင်းမလဲ၊ ဖြေရှင်းရင် ဘာ
+      အကျိုးကျေးဇူး ရမလဲ ဆိုတာကို ဒီမှာ ဆုံးဖြတ်ရတာပါ။ [[mark:draw-two]] web developer အနေနဲ့ ကိုယ်က idea တစ်ခုကို
+      နည်းပညာအရ ဆောက်လို့ ရမရ ဆိုတာရော၊ user ရဲ့ အတွေ့အကြုံကို ဘယ်လို ပြောင်းစေမလဲ ဆိုတာပါ နှစ်ဘက်လုံး
+      မြင်နိုင်ပါတယ်။ ဒါကြောင့် AI အခွင့်အလမ်း ရှာတဲ့ နေရာမှာ ကိုယ့် အမြင်က အရေးပါပါတယ်။
+      [[mark:draw-why]] AI ကို ထည့်တဲ့ အကြောင်းကလည်း အသစ်ဖြစ်လို့၊ အထင်ကြီးစရာ ကောင်းလို့ မဟုတ်ဘဲ၊ user
+      အတွက် ပိုလွယ်၊ ပိုမြန်၊ ပိုပျော်စရာ ကောင်းအောင် တကယ် လုပ်ပေးနိုင်လို့ ဖြစ်ရပါမယ်။
+    sources:
+      - { title: "web.dev Learn AI: Explore use cases", url: "https://web.dev/learn/ai/use-cases" }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-opp-d,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+              a-today,
+            ],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-two,
+          type: whiteboard.apply,
+          at: { mark: draw-two },
+          upsertIds: [a-two],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: draw-why },
+          upsertIds: [a-why],
+          drawMs: 1000,
+        }
+
+  - id: value
+    chapter: "AI ရဲ့ အကျိုးကျေးဇူး ငါးမျိုး"
+    narration: >
+      [[mark:draw-tree]] AI က ပေးနိုင်တဲ့ အကျိုးကျေးဇူးကို အမျိုးအစား ငါးမျိုး ခွဲကြည့်လို့ ရပါတယ်။
+      [[mark:draw-insights]] ပထမ တစ်ခု insights ဆိုတာ ဆုံးဖြတ်ချက် ပိုကောင်းအောင် အချက် ထုတ်ပေးတာပါ။
+      ဥပမာ customer တွေ ဘာကို အများဆုံး တိုင်ကြားလဲ ဆိုတာ ဆိုင်ပိုင်ရှင်ကို စုပြပေးတာမျိုးပါ။
+      [[mark:draw-convenience]] convenience က လုပ်ရ ခက်တာ၊ အချိန်ကုန်တာကို လျှော့ပေးတာပါ။ customer က
+      ကိုယ့်စကားနဲ့ ရှာရင်တောင် menu ထဲက လိုချင်တာကို တန်းတွေ့တာမျိုးပါ။ [[mark:draw-automation]]
+      automation ကတော့ ထပ်ခါထပ်ခါ လုပ်ရတဲ့ အလုပ်ကို အစားလုပ်ပေးတာပါ။ ဆိုင် ဘယ်နှနာရီ ဖွင့်လဲ လို
+      ခဏခဏ မေးတဲ့ မေးခွန်းတွေကို အလိုလို ဖြေပေးတာမျိုးပါ။ [[mark:draw-augmentation]] augmentation က
+      ခက်တဲ့၊ ဖန်တီးရတဲ့ အလုပ်မှာ ကူညီပေးတာပါ။ menu ဖော်ပြချက် အသစ်အတွက် မူကြမ်း ရေးပေးတာမျိုးပါ။
+      [[mark:draw-personalization]] personalization ကတော့ လူ တစ်ယောက်ချင်းရဲ့ လိုအပ်ချက်နဲ့ ကြိုက်တာကို
+      လိုက်ပြီး ပြောင်းပေးတာပါ။ customer တစ်ယောက်ချင်းအတွက် menu ကို အကြံပြုတာမျိုးပါ။
+      [[mark:draw-risk]] စာရင်းရဲ့ အောက်ကို ဆင်းလာလေ ဆောက်ရတာ ပိုရှုပ်ထွေးလာလေ ဖြစ်ပါတယ်။ မှားရင်
+      ဖြစ်မယ့် risk ရော၊ user အပေါ် သက်ရောက်မှုပါ ပိုကြီးလာပါတယ်။ [[mark:draw-start]] ဒါကြောင့်
+      အပေါ်ဘက်ကနေ စတာ ကောင်းပါတယ်။ ဆိုင်ထဲမှာပဲ သုံးတဲ့ insights နဲ့ စရင်၊ model မှားသွားလည်း
+      ဝန်ထမ်းတွေပဲ မြင်လို့ customer ကို မထိခိုက်ပါဘူး။ ပြီးမှ customer တွေ အခုကတည်းက အခက်တွေ့နေတဲ့
+      နေရာတွေကို ပြင်ပြီး၊ အတွေ့အကြုံ ရလာတော့မှ ပိုခက်တဲ့ idea တွေဆီ ဆက်သွားပါ။ [[mark:draw-light]]
+      ဒါပေမဲ့ personalization ထဲမှာတောင် လုပ်ရ မခက်၊ risk နည်းပြီး customer အတွက် အဓိပ္ပာယ် ရှိတဲ့
+      အပေါ့စားလေးတွေ ရှိပါတယ်။ ဥပမာ member တစ်ယောက် သောက်နေကျ အချိုအဆိမ့်ကို မှတ်ထားပေးတာမျိုးပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Understand the value of AI)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+    actions:
+      - {
+          id: draw-tree,
+          type: whiteboard.apply,
+          at: { mark: draw-tree },
+          clear: true,
+          upsertIds: [v-title],
+        }
+      - {
+          id: draw-insights,
+          type: whiteboard.apply,
+          at: { mark: draw-insights },
+          upsertIds: [v-ins, v-ins-ex],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-convenience,
+          type: whiteboard.apply,
+          at: { mark: draw-convenience },
+          upsertIds: [v-conv, v-conv-ex],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-automation,
+          type: whiteboard.apply,
+          at: { mark: draw-automation },
+          upsertIds: [v-auto, v-auto-ex],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-augmentation,
+          type: whiteboard.apply,
+          at: { mark: draw-augmentation },
+          upsertIds: [v-aug, v-aug-ex],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-personalization,
+          type: whiteboard.apply,
+          at: { mark: draw-personalization },
+          upsertIds: [v-pers, v-pers-ex],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-risk,
+          type: whiteboard.apply,
+          at: { mark: draw-risk },
+          upsertIds: [v-arrow, v-risk],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-start,
+          type: whiteboard.apply,
+          at: { mark: draw-start },
+          upsertIds: [v-start-ring, v-start],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-light,
+          type: whiteboard.apply,
+          at: { mark: draw-light },
+          upsertIds: [v-light],
+          drawMs: 1200,
+        }
+
+  - id: people
+    chapter: "User ကို အရင် သိရအောင်"
+    narration: >
+      [[mark:draw-people]] ဘယ် idea ကို ရွေးမလဲ ဆုံးဖြတ်ဖို့ ကိုယ့် user တွေ ဘယ်သူတွေလဲ ဆိုတာ အရင်
+      သိရပါမယ်။ U X team ရှိရင် သူတို့နဲ့ တွဲပြီး persona တွေ သတ်မှတ်ပါ။ persona ဆိုတာ user
+      အမျိုးအစား တစ်ခုကို ကိုယ်စားပြုတဲ့ လူပါ။ ကိုယ်တို့ ဆိုင်အတွက်တော့ persona လေးယောက်ကို ကြည့်ပါမယ်။
+      [[mark:draw-mm]]
+      ဆိုင်ပိုင်ရှင် မြမြ က customer တွေ ဘာကို မကျေနပ်လဲ ဆိုတာ သိချင်ပါတယ်။ [[mark:draw-hh]] ကောင်တာမှာရော၊
+      ဆိုင်ရဲ့ page မှာပါ အလုပ်လုပ်တဲ့ လှလှ ကတော့ menu ဖော်ပြချက် ရေးရတာ အချိန် အများကြီး ကုန်ပါတယ်။
+      [[mark:draw-aa]] မနက်တိုင်း မှာတဲ့ member အောင်အောင် က မှာနေကျ အော်ဒါကို မြန်မြန် ပြန်မှာချင်ပါတယ်။
+      [[mark:draw-mg]] ကျောင်းသား customer အသစ် မောင်မောင် ကတော့ ကိုယ့်စကားနဲ့ ရှာတဲ့အခါ လိုချင်တာကို
+      ရှာမတွေ့ပါဘူး။ [[mark:draw-first]] ဒီလို user ရဲ့ တကယ့် လိုအပ်ချက်ကနေ စပြီး၊ တွေ့လာတဲ့ AI
+      အခွင့်အလမ်း တစ်ခုချင်းကို ဆိုင်မှာ တကယ် ဖြေရှင်းမယ့် use case တစ်ခုအဖြစ် ချရေးရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Identify opportunities in your product)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+      - {
+          title: "People + AI Guidebook: User needs and defining success",
+          url: "https://pair.withgoogle.com/guidebook/chapters/user-needs-and-defining-success",
+        }
+    actions:
+      - {
+          id: draw-people,
+          type: whiteboard.apply,
+          at: { mark: draw-people },
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-mm,
+          type: whiteboard.apply,
+          at: { mark: draw-mm },
+          upsertIds: [p-mm-box, p-mm, p-mm-need],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-hh,
+          type: whiteboard.apply,
+          at: { mark: draw-hh },
+          upsertIds: [p-hh-box, p-hh, p-hh-need],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-aa,
+          type: whiteboard.apply,
+          at: { mark: draw-aa },
+          upsertIds: [p-aa-box, p-aa, p-aa-need],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-mg,
+          type: whiteboard.apply,
+          at: { mark: draw-mg },
+          upsertIds: [p-mg-box, p-mg, p-mg-need],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-first,
+          type: whiteboard.apply,
+          at: { mark: draw-first },
+          upsertIds: [p-first],
+          drawMs: 1100,
+        }
+
+  - id: sources
+    narration: >
+      [[mark:draw-sources]] idea တွေက နေရာ သုံးနေရာကနေ လာတတ်ပါတယ်။ [[mark:draw-src-user]] အကောင်းဆုံးကတော့
+      user ကိုယ်တိုင် ပြောတဲ့ လိုအပ်ချက်၊ ဒါမှမဟုတ် ကြုံနေရတဲ့ အခက်အခဲပါ။ မောင်မောင် ရှာမတွေ့တာလို
+      ပြဿနာမျိုးပါ။ [[mark:draw-src-team]] ဒုတိယက ကိုယ် ဒါမှမဟုတ် team ထဲက တစ်ယောက်ယောက် စဉ်းစားမိတဲ့
+      idea ပါ။ ဒီလို idea ဆိုရင် user တွေ တကယ် လိုချင်လား ဆိုတာကို မြန်မြန် စစ်ရပါမယ်။ မစစ်ရင် AI
+      ပါအောင်လို့ပဲ ထည့်တဲ့ feature ဖြစ်သွားတတ်ပါတယ်။ [[mark:draw-src-rival]] တတိယက ပြိုင်ဘက်တွေ
+      လုပ်တာကို ကြည့်ပြီး ရလာတဲ့ idea ပါ။ ဥပမာ ဘေးက ဆိုင်မှာ chatbot ရှိလို့ ကိုယ်လည်း လုပ်ချင်တာမျိုးပါ။
+      ဒါပေမဲ့ သူတို့ customer နဲ့ ကိုယ်တို့ customer က မတူနိုင်လို့၊ ကိုယ်တို့ ဆိုင်မှာလည်း အလုပ်ဖြစ်မလား
+      စောစော စမ်းကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Identify opportunities in your product)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+    actions:
+      - {
+          id: draw-sources,
+          type: whiteboard.apply,
+          at: { mark: draw-sources },
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-src-user,
+          type: whiteboard.apply,
+          at: { mark: draw-src-user },
+          upsertIds: [s-user, s-user-check, s-user-ex],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-src-team,
+          type: whiteboard.apply,
+          at: { mark: draw-src-team },
+          upsertIds: [s-team, s-team-ex],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-src-rival,
+          type: whiteboard.apply,
+          at: { mark: draw-src-rival },
+          upsertIds: [s-rival, s-rival-ex],
+          drawMs: 1200,
+        }
+
+  - id: journey
+    chapter: "User journey တစ်လျှောက် ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-sources]] ဒါဆို idea တွေကို customer ရဲ့ ခရီးတစ်လျှောက် ချရေးကြည့်ရအောင်။
+      [[mark:panel-ready]] customer က ရှာတာကနေ မှာ၊ ငွေချေ၊ ရပြီးတဲ့အထိ ဖြတ်သွားတဲ့ အဆင့်တွေကို user
+      journey လို့ ခေါ်ပါတယ်။ ညာဘက်က AI panel မှာ ဆိုင်ရဲ့ user journey အဆင့်တစ်ခုချင်းက AI idea တွေကို
+      ဇယား တစ်ခုနဲ့ ပြထားပါတယ်။
+      [[mark:open-journey]] ဒီ ဖိုင်ထဲမှာ idea တစ်ခုကို တစ်ကြောင်းစီ ရေးထားပြီး၊ panel က အဲဒါကို
+      ဇယားအဖြစ် ဆွဲပေးတာပါ။ model တစ်ခုမှ run နေတာ မဟုတ်ပါဘူး။ column တွေကတော့ အဆင့်၊ အကျိုးကျေးဇူး
+      အမျိုးအစား၊ idea နဲ့ AI လိုမလို ဆိုတာပါ။ [[mark:sel-find]] ပထမ ရှာတဲ့ အဆင့်မှာ idea သုံးခု
+      ရှိပါတယ်။ ရှာမတွေ့တဲ့ search တွေကို စုကြည့်တာက insights ပါ။ ကိုယ့်စကားနဲ့ ရှာရင်တောင် တွေ့အောင်
+      လုပ်တာက convenience ဖြစ်ပြီး၊ customer တစ်ယောက်ချင်းအတွက် အကြံပြုတာကတော့ personalization ပါ။
+      [[mark:sel-choose]] ရွေးတဲ့ အဆင့်မှာတော့ review တွေကို အနှစ်ချုပ်ပြတာ၊ ဘာနဲ့ တွဲစားရင် ကောင်းလဲ
+      အကြံပေးတာ စတဲ့ idea တွေ ရှိပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Identify opportunities in your product: the journey table)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+    actions:
+      - { id: close-sources, type: whiteboard.apply, at: { mark: close-sources }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-journey-card
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey }
+        attribute: { name: data-label, value: "Customer journey" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-journey-rows
+        type: expect.preview
+        at: { afterAction: expect-journey-card }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey }
+        attribute: { name: data-count, value: "13" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - {
+          id: open-journey,
+          type: workspace.openFile,
+          at: { mark: open-journey },
+          path: src/journey.js,
+        }
+      - id: sel-find
+        type: editor.select
+        at: { mark: sel-find }
+        target:
+          {
+            file: src/journey.js,
+            text: "idea(\"ရှာ\", \"insights\", \"ရှာမတွေ့တဲ့ search တွေ\"),\n  idea(\"ရှာ\", \"convenience\", \"ကိုယ့်စကားနဲ့ ရှာ\"),\n  idea(\"ရှာ\", \"personalization\", \"ကိုယ့်အတွက် အကြံပြု\"),",
+            occurrence: 1,
+          }
+      - id: expect-find-insights
+        type: expect.preview
+        at: { afterAction: sel-find }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-1 }
+        textContains: "ရှာinsightsရှာမတွေ့တဲ့ search တွေ✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-find-personal
+        type: expect.preview
+        at: { afterAction: expect-find-insights }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-3 }
+        textContains: "ရှာpersonalizationကိုယ့်အတွက် အကြံပြု✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: sel-choose
+        type: editor.select
+        at: { mark: sel-choose }
+        target:
+          {
+            file: src/journey.js,
+            text: "idea(\"ရွေး\", \"convenience\", \"review အနှစ်ချုပ်\"),\n  idea(\"ရွေး\", \"augmentation\", \"တွဲစားရင် ကောင်းတာ\"),",
+            occurrence: 1,
+          }
+      - id: expect-choose-review
+        type: expect.preview
+        at: { afterAction: sel-choose }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-4 }
+        textContains: "ရွေးconveniencereview အနှစ်ချုပ်✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: journey-rest
+    narration: >
+      [[mark:sel-order]] မှာပြီး ငွေချေတဲ့ အဆင့်မှာတော့ ငွေ နှစ်ခါ ဖြတ်မိရင် သတိပေးတာက automation ပါ။
+      [[mark:read-no-ai]] ဒါပေမဲ့ panel ရဲ့ နောက်ဆုံး column ကို ကြည့်ပါ။ ခုနက personalization အပေါ့စား
+      ဥပမာ ဖြစ်တဲ့ အချိုအဆိမ့် မှတ်ထားတာနဲ့ မှာနေကျကို ပြန်မှာတာ နှစ်ခုမှာ AI မလိုဘူးလို့ ကြက်ခြေခတ်နဲ့
+      ပြနေပါတယ်။ အောင်အောင် လို member အတွက် သိမ်းထားတဲ့ setting တစ်ခုနဲ့၊ နောက်ဆုံး မှာခဲ့တဲ့ အော်ဒါကို
+      ပြန်မှာပေးတဲ့ ခလုတ် တစ်ခုနဲ့တင် လုပ်လို့ ရလို့ပါ။ သာမန် code နဲ့ ရရင် AI မလိုဘူး ဆိုတာ ဒီမှာလည်း
+      မှန်ပါတယ်။ [[mark:sel-after]]
+      ရပြီးနောက် အဆင့်မှာ customer message တွေကို ခွဲပြီး ဆိုင်ပိုင်ရှင်ကို စုပြတာ၊ ဆိုင် မလာတော့မယ့်
+      member ကို ကြိုသိအောင် လုပ်တာ၊ ခဏခဏ မေးတဲ့ မေးခွန်းကို အလိုလို ဖြေတာ တို့ ရှိပါတယ်။
+      [[mark:sel-staff]] နောက်ဆုံး နှစ်ကြောင်းကတော့ customer ရဲ့ journey မဟုတ်ဘဲ၊ မနက်ဖြန် ဘယ်နှပွဲ
+      ရောင်းရမလဲ ခန့်မှန်းတာ၊ ဖော်ပြချက် မူကြမ်း ရေးတာလို ဆိုင်ဘက်က အလုပ်တွေပါ။ [[mark:read-stages]]
+      ဒီလို ချရေးကြည့်လိုက်တော့ အဆင့်တိုင်းမှာ အခွင့်အလမ်း မတူတာကို မြင်ရပါတယ်။ ဒါကြောင့် feature
+      တစ်ခုတည်းကို စဉ်းစားတာထက် customer ဖြတ်သွားတဲ့ အဆင့်တွေ တစ်လျှောက်လုံး ရှာကြည့်တာက ပိုကောင်းပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Identify opportunities in your product: the journey table)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (use AI only when needed)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+    actions:
+      - id: sel-order
+        type: editor.select
+        at: { mark: sel-order }
+        target:
+          {
+            file: src/journey.js,
+            text: 'idea("မှာ၊ ငွေချေ", "automation", "ငွေ 2 ခါ ဖြတ်ရင် သတိပေး"),',
+            occurrence: 1,
+          }
+      - id: expect-order-auto
+        type: expect.preview
+        at: { afterAction: sel-order }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-8 }
+        textContains: "automationငွေ 2 ခါ ဖြတ်ရင် သတိပေး✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: sel-no-ai
+        type: editor.select
+        at: { mark: read-no-ai }
+        target:
+          {
+            file: src/journey.js,
+            text: "idea(\"ရွေး\", \"personalization\", \"အချိုအဆိမ့် မှတ်ထား\", false),\n  idea(\"မှာ၊ ငွေချေ\", \"convenience\", \"မှာနေကျ ပြန်မှာ\", false),",
+            occurrence: 1,
+          }
+      - id: expect-no-ai-sugar
+        type: expect.preview
+        at: { afterAction: sel-no-ai }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-6 }
+        textContains: "personalizationအချိုအဆိမ့် မှတ်ထား✗"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-no-ai-usual
+        type: expect.preview
+        at: { afterAction: expect-no-ai-sugar }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-7 }
+        textContains: "မှာနေကျ ပြန်မှာ✗"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: sel-after
+        type: editor.select
+        at: { mark: sel-after }
+        target:
+          {
+            file: src/journey.js,
+            text: "idea(\"ရပြီးနောက်\", \"insights\", \"message တွေ ခွဲပြီး စုပြ\"),\n  idea(\"ရပြီးနောက်\", \"insights\", \"မလာတော့မယ့် member\"),\n  idea(\"ရပြီးနောက်\", \"automation\", \"မေးတာ အလိုလို ဖြေ\"),",
+            occurrence: 1,
+          }
+      - id: expect-after-member
+        type: expect.preview
+        at: { afterAction: sel-after }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-10 }
+        textContains: "ရပြီးနောက်insightsမလာတော့မယ့် member✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: sel-staff
+        type: editor.select
+        at: { mark: sel-staff }
+        target:
+          {
+            file: src/journey.js,
+            text: "idea(\"ဆိုင်ဘက်\", \"insights\", \"မနက်ဖြန် ဘယ်နှပွဲ\"),\n  idea(\"ဆိုင်ဘက်\", \"augmentation\", \"ဖော်ပြချက် မူကြမ်း\"),",
+            occurrence: 1,
+          }
+      - id: expect-staff
+        type: expect.preview
+        at: { afterAction: sel-staff }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-journey-13 }
+        textContains: "ဆိုင်ဘက်augmentationဖော်ပြချက် မူကြမ်း✓"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ လှလှ က menu ဖော်ပြချက် အသစ်တွေ ရေးတဲ့အခါ AI ရဲ့ အကူအညီ
+      လိုချင်တယ် ဆိုပါစို့။ ဒါက အကျိုးကျေးဇူး အမျိုးအစား ငါးမျိုးထဲက ဘယ်ဟာလဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ augmentation ပါ။ ဘာကြောင့်လဲဆိုတော့ ဖန်တီးရတဲ့
+      အလုပ်ကို AI က မူကြမ်းနဲ့ ကူညီပေးရုံပဲ ဖြစ်ပြီး၊ ဘယ်ဟာ သုံးမလဲ ရွေးတာ၊ ပြင်တာ၊ နောက်ဆုံး
+      ဆုံးဖြတ်တာကို လှလှ ကိုယ်တိုင် လုပ်နေဆဲ ဖြစ်လို့ပါ။ automation ဆိုရင်တော့ အလုပ် တစ်ခုလုံးကို AI က
+      အစားလုပ်ပေးတာ ဖြစ်လို့ ဒီနေရာမှာ မကိုက်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Check your understanding)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-q3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ AI ကို ထည့်တဲ့ အကြောင်းက user အတွက် တကယ် ပိုလွယ်၊
+      ပိုမြန်အောင် လုပ်ပေးဖို့ပါ။ [[mark:sel-five]] အကျိုးကျေးဇူးကို အမျိုးအစား ငါးမျိုးနဲ့ စဉ်းစားပြီး၊
+      [[mark:sel-low]] risk နည်းတဲ့ ဆိုင်ထဲက insights ကနေ စပါ။ [[mark:sel-users]] idea တွေကို user ရဲ့
+      လိုအပ်ချက်ကနေ ရှာပြီး၊ team နဲ့ ပြိုင်ဘက်ဆီက idea တွေကိုတော့ user နဲ့ စစ်ပါ။ [[mark:sel-journey]]
+      user journey ရဲ့ အဆင့်တိုင်းမှာ အခွင့်အလမ်း မတူတာကိုလည်း မှတ်ထားပါ။ [[mark:sel-terms]] စကားလုံး
+      အသစ်တွေကိုလည်း notes ဖိုင်မှာ စာရင်း လုပ်ထားပါတယ်။ နောက် lesson မှာတော့ idea တစ်ခုကို ပုံဖော်တာ၊
+      ကုန်ကျစရိတ်နဲ့ မှားနိုင်တဲ့ ပုံစံတွေကို ခန့်မှန်းတာနဲ့ prototype အမြန် လုပ်ကြည့်တာကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Explore use cases (Your takeaways)",
+          url: "https://web.dev/learn/ai/use-cases",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: open-notes,
+          type: workspace.openFile,
+          at: { mark: close-quiz, offsetMs: 400 },
+          path: notes.md,
+        }
+      - id: sel-why
+        type: editor.select
+        at: { afterAction: open-notes }
+        target:
+          {
+            file: notes.md,
+            text: "အထင်ကြီးစရာ ကောင်းလို့ မဟုတ်ဘဲ user အတွက် ပိုလွယ်၊ ပိုမြန်၊ ပိုပျော်စရာ ကောင်းအောင်",
+            occurrence: 1,
+          }
+      - id: sel-five
+        type: editor.select
+        at: { mark: sel-five }
+        target:
+          {
+            file: notes.md,
+            text: "insights · convenience · automation · augmentation · personalization",
+            occurrence: 1,
+          }
+      - id: sel-low
+        type: editor.select
+        at: { mark: sel-low }
+        target: { file: notes.md, text: "ဆိုင်ထဲ insights ကနေ စ", occurrence: 1 }
+      - id: sel-users
+        type: editor.select
+        at: { mark: sel-users }
+        target:
+          {
+            file: notes.md,
+            text: "user ရဲ့ လိုအပ်ချက်ကနေ စ · team နဲ့ ပြိုင်ဘက်ရဲ့ idea ကို user နဲ့ စစ်",
+            occurrence: 1,
+          }
+      - id: sel-journey
+        type: editor.select
+        at: { mark: sel-journey }
+        target: { file: notes.md, text: "အဆင့်တိုင်းမှာ အခွင့်အလမ်း မတူ", occurrence: 1 }
+      - id: sel-terms
+        type: editor.select
+        at: { mark: sel-terms }
+        target: { file: notes.md, text: "ဒီ lesson ထဲက စကားလုံး အသစ်တွေ", occurrence: 1 }
+checks:
+  - { type: timing.p95Ms, max: 300 }
