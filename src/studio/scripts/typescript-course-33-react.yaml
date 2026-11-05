@@ -1,0 +1,1444 @@
+# TypeScript course, lesson 33: React with TypeScript (Burmese).
+#
+# Start state (ws/, base-react): src/components.tsx holds MenuButton (props destructured with no
+# type, the rest spread onto the <button>) and Card (CardProps has only `title`, but the component
+# reads `children`); src/main.tsx builds the order screen (useState([]) for the orders, one tea
+# MenuButton with data-testid "tea", a <p data-testid="orders"> count) and renders it into #app.
+# Panel data-modes "errors types output". Start: 4 errors (TS7031 name, TS7031 price, TS2339
+# children in Card, TS2322 children at the <Card> usage); #app renders anyway.
+# Edits, all insert-only:
+#   1. components: a MenuButtonProps alias (line-by-line) + `: MenuButtonProps` -> 2 errors.
+#   2. components: `; children: React.ReactNode` in CardProps -> 0 errors.
+#   3. main: handleOrder(event: React.MouseEvent<HTMLButtonElement>) (line-by-line) -> 2 errors
+#      "Type 'Order' is not assignable to type 'never'".
+#   4. main: a ^? query under useState -> useState<never[]>(…): [never[], React.Dispatch<React.SetStateAction<never[]>>];
+#      then `<Order[]>` -> 0 errors, the query shows Order[].
+#   5. main: `onClick={handleOrder}` on the MenuButton -> 1 error (onClick not in MenuButtonProps);
+#      components: `React.ComponentProps<"button"> & ` -> 0 errors.
+#   6. preview.click on the tea button twice -> "အော်ဒါ 1 ခု" / "အော်ဒါ 2 ခု", Output "မှာပြီ: လက်ဖက်ရည် 1500".
+# Board: a component is a function and props are its one parameter.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-33-react.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-33-react
+  title: "TypeScript course 33: React နဲ့ TypeScript"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.tsx
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/modules-react.js: |
+        // TypeScript course · the packages a lesson's program may import while it runs in the panel.
+        import * as React from "react";
+        import * as ReactDOMClient from "react-dom/client";
+        import * as JsxRuntime from "react/jsx-runtime";
+
+        window.__courseModules = {
+          ...window.__courseModules,
+          react: React,
+          "react-dom/client": ReactDOMClient,
+          "react/jsx-runtime": JsxRuntime,
+        };
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/modules-react.js"></script>
+            <script type="module" src="/course/panel.js" data-modes="errors types output" data-run="src/main.tsx"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-react",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "@types/react": "19.3.0",
+            "@types/react-dom": "19.3.0",
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          },
+          "dependencies": {
+            "react": "19.3.1",
+            "react-dom": "19.3.1"
+          }
+        }
+      src/components.tsx: |
+        // ဆိုင်ရဲ့ component တွေ
+
+        export function MenuButton({ name, price, ...rest }) {
+          return (
+            <button type="button" {...rest}>
+              {name} {price}
+            </button>
+          );
+        }
+
+        type CardProps = { title: string };
+
+        export function Card({ title, children }: CardProps) {
+          return (
+            <section>
+              <b>{title}</b> {children}
+            </section>
+          );
+        }
+      src/main.tsx: |
+        import { useState } from "react";
+        import { createRoot } from "react-dom/client";
+        import { Card, MenuButton } from "./components";
+
+        type Order = { item: string; price: number };
+
+        function App() {
+          const [orders, setOrders] = useState([]);
+          const tea: Order = { item: "လက်ဖက်ရည်", price: 1500 };
+          return (
+            <Card title="ရွှေလက်ဖက်ရည်ဆိုင်">
+              <MenuButton
+                name={tea.item}
+                price={tea.price}
+                data-testid="tea"
+              />
+              <p data-testid="orders">အော်ဒါ {orders.length} ခု</p>
+            </Card>
+          );
+        }
+
+        createRoot(document.getElementById("app")!).render(<App />);
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force",
+            "jsx": "react-jsx"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+          // Pre-bundle React up front so Vite never discovers it mid-lesson and reloads.
+          optimizeDeps: { include: ["react", "react-dom/client", "react/jsx-runtime"] },
+        });
+  whiteboardAssets:
+    # Board: JSX usage -> React calls the function with one props object -> its type is the contract.
+    - {
+        id: r-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 720,
+        height: 50,
+        text: "React component ဆိုတာ function တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r-jsx-box,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 470,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-jsx,
+        kind: text,
+        x: 290,
+        y: 272,
+        width: 430,
+        height: 36,
+        text: "<MenuButton name=… price=… />",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: r-jsx-note,
+        kind: text,
+        x: 770,
+        y: 272,
+        width: 300,
+        height: 36,
+        text: "JSX ထဲမှာ သုံးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 480,
+        y: 340,
+        width: 40,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-fn-box,
+        kind: rectangle,
+        x: 270,
+        y: 405,
+        width: 470,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-fn,
+        kind: text,
+        x: 290,
+        y: 427,
+        width: 430,
+        height: 36,
+        text: "MenuButton(props)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-fn-note,
+        kind: text,
+        x: 770,
+        y: 427,
+        width: 300,
+        height: 36,
+        text: "props = parameter",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-rule-any,
+        kind: text,
+        x: 290,
+        y: 510,
+        width: 330,
+        height: 36,
+        text: "type မရှိရင် → any",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: r-rule-check,
+        kind: text,
+        x: 650,
+        y: 510,
+        width: 430,
+        height: 36,
+        text: "type ရှိရင် → သုံးတိုင်း စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-agenda,
+        kind: text,
+        x: 290,
+        y: 585,
+        width: 790,
+        height: 36,
+        text: "props · children · event · state · button props",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3302
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "React component နဲ့ props"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ အပြင်ကနေ ဝင်လာတဲ့ data ကို Zod schema နဲ့ runtime မှာ စစ်ပြီး၊
+      type ကိုလည်း အဲဒီ schema ကနေပဲ ထုတ်ယူခဲ့ပါတယ်။ ဒီ lesson မှာတော့ React နဲ့ TypeScript ကို တွဲသုံးပုံကို
+      ဆိုင်ရဲ့ အော်ဒါ screen လေး တစ်ခုနဲ့ ကြည့်သွားပါမယ်။ [[mark:draw-jsx]] React မှာ component ဆိုတာ
+      JavaScript ထဲမှာ HTML လို ရေးရတဲ့ JSX ကို ပြန်ပေးတဲ့ function တစ်ခုပါ။ JSX ထဲမှာ component ကို tag
+      တစ်ခုလို ရေးပြီး၊ နာမည်တို့ ဈေးနှုန်းတို့ကို attribute တွေလို ပေးလိုက်တယ် ဆိုပါစို့။ [[mark:draw-fn]] React
+      က အဲဒီ တန်ဖိုး အားလုံးကို object တစ်ခုထဲ စုပြီး component function ကို ခေါ်ပေးပါတယ်။ အဲဒီ object ကို
+      props လို့ ခေါ်ပါတယ်။ ဆိုတော့ props ဆိုတာ function ရဲ့ parameter တစ်ခုပဲ ဖြစ်ပါတယ်။ [[mark:draw-rule]]
+      ရှေ့ပိုင်း lesson တွေမှာ မြင်ခဲ့သလိုပဲ၊ parameter မှာ type မပေးထားရင် TypeScript က ဘာမှ မသိလို့ any လို့
+      ယူဆပြီး၊ strict mode မှာ error ပြပါတယ်။ type ပေးထားရင်တော့ component ကို သုံးတဲ့ နေရာတိုင်းမှာ
+      ပေးလိုက်တဲ့ props တွေ မှန်မမှန် စစ်ပေးနိုင်ပါပြီ။ [[mark:draw-agenda]] ဒီနေ့ props
+      တင် မကဘဲ၊ component ထဲ ထည့်ပေးတဲ့ children ရယ်၊ click လိုမျိုး event ရယ်၊ use State နဲ့ သိမ်းတဲ့ state
+      ရယ်၊ button element ရဲ့ props တွေကိုပါ type ပေးကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial (props, children, events, hooks)",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+      - {
+          title: "React docs: Using TypeScript (typing component props)",
+          url: "https://react.dev/learn/typescript",
+        }
+      - {
+          title: "React docs: Passing Props to a Component",
+          url: "https://react.dev/learn/passing-props-to-a-component",
+        }
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [r-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-jsx
+        type: whiteboard.apply
+        at: { mark: draw-jsx }
+        upsertIds: [r-jsx-box, r-jsx, r-jsx-note]
+        drawMs: 2200
+      - id: draw-fn
+        type: whiteboard.apply
+        at: { mark: draw-fn }
+        upsertIds: [r-arrow, r-fn-box, r-fn, r-fn-note]
+        drawMs: 2600
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [r-rule-any, r-rule-check]
+        drawMs: 1800
+      - id: draw-agenda
+        type: whiteboard.apply
+        at: { mark: draw-agenda }
+        upsertIds: [r-agenda]
+        drawMs: 1600
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-components]] ဒါက ဆိုင်ရဲ့ component တွေကို
+      ရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-menu-button]] ပထမ component က menu ထဲက ပစ္စည်း တစ်ခုရဲ့ နာမည်နဲ့
+      ဈေးနှုန်းကို ခလုတ်ပေါ်မှာ ပြပေးပါတယ်။ props ထဲက name နဲ့ price ကို ခွဲထုတ်ယူထားပေမယ့်၊ type တော့
+      မပေးထားသေးပါဘူး။ [[mark:select-rest]] ကျန်တဲ့ props တွေကိုတော့ rest ဆိုတဲ့ နာမည်နဲ့ စုယူပြီး၊ အထဲက button
+      element ဆီ အကုန် ဆက်ပို့ပေးထားပါတယ်။ [[mark:select-card]] ဒုတိယ component ကတော့ ခေါင်းစဉ် တစ်ခုနဲ့
+      သူ့အထဲမှာ ထည့်ပေးတဲ့ အရာတွေကို အုပ်စု တစ်ခုအဖြစ် ပြပေးတဲ့ card ပါ။ သူ့ props type မှာတော့ ခေါင်းစဉ်ပဲ
+      ရှိပါသေးတယ်။ [[mark:open-main]] main ဖိုင်မှာတော့ ဒီ component နှစ်ခုကို သုံးပြီး အော်ဒါ screen ကို
+      တည်ဆောက်ထားပါတယ်။ [[mark:select-state]] မှာထားတဲ့ အော်ဒါ စာရင်းကို use State နဲ့ state အဖြစ် သိမ်းထားပြီး၊
+      ဗလာ array နဲ့ စထားပါတယ်။ [[mark:select-usage]] card ထဲမှာတော့ လက်ဖက်ရည် ခလုတ် တစ်ခုနဲ့၊ အော်ဒါ ဘယ်နှခု
+      ရှိပြီလဲ ဆိုတဲ့ စာ တစ်ကြောင်းကို ထည့်ထားပါတယ်။
+    sources:
+      - {
+          title: "React docs: Passing Props to a Component (children, spreading props)",
+          url: "https://react.dev/learn/passing-props-to-a-component",
+        }
+      - { title: "React docs: useState", url: "https://react.dev/reference/react/useState" }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-components
+        type: workspace.openFile
+        at: { mark: open-components }
+        path: src/components.tsx
+      - id: select-menu-button
+        type: editor.select
+        at: { mark: select-menu-button }
+        target: { file: src/components.tsx, text: "{ name, price, ...rest }", occurrence: 1 }
+      - id: select-rest
+        type: editor.select
+        at: { mark: select-rest }
+        target: { file: src/components.tsx, text: "{...rest}", occurrence: 1 }
+      - id: select-card
+        type: editor.select
+        at: { mark: select-card }
+        target:
+          { file: src/components.tsx, text: "type CardProps = { title: string };", occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.tsx
+      - id: select-state
+        type: editor.select
+        at: { mark: select-state }
+        target:
+          { file: src/main.tsx, text: "const [orders, setOrders] = useState([]);", occurrence: 1 }
+      - id: select-usage
+        type: editor.select
+        at: { mark: select-usage }
+        target:
+          {
+            file: src/main.tsx,
+            text: "      <MenuButton\n        name={tea.item}\n        price={tea.price}\n        data-testid=\"tea\"\n      />\n      <p data-testid=\"orders\">အော်ဒါ {orders.length} ခု</p>",
+            occurrence: 1,
+          }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] ညာဘက် အပေါ်ဆုံးမှာ program က ဆွဲပေးထားတဲ့ card ကို မြင်ရပါတယ်။ ဆိုင်ရဲ့ နာမည်၊
+      လက်ဖက်ရည် ၁၅၀၀ ဆိုတဲ့ ခလုတ်နဲ့ အော်ဒါ သုည ခု ဆိုတဲ့ စာ ပေါ်နေပါတယ်။ [[mark:read-errors]] ဒါပေမဲ့ သူ့အောက်က
+      TypeScript panel မှာတော့ error လေးခု ရှိနေပါတယ်။ ပထမ နှစ်ခုက name နဲ့ price ဟာ type မရှိလို့ any
+      ဖြစ်နေတယ်လို့ ပြောနေပြီး၊ နောက် နှစ်ခုကတော့ children အကြောင်းပါ။ type error တွေက program ကို မရပ်စေလို့ screen
+      က ပေါ်နေပေမယ့်၊ ဒီ component တွေကို မှန်မှန် သုံးထားလား ဆိုတာကိုတော့ TypeScript က မစစ်ပေးနိုင်သေးပါဘူး။
+    sources:
+      - {
+          title: "TypeScript Handbook: JSX (type checking components)",
+          url: "https://www.typescriptlang.org/docs/handbook/jsx.html",
+        }
+      - {
+          title: "TSConfig reference: noImplicitAny",
+          url: "https://www.typescriptlang.org/tsconfig/#noImplicitAny",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-four-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-name-any
+        type: expect.preview
+        at: { afterAction: expect-four-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Binding element 'name' implicitly has an 'any' type."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-price-any
+        type: expect.preview
+        at: { afterAction: expect-name-any }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Binding element 'price' implicitly has an 'any' type."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-children-code
+        type: expect.preview
+        at: { afterAction: expect-price-any }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-3 }
+        attribute: { name: data-code, value: "2339" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-usage-code
+        type: expect.preview
+        at: { afterAction: expect-children-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-4 }
+        attribute: { name: data-code, value: "2322" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-tea-button
+        type: expect.preview
+        at: { afterAction: expect-usage-code }
+        timeoutMs: 5000
+        target: { by: testId, value: tea }
+        textContains: "လက်ဖက်ရည် 1500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-zero-orders
+        type: expect.preview
+        at: { afterAction: expect-tea-button }
+        timeoutMs: 5000
+        target: { by: testId, value: orders }
+        textContains: "အော်ဒါ 0 ခု"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: props
+    chapter: "Props ကို type ပေးခြင်း"
+    narration: >
+      [[mark:open-components-2]] ပထမ error နှစ်ခုကနေ စပြင်ရအောင်။ [[mark:select-props]] ခလုတ် component ရဲ့
+      props မှာ type မရှိလို့ name ရော price ပါ any ဖြစ်နေပါတယ်။ ဆိုလိုတာက ခလုတ်ကို သုံးတဲ့ နေရာမှာ ဈေးနှုန်းကို
+      စာသားနဲ့ ပေးမိရင် ဖြစ်ဖြစ်၊ နာမည် ထည့်ဖို့ မေ့သွားရင် ဖြစ်ဖြစ်၊ TypeScript က ဘာမှ မပြောနိုင်ပါဘူး။
+      [[mark:type-props-alias]] ဒါကြောင့် ဖိုင်ရဲ့ အပေါ်မှာ ဒီ component ရဲ့ props အတွက် type alias တစ်ခု
+      ရေးပါမယ်။ name ကို string လို့၊ price ကို number လို့ သတ်မှတ်ထားပါတယ်။ component နာမည်ရဲ့ နောက်မှာ Props
+      ဆိုတဲ့ စကားလုံး ထည့်ပြီး နာမည်ပေးတာက React project တွေမှာ အတွေ့ရ အများဆုံး ပုံစံပါ။
+      [[mark:type-props-annotation]] ပြီးတော့ ခွဲထုတ်ထားတဲ့ props ရဲ့ နောက်မှာ အဲဒီ type ကို ကြေညာပေးလိုက်ပါမယ်။
+      [[mark:read-props-fixed]] ပထမ error နှစ်ခု ပျောက်သွားပြီး၊ children အကြောင်း error နှစ်ခုပဲ ကျန်ပါတော့တယ်။
+      အခုဆိုရင် ဒီ ခလုတ်ကို သုံးတဲ့ နေရာတိုင်းမှာ name နဲ့ price ပါမပါ၊ type မှန်မမှန်ကို TypeScript က စစ်ပေးပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial (typing component props)",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+      - {
+          title: "React docs: Using TypeScript (typing component props)",
+          url: "https://react.dev/learn/typescript#typing-component-props",
+        }
+    actions:
+      - id: open-components-2
+        type: workspace.openFile
+        at: { mark: open-components-2 }
+        path: src/components.tsx
+      - id: select-props
+        type: editor.select
+        at: { mark: select-props }
+        target: { file: src/components.tsx, text: "{ name, price, ...rest }", occurrence: 1 }
+      - id: type-props-alias
+        type: editor.type
+        at: { mark: type-props-alias }
+        target: { file: src/components.tsx, after: "// ဆိုင်ရဲ့ component တွေ\n\n", occurrence: 1 }
+        text: "type MenuButtonProps = {\n  name: string;\n  price: number;\n};\n\n"
+        cadence: line-by-line
+      - id: type-props-annotation
+        type: editor.type
+        at: { mark: type-props-annotation }
+        target:
+          {
+            file: src/components.tsx,
+            after: "export function MenuButton({ name, price, ...rest }",
+            occurrence: 1,
+          }
+        text: ": MenuButtonProps"
+      - id: expect-two-left
+        type: expect.preview
+        at: { afterAction: type-props-annotation }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-children-first
+        type: expect.preview
+        at: { afterAction: expect-two-left }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'children' does not exist on type 'CardProps'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: children
+    chapter: "children နဲ့ ReactNode"
+    narration: >
+      [[mark:select-children]] အခု card component ကို ကြည့်ပါ။ props ထဲက children ကို ခွဲထုတ်ယူထားပေမယ့်၊
+      props type မှာ children မပါလို့ ဒီ property မရှိဘူးလို့ error ပြနေပါတယ်။ [[mark:read-children-usage]]
+      နောက်ဆုံး error ကတော့ main ဖိုင်မှာ card ကို သုံးထားတဲ့ နေရာကပါ။ JSX မှာ tag အဖွင့်နဲ့ အပိတ်ကြားမှာ
+      ရေးထားတဲ့ အရာတွေကို React က children ဆိုတဲ့ prop တစ်ခုအနေနဲ့ ပို့ပေးလို့၊ panel ထဲက props object မှာလည်း
+      children ပါနေတာ မြင်ရပါတယ်။ [[mark:type-children]] ဒါကြောင့် card ရဲ့ props type ထဲမှာ children ကို
+      ထည့်ပြီး၊ type ကို React ရဲ့ ReactNode လို့ ပေးပါမယ်။ ReactNode ဆိုတာ JSX element တွေ၊ စာသား၊ ဂဏန်း၊ null
+      နဲ့ အဲဒါတွေရဲ့ list လိုမျိုး component တစ်ခုရဲ့ အထဲမှာ children အဖြစ် ထည့်လို့ ရတဲ့ အရာ အားလုံးကို
+      ပေါင်းထားတဲ့ union type ပါ။ [[mark:read-children-fixed]] Errors အပိုင်းမှာ error တစ်ခုမှ မကျန်တော့ပါဘူး။ အခု card ထဲမှာ
+      ကြိုက်တာကို ထည့်လို့ ရပါပြီ။
+    sources:
+      - {
+          title: "React docs: Using TypeScript (typing children: React.ReactNode)",
+          url: "https://react.dev/learn/typescript#typing-children",
+        }
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial (supporting children)",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+    actions:
+      - id: select-children
+        type: editor.select
+        at: { mark: select-children }
+        target: { file: src/components.tsx, text: "{ title, children }", occurrence: 1 }
+      - id: type-children
+        type: editor.type
+        at: { mark: type-children }
+        target:
+          { file: src/components.tsx, after: "type CardProps = { title: string", occurrence: 1 }
+        text: "; children: React.ReactNode"
+      - id: expect-no-errors
+        type: expect.preview
+        at: { afterAction: type-children }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: event
+    chapter: "Event handler ရဲ့ type"
+    narration: >
+      [[mark:open-main-2]] အခု ခလုတ်ကို နှိပ်ရင် အော်ဒါ ဝင်လာအောင် လုပ်ကြည့်ရအောင်။ [[mark:type-handler]] App
+      component ထဲမှာ click ကို handle လုပ်ပေးမယ့် function တစ်ခု ရေးပါမယ်။ ဒီ function က ခလုတ်ပေါ်က
+      စာသားကို Output မှာ ထုတ်ပြပြီး၊ အော်ဒါ စာရင်းထဲကို လက်ဖက်ရည် တစ်ခွက် ထည့်ပေးပါတယ်။ click ဖြစ်တိုင်း
+      React က event object တစ်ခုကို ဒီ function ဆီ ပို့ပေးပါတယ်။ function ကို သီးသန့် ရေးထားတဲ့အခါ ဘယ်ကနေ
+      ခေါ်မလဲ ဆိုတာကို TypeScript က မသိလို့၊ parameter ရဲ့ type ကို ကိုယ်တိုင် ပေးရပါတယ်။
+      [[mark:explain-mouse-event]] React ရဲ့ type တွေထဲမှာ event အမျိုးအစား တစ်ခုချင်းစီအတွက် type ရှိပြီး၊ click
+      အတွက်ကတော့ MouseEvent ပါ။ angle bracket ထဲမှာတော့ ဘယ် element ရဲ့ event လဲ ဆိုတာကို button element လို့
+      ပေးထားပါတယ်။ [[mark:select-current-target]] ဒါကြောင့် event ရဲ့ current target ဟာ button element ဖြစ်တယ်လို့
+      TypeScript က သိပြီး၊ button element မှာ ရှိတဲ့ property တွေကို စိတ်ချ သုံးလို့ ရပါတယ်။
+      onClick ထဲမှာ arrow function နဲ့ တိုက်ရိုက် ရေးရင်တော့၊ event ရဲ့ type
+      ကို onClick ရဲ့ type ကနေ TypeScript က infer လုပ်ပေးလို့ ကိုယ်တိုင် ရေးစရာ မလိုပါဘူး။ [[mark:read-never]] ဒါပေမဲ့ အော်ဒါ စာရင်းထဲကို
+      လက်ဖက်ရည် ထည့်တဲ့ line မှာ error နှစ်ခု ပေါ်လာပါပြီ။ Order ကို never type ရှိရမယ့် နေရာမှာ ထည့်လို့ မရဘူးလို့
+      ပြောနေပါတယ်။
+    sources:
+      - {
+          title: "React docs: Using TypeScript (typing DOM events)",
+          url: "https://react.dev/learn/typescript#typing-dom-events",
+        }
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial (typing event handlers)",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+    actions:
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: src/main.tsx
+      - id: type-handler
+        type: editor.type
+        at: { mark: type-handler }
+        target:
+          {
+            file: src/main.tsx,
+            after: "  const tea: Order = { item: \"လက်ဖက်ရည်\", price: 1500 };\n",
+            occurrence: 1,
+          }
+        text: "  function handleOrder(event: React.MouseEvent<HTMLButtonElement>) {\n    console.log(\"မှာပြီ:\", event.currentTarget.textContent);\n    setOrders([...orders, tea]);\n  }\n"
+        cadence: line-by-line
+      - id: select-current-target
+        type: editor.select
+        at: { mark: select-current-target }
+        target: { file: src/main.tsx, text: "event.currentTarget.textContent", occurrence: 1 }
+      - id: expect-never-count
+        type: expect.preview
+        at: { afterAction: type-handler }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-never-text
+        type: expect.preview
+        at: { afterAction: expect-never-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Type 'Order' is not assignable to type 'never'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: state
+    chapter: "useState နဲ့ ဗလာ array"
+    narration: >
+      [[mark:select-use-state]] never ဆိုတာ ဘယ်ကနေ ပေါ်လာတာလဲ။ ဒီလို နားလည်ရ ခက်တဲ့ error မျိုး တွေ့ရင် React
+      ရဲ့ type ကိုယ်တိုင်ကို ဖတ်ကြည့်တာ အကောင်းဆုံးပါ။ [[mark:type-state-query]] use State ကို ခေါ်ထားတဲ့ line
+      အောက်မှာ query comment ထည့်ကြည့်ရအောင်။ [[mark:read-state-type]] Types အပိုင်းမှာ use State ရဲ့ type
+      ပေါ်လာပါပြီ။ use State က generic function ဖြစ်ပြီး၊
+      angle bracket ထဲက type ဟာ state ရဲ့ type ပါ။ ကိုယ်က type argument မပေးထားလို့
+      TypeScript က အစ တန်ဖိုးကို ကြည့်ပြီး infer လုပ်ရပါတယ်။ ဗလာ array က ဘာတွေ ထည့်မလဲ ဆိုတာကို ဘာမှ
+      မပြောလို့၊ ဘာမှ ထည့်လို့ မရတဲ့ never array ဖြစ်သွားတာပါ။ [[mark:read-set-state]] နောက်ဆုံးက SetStateAction
+      ကတော့ state ကို ပြင်တဲ့ function က တန်ဖိုး အသစ် ဒါမှမဟုတ် တန်ဖိုး အသစ်ကို တွက်ပေးမယ့် function ကို
+      လက်ခံတယ် ဆိုတာကို React က နာမည်ပေးထားတာပါ။ state က never array ဖြစ်နေလို့ အဲဒီ function ကလည်း never array
+      ကိုပဲ လက်ခံပါတယ်။ ဒါကြောင့် Order ပါတဲ့ array ကို ပေးလိုက်တော့ error ပြနေတာပါ။ [[mark:type-state-arg]] ဒါဆို use State ကို ခေါ်တဲ့အခါ state က Order
+      array ဖြစ်မယ် ဆိုတာကို type argument နဲ့ ပြောပေးလိုက်ပါမယ်။ [[mark:read-state-fixed]] error နှစ်ခုလုံး
+      ပျောက်သွားပြီး၊ Types မှာလည်း never နေရာမှာ Order array ဖြစ်သွားပါပြီ။ ဗလာ array ဒါမှမဟုတ် null နဲ့ စတဲ့
+      state တွေမှာ ဒီလို type argument ကို ပေးဖို့ မှတ်ထားပါ။
+    sources:
+      - {
+          title: "React docs: Using TypeScript (typing useState)",
+          url: "https://react.dev/learn/typescript#typing-usestate",
+        }
+      - {
+          title: "React docs: useState (setState with a value or an updater function)",
+          url: "https://react.dev/reference/react/useState",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (type arguments)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html",
+        }
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial (typing hooks, reading React's types)",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+    actions:
+      - id: select-use-state
+        type: editor.select
+        at: { mark: select-use-state }
+        target: { file: src/main.tsx, text: "useState([])", occurrence: 1 }
+      - id: type-state-query
+        type: editor.type
+        at: { mark: type-state-query }
+        target:
+          {
+            file: src/main.tsx,
+            after: "  const [orders, setOrders] = useState([]);\n",
+            occurrence: 1,
+          }
+        text: "  //                          ^?\n"
+        cadence: block
+      - id: expect-state-never
+        type: expect.preview
+        at: { afterAction: type-state-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "useState<never[]>(initialState: never[] | (() => never[])): [never[], React.Dispatch<React.SetStateAction<never[]>>]"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-state-arg
+        type: editor.type
+        at: { mark: type-state-arg }
+        target:
+          { file: src/main.tsx, after: "  const [orders, setOrders] = useState", occurrence: 1 }
+        text: "<Order[]>"
+      - id: expect-state-fixed
+        type: expect.preview
+        at: { afterAction: type-state-arg }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-state-order
+        type: expect.preview
+        at: { afterAction: expect-state-fixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "useState<Order[]>(initialState: Order[] | (() => Order[])): [Order[], React.Dispatch<React.SetStateAction<Order[]>>]"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: button-props
+    chapter: "Button ရဲ့ props တွေ"
+    narration: >
+      [[mark:type-onclick]] state ပြဿနာ ပြေလည်သွားပြီ ဆိုတော့၊ ရေးထားတဲ့ function ကို ခလုတ်ရဲ့ onClick မှာ
+      ချိတ်ပေးပါမယ်။ ဒါမှ ခလုတ်ကို နှိပ်လိုက်တိုင်း React က ဒီ function ကို event object နဲ့အတူ ခေါ်ပေးမှာပါ။ [[mark:read-onclick-error]]
+      error အသစ် တစ်ခု ပေါ်လာပါပြီ။ အောက်ဆုံး အပိုင်းကနေ ဖတ်ရင်၊ ခလုတ် component ရဲ့ props type မှာ onClick ဆိုတဲ့
+      property မရှိဘူးလို့ ပြောနေပါတယ်။ ကိုယ့် props type မှာ name နဲ့ price နှစ်ခုပဲ ရေးထားလို့ပါ။ data testid
+      လိုမျိုး dash ပါတဲ့ attribute တွေကိုတော့ JSX မှာ TypeScript က ချွင်းချက်အနေနဲ့ ခွင့်ပြုလို့ error မပြပါဘူး။
+      [[mark:open-components-3]] onClick ရယ်၊ disabled ရယ်၊ title ရယ် လိုမျိုး button element တစ်ခု လက်ခံတဲ့ props
+      တွေက အများကြီး ရှိလို့၊ တစ်ခုချင်း လိုက်ရေးနေရင်တော့ ဘယ်တော့မှ မပြီးနိုင်ပါဘူး။ [[mark:type-component-props]] ဒါကြောင့်
+      React ရဲ့ ComponentProps ဆိုတဲ့ type ကို သုံးပြီး button element ရဲ့ props အားလုံးကို ယူလိုက်ပါမယ်။ ပြီးတော့
+      intersection နဲ့ ကိုယ့်ရဲ့ name နဲ့ price ကို ပေါင်းထည့်ထားပါတယ်။ [[mark:read-props-merged]] error
+      ပျောက်သွားပါပြီ။ အခု onClick က button ရဲ့ props ထဲက တစ်ခု ဖြစ်လို့ TypeScript က လက်ခံပြီး၊ program run တဲ့အခါ
+      rest ထဲကို ဝင်လာပြီး button element ဆီ ရောက်သွားပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript: React.ComponentProps type helper",
+          url: "https://www.totaltypescript.com/react-component-props-type-helper",
+        }
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial (ComponentProps, overriding props)",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (intersection types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#intersection-types",
+        }
+      - {
+          title: "TypeScript Handbook: JSX (attribute names that are not identifiers, such as data-*, are not checked)",
+          url: "https://www.typescriptlang.org/docs/handbook/jsx.html#attribute-type-checking",
+        }
+    actions:
+      - id: type-onclick
+        type: editor.type
+        at: { mark: type-onclick }
+        target: { file: src/main.tsx, after: "        data-testid=\"tea\"\n", occurrence: 1 }
+        text: "        onClick={handleOrder}\n"
+      - id: expect-onclick-count
+        type: expect.preview
+        at: { afterAction: type-onclick }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-onclick-text
+        type: expect.preview
+        at: { afterAction: expect-onclick-count }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'onClick' does not exist on type 'IntrinsicAttributes & MenuButtonProps'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-components-3
+        type: workspace.openFile
+        at: { mark: open-components-3 }
+        path: src/components.tsx
+      - id: type-component-props
+        type: editor.type
+        at: { mark: type-component-props }
+        target: { file: src/components.tsx, after: "type MenuButtonProps = ", occurrence: 1 }
+        text: 'React.ComponentProps<"button"> & '
+      - id: expect-merged
+        type: expect.preview
+        at: { afterAction: type-component-props }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-ready-to-click
+        type: expect.preview
+        at: { afterAction: expect-merged }
+        timeoutMs: 5000
+        target: { by: testId, value: orders }
+        textContains: "အော်ဒါ 0 ခု"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    chapter: "နှိပ်ကြည့်ခြင်းနဲ့ ပြန်ချုပ်ခြင်း"
+    narration: >
+      [[mark:click-tea]] ဒါဆို ညာဘက်က လက်ဖက်ရည် ခလုတ်ကို နှိပ်ကြည့်ရအောင်။ [[mark:read-click]] အော်ဒါ
+      တစ်ခု ဖြစ်သွားပြီး၊ Output မှာလည်း handler က ထုတ်ပြတဲ့ ခလုတ်ရဲ့ စာသား ပေါ်လာပါပြီ။
+      [[mark:click-tea-again]] နောက်တစ်ခါ နှိပ်လိုက်တော့ အော်ဒါ နှစ်ခု ဖြစ်သွားပါတယ်။ state ထဲကို Order တွေ
+      မှန်မှန် ဝင်နေတာပါ။ [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ React component ရဲ့ props ဆိုတာ function ရဲ့
+      parameter ဖြစ်လို့ type alias နဲ့ type ပေးရပါတယ်။ အထဲ ထည့်ပေးတဲ့ အရာတွေအတွက် children ကို ReactNode လို့
+      ပေးပြီး၊ သီးသန့် ရေးထားတဲ့ event handler မှာတော့ MouseEvent လိုမျိုး React ရဲ့ event type ကို ပေးရပါတယ်။
+      [[mark:recap-state]] ဗလာ array နဲ့ စတဲ့ state မှာတော့ use State ကို type argument ပေးရပါတယ်။
+      [[mark:recap-button]] HTML element တစ်ခုရဲ့ props တွေကိုတော့ ComponentProps နဲ့ တစ်ခါတည်း ယူသုံးလို့
+      ရပါတယ်။ error က ရှုပ်နေရင် VS Code မှာ
+      mouse တင်ကြည့်တာ၊ Go to Definition နဲ့ ဖွင့်ကြည့်တာမျိုးနဲ့ React ရဲ့ type ကို ဖတ်ကြည့်ပါ။ နောက်ဆုံး lesson
+      မှာတော့ အတွေ့ရ အများဆုံး TypeScript error တွေကို ဘယ်လို ဖတ်ပြီး ဘယ်လို ပြင်ရလဲ ဆိုတာ ကြည့်ပြီး course ကို
+      အဆုံးသတ်ပါမယ်။
+    sources:
+      - { title: "React docs: Using TypeScript", url: "https://react.dev/learn/typescript" }
+      - {
+          title: "Total TypeScript: React with TypeScript tutorial",
+          url: "https://www.totaltypescript.com/tutorials/react-with-typescript",
+        }
+    actions:
+      - id: click-tea
+        type: preview.click
+        at: { mark: click-tea }
+        timeoutMs: 10000
+        target: { by: testId, value: tea }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-one-order
+        type: expect.preview
+        at: { afterAction: click-tea }
+        timeoutMs: 5000
+        target: { by: testId, value: orders }
+        textContains: "အော်ဒါ 1 ခု"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-click-output
+        type: expect.preview
+        at: { afterAction: expect-one-order }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "မှာပြီ: လက်ဖက်ရည် 1500"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: click-tea-again
+        type: preview.click
+        at: { mark: click-tea-again }
+        timeoutMs: 10000
+        target: { by: testId, value: tea }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-two-orders
+        type: expect.preview
+        at: { afterAction: click-tea-again }
+        timeoutMs: 5000
+        target: { by: testId, value: orders }
+        textContains: "အော်ဒါ 2 ခု"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-two-output
+        type: expect.preview
+        at: { afterAction: expect-two-orders }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-props-type
+        type: editor.select
+        at: { mark: recap }
+        target:
+          {
+            file: src/components.tsx,
+            text: "{ name, price, ...rest }: MenuButtonProps",
+            occurrence: 1,
+          }
+      - id: select-component-props
+        type: editor.select
+        at: { mark: recap-button }
+        target:
+          { file: src/components.tsx, text: 'React.ComponentProps<"button"> & {', occurrence: 1 }
+      - id: expect-file-props
+        type: expect.file
+        at: { afterAction: expect-two-output }
+        path: src/components.tsx
+        contains: "type MenuButtonProps = React.ComponentProps<\"button\"> & {\n  name: string;\n  price: number;\n};"
+      - id: expect-file-children
+        type: expect.file
+        at: { afterAction: expect-file-props }
+        path: src/components.tsx
+        contains: "type CardProps = { title: string; children: React.ReactNode };"
+      - id: expect-file-state
+        type: expect.file
+        at: { afterAction: expect-file-children }
+        path: src/main.tsx
+        contains: "const [orders, setOrders] = useState<Order[]>([]);"
+      - id: expect-file-handler
+        type: expect.file
+        at: { afterAction: expect-file-state }
+        path: src/main.tsx
+        contains: "function handleOrder(event: React.MouseEvent<HTMLButtonElement>) {"
+      - id: expect-file-onclick
+        type: expect.file
+        at: { afterAction: expect-file-handler }
+        path: src/main.tsx
+        contains: "        data-testid=\"tea\"\n        onClick={handleOrder}\n      />"
+checks:
+  - { type: timing.p95Ms, max: 300 }
