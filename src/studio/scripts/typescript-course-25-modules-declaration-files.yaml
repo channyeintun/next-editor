@@ -1,0 +1,1787 @@
+# TypeScript course, lesson 25: modules, scripts and declaration files (Burmese).
+#
+# Start state (ws/): index.html carries a small classic <script> from "the shop's website" that sets
+# a global variable (todaySpecial) and a property on window (tableCount) before the panel loads.
+# src/main.ts has no import or export, so TypeScript treats it as a script: `const name` clashes
+# with the DOM's global `name`, and TypeScript knows neither todaySpecial nor window.tableCount.
+# The program runs fine (the script tag really set the values): 3 errors, 3 correct Output lines.
+# src/globals.d.ts holds only a comment; src/menu.ts is a module whose generated .d.ts is shown in
+# the panel's Declaration output (data-dts). tsconfig.json starts without moduleDetection and
+# without skipLibCheck.
+#
+# Edits, all insert-only:
+#   1. tsconfig: "moduleDetection": "force" (block) -> the `name` clash disappears (2 errors).
+#   2. globals.d.ts: declare const todaySpecial (fast-explainer) -> 1 error.
+#   3. main.ts: declare global { interface Window { tableCount } } (block) -> 0 errors.
+#   4. main.ts: `^?` under window -> var window: Window & typeof globalThis (lib.dom).
+#   5. globals.d.ts: a function with a body (block, a deliberate experiment) -> TS1183.
+#   6. tsconfig: "skipLibCheck": true (block) -> the error is hidden, not fixed.
+#   7. globals.d.ts: `// ` comments the experiment out.
+# Boards: (A) script vs module scope; (B) where declaration files come from; (C) a package with no
+# types and declare module.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-25-modules-declaration-files.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-25-modules-declaration-files
+  title: "TypeScript course 25: Module၊ script နဲ့ declaration file"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <!-- ဆိုင်ရဲ့ website က ထည့်ပေးထားတဲ့ script -->
+            <script>
+              var todaySpecial = { item: "မုန့်ဟင်းခါး", price: 2500 };
+              window.tableCount = 12;
+            </script>
+            <script type="module" src="/course/panel.js" data-modes="errors output dts types" data-dts="src/menu.ts"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/globals.d.ts: |
+        // ဆိုင်ရဲ့ website က ထည့်ပေးတဲ့ global တွေ
+      src/main.ts: |
+        // ဆိုင်ရဲ့ အော်ဒါ screen
+        const name = "မြမြ";
+        const special = todaySpecial.item;
+        const tables = window.tableCount;
+
+        console.log("မင်္ဂလာပါ", name);
+        console.log("ဒီနေ့ special:", special);
+        console.log("စားပွဲ", tables, "လုံး");
+      src/menu.ts: |
+        export type MenuItem = {
+          name: string;
+          price: number;
+        };
+
+        export const menu: MenuItem[] = [
+          { name: "လက်ဖက်ရည်", price: 1500 },
+          { name: "ကော်ဖီ", price: 1800 },
+        ];
+
+        export function priceOf(name: string): number {
+          const item = menu.find((m) => m.name === name);
+          return item ? item.price : 0;
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: scripts share one global scope; every module has its own.
+    - {
+        id: a-script-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 300,
+        height: 50,
+        text: "script ဖိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: a-script-rule,
+        kind: text,
+        x: 270,
+        y: 222,
+        width: 380,
+        height: 36,
+        text: "import/export မပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-script-box,
+        kind: rectangle,
+        x: 260,
+        y: 270,
+        width: 440,
+        height: 330,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-script-main,
+        kind: text,
+        x: 285,
+        y: 300,
+        width: 380,
+        height: 36,
+        text: "main.ts → name",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-script-dom,
+        kind: text,
+        x: 285,
+        y: 352,
+        width: 380,
+        height: 36,
+        text: "browser (DOM) → name",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-script-scope,
+        kind: text,
+        x: 285,
+        y: 440,
+        width: 380,
+        height: 36,
+        text: "global scope တစ်ခုတည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-clash-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 270,
+        y: 285,
+        width: 420,
+        height: 115,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-clash,
+        kind: text,
+        x: 285,
+        y: 530,
+        width: 380,
+        height: 36,
+        text: "name နှစ်ခု → error",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-module-title,
+        kind: text,
+        x: 740,
+        y: 165,
+        width: 320,
+        height: 50,
+        text: "module ဖိုင်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: a-module-rule,
+        kind: text,
+        x: 740,
+        y: 222,
+        width: 340,
+        height: 36,
+        text: "import/export ပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-module-box1,
+        kind: rectangle,
+        x: 730,
+        y: 270,
+        width: 360,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-module-name1,
+        kind: text,
+        x: 755,
+        y: 292,
+        width: 300,
+        height: 36,
+        text: "main.ts → name",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-module-own1,
+        kind: text,
+        x: 755,
+        y: 348,
+        width: 300,
+        height: 36,
+        text: "ကိုယ်ပိုင် scope",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-module-box2,
+        kind: rectangle,
+        x: 730,
+        y: 450,
+        width: 360,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-module-name2,
+        kind: text,
+        x: 755,
+        y: 472,
+        width: 300,
+        height: 36,
+        text: "menu.ts → menu",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-module-own2,
+        kind: text,
+        x: 755,
+        y: 528,
+        width: 300,
+        height: 36,
+        text: "ကိုယ်ပိုင် scope",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board B: where declaration files come from.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Type တွေ ဘယ်က လာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-lib-box,
+        kind: rectangle,
+        x: 260,
+        y: 240,
+        width: 400,
+        height: 160,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-lib-name,
+        kind: text,
+        x: 280,
+        y: 258,
+        width: 360,
+        height: 36,
+        text: "① TypeScript ရဲ့ lib",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-lib-sub,
+        kind: text,
+        x: 280,
+        y: 308,
+        width: 360,
+        height: 36,
+        text: "lib.es2022.d.ts",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-lib-dom,
+        kind: text,
+        x: 280,
+        y: 352,
+        width: 360,
+        height: 36,
+        text: "lib.dom.d.ts · window",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-pkg-box,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 400,
+        height: 160,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-pkg-name,
+        kind: text,
+        x: 710,
+        y: 258,
+        width: 360,
+        height: 36,
+        text: "② package နဲ့ ပါလာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-pkg-sub,
+        kind: text,
+        x: 710,
+        y: 308,
+        width: 360,
+        height: 36,
+        text: "vite",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-pkg-field,
+        kind: text,
+        x: 710,
+        y: 352,
+        width: 360,
+        height: 36,
+        text: "package.json → types",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-dt-box,
+        kind: rectangle,
+        x: 260,
+        y: 430,
+        width: 400,
+        height: 160,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-dt-name,
+        kind: text,
+        x: 280,
+        y: 448,
+        width: 360,
+        height: 36,
+        text: "③ DefinitelyTyped",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-dt-sub,
+        kind: text,
+        x: 280,
+        y: 498,
+        width: 360,
+        height: 36,
+        text: "@types/react",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-dt-node,
+        kind: text,
+        x: 280,
+        y: 542,
+        width: 360,
+        height: 36,
+        text: "@types/node → types",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-own-box,
+        kind: rectangle,
+        x: 690,
+        y: 430,
+        width: 400,
+        height: 160,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-own-name,
+        kind: text,
+        x: 710,
+        y: 448,
+        width: 360,
+        height: 36,
+        text: "④ ကိုယ်တိုင် ရေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-own-sub,
+        kind: text,
+        x: 710,
+        y: 498,
+        width: 360,
+        height: 36,
+        text: "globals.d.ts",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: a package that ships no types.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Type မပါတဲ့ package",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-import,
+        kind: text,
+        x: 280,
+        y: 240,
+        width: 760,
+        height: 36,
+        text: 'import { print } from "tea-printer";',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-error-1,
+        kind: text,
+        x: 280,
+        y: 290,
+        width: 760,
+        height: 36,
+        text: "Could not find a declaration file",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-error-2,
+        kind: text,
+        x: 280,
+        y: 330,
+        width: 760,
+        height: 36,
+        text: "for module 'tea-printer' … 'any'",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-first,
+        kind: text,
+        x: 280,
+        y: 395,
+        width: 760,
+        height: 36,
+        text: "① @types/tea-printer ရှိလား ရှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-second,
+        kind: text,
+        x: 280,
+        y: 450,
+        width: 760,
+        height: 36,
+        text: "② မရှိရင် .d.ts ထဲမှာ ကိုယ်တိုင် ကြေညာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-1,
+        kind: text,
+        x: 310,
+        y: 500,
+        width: 760,
+        height: 36,
+        text: 'declare module "tea-printer" {',
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-2,
+        kind: text,
+        x: 310,
+        y: 540,
+        width: 760,
+        height: 36,
+        text: "  export function print(text: string): void;",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-3,
+        kind: text,
+        x: 310,
+        y: 580,
+        width: 760,
+        height: 36,
+        text: "}",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3125
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Module နဲ့ script"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ နာမည် တစ်ခုက type world မှာ နေလား၊ value world မှာ နေလား ဆိုတာ
+      ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ဖိုင် တစ်ဖိုင်ထဲက နာမည်တွေကို ဘယ် ဖိုင်တွေက မြင်ရလဲ ဆိုတာနဲ့၊ ကိုယ် မရေးထားတဲ့
+      code ရဲ့ type တွေကို TypeScript က ဘယ်ကနေ သိလဲ ဆိုတာကို ကြည့်သွားပါမယ်။ [[mark:draw-script]] TypeScript က
+      ဖိုင် တစ်ဖိုင်ကို ဖတ်တဲ့အခါ import ဒါမှမဟုတ် export ပါလား ဆိုတာ အရင် ကြည့်ပါတယ်။ တစ်ခုမှ မပါရင် အဲဒီ
+      ဖိုင်ကို script လို့ ယူဆပါတယ်။ script တွေက project ထဲက ဘယ်ဖိုင်ကမဆို မြင်ရတဲ့ global scope တစ်ခုတည်းကို
+      မျှသုံးကြပြီး၊ browser ရဲ့ window လို နာမည်တွေလည်း အဲဒီမှာပဲ ရှိပါတယ်။ [[mark:draw-module]] import
+      ဒါမှမဟုတ် export ပါတဲ့ ဖိုင်ကတော့ module ပါ။ module တစ်ခုစီမှာ ကိုယ်ပိုင် scope ရှိလို့၊ export မလုပ်တဲ့
+      နာမည်တွေကို တခြား ဖိုင်က မမြင်ရပါဘူး။ [[mark:draw-clash]] ဒါကြောင့် script ထဲမှာ browser က ရှိပြီးသား
+      နာမည် တစ်ခုကို ထပ်ကြေညာရင်၊ global scope ထဲမှာ နာမည်တူ နှစ်ခု ဖြစ်ပြီး error တက်ပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Modules, Scripts, and Declaration Files",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "TypeScript Handbook: Modules (how JavaScript modules are defined)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/modules.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-script-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-script
+        type: whiteboard.apply
+        at: { mark: draw-script }
+        upsertIds: [a-script-rule, a-script-box, a-script-main, a-script-dom, a-script-scope]
+        drawMs: 3000
+      - id: draw-module
+        type: whiteboard.apply
+        at: { mark: draw-module }
+        upsertIds:
+          [
+            a-module-title,
+            a-module-rule,
+            a-module-box1,
+            a-module-name1,
+            a-module-own1,
+            a-module-box2,
+            a-module-name2,
+            a-module-own2,
+          ]
+        drawMs: 3200
+      - id: draw-clash
+        type: whiteboard.apply
+        at: { mark: draw-clash }
+        upsertIds: [a-clash-circle, a-clash]
+        drawMs: 1800
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-index]] ဒါက page ရဲ့ HTML ဖိုင်ပါ။
+      [[mark:select-script]] ဆိုင်ရဲ့ website က ဒီ script tag ကို ထည့်ပေးထားပါတယ်။ ဒီနေ့ special ဟင်းလျာကို
+      global variable တစ်ခု အနေနဲ့ သတ်မှတ်ပေးပြီး၊ စားပွဲ အရေအတွက်ကိုလည်း window ပေါ်မှာ တင်ပေးထားပါတယ်။
+      HTML ထဲမှာ ရေးထားတဲ့ ရိုးရိုး JavaScript ဖြစ်လို့၊ TypeScript က ဒီ code ကို မဖတ်ပါဘူး။
+      [[mark:open-main]] ဒါကတော့ ဆိုင်ရဲ့ အော်ဒါ screen အတွက် main ဖိုင်ပါ။ [[mark:select-name]] customer ရဲ့
+      နာမည်ကို name ဆိုတဲ့ variable ထဲ ထည့်ထားပါတယ်။ [[mark:select-globals]] အောက်က နှစ်ကြောင်းက website
+      ပေးထားတဲ့ special ဟင်းလျာနဲ့ စားပွဲ အရေအတွက်ကို ယူသုံးပြီး၊ [[mark:select-logs]] နောက်ဆုံး သုံးကြောင်းက
+      အားလုံးကို ထုတ်ပြပါတယ်။ ဒီ ဖိုင်ထဲမှာ import ရော export ရော တစ်ကြောင်းမှ မပါတာကို သတိထား ကြည့်ပါ။
+    sources:
+      - {
+          title: "MDN: The Window object (global scope in the browser)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/Window",
+        }
+      - {
+          title: "MDN: <script> — classic scripts",
+          url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-index
+        type: workspace.openFile
+        at: { mark: open-index }
+        path: index.html
+      - id: select-script
+        type: editor.select
+        at: { mark: select-script }
+        target:
+          {
+            file: index.html,
+            text: "var todaySpecial = { item: \"မုန့်ဟင်းခါး\", price: 2500 };\n      window.tableCount = 12;",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-name
+        type: editor.select
+        at: { mark: select-name }
+        target: { file: src/main.ts, text: 'const name = "မြမြ";', occurrence: 1 }
+      - id: select-globals
+        type: editor.select
+        at: { mark: select-globals }
+        target:
+          {
+            file: src/main.ts,
+            text: "const special = todaySpecial.item;\nconst tables = window.tableCount;",
+            occurrence: 1,
+          }
+      - id: select-logs
+        type: editor.select
+        at: { mark: select-logs }
+        target:
+          {
+            file: src/main.ts,
+            text: "console.log(\"မင်္ဂလာပါ\", name);\nconsole.log(\"ဒီနေ့ special:\", special);\nconsole.log(\"စားပွဲ\", tables, \"လုံး\");",
+            occurrence: 1,
+          }
+
+  - id: symptoms
+    narration: >
+      [[mark:panel-ready]] panel ရဲ့ Output မှာ မြမြ ကို နှုတ်ဆက်စာ၊ ဒီနေ့ special နဲ့ စားပွဲ
+      အရေအတွက်၊ သုံးကြောင်းလုံး မှန်မှန် ထွက်လာပါတယ်။ website ရဲ့ script က တန်ဖိုးတွေကို တကယ်
+      ထည့်ပေးထားလို့ပါ။ [[mark:read-errors]] ဒါပေမဲ့ Errors မှာတော့ error သုံးခု ရှိပါတယ်။ ဒုတိယနဲ့ တတိယ error
+      က special ဟင်းလျာကို ရှာမတွေ့ဘူး၊ window ပေါ်မှာ စားပွဲ အရေအတွက် မရှိဘူးလို့ ပြောနေပါတယ်။ HTML ထဲက
+      script ကို TypeScript မဖတ်လို့ပါ။ [[mark:read-redeclare]] ပထမ error ကတော့ name ဆိုတဲ့ variable ကို
+      ထပ်ကြေညာလို့ မရဘူးလို့ ပြောပါတယ်။ ဒီ ဖိုင်ထဲမှာ တစ်ခါပဲ ကြေညာထားပေမယ့်၊ TypeScript က ဒီ ဖိုင်ကို script
+      လို့ ယူဆထားပါတယ်။ TypeScript ရဲ့ DOM type တွေထဲမှာလည်း browser ရဲ့ window မှာ ရှိတဲ့ name ဆိုတဲ့ global
+      ကို ကြေညာထားပြီးသား ဖြစ်တဲ့အတွက်၊ global scope ထဲမှာ name နှစ်ခု ဖြစ်သွားတာပါ။
+    sources:
+      - {
+          title: 'Total TypeScript Essentials, ch. 13: "Cannot redeclare block-scoped variable"',
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "MDN: Window.name",
+          url: "https://developer.mozilla.org/en-US/docs/Web/API/Window/name",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-start-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-out-name
+        type: expect.preview
+        at: { afterAction: expect-start-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "မင်္ဂလာပါ မြမြ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-out-special
+        type: expect.preview
+        at: { afterAction: expect-out-name }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ဒီနေ့ special: မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-out-tables
+        type: expect.preview
+        at: { afterAction: expect-out-special }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "စားပွဲ 12 လုံး"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-error-special
+        type: expect.preview
+        at: { mark: read-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Cannot find name 'todaySpecial'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-error-window
+        type: expect.preview
+        at: { afterAction: expect-error-special }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-3 }
+        textContains: "Property 'tableCount' does not exist on type 'Window & typeof globalThis'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-error-redeclare
+        type: expect.preview
+        at: { mark: read-redeclare }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot redeclare block-scoped variable 'name'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-error-redeclare-code
+        type: expect.preview
+        at: { afterAction: expect-error-redeclare }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2451" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: module-detection
+    narration: >
+      ဒီလို ဖြစ်ရတာက၊ ဖိုင် တစ်ဖိုင်ကို module အနေနဲ့ run မလား၊ script အနေနဲ့ run မလား ဆိုတာ TypeScript
+      ကြိုမသိနိုင်ပါဘူး။ ဒါကြောင့် import နဲ့ export ကို ကြည့်ပြီး ခန့်မှန်းရတာပါ။ ဘာမှ မပါတဲ့ export
+      တစ်ကြောင်း ထည့်ရင် module ဖြစ်သွားပေမယ့်၊ ဖိုင်တိုင်းမှာ လိုက်ထည့်ရမှာပါ။ [[mark:open-tsconfig]] ဒါကြောင့် tsconfig ဖိုင်မှာ တစ်ခါတည်း သတ်မှတ်ပါမယ်။
+      [[mark:type-force]] module detection option ကို force လို့ ထည့်လိုက်ပါမယ်။ [[mark:read-force]] name
+      error ပျောက်ပြီး error နှစ်ခုပဲ ကျန်ပါတော့တယ်။ force က ဖိုင်တိုင်းကို module လို့ ယူဆခိုင်းလို့၊ main
+      ဖိုင်ရဲ့ name က ကိုယ်ပိုင် scope ထဲ ရောက်သွားတာပါ။
+      ဒါပေမဲ့ declaration file တွေကိုတော့ force က module မဖြစ်စေပါဘူး။
+    sources:
+      - {
+          title: "TSConfig reference: moduleDetection",
+          url: "https://www.typescriptlang.org/tsconfig/#moduleDetection",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Forcing modules with moduleDetection",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "create-vite: template-vanilla-ts tsconfig.json",
+          url: "https://github.com/vitejs/vite/blob/main/packages/create-vite/template-vanilla-ts/tsconfig.json",
+        }
+    actions:
+      - id: open-tsconfig
+        type: workspace.openFile
+        at: { mark: open-tsconfig }
+        path: tsconfig.json
+      - id: type-force
+        type: editor.type
+        at: { mark: type-force }
+        target: { file: tsconfig.json, after: "\"strict\": true,\n", occurrence: 1 }
+        text: "    \"moduleDetection\": \"force\",\n"
+        cadence: block
+      - id: expect-force-two
+        type: expect.preview
+        at: { afterAction: type-force }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-force-first
+        type: expect.preview
+        at: { afterAction: expect-force-two }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2304" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: declare-const
+    chapter: "Declaration file နဲ့ declare"
+    narration: >
+      [[mark:open-globals]] special ဟင်းလျာအတွက်တော့ TypeScript မဖတ်တဲ့ script ထဲမှာ ဘာ ရှိလဲ ဆိုတာ ကိုယ်က
+      ပြောပြရပါမယ်။ ဒီ ဖိုင်က အဲဒီအတွက်ပါ။ နာမည်ရဲ့ နောက်ဆုံးမှာ D T S ပါတဲ့ ဒီလို ဖိုင်ကို declaration file
+      လို့ ခေါ်ပြီး၊ type တွေကိုပဲ ရေးရတဲ့ ဖိုင်ပါ။ JavaScript အဖြစ် ဘယ်တော့မှ မပြောင်းလို့၊ အလုပ်လုပ်မယ့်
+      code ထည့်လို့ မရပါဘူး။ [[mark:type-declare-const]] special ဟင်းလျာအတွက် declare const ကို ရေးပါမယ်။
+      declare ဆိုတာ ဒီ နာမည်နဲ့ တန်ဖိုး တစ်ခု run တဲ့ အချိန်မှာ တကယ် ရှိပါတယ်၊ ဒါပေမဲ့ သူ့ကို တခြား နေရာမှာ
+      ရေးထားပါတယ်လို့ ပြောတာပါ။ [[mark:read-declare-const]] error တစ်ခု ထပ်ပျောက်သွားပါပြီ။
+      main ဖိုင်က ဒီ ဖိုင်ကို import မလုပ်ဘဲ မြင်ရတာက၊ ဒီ ဖိုင်မှာ import export မပါတဲ့အပြင် force ကလည်း
+      declaration file ကို module မဖြစ်စေလို့ပါ။ ဒါကြောင့် ဒီက
+      ကြေညာချက်တွေက global scope ထဲ ရောက်သွားပါတယ်။ [[mark:warn-drift]] သတိထားရမှာက TypeScript က
+      ဒီ ကြေညာချက်ကို website ရဲ့ script နဲ့ တိုက်မစစ်နိုင်တာပါ။ script ပြောင်းသွားရင် ဒီ ဖိုင်ကို ကိုယ်တိုင်
+      လိုက်ပြင်ရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Declaration files, declare const, typing global variables",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "TypeScript Handbook: Declaration Reference (global variables)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/by-example.html#global-variables",
+        }
+      - {
+          title: "TSConfig reference: moduleDetection (force applies to non-declaration files)",
+          url: "https://www.typescriptlang.org/tsconfig/#moduleDetection",
+        }
+    actions:
+      - id: open-globals
+        type: workspace.openFile
+        at: { mark: open-globals }
+        path: src/globals.d.ts
+      - id: type-declare-const
+        type: editor.type
+        at: { mark: type-declare-const }
+        target: { file: src/globals.d.ts, after: "global တွေ\n", occurrence: 1 }
+        text: "declare const todaySpecial: { item: string; price: number };\n"
+        cadence: fast-explainer
+      - id: expect-const-one
+        type: expect.preview
+        at: { afterAction: type-declare-const }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-const-left
+        type: expect.preview
+        at: { afterAction: expect-const-one }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2339" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: declare-global
+    narration: >
+      [[mark:back-main]] ကျန်တဲ့ error ကို ကြည့်ရအောင်။ [[mark:select-window]] window ရဲ့ type ကို TypeScript
+      ရဲ့ DOM type တွေထဲမှာ Window interface နဲ့ ကြေညာထားပြီး၊ စားပွဲ အရေအတွက် property မပါပါဘူး။ နာမည်တူ
+      interface တွေ တစ်ခုတည်း ပေါင်းသွားတယ် ဆိုတာ lesson ၁၂ မှာ မြင်ခဲ့လို့၊ Window interface ကို
+      ထပ်ရေးပြီး property ထည့်ပေးလို့ ရပါတယ်။ [[mark:type-declare-global]] ဒီတစ်ခါတော့ property ကို သုံးတဲ့
+      main ဖိုင်ထဲမှာပဲ ရေးပါမယ်။ main ဖိုင်က အခု module ဖြစ်နေလို့ ဒီတိုင်း ရေးရင် သူ့ scope ထဲမှာပဲ ကျန်မှာ
+      ဖြစ်တဲ့အတွက်၊ declare global block ထဲ ထည့်ပြီး global scope ထဲကို ထည့်ခိုင်းပါတယ်။
+      [[mark:read-declare-global]] Errors မှာ error တစ်ခုမှ
+      မကျန်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: declare global",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "TypeScript Handbook: Declaration Merging (global augmentation)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-merging.html#global-augmentation",
+        }
+    actions:
+      - id: back-main
+        type: workspace.openFile
+        at: { mark: back-main }
+        path: src/main.ts
+      - id: select-window
+        type: editor.select
+        at: { mark: select-window }
+        target: { file: src/main.ts, text: "window.tableCount", occurrence: 1 }
+      - id: type-declare-global
+        type: editor.type
+        at: { mark: type-declare-global }
+        target:
+          { file: src/main.ts, after: "console.log(\"စားပွဲ\", tables, \"လုံး\");\n", occurrence: 1 }
+        text: "\ndeclare global {\n  interface Window {\n    tableCount: number;\n  }\n}\n"
+        cadence: block
+      - id: expect-global-clean
+        type: expect.preview
+        at: { afterAction: type-declare-global }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-global-output
+        type: expect.preview
+        at: { afterAction: expect-global-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "စားပွဲ 12 လုံး"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: dts-output
+    narration: >
+      [[mark:open-menu]] declaration file ကို အမြဲ လက်နဲ့ ရေးရတာ မဟုတ်ပါဘူး။ ဒါက ဆိုင်ရဲ့ menu ဖိုင်ပါ။
+      [[mark:select-body]] ဈေးနှုန်း ရှာတဲ့ function ထဲမှာ အလုပ်လုပ်မယ့် code ရှိပါတယ်။ [[mark:read-dts]] panel ရဲ့ Declaration output အပိုင်းမှာ TypeScript က ဒီ ဖိုင်ကနေ
+      ထုတ်ပေးမယ့် declaration file ကို ပြထားပါတယ်။ type alias ကတော့ ဒီအတိုင်း ကျန်ပေမယ့်၊ menu array ထဲက တန်ဖိုးတွေနဲ့
+      function ရဲ့ code ပျောက်သွားပြီး type တွေပဲ ကျန်ပါတယ်။ [[mark:explain-library]] TypeScript နဲ့ ရေးတဲ့
+      library တွေက ဒီလိုပဲ JavaScript ဖိုင်နဲ့ declaration file ကို တွဲထုတ်ကြပါတယ်။ JavaScript ဖိုင်က run ဖို့
+      ဖြစ်ပြီး၊ declaration file က editor နဲ့ type checker ဖတ်ဖို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Declaration files describe JavaScript",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "TSConfig reference: declaration",
+          url: "https://www.typescriptlang.org/tsconfig/#declaration",
+        }
+      - {
+          title: "TypeScript Handbook: Introduction to declaration files",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/introduction.html",
+        }
+    actions:
+      - id: open-menu
+        type: workspace.openFile
+        at: { mark: open-menu }
+        path: src/menu.ts
+      - id: select-body
+        type: editor.select
+        at: { mark: select-body }
+        target:
+          {
+            file: src/menu.ts,
+            text: "  const item = menu.find((m) => m.name === name);\n  return item ? item.price : 0;",
+            occurrence: 1,
+          }
+      - id: expect-dts-function
+        type: expect.preview
+        at: { mark: read-dts }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-dts-1 }
+        textContains: "export declare function priceOf(name: string): number;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-dts-menu
+        type: expect.preview
+        at: { afterAction: expect-dts-function }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-dts-1 }
+        textContains: "export declare const menu: MenuItem[];"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: where-types-come-from
+    chapter: "Type တွေ ဘယ်က လာလဲ"
+    narration: >
+      [[mark:type-query-window]] main ဖိုင်ကို ပြန်ဖွင့်ပြီး window ကိုယ်တိုင်ရဲ့ type ကိုလည်း query comment
+      နဲ့ မေးကြည့်ရအောင်။
+      [[mark:read-query-window]] Types မှာ Window interface နဲ့ globalThis ကို ပေါင်းထားတဲ့ type ကို ပြပြီး၊
+      အောက်မှာ MDN link ပါတဲ့ ရှင်းလင်းချက်ပါ ပါလာပါတယ်။ ဒါတွေက TypeScript နဲ့ အတူ ပါလာတဲ့ lib dot dom ဆိုတဲ့
+      declaration file ထဲမှာ ရေးထားတာပါ။ VS Code မှာ Go to Definition လုပ်ရင် အဲဒီ ဖိုင်ကို
+      ဖွင့်ပေးပါမယ်။ [[mark:board-sources]] ဆိုတော့ declaration file တွေ ဘယ်က လာလဲ ဆိုတာကို လေးမျိုး ခွဲကြည့်ရအောင်။
+      [[mark:draw-lib]] ပထမက TypeScript မှာ ပါလာတဲ့ lib ဖိုင်တွေပါ။ JavaScript ရဲ့ built-in တွေရော browser ရဲ့
+      DOM တွေရော ဒီထဲမှာ ရှိပြီး၊ tsconfig ရဲ့ lib option က ဘယ်ဟာ သုံးမလဲ ရွေးပါတယ်။ မရေးထားရင် target ကို
+      ကြည့်ပြီး DOM ပါ တွဲပေးပါတယ်။ [[mark:draw-packages]] ဒုတိယက Vite လို package တွေက သူ့ထဲမှာ ထည့်ပေးထားတဲ့
+      type တွေ ဖြစ်ပြီး၊ package json ရဲ့ types field က အဲဒီ ဖိုင်ကို ညွှန်ပြပါတယ်။ [[mark:draw-definitely]]
+      တတိယက DefinitelyTyped ပါ။ type မပါတဲ့ package တွေအတွက် community က at types package တွေ သီးသန့်
+      ထုတ်ပေးပြီး၊ ဥပမာ at types react ကို ထည့်ထားရင် React ကို import လုပ်တဲ့အခါ TypeScript က ရှာတွေ့ပါတယ်။
+      TypeScript ၆ ကစပြီး Node.js လို global type ထည့်ပေးတဲ့ package ကိုတော့ types option ထဲမှာ နာမည်
+      ရေးပေးရပါတယ်။ [[mark:draw-own]] စတုတ္ထကတော့ ခုနက ရေးခဲ့သလို ကိုယ်တိုင် ရေးတဲ့ declaration file တွေပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Declaration files you don't control, lib, DOM types, DefinitelyTyped",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - { title: "TSConfig reference: lib", url: "https://www.typescriptlang.org/tsconfig/#lib" }
+      - {
+          title: "TSConfig reference: types",
+          url: "https://www.typescriptlang.org/tsconfig/#types",
+        }
+      - {
+          title: "Announcing TypeScript 6.0 (types defaults to [], dom.iterable merged into dom)",
+          url: "https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/",
+        }
+      - {
+          title: "TypeScript Handbook: Consumption of declaration files (@types)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/consumption.html",
+        }
+    actions:
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: type-query-window }
+        path: src/main.ts
+      - id: type-query-window
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "const tables = window.tableCount;\n", occurrence: 1 }
+        text: "//             ^?\n"
+        cadence: fast-explainer
+      - id: expect-query-window
+        type: expect.preview
+        at: { afterAction: type-query-window }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "var window: Window & typeof globalThis" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-sources }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-lib
+        type: whiteboard.apply
+        at: { mark: draw-lib }
+        upsertIds: [b-lib-box, b-lib-name, b-lib-sub, b-lib-dom]
+        drawMs: 2400
+      - id: draw-packages
+        type: whiteboard.apply
+        at: { mark: draw-packages }
+        upsertIds: [b-pkg-box, b-pkg-name, b-pkg-sub, b-pkg-field]
+        drawMs: 2400
+      - id: draw-definitely
+        type: whiteboard.apply
+        at: { mark: draw-definitely }
+        upsertIds: [b-dt-box, b-dt-name, b-dt-sub, b-dt-node]
+        drawMs: 2600
+      - id: draw-own
+        type: whiteboard.apply
+        at: { mark: draw-own }
+        upsertIds: [b-own-box, b-own-name, b-own-sub]
+        drawMs: 1800
+
+  - id: declare-module
+    narration: >
+      [[mark:board-untyped]] declaration file ကို ကိုယ်တိုင် ရေးရတဲ့ နောက် အခြေအနေ တစ်ခုက type လုံးဝ မပါတဲ့
+      package ကို သုံးရတဲ့အခါပါ။ ဥပမာ JavaScript နဲ့ပဲ ရေးထားတဲ့ printer package တစ်ခုကို import လုပ်ရင်၊
+      declaration file ရှာမတွေ့လို့ any လို့ ယူဆရမယ် ဆိုပြီး TypeScript က error ပြပါတယ်။
+      [[mark:draw-types-first]] အဲဒီအခါ at types package ရှိမရှိ အရင် ရှာကြည့်ပါ။
+      [[mark:draw-declare-module]] မရှိရင်တော့ ကိုယ့် declaration file ထဲမှာ declare
+      module နဲ့ package နာမည်ကို ရေးပြီး၊ သုံးမယ့် function တွေရဲ့ type ကို အထဲမှာ ကြေညာပေးပါ။ block မပါဘဲ
+      package နာမည်ကိုပဲ တစ်ကြောင်းတည်း ကြေညာရင်တော့ error ပျောက်ပေမယ့် အားလုံး any
+      ဖြစ်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: declare module",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "TypeScript Handbook: Modules .d.ts (ambient modules, shorthand ambient modules)",
+          url: "https://www.typescriptlang.org/docs/handbook/modules/reference.html#ambient-modules",
+        }
+      - {
+          title: "TypeScript Handbook: Consumption of declaration files (@types)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-files/consumption.html",
+        }
+    actions:
+      - id: open-board-c
+        type: whiteboard.apply
+        at: { mark: board-untyped }
+        clear: true
+        upsertIds: [c-title, c-import, c-error-1, c-error-2]
+        drawMs: 2400
+      - id: draw-types-first
+        type: whiteboard.apply
+        at: { mark: draw-types-first }
+        upsertIds: [c-first]
+        drawMs: 1200
+      - id: draw-declare-module
+        type: whiteboard.apply
+        at: { mark: draw-declare-module }
+        upsertIds: [c-second, c-code-1, c-code-2, c-code-3]
+        drawMs: 2800
+
+  - id: skiplibcheck
+    chapter: "skipLibCheck ရဲ့ အားနည်းချက်"
+    narration: >
+      [[mark:close-board-c]] declaration file ထဲမှာ run မယ့် code ထည့်လို့ မရဘူး ဆိုတာကို တကယ်
+      စမ်းကြည့်ရအောင်။ [[mark:type-impl]] ဈေးနှုန်းကို ကျပ် နဲ့ ပြတဲ့ function တစ်ခုကို၊ code ပါ ပါအောင်
+      တမင် ရေးကြည့်ပါမယ်။ [[mark:read-impl]] ambient context မှာ implementation ရေးလို့ မရဘူး ဆိုတဲ့
+      error ပေါ်လာပါပြီ။ ambient ဆိုတာ code မပါဘဲ ရှိတယ်လို့ ကြေညာရုံ ကြေညာတာ ဖြစ်ပြီး၊ declaration file ထဲက
+      အရာအားလုံးက ambient ပါ။ [[mark:open-tsconfig-2]] အခု project အများစုမှာ ဖွင့်ထားတဲ့ skip lib check
+      option ကို ထည့်ကြည့်ပါမယ်။ [[mark:type-skip]] ဒီ option က declaration file တွေကို type check မလုပ်ဖို့
+      ပြောတာပါ။ [[mark:read-skip]] error ပျောက်သွားပေမယ့် အမှားက ရှိနေတုန်းပါ။ package တွေရဲ့ type တွေကို
+      မစစ်တော့လို့ စစ်တာ ပိုမြန်ပြီး၊ ကိုယ် ပြင်လို့ မရတဲ့ package ထဲက error တွေလည်း မပေါ်တော့တာက သူ့ရဲ့
+      ကောင်းကွက်ပါ။ ကိုယ်တိုင် ရေးတဲ့ declaration file ကိုပါ မစစ်တော့တာကတော့ အားနည်းချက်ပါ။
+      [[mark:type-comment-impl]] ဒါကြောင့် စမ်းထားတဲ့ ဒီ line ကို ကိုယ်တိုင် comment လုပ်ပြီး ပိတ်ထားပါမယ်။ [[mark:advice]] project ထဲမှာ သုံးမယ့်
+      type တွေကိုလည်း declaration file ထဲမှာ မစုဘဲ၊ ရိုးရိုး TypeScript ဖိုင်မှာ ရေးပြီး export လုပ်ပါ။ အဲဒီ
+      ဖိုင်တွေကိုတော့ TypeScript က အမြဲ စစ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Declaration files can't contain implementations; skipLibCheck and its downsides; should you store your types in declaration files?",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+      - {
+          title: "TSConfig reference: skipLibCheck",
+          url: "https://www.typescriptlang.org/tsconfig/#skipLibCheck",
+        }
+    actions:
+      - id: close-board-c
+        type: whiteboard.apply
+        at: { mark: close-board-c }
+        open: false
+      - id: open-globals-2
+        type: workspace.openFile
+        at: { mark: type-impl }
+        path: src/globals.d.ts
+      - id: type-impl
+        type: editor.type
+        at: { afterAction: open-globals-2 }
+        target: { file: src/globals.d.ts, after: "price: number };\n", occurrence: 1 }
+        text: "declare function formatKyat(price: number): string { return price + \" ကျပ်\"; }\n"
+        cadence: block
+      - id: expect-impl-error
+        type: expect.preview
+        at: { afterAction: type-impl }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-impl-code
+        type: expect.preview
+        at: { afterAction: expect-impl-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "1183" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-impl-file
+        type: expect.preview
+        at: { afterAction: expect-impl-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "src/globals.d.ts" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-tsconfig-2
+        type: workspace.openFile
+        at: { mark: open-tsconfig-2 }
+        path: tsconfig.json
+      - id: type-skip
+        type: editor.type
+        at: { mark: type-skip }
+        target: { file: tsconfig.json, after: "\"moduleDetection\": \"force\",\n", occurrence: 1 }
+        text: "    \"skipLibCheck\": true,\n"
+        cadence: block
+      - id: expect-skip-hidden
+        type: expect.preview
+        at: { afterAction: type-skip }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: open-globals-3
+        type: workspace.openFile
+        at: { mark: type-comment-impl }
+        path: src/globals.d.ts
+      - id: type-comment-impl
+        type: editor.type
+        at: { afterAction: open-globals-3 }
+        target: { file: src/globals.d.ts, after: "price: number };\n", occurrence: 1 }
+        text: "// "
+      - id: expect-comment-clean
+        type: expect.preview
+        at: { afterAction: type-comment-impl }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: recap
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ import ဒါမှမဟုတ် export ပါတဲ့ ဖိုင်က ကိုယ်ပိုင် scope ရှိတဲ့ module ဖြစ်ပြီး၊
+      မပါရင် global scope ကို မျှသုံးတဲ့ script ဖြစ်ပါတယ်။ module detection ကို force ထားရင်တော့
+      declaration file ကလွဲရင် ဖိုင်တိုင်း module ဖြစ်ပါတယ်။ [[mark:recap-dts]] declaration file မှာ type ပဲ
+      ပါပြီး၊ declare နဲ့ global တွေကို ကြေညာနိုင်သလို module ထဲကနေ declare global နဲ့လည်း ထည့်နိုင်ပါတယ်။
+      skip lib check က ကိုယ်ရေးတဲ့ declaration file တွေကိုပါ မစစ်တော့တာ သတိထားပါ။ နောက် lesson မှာတော့ tsconfig ကို
+      အသေးစိတ် ပြင်ဆင်ပုံကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 13: Modules, Scripts, and Declaration Files",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/modules-scripts-and-declaration-files",
+        }
+    actions:
+      - id: select-declare
+        type: editor.select
+        at: { mark: recap-dts }
+        target: { file: src/globals.d.ts, text: "declare const todaySpecial", occurrence: 1 }
+      - id: expect-file-tsconfig
+        type: expect.file
+        at: { afterAction: select-declare }
+        path: tsconfig.json
+        contains: "    \"strict\": true,\n    \"moduleDetection\": \"force\",\n    \"skipLibCheck\": true,\n"
+      - id: expect-file-globals
+        type: expect.file
+        at: { afterAction: expect-file-tsconfig }
+        path: src/globals.d.ts
+        contains: "declare const todaySpecial: { item: string; price: number };\n// declare function formatKyat"
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: expect-file-globals }
+        path: src/main.ts
+        contains: "declare global {\n  interface Window {\n    tableCount: number;\n  }\n}\n"
+checks:
+  - { type: timing.p95Ms, max: 300 }
