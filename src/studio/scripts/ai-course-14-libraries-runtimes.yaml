@@ -1,0 +1,2166 @@
+# AI course, lesson 14: client-side libraries and runtimes (Burmese, hands-on, M2 Transformers.js).
+#
+# Start state (ws/, copied from base-transformers/): data/reviews.json (COURSE-KIT §4.2, sample data,
+# unchanged from datasets/); src/main.js keeps the nine English reviews (lang "en", not questions),
+# one customer question ("Is it crowded on the weekend?"), loads Xenova/all-MiniLM-L6-v2 q8 on
+# WebAssembly with Transformers.js 4.3.2 (course/modules-transformers.js, pinned, from jsDelivr) and
+# draws, per question, a table of the three closest reviews (`ai-closest-<n>`). The MODEL card
+# (`ai-model-1`) is drawn by modules-transformers.js: model, task, dtype q8, device wasm, the download
+# (`download x MB of 23.7 MB` → `size 23.7 MB downloaded`) and its status. index.html: console off.
+#
+# The model downloads when the preview opens (`open-preview`); the first answer is asserted at
+# `read-closest`, more than 1,400 narration characters later, in two steps (PLATFORM.md §8).
+# One edit (line-by-line): a second question, "Is the drink too sugary?" → `ai-closest-2` at once,
+# the model already in memory (no second download).
+# Measured (tools/sim.ts on node, verify in Chrome's WebAssembly build): question 1 → "Best tea in
+# Bahan, but Sunday mornings are packed and slow." then "Tasty mohinga, but we waited forty minutes on
+# Sunday."; question 2 → "Lime juice was too sweet for me." Order and labels are asserted, never digits.
+#
+# Boards: (A) the mini blueprint, Intelligence highlighted; (B) five client-side libraries; (C) the
+# client-side stack, drawn while the model downloads; (D) three runtimes; (E) built-in AI or a
+# library; (Z) the quiz. The board is a modal: the panel is seen in `code` (editor), the start of
+# `download`, `search`, `second` and the recap.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-14-libraries-runtimes.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-14-libraries-runtimes
+  title: "AI course 14: Client-side library နဲ့ runtime"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/modules-transformers.js: |
+        // AI course · Transformers.js for lesson code (runs in the preview page, pinned, never typed).
+        // Lesson code writes `import { pipeline } from "@huggingface/transformers"` as in any app; the
+        // panel resolves that import to this exact build from jsDelivr. (An npm install of the package
+        // would add onnxruntime-node and onnxruntime-web, about 430 MB, to every WebContainer install.)
+        // Two course defaults keep runs repeatable: one WebAssembly thread on the CPU ("wasm"), unless the
+        // lesson asks for another device, and one loaded pipeline per (task, model, options), reused by
+        // every re-run, so editing the code does not load the model again. Each pipeline() call draws a
+        // MODEL card in the AI panel: what is downloading, how much, and when it is ready.
+        const VERSION = "4.3.2";
+        const SRC = `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${VERSION}/dist/transformers.min.js`;
+
+        const loaders = (window.__courseModuleLoaders ??= {});
+        loaders["@huggingface/transformers"] = async () => {
+          const lib = await import(/* @vite-ignore */ SRC);
+          lib.env.allowLocalModels = false;
+          lib.env.backends.onnx.wasm.numThreads = 1;
+          const loaded = new Map();
+          const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
+
+          function load(task, model, options) {
+            const entry = { info: { task, model, dtype: options.dtype ?? "default", device: options.device, status: "downloading", files: {} }, listeners: new Set() };
+            const notify = () => { for (const fn of entry.listeners) fn(entry); };
+            const progress = (p) => {
+              if (p.status === "progress" && p.file) {
+                entry.info.files[p.file] = { loaded: p.loaded ?? 0, total: p.total ?? 0 };
+                notify();
+              }
+            };
+            const started = performance.now();
+            entry.promise = lib.pipeline(task, model, { ...options, progress_callback: progress }).then(
+              (pipe) => {
+                entry.info.status = "ready";
+                entry.info.loadMs = Math.round(performance.now() - started);
+                notify();
+                return pipe;
+              },
+              (error) => {
+                entry.info.status = "failed";
+                entry.info.error = String(error?.message ?? error);
+                notify();
+                loaded.delete(entry.key);
+                throw error;
+              },
+            );
+            return entry;
+          }
+
+          function describe(entry) {
+            const files = Object.values(entry.info.files);
+            const total = files.reduce((s, f) => s + (f.total || 0), 0);
+            const done = files.reduce((s, f) => s + (f.loaded || 0), 0);
+            const row = { model: entry.info.model, task: entry.info.task, dtype: entry.info.dtype, device: entry.info.device };
+            if (entry.info.status === "ready") row.size = total ? `${mb(total)} downloaded` : "from the browser cache";
+            else if (entry.info.status === "downloading") row.download = total ? `${mb(done)} of ${mb(total)}` : "starting…";
+            else row.error = entry.info.error;
+            row.status = entry.info.status;
+            return row;
+          }
+
+          function pipeline(task, model, options = {}) {
+            const opts = { device: "wasm", ...options };
+            delete opts.progress_callback;
+            const key = JSON.stringify([task, model ?? null, opts]);
+            let entry = loaded.get(key);
+            if (!entry) {
+              entry = load(task, model, opts);
+              entry.key = key;
+              loaded.set(key, entry);
+            }
+            const run = window.__coursePanel?.current;
+            if (run && !run.dead) {
+              run.models = (run.models ?? 0) + 1;
+              const card = run.panel.model("Model", describe(entry), { id: `model-${run.models}` });
+              if (entry.info.status !== "ready") {
+                // At most four redraws a second while downloading (keeps the recording small), then the last.
+                let last = 0;
+                let pending = null;
+                const update = () => {
+                  const now = performance.now();
+                  if (entry.info.status !== "downloading" || now - last >= 250) {
+                    last = now;
+                    clearTimeout(pending);
+                    card?.set(describe(entry));
+                  } else if (!pending) {
+                    pending = setTimeout(() => { pending = null; last = performance.now(); card?.set(describe(entry)); }, 250);
+                  }
+                };
+                entry.listeners.add(update);
+                entry.promise.finally(() => entry.listeners.delete(update)).catch(() => {});
+              }
+            }
+            return entry.promise;
+          }
+
+          return { ...lib, pipeline };
+        };
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/reviews.json: |
+        {
+         "note": "Synthetic sample reviews written for the AI course (not real customers). lang: my, en, mixed, my-latn (romanized Burmese). sentiment and type are the shop's own labels; tags mark edge cases.",
+         "reviews": [
+          { "id": "r01", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ချိုဆိမ့် တစ်ခွက်နဲ့ မနက်တိုင်း စတယ်။ အရသာ တစ်ခါမှ မပြောင်းဘူး။" },
+          { "id": "r02", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။" },
+          { "id": "r03", "item": "laphet-yay", "lang": "en", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Best tea in Bahan, but Sunday mornings are packed and slow." },
+          { "id": "r04", "item": "palata", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ပလာတာက ကြွပ်ပြီး ကောင်းတယ်၊ ဒါပေမဲ့ ဆီ နည်းနည်း များတယ်။" },
+          { "id": "r05", "item": "coffee", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "ကော်ဖီ ပူပူလေး သောက်ရတာ စိတ်ချမ်းသာတယ် ☕" },
+          { "id": "r06", "item": "shan-noodles", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မှာပြီးမှ ကုန်သွားပြီလို့ ပြောတယ်၊ ပိုက်ဆံ ပြန်ရဖို့ နှစ်ရက် စောင့်ရတယ်။" },
+          { "id": "r07", "item": "mohinga", "lang": "mixed", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Mohinga က အရမ်း ကောင်းတယ်၊ but the price went up again." },
+          { "id": "r08", "item": "lime-juice", "lang": "en", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Lime juice was too sweet for me." },
+          { "id": "r09", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။" },
+          { "id": "r10", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "👍👍👍" },
+          { "id": "r11", "item": "mohinga", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["sarcasm"], "text": "အရမ်း မြန်တာပဲ၊ နှစ်နာရီပဲ စောင့်ရတယ်။" },
+          { "id": "r12", "item": null, "lang": "en", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "Can I order 50 cups for an office event next Friday?" },
+          { "id": "r13", "item": "falooda", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နေပူတဲ့နေ့မှာ ဖာလူဒါ အေးအေးလေးက အကောင်းဆုံးပဲ။" },
+          { "id": "r14", "item": "mohinga", "lang": "my-latn", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "Mohinga ka a yan kg tl. Nout tit khout lr mal." },
+          { "id": "r15", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "ညနေ ၈ နာရီ ထိ ဖွင့်လား။" },
+          { "id": "r16", "item": "palata", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["pii"], "text": "အော်ဒါ မရောက်သေးဘူး။ 09 000 123 456 ကို ပြန်ဆက်ပေးပါ။" },
+          { "id": "r17", "item": "coffee", "lang": "en", "stars": 2, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Coffee tasted burnt today. Usually it's great." },
+          { "id": "r18", "item": "laphet-thoke", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "လက်ဖက်သုပ် အရသာ ပြည့်တယ်၊ နည်းနည်း စပ်တယ်။" },
+          { "id": "r19", "item": null, "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": ["long"], "text": "ဒီဆိုင်ကို ကျောင်းတက်ကတည်းက လာနေတာ ဆယ်နှစ်ကျော်ပြီ။ လက်ဖက်ရည် အရသာက အရင်အတိုင်း ကောင်းတုန်းပဲ။ ဒါပေမဲ့ စနေ တနင်္ဂနွေ မနက်ဆိုရင် ထိုင်ခုံ ရဖို့ ခက်တယ်၊ ကားရပ်ဖို့လည်း နေရာ မရှိဘူး။ delivery ကတော့ မြန်တယ်။" },
+          { "id": "r20", "item": "e-kya-kwe", "lang": "my", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "အီကြာကွေး မနက်က ကြော်ထားတာ ညနေ ရောက်တော့ ပျော့နေပြီ။" },
+          { "id": "r21", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["pii"], "text": "ကောင်တာက လှလှ က ကျွန်တော် မှာနေကျကို မှတ်မိနေတယ်၊ အရမ်း သဘောကျတယ်။" },
+          { "id": "r22", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "စမ်းချောင်းကို delivery ပို့ပေးလား။" },
+          { "id": "r23", "item": "mohinga", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The mohinga is rich and the fish broth tastes fresh." },
+          { "id": "r24", "item": "shan-noodles", "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "ရှမ်းခေါက်ဆွဲ အရသာ ကောင်းတယ်၊ ပမာဏ နည်းနည်း ထပ်ပေးရင် ပိုကောင်းမယ်။" },
+          { "id": "r25", "item": "laphet-yay", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The milk tea is strong and creamy, just how I like it." },
+          { "id": "r26", "item": "samosa", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "Crispy samosas, a little spicy, great with tea." },
+          { "id": "r27", "item": "nan-gyi-thoke", "lang": "en", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "The nan gyi thoke was too spicy and the noodles were soggy." },
+          { "id": "r28", "item": "mohinga", "lang": "en", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Tasty mohinga, but we waited forty minutes on Sunday." },
+          { "id": "r29", "item": "falooda", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "The falooda was cold and sweet, perfect for a hot afternoon." },
+          { "id": "r30", "item": "nan-gyi-thoke", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နန်းကြီးသုပ်က စပ်စပ်လေးနဲ့ အရမ်း စားကောင်းတယ်။" },
+          { "id": "r31", "item": "samosa", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "စမူဆာက ဆီစိမ်ပြီး အေးနေတယ်။" },
+          { "id": "r32", "item": "lime-juice", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "သံပုရာရည် ချဉ်ချဉ် အေးအေးလေး သောက်လို့ ကောင်းတယ်။" },
+          { "id": "r33", "item": "laphet-thoke", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "လက်ဖက်သုပ်က ငန်လွန်းတယ်၊ ပဲကြော်လည်း နည်းတယ်။" },
+          { "id": "r34", "item": "e-kya-kwe", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "အီကြာကွေး ပူပူ ကြွပ်ကြွပ်ကို လက်ဖက်ရည်နဲ့ တွဲစားရတာ အရမ်း ကောင်းတယ်။" },
+          { "id": "r35", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မုန့်ဟင်းခါး ဈေး တက်သွားပြီး ပမာဏက နည်းသွားတယ်။" },
+          { "id": "r36", "item": "coffee", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ကော်ဖီ အရသာ ကောင်းပေမယ့် ချိုလွန်းတယ်။" },
+          { "id": "r37", "item": "palata", "lang": "mixed", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "ပလာတာ ကြွပ်ကြွပ်လေး၊ really good with the bean curry." },
+          { "id": "r38", "item": "shan-noodles", "lang": "mixed", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Shan noodles ကုန်သွားပြန်ပြီ၊ third time this month." },
+          { "id": "r39", "item": "laphet-yay", "lang": "mixed", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "လက်ဖက်ရည်က ကောင်းတယ်၊ but it's hard to get a seat on Saturday morning." },
+          { "id": "r40", "item": "laphet-yay", "lang": "my-latn", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Laphet yay ka a cho lun tal." }
+         ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/modules-transformers.js"></script>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.js: |
+        import { pipeline } from "@huggingface/transformers";
+        import { panel } from "ai-panel";
+        import data from "../data/reviews.json";
+
+        // The reviews that visitors wrote in English (this small model reads English only).
+        const reviews = data.reviews.filter((r) => r.lang === "en" && r.type !== "question").map((r) => r.text);
+
+        // What a customer types into the review search, in their own words.
+        const questions = [
+          "Is it crowded on the weekend?",
+        ];
+
+        // A small embedding model: it turns each sentence into 384 numbers.
+        const embed = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { dtype: "q8", device: "wasm" });
+        const toVectors = async (texts) => (await embed(texts, { pooling: "mean", normalize: true })).tolist();
+
+        const reviewVectors = await toVectors(reviews);
+        const similarity = (a, b) => a.reduce((sum, x, i) => sum + x * b[i], 0);
+
+        for (const [i, question] of questions.entries()) {
+          const [q] = await toVectors([question]);
+          const closest = reviews
+            .map((review, j) => ({ review, similarity: similarity(q, reviewVectors[j]) }))
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, 3);
+          panel.table(question, closest, { id: `closest-${i + 1}` });
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Intelligence is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 700,
+        height: 45,
+        text: "ဒီနေ့ · browser ထဲမှာ model ကိုယ်တိုင် run",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board B: five client-side libraries (names violet = model runners, what each is good for in white).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 600,
+        height: 50,
+        text: "Client-side library 5 မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-tjs-n,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 290,
+        height: 40,
+        text: "Transformers.js",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-tjs-u,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 258,
+        width: 240,
+        height: 12,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-tjs-d,
+        kind: text,
+        x: 610,
+        y: 225,
+        width: 480,
+        height: 40,
+        text: "Hugging Face · embedding",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-tf-n,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 290,
+        height: 40,
+        text: "TensorFlow.js",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-tf-d,
+        kind: text,
+        x: 610,
+        y: 285,
+        width: 480,
+        height: 40,
+        text: "TF/Keras · train · ပုံ၊ အသံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-llm-n,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 290,
+        height: 40,
+        text: "WebLLM",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-llm-d,
+        kind: text,
+        x: 610,
+        y: 345,
+        width: 480,
+        height: 40,
+        text: "LLM သေး · chat · WebGPU",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-mp-n,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 290,
+        height: 40,
+        text: "MediaPipe",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-mp-d,
+        kind: text,
+        x: 610,
+        y: 405,
+        width: 480,
+        height: 40,
+        text: "vision · real time · LLM",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-ort-n,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 290,
+        height: 40,
+        text: "ONNX Runtime Web",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-ort-d,
+        kind: text,
+        x: 610,
+        y: 465,
+        width: 480,
+        height: 40,
+        text: "ONNX model မျိုးစုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-lite,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 520,
+        height: 40,
+        text: "+ LiteRT.js · TFLite model",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: the client-side stack, top to bottom; our path (runtime) in orange.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 460,
+        height: 50,
+        text: "Client-side AI stack",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: c-app, kind: rectangle, x: 300, y: 215, width: 580, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: c-app-t,
+        kind: text,
+        x: 318,
+        y: 226,
+        width: 540,
+        height: 38,
+        text: "ကိုယ့် app · review search",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ar1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 570,
+        y: 279,
+        width: 40,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c-lib, kind: rectangle, x: 300, y: 310, width: 580, height: 60, strokeColor: "#6741d9" }
+    - {
+        id: c-lib-t,
+        kind: text,
+        x: 318,
+        y: 321,
+        width: 540,
+        height: 38,
+        text: "library · Transformers.js",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-ar2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 570,
+        y: 374,
+        width: 40,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c-rt, kind: rectangle, x: 300, y: 405, width: 580, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: c-rt-t,
+        kind: text,
+        x: 318,
+        y: 416,
+        width: 540,
+        height: 38,
+        text: "runtime · Wasm · WebGPU · WebNN",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-ar3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 570,
+        y: 469,
+        width: 40,
+        height: 28,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c-hw, kind: rectangle, x: 300, y: 500, width: 580, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: c-hw-t,
+        kind: text,
+        x: 318,
+        y: 511,
+        width: 540,
+        height: 38,
+        text: "hardware · CPU · GPU · NPU",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ours,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 720,
+        height: 40,
+        text: "ဒီ lesson · ONNX Runtime Web → Wasm → CPU",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board D: three runtimes (green = works everywhere, orange = not on every platform yet, red = not shipped).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 400,
+        height: 50,
+        text: "Runtime 3 မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-wasm,
+        kind: rectangle,
+        x: 300,
+        y: 215,
+        width: 250,
+        height: 230,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-wasm-n,
+        kind: text,
+        x: 315,
+        y: 228,
+        width: 225,
+        height: 40,
+        text: "WebAssembly",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-wasm-1,
+        kind: text,
+        x: 315,
+        y: 280,
+        width: 225,
+        height: 40,
+        text: "CPU",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-wasm-2,
+        kind: text,
+        x: 315,
+        y: 325,
+        width: 225,
+        height: 40,
+        text: "browser တိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-wasm-3,
+        kind: text,
+        x: 315,
+        y: 370,
+        width: 225,
+        height: 40,
+        text: "fallback",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-gpu,
+        kind: rectangle,
+        x: 570,
+        y: 215,
+        width: 250,
+        height: 230,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-gpu-n,
+        kind: text,
+        x: 585,
+        y: 228,
+        width: 225,
+        height: 40,
+        text: "WebGPU",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-gpu-1,
+        kind: text,
+        x: 585,
+        y: 280,
+        width: 225,
+        height: 40,
+        text: "GPU · ပိုမြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-gpu-2,
+        kind: text,
+        x: 585,
+        y: 325,
+        width: 225,
+        height: 40,
+        text: "LLM · WebLLM",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-gpu-3,
+        kind: text,
+        x: 585,
+        y: 370,
+        width: 225,
+        height: 40,
+        text: "မရသေးတာ ရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: d-nn, kind: rectangle, x: 840, y: 215, width: 250, height: 230, strokeColor: "#e03131" }
+    - {
+        id: d-nn-n,
+        kind: text,
+        x: 855,
+        y: 228,
+        width: 225,
+        height: 40,
+        text: "WebNN",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-nn-1,
+        kind: text,
+        x: 855,
+        y: 280,
+        width: 225,
+        height: 40,
+        text: "GPU · NPU",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-nn-2,
+        kind: text,
+        x: 855,
+        y: 325,
+        width: 225,
+        height: 40,
+        text: "စမ်းသပ်ဆဲ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-why,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 700,
+        height: 40,
+        text: "မြန်နှုန်း · memory · တိကျမှု · device",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-ours,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 520,
+        height: 40,
+        text: "ဒီ lesson · Wasm ပုံသေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board E: built-in AI or a library (violet = where the model comes from; green = strength; orange = cost).
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 460,
+        height: 50,
+        text: "ဘယ်ဟာ ရွေးမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: e-bi, kind: rectangle, x: 300, y: 220, width: 380, height: 190, strokeColor: "#6741d9" }
+    - {
+        id: e-bi-n,
+        kind: text,
+        x: 318,
+        y: 233,
+        width: 340,
+        height: 42,
+        text: "built-in AI",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: e-bi-1,
+        kind: text,
+        x: 318,
+        y: 290,
+        width: 340,
+        height: 40,
+        text: "API ခေါ်ရုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-bi-2,
+        kind: text,
+        x: 318,
+        y: 340,
+        width: 340,
+        height: 40,
+        text: "အလုပ်သေး · အမြန်စမ်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-lib,
+        kind: rectangle,
+        x: 700,
+        y: 220,
+        width: 390,
+        height: 190,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-lib-n,
+        kind: text,
+        x: 718,
+        y: 233,
+        width: 340,
+        height: 42,
+        text: "library",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: e-lib-1,
+        kind: text,
+        x: 718,
+        y: 290,
+        width: 350,
+        height: 40,
+        text: "model ကိုယ်တိုင် ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-lib-2,
+        kind: text,
+        x: 718,
+        y: 340,
+        width: 350,
+        height: 40,
+        text: "ပိုရှုပ် · ကိုယ်တိုင် ပို့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-change,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 700,
+        height: 40,
+        text: "↻ လိုအပ်ချက် ပြောင်းရင် stack ပြန်ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 45,
+        text: "browser တိုင်း၊ device တိုင်းမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 560,
+        height: 45,
+        text: "ရရမယ့် fallback runtime က",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 400,
+        height: 50,
+        text: "WebAssembly",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 620,
+        height: 40,
+        text: "CPU ပေါ်မှာ run · browser တိုင်း ရ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5114
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Built-in AI မလုံလောက်ရင်"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ Chrome ရဲ့ built in AI ကို API ခေါ်ရုံနဲ့ သုံးလို့
+      ရပေမယ့်၊ ဒီ preview ထဲမှာ သုံးခွင့် မရတာ၊ ဖုန်းတွေမှာ မရသေးတာ၊ မြန်မာစာကို support မလုပ်သေးတာ
+      စတဲ့ ကန့်သတ်ချက်တွေ ရှိတာကို တွေ့ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ အဲဒီလို မလုံလောက်တဲ့အခါ ကိုယ်တိုင်
+      ရွေးထားတဲ့ model ကို browser ထဲမှာ run ပေးတဲ့ client side library တွေနဲ့၊ သူတို့ အောက်က runtime
+      တွေကို ကြည့်ပါမယ်။ [[mark:draw-mini]] blueprint မှာဆိုရင် ဒီနေ့ ကြည့်မှာက Solution ထဲက
+      intelligence အလွှာပါ။ [[mark:draw-today]] model ကို server ပေါ်မှာ မဟုတ်ဘဲ customer ရဲ့
+      browser ထဲမှာ ကိုယ်တိုင် run ရင် ဘာတွေ လိုလဲ ဆိုတာ ကြည့်မှာမို့လို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: libraries
+    narration: >
+      [[mark:draw-libs]] built in AI မှာ model ကို browser က ပေးထားပေမယ့်၊ library နဲ့ဆိုရင် model
+      ကို ကိုယ်တိုင် ရွေးပြီး ကိုယ့် website နဲ့ တွဲပို့ရပါတယ်။ ဒါကြောင့် ရွေးစရာ model ပိုများသလို၊
+      library တချို့မှာ train လုပ်တာ၊ fine tune လုပ်တာအထိ ရပါတယ်။ [[mark:draw-tjs]] Transformers.js
+      နဲ့ဆိုရင် open model တွေ အများဆုံး တင်ထားတဲ့ Hugging Face Hub က model တွေကို pipeline
+      တစ်ခုနဲ့ ခေါ်သုံးလို့ ရပြီး၊ embedding လို စာသား အလုပ်တွေအတွက် ကောင်းပါတယ်။ ဒီနေ့ သုံးမှာ ဒါပါ။
+      [[mark:draw-tf]] TensorFlow.js က TensorFlow နဲ့ Keras model တွေကို run ပေးပြီး browser
+      ထဲမှာတင် train လုပ်လို့ ရလို့၊ ပုံ၊ အသံ၊ ကိုယ်ပိုင် classifier တွေအတွက် သုံးကြပါတယ်။ Google
+      ကတော့ TensorFlow Lite model တွေအတွက် LiteRT.js ကိုလည်း ထုတ်ထားပါတယ်။ [[mark:draw-llm]] WebLLM
+      က language model သေးတွေကို browser ထဲမှာ run ပေးလို့၊ chat feature တွေ၊ internet မရှိလည်း
+      အလုပ်လုပ်ရမယ့် feature တွေအတွက် ရွေးပါတယ်။ [[mark:draw-mp]] MediaPipe က မျက်နှာ၊ လက် ရှာတာလို
+      vision အလုပ်တွေကို ကိုယ်ပိုင် runtime နဲ့ real time run ပေးပြီး၊ LLM inference လည်း ပါပါတယ်။
+      [[mark:draw-ort]] ONNX Runtime Web ကတော့ PyTorch လို framework တွေကနေ ONNX ပုံစံ ထုတ်ထားတဲ့
+      model မှန်သမျှကို run ပေးပြီး၊ Transformers.js ကိုယ်တိုင်လည်း သူ့ပေါ်မှာ run တာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (custom deployments with libraries)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "Transformers.js documentation",
+          url: "https://huggingface.co/docs/transformers.js",
+        }
+      - {
+          title: "LiteRT.js (@litertjs/core on npm)",
+          url: "https://www.npmjs.com/package/@litertjs/core",
+        }
+      - { title: "WebLLM", url: "https://webllm.mlc.ai/" }
+    actions:
+      - {
+          id: draw-libs,
+          type: whiteboard.apply,
+          at: { mark: draw-libs },
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-tjs,
+          type: whiteboard.apply,
+          at: { mark: draw-tjs },
+          upsertIds: [b-tjs-n, b-tjs-d, b-tjs-u],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-tf,
+          type: whiteboard.apply,
+          at: { mark: draw-tf },
+          upsertIds: [b-tf-n, b-tf-d, b-lite],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-llm,
+          type: whiteboard.apply,
+          at: { mark: draw-llm },
+          upsertIds: [b-llm-n, b-llm-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-mp,
+          type: whiteboard.apply,
+          at: { mark: draw-mp },
+          upsertIds: [b-mp-n, b-mp-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-ort,
+          type: whiteboard.apply,
+          at: { mark: draw-ort },
+          upsertIds: [b-ort-n, b-ort-d],
+          drawMs: 1200,
+        }
+
+  - id: code
+    narration: >
+      [[mark:close-libs]] ဒါဆို Transformers.js ကို code ထဲမှာ ကြည့်ရအောင်။ [[mark:open-main]] ဒါက
+      ဆိုင် website ရဲ့ review search program ပါ။ [[mark:sel-reviews]] ပထမဆုံး customer တွေ
+      အင်္ဂလိပ်လို ရေးထားတဲ့ review တွေကိုပဲ ရွေးယူပါတယ်။ ဒီ review တွေက lesson အတွက် ပြင်ဆင်ထားတဲ့
+      နမူနာ data ပါ။ [[mark:sel-question]] ဒါကတော့ customer က search box ထဲမှာ ကိုယ့်စကားနဲ့ကိုယ်
+      ရိုက်မယ့် မေးခွန်းပါ။ စနေ တနင်္ဂနွေမှာ ဆိုင်က လူကြပ်လား လို့ မေးထားတာပါ။ [[mark:sel-pipeline]]
+      ဒီ line က Transformers.js ဆီကနေ MiniLM ဆိုတဲ့ embedding model သေးသေး တစ်ခုကို တောင်းတာပါ။ ဒီ
+      model က စာကြောင်း တစ်ကြောင်းကို ဂဏန်း ၃၈၄ လုံး ပြောင်းပေးပါတယ်။ [[mark:sel-options]] နောက်က
+      option နှစ်ခုက model ကို ဘယ်လောက် သေးတဲ့ ပုံစံနဲ့ ယူမလဲ၊ ဘယ် runtime ပေါ်မှာ run မလဲ ဆိုတာပါ။
+      [[mark:sel-similarity]] အဓိပ္ပာယ် နီးမနီးကိုတော့ ဂဏန်း နှစ်တန်းကို တစ်လုံးချင်း မြှောက်ပြီး
+      ပေါင်းတာနဲ့ တွက်ပါတယ်။ နီးလေ similarity များလေ ဖြစ်ပြီး၊ [[mark:sel-table]] မေးခွန်း တစ်ခုစီအတွက်
+      အနီးဆုံး review သုံးခုကို table နဲ့ ပြပါတယ်။ [[mark:panel-ready]] program ကို run လိုက်တာနဲ့
+      browser က model ဖိုင်တွေကို Hugging Face Hub ကနေ download လုပ်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (Transformers.js)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "Transformers.js: feature extraction pipeline",
+          url: "https://huggingface.co/docs/transformers.js/api/pipelines#module_pipelines.FeatureExtractionPipeline",
+        }
+      - {
+          title: "Xenova/all-MiniLM-L6-v2 on the Hugging Face Hub",
+          url: "https://huggingface.co/Xenova/all-MiniLM-L6-v2",
+        }
+    actions:
+      - { id: close-libs, type: whiteboard.apply, at: { mark: close-libs }, open: false }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: src/main.js }
+      - id: sel-reviews
+        type: editor.select
+        at: { mark: sel-reviews }
+        target:
+          {
+            file: src/main.js,
+            text: 'data.reviews.filter((r) => r.lang === "en" && r.type !== "question")',
+            occurrence: 1,
+          }
+      - id: sel-question
+        type: editor.select
+        at: { mark: sel-question }
+        target: { file: src/main.js, text: '"Is it crowded on the weekend?",', occurrence: 1 }
+      - id: sel-pipeline
+        type: editor.select
+        at: { mark: sel-pipeline }
+        target:
+          {
+            file: src/main.js,
+            text: 'pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2"',
+            occurrence: 1,
+          }
+      - id: sel-options
+        type: editor.select
+        at: { mark: sel-options }
+        target: { file: src/main.js, text: '{ dtype: "q8", device: "wasm" }', occurrence: 1 }
+      - id: sel-similarity
+        type: editor.select
+        at: { mark: sel-similarity }
+        target:
+          { file: src/main.js, text: "a.reduce((sum, x, i) => sum + x * b[i], 0)", occurrence: 1 }
+      - id: sel-table
+        type: editor.select
+        at: { mark: sel-table }
+        target:
+          {
+            file: src/main.js,
+            text: "panel.table(question, closest, { id: `closest-${i + 1}` });",
+            occurrence: 1,
+          }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-model-card
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 10000
+        target: { by: testId, value: ai-model-1 }
+        attribute: { name: data-label, value: "Model" }
+        retry: { maxAttempts: 3, delayMs: 1000 }
+
+  - id: download
+    chapter: "Model download ရဲ့ ကုန်ကျစရိတ်"
+    narration: >
+      [[mark:read-model]] ညာဘက် AI panel မှာ MODEL card ပေါ်လာပါပြီ။ model နာမည်၊ task၊ dtype နဲ့
+      device ကို ပြထားပြီး၊ download ဘယ်လောက် ရောက်ပြီလဲ ဆိုတာကိုလည်း ပြပေးပါတယ်။ ဒီ panel ထဲက
+      ရလဒ်တွေက ကြိုမှတ်ထားတာ မဟုတ်ဘဲ၊ ဒီ page ထဲမှာ model အစစ်ကို တကယ် run ပြီး တွက်မှာပါ။
+      [[mark:quantize]] dtype ရဲ့ q ၈ ဆိုတာ quantization ပါ။ quantization ဆိုတာ model ကို သေးအောင်
+      ဂဏန်းတွေရဲ့ တိကျမှုကို နည်းနည်း လျှော့ပြီး သိမ်းတာပါ။ ဂဏန်း အများစုကို ၃၂ bit အစား ၈ bit နဲ့
+      သိမ်းလို့၊ မူရင်း ၉၀ megabyte လောက်ကနေ ၂၄ megabyte လောက်အထိ လေးဆလောက် သေးသွားပါတယ်။
+      [[mark:cost]] ဒီ download က တကယ့် website မှာဆိုရင် ဝင်လာတဲ့ user တိုင်း ပေးရမယ့် ကုန်ကျစရိတ်ပါ။
+      feature က အဖြေ တစ်ခုမှ မပေးခင် user ရဲ့ ဖုန်း data၊ အချိန်နဲ့ disk နေရာ ကုန်ပြီး၊ internet
+      နှေးရင် ပိုကြာပါတယ်။ ဖိုင်တွေကို browser က cache ထဲ သိမ်းထားလို့ နောက်တစ်ခါ လာရင်တော့ ထပ်
+      download မလုပ်ရပါဘူး။ [[mark:burmese-size]] မြန်မာစာပါ ဖတ်နိုင်တဲ့ embedding model တွေကတော့
+      သေးတဲ့ ဟာတွေတောင် ၁၁၈ megabyte လောက် ရှိလို့ ငါးဆလောက် ပိုကြီးပါတယ်။ ဒါကြောင့် ဒီ lesson မှာ အင်္ဂလိပ် review
+      တွေကိုပဲ ရှာထားတာပါ။ [[mark:draw-stack]] library တစ်ခုက browser ထဲမှာ ဘယ်လို အလွှာတွေနဲ့
+      အလုပ်လုပ်လဲ board မှာ ကြည့်ရအောင်။ အပေါ်ဆုံးမှာ ကိုယ့် app ရဲ့ code ရှိပြီး၊ သူ့အောက်မှာ model
+      ကို pipeline နဲ့ ခေါ်ပေးတဲ့ library ရှိပါတယ်။ [[mark:draw-runtime]] library ရဲ့ အောက်မှာတော့
+      runtime ရှိပါတယ်။ runtime ဆိုတာ library ရဲ့ အောက်မှာ hardware ပေါ်မှာ တကယ် တွက်ပေးတဲ့ အလွှာပါ။
+      Transformers.js က ONNX Runtime Web ကို သုံးပြီး၊ ဒီ lesson မှာ runtime အဖြစ် CPU ပေါ်မှာ run
+      တဲ့ WebAssembly ကို ရွေးထားပါတယ်။ [[mark:draw-hw]] အောက်ဆုံးမှာတော့ CPU၊ GPU၊ NPU လို
+      hardware ရှိပါတယ်။ library က ဒီ အလွှာတွေကို ဖုံးထားလို့ ကိုယ်က pipeline တစ်ကြောင်းပဲ ရေးရပေမယ့်၊ ဘယ်
+      runtime ပေါ်မှာ run နေလဲ သိထားရင် နှေးတာ၊ memory များတာ လို ပြဿနာတွေကို ပိုမြန်မြန်
+      ရှာနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (runtimes)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "web.dev Learn AI: Design AI user experiences (minimize disruption during the setup)",
+          url: "https://web.dev/learn/ai/ux-patterns",
+        }
+      - {
+          title: "Xenova/all-MiniLM-L6-v2: files (model.onnx 90.4 MB, model_quantized.onnx 23.0 MB)",
+          url: "https://huggingface.co/Xenova/all-MiniLM-L6-v2/tree/main/onnx",
+        }
+      - {
+          title: "Transformers.js: using quantized models (dtypes)",
+          url: "https://huggingface.co/docs/transformers.js/guides/dtypes",
+        }
+    actions:
+      - id: expect-model-q8
+        type: expect.preview
+        at: { mark: read-model }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-model-1 }
+        textContains: "dtypeq8"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-model-wasm
+        type: expect.preview
+        at: { afterAction: expect-model-q8 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-model-1 }
+        textContains: "devicewasm"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - {
+          id: draw-stack,
+          type: whiteboard.apply,
+          at: { mark: draw-stack },
+          open: true,
+          clear: true,
+          upsertIds: [c-title, c-app, c-app-t, c-ar1, c-lib, c-lib-t],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-runtime,
+          type: whiteboard.apply,
+          at: { mark: draw-runtime },
+          upsertIds: [c-ar2, c-rt, c-rt-t, c-ours],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-hw,
+          type: whiteboard.apply,
+          at: { mark: draw-hw },
+          upsertIds: [c-ar3, c-hw, c-hw-t],
+          drawMs: 1300,
+        }
+
+  - id: search
+    chapter: "အဓိပ္ပာယ်နဲ့ ရှာရအောင်"
+    narration: >
+      [[mark:close-stack]] panel ကို ပြန်ကြည့်ရအောင်။ [[mark:read-closest]] MODEL card မှာ model ရဲ့
+      အရွယ်အစား ၂၄ megabyte လောက် download ပြီးသွားပြီး၊ အောက်က table မှာ မေးခွန်းနဲ့ အနီးဆုံး
+      review သုံးခုကို similarity အလိုက် စီပြထားပါတယ်။ [[mark:read-match]] ပထမ နှစ်ခုက တနင်္ဂနွေ
+      မနက်တွေမှာ လူပြည့်ပြီး နှေးတယ်၊ တနင်္ဂနွေမှာ မိနစ် ၄၀ စောင့်ရတယ် ဆိုတဲ့ review တွေပါ။
+      မေးခွန်းထဲက အဓိက စကားလုံးတွေ review ထဲမှာ မပါပေမယ့် အဓိပ္ပာယ် နီးလို့ ရှာတွေ့တာ ဖြစ်ပြီး၊ ဒါက
+      ပထမ lesson မှာ ပြောခဲ့တဲ့ semantic search ပါ။ [[mark:read-third]] တတိယ review ကတော့ ဖာလူဒါ
+      အကြောင်းပါ။ similarity သိသိသာသာ နိမ့်ပြီး မေးခွန်းနဲ့ မဆိုင်တာမို့၊ တကယ့် search မှာ similarity
+      နိမ့်တဲ့ ရလဒ်တွေကို ဖြတ်ထုတ်ရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (semantic search)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+    actions:
+      - { id: close-stack, type: whiteboard.apply, at: { mark: close-stack }, open: false }
+      - id: wait-model
+        type: expect.preview
+        at: { mark: read-closest }
+        timeoutMs: 120000
+        target: { by: testId, value: ai-model-1 }
+        attribute: { name: data-status, value: "ready" }
+        retry: { maxAttempts: 3, delayMs: 45000 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: wait-model }
+        timeoutMs: 60000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 25000 }
+      - id: expect-size
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-model-1 }
+        textContains: "23.7 MB downloaded"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-two-cards
+        type: expect.preview
+        at: { afterAction: expect-size }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-closest-1
+        type: expect.preview
+        at: { mark: read-match }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-closest-1-1 }
+        textContains: "packed and slow"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-closest-2
+        type: expect.preview
+        at: { afterAction: expect-closest-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-closest-1-2 }
+        textContains: "forty minutes on Sunday"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-closest-3
+        type: expect.preview
+        at: { mark: read-third }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-closest-1-3 }
+        textContains: "falooda"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: second
+    narration: >
+      [[mark:type-question]] မေးခွန်း နောက်တစ်ခု ထည့်ကြည့်ရအောင်။ သောက်စရာက ချိုလွန်းလား လို့
+      မေးပါမယ်။ [[mark:read-second]] ဒုတိယ table ပေါ်လာပြီး၊ သံပုရာရည် ချိုလွန်းတယ် ဆိုတဲ့ review က
+      ထိပ်ဆုံးမှာ ရှိပါတယ်။ ဒီတစ်ခါ model ကို ထပ် download မလုပ်ရပါဘူး။ program က edit တိုင်း အစကနေ
+      ပြန် run ပေမယ့်၊ model က page ရဲ့ memory ထဲမှာ ရှိနေပြီးသား ဖြစ်လို့ ပြန်သုံးလိုက်တာပါ။
+      [[mark:read-device]] MODEL card ရဲ့ device မှာ wasm လို့ ပြထားတာကတော့ WebAssembly ကို
+      ဆိုလိုတာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "Transformers.js: running models on WebGPU or WebAssembly (device)",
+          url: "https://huggingface.co/docs/transformers.js/guides/webgpu",
+        }
+    actions:
+      - id: type-question
+        type: editor.type
+        at: { mark: type-question }
+        target:
+          { file: src/main.js, after: "  \"Is it crowded on the weekend?\",\n", occurrence: 1 }
+        text: "  \"Is the drink too sugary?\",\n"
+        cadence: line-by-line
+      - id: expect-second
+        type: expect.preview
+        at: { afterAction: type-question }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-closest-2-1 }
+        textContains: "too sweet"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-three-cards
+        type: expect.preview
+        at: { afterAction: expect-second }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-reused
+        type: expect.preview
+        at: { afterAction: expect-three-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-model-1 }
+        attribute: { name: data-status, value: "ready" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: sel-device
+        type: editor.select
+        at: { mark: read-device }
+        target: { file: src/main.js, text: 'device: "wasm"', occurrence: 1 }
+
+  - id: runtimes
+    chapter: "Runtime သုံးမျိုး"
+    narration: >
+      [[mark:draw-runtimes]] browser ထဲက runtime အဓိက သုံးမျိုးကို နှိုင်းယှဉ်ကြည့်ရအောင်။
+      [[mark:draw-wasm]] WebAssembly ဆိုတာ CPU ပေါ်မှာ မြန်မြန် run တဲ့ code ပုံစံ ဖြစ်ပြီး browser
+      တိုင်းမှာ ရပါတယ်။ ဂဏန်း အများကြီးကို တစ်ပြိုင်နက် တွက်တဲ့ SIMD ကို သုံးနိုင်ပြီး၊ ခွင့်ရတဲ့
+      page မှာ thread တွေပါ သုံးနိုင်လို့ embedding၊ classifier လို model သေးတွေအတွက် ကောင်းပါတယ်။
+      တခြား runtime မရတဲ့အခါမှာလည်း fallback အဖြစ် အမြဲ အလုပ်လုပ်ပါတယ်။ [[mark:draw-webgpu]] WebGPU ကတော့ browser ကနေ GPU ကို ခိုင်းလို့ ရတဲ့ API
+      ပါ။ model ကြီးတွေ၊ LLM တွေကို အများကြီး ပိုမြန်မြန် run နိုင်ပြီး WebLLM ဆိုရင် မဖြစ်မနေ
+      လိုပါတယ်။ browser အများစုမှာ ရလာပေမယ့် platform တိုင်းမှာ မရသေးလို့ WebAssembly fallback ကို
+      ထားရပါမယ်။ [[mark:draw-webnn]] WebNN ကတော့ GPU၊ NPU လို accelerator တွေကို ရွေးသုံးပေးမယ့် API
+      ဖြစ်ပေမယ့်၊ Chrome မှာ site တွေကို အချိန် ကန့်သတ်ပြီး စမ်းသုံးခွင့် ပေးတဲ့ origin trial
+      အဆင့်ပဲ ရှိသေးလို့ စမ်းသပ်ဆဲပါ။ [[mark:draw-why]] runtime ပေါ် မူတည်ပြီး မြန်နှုန်း၊ memory၊
+      ဂဏန်း တိကျမှုနဲ့ ရတဲ့ device တွေ ကွာပါတယ်။ similarity ဂဏန်းရဲ့ နောက်ဆုံး ဒဿမ နေရာတွေတောင်
+      runtime မတူရင် နည်းနည်း ကွာနိုင်ပါတယ်။ ဒီ lesson မှာ WebAssembly
+      ကို ပုံသေ ရွေးထားတာက ဘယ် စက်မှာမဆို အလုပ်လုပ်အောင်ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (runtimes: WebAssembly, WebGPU, WebNN)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - { title: "WebAssembly", url: "https://webassembly.org/" }
+      - {
+          title: "Chrome for Developers: WebGPU overview",
+          url: "https://developer.chrome.com/docs/web-platform/webgpu/overview",
+        }
+      - {
+          title: "web.dev: WebGPU is now supported in major browsers",
+          url: "https://web.dev/blog/webgpu-supported-major-browsers",
+        }
+      - {
+          title: "Chrome for Developers: WebNN origin trial",
+          url: "https://developer.chrome.com/origintrials/#/trials/active",
+        }
+    actions:
+      - {
+          id: draw-runtimes,
+          type: whiteboard.apply,
+          at: { mark: draw-runtimes },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-wasm,
+          type: whiteboard.apply,
+          at: { mark: draw-wasm },
+          upsertIds: [d-wasm, d-wasm-n, d-wasm-1, d-wasm-2, d-wasm-3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-webgpu,
+          type: whiteboard.apply,
+          at: { mark: draw-webgpu },
+          upsertIds: [d-gpu, d-gpu-n, d-gpu-1, d-gpu-2, d-gpu-3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-webnn,
+          type: whiteboard.apply,
+          at: { mark: draw-webnn },
+          upsertIds: [d-nn, d-nn-n, d-nn-1, d-nn-2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: draw-why },
+          upsertIds: [d-why, d-ours],
+          drawMs: 1400,
+        }
+
+  - id: takeaway
+    narration: >
+      [[mark:draw-choose]] ဒါဆို built in AI နဲ့ library ကို ဘယ်အချိန် ရွေးမလဲ။ built in AI က API
+      ခေါ်ရုံပဲ ဖြစ်လို့ အလုပ် သေးသေး တစ်ခုကို အမြန် စမ်းပြီး ထည့်ချင်ရင် ကောင်းပါတယ်။
+      [[mark:draw-lib-side]] library ကတော့ model ကို ကိုယ်တိုင် ရွေးပြီး ပို့ရလို့ ပိုရှုပ်ပေမယ့်
+      ကိုယ်က ထိန်းချုပ်နိုင်ပါတယ်။ ဒီ review search လို embedding အလုပ်အတွက် built in API မရှိလို့
+      library ကို သုံးရတာပါ။ [[mark:draw-change]] app ကြီးလာပြီး လိုအပ်ချက် ပြောင်းရင်တော့ stack
+      ကိုလည်း ပြန်ရွေးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (your takeaways)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+      - {
+          title: "Chrome for Developers: Built-in AI APIs",
+          url: "https://developer.chrome.com/docs/ai/built-in-apis",
+        }
+    actions:
+      - {
+          id: draw-choose,
+          type: whiteboard.apply,
+          at: { mark: draw-choose },
+          clear: true,
+          upsertIds: [e-title, e-bi, e-bi-n, e-bi-1, e-bi-2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-lib-side,
+          type: whiteboard.apply,
+          at: { mark: draw-lib-side },
+          upsertIds: [e-lib, e-lib-n, e-lib-1, e-lib-2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-change,
+          type: whiteboard.apply,
+          at: { mark: draw-change },
+          upsertIds: [e-change],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ရဲ့ review search ကို browser တိုင်း၊ device
+      တိုင်းမှာ အလုပ်လုပ်စေချင်ရင်၊ ဘယ် runtime ကို fallback အဖြစ် ထားရမလဲ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ WebAssembly ပါ။ ဘာကြောင့်လဲဆိုတော့ CPU
+      ပေါ်မှာ run တာမို့ browser တိုင်း၊ device တိုင်းမှာ ရလို့ပါ။ WebGPU က ပိုမြန်ပေမယ့်
+      နေရာတိုင်းမှာ မရသေးပြီး၊ WebNN ကတော့ စမ်းသပ်ဆဲပဲ ရှိပါသေးတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (Check your understanding)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1600,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ built in AI မလုံလောက်တဲ့အခါ Transformers.js လို client
+      side library နဲ့ model ကို ကိုယ်တိုင် ရွေးပြီး browser ထဲမှာ run နိုင်ပါတယ်။
+      [[mark:sel-final-pipeline]] model download က user တိုင်း ပေးရတဲ့ ကုန်ကျစရိတ်မို့ quantization
+      နဲ့ model ကို သေးအောင် ထားပြီး၊ download ပြီးရင် page ထဲမှာ ပြန်သုံးပါတယ်။
+      [[mark:sel-final-device]] library အောက်မှာ WebAssembly၊ WebGPU၊ WebNN ဆိုတဲ့ runtime တွေ
+      ရှိပြီး၊ WebAssembly က နေရာတိုင်းမှာ ရတဲ့ fallback ပါ။ နောက် lesson မှာတော့ app နဲ့ model
+      ကြားက စာချုပ် တစ်ခုလို ဖြစ်တဲ့ prompt ရဲ့ အစိတ်အပိုင်းတွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: The client-side AI stack (your takeaways)",
+          url: "https://web.dev/learn/ai/client-side",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-final-pipeline
+        type: editor.select
+        at: { mark: sel-final-pipeline }
+        target:
+          {
+            file: src/main.js,
+            text: 'await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { dtype: "q8", device: "wasm" });',
+            occurrence: 1,
+          }
+      - id: sel-final-device
+        type: editor.select
+        at: { mark: sel-final-device }
+        target: { file: src/main.js, text: 'device: "wasm"', occurrence: 1 }
+      - {
+          id: expect-final-questions,
+          type: expect.file,
+          at: { afterAction: sel-final-device },
+          path: src/main.js,
+          contains: "  \"Is it crowded on the weekend?\",\n  \"Is the drink too sugary?\",\n];\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
