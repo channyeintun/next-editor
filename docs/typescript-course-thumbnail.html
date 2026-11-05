@@ -203,6 +203,10 @@
         width: 100%;
         white-space: pre;
         overflow: hidden;
+        /* Burmese marks stack well above and below the code line, where overflow: hidden
+           would cut them off; the padding gives them room and the margin cancels it. */
+        padding-block: 18px;
+        margin-block: -18px;
         font:
           500 32px/1.2 "Google Sans Code",
           "Noto Sans Myanmar",
