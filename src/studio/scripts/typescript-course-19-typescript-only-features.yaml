@@ -1,0 +1,1836 @@
+# TypeScript course, lesson 19: the features that are TypeScript only (Burmese).
+#
+# Start state (ws/): src/menu.ts holds one class written the JavaScript way (MenuItem: two typed
+# property declarations and a constructor that assigns them); src/main.ts creates a tea and prints
+# it. The panel (data-modes "errors output js", data-js "src/menu.ts") shows 0 errors, the printed
+# MenuItem and menu.ts's JavaScript output (the same code with the types removed).
+# Every TypeScript-only construct is then typed at the TOP of menu.ts, so the newest one is always
+# the first thing in the JavaScript output:
+#   Cup (parameter properties: the JS output gains field declarations and this.x = x lines),
+#   enum CupSize (numeric: the IIFE with the reverse mapping), a lookup in main.ts (Large), a size
+#   number from a form (Number("5")) passed in with no error -> undefined,
+#   enum Sugar (string: no reverse mapping), a plain "less" rejected (TS2322) though Output prints
+#   less, fixed by inserting `Sugar.Less; // ` in front of the string,
+#   const enum on a board (tsc inlines it; the panel compiles one file at a time, so it is not typed),
+#   namespace Kitchen twice (two IIFEs on one object) and a call that uses both halves,
+#   then "erasableSyntaxOnly": true in tsconfig (one block edit) -> 6 x TS1294.
+# Boards: (A) JavaScript + types and the three exceptions, (B) const enum, (C) Node's type
+# stripping, (D) the course's advice.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-19-typescript-only-features.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-19-typescript-only-features
+  title: "TypeScript course 19: TypeScript မှာပဲ ရှိတဲ့ feature တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors output js" data-js="src/menu.ts"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { MenuItem } from "./menu";
+
+        const tea = new MenuItem("လက်ဖက်ရည်", 1500);
+        console.log(tea);
+      src/menu.ts: |
+        export class MenuItem {
+          name: string;
+          price: number;
+
+          constructor(name: string, price: number) {
+            this.name = name;
+            this.price = price;
+          }
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: TypeScript = JavaScript + types, and the three exceptions.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "TypeScript = JavaScript + type",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-ts-box,
+        kind: rectangle,
+        x: 255,
+        y: 250,
+        width: 290,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-ts-name,
+        kind: text,
+        x: 340,
+        y: 263,
+        width: 150,
+        height: 36,
+        text: "menu.ts",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-ts-sub,
+        kind: text,
+        x: 265,
+        y: 309,
+        width: 275,
+        height: 36,
+        text: "JavaScript + type",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 555,
+        y: 280,
+        width: 85,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-strip,
+        kind: text,
+        x: 550,
+        y: 322,
+        width: 140,
+        height: 36,
+        text: "type ဖယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-js-box,
+        kind: rectangle,
+        x: 700,
+        y: 250,
+        width: 340,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-js-name,
+        kind: text,
+        x: 800,
+        y: 263,
+        width: 150,
+        height: 36,
+        text: "menu.js",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-js-sub,
+        kind: text,
+        x: 715,
+        y: 309,
+        width: 315,
+        height: 36,
+        text: "ကိုယ်ရေးတဲ့ JavaScript",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-except,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 760,
+        height: 40,
+        text: "ခြွင်းချက် · parameter property · enum · namespace",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-except-why,
+        kind: text,
+        x: 270,
+        y: 490,
+        width: 760,
+        height: 40,
+        text: "→ TypeScript က JavaScript code အသစ် ရေးပေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board B: const enum, as tsc emits it.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "const enum",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-ts-1,
+        kind: text,
+        x: 270,
+        y: 245,
+        width: 640,
+        height: 36,
+        text: "const enum CupSize { Small, Large }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-ts-2,
+        kind: text,
+        x: 270,
+        y: 290,
+        width: 460,
+        height: 36,
+        text: "let size = CupSize.Large;",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 300,
+        y: 340,
+        width: 40,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-tsc,
+        kind: text,
+        x: 355,
+        y: 355,
+        width: 220,
+        height: 36,
+        text: "tsc ထုတ်ပေးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-js,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 600,
+        height: 36,
+        text: "let size = 1 /* CupSize.Large */;",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-note,
+        kind: text,
+        x: 270,
+        y: 490,
+        width: 760,
+        height: 36,
+        text: "enum object မရှိတော့ · တန်ဖိုးကို ကူးထည့်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-warn,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 760,
+        height: 36,
+        text: "library code မှာ ရှောင်ပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board C: Node.js runs .ts files by stripping the types.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Node.js က .ts ဖိုင်ကို run ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-ts-box,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 200,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-ts-name,
+        kind: text,
+        x: 320,
+        y: 277,
+        width: 120,
+        height: 36,
+        text: "app.ts",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 275,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-strip,
+        kind: text,
+        x: 550,
+        y: 277,
+        width: 330,
+        height: 36,
+        text: "type → နေရာလွတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 820,
+        y: 275,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-run,
+        kind: text,
+        x: 890,
+        y: 277,
+        width: 150,
+        height: 36,
+        text: "run ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-no-check,
+        kind: text,
+        x: 550,
+        y: 330,
+        width: 330,
+        height: 36,
+        text: "type မစစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fail,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 780,
+        height: 40,
+        text: "enum · namespace · parameter property → error",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-flag,
+        kind: text,
+        x: 270,
+        y: 500,
+        width: 780,
+        height: 40,
+        text: "tsconfig · erasableSyntaxOnly (TypeScript 5.8)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-flag-why,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 780,
+        height: 40,
+        text: "run မလုပ်ခင် editor ထဲမှာ ကြိုသိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board D: the course's advice.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "ဒီ course ရဲ့ ရွေးချယ်မှု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-enum,
+        kind: text,
+        x: 270,
+        y: 250,
+        width: 800,
+        height: 40,
+        text: "enum → union type · as const object",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-ns,
+        kind: text,
+        x: 270,
+        y: 320,
+        width: 800,
+        height: 40,
+        text: "namespace → module (import · export)",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-param,
+        kind: text,
+        x: 270,
+        y: 390,
+        width: 800,
+        height: 40,
+        text: "parameter property → property + constructor",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-team,
+        kind: text,
+        x: 270,
+        y: 480,
+        width: 800,
+        height: 40,
+        text: "ရှိပြီးသား code → အဖွဲ့နဲ့ ညှိ၊ အတင်း မဖျက်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3119
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "JavaScript မှာ မရှိတဲ့ feature တွေ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ class တစ်ခုကနေ နောက် class တစ်ခုကို extends နဲ့
+      အမွေဆက်ခံပုံကို ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ TypeScript မှာပဲ ရှိပြီး JavaScript မှာ
+      မရှိတဲ့ feature သုံးမျိုးကို ကြည့်သွားပါမယ်။ [[mark:draw-rule]] TypeScript ဆိုတာ JavaScript
+      ပေါ်မှာ type တွေ ထပ်ရေးထားတာ ဖြစ်လို့၊ type တွေကို ဖယ်ထုတ်လိုက်ရင် ကိုယ် ရေးထားတဲ့ JavaScript
+      အတိုင်းပဲ ကျန်ပါတယ်။ lesson ၃ မှာလည်း JavaScript output ထဲမှာ type တွေ ပျောက်သွားပြီး၊ code
+      ကတော့ မပြောင်းဘဲ ကျန်ခဲ့တာ မြင်ခဲ့ပါတယ်။ [[mark:draw-exceptions]] ဒါပေမဲ့ parameter property
+      ရယ်၊ enum ရယ်၊ namespace ရယ်က ဒီ စည်းကမ်းနဲ့ မကိုက်ပါဘူး။ သူတို့က type ပိုင်းမှာတင် မဟုတ်ဘဲ
+      program run တဲ့ အချိန်မှာပါ အလုပ်လုပ်ရလို့၊ type ကို ဖယ်ရုံနဲ့ မရပါဘူး။ TypeScript က
+      JavaScript code အသစ်တွေကို ကိုယ်တိုင် ရေးထုတ်ပေးရပါတယ်။ [[mark:draw-why]] JavaScript မှာ class
+      တွေ၊ module တွေ မရှိသေးတဲ့ ခေတ်က ထည့်ခဲ့တဲ့ feature တွေ ဖြစ်ပြီး၊ အခုတော့ TypeScript အဖွဲ့က
+      JavaScript မှာ မရှိတဲ့ runtime feature အသစ်တွေကို မထည့်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: TypeScript for JavaScript Programmers",
+          url: "https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: draw-rule }
+        upsertIds: [a-ts-box, a-ts-name, a-ts-sub, a-strip, a-arrow, a-js-box, a-js-name, a-js-sub]
+        drawMs: 3600
+      - id: draw-exceptions
+        type: whiteboard.apply
+        at: { mark: draw-exceptions }
+        upsertIds: [a-except]
+        drawMs: 1600
+      - id: draw-why
+        type: whiteboard.apply
+        at: { mark: draw-why }
+        upsertIds: [a-except-why]
+        drawMs: 1400
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒါဆို ဒီ feature တွေ မပါခင် ဆိုင်ရဲ့ code ကို အရင် ကြည့်ရအောင်။ [[mark:open-menu]] ဒါက ဆိုင်ရဲ့ menu
+      ပစ္စည်းကို class နဲ့ ရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-fields]] class ထဲမှာ နာမည်နဲ့ ဈေးနှုန်း
+      ဆိုတဲ့ property နှစ်ခုကို type နဲ့ ကြေညာထားပါတယ်။ [[mark:select-assign]] constructor ကတော့
+      parameter နှစ်ခုကို လက်ခံပြီး၊ property တစ်ခုချင်းစီထဲကို ပြန်ထည့်ပေးပါတယ်။ ဆိုတော့ နာမည်
+      ဆိုတဲ့ စကားလုံး တစ်ခုတည်းကို လေးခါ ရေးနေရပါတယ်။ JavaScript မှာ class ရေးရင်လည်း ဒီ ပုံစံပါပဲ။
+      [[mark:open-main]] main ဖိုင်မှာတော့ လက်ဖက်ရည်ကို ၁၅၀၀ ကျပ်နဲ့ ဖန်တီးပြီး ထုတ်ပြထားပါတယ်။
+      [[mark:say-js]] ဒီ lesson ရဲ့ panel မှာ Errors နဲ့ Output အပြင်၊ menu ဖိုင်ကနေ ထွက်လာတဲ့
+      JavaScript output လည်း ပါပါတယ်။ feature အသစ် တစ်ခု ရေးလိုက်တိုင်း အဲဒီ အပိုင်းမှာ ဘာ ပေါ်လာလဲ
+      ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Classes (fields, constructors)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html",
+        }
+      - {
+          title: "MDN: Classes",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-menu
+        type: workspace.openFile
+        at: { mark: open-menu }
+        path: src/menu.ts
+      - id: select-fields
+        type: editor.select
+        at: { mark: select-fields }
+        target: { file: src/menu.ts, text: "  name: string;\n  price: number;", occurrence: 1 }
+      - id: select-assign
+        type: editor.select
+        at: { mark: select-assign }
+        target:
+          {
+            file: src/menu.ts,
+            text: "    this.name = name;\n    this.price = price;",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-tea
+        type: editor.select
+        at: { afterAction: open-main }
+        target: { file: src/main.ts, text: 'new MenuItem("လက်ဖက်ရည်", 1500)', occurrence: 1 }
+
+  - id: js-output
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel မှာ error မရှိဘဲ၊ Output မှာ MenuItem object ကို နာမည်နဲ့
+      ဈေးနှုန်း နှစ်ခုလုံးနဲ့ မြင်ရပါတယ်။ [[mark:open-menu-2]] အောက်က JavaScript output ကို menu
+      ဖိုင်နဲ့ ယှဉ်ကြည့်ပါ။ [[mark:read-js]] type တွေ ပျောက်သွားတာကလွဲရင်၊ ကျန်တဲ့ code က ကိုယ်
+      ရေးထားတဲ့ အတိုင်းပဲ ဖြစ်နေပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: The Basics (erased types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/basic-types.html#erased-types",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-clean
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-tea
+        type: expect.preview
+        at: { afterAction: expect-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "MenuItem { name: 'လက်ဖက်ရည်', price: 1500 }"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-js-same
+        type: expect.preview
+        at: { afterAction: expect-tea }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "constructor(name, price) {"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-menu-2
+        type: workspace.openFile
+        at: { mark: open-menu-2 }
+        path: src/menu.ts
+      - id: select-constructor
+        type: editor.select
+        at: { mark: read-js }
+        target:
+          { file: src/menu.ts, text: "constructor(name: string, price: number)", occurrence: 1 }
+
+  - id: parameter-properties
+    chapter: "Parameter property"
+    narration: >
+      [[mark:type-cup]] အခု ခွက်အတွက် class တစ်ခုကို ဖိုင်ရဲ့ အပေါ်ဆုံးမှာ ရေးပါမယ်။ ဒီတစ်ခါ
+      property တွေကို သီးသန့် မကြေညာဘဲ၊ constructor ရဲ့ parameter တွေ ရှေ့မှာ public ကို
+      ထည့်ရေးပါမယ်။ [[mark:select-public]] ဒါကို parameter property လို့ ခေါ်ပါတယ်။ parameter
+      ရှေ့မှာ public ရယ်၊ private ရယ်၊ read only ရယ် လို စကားလုံး ပါရင်၊ TypeScript က အဲဒီ နာမည်နဲ့ property
+      ကြေညာပေးပြီး တန်ဖိုးကိုပါ ထည့်ပေးလို့၊ constructor ရဲ့ body က အလွတ်ပဲ ဖြစ်နေပါတယ်။
+      [[mark:read-cup-js]] JavaScript output ရဲ့ အပေါ်ဆုံးကို ကြည့်ပါ။ Cup ထဲမှာ property ကြေညာတဲ့
+      line နှစ်ကြောင်းနဲ့ တန်ဖိုး ထည့်တဲ့ line နှစ်ကြောင်း ပေါ်လာပါတယ်။ ဒီ line တွေက TypeScript
+      ဖိုင်ထဲမှာ မရှိပါဘူး၊ TypeScript က ရေးပေးလိုက်တာပါ။ အောက်က MenuItem နဲ့ ယှဉ်ကြည့်ရင် ပုံစံ
+      တစ်ထပ်တည်းပါပဲ။ [[mark:open-main-2]] main ဖိုင်မှာ ၁၈၀၀ ကျပ် တန် ခွက်ကြီး တစ်ခွက်ကိုပါ
+      ထုတ်ပြကြည့်ရအောင်။ [[mark:read-cup-output]] Output မှာ Cup object ကို အရွယ်အစားနဲ့ ဈေးနှုန်း
+      နှစ်ခုလုံးနဲ့ မြင်ရပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (class parameter properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (parameter properties)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#parameter-properties",
+        }
+    actions:
+      - id: type-cup
+        type: editor.type
+        at: { mark: type-cup }
+        target: { file: src/menu.ts, after: "", occurrence: 1 }
+        text: "export class Cup {\n  constructor(public size: string, public price: number) {}\n}\n\n"
+        cadence: line-by-line
+      - id: select-public
+        type: editor.select
+        at: { mark: select-public }
+        target:
+          { file: src/menu.ts, text: "public size: string, public price: number", occurrence: 1 }
+      - id: expect-cup-js
+        type: expect.preview
+        at: { afterAction: type-cup }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "this.size = size;"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cup-fields
+        type: expect.preview
+        at: { afterAction: expect-cup-js }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "export class Cup {\n    size;\n    price;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: open-main-2 }
+        path: src/main.ts
+      - id: import-cup
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "import { MenuItem", occurrence: 1 }
+        text: ", Cup"
+        cadence: fast-explainer
+      - id: print-cup
+        type: editor.type
+        at: { afterAction: import-cup }
+        target: { file: src/main.ts, after: "console.log(tea", occurrence: 1 }
+        text: ', new Cup("large", 1800)'
+        cadence: fast-explainer
+      - id: expect-cup-output
+        type: expect.preview
+        at: { afterAction: print-cup }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "Cup { size: 'large', price: 1800 }"
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: numeric-enum
+    chapter: "Enum"
+    narration: >
+      [[mark:open-menu-3]] နောက် feature က enum ပါ။ enum ဆိုတာ ဆက်စပ်နေတဲ့ ကိန်းသေ တန်ဖိုးတွေကို
+      နာမည် တစ်ခုအောက်မှာ စုထားတာပါ။ [[mark:type-cupsize]] ခွက် အရွယ်အစား နှစ်မျိုးအတွက် enum
+      ရေးပါမယ်။ တန်ဖိုး မပေးထားရင် member တွေက သုည၊ တစ် ဆိုပြီး ဂဏန်း အစဉ်လိုက် ရလို့ numeric enum
+      လို့ ခေါ်ပါတယ်။ [[mark:read-enum-js]] JavaScript output မှာ variable တစ်ခုနဲ့ ချက်ချင်း run
+      သွားတဲ့ function တစ်ခု ပေါ်လာပြီး၊ အဲဒီ function က object ကို ဖြည့်ပေးပါတယ်။ line
+      တစ်ကြောင်းမှာ နှစ်ထပ် ထည့်ထားတာကို ကြည့်ပါ။ Small ကို သုညနဲ့ တွဲပြီး၊ သုညကိုလည်း Small နဲ့
+      ပြန်တွဲထားပါတယ်။ ဒါကြောင့် နာမည်နဲ့ ဂဏန်းကို ရှာလို့ ရသလို ဂဏန်းနဲ့ နာမည်ကိုလည်း ပြန်ရှာလို့
+      ရပြီး၊ ဒါကို reverse mapping လို့ ခေါ်ပါတယ်။ [[mark:open-main-3]] main ဖိုင်မှာ ဂဏန်းကနေ နာမည်
+      ပြန်ရှာတဲ့ function ရေးပြီး ခွက်ကြီးနဲ့ ခေါ်ကြည့်ပါမယ်။ [[mark:read-large]] Output မှာ Large
+      ဆိုတဲ့ နာမည် ပေါ်လာပါပြီ။ [[mark:select-two-uses]] ဒီ function မှာ CupSize ကို parameter ရဲ့
+      type အဖြစ်ရော၊ function ထဲမှာ တန်ဖိုး အဖြစ်ရော သုံးထားတာကိုလည်း သတိထား ကြည့်ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (numeric enums, reverse mapping)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: Enums (numeric enums, reverse mappings)",
+          url: "https://www.typescriptlang.org/docs/handbook/enums.html#reverse-mappings",
+        }
+    actions:
+      - id: open-menu-3
+        type: workspace.openFile
+        at: { mark: open-menu-3 }
+        path: src/menu.ts
+      - id: type-cupsize
+        type: editor.type
+        at: { mark: type-cupsize }
+        target: { file: src/menu.ts, after: "", occurrence: 1 }
+        text: "export enum CupSize {\n  Small,\n  Large,\n}\n\n"
+        cadence: line-by-line
+      - id: expect-enum-js
+        type: expect.preview
+        at: { afterAction: type-cupsize }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'CupSize[CupSize["Small"] = 0] = "Small";'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: src/main.ts
+      - id: import-cupsize
+        type: editor.type
+        at: { afterAction: open-main-3 }
+        target: { file: src/main.ts, after: "import { MenuItem, Cup", occurrence: 1 }
+        text: ", CupSize"
+        cadence: fast-explainer
+      - id: type-cupname
+        type: editor.type
+        at: { afterAction: import-cupsize }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(tea, new Cup(\"large\", 1800));\n",
+            occurrence: 1,
+          }
+        text: "\nfunction cupName(size: CupSize) {\n  return CupSize[size];\n}\nconsole.log(cupName(CupSize.Large));\n"
+        cadence: line-by-line
+      - id: expect-large
+        type: expect.preview
+        at: { afterAction: type-cupname }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "Large"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-large-clean
+        type: expect.preview
+        at: { afterAction: expect-large }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-two-uses
+        type: editor.select
+        at: { mark: select-two-uses }
+        target:
+          {
+            file: src/main.ts,
+            text: "function cupName(size: CupSize) {\n  return CupSize[size];",
+            occurrence: 1,
+          }
+
+  - id: any-number
+    narration: >
+      [[mark:type-fromform]] numeric enum မှာ သတိထားစရာ တစ်ခု ရှိပါတယ်။ ဖောင်ကနေ ဝင်လာတဲ့ အရွယ်အစား
+      နံပါတ် ငါးကို ဂဏန်း ပြောင်းပြီး ဒီ function ထဲ ပို့ကြည့်ရအောင်။ [[mark:read-undefined]] error
+      မပေါ်ပါဘူး၊ ဒါပေမဲ့ Output မှာ undefined ထွက်လာပါတယ်။ numeric enum က number type ရှိတဲ့
+      တန်ဖိုး မှန်သမျှကို လက်ခံလို့ပါ။ enum ထဲမှာ မရှိတဲ့ ဂဏန်းကို code ထဲ တိုက်ရိုက် ရေးရင်တော့
+      error ပြပေမယ့်၊ တခြား နေရာက ဝင်လာတဲ့ number ကိုတော့ စစ်မပေးနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (numeric enums accept numbers)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript 5.0 release notes: Enum overhaul (an out-of-domain literal is an error)",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-0.html#enum-overhaul",
+        }
+    actions:
+      - id: type-fromform
+        type: editor.type
+        at: { mark: type-fromform }
+        target:
+          { file: src/main.ts, after: "console.log(cupName(CupSize.Large));\n", occurrence: 1 }
+        text: "\nconst fromForm = Number(\"5\");\nconsole.log(cupName(fromForm));\n"
+        cadence: line-by-line
+      - id: expect-undefined
+        type: expect.preview
+        at: { afterAction: type-fromform }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "undefined"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-undefined-clean
+        type: expect.preview
+        at: { afterAction: expect-undefined }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-fromform
+        type: editor.select
+        at: { mark: read-undefined }
+        target: { file: src/main.ts, text: "cupName(fromForm)", occurrence: 1 }
+
+  - id: string-enum
+    narration: >
+      [[mark:open-menu-4]] ဒီတစ်ခါ သကြား အဆင့်တွေအတွက် enum ရေးပါမယ်။ [[mark:type-sugar]] member
+      တိုင်းကို string တန်ဖိုး ပေးထားလို့ ဒါကို string enum လို့ ခေါ်ပါတယ်။ [[mark:read-sugar-js]]
+      JavaScript output မှာ နာမည်နဲ့ string ကိုပဲ တွဲပေးပြီး၊ ပြန်တွဲတာ မပါပါဘူး။ string enum မှာ
+      reverse mapping မရှိလို့ပါ။ [[mark:open-main-4]] main ဖိုင်မှာ သကြား နည်းနည်းကို member နဲ့
+      မဟုတ်ဘဲ၊ တန်ဖိုး တူတဲ့ string နဲ့ ပေးကြည့်ရအောင်။ [[mark:read-raw-error]] ဒီ string ကို Sugar
+      type ထဲ ထည့်လို့ မရဘူး ဆိုတဲ့ error ပေါ်လာပါပြီ။ string enum က တန်ဖိုး တူနေရင်တောင် သူ့ member
+      တွေကိုပဲ လက်ခံပါတယ်။ [[mark:read-raw-output]] Output မှာတော့ less ထွက်နေပါတယ်။ run တဲ့
+      အချိန်မှာ တန်ဖိုး အတူတူ ဖြစ်လို့၊ ဒီ ကန့်သတ်ချက်က type ပိုင်းမှာပဲ ရှိတာပါ။
+      [[mark:type-member]] ဒါကြောင့် member ကို ထည့်ရေးပြီး string ကိုတော့ comment အဖြစ်
+      ချန်ထားပါမယ်။ [[mark:read-member-fixed]] error ပျောက်သွားပြီး Output ကလည်း မပြောင်းပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (string enums)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: Enums (string enums)",
+          url: "https://www.typescriptlang.org/docs/handbook/enums.html#string-enums",
+        }
+    actions:
+      - id: open-menu-4
+        type: workspace.openFile
+        at: { mark: open-menu-4 }
+        path: src/menu.ts
+      - id: type-sugar
+        type: editor.type
+        at: { mark: type-sugar }
+        target: { file: src/menu.ts, after: "", occurrence: 1 }
+        text: "export enum Sugar {\n  Less = \"less\",\n  Normal = \"normal\",\n  Extra = \"extra\",\n}\n\n"
+        cadence: line-by-line
+      - id: expect-sugar-js
+        type: expect.preview
+        at: { afterAction: type-sugar }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'Sugar["Less"] = "less";'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-4
+        type: workspace.openFile
+        at: { mark: open-main-4 }
+        path: src/main.ts
+      - id: import-sugar
+        type: editor.type
+        at: { afterAction: open-main-4 }
+        target: { file: src/main.ts, after: "import { MenuItem, Cup, CupSize", occurrence: 1 }
+        text: ", Sugar"
+        cadence: fast-explainer
+      - id: type-raw
+        type: editor.type
+        at: { afterAction: import-sugar }
+        target: { file: src/main.ts, after: "console.log(cupName(fromForm));\n", occurrence: 1 }
+        text: "\nconst sugar: Sugar = \"less\";\nconsole.log(sugar);\n"
+        cadence: line-by-line
+      - id: expect-raw-error
+        type: expect.preview
+        at: { afterAction: type-raw }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-raw-code
+        type: expect.preview
+        at: { afterAction: expect-raw-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: 'Type ''"less"'' is not assignable to type ''Sugar''.'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-raw-output
+        type: expect.preview
+        at: { afterAction: expect-raw-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-raw
+        type: editor.select
+        at: { mark: read-raw-error }
+        target: { file: src/main.ts, text: '"less"', occurrence: 1 }
+      - id: type-member
+        type: editor.type
+        at: { mark: type-member }
+        target: { file: src/main.ts, after: "const sugar: Sugar = ", occurrence: 1 }
+        text: "Sugar.Less; // "
+        cadence: fast-explainer
+      - id: expect-member-clean
+        type: expect.preview
+        at: { afterAction: type-member }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-member-output
+        type: expect.preview
+        at: { afterAction: expect-member-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "less"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: const-enum
+    narration: >
+      [[mark:board-const]] enum ရဲ့ ရှေ့မှာ const ထည့်ရေးရင်တော့ const enum ဖြစ်ပါတယ်။
+      [[mark:draw-const-out]] tsc က const enum အတွက် object မထုတ်ပေးဘဲ၊ သုံးထားတဲ့ နေရာတိုင်းမှာ
+      member ရဲ့ တန်ဖိုးကို တိုက်ရိုက် ကူးထည့်ပေးပါတယ်။ ဒါကြောင့် run တဲ့ အချိန်မှာ enum ကိုယ်တိုင်
+      မရှိတော့ပါဘူး။ [[mark:draw-const-warn]] ဒါပေမဲ့ ဖိုင်တစ်ဖိုင်ချင်း compile လုပ်တဲ့ tool တွေက
+      တခြား ဖိုင်ထဲက တန်ဖိုးကို မမြင်ရလို့၊ တခြားသူတွေ သုံးမယ့် library code မှာ const enum ကို
+      ရှောင်တာ ပိုကောင်းပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (const enums)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: Enums (const enums, const enum pitfalls)",
+          url: "https://www.typescriptlang.org/docs/handbook/enums.html#const-enums",
+        }
+      - {
+          title: "TSConfig: isolatedModules (references to const enum members)",
+          url: "https://www.typescriptlang.org/tsconfig/#isolatedModules",
+        }
+    actions:
+      - id: board-const
+        type: whiteboard.apply
+        at: { mark: board-const }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-ts-1, b-ts-2]
+      - id: draw-const-out
+        type: whiteboard.apply
+        at: { mark: draw-const-out }
+        upsertIds: [b-arrow, b-tsc, b-js, b-note]
+        drawMs: 2600
+      - id: draw-const-warn
+        type: whiteboard.apply
+        at: { mark: draw-const-warn }
+        upsertIds: [b-warn]
+        drawMs: 1200
+
+  - id: namespace
+    chapter: "Namespace"
+    narration: >
+      [[mark:close-board-b]] တတိယ feature က namespace ပါ။ JavaScript မှာ module မရှိသေးတဲ့ ခေတ်က၊
+      ဆက်စပ်တဲ့ code တွေကို နာမည်တစ်ခုအောက်မှာ စုထားဖို့ သုံးခဲ့ကြတာပါ။ [[mark:type-kitchen]]
+      မီးဖိုချောင်အတွက် namespace တစ်ခု ရေးပြီး၊ ဖျော်ပေးတဲ့ function ကို export လုပ်ပါမယ်။
+      [[mark:read-kitchen-js]] JavaScript output မှာ enum တုန်းကလိုပဲ variable တစ်ခုနဲ့ ချက်ချင်း
+      run သွားတဲ့ function ပေါ်လာပြီး၊ ဖျော်ပေးတဲ့ function ကို Kitchen object ပေါ်မှာ
+      ချိတ်ပေးပါတယ်။ [[mark:type-kitchen-2]] နာမည် တူတဲ့ namespace နှစ်ခု ရေးရင် တစ်ခုတည်း အဖြစ်
+      ပေါင်းသွားပါတယ်။ စားပွဲကို ပို့ပေးတဲ့ function နဲ့ နောက်တစ်ခု ရေးကြည့်ရအောင်။
+      [[mark:read-merge-js]] အခု ချက်ချင်း run သွားတဲ့ function နှစ်ခုလုံးက Kitchen object
+      တစ်ခုတည်းကို လက်ခံပါတယ်။ မရှိသေးရင် အသစ် ဆောက်ပြီး၊ ရှိပြီးသား ဆိုရင် အဲဒီ object ပေါ်မှာပဲ
+      ထပ်ချိတ်တာပါ။ [[mark:open-main-5]] main ဖိုင်မှာ function နှစ်ခုလုံးကို ဆက်ခေါ်ကြည့်ရအောင်။
+      [[mark:read-kitchen-output]] Output မှာ ကော်ဖီကို ဖျော်ပြီး စားပွဲကို ပို့ပြီ ဆိုတာ
+      ပေါ်လာပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (namespaces, merging)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: Namespaces",
+          url: "https://www.typescriptlang.org/docs/handbook/namespaces.html",
+        }
+      - {
+          title: "TypeScript Handbook: Declaration Merging (merging namespaces)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-merging.html#merging-namespaces",
+        }
+    actions:
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: close-board-b }
+        open: false
+      - id: open-menu-5
+        type: workspace.openFile
+        at: { mark: close-board-b, offsetMs: 700 }
+        path: src/menu.ts
+      - id: type-kitchen
+        type: editor.type
+        at: { mark: type-kitchen }
+        target: { file: src/menu.ts, after: "", occurrence: 1 }
+        text: "export namespace Kitchen {\n  export function brew(item: string) {\n    return `${item} ဖျော်ပြီး`;\n  }\n}\n\n"
+        cadence: line-by-line
+      - id: expect-kitchen-js
+        type: expect.preview
+        at: { afterAction: type-kitchen }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "Kitchen.brew = brew;\n})(Kitchen || (Kitchen = {}));"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-kitchen-2
+        type: editor.type
+        at: { mark: type-kitchen-2 }
+        target: { file: src/menu.ts, after: "", occurrence: 1 }
+        text: "export namespace Kitchen {\n  export function serve(item: string) {\n    return `${item}၊ စားပွဲကို ပို့ပြီ`;\n  }\n}\n\n"
+        cadence: line-by-line
+      - id: expect-merge-js
+        type: expect.preview
+        at: { afterAction: type-kitchen-2 }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "Kitchen.serve = serve;\n})(Kitchen || (Kitchen = {}));\n(function (Kitchen) {"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: open-main-5
+        type: workspace.openFile
+        at: { mark: open-main-5 }
+        path: src/main.ts
+      - id: import-kitchen
+        type: editor.type
+        at: { afterAction: open-main-5 }
+        target:
+          { file: src/main.ts, after: "import { MenuItem, Cup, CupSize, Sugar", occurrence: 1 }
+        text: ", Kitchen"
+        cadence: fast-explainer
+      - id: type-print-kitchen
+        type: editor.type
+        at: { afterAction: import-kitchen }
+        target: { file: src/main.ts, after: "console.log(sugar);\n", occurrence: 1 }
+        text: "\nconsole.log(Kitchen.serve(Kitchen.brew(\"ကော်ဖီ\")));\n"
+        cadence: line-by-line
+      - id: expect-kitchen-output
+        type: expect.preview
+        at: { afterAction: type-print-kitchen }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "ကော်ဖီ ဖျော်ပြီး၊ စားပွဲကို ပို့ပြီ"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-kitchen-clean
+        type: expect.preview
+        at: { afterAction: expect-kitchen-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: erasable
+    chapter: "Erasable syntax only"
+    narration: >
+      [[mark:board-node]] ဒီ feature တွေက အခုခေတ်မှာ ဘာကြောင့် ပြဿနာ ဖြစ်လဲ ကြည့်ရအောင်။ Node.js version
+      အသစ်တွေက TypeScript ဖိုင်ကို တိုက်ရိုက် run ပေးနိုင်ပါတယ်။ [[mark:draw-strip]] ဒါပေမဲ့ type
+      ကို မစစ်ပါဘူး။ type တွေကို နေရာလွတ်နဲ့ အစားထိုးပြီး၊ ကျန်တဲ့ JavaScript ကို run ရုံပါ။
+      [[mark:draw-strip-fail]] ဒါကြောင့် code အသစ် ထုတ်ပေးရမယ့် enum ရယ်၊ namespace ရယ်၊ parameter
+      property ရယ် ပါတဲ့ ဖိုင်ဆိုရင် error နဲ့ ရပ်သွားပါတယ်။ [[mark:draw-flag]] ဒါကို run မှ
+      မသိရအောင် TypeScript ၅.၈ မှာ erasable syntax only ဆိုတဲ့ setting ထည့်ပေးခဲ့ပါတယ်။ type ကို
+      ဖယ်ရုံနဲ့ ရတဲ့ syntax ကိုပဲ ခွင့်ပြုမယ်လို့ ဆိုလိုတာပါ။ [[mark:open-tsconfig]] tsconfig ထဲမှာ
+      ဖွင့်ကြည့်ရအောင်။ [[mark:read-erasable]] Errors မှာ စာ အတူတူ ပါတဲ့ error ခြောက်ခု ပေါ်လာပါပြီ။
+      erasable syntax only ဖွင့်ထားရင် ဒီ syntax ကို သုံးလို့ မရဘူးလို့ ပြောနေတာပါ။
+      [[mark:select-flagged]] namespace နှစ်ခု၊ enum နှစ်ခုနဲ့ Cup ရဲ့ parameter property နှစ်ခုမှာ
+      ပေါ်ပြီး၊ MenuItem ကိုတော့ ဘာမှ မပြောပါဘူး။ Output ကတော့ ဆက်ထွက်နေပါတယ်၊ type error က program
+      ကို မရပ်စေလို့ပါ။
+    sources:
+      - {
+          title: "TSConfig: erasableSyntaxOnly",
+          url: "https://www.typescriptlang.org/tsconfig/#erasableSyntaxOnly",
+        }
+      - {
+          title: "TypeScript 5.8 release notes: --erasableSyntaxOnly",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-8.html",
+        }
+      - {
+          title: "Node.js: Modules — TypeScript (type stripping, unsupported features)",
+          url: "https://nodejs.org/api/typescript.html#type-stripping",
+        }
+    actions:
+      - id: board-node
+        type: whiteboard.apply
+        at: { mark: board-node }
+        open: true
+        clear: true
+        upsertIds: [c-title, c-ts-box, c-ts-name]
+      - id: draw-strip
+        type: whiteboard.apply
+        at: { mark: draw-strip }
+        upsertIds: [c-arrow-1, c-strip, c-no-check, c-arrow-2, c-run]
+        drawMs: 2400
+      - id: draw-strip-fail
+        type: whiteboard.apply
+        at: { mark: draw-strip-fail }
+        upsertIds: [c-fail]
+        drawMs: 1600
+      - id: draw-flag
+        type: whiteboard.apply
+        at: { mark: draw-flag }
+        upsertIds: [c-flag, c-flag-why]
+        drawMs: 2000
+      - id: close-board-c
+        type: whiteboard.apply
+        at: { mark: open-tsconfig }
+        open: false
+      - id: open-tsconfig
+        type: workspace.openFile
+        at: { mark: open-tsconfig, offsetMs: 700 }
+        path: tsconfig.json
+      - id: type-erasable
+        type: editor.type
+        at: { afterAction: open-tsconfig }
+        target: { file: tsconfig.json, after: "\"strict\": true,\n", occurrence: 1 }
+        text: "    \"erasableSyntaxOnly\": true,\n"
+        cadence: block
+      - id: expect-six
+        type: expect.preview
+        at: { afterAction: type-erasable }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "6" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-erasable-first
+        type: expect.preview
+        at: { afterAction: expect-six }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "This syntax is not allowed when 'erasableSyntaxOnly' is enabled."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-erasable-code
+        type: expect.preview
+        at: { afterAction: expect-erasable-first }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-6 }
+        attribute: { name: data-code, value: "1294" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-runs
+        type: expect.preview
+        at: { afterAction: expect-erasable-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-menu-6
+        type: workspace.openFile
+        at: { mark: select-flagged }
+        path: src/menu.ts
+      - id: select-flagged
+        type: editor.select
+        at: { afterAction: open-menu-6 }
+        target:
+          { file: src/menu.ts, text: "public size: string, public price: number", occurrence: 1 }
+
+  - id: advice
+    chapter: "ဒီ course ရဲ့ ရွေးချယ်မှု"
+    narration: >
+      [[mark:board-advice]] TypeScript က ဒီ feature တွေကို ဆက်ထောက်ပံ့မှာ ဖြစ်လို့ သုံးထားရင်
+      ပျက်မသွားပါဘူး။ ဒါပေမဲ့ ဒီ course မှာတော့ JavaScript ရဲ့ ပုံစံအတိုင်း ရေးပါမယ်။
+      [[mark:draw-advice-enum]] enum အစား union type ဒါမှမဟုတ် as const object ကို သုံးပြီး၊ as
+      const object ကို နောက် lesson မှာ ကြည့်ပါမယ်။ [[mark:draw-advice-ns]] namespace အစား
+      ဖိုင်တွေကို module အဖြစ် ထားပြီး import နဲ့ export ကို သုံးပါမယ်။ [[mark:draw-advice-param]]
+      parameter property အစား MenuItem လိုပဲ ရိုးရိုး ရေးပါမယ်။ [[mark:draw-advice-team]]
+      သုံးထားပြီးသား project မှာတော့ အကုန် လိုက်ဖျက်စရာ မလိုပါဘူး။ အဖွဲ့နဲ့ သဘောတူပြီး တစ်ပုံစံတည်း
+      ရေးတာက ပိုအရေးကြီးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features (should you use them?)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "TypeScript Handbook: Enums (objects vs enums)",
+          url: "https://www.typescriptlang.org/docs/handbook/enums.html#objects-vs-enums",
+        }
+      - {
+          title: "TypeScript Handbook: Modules",
+          url: "https://www.typescriptlang.org/docs/handbook/2/modules.html",
+        }
+    actions:
+      - id: board-advice
+        type: whiteboard.apply
+        at: { mark: board-advice }
+        open: true
+        clear: true
+        upsertIds: [d-title]
+      - id: draw-advice-enum
+        type: whiteboard.apply
+        at: { mark: draw-advice-enum }
+        upsertIds: [d-enum]
+        drawMs: 1400
+      - id: draw-advice-ns
+        type: whiteboard.apply
+        at: { mark: draw-advice-ns }
+        upsertIds: [d-ns]
+        drawMs: 1400
+      - id: draw-advice-param
+        type: whiteboard.apply
+        at: { mark: draw-advice-param }
+        upsertIds: [d-param]
+        drawMs: 1400
+      - id: draw-advice-team
+        type: whiteboard.apply
+        at: { mark: draw-advice-team }
+        upsertIds: [d-team]
+        drawMs: 1400
+
+  - id: recap
+    narration: >
+      [[mark:close-advice]] ဒါဆို ပြန်ချုပ်ရရင်၊ parameter property ရယ်၊ enum ရယ်၊ namespace ရယ်
+      ဆိုတဲ့ feature တွေအတွက် TypeScript က JavaScript code အသစ် ရေးပေးရပါတယ်။ [[mark:recap-enum]]
+      numeric enum က number ဘာမဆို လက်ခံပြီး၊ string enum ကတော့ သူ့ member တွေကိုပဲ လက်ခံပါတယ်။
+      [[mark:recap-erasable]] type ကို ဖယ်ပြီး run တဲ့ tool တွေအတွက်တော့ erasable syntax only နဲ့
+      ကြိုစစ်ထားလို့ ရပါတယ်။ နောက် lesson မှာတော့ key of ရယ်၊ type of ရယ်၊ indexed access ရယ်ကို
+      သုံးပြီး၊ ရှိပြီးသား type နဲ့ တန်ဖိုးတွေကနေ type အသစ် ထုတ်ယူပုံကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 9: TypeScript-only Features",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/typescript-only-features",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 10: Deriving Types",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/deriving-types",
+        }
+    actions:
+      - id: close-advice
+        type: whiteboard.apply
+        at: { mark: close-advice }
+        open: false
+      - id: select-cup-recap
+        type: editor.select
+        at: { mark: recap-enum }
+        target: { file: src/menu.ts, text: "export enum CupSize {", occurrence: 1 }
+      - id: expect-file-cup
+        type: expect.file
+        at: { afterAction: close-advice }
+        path: src/menu.ts
+        contains: "export class Cup {\n  constructor(public size: string, public price: number) {}\n}"
+      - id: expect-file-kitchen
+        type: expect.file
+        at: { afterAction: expect-file-cup }
+        path: src/menu.ts
+        contains: "export namespace Kitchen {\n  export function serve(item: string) {"
+      - id: expect-file-sugar
+        type: expect.file
+        at: { afterAction: expect-file-kitchen }
+        path: src/main.ts
+        contains: 'const sugar: Sugar = Sugar.Less; // "less";'
+      - id: expect-file-tsconfig
+        type: expect.file
+        at: { afterAction: expect-file-sugar }
+        path: tsconfig.json
+        contains: '"erasableSyntaxOnly": true,'
+checks:
+  - { type: timing.p95Ms, max: 300 }
