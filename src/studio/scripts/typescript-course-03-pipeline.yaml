@@ -1629,7 +1629,7 @@ scenes:
       JavaScript output ကတော့ tsc ထုတ်ရင် ဘာ ထွက်မလဲ ဆိုတာကို သီးသန့် တောင်းပြီး ပြထားတာပါ။
       [[mark:board-tools]] အခုခေတ် project အများစုမှာ ဒီလိုပဲ အလုပ်ခွဲထားကြပါတယ်။ [[mark:draw-strippers]] Vite
       နဲ့ esbuild လို tool တွေက dot ts ဖိုင်ထဲက type တွေကို ဖယ်ရုံပဲ ဖယ်ပြီး JavaScript ကို ထုတ်ပေးပါတယ်။
-      Node.js ကလည်း ၂၂.၁၈ နဲ့ ၂၄ လို version အသစ်တွေမှာ dot ts ဖိုင်ကို တိုက်ရိုက် run နိုင်ပါပြီ။
+      Node.js ကလည်း ၂၂ ဒသမ ၁၈ နဲ့ ၂၄ လို version အသစ်တွေမှာ dot ts ဖိုင်ကို တိုက်ရိုက် run နိုင်ပါပြီ။
       သူကလည်း type တွေကို ဖယ်ပြီးမှ run တာ ဖြစ်လို့၊ ခုနက ပြောခဲ့တဲ့ enum လို feature တွေကိုတော့ မ run
       နိုင်ပါဘူး။ [[mark:draw-fast]] ဒီ tool တွေ မြန်ရတဲ့ အကြောင်းရင်း တစ်ခုက type ကို လုံးဝ မစစ်လို့ပါ။ ဆိုလိုတာက
       type error ရှိနေလည်း သူတို့က ဘာမှ မပြောဘဲ ဆက် run သွားမှာပါ။ ဒီ panel ရဲ့ Output ကလည်း type တွေကို
@@ -1640,7 +1640,7 @@ scenes:
       တင်လိုက်တိုင်း server ပေါ်မှာ အလိုအလျောက် စစ်ပေးတဲ့ စနစ်ပါ။ type error ရှိနေရင် အဲဒီ code ကို main branch
       ထဲ ပေါင်းလို့ မရအောင် ပိတ်ထားနိုင်ပါတယ်။ [[mark:draw-ts7]] TypeScript ၇ မှာတော့ tsc ကို Go နဲ့ ပြန်ရေးထားလို့၊
       project ကြီးတွေမှာ ဒီ စစ်ဆေးမှုက အရင်ကထက် ဆယ်ဆလောက် မြန်လာပါပြီ။ [[mark:draw-panel]]
-      ဒီ course ရဲ့ panel ကတော့ TypeScript ၆.၀ compiler ကို သုံးထားပေမယ့်၊ ၇.၀ နဲ့ စစ်ပုံ အတူတူပါပဲ။
+      ဒီ course ရဲ့ panel ကတော့ TypeScript ၆ compiler ကို သုံးထားပေမယ့်၊ ၇ နဲ့ စစ်ပုံ အတူတူပါပဲ။
     sources:
       - {
           title: "Total TypeScript Essentials, ch. 3: TypeScript in the Development Pipeline (modern frameworks, TypeScript as a linter)",
