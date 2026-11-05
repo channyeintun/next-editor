@@ -1,0 +1,1746 @@
+# TypeScript course, lesson 15: mutability and read only (Burmese).
+#
+# Start state (ws/): src/order.ts holds the shop's types (CupSize, Drink, Receipt) and helpers
+# (sizeExtra, drinkPrice, printList); src/main.ts uses them in four parts. The panel
+# (data-modes "errors output types": Output above Types, so the lists stay on the first screen)
+# shows 2 errors on purpose:
+#   - `let chosenSize = "small"` is inferred as string      -> TS2345 at sizeExtra(chosenSize)
+#   - `const teaOrder = { ..., size: "large" }` widens size  -> TS2345 (3 parts) at drinkPrice(teaOrder)
+# and Output "စားပွဲ 9 · 0 ကျပ်" (a line erases the paid total) and "ဒီနေ့ အထူး 2 မျိုး · …ပလာတာ"
+# (a line pushes onto today's specials).
+#
+# Edits, all insert-only:
+#   1. main.ts: `^?` queries -> `const defaultSize: "small"` vs `let chosenSize: string`;
+#      `: CupSize` on chosenSize -> 1 error, query `let chosenSize: CupSize`.
+#   2. main.ts: `^?` on teaOrder -> `{ item: string; size: string; }`; an inline drinkPrice({...})
+#      call has no error (Output "ကော်ဖီ 2100"); `: Drink` on teaOrder -> 0 errors.
+#   3. order.ts: `readonly ` before total -> TS2540 at main's `receipt.total = 0`, Output still 0
+#      (type-only); `// ` comments that line out -> 3300.
+#   4. order.ts: `export type PaidReceipt = Readonly<Receipt>;` + query -> readonly on id, total,
+#      customer, not on customer's name/table (top level only).
+#   5. main.ts: `: ReadonlyArray<string>` on specials -> push does not exist on 'readonly string[]'
+#      + readonly-to-mutable error at printList(…, specials); `// ` before the push -> 1 kind.
+#   6. order.ts: `readonly ` in printList's parameter -> 0 errors; the mutable drinks list is
+#      accepted too. Board B shows the two directions.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-15-mutability.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-15-mutability
+  title: "TypeScript course 15: Mutability နဲ့ readonly"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors output types"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { drinkPrice, printList, sizeExtra } from "./order";
+        import type { CupSize, Drink, Receipt } from "./order";
+
+        const defaultSize = "small";
+        let chosenSize = "small";
+        chosenSize = "large";
+        console.log("ပိုကြေး", sizeExtra(defaultSize), sizeExtra(chosenSize));
+
+        const teaOrder = { item: "လက်ဖက်ရည်", size: "large" };
+        console.log("လက်ဖက်ရည်", drinkPrice(teaOrder));
+
+        const receipt: Receipt = {
+          id: 7,
+          total: 3300,
+          customer: { name: "မြမြ", table: 5 },
+        };
+        receipt.customer.table = 9;
+        receipt.total = 0;
+        console.log("စားပွဲ", receipt.customer.table, "·", receipt.total, "ကျပ်");
+
+        const drinks = ["လက်ဖက်ရည်", "ကော်ဖီ"];
+        const specials = ["မုန့်ဟင်းခါး"];
+        specials.push("ပလာတာ");
+        printList("သောက်စရာ", drinks);
+        printList("ဒီနေ့ အထူး", specials);
+      src/order.ts: |
+        export type CupSize = "small" | "large";
+
+        export type Drink = {
+          item: string;
+          size: CupSize;
+        };
+
+        export function sizeExtra(size: CupSize): number {
+          return size === "large" ? 300 : 0;
+        }
+
+        export function drinkPrice(drink: Drink): number {
+          const base = drink.item === "ကော်ဖီ" ? 1800 : 1500;
+          return base + sizeExtra(drink.size);
+        }
+
+        export type Receipt = {
+          id: number;
+          total: number;
+          customer: { name: string; table: number };
+        };
+
+        export function printList(title: string, items: string[]) {
+          console.log(title, items.length, "မျိုး ·", items.join("၊ "));
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: the value "large" fits three sets; mutability decides which one TypeScript infers.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: '"large" ရဲ့ type က ဘာလဲ',
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-string-set,
+        kind: ellipse,
+        x: 260,
+        y: 225,
+        width: 500,
+        height: 410,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-string-label,
+        kind: text,
+        x: 455,
+        y: 250,
+        width: 110,
+        height: 36,
+        text: "string",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-cup-set,
+        kind: ellipse,
+        x: 325,
+        y: 320,
+        width: 370,
+        height: 240,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-cup-label,
+        kind: text,
+        x: 448,
+        y: 345,
+        width: 130,
+        height: 36,
+        text: "CupSize",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-small,
+        kind: text,
+        x: 375,
+        y: 435,
+        width: 110,
+        height: 36,
+        text: '"small"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-large,
+        kind: text,
+        x: 545,
+        y: 435,
+        width: 110,
+        height: 36,
+        text: '"large"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-large-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 525,
+        y: 415,
+        width: 150,
+        height: 76,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-const,
+        kind: text,
+        x: 780,
+        y: 290,
+        width: 310,
+        height: 36,
+        text: 'const → "large"',
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-let,
+        kind: text,
+        x: 780,
+        y: 380,
+        width: 310,
+        height: 36,
+        text: "let → string",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-annotation,
+        kind: text,
+        x: 780,
+        y: 470,
+        width: 320,
+        height: 36,
+        text: "annotation → CupSize",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board B: which array may go into which parameter.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "array ကို function ထဲ ပို့ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-head-array,
+        kind: text,
+        x: 330,
+        y: 235,
+        width: 200,
+        height: 36,
+        text: "ပို့တဲ့ array",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-head-param,
+        kind: text,
+        x: 790,
+        y: 235,
+        width: 180,
+        height: 36,
+        text: "parameter",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-left,
+        kind: rectangle,
+        x: 270,
+        y: 285,
+        width: 310,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-r1-left-text,
+        kind: text,
+        x: 292,
+        y: 302,
+        width: 270,
+        height: 36,
+        text: "readonly string[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 600,
+        y: 300,
+        width: 110,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-r1-right,
+        kind: rectangle,
+        x: 730,
+        y: 285,
+        width: 310,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-r1-right-text,
+        kind: text,
+        x: 822,
+        y: 302,
+        width: 130,
+        height: 36,
+        text: "string[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r1-note,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 760,
+        height: 36,
+        text: "✗ function က push လုပ်သွားနိုင်လို့ မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-left,
+        kind: rectangle,
+        x: 270,
+        y: 455,
+        width: 310,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-r2-left-text,
+        kind: text,
+        x: 362,
+        y: 472,
+        width: 130,
+        height: 36,
+        text: "string[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 600,
+        y: 470,
+        width: 110,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-r2-right,
+        kind: rectangle,
+        x: 730,
+        y: 455,
+        width: 310,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-r2-right-text,
+        kind: text,
+        x: 752,
+        y: 472,
+        width: 270,
+        height: 36,
+        text: "readonly string[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-r2-note,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 760,
+        height: 36,
+        text: "✓ function က ဖတ်ရုံပဲ ဖတ်လို့ ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3115
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "ပြောင်းလဲနိုင်မှုနဲ့ type"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ utility type တွေနဲ့ type တစ်ခုကနေ နောက် type တစ်ခုကို
+      ထုတ်ယူခဲ့ပါတယ်။ ဒီ lesson မှာတော့ တန်ဖိုး တစ်ခုကို နောက်မှ ပြောင်းလို့ ရမရ ဆိုတဲ့ mutability က
+      TypeScript ရဲ့ inference အပေါ် ဘယ်လို သက်ရောက်လဲ၊ ပြီးတော့ မပြောင်းစေချင်တဲ့ တန်ဖိုးတွေကို read only နဲ့
+      ဘယ်လို ကာကွယ်မလဲ ဆိုတာ ကြည့်သွားပါမယ်။ [[mark:draw-sets]] type တွေကို အစုလိုက် ပုံဆွဲကြည့်ရင်၊ string ထဲမှာ
+      စာသား အားလုံး ပါပြီး၊ ဆိုင်ရဲ့ ခွက် size ဖြစ်တဲ့ CupSize ထဲမှာတော့ small နဲ့ large နှစ်ခုပဲ ပါပါတယ်။
+      ဒါဆို variable တစ်ခုထဲကို large ထည့်လိုက်ရင်၊ TypeScript က ဘယ် အစုကို သူ့ type အဖြစ် ရွေးမလဲ။
+      [[mark:draw-const]] const နဲ့ ကြေညာထားလို့ နောက် ဘယ်တော့မှ ပြောင်းလို့ မရတဲ့ variable ဆိုရင်၊ တန်ဖိုးက large တစ်ခုတည်းပဲ
+      ဖြစ်နိုင်လို့ large ဆိုတဲ့ literal type ကို ယူပါတယ်။ [[mark:draw-let]] let နဲ့ ကြေညာထားလို့ ပြောင်းလို့ ရတဲ့
+      variable ဆိုရင်တော့ နောက်မှ ဘာ စာသား ဝင်လာမလဲ မသိနိုင်လို့ string တစ်ခုလုံးကို ယူပါတယ်။ [[mark:draw-annotation]]
+      ကိုယ် တကယ် လိုချင်တဲ့ အလယ်က CupSize ကိုတော့ TypeScript က ခန့်မှန်းလို့ မရလို့၊ type annotation နဲ့
+      ကိုယ်တိုင် ပြောပြရပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (mutability and inference)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (literal inference)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-inference",
+        }
+      - {
+          title: "TypeScript Handbook: Type Inference (best common type, widening)",
+          url: "https://www.typescriptlang.org/docs/handbook/type-inference.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-sets
+        type: whiteboard.apply
+        at: { mark: draw-sets }
+        upsertIds: [a-string-set, a-string-label, a-cup-set, a-cup-label, a-small, a-large]
+        drawMs: 3600
+      - id: draw-const
+        type: whiteboard.apply
+        at: { mark: draw-const }
+        upsertIds: [a-large-circle, a-const]
+        drawMs: 1800
+      - id: draw-let
+        type: whiteboard.apply
+        at: { mark: draw-let }
+        upsertIds: [a-let]
+        drawMs: 1000
+      - id: draw-annotation
+        type: whiteboard.apply
+        at: { mark: draw-annotation }
+        upsertIds: [a-annotation]
+        drawMs: 1300
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-order]] order ဖိုင်မှာ ဆိုင်ရဲ့ type တွေနဲ့
+      function တွေ ရှိပါတယ်။ [[mark:select-cup-size]] CupSize type က small နဲ့ large နှစ်ခုပဲ လက်ခံပြီး၊ ဈေး
+      တွက်တဲ့ function နှစ်ခုလုံးက CupSize ကို သုံးပါတယ်။ [[mark:select-receipt-type]] Receipt type ကတော့
+      ဘောင်ချာ တစ်စောင်ကို ဖော်ပြပြီး၊ နံပါတ်၊ စုစုပေါင်း ငွေနဲ့ customer ပါပါတယ်။ [[mark:select-print-list]]
+      အောက်ဆုံးက function ကတော့ စာရင်း တစ်ခုကို ခေါင်းစဉ်နဲ့ အရေအတွက်ပါ တွဲပြီး ထုတ်ပြပေးပါတယ်။
+      [[mark:open-main]] main
+      ဖိုင်မှာတော့ ဒီ type တွေကို သုံးတဲ့ အပိုင်း လေးပိုင်း ရှိပါတယ်။ [[mark:select-sizes]] ပထမ အပိုင်းမှာ
+      ဆိုင်ရဲ့ ပုံမှန် size နဲ့ customer ရွေးတဲ့ size ရှိပြီး၊ ရွေးတဲ့ size ကိုတော့ နောက်မှ large လို့
+      ပြောင်းထားပါတယ်။ [[mark:select-tea-order]] ဒုတိယက လက်ဖက်ရည် ခွက်ကြီး အော်ဒါ object ပါ။
+      [[mark:select-receipt-lines]] တတိယက မြမြရဲ့ ဘောင်ချာ ဖြစ်ပြီး၊ စားပွဲ ပြောင်းတဲ့ line နဲ့ စုစုပေါင်း
+      ငွေကို သုည ပြောင်းတဲ့ line ပါပါတယ်။ [[mark:select-lists]] နောက်ဆုံး အပိုင်းမှာတော့ စာရင်း နှစ်ခု
+      ရှိပြီး၊ ဒီနေ့ အထူး စာရင်းထဲကို ပလာတာ ထပ်ထည့်ထားပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-order
+        type: workspace.openFile
+        at: { mark: open-order }
+        path: src/order.ts
+      - id: select-cup-size
+        type: editor.select
+        at: { mark: select-cup-size }
+        target:
+          { file: src/order.ts, text: 'export type CupSize = "small" | "large";', occurrence: 1 }
+      - id: select-receipt-type
+        type: editor.select
+        at: { mark: select-receipt-type }
+        target:
+          {
+            file: src/order.ts,
+            text: "  id: number;\n  total: number;\n  customer: { name: string; table: number };",
+            occurrence: 1,
+          }
+      - id: select-print-list
+        type: editor.select
+        at: { mark: select-print-list }
+        target:
+          {
+            file: src/order.ts,
+            text: "export function printList(title: string, items: string[]) {",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-sizes
+        type: editor.select
+        at: { mark: select-sizes }
+        target:
+          {
+            file: src/main.ts,
+            text: "const defaultSize = \"small\";\nlet chosenSize = \"small\";\nchosenSize = \"large\";",
+            occurrence: 1,
+          }
+      - id: select-tea-order
+        type: editor.select
+        at: { mark: select-tea-order }
+        target:
+          {
+            file: src/main.ts,
+            text: 'const teaOrder = { item: "လက်ဖက်ရည်", size: "large" };',
+            occurrence: 1,
+          }
+      - id: select-receipt-lines
+        type: editor.select
+        at: { mark: select-receipt-lines }
+        target:
+          {
+            file: src/main.ts,
+            text: "receipt.customer.table = 9;\nreceipt.total = 0;",
+            occurrence: 1,
+          }
+      - id: select-lists
+        type: editor.select
+        at: { mark: select-lists }
+        target:
+          {
+            file: src/main.ts,
+            text: "const specials = [\"မုန့်ဟင်းခါး\"];\nspecials.push(\"ပလာတာ\");",
+            occurrence: 1,
+          }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ကို ကြည့်ရအောင်။ ဒီတစ်ခါ Errors ရဲ့ အောက်မှာ Output ရှိပြီး၊ Types
+      ကတော့ အောက်ဆုံးမှာ ရှိပါတယ်။ [[mark:read-start-output]] Output မှာ မြမြရဲ့ ဘောင်ချာက သုည ကျပ် ဖြစ်နေပြီး၊
+      ဒီနေ့ အထူး စာရင်းက နှစ်မျိုး ဖြစ်နေပါတယ်။ ပြောင်းလို့ မရသင့်တဲ့ တန်ဖိုးတွေကို code က ပြောင်းလိုက်လို့ပါ။
+      ဒါကို lesson ရဲ့ နောက်ပိုင်းမှာ ကာကွယ်ပါမယ်။ [[mark:read-start-errors]] Errors မှာတော့ error နှစ်ခုလုံးက
+      string ကို CupSize ရှိရမယ့် နေရာမှာ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ code ထဲမှာ ရေးထားတဲ့ size တွေက small
+      နဲ့ large ပဲ ဖြစ်ပေမယ့်၊ ဘာကြောင့် string လို့ ပြောနေတာလဲ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (mutability and inference)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-let-error
+        type: expect.preview
+        at: { afterAction: expect-start-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Argument of type 'string' is not assignable to parameter of type 'CupSize'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-object-error
+        type: expect.preview
+        at: { afterAction: expect-start-let-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Types of property 'size' are incompatible."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-start-object-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "5" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-receipt
+        type: expect.preview
+        at: { afterAction: expect-start-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "စားပွဲ 9 · 0 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-specials
+        type: expect.preview
+        at: { afterAction: expect-start-receipt }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "ဒီနေ့ အထူး 2 မျိုး · မုန့်ဟင်းခါး၊ ပလာတာ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: let-const
+    chapter: "let နဲ့ const"
+    narration: >
+      [[mark:type-query-default]] ပုံမှန် size ရဲ့ အောက်မှာ query comment ထည့်ကြည့်ရအောင်။
+      [[mark:read-query-default]] Types မှာ small ဆိုတဲ့ literal type ပေါ်လာပါပြီ။ const နဲ့ ကြေညာထားလို့
+      တန်ဖိုး အသစ် ပြန်ထည့်လို့ မရတဲ့အတွက်၊ TypeScript က တန်ဖိုး အတိအကျကို type အဖြစ် ယူထားတာပါ။
+      [[mark:type-query-chosen]] customer ရွေးတဲ့ size ကိုလည်း မေးကြည့်ရအောင်။ [[mark:read-query-chosen]]
+      ဒီတစ်ခါတော့ string ဖြစ်နေပါတယ်။ let နဲ့ ကြေညာထားတဲ့ variable က နောက်မှ ပြောင်းလို့ ရတဲ့အတွက်၊ TypeScript
+      က ကျယ်တဲ့ string ကို ယူထားတာပါ။ ဒါကြောင့် small နဲ့ large ပဲ လက်ခံတဲ့ function ထဲ ပို့တော့ error
+      ပြနေတာပါ။ [[mark:type-annotation]] ဒီ variable ရဲ့ နာမည်နောက်မှာ CupSize ဆိုတဲ့ type annotation
+      ထည့်ပေးပါမယ်။ [[mark:read-annotation]] ပထမ error ပျောက်ပြီး၊ Types မှာလည်း CupSize ဖြစ်သွားပါပြီ။
+      variable ကို ပြောင်းလို့ ရနေတုန်းပဲ ဖြစ်ပေမယ့်၊ small နဲ့ large ကြားမှာပဲ ပြောင်းခွင့် ရှိတော့တာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (how TypeScript infers let and const)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (literal types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-types",
+        }
+    actions:
+      - id: type-query-default
+        type: editor.type
+        at: { mark: type-query-default }
+        target: { file: src/main.ts, after: "const defaultSize = \"small\";\n", occurrence: 1 }
+        text: "//    ^?\n"
+      - id: expect-query-default
+        type: expect.preview
+        at: { afterAction: type-query-default }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: 'const defaultSize: "small"' }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-query-chosen
+        type: editor.type
+        at: { mark: type-query-chosen }
+        target: { file: src/main.ts, after: "let chosenSize = \"small\";\n", occurrence: 1 }
+        text: "//  ^?\n"
+      - id: expect-query-chosen
+        type: expect.preview
+        at: { afterAction: type-query-chosen }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "let chosenSize: string" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-annotation
+        type: editor.type
+        at: { mark: type-annotation }
+        target: { file: src/main.ts, after: "let chosenSize", occurrence: 1 }
+        text: ": CupSize"
+      - id: expect-one-error
+        type: expect.preview
+        at: { afterAction: type-annotation }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-query-cupsize
+        type: expect.preview
+        at: { afterAction: expect-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "let chosenSize: CupSize" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: object
+    chapter: "Object ရဲ့ property တွေ"
+    narration: >
+      [[mark:type-query-order]] ကျန်တဲ့ error က လက်ဖက်ရည် အော်ဒါ object မှာပါ။ ဒီ object ကို const နဲ့
+      ကြေညာထားပေမယ့် error ပြနေလို့ query comment နဲ့ ကြည့်ရအောင်။ [[mark:read-query-order]] size က large မဟုတ်ဘဲ string ဖြစ်နေပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့၊ const က variable ထဲကို object အသစ် ပြန်ထည့်တာကိုပဲ တားပြီး၊ object ထဲက property
+      တွေကိုတော့ နောက်မှ ပြောင်းလို့ ရနေသေးလို့ပါ။ ဒါကြောင့် TypeScript က property တိုင်းကို let လိုပဲ ကျယ်တဲ့
+      type နဲ့ infer လုပ်ပါတယ်။ error ကို အောက်ဆုံး အပိုင်းကနေ ဖတ်ကြည့်ရင်လည်း၊ string ကို CupSize နေရာမှာ
+      ထည့်လို့ မရဘူး ဆိုတဲ့ ပြဿနာက size property မှာ ဖြစ်နေတာ တွေ့ရပါတယ်။ [[mark:type-inline]] ပြင်နည်း နှစ်မျိုး ရှိပါတယ်။ ပထမ
+      နည်းက object ကို function ခေါ်တဲ့ နေရာမှာ တိုက်ရိုက် ရေးတာပါ။ ကော်ဖီ ခွက်ကြီးကို ဒီ နည်းနဲ့
+      တွက်ကြည့်ပါမယ်။ [[mark:read-inline]] ဒီ line မှာ error မရှိဘဲ၊ Output မှာ ကော်ဖီ ၂၁၀၀ ကျပ် ထွက်လာပါပြီ။
+      ဒီ နေရာမှာ Drink type ဖြစ်ရမယ် ဆိုတာ TypeScript က ကြိုသိနေလို့၊ large ကို CupSize အဖြစ် တန်းစစ်ပေးတာပါ။
+      [[mark:type-drink-annotation]] ဒုတိယ နည်းကတော့ variable မှာ Drink ဆိုတဲ့ type annotation ထည့်တာပါ။
+      [[mark:read-no-errors]] error တစ်ခုမှ မကျန်တော့ဘဲ၊ query ကလည်း Drink ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (object property inference, inline object, adding a type)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (literal inference)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-inference",
+        }
+      - {
+          title: "TypeScript Handbook: Type Inference (contextual typing)",
+          url: "https://www.typescriptlang.org/docs/handbook/type-inference.html#contextual-typing",
+        }
+    actions:
+      - id: type-query-order
+        type: editor.type
+        at: { mark: type-query-order }
+        target:
+          {
+            file: src/main.ts,
+            after: "const teaOrder = { item: \"လက်ဖက်ရည်\", size: \"large\" };\n",
+            occurrence: 1,
+          }
+        text: "//    ^?\n"
+      - id: expect-query-order
+        type: expect.preview
+        at: { afterAction: type-query-order }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-3 }
+        textContains: "size: string;"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-inline
+        type: editor.type
+        at: { mark: type-inline }
+        target:
+          {
+            file: src/main.ts,
+            after: "console.log(\"လက်ဖက်ရည်\", drinkPrice(teaOrder));\n",
+            occurrence: 1,
+          }
+        text: "console.log(\"ကော်ဖီ\", drinkPrice({ item: \"ကော်ဖီ\", size: \"large\" }));\n"
+        cadence: line-by-line
+      - id: expect-inline-output
+        type: expect.preview
+        at: { afterAction: type-inline }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "ကော်ဖီ 2100"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-inline-no-error
+        type: expect.preview
+        at: { afterAction: expect-inline-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-drink-annotation
+        type: editor.type
+        at: { mark: type-drink-annotation }
+        target: { file: src/main.ts, after: "const teaOrder", occurrence: 1 }
+        text: ": Drink"
+      - id: expect-no-errors
+        type: expect.preview
+        at: { afterAction: type-drink-annotation }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-query-drink
+        type: expect.preview
+        at: { afterAction: expect-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-3 }
+        attribute: { name: data-type, value: "const teaOrder: Drink" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: readonly-property
+    chapter: "readonly property"
+    narration: >
+      [[mark:select-receipt-again]] အခု ပြောင်းလို့ လုံးဝ မရစေချင်တဲ့ တန်ဖိုးတွေကို ကြည့်ရအောင်။ ဘောင်ချာမှာ
+      စားပွဲ ပြောင်းတာက ဖြစ်တတ်ပေမယ့်၊ ငွေရှင်းပြီးသား စုစုပေါင်း ငွေကို ပြောင်းတာကတော့ မဖြစ်သင့်ပါဘူး။
+      [[mark:open-order-2]] order ဖိုင်ကို ပြန်ဖွင့်ပါမယ်။ [[mark:type-readonly-total]] စုစုပေါင်း ငွေ
+      property ရဲ့ ရှေ့မှာ read only ထည့်ပါမယ်။ read only ဆိုတာ ဖတ်လို့ပဲ ရပြီး ပြန်ပြင်လို့ မရတဲ့ property
+      ပါ။ [[mark:read-readonly-error]] read only property ကို တန်ဖိုး အသစ် ထည့်လို့ မရဘူး ဆိုတဲ့ error
+      ပေါ်လာပြီး၊ ငွေကို ပြောင်းနေတဲ့ main ဖိုင်ရဲ့ line ကို ညွှန်ပြနေပါတယ်။ [[mark:read-still-zero]] ဒါပေမဲ့
+      Output မှာ ဘောင်ချာက သုည ကျပ် အတိုင်း ရှိနေပါသေးတယ်။ read only က type ပိုင်းမှာပဲ ရှိပြီး run တဲ့
+      အချိန်မှာ ဖယ်ထုတ်ပြီးသား ဖြစ်လို့၊ တကယ့် object ကိုတော့ ကာကွယ်မပေးပါဘူး။ [[mark:type-comment-total]]
+      TypeScript ပြပေးတဲ့ အမှားကို ပြင်ဖို့၊ ငွေ ပြောင်းတဲ့ line ကို comment လုပ်ပြီး ပိတ်လိုက်ပါမယ်။ [[mark:read-total-back]] error
+      ပျောက်ပြီး၊ ဘောင်ချာက ၃၃၀၀ ကျပ် ပြန်ဖြစ်သွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (readonly object properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (readonly properties)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#readonly-properties",
+        }
+    actions:
+      - id: select-receipt-again
+        type: editor.select
+        at: { mark: select-receipt-again }
+        target:
+          {
+            file: src/main.ts,
+            text: "receipt.customer.table = 9;\nreceipt.total = 0;",
+            occurrence: 1,
+          }
+      - id: open-order-2
+        type: workspace.openFile
+        at: { mark: open-order-2 }
+        path: src/order.ts
+      - id: type-readonly-total
+        type: editor.type
+        at: { mark: type-readonly-total }
+        target: { file: src/order.ts, after: "  id: number;\n  ", occurrence: 1 }
+        text: "readonly "
+      - id: expect-readonly-error
+        type: expect.preview
+        at: { afterAction: type-readonly-total }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-readonly-code
+        type: expect.preview
+        at: { afterAction: expect-readonly-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2540" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-readonly-message
+        type: expect.preview
+        at: { afterAction: expect-readonly-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Cannot assign to 'total' because it is a read-only property."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-readonly-in-main
+        type: expect.preview
+        at: { afterAction: expect-readonly-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "src/main.ts" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-zero
+        type: expect.preview
+        at: { mark: read-still-zero }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "စားပွဲ 9 · 0 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: type-comment-total }
+        path: src/main.ts
+      - id: type-comment-total
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "receipt.customer.table = 9;\n", occurrence: 1 }
+        text: "// "
+      - id: expect-total-clean
+        type: expect.preview
+        at: { afterAction: type-comment-total }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-total-back
+        type: expect.preview
+        at: { afterAction: expect-total-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-4 }
+        textContains: "စားပွဲ 9 · 3300 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: readonly-helper
+    narration: >
+      [[mark:open-order-3]] property တိုင်းကို read only ဖြစ်စေချင်ရင်တော့ တစ်ခုချင်း လိုက်ရေးစရာ မလိုပါဘူး။
+      [[mark:type-paid-receipt]] Readonly ဆိုတဲ့ utility type ထဲကို Receipt ကို ထည့်ပြီး၊ ငွေရှင်းပြီးသား
+      ဘောင်ချာအတွက် type အသစ် တစ်ခု ရေးပါမယ်။ အောက်မှာ query comment ပါ ထည့်ထားပါတယ်။
+      [[mark:read-paid-receipt]] Types ရဲ့ အပေါ်ဆုံးမှာ နံပါတ်၊ ငွေနဲ့ customer သုံးခုလုံး read only
+      ဖြစ်သွားပါပြီ။ [[mark:read-nested]] ဒါပေမဲ့ customer ရဲ့ အထဲက နာမည်နဲ့ စားပွဲ နံပါတ်မှာတော့ read only
+      မပါပါဘူး။ Readonly က အပြင်ဆုံး အဆင့် တစ်ဆင့်ကိုပဲ ပြောင်းပေးလို့ပါ။ တန်ဖိုး တစ်ခုကို အထဲအထိ read only
+      ဖြစ်အောင် လုပ်နည်းကိုတော့ နောက် lesson မှာ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (the Readonly type helper)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Utility Types (Readonly<Type>)",
+          url: "https://www.typescriptlang.org/docs/handbook/utility-types.html#readonlytype",
+        }
+    actions:
+      - id: open-order-3
+        type: workspace.openFile
+        at: { mark: open-order-3 }
+        path: src/order.ts
+      - id: type-paid-receipt
+        type: editor.type
+        at: { mark: type-paid-receipt }
+        target:
+          {
+            file: src/order.ts,
+            after: "  customer: { name: string; table: number };\n};\n",
+            occurrence: 1,
+          }
+        text: "\nexport type PaidReceipt = Readonly<Receipt>;\n//          ^?\n"
+        cadence: line-by-line
+      - id: expect-four-queries
+        type: expect.preview
+        at: { afterAction: type-paid-receipt }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-types }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-paid-receipt
+        type: expect.preview
+        at: { afterAction: expect-four-queries }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          {
+            name: data-type,
+            value: "type PaidReceipt = {\n    readonly id: number;\n    readonly total: number;\n    readonly customer: {\n        name: string;\n        table: number;\n    };\n}",
+          }
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: readonly-array
+    chapter: "readonly array"
+    narration: >
+      [[mark:open-main-3]] array တွေကိုလည်း read only လုပ်လို့ ရပါတယ်။ [[mark:select-push]] ဒီနေ့ အထူး
+      စာရင်းကို မနက်ကတည်းက ဆိုင်ရှေ့က ဘုတ်ပေါ်မှာ ရေးထားပြီးသား ဆိုပါစို့။ ဒါဆို ပလာတာ ထပ်ထည့်တဲ့ ဒီ line
+      မျိုးကို တားချင်ပါတယ်။ [[mark:type-readonly-array]] စာရင်းရဲ့ နာမည်နောက်မှာ string တွေ သိမ်းတဲ့
+      ReadonlyArray ဆိုတဲ့ type annotation ထည့်ပါမယ်။ [[mark:read-push-error]] error နှစ်ခု ပေါ်လာပါပြီ။ ပထမ တစ်ခုက
+      read only string array မှာ push method မရှိဘူးလို့ ပြောနေပါတယ်။ ကိုယ်က ReadonlyArray လို့ ရေးခဲ့ပေမယ့်၊
+      TypeScript က array ရဲ့ ရှေ့မှာ read only ထည့်တဲ့ ပုံစံနဲ့ ပြနေတာ သတိထား ကြည့်ပါ။ ဒီ ရေးပုံ နှစ်မျိုးက
+      အဓိပ္ပာယ် အတူတူပါပဲ။ [[mark:read-other-methods]] push လို စာရင်းကို ပြောင်းတဲ့ method တွေ
+      မရှိတော့ပေမယ့်၊ join နဲ့ map လို စာရင်းကို မပြောင်းဘဲ ဖတ်ရုံပဲ ဖတ်တဲ့ method တွေကတော့ သုံးလို့
+      ရပါတယ်။
+      [[mark:type-comment-push]] ပလာတာ ထည့်တဲ့ line ကို comment လုပ်လိုက်ပါမယ်။ [[mark:read-push-gone]] Output
+      မှာ ဒီနေ့ အထူး စာရင်းက မုန့်ဟင်းခါး တစ်မျိုးတည်း ဖြစ်သွားပါပြီ။ ဒါပေမဲ့ Errors မှာ error တစ်ခု
+      ကျန်နေပါသေးတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (readonly arrays)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (the ReadonlyArray type)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#the-readonlyarray-type",
+        }
+    actions:
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: open-main-3 }
+        path: src/main.ts
+      - id: select-push
+        type: editor.select
+        at: { mark: select-push }
+        target: { file: src/main.ts, text: 'specials.push("ပလာတာ");', occurrence: 1 }
+      - id: type-readonly-array
+        type: editor.type
+        at: { mark: type-readonly-array }
+        target: { file: src/main.ts, after: "const specials", occurrence: 1 }
+        text: ": ReadonlyArray<string>"
+      - id: expect-two-array-errors
+        type: expect.preview
+        at: { afterAction: type-readonly-array }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-push-error
+        type: expect.preview
+        at: { afterAction: expect-two-array-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'push' does not exist on type 'readonly string[]'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-mutable-error
+        type: expect.preview
+        at: { afterAction: expect-push-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "The type 'readonly string[]' is 'readonly' and cannot be assigned to the mutable type 'string[]'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-comment-push
+        type: editor.type
+        at: { mark: type-comment-push }
+        target: { file: src/main.ts, after: "[\"မုန့်ဟင်းခါး\"];\n", occurrence: 1 }
+        text: "// "
+      - id: expect-push-gone
+        type: expect.preview
+        at: { afterAction: type-comment-push }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-out-6 }
+        textContains: "ဒီနေ့ အထူး 1 မျိုး · မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-one-array-error
+        type: expect.preview
+        at: { afterAction: expect-push-gone }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: array-direction
+    chapter: "ဘယ် array ကို ဘယ်မှာ ထည့်လို့ ရလဲ"
+    narration: >
+      [[mark:select-call]] ကျန်တဲ့ error က ဒီနေ့ အထူး စာရင်းကို function ထဲ ပို့တဲ့ ဒီ နေရာမှာပါ။ read only
+      array ကို ပြောင်းလို့ ရတဲ့ array နေရာမှာ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ [[mark:board-arrays]]
+      ဘာကြောင့်လဲ ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-readonly-to-mutable]] parameter က ပြောင်းလို့ ရတဲ့
+      array ဆိုရင်၊ function က အထဲမှာ push လုပ်လို့ ရပါတယ်။ အဲဒီ ထဲကို read only array ပို့ခွင့် ပေးရင်၊
+      ပြောင်းလို့ မရသင့်တဲ့ စာရင်းကို function က ပြောင်းသွားနိုင်လို့ TypeScript က တားတာပါ။
+      [[mark:draw-mutable-to-readonly]] parameter က read only ဆိုရင်တော့ function က စာရင်းကို ဖတ်ရုံပဲ ဖတ်မှာ
+      ဖြစ်လို့၊ ဘယ် array ပို့ပို့ ပြဿနာ မရှိပါဘူး။ [[mark:open-order-4]] ဒါကြောင့် စာရင်းကို ဖတ်ရုံပဲ ဖတ်တဲ့
+      function ရဲ့ parameter ကို read only လုပ်ပေးတာ ကောင်းတဲ့ အလေ့အကျင့်ပါ။ [[mark:type-readonly-param]]
+      စာရင်းကို လက်ခံတဲ့ parameter မှာ read only ထည့်ပါမယ်။ [[mark:read-all-clean]] Errors ရှင်းသွားပြီး၊
+      ပြောင်းလို့ ရတဲ့ သောက်စရာ စာရင်းရော၊ read only ဖြစ်တဲ့ ဒီနေ့ အထူး စာရင်းရော၊ နှစ်ခုလုံးကို function က
+      လက်ခံပြီး ထုတ်ပြနေပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability (how read-only and mutable arrays work together)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (ReadonlyArray assignability)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#the-readonlyarray-type",
+        }
+    actions:
+      - id: select-call
+        type: editor.select
+        at: { mark: select-call }
+        target: { file: src/main.ts, text: 'printList("ဒီနေ့ အထူး", specials);', occurrence: 1 }
+      - id: board-arrays
+        type: whiteboard.apply
+        at: { mark: board-arrays }
+        open: true
+        clear: true
+        upsertIds: [b-title, b-head-array, b-head-param]
+      - id: draw-readonly-to-mutable
+        type: whiteboard.apply
+        at: { mark: draw-readonly-to-mutable }
+        upsertIds: [b-r1-left, b-r1-left-text, b-r1-arrow, b-r1-right, b-r1-right-text, b-r1-note]
+        drawMs: 3200
+      - id: draw-mutable-to-readonly
+        type: whiteboard.apply
+        at: { mark: draw-mutable-to-readonly }
+        upsertIds: [b-r2-left, b-r2-left-text, b-r2-arrow, b-r2-right, b-r2-right-text, b-r2-note]
+        drawMs: 3200
+      - id: close-board-b
+        type: whiteboard.apply
+        at: { mark: open-order-4 }
+        open: false
+      - id: open-order-4
+        type: workspace.openFile
+        at: { mark: open-order-4, offsetMs: 700 }
+        path: src/order.ts
+      - id: type-readonly-param
+        type: editor.type
+        at: { mark: type-readonly-param }
+        target: { file: src/order.ts, after: "items: ", occurrence: 1 }
+        text: "readonly "
+      - id: expect-all-clean
+        type: expect.preview
+        at: { afterAction: type-readonly-param }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-drinks-list
+        type: expect.preview
+        at: { afterAction: expect-all-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "သောက်စရာ 2 မျိုး · လက်ဖက်ရည်၊ ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-specials-list
+        type: expect.preview
+        at: { afterAction: expect-drinks-list }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-6 }
+        textContains: "ဒီနေ့ အထူး 1 မျိုး · မုန့်ဟင်းခါး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: recap
+    narration: >
+      [[mark:recap-inference]] ဒါဆို ပြန်ချုပ်ရရင်၊ const variable က literal type ကို ယူပြီး၊ let variable နဲ့
+      object ရဲ့ property တွေကတော့ နောက်မှ ပြောင်းလို့ ရတဲ့အတွက် ကျယ်တဲ့ type ကို ယူပါတယ်။ အဲဒါကို type
+      annotation ထည့်တာ၊ ဒါမှမဟုတ် object ကို function ခေါ်တဲ့ နေရာမှာ တိုက်ရိုက် ရေးတာနဲ့ ပြင်လို့ ရပါတယ်။ [[mark:recap-readonly]] read only property
+      နဲ့ Readonly utility type က ပြောင်းတာကို တားပေးပေမယ့်၊ Readonly က အပြင်ဆုံး အဆင့်ကိုပဲ ကာကွယ်ပါတယ်။
+      [[mark:recap-array]] read only array မှာ push မရှိပါဘူး။ ပြောင်းလို့ ရတဲ့ array ကို read only parameter
+      ထဲ ပို့လို့ ရပေမယ့်၊ ပြောင်းပြန်ကတော့ မရပါဘူး။ ဒါတွေ အားလုံးက type စစ်တဲ့ အချိန်မှာပဲ အလုပ်လုပ်ပြီး၊ run
+      တဲ့ အချိန်မှာ မရှိတော့ပါဘူး။ နောက် lesson မှာတော့ တန်ဖိုး တစ်ခုလုံးကို အထဲအထိ read only လုပ်ပြီး literal
+      type တွေကိုပါ ထိန်းထားပေးတဲ့ as const ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 7: Mutability",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/mutability",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (readonly properties)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#readonly-properties",
+        }
+    actions:
+      - id: open-main-4
+        type: workspace.openFile
+        at: { mark: recap-inference }
+        path: src/main.ts
+      - id: select-recap-annotation
+        type: editor.select
+        at: { afterAction: open-main-4 }
+        target: { file: src/main.ts, text: "let chosenSize: CupSize", occurrence: 1 }
+      - id: open-order-5
+        type: workspace.openFile
+        at: { mark: recap-readonly }
+        path: src/order.ts
+      - id: select-recap-readonly
+        type: editor.select
+        at: { afterAction: open-order-5 }
+        target:
+          {
+            file: src/order.ts,
+            text: "export type PaidReceipt = Readonly<Receipt>;",
+            occurrence: 1,
+          }
+      - id: select-recap-array
+        type: editor.select
+        at: { mark: recap-array }
+        target: { file: src/order.ts, text: "items: readonly string[]", occurrence: 1 }
+      - id: expect-file-order
+        type: expect.file
+        at: { afterAction: select-recap-array }
+        path: src/order.ts
+        contains: "  readonly total: number;\n  customer: { name: string; table: number };\n};\n\nexport type PaidReceipt = Readonly<Receipt>;\n//          ^?\n"
+      - id: expect-file-order-param
+        type: expect.file
+        at: { afterAction: expect-file-order }
+        path: src/order.ts
+        contains: "export function printList(title: string, items: readonly string[]) {"
+      - id: expect-file-main-sizes
+        type: expect.file
+        at: { afterAction: expect-file-order-param }
+        path: src/main.ts
+        contains: "let chosenSize: CupSize = \"small\";\n//  ^?\n"
+      - id: expect-file-main-order
+        type: expect.file
+        at: { afterAction: expect-file-main-sizes }
+        path: src/main.ts
+        contains: 'const teaOrder: Drink = { item: "လက်ဖက်ရည်", size: "large" };'
+      - id: expect-file-main-lists
+        type: expect.file
+        at: { afterAction: expect-file-main-order }
+        path: src/main.ts
+        contains: "// receipt.total = 0;"
+      - id: expect-file-main-push
+        type: expect.file
+        at: { afterAction: expect-file-main-lists }
+        path: src/main.ts
+        contains: "const specials: ReadonlyArray<string> = [\"မုန့်ဟင်းခါး\"];\n// specials.push(\"ပလာတာ\");"
+checks:
+  - { type: timing.p95Ms, max: 300 }
