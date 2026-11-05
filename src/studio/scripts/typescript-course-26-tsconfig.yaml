@@ -1,0 +1,1688 @@
+# TypeScript course, lesson 26: configuring TypeScript with tsconfig.json (Burmese).
+#
+# Start state (ws/): tsconfig.json with module preserve, noEmit, strict, skipLibCheck and
+# moduleDetection force, and no target (TypeScript 6/7 then default to the newest ES version).
+# src/orders.ts exports `type Order` and an `orders` array; src/main.ts imports both in one plain
+# import, uses `??`, `.at(-1)` and `?.`, and passes `orders[0]` to a function that takes an Order.
+# The panel shows Errors, the JavaScript output of main.ts (data-js), Types and Output.
+# Start: 0 errors; the JS output is the source minus types (Order dropped from the import).
+#
+# Edits, all insert-only (tsconfig edits are single block inserts, one reload each):
+#   1. tsconfig: "target": "es5" -> JS output rewritten (var, ?? and ?. expanded, .at untouched),
+#      TS5107 (es5 deprecated, stops working in TS 7) + TS2550 ('at' missing: lib follows target).
+#   2. tsconfig: "target": "es2022" above, `// ` on the es5 line -> 0 errors, modern JS output.
+#   3. tsconfig: "noUncheckedIndexedAccess": true -> TS2345 at orderLine(first).
+#   4. main.ts: `//    ^?` under `first` -> const first: Order | undefined; `if (first) ` -> 0 errors.
+#   5. tsconfig: "verbatimModuleSyntax": true -> TS1484, JS output keeps `Order` in the import.
+#   6. main.ts: `type ` before Order -> 0 errors, JS output drops it again.
+# Boards: (A) what tsconfig answers; (B) who emits JavaScript (tsc: NodeNext, outDir, sourceMap,
+# declaration, declarationMap / bundler: preserve + noEmit; jsx); (C) several configs.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-26-tsconfig.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-26-tsconfig
+  title: "TypeScript course 26: tsconfig ကို ပြင်ဆင်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors js types output" data-js="src/main.ts"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { Order, orders } from "./orders";
+
+        function orderLine(order: Order) {
+          const note = order.note ?? "မှတ်ချက် မရှိ";
+          return order.item + " · " + note;
+        }
+
+        const first = orders[0];
+        console.log(orderLine(first));
+        console.log(orders.at(-1)?.item);
+      src/orders.ts: |
+        export type Order = {
+          item: string;
+          price: number;
+          note?: string;
+        };
+
+        export const orders: Order[] = [
+          { item: "လက်ဖက်ရည်", price: 1500 },
+          { item: "ကော်ဖီ", price: 1800, note: "သကြား နည်းနည်း" },
+        ];
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "module": "preserve",
+            "noEmit": true,
+            "strict": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: the three questions a tsconfig answers.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "tsconfig.json က ဘာ ဖြေပေးလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-files-q,
+        kind: text,
+        x: 280,
+        y: 245,
+        width: 700,
+        height: 36,
+        text: "① ဘယ် ဖိုင်တွေကို စစ်မလဲ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-files-a,
+        kind: text,
+        x: 330,
+        y: 288,
+        width: 600,
+        height: 36,
+        text: 'include: ["src"]',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-strict-q,
+        kind: text,
+        x: 280,
+        y: 355,
+        width: 700,
+        height: 36,
+        text: "② ဘယ်လောက် တင်းကျပ်ကျပ် စစ်မလဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-strict-a,
+        kind: text,
+        x: 330,
+        y: 398,
+        width: 600,
+        height: 36,
+        text: "strict · noUncheckedIndexedAccess",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-emit-q,
+        kind: text,
+        x: 280,
+        y: 465,
+        width: 760,
+        height: 36,
+        text: "③ ဘယ်လို JavaScript ကို ဘယ်သူ ထုတ်မလဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-emit-a,
+        kind: text,
+        x: 330,
+        y: 508,
+        width: 600,
+        height: 36,
+        text: "target · module · noEmit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: who turns the TypeScript into JavaScript.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 700,
+        height: 50,
+        text: "JavaScript ကို ဘယ်သူ ထုတ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-tsc-box,
+        kind: rectangle,
+        x: 260,
+        y: 230,
+        width: 410,
+        height: 310,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-tsc-name,
+        kind: text,
+        x: 280,
+        y: 245,
+        width: 370,
+        height: 36,
+        text: "tsc က ထုတ် · Node.js",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-tsc-module,
+        kind: text,
+        x: 280,
+        y: 295,
+        width: 370,
+        height: 36,
+        text: "module: NodeNext",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-tsc-ext,
+        kind: text,
+        x: 280,
+        y: 338,
+        width: 370,
+        height: 36,
+        text: 'import "./orders.js"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-tsc-out,
+        kind: text,
+        x: 280,
+        y: 381,
+        width: 370,
+        height: 36,
+        text: "outDir · sourceMap",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-tsc-lib,
+        kind: text,
+        x: 280,
+        y: 440,
+        width: 370,
+        height: 36,
+        text: "library → declaration",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-tsc-map,
+        kind: text,
+        x: 280,
+        y: 483,
+        width: 370,
+        height: 36,
+        text: "declarationMap",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-bundler-box,
+        kind: rectangle,
+        x: 690,
+        y: 230,
+        width: 400,
+        height: 310,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-bundler-name,
+        kind: text,
+        x: 710,
+        y: 245,
+        width: 360,
+        height: 36,
+        text: "bundler (Vite) က ထုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-bundler-module,
+        kind: text,
+        x: 710,
+        y: 295,
+        width: 360,
+        height: 36,
+        text: "module: preserve",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-bundler-noemit,
+        kind: text,
+        x: 710,
+        y: 338,
+        width: 360,
+        height: 36,
+        text: "noEmit: true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-bundler-here,
+        kind: text,
+        x: 710,
+        y: 440,
+        width: 360,
+        height: 36,
+        text: "ဒီ project ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-jsx,
+        kind: text,
+        x: 280,
+        y: 575,
+        width: 700,
+        height: 36,
+        text: "jsx: preserve · react-jsx",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board C: several configs in one repository.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 700,
+        height: 50,
+        text: "Config ဖိုင် တစ်ခုထက် ပိုရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-base-box,
+        kind: rectangle,
+        x: 360,
+        y: 228,
+        width: 350,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-base,
+        kind: text,
+        x: 380,
+        y: 245,
+        width: 320,
+        height: 36,
+        text: "tsconfig.base.json",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 410,
+        y: 303,
+        width: 40,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 620,
+        y: 303,
+        width: 40,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-extends,
+        kind: text,
+        x: 470,
+        y: 310,
+        width: 130,
+        height: 36,
+        text: "extends",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-client-box,
+        kind: rectangle,
+        x: 300,
+        y: 360,
+        width: 250,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-client,
+        kind: text,
+        x: 320,
+        y: 372,
+        width: 210,
+        height: 36,
+        text: "client/",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-client-file,
+        kind: text,
+        x: 320,
+        y: 412,
+        width: 225,
+        height: 36,
+        text: "tsconfig.json",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-server-box,
+        kind: rectangle,
+        x: 570,
+        y: 360,
+        width: 250,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-server,
+        kind: text,
+        x: 590,
+        y: 372,
+        width: 210,
+        height: 36,
+        text: "server/",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-server-file,
+        kind: text,
+        x: 590,
+        y: 412,
+        width: 225,
+        height: 36,
+        text: "tsconfig.json",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-nearest,
+        kind: text,
+        x: 280,
+        y: 490,
+        width: 780,
+        height: 36,
+        text: "editor → ဖိုင်နဲ့ အနီးဆုံး tsconfig.json",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-project,
+        kind: text,
+        x: 280,
+        y: 538,
+        width: 780,
+        height: 36,
+        text: "tsc --project server/tsconfig.json",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-references,
+        kind: text,
+        x: 280,
+        y: 586,
+        width: 780,
+        height: 36,
+        text: "references + composite → tsc --build",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3126
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "tsconfig ဆိုတာ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ module နဲ့ script ကွာပုံ၊ declaration file တွေ ဘယ်က လာလဲ ဆိုတာ
+      ကြည့်ခဲ့ပြီး၊ tsconfig မှာ option နှစ်ခု ထည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ tsconfig ဖိုင်ကို အသေးစိတ်
+      ကြည့်ပြီး၊ project အများစုမှာ သုံးလို့ရတဲ့ config တစ်ခုရဲ့ line တစ်ကြောင်းချင်းကို ဘာကြောင့် ထည့်လဲ
+      ဆိုတာ နားလည်အောင် လုပ်ကြည့်ပါမယ်။ [[mark:draw-files]] tsconfig က TypeScript အတွက် မေးခွန်း
+      သုံးခုကို ဖြေပေးပါတယ်။ ပထမက ဘယ် ဖိုင်တွေကို စစ်မလဲ ဆိုတာပါ။ include မှာ folder ကို ရေးပေးရပြီး၊ အဲဒီ
+      path ကို tsconfig ဖိုင် ရှိတဲ့ folder ကနေ စတွက်ပါတယ်။ [[mark:draw-strict]] ဒုတိယက ဘယ်လောက် တင်းကျပ်ကျပ် စစ်မလဲ ဆိုတာပါ။
+      strict လို option တွေက ဘယ်လို code ကို error အဖြစ် ပြမလဲ ဆုံးဖြတ်ပါတယ်။ [[mark:draw-emit]] တတိယက
+      ဘယ်လို JavaScript ကို ဘယ်သူ ထုတ်မလဲ ဆိုတာပါ။ ဘယ် JavaScript version အတွက် ထုတ်မလဲ၊ import export
+      တွေကို ဘယ်လို ထားမလဲ၊ TypeScript ကိုယ်တိုင် ဖိုင် ထုတ်မလား ဆိုတာတွေကို ဒီမှာ ရွေးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: Configuring TypeScript",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: What is a tsconfig.json",
+          url: "https://www.typescriptlang.org/docs/handbook/tsconfig-json.html",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-files
+        type: whiteboard.apply
+        at: { mark: draw-files }
+        upsertIds: [a-files-q, a-files-a]
+        drawMs: 1600
+      - id: draw-strict
+        type: whiteboard.apply
+        at: { mark: draw-strict }
+        upsertIds: [a-strict-q, a-strict-a]
+        drawMs: 1800
+      - id: draw-emit
+        type: whiteboard.apply
+        at: { mark: draw-emit }
+        upsertIds: [a-emit-q, a-emit-a]
+        drawMs: 1800
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီ project ရဲ့ tsconfig ကို ကြည့်ရအောင်။ [[mark:open-tsconfig]] ဒါက tsconfig
+      ဖိုင်ပါ။ [[mark:select-include]] include က src folder ထဲက ဖိုင်တွေကို စစ်ခိုင်းထားပါတယ်။
+      [[mark:select-module]] module ကို preserve ထားပြီး no emit ကို ဖွင့်ထားပါတယ်။ ဆိုလိုတာက import export တွေကို
+      ရေးထားတဲ့ အတိုင်း ချန်ထားပြီး၊ JavaScript ထုတ်တဲ့ အလုပ်ကို TypeScript မလုပ်ဘဲ Vite ကို လွှဲထားတာပါ။ [[mark:select-strict]] strict ကတော့ TypeScript ၆ ကစပြီး မရေးထားရင်တောင် ဖွင့်ပြီးသားပါ။
+      ဒါပေမဲ့ ရေးထားတော့ ဖတ်တဲ့သူ ချက်ချင်း သိပါတယ်။ [[mark:select-skip]] အောက်က နှစ်ခုကတော့ ပြီးခဲ့တဲ့
+      lesson မှာ ထည့်ခဲ့တဲ့ skip lib check နဲ့ module detection ပါ။ target ကိုတော့ မရေးထားပါဘူး။
+      [[mark:open-main]] main ဖိုင်က orders ဖိုင်ထဲက Order type နဲ့ အော်ဒါ စာရင်းကို import လုပ်ပါတယ်။
+      [[mark:select-nullish]] function ထဲမှာ မှတ်ချက် မရှိရင် default စာသား ပေးဖို့ nullish coalescing
+      operator ကို သုံးထားပြီး၊ [[mark:select-at]] အောက်ဆုံးမှာ နောက်ဆုံး အော်ဒါကို ယူတဲ့ at method နဲ့
+      optional chaining ကို သုံးထားပါတယ်။ ဒါတွေက JavaScript ရဲ့ နောက်ပိုင်း version တွေမှာမှ ပါလာတာပါ။
+    sources:
+      - {
+          title: "TSConfig reference: include",
+          url: "https://www.typescriptlang.org/tsconfig/#include",
+        }
+      - {
+          title: "Announcing TypeScript 6.0 (strict on by default, target defaults to the newest ES version)",
+          url: "https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/",
+        }
+      - {
+          title: "MDN: Array.prototype.at()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-tsconfig
+        type: workspace.openFile
+        at: { mark: open-tsconfig }
+        path: tsconfig.json
+      - id: select-include
+        type: editor.select
+        at: { mark: select-include }
+        target: { file: tsconfig.json, text: '"include": ["src"]', occurrence: 1 }
+      - id: select-module
+        type: editor.select
+        at: { mark: select-module }
+        target:
+          {
+            file: tsconfig.json,
+            text: "\"module\": \"preserve\",\n    \"noEmit\": true,",
+            occurrence: 1,
+          }
+      - id: select-strict
+        type: editor.select
+        at: { mark: select-strict }
+        target: { file: tsconfig.json, text: '"strict": true,', occurrence: 1 }
+      - id: select-skip
+        type: editor.select
+        at: { mark: select-skip }
+        target:
+          {
+            file: tsconfig.json,
+            text: "\"skipLibCheck\": true,\n    \"moduleDetection\": \"force\"",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-nullish
+        type: editor.select
+        at: { mark: select-nullish }
+        target: { file: src/main.ts, text: 'order.note ?? "မှတ်ချက် မရှိ"', occurrence: 1 }
+      - id: select-at
+        type: editor.select
+        at: { mark: select-at }
+        target: { file: src/main.ts, text: "orders.at(-1)?.item", occurrence: 1 }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] panel မှာ error မရှိပါဘူး။ Output မှာ ပထမ အော်ဒါက လက်ဖက်ရည်၊ မှတ်ချက် မရှိ ဆိုတာနဲ့၊
+      နောက်ဆုံး အော်ဒါက ကော်ဖီ ဆိုတာ ထွက်နေပါတယ်။ [[mark:read-js]] ဒီ lesson မှာ အဓိက ကြည့်မှာက JavaScript
+      output ပါ။ ဒီ tsconfig ရဲ့ setting တွေနဲ့ main ဖိုင်ကို JavaScript ပြောင်းရင် ဘာ ထွက်လာမလဲ ဆိုတာ ပြပါတယ်။ type တွေ
+      ပျောက်သွားတာကလွဲရင် ကိုယ် ရေးထားတဲ့ code အတိုင်းပါပဲ။ target မရေးထားရင် TypeScript ၆ နဲ့ ၇ က အသစ်ဆုံး
+      JavaScript version ကို ယူလို့ပါ။ [[mark:read-import]] import line မှာ Order type မပါတော့တာကိုလည်း
+      သတိထား ကြည့်ပါ။ type ဖြစ်လို့ TypeScript က ဖယ်ထုတ်ပေးလိုက်တာပါ။ ဒါကို နောက်မှ ပြန်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "TSConfig reference: target",
+          url: "https://www.typescriptlang.org/tsconfig/#target",
+        }
+      - {
+          title: "Announcing TypeScript 6.0 (target defaults to the newest ES version)",
+          url: "https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-clean
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-start-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-out-first
+        type: expect.preview
+        at: { afterAction: expect-start-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည် · မှတ်ချက် မရှိ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-out-last
+        type: expect.preview
+        at: { afterAction: expect-out-first }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "ကော်ဖီ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-js-modern
+        type: expect.preview
+        at: { mark: read-js }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "console.log(orders.at(-1)?.item);"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-js-import-elided
+        type: expect.preview
+        at: { mark: read-import }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'import { orders } from "./orders";'
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: target
+    chapter: "target နဲ့ polyfill"
+    narration: >
+      [[mark:open-tsconfig-2]] target ပြောင်းရင် ဘာ ဖြစ်မလဲ ကြည့်ရအောင်။ [[mark:type-es5]] project အဟောင်းတွေမှာ
+      တွေ့ရတတ်တဲ့ ES ၅ ကို target အဖြစ် ထည့်ကြည့်ပါမယ်။ [[mark:read-es5-js]] JavaScript output က တော်တော်
+      ပြောင်းသွားပါပြီ။ const တွေ var ဖြစ်သွားပြီး၊ nullish coalescing operator နဲ့ optional chaining
+      က ES ၅ မှာ မရှိလို့၊ null နဲ့ undefined ကို စစ်တဲ့ ရှည်ရှည် code အဖြစ် ပြန်ရေးထားပါတယ်။ target က
+      syntax ကို ဒီလို ပြောင်းပေးတာပါ။ [[mark:read-at]] ဒါပေမဲ့ at method ကို ခေါ်တဲ့ နေရာကတော့ မပြောင်းပါဘူး။
+      at က syntax မဟုတ်ဘဲ array မှာ ရှိရမယ့် method ဖြစ်လို့၊ မရှိတဲ့ browser အတွက် အဲဒီ method ကို ဖြည့်ရေးပေးမယ့်
+      polyfill ဆိုတဲ့ code ကို TypeScript က ထည့်မပေးပါဘူး။ အဲဒီအစား ဒုတိယ error က array မှာ at မရှိဘူး၊ lib ကို ပြောင်းဖို့ လိုမလားလို့
+      ပြောနေပါတယ်။ lib ကို မရေးထားရင် target ကို လိုက်လို့ပါ။ [[mark:read-deprecated]] ပထမ error ကတော့ tsconfig ထဲက
+      error ပါ။ ES ၅ target ကို deprecated လုပ်ထားပြီး TypeScript ၇ မှာ အလုပ် မလုပ်တော့ဘူးလို့ ပြောနေပါတယ်။
+      TypeScript ၆ မှာ ignore deprecations option နဲ့ ခဏ ပိတ်ထားလို့ ရပေမယ့်၊ TypeScript ၇ မှာတော့ ဒီလို
+      option တွေက ပြင်မှ ရမယ့် error တွေ ဖြစ်သွားပါပြီ။ base url နဲ့ module resolution node တို့လည်း ဒီ
+      အုပ်စုထဲ ပါပါတယ်။ [[mark:type-es2022]] ဒါကြောင့် ES ၅ line ကို comment လုပ်ပြီး target ကို ES ၂၀၂၂
+      လို့ ထားပါမယ်။ [[mark:read-es2022]] error နှစ်ခုလုံး ပျောက်ပြီး JavaScript output လည်း မူလအတိုင်း ပြန်ဖြစ်သွားပါပြီ။
+      target ကို ကိုယ့် code run မယ့် browser ဒါမှမဟုတ် Node.js က support လုပ်တဲ့ version အထိ ထားပါ။ default ကို
+      မမှီခိုဘဲ ရေးထားတော့ TypeScript version တက်တဲ့အခါ output မပြောင်းသွားပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: target, target doesn't polyfill",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+      - {
+          title: "TSConfig reference: target",
+          url: "https://www.typescriptlang.org/tsconfig/#target",
+        }
+      - { title: "TSConfig reference: lib", url: "https://www.typescriptlang.org/tsconfig/#lib" }
+      - {
+          title: "Announcing TypeScript 6.0 (deprecations: target es5, baseUrl, moduleResolution node; ignoreDeprecations)",
+          url: "https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/",
+        }
+      - {
+          title: "Announcing TypeScript 7.0 (6.0 deprecations are hard errors)",
+          url: "https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/",
+        }
+    actions:
+      - id: open-tsconfig-2
+        type: workspace.openFile
+        at: { mark: open-tsconfig-2 }
+        path: tsconfig.json
+      - id: type-es5
+        type: editor.type
+        at: { mark: type-es5 }
+        target: { file: tsconfig.json, after: "\"compilerOptions\": {\n", occurrence: 1 }
+        text: "    \"target\": \"es5\",\n"
+        cadence: block
+      - id: expect-es5-errors
+        type: expect.preview
+        at: { afterAction: type-es5 }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-es5-js
+        type: expect.preview
+        at: { afterAction: expect-es5-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'var note = (_a = order.note) !== null && _a !== void 0 ? _a : "မှတ်ချက် မရှိ";'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-es5-at
+        type: expect.preview
+        at: { mark: read-at }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "(_a = orders.at(-1)) === null"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-es5-lib
+        type: expect.preview
+        at: { afterAction: expect-es5-at }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        textContains: "Property 'at' does not exist on type 'Order[]'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-es5-deprecated
+        type: expect.preview
+        at: { mark: read-deprecated }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Option 'target=ES5' is deprecated and will stop functioning in TypeScript 7.0."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-es5-deprecated-file
+        type: expect.preview
+        at: { afterAction: expect-es5-deprecated }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-file, value: "tsconfig.json" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-es2022
+        type: editor.type
+        at: { mark: type-es2022 }
+        target: { file: tsconfig.json, after: "\"compilerOptions\": {\n    ", occurrence: 1 }
+        text: "\"target\": \"es2022\",\n    // "
+        cadence: block
+      - id: expect-es2022-clean
+        type: expect.preview
+        at: { afterAction: type-es2022 }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-es2022-js
+        type: expect.preview
+        at: { afterAction: expect-es2022-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'const note = order.note ?? "မှတ်ချက် မရှိ";'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: strictness
+    chapter: "Index နဲ့ ယူရင် undefined ဖြစ်နိုင်တယ်"
+    narration: >
+      strict တစ်ခုတည်းက null နဲ့ undefined ကို သေချာ စစ်တာ၊ parameter မှာ type မပါရင်
+      error ပြတာ စတဲ့ စစ်ဆေးမှု တစ်စုကို ဖွင့်ပေးပါတယ်။ strict ထဲမှာ မပါပေမယ့် ထည့်သင့်တဲ့ option တစ်ခု
+      ရှိပါသေးတယ်။ [[mark:type-nuia]] no unchecked indexed access ကို ထည့်ပါမယ်။ [[mark:read-nuia]] error
+      တစ်ခု ပေါ်လာပါပြီ။ ပထမ အော်ဒါကို function ထဲ ပို့တဲ့ နေရာမှာ၊ undefined ဖြစ်နိုင်တဲ့ တန်ဖိုးကို Order
+      နေရာမှာ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ [[mark:type-query-first]] ပထမ အော်ဒါရဲ့ type ကို query comment
+      နဲ့ ကြည့်ရအောင်။ [[mark:read-query-first]] Order ဒါမှမဟုတ် undefined လို့ ပြနေပါတယ်။ array ထဲမှာ အော်ဒါ
+      မရှိရင် index နဲ့ ယူတဲ့ တန်ဖိုးက undefined ဖြစ်မှာမို့၊ ဒီ option က အဲဒါကို type ထဲမှာ ထည့်ပြပေးတာပါ။
+      [[mark:type-guard]] ဒါကြောင့် ပထမ အော်ဒါ ရှိမှပဲ ထုတ်ပြဖို့ if စစ်ချက် ထည့်ပါမယ်။ [[mark:read-guard]]
+      error ပျောက်သွားပါပြီ။ code နည်းနည်း ပိုရေးရပေမယ့်၊ array ရဲ့ အဆုံးကို ကျော်ပြီး ယူမိတဲ့ bug တွေကို run
+      မတိုင်ခင် ဖမ်းပေးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: strict, noUncheckedIndexedAccess",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+      - {
+          title: "TSConfig reference: strict",
+          url: "https://www.typescriptlang.org/tsconfig/#strict",
+        }
+      - {
+          title: "TSConfig reference: noUncheckedIndexedAccess",
+          url: "https://www.typescriptlang.org/tsconfig/#noUncheckedIndexedAccess",
+        }
+    actions:
+      - id: type-nuia
+        type: editor.type
+        at: { mark: type-nuia }
+        target: { file: tsconfig.json, after: "\"strict\": true,\n", occurrence: 1 }
+        text: "    \"noUncheckedIndexedAccess\": true,\n"
+        cadence: block
+      - id: expect-nuia-one
+        type: expect.preview
+        at: { afterAction: type-nuia }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-nuia-message
+        type: expect.preview
+        at: { afterAction: expect-nuia-one }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Argument of type 'Order | undefined' is not assignable to parameter of type 'Order'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: open-main-2
+        type: workspace.openFile
+        at: { mark: type-query-first }
+        path: src/main.ts
+      - id: type-query-first
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: src/main.ts, after: "const first = orders[0];\n", occurrence: 1 }
+        text: "//    ^?\n"
+        cadence: fast-explainer
+      - id: expect-query-first
+        type: expect.preview
+        at: { afterAction: type-query-first }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "const first: Order | undefined" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-guard
+        type: editor.type
+        at: { mark: type-guard }
+        target: { file: src/main.ts, after: "//    ^?\n", occurrence: 1 }
+        text: "if (first) "
+      - id: expect-guard-clean
+        type: expect.preview
+        at: { afterAction: type-guard }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: verbatim
+    chapter: "verbatimModuleSyntax နဲ့ import type"
+    narration: >
+      Vite လို tool တွေက ဖိုင် တစ်ဖိုင်ချင်းစီကို တခြား ဖိုင်တွေ မကြည့်ဘဲ JavaScript
+      ပြောင်းပါတယ်။ ဒါကြောင့် ဖိုင် တစ်ဖိုင်တည်း ကြည့်ပြီး ပြောင်းလို့ မရတဲ့ code ကို isolated modules option
+      က error ပြပေးပါတယ်။ verbatim module syntax option က ဒါကို အလိုလို ဖွင့်ပေးပြီး၊ import တွေကိုပါ
+      ပိုရှင်းအောင် ရေးခိုင်းပါတယ်။ [[mark:type-verbatim]] verbatim module syntax ကို ထည့်ကြည့်ပါမယ်။
+      [[mark:read-verbatim]] Order က type ဖြစ်လို့ type only import နဲ့ import လုပ်ရမယ် ဆိုတဲ့ error
+      ပေါ်လာပါပြီ။ JavaScript output ကိုလည်း ကြည့်ပါ။ ခုနက ဖယ်ထုတ်ပေးခဲ့တဲ့ Order က import line ထဲမှာ
+      ပြန်ပါလာပါပြီ။ ဒီ option က import export ကို ရေးထားတဲ့ အတိုင်း ချန်ထားလို့ပါ။ orders ဖိုင်က Order
+      ဆိုတဲ့ တန်ဖိုးကို export မလုပ်တဲ့အတွက်၊ ဒီ JavaScript ကို browser မှာ run ရင် error တက်မှာပါ။
+      [[mark:type-type]] ဒါကြောင့် Order ရဲ့ ရှေ့မှာ type ဆိုတဲ့ စကားလုံး ထည့်ပေးပါမယ်။ [[mark:read-type]]
+      error ပျောက်ပြီး JavaScript output ထဲက Order လည်း ပျောက်သွားပါပြီ။ type လို့ ရေးထားတဲ့ import ကိုပဲ
+      ဖယ်တာ ဖြစ်လို့၊ ဘယ်ဟာ ဖယ်မလဲ ဆိုတာ code ကို ကြည့်ရုံနဲ့ သိနိုင်ပါတယ်။ import တစ်ကြောင်းလုံး type
+      တွေပဲ ဆိုရင်တော့ import type လို့ ရှေ့ဆုံးမှာ ရေးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: isolatedModules, import type, verbatimModuleSyntax",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+      - {
+          title: "TSConfig reference: verbatimModuleSyntax",
+          url: "https://www.typescriptlang.org/tsconfig/#verbatimModuleSyntax",
+        }
+      - {
+          title: "TSConfig reference: isolatedModules (default true with verbatimModuleSyntax)",
+          url: "https://www.typescriptlang.org/tsconfig/#isolatedModules",
+        }
+    actions:
+      - id: open-tsconfig-3
+        type: workspace.openFile
+        at: { mark: type-verbatim }
+        path: tsconfig.json
+      - id: type-verbatim
+        type: editor.type
+        at: { afterAction: open-tsconfig-3 }
+        target: { file: tsconfig.json, after: "\"skipLibCheck\": true,\n", occurrence: 1 }
+        text: "    \"verbatimModuleSyntax\": true,\n"
+        cadence: block
+      - id: expect-verbatim-one
+        type: expect.preview
+        at: { afterAction: type-verbatim }
+        timeoutMs: 10000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 800 }
+      - id: expect-verbatim-code
+        type: expect.preview
+        at: { afterAction: expect-verbatim-one }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "1484" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-verbatim-js
+        type: expect.preview
+        at: { afterAction: expect-verbatim-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'import { Order, orders } from "./orders";'
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: open-main-3
+        type: workspace.openFile
+        at: { mark: type-type }
+        path: src/main.ts
+      - id: type-type
+        type: editor.type
+        at: { afterAction: open-main-3 }
+        target: { file: src/main.ts, after: "import { ", occurrence: 1 }
+        text: "type "
+      - id: expect-type-clean
+        type: expect.preview
+        at: { afterAction: type-type }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-type-js
+        type: expect.preview
+        at: { afterAction: expect-type-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'import { orders } from "./orders";'
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: who-emits
+    chapter: "JavaScript ကို ဘယ်သူ ထုတ်မလဲ"
+    narration: >
+      [[mark:board-emit]] module option မှာ အဓိက ရွေးစရာ နှစ်ခု ရှိပြီး၊ JavaScript ကို ဘယ်သူ ထုတ်မလဲ
+      ဆိုတာကို ကြည့်ပြီး ရွေးရပါတယ်။ [[mark:draw-tsc]] tsc ကိုယ်တိုင် JavaScript ထုတ်ပြီး Node.js မှာ run မယ်ဆိုရင်
+      module ကို NodeNext ထားပါ။ NodeNext က Node.js ရဲ့ ES module စည်းကမ်းအတိုင်း စစ်လို့၊ ကိုယ့် ဖိုင်တွေကို import
+      လုပ်တဲ့အခါ dot js extension ထည့်ရေးရပါတယ်။ ထွက်လာတဲ့ ဖိုင်တွေကို out dir နဲ့ folder တစ်ခုထဲ စုထားပြီး၊
+      source map ဖွင့်ထားရင် error တက်တဲ့အခါ TypeScript ဖိုင်ထဲက line ကို ပြန်ညွှန်ပြနိုင်ပါတယ်။
+      [[mark:draw-library]] library ထုတ်မယ်ဆိုရင် declaration ကို ဖွင့်ပြီး ပြီးခဲ့တဲ့ lesson က declaration file
+      တွေကို ထုတ်ခိုင်းပါ။ declaration map ကလည်း Go to Definition ကို declaration file အစား မူရင်း TypeScript
+      ဖိုင်ဆီ ခေါ်သွားပေးပါတယ်။ [[mark:draw-bundler]] Vite လို bundler က JavaScript ထုတ်ပေးမယ် ဆိုရင်တော့
+      ဒီ project လိုပဲ module ကို preserve ထားပြီး no emit ကို ဖွင့်ပါ။ import path တွေကို bundler က ရှာပေးလို့
+      extension ထည့်စရာ မလိုပါဘူး။ [[mark:draw-jsx]] React လို JSX ရေးမယ်ဆိုရင် jsx option ကိုလည်း
+      ထည့်ရပါတယ်။ preserve ဆိုရင် JSX ကို အတိုင်း ချန်ထားပြီး၊ react jsx ဆိုရင် JavaScript function ခေါ်တာ
+      အဖြစ် ပြောင်းပေးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: The two choices for module; noEmit; source maps; transpiling for library use; jsx",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+      - {
+          title: "TSConfig reference: module (preserve, nodenext)",
+          url: "https://www.typescriptlang.org/tsconfig/#module",
+        }
+      - {
+          title: "TSConfig reference: declaration, declarationMap, outDir, sourceMap",
+          url: "https://www.typescriptlang.org/tsconfig/#declaration",
+        }
+      - { title: "TSConfig reference: jsx", url: "https://www.typescriptlang.org/tsconfig/#jsx" }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-emit }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-tsc
+        type: whiteboard.apply
+        at: { mark: draw-tsc }
+        upsertIds: [b-tsc-box, b-tsc-name, b-tsc-module, b-tsc-ext, b-tsc-out]
+        drawMs: 3000
+      - id: draw-library
+        type: whiteboard.apply
+        at: { mark: draw-library }
+        upsertIds: [b-tsc-lib, b-tsc-map]
+        drawMs: 1600
+      - id: draw-bundler
+        type: whiteboard.apply
+        at: { mark: draw-bundler }
+        upsertIds:
+          [b-bundler-box, b-bundler-name, b-bundler-module, b-bundler-noemit, b-bundler-here]
+        drawMs: 2800
+      - id: draw-jsx
+        type: whiteboard.apply
+        at: { mark: draw-jsx }
+        upsertIds: [b-jsx]
+        drawMs: 1200
+
+  - id: many-configs
+    chapter: "Config ဖိုင် တစ်ခုထက် ပိုရင်"
+    narration: >
+      [[mark:board-configs]] project ကြီးလာရင် client နဲ့ server လို အပိုင်းတွေအတွက် setting မတူတဲ့ config
+      ဖိုင်တွေ လိုလာတတ်ပါတယ်။ [[mark:draw-tree]] တူတဲ့ setting တွေကို base ဖိုင် တစ်ခုထဲ စုထားပြီး၊ ကျန်တဲ့
+      config တွေက extends နဲ့ အဲဒီ setting တွေကို ယူသုံးပြီး ကိုယ်ပိုင် setting ထပ်ထည့်နိုင်ပါတယ်။
+      [[mark:draw-nearest]] VS Code က ဖိုင် တစ်ဖိုင်ကို စစ်တဲ့အခါ အဲဒီ ဖိုင်နဲ့ အနီးဆုံး tsconfig ကို သုံးပါတယ်။
+      [[mark:draw-project]] command line မှာတော့ tsc ကို project option နဲ့ run ပြီး ဘယ် config ကို သုံးမလဲ
+      ရွေးပေးနိုင်ပါတယ်။ [[mark:draw-references]] config တွေ များလာရင် root config ထဲမှာ references နဲ့
+      စာရင်းလုပ်ပြီး၊ အပိုင်း တစ်ခုချင်းမှာ composite ကို ဖွင့်ထားရင်၊ tsc ရဲ့ build mode က အားလုံးကို အစဉ်လိုက်
+      တစ်ခါတည်း build လုပ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: Managing multiple TypeScript configurations",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+      - {
+          title: "TSConfig reference: extends",
+          url: "https://www.typescriptlang.org/tsconfig/#extends",
+        }
+      - {
+          title: "TypeScript Handbook: Project References",
+          url: "https://www.typescriptlang.org/docs/handbook/project-references.html",
+        }
+    actions:
+      - id: open-board-c
+        type: whiteboard.apply
+        at: { mark: board-configs }
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-tree
+        type: whiteboard.apply
+        at: { mark: draw-tree }
+        upsertIds:
+          [
+            c-base-box,
+            c-base,
+            c-arrow-1,
+            c-arrow-2,
+            c-extends,
+            c-client-box,
+            c-client,
+            c-client-file,
+            c-server-box,
+            c-server,
+            c-server-file,
+          ]
+        drawMs: 4000
+      - id: draw-nearest
+        type: whiteboard.apply
+        at: { mark: draw-nearest }
+        upsertIds: [c-nearest]
+        drawMs: 1200
+      - id: draw-project
+        type: whiteboard.apply
+        at: { mark: draw-project }
+        upsertIds: [c-project]
+        drawMs: 1200
+      - id: draw-references
+        type: whiteboard.apply
+        at: { mark: draw-references }
+        upsertIds: [c-references]
+        drawMs: 1200
+
+  - id: recap
+    narration: >
+      [[mark:close-board-c]] ဒါဆို ပြန်ချုပ်ရရင်၊ tsconfig က ဘယ် ဖိုင်တွေကို ဘယ်လောက် တင်းကျပ်ကျပ် စစ်ပြီး၊
+      ဘယ်လို JavaScript ထုတ်မလဲ ဆိုတာ သတ်မှတ်ပါတယ်။ [[mark:recap-config]] target က syntax ကိုပဲ ပြောင်းပေးပြီး
+      polyfill မထည့်ပေးပါဘူး။ no unchecked indexed access က index နဲ့ ယူတဲ့ တန်ဖိုး undefined ဖြစ်နိုင်တာကို
+      သတိပေးပြီး၊ verbatim module syntax က type import တွေကို type လို့ ရေးခိုင်းပါတယ်။ [[mark:recap-emit]]
+      JavaScript ကို tsc က ထုတ်ရင် module ကို NodeNext ထားပြီး၊ bundler က ထုတ်ရင် preserve နဲ့ no emit ကို
+      သုံးပါတယ်။ TypeScript ၇ မှာ deprecated option တွေ အလုပ် မလုပ်တော့တာကိုလည်း မှတ်ထားပါ။ နောက် lesson
+      မှာတော့ ကိုယ်ပိုင် type တွေကို ဒီဇိုင်းဆွဲတဲ့ အပိုင်းကို စပြီး၊ type parameter ပါတဲ့ generic type တွေကို
+      ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 14: Configuring TypeScript",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/configuring-typescript",
+        }
+    actions:
+      - id: close-board-c
+        type: whiteboard.apply
+        at: { mark: close-board-c }
+        open: false
+      - id: open-tsconfig-4
+        type: workspace.openFile
+        at: { mark: recap-config }
+        path: tsconfig.json
+      - id: select-final
+        type: editor.select
+        at: { afterAction: open-tsconfig-4 }
+        target: { file: tsconfig.json, text: '"target": "es2022",', occurrence: 1 }
+      - id: expect-file-tsconfig
+        type: expect.file
+        at: { afterAction: select-final }
+        path: tsconfig.json
+        contains: "    \"target\": \"es2022\",\n    // \"target\": \"es5\",\n    \"module\": \"preserve\",\n    \"noEmit\": true,\n    \"strict\": true,\n    \"noUncheckedIndexedAccess\": true,\n    \"skipLibCheck\": true,\n    \"verbatimModuleSyntax\": true,\n    \"moduleDetection\": \"force\"\n"
+      - id: expect-file-main
+        type: expect.file
+        at: { afterAction: expect-file-tsconfig }
+        path: src/main.ts
+        contains: 'import { type Order, orders } from "./orders";'
+      - id: expect-file-guard
+        type: expect.file
+        at: { afterAction: expect-file-main }
+        path: src/main.ts
+        contains: "const first = orders[0];\n//    ^?\nif (first) console.log(orderLine(first));"
+checks:
+  - { type: timing.p95Ms, max: 300 }
