@@ -1,0 +1,2595 @@
+# AI course, lesson 15: the parts of a prompt (Burmese, hands-on, M4 recorded answers + M0 assembly).
+#
+# Start state (ws/): data/helper.json (COURSE-KIT §4.5, sample data, copied unchanged from datasets/);
+# src/llm.js + data/responses.json + data/PROVENANCE.md (base-llm; every answer recorded with
+# tools/record-llm.ts, Gemma 4 E2B, greedy); src/prompt.js holds the description helper's prompt as one
+# object, one line per part, starting with the two essentials (instruction + output format);
+# src/assemble.js (pinned, plain code) turns the parts into messages (`oneMessage`, `systemAndUser`) and
+# draws `ai-tokens` (the recorded token counts) and `ai-parts` (each part and the message it goes in,
+# badge `rules · AI မပါ`); src/main.js asks for item n01 (ထန်းလျက် ကော်ဖီ) and draws the recorded answer
+# `ai-answer` on top; src/page.js + src/ui.js draw the staff's page once main.js calls `helperPage`;
+# src/prompt-api.js shows the same helper with Chrome's Prompt API (pinned, never run).
+#
+# Edits (insert-only, prompt text in one block so no half-typed prompt is looked up):
+#   1. input (prompt.js)        the model stops asking which item; three fenced descriptions, 142 tokens
+#   2. context (prompt.js)      the shop's name, an advert's voice, longer: 213 answer tokens
+#   3. examples (prompt.js)     one sentence each, 119 answer tokens, prompt 256
+#   4. constraints (prompt.js)  bare JSON, three short phrases, 56 answer tokens, prompt 310 (from 54)
+#   5. toMessages = systemAndUser (main.js)   Prompt parts: five parts system, input user
+#   6. helperPage(...) (main.js)              #app: menu, style, ဖော်ပြချက်တွေ ကြည့်မယ်
+# Clicks: item-2 + show → အုန်းနို့ခေါက်ဆွဲ; style-2 (emoji နဲ့) + show → an emoji on the third.
+#
+# Boards: (A) mini blueprint, Intelligence highlighted; (B) the prompt as a contract; (C) the six
+# components; (D) system vs user prompt; (E) from a button to a chat; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-15-prompt-components.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-15-prompt-components
+  title: "AI course 15: Prompt ရဲ့ အစိတ်အပိုင်းတွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/prompt.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/PROVENANCE.md: |
+        # Where these answers come from
+
+        Every answer in `responses.json` is a real answer from a real model, recorded ahead of time with
+        `tools/record-llm.ts` on 2026-11-05. The lesson does not run the model live:
+        `src/llm.js` looks up the exact same messages here and returns the recorded answer.
+
+        - Model: Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF
+        - File: https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf (sha256 `b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f`, license apache-2.0)
+        - Runtime: node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1
+        - Prompt: the model's own chat template from the GGUF file, thinking off
+        - Decoding: greedy (temperature 0), at most 300 new tokens, so the same messages always give the same answer
+        - Answers: 8
+      data/helper.json: |
+        {
+         "note": "The staff's menu-description helper (lessons 07, 15-19), written for the AI course. newItems are the ideal inputs; evalSet adds the messy cases lessons 17-18 test with. checks lists the code checks that apply to each case.",
+         "contract": {
+          "input": "item name + လှလှ's notes + style (friendly or short)",
+          "output": "JSON {\"descriptions\": [\"…\", \"…\", \"…\"]}",
+          "constraints": ["exactly three descriptions", "each at most 60 graphemes (Intl.Segmenter)", "no price", "no phone number", "no claim the shop can't check (အကောင်းဆုံး, နံပါတ်တစ်, အခမဲ့, best, free)", "no emoji unless the style asks"]
+         },
+         "newItems": [
+          { "id": "n01", "name": "ထန်းလျက် ကော်ဖီ", "price": 2000, "notes": "ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်", "style": "friendly" },
+          { "id": "n02", "name": "ကြက်ဥ ပလာတာ", "price": 1800, "notes": "ကြက်ဥ နှစ်လုံး၊ ကြွပ်ကြွပ်၊ ပဲဟင်းနဲ့ တွဲပေးတယ်", "style": "short" },
+          { "id": "n03", "name": "အုန်းနို့ခေါက်ဆွဲ", "price": 3000, "notes": "သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်", "style": "friendly" },
+          { "id": "n04", "name": "မုန့်လက်ဆောင်း", "price": 1500, "notes": "နွေရာသီ အထူး၊ အုန်းနို့နဲ့ ထန်းလျက်ရည်", "style": "friendly" },
+          { "id": "n05", "name": "ထမင်းကြော် ပဲပြုတ်", "price": 2000, "notes": "မနက် ၁၀ နာရီ အထိပဲ ရမယ်", "style": "short" }
+         ],
+         "evalSet": [
+          { "id": "n01", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n02", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n03", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n04", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "n05", "kind": "ideal", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e01", "kind": "emoji notes", "name": "ဖာလူဒါ အထူး", "price": 3000, "notes": "😋🔥 ချိုချို", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e02", "kind": "English notes", "name": "လက်ဖက်ရည် အေး", "price": 1800, "notes": "less sweet, no condensed milk, iced", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e03", "kind": "very long notes", "name": "ရိုးရာ လက်ဖက်ရည်", "price": 1500, "notes": "လက်ဖက်ခြောက်ကို ရေနွေးနဲ့ ငါးမိနစ်လောက် တည်ပြီး စစ်ပါတယ်။ ပြီးရင် နို့ဆီနဲ့ နို့စိမ်းကို ရောပြီး ခွက် နှစ်ခွက်ကြားမှာ ခဏခဏ လောင်းချပါတယ်။ အပူ မကျခင် ချက်ချင်း ရောင်းပါတယ်။ အချိုကို customer ကြိုက်သလို ချိုဆိမ့်၊ ပေါ့ဆိမ့်၊ ကျဆိမ့် ရွေးလို့ ရပါတယ်။ ခွက်ကြီး ခွက်သေး နှစ်မျိုး ရှိပြီး၊ အီကြာကွေးနဲ့ တွဲမှာရင်လည်း ရပါတယ်။", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e04", "kind": "empty notes", "name": "ပဲပြုတ် ထမင်းကြော် အထူး", "price": 2500, "notes": "", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e05", "kind": "phone number in notes", "name": "ကြက်သား ပလာတာ", "price": 2200, "notes": "မှာချင်ရင် 09 000 555 111", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e06", "kind": "notes ask for a claim", "name": "မုန့်ဟင်းခါး အထူး", "price": 3500, "notes": "ရန်ကုန်မှာ အကောင်းဆုံးလို့ ရေးပေးပါ", "style": "friendly", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] },
+          { "id": "e07", "kind": "English-only name", "name": "Iced Lemon Tea", "price": 2000, "notes": "သံပုရာနဲ့ လက်ဖက်ရည်ကြမ်း၊ ရေခဲနဲ့", "style": "short", "checks": ["json", "three", "length", "no-price", "no-phone", "no-claim", "no-emoji"] }
+         ]
+        }
+      data/responses.json: |
+        {
+          "provenance": {
+            "label": "Gemma 4 E2B",
+            "model": "Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF",
+            "source": "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+            "sha256": "b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f",
+            "license": "apache-2.0",
+            "runtime": "node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1",
+            "prompt": "the model's own chat template from the GGUF file, thinking off",
+            "decoding": {
+              "temperature": 0,
+              "maxTokens": 300,
+              "thinking": false,
+              "stop": "<turn|>",
+              "contextSize": 4096
+            },
+            "recordedOn": "2026-11-05",
+            "recordedBy": "tools/record-llm.ts"
+          },
+          "responses": [
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}"
+                }
+              ],
+              "output": "Please provide the menu item you would like me to write descriptions for.",
+              "promptTokens": 54,
+              "outputTokens": 14,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Input variables\nItem: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}"
+                }
+              ],
+              "output": "```json\n{\n  \"descriptions\": [\n    \"ထန်းလျက်ရဲ့ အရသာကို ခံစားလိုက်ပါ။ ချိုမြိန်ပြီး နို့ဆီမပါတဲ့အတွက် ပိုပြီး သန့်စင်တဲ့ အရသာကို ခံစားရမှာပါ။\",\n    \"အေးအေးနဲ့ ပူပူ ရတဲ့ ထန်းလျက် ကော်ဖီလေးနဲ့ နေ့ရက်တိုင်းကို စိတ်ကြည်လင်စေလိုက်ပါ။\",\n    \"ချိုတယ်လို့ ပြောလို့ရတဲ့ ထန်းလျက် ကော်ဖီ။ နို့ဆီမပါတဲ့အတွက် အရသာက ပိုပြီး ထူးခြားပါတယ်။\"\n  ]\n}\n```",
+              "promptTokens": 104,
+              "outputTokens": 142,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Input variables\nItem: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}"
+                }
+              ],
+              "output": "```json\n{\n  \"descriptions\": [\n    \"ထန်းလျက်ရဲ့ အရသာနဲ့ ချိုမြိန်မှုကို ခံစားလိုက်ပါ။ နို့ဆီမပါတဲ့အတွက် ပိုပြီး သန့်စင်ပြီး အရသာရှိပါတယ်။ အေးအေးနဲ့ ပူပူ ရတဲ့ အတွေ့အကြုံကို ပေးပါမယ်။\",\n    \"Shwe Tea House ရဲ့ ထန်းလျက် ကော်ဖီလေးကို စမ်းကြည့်လိုက်ပါ။ သဘာဝထန်းလျက်ရဲ့ ချိုမြိန်မှုက သင့်ကို စိတ်ကြည်လင်စေမှာပါ။ နို့ဆီမပါတဲ့အတွက် ပိုပြီး လန်းဆန်းပါတယ်။\",\n    \"ပူပူလေး သောက်လိုက်ရုံနဲ့ စိတ်ကို အေးချမ်းစေမယ့် ထန်းလျက် ကော်ဖီပါ။ သန့်စင်တဲ့ အရသာနဲ့ ချိုမြိန်မှုကို ခံစားရင်း နေ့ရက်တိုင်းကို ပျော်ရွှင်စေလိုက်ပါ။\"\n  ]\n}\n```",
+              "promptTokens": 138,
+              "outputTokens": 213,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Input variables\nItem: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}"
+                }
+              ],
+              "output": "```json\n{\n\"descriptions\": [\n\"ထန်းလျက်ရဲ့ ချိုမြိန်တဲ့ အရသာနဲ့ ဖျော်ထားတဲ့ ကော်ဖီလေးပါ။\",\n\"နို့ဆီမပါလို့ ပိုပြီး သန့်ရှင်းပြီး ထန်းလျက်ရဲ့ အစစ်အမှန်အရသာကို ခံစားလို့ရမှာပါ။\",\n\"အေးအေးနဲ့ ပူပူလေး ရတဲ့ ထန်းလျက် ကော်ဖီနဲ့ စိတ်ကြည်လင်စေမယ့် အတွေ့အကြုံလေးပါ။\"\n]\n}\n```",
+              "promptTokens": 256,
+              "outputTokens": 119,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Input variables\nItem: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}\n\n### Constraints\nEach description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences."
+                }
+              ],
+              "output": "{\"descriptions\": [\"ထန်းလျက်နဲ့ ချိုတဲ့ ကော်ဖီလေး\", \"နို့ဆီမပါဘဲ အေးအေးပူပူ ရတယ်\", \"အရသာကောင်းပြီး သာယာတဲ့ ထန်းလျက်ကော်ဖီ\"]}",
+              "promptTokens": 310,
+              "outputTokens": 56,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}\n\n### Constraints\nEach description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences."
+                },
+                {
+                  "role": "user",
+                  "content": "Item: ထန်းလျက် ကော်ဖီ\nStaff notes: ထန်းလျက်နဲ့ ချိုတယ်၊ နို့ဆီ မပါဘူး၊ အေးအေး ပူပူ ရတယ်\nStyle: friendly"
+                }
+              ],
+              "output": "{\"descriptions\": [\"ထန်းလျက်နဲ့ ချိုတဲ့ ကော်ဖီလေး\", \"နို့ဆီမပါတဲ့ အရသာကောင်းလေး\", \"အေးအေး ပူပူနဲ့ သောက်လို့ကောင်း\"]}",
+              "promptTokens": 310,
+              "outputTokens": 46,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}\n\n### Constraints\nEach description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences."
+                },
+                {
+                  "role": "user",
+                  "content": "Item: အုန်းနို့ခေါက်ဆွဲ\nStaff notes: သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်\nStyle: friendly"
+                }
+              ],
+              "output": "{\"descriptions\": [\"သောကြာနေ့မှာ ရနိုင်တဲ့ အုန်းနို့ခေါက်ဆွဲ\", \"ကြက်သားနဲ့ ဟင်းရည် ပျစ်ပျစ်လေး\", \"အရသာရှိတဲ့ အုန်းနို့ခေါက်ဆွဲ\"]}",
+              "promptTokens": 305,
+              "outputTokens": 52,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "### Context\nYou are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\n\n### Instruction\nWrite three short descriptions of this menu item for the shop's website, in Burmese.\n\n### Output format\nReturn only JSON in this shape: {\"descriptions\": [\"…\", \"…\", \"…\"]}\n\n### Examples\nItem: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}\n\n### Constraints\nEach description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences."
+                },
+                {
+                  "role": "user",
+                  "content": "Item: အုန်းနို့ခေါက်ဆွဲ\nStaff notes: သောကြာနေ့ပဲ ရမယ်၊ ကြက်သား၊ ဟင်းရည် ပျစ်ပျစ်\nStyle: friendly, with one emoji"
+                }
+              ],
+              "output": "{\"descriptions\": [\"သောကြာနေ့မှာ ရနိုင်တဲ့ အုန်းနို့ခေါက်ဆွဲ\", \"ကြက်သားနဲ့ ဟင်းရည် ပျစ်ပျစ်လေး\", \"အရသာရှိပြီး စားလို့ကောင်းတယ် 😋\"]}",
+              "promptTokens": 309,
+              "outputTokens": 50,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            }
+          ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/assemble.js: |
+        // Prompt assembly: plain code that turns the parts into the messages the model gets (no model here).
+        import { panel } from "ai-panel";
+
+        const NAMES = { context: "Context", instruction: "Instruction", input: "Input variables", format: "Output format", examples: "Examples", constraints: "Constraints" };
+        const section = ([part, text]) => `### ${NAMES[part] ?? part}\n${text}`;
+
+        // Every part, in the order it is written, as one user message.
+        export const oneMessage = (prompt) => [{ role: "user", content: Object.entries(prompt).map(section).join("\n\n") }];
+
+        // The stable parts as the system message; only the item of the moment as the user message.
+        export const systemAndUser = ({ input, ...stable }) => [
+          { role: "system", content: Object.entries(stable).map(section).join("\n\n") },
+          { role: "user", content: input },
+        ];
+
+        // The Prompt parts card (which message each part goes in) and the recorded token counts.
+        export function showParts(prompt, messages, tokens) {
+          const sentIn = (part) => (messages.length > 1 && part !== "input" ? "system" : "user");
+          panel.metrics("Tokens", { prompt: tokens?.promptTokens ?? "—", answer: tokens?.outputTokens ?? "—" }, { id: "tokens" });
+          panel.table("Prompt parts", Object.keys(prompt).map((part) => ({ part, "sent in": sentIn(part) })), { id: "parts", badge: "rules · AI မပါ" });
+        }
+      src/llm.js: |
+        // The lesson's stand-in for a model API.
+        // A real model is slow and can answer differently from run to run, so this lesson uses answers
+        // recorded ahead of time from a real model: data/responses.json (how: data/PROVENANCE.md).
+        // generate() returns the recorded answer for exactly these messages, and shows it in the panel.
+        import recorded from "../data/responses.json";
+        import { panel } from "ai-panel";
+
+        export const model = recorded.provenance;
+
+        const find = (messages) => {
+          const key = JSON.stringify(messages.map(({ role, content }) => ({ role, content })));
+          return recorded.responses.find((r) => JSON.stringify(r.messages) === key);
+        };
+
+        export async function generate(messages, { show = true } = {}) {
+          const hit = find(messages);
+          if (!hit) {
+            const error = new Error("No recorded answer for these exact messages yet.");
+            error.name = "CourseNotice";
+            throw error;
+          }
+          if (show) panel.output("Model answer", hit.output, { id: "answer", badge: `recorded · ${model.label} · greedy` });
+          return hit.output;
+        }
+
+        // The token counts the model's own tokenizer gave when the answer was recorded (the prompt includes
+        // the chat template's own tokens): { promptTokens, outputTokens }, or null when not recorded.
+        export function tokensFor(messages) {
+          const hit = find(messages);
+          return hit ? { promptTokens: hit.promptTokens, outputTokens: hit.outputTokens } : null;
+        }
+      src/main.js: |
+        import helper from "../data/helper.json";
+        import { generate, tokensFor } from "./llm.js";
+        import { helperPrompt } from "./prompt.js";
+        import { oneMessage, systemAndUser, showParts } from "./assemble.js";
+        import { helperPage } from "./page.js";
+
+        // The new item လှလှ wants descriptions for.
+        const item = helper.newItems[0];
+
+        // How the parts go to the model: for now, all of them in one message.
+        let toMessages = oneMessage;
+
+        async function show(item) {
+          const prompt = helperPrompt(item);
+          const messages = toMessages(prompt);
+          await generate(messages);
+          showParts(prompt, messages, tokensFor(messages));
+        }
+
+        await show(item);
+      src/page.js: |
+        // The staff's page for the helper: pick an item and a style, then press one button.
+        // The task, the format and the rules stay in the system prompt; only these choices change.
+        import { button, choices } from "./ui.js";
+
+        const MENU = ["n01", "n03"];
+        const STYLES = { ဖော်ဖော်ရွေရွေ: "friendly", "emoji နဲ့": "friendly, with one emoji" };
+
+        export function helperPage(items, show) {
+          const menu = MENU.map((id) => items.find((i) => i.id === id));
+          let item = menu[0];
+          let style = "friendly";
+          choices("item", menu.map((i) => i.name), (name, i) => (item = menu[i]), { label: "menu", selected: item.name });
+          choices("style", Object.keys(STYLES), (label) => (style = STYLES[label]), { label: "style", selected: "ဖော်ဖော်ရွေရွေ" });
+          button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => show({ ...item, style }));
+        }
+      src/prompt-api.js: |
+        // The same helper with Chrome's built-in Prompt API (adapted from web.dev's example, Apache 2.0).
+        // Not run in this lesson: built-in AI never runs inside this preview (lesson 13), and today the
+        // Prompt API writes English, Japanese, Spanish, German and French, not Burmese.
+        export async function createHelper(systemPrompt) {
+          // Once, when the page opens: the system prompt sets the behaviour for the whole session.
+          const session = await LanguageModel.create({
+            initialPrompts: [{ role: "system", content: systemPrompt }],
+          });
+          // Each press of ဖော်ပြချက်တွေ ကြည့်မယ် sends only the item, to a fresh clone of the session:
+          // it keeps the system prompt, and the items asked for earlier don't mix into this answer.
+          return async (itemText) => {
+            const fresh = await session.clone();
+            const answer = await fresh.prompt(itemText);
+            fresh.destroy();
+            return answer;
+          };
+        }
+      src/prompt.js: |
+        // The description helper's prompt: the contract between the shop's page and the model.
+        // One line per part, so each part can be versioned, tested and improved on its own.
+        export const helperPrompt = (item) => ({
+          instruction: "Write three short descriptions of this menu item for the shop's website, in Burmese.",
+          format: 'Return only JSON in this shape: {"descriptions": ["…", "…", "…"]}',
+        });
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Intelligence is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 560,
+        height: 45,
+        text: "ဒီနေ့ · helper ရဲ့ prompt",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board B: the prompt as a contract between the page (data, blue) and the model (violet).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 50,
+        text: "Prompt = စာချုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-page,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 180,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-page-t,
+        kind: text,
+        x: 330,
+        y: 247,
+        width: 120,
+        height: 38,
+        text: "page",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 248,
+        width: 50,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-prompt,
+        kind: rectangle,
+        x: 550,
+        y: 230,
+        width: 200,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-prompt-t,
+        kind: text,
+        x: 580,
+        y: 247,
+        width: 140,
+        height: 38,
+        text: "prompt",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 760,
+        y: 248,
+        width: 50,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-model,
+        kind: rectangle,
+        x: 820,
+        y: 230,
+        width: 180,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-model-t,
+        kind: text,
+        x: 850,
+        y: 247,
+        width: 120,
+        height: 38,
+        text: "model",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-c1,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 600,
+        height: 40,
+        text: "1 · အဖြေကို ဘယ်လို ရေးရမလဲ ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c2,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 640,
+        height: 40,
+        text: "2 · အပိုင်းလိုက် version · test · ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c3,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 640,
+        height: 40,
+        text: "3 · team အတူ ဖတ်ပြီး ပြင်တဲ့ စာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board C: the six components, stacked; the two to start with in orange, the model's role violet,
+    # the app's data blue, the limits red.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 152,
+        width: 560,
+        height: 50,
+        text: "Prompt ရဲ့ အစိတ်အပိုင်း 6 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: c-r1, kind: rectangle, x: 300, y: 210, width: 760, height: 50, strokeColor: "#6741d9" }
+    - {
+        id: c-n1,
+        kind: text,
+        x: 318,
+        y: 217,
+        width: 240,
+        height: 38,
+        text: "context",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-g1,
+        kind: text,
+        x: 590,
+        y: 217,
+        width: 440,
+        height: 38,
+        text: "model ရဲ့ role · နယ်ပယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-r2, kind: rectangle, x: 300, y: 267, width: 760, height: 50, strokeColor: "#f08c00" }
+    - {
+        id: c-n2,
+        kind: text,
+        x: 318,
+        y: 274,
+        width: 240,
+        height: 38,
+        text: "instruction",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-g2,
+        kind: text,
+        x: 590,
+        y: 274,
+        width: 440,
+        height: 38,
+        text: "လုပ်ရမယ့် အလုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-r3, kind: rectangle, x: 300, y: 324, width: 760, height: 50, strokeColor: "#1971c2" }
+    - {
+        id: c-n3,
+        kind: text,
+        x: 318,
+        y: 331,
+        width: 260,
+        height: 38,
+        text: "input variables",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: c-g3,
+        kind: text,
+        x: 590,
+        y: 331,
+        width: 440,
+        height: 38,
+        text: "request တိုင်း app က ဖြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-r4, kind: rectangle, x: 300, y: 381, width: 760, height: 50, strokeColor: "#f08c00" }
+    - {
+        id: c-n4,
+        kind: text,
+        x: 318,
+        y: 388,
+        width: 260,
+        height: 38,
+        text: "output format",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-g4,
+        kind: text,
+        x: 590,
+        y: 388,
+        width: 440,
+        height: 38,
+        text: "အဖြေ ပုံစံ · JSON",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-r5, kind: rectangle, x: 300, y: 438, width: 760, height: 50, strokeColor: "#1e1e1e" }
+    - {
+        id: c-n5,
+        kind: text,
+        x: 318,
+        y: 445,
+        width: 240,
+        height: 38,
+        text: "examples",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-g5,
+        kind: text,
+        x: 590,
+        y: 445,
+        width: 440,
+        height: 38,
+        text: "နမူနာ input → output",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-r6, kind: rectangle, x: 300, y: 495, width: 760, height: 50, strokeColor: "#e03131" }
+    - {
+        id: c-n6,
+        kind: text,
+        x: 318,
+        y: 502,
+        width: 240,
+        height: 38,
+        text: "constraints",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-g6,
+        kind: text,
+        x: 590,
+        y: 502,
+        width: 440,
+        height: 38,
+        text: "ကန့်သတ်ချက် · စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-start,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 640,
+        height: 40,
+        text: "စမယ် → instruction + output format",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board D: system prompt (the developer's stable rules, violet) vs user prompt (the request, blue).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 560,
+        height: 50,
+        text: "System prompt · user prompt",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-sys,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 420,
+        height: 245,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-sys-t,
+        kind: text,
+        x: 320,
+        y: 237,
+        width: 200,
+        height: 42,
+        text: "system",
+        strokeColor: "#6741d9",
+        fontSize: 30,
+      }
+    - {
+        id: d-sys-1,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 380,
+        height: 38,
+        text: "developer ရေး · မပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sys-2,
+        kind: text,
+        x: 320,
+        y: 335,
+        width: 380,
+        height: 38,
+        text: "role · task · format",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sys-3,
+        kind: text,
+        x: 320,
+        y: 380,
+        width: 380,
+        height: 38,
+        text: "examples · rules",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sys-4,
+        kind: text,
+        x: 320,
+        y: 425,
+        width: 380,
+        height: 38,
+        text: "safety စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-user,
+        kind: rectangle,
+        x: 740,
+        y: 225,
+        width: 340,
+        height: 245,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-user-t,
+        kind: text,
+        x: 760,
+        y: 237,
+        width: 200,
+        height: 42,
+        text: "user",
+        strokeColor: "#1971c2",
+        fontSize: 30,
+      }
+    - {
+        id: d-user-1,
+        kind: text,
+        x: 760,
+        y: 290,
+        width: 300,
+        height: 38,
+        text: "အခု တောင်းတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-user-2,
+        kind: text,
+        x: 760,
+        y: 335,
+        width: 310,
+        height: 38,
+        text: "item · notes · style",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-roles,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 640,
+        height: 40,
+        text: "API → role ပါတဲ့ message စာရင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board E: from a button (constrained, green) to a chat (flexible, orange); the risk red.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 560,
+        height: 50,
+        text: "ခလုတ် ကနေ chat အထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-btn,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 370,
+        height: 190,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-btn-t,
+        kind: text,
+        x: 318,
+        y: 237,
+        width: 330,
+        height: 40,
+        text: "ခလုတ် · ပုံသေ အလုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-btn-1,
+        kind: text,
+        x: 318,
+        y: 292,
+        width: 340,
+        height: 38,
+        text: "system prompt က များ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-btn-2,
+        kind: text,
+        x: 318,
+        y: 342,
+        width: 340,
+        height: 38,
+        text: "model သေးလည်း ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 680,
+        y: 302,
+        width: 50,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-chat,
+        kind: rectangle,
+        x: 740,
+        y: 225,
+        width: 350,
+        height: 190,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-chat-t,
+        kind: text,
+        x: 758,
+        y: 237,
+        width: 310,
+        height: 40,
+        text: "chat · flexible",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-chat-1,
+        kind: text,
+        x: 758,
+        y: 292,
+        width: 320,
+        height: 38,
+        text: "user prompt က များ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-chat-2,
+        kind: text,
+        x: 758,
+        y: 342,
+        width: 320,
+        height: 38,
+        text: "ပိုစွမ်းတဲ့ model",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-warn,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 700,
+        height: 40,
+        text: "chatbot ကို စောစော ထည့်ရင် မအောင်မြင်တတ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-watch,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 700,
+        height: 40,
+        text: "user တကယ် ဘာလုပ်လဲ စောင့်ကြည့်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 520,
+        height: 45,
+        text: "helper ရဲ့ system prompt ထဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 520,
+        height: 45,
+        text: "ဘာတွေ ထည့်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 700,
+        height: 50,
+        text: "role · အဖြေ ပုံစံ · ကန့်သတ်ချက်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 700,
+        height: 40,
+        text: "ရွေးထားတဲ့ item → user prompt",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5115
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Prompt ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ Transformers.js လို library နဲ့ model ကို browser ထဲမှာ run ပြီး၊
+      အောက်က runtime တွေကိုပါ ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ model ကို ဘာလုပ်ရမလဲ ပြောပေးတဲ့ prompt ကို
+      ကြည့်ပါမယ်။ [[mark:draw-mini]] blueprint မှာဆိုရင် intelligence အလွှာထဲက model ကို ခိုင်းတဲ့ အပိုင်းပါ။
+      [[mark:draw-today]] ကောင်တာက လှလှ ဟာ menu အသစ် ထွက်တိုင်း helper နဲ့ ဖော်ပြချက် မူကြမ်းတွေ
+      ရေးပါတယ်။ helper ရဲ့ အဖြေ ကောင်းမကောင်းက prompt ပေါ်မှာ အများကြီး မူတည်ပါတယ်။
+      user မျှော်လင့်တဲ့ အဖြေ ထွက်လာအောင် prompt ကို ရေးတာ၊ ပြန်ပြင်တာကို prompt engineering လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: contract
+    narration: >
+      [[mark:draw-contract]] prompt ကို ဆိုင်ရဲ့ page နဲ့ model ကြားက စာချုပ် တစ်ခုလို့ မြင်ကြည့်ပါ။
+      [[mark:draw-c1]] ကောင်းတဲ့ prompt က အဖြေကို ဘယ်လို ရေးရမလဲ ဆိုတာ ရှင်းရှင်း ပြောပါတယ်။ [[mark:draw-c2]]
+      အပိုင်းလိုက် ခွဲရေးထားလို့ အပိုင်း တစ်ခုချင်းကို version ထိန်း၊ test လုပ်ပြီး ပြင်လို့ ရပါတယ်။
+      [[mark:draw-c3]] ပြီးတော့ ကိုယ်နဲ့ လှလှ လို team တစ်ခုလုံး အတူ ဖတ်ပြီး ပြင်တဲ့ စာလည်း ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-contract,
+          type: whiteboard.apply,
+          at: { mark: draw-contract },
+          clear: true,
+          upsertIds:
+            [b-title, b-page, b-page-t, b-a1, b-prompt, b-prompt-t, b-a2, b-model, b-model-t],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-c1,
+          type: whiteboard.apply,
+          at: { mark: draw-c1 },
+          upsertIds: [b-c1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c2,
+          type: whiteboard.apply,
+          at: { mark: draw-c2 },
+          upsertIds: [b-c2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c3,
+          type: whiteboard.apply,
+          at: { mark: draw-c3 },
+          upsertIds: [b-c3],
+          drawMs: 900,
+        }
+
+  - id: components
+    chapter: "Prompt ရဲ့ အစိတ်အပိုင်း ခြောက်ခု"
+    narration: >
+      [[mark:draw-parts]] prompt မှာ အစိတ်အပိုင်း ခြောက်ခု ရှိနိုင်ပါတယ်။ [[mark:draw-p1]] context က model ရဲ့
+      role နဲ့ နယ်ပယ် ဖြစ်ပြီး၊ instruction က လုပ်ရမယ့် အလုပ်ပါ။ [[mark:draw-p2]] input variable ကတော့ item
+      နာမည်၊ လှလှ ရဲ့ မှတ်ချက် လို app က request တိုင်းမှာ ထည့်ပေးတဲ့ အချက်တွေ ဖြစ်ပြီး၊ output format က အဖြေ
+      ပုံစံပါ။ [[mark:draw-p3]] example က တခြား input တစ်ခုအတွက် အဖြေ နမူနာပါ။ constraint ကတော့ အဖြေကို
+      တစ်သမတ်တည်း ဖြစ်အောင်၊ ဘေးကင်းအောင်၊ ဆိုင်ရဲ့ လေသံနဲ့ ကိုက်အောင် ထိန်းတဲ့ ကန့်သတ်ချက်ပါ။
+      [[mark:draw-start]] ခြောက်ခုလုံး အမြဲ မလိုပါဘူး။ instruction နဲ့ output format နဲ့ စပြီး၊ အဖြေကို
+      ကြည့်ရင်း လိုတဲ့ အပိုင်းကို တစ်ခုချင်း ထပ်ထည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (prompt components)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-parts,
+          type: whiteboard.apply,
+          at: { mark: draw-parts },
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-p1,
+          type: whiteboard.apply,
+          at: { mark: draw-p1 },
+          upsertIds: [c-r1, c-n1, c-g1, c-r2, c-n2, c-g2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-p2,
+          type: whiteboard.apply,
+          at: { mark: draw-p2 },
+          upsertIds: [c-r3, c-n3, c-g3, c-r4, c-n4, c-g4],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-p3,
+          type: whiteboard.apply,
+          at: { mark: draw-p3 },
+          upsertIds: [c-r5, c-n5, c-g5, c-r6, c-n6, c-g6],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-start,
+          type: whiteboard.apply,
+          at: { mark: draw-start },
+          upsertIds: [c-start],
+          drawMs: 1000,
+        }
+
+  - id: start
+    chapter: "Instruction နဲ့ output format က စရအောင်"
+    narration: >
+      [[mark:close-parts]] helper ရဲ့ prompt ကို ကြည့်ရအောင်။ [[mark:open-prompt]] prompt ဖိုင်မှာ အပိုင်း
+      တစ်ခုကို စာကြောင်း တစ်ကြောင်းစီ ရေးထားပါတယ်။ [[mark:sel-instruction]] instruction က menu item တစ်ခုအတွက်
+      website မှာ တင်မယ့် ဖော်ပြချက် တိုတို သုံးခုကို မြန်မာလို ရေးခိုင်းထားပြီး၊ [[mark:sel-format]] output
+      format က အဲဒီ သုံးခုကို JSON နဲ့ပဲ ပြန်ပေးခိုင်းပါတယ်။ [[mark:panel-ready]] ညာဘက် AI panel ရဲ့
+      အပေါ်ဆုံးက Model answer ကို ကြည့်ပါ။ ဒါက ဒီ prompt နဲ့ ကြိုပြီး run ထားတုန်းက တကယ် ထွက်လာခဲ့တဲ့ အဖြေပါ။
+      laptop ပေါ်က open model သေးသေးလေး တစ်ခုရဲ့ အဖြေကို ကြိုမှတ်ထားလို့ ကြည့်တဲ့သူတိုင်း ဒီ အဖြေကိုပဲ
+      မြင်ရပြီး၊ badge ကလည်း အဲဒါကို ပြနေပါတယ်။ [[mark:read-ask]] model က ဖော်ပြချက် မရေးဘဲ၊ ဘယ် item
+      အတွက်လဲလို့ အင်္ဂလိပ်လို ပြန်မေးနေပါတယ်။ prompt ထဲမှာ item မပါသေးလို့ပါ။ [[mark:read-parts]] အဖြေနဲ့အတူ မှတ်ထားတဲ့ Tokens card မှာ prompt က token ၅၄ ခု၊ အဖြေက ၁၄ ခု ရှိပါတယ်။ Prompt parts ဇယားကတော့ အပိုင်း နှစ်ခုကို ပြထားပြီး၊
+      model မပါတဲ့ code နဲ့ ဆွဲထားလို့ badge က AI မပါဘူးလို့ ပြနေပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (prompt components)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - { id: close-parts, type: whiteboard.apply, at: { mark: close-parts }, open: false }
+      - {
+          id: open-prompt,
+          type: workspace.openFile,
+          at: { mark: open-prompt },
+          path: src/prompt.js,
+        }
+      - id: sel-instruction
+        type: editor.select
+        at: { mark: sel-instruction }
+        target:
+          {
+            file: src/prompt.js,
+            text: 'instruction: "Write three short descriptions of this menu item for the shop''s website, in Burmese."',
+            occurrence: 1,
+          }
+      - id: sel-format
+        type: editor.select
+        at: { mark: sel-format }
+        target:
+          {
+            file: src/prompt.js,
+            text: 'format: ''Return only JSON in this shape: {"descriptions": ["…", "…", "…"]}''',
+            occurrence: 1,
+          }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-three-cards
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-badge
+        type: expect.preview
+        at: { afterAction: expect-three-cards }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer-badge }
+        textContains: "recorded · Gemma 4 E2B · greedy"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-asks
+        type: expect.preview
+        at: { mark: read-ask }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "Please provide the menu item"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-prompt-54
+        type: expect.preview
+        at: { mark: read-parts }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-1 }
+        attribute: { name: data-value, value: "54" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-answer-14
+        type: expect.preview
+        at: { afterAction: expect-prompt-54 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-2 }
+        attribute: { name: data-value, value: "14" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-two-parts
+        type: expect.preview
+        at: { afterAction: expect-answer-14 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-parts-badge
+        type: expect.preview
+        at: { afterAction: expect-two-parts }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts-badge }
+        textContains: "rules · AI မပါ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: input
+    narration: >
+      [[mark:type-input]] ဒါကြောင့် instruction ရဲ့ အောက်မှာ input variable တွေ ထည့်ပါမယ်။ item နာမည်၊ မှတ်ချက်နဲ့ style ကို app က data ထဲကနေ ဖြည့်ပေးမှာပါ။ [[mark:read-input]] ဒီ item တွေက
+      lesson အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ ဒီတစ်ခါ အဖြေမှာ ထန်းလျက် ကော်ဖီ ရဲ့ ဖော်ပြချက် သုံးခု
+      ပါလာပြီး၊ မှတ်ချက်ထဲက နို့ဆီ မပါတာကိုလည်း သုံးထားပါတယ်။ ဒါပေမဲ့ တချို့ ဖော်ပြချက်က စာကြောင်း
+      နှစ်ကြောင်း ရှည်ပြီး၊ အဖြေက token ၁၄၂ ခု ရှိပါတယ်။ JSON ကိုလည်း markdown code fence ထဲ ထုပ်ထားလို့ program က တိုက်ရိုက် ဖတ်လို့ မရပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (prompt components: input variables)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: type-input
+        type: editor.type
+        at: { mark: type-input }
+        target:
+          { file: src/prompt.js, after: "for the shop's website, in Burmese.\",\n", occurrence: 1 }
+        text: "  input: `Item: ${item.name}\\nStaff notes: ${item.notes}\\nStyle: ${item.style}`,\n"
+        cadence: block
+      - id: expect-input-answer
+        type: expect.preview
+        at: { afterAction: type-input }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-answer }
+        textContains: "ထန်းလျက်ရဲ့ အရသာကို ခံစားလိုက်ပါ။"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-input-tokens
+        type: expect.preview
+        at: { afterAction: expect-input-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-2 }
+        attribute: { name: data-value, value: "142" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-three-parts
+        type: expect.preview
+        at: { afterAction: expect-input-tokens }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: context
+    narration: >
+      [[mark:type-context]] အပေါ်ဆုံးမှာ context ကို ထည့်ပါမယ်။ model ကို ရန်ကုန်က ကိုယ်တို့ ဆိုင်ရဲ့ menu ရေးတဲ့ helper အဖြစ် role ပေးတာပါ။
+      [[mark:read-context]] အဖြေမှာ ဆိုင်နာမည်ကိုပါ ထည့်ပြီး၊ လာစမ်းကြည့်ဖို့ ဖိတ်ခေါ်တဲ့ ကြော်ငြာ လေသံ
+      ဖြစ်လာပါတယ်။ ဒါပေမဲ့ မှတ်ချက်ထဲမှာ မပါတဲ့ သဘာဝ ထန်းလျက် ဆိုတဲ့ စကားလည်း ပါလာပြီး၊ အဖြေက ပိုရှည်လာလို့
+      token ၂၁၃ ခု ဖြစ်သွားပါတယ်။ role ကို ပြောရုံနဲ့ အရှည်ကို မထိန်းနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (prompt components: context)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: type-context
+        type: editor.type
+        at: { mark: type-context }
+        target:
+          {
+            file: src/prompt.js,
+            after: "export const helperPrompt = (item) => ({\n",
+            occurrence: 1,
+          }
+        text: "  context: \"You are the menu-writing helper of Shwe Tea House, a tea shop in Yangon. The counter staff use you to describe new items.\",\n"
+        cadence: block
+      - id: expect-context-answer
+        type: expect.preview
+        at: { afterAction: type-context }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-answer }
+        textContains: "Shwe Tea House ရဲ့ ထန်းလျက် ကော်ဖီလေးကို"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-context-tokens
+        type: expect.preview
+        at: { afterAction: expect-context-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-2 }
+        attribute: { name: data-value, value: "213" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-four-parts
+        type: expect.preview
+        at: { afterAction: expect-context-tokens }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: examples
+    narration: >
+      [[mark:type-examples]] ဒါကြောင့် example တစ်ခု ထည့်ပါမယ်။ လက်ဖက်ရည် ရဲ့ မှတ်ချက်ကို input အဖြစ်၊ ကိုယ်
+      လိုချင်တဲ့ ဖော်ပြချက် တိုတို သုံးခုကို အဖြေ အဖြစ် ပြထားတာပါ။ [[mark:read-examples]] ဖော်ပြချက် တစ်ခုစီက
+      စာကြောင်း တစ်ကြောင်းစီ ဖြစ်သွားပြီး၊ အဖြေက token ၁၁၉ ခု အထိ ကျသွားပါတယ်။ ဒါပေမဲ့ example ကြောင့် prompt
+      က token ၂၅၆ ခု ဖြစ်လာပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (prompt components: examples)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: type-examples
+        type: editor.type
+        at: { mark: type-examples }
+        target:
+          {
+            file: src/prompt.js,
+            after: "{\"descriptions\": [\"…\", \"…\", \"…\"]}',\n",
+            occurrence: 1,
+          }
+        text: "  examples: `Item: လက်ဖက်ရည်\nStaff notes: လက်ဖက်ခြောက် ပြင်းပြင်း၊ နို့ဆီနဲ့၊ ပူပူ\nStyle: friendly\n{\"descriptions\": [\"လက်ဖက်ခြောက် ပြင်းပြင်းနဲ့ ဖျော်ထားတဲ့ လက်ဖက်ရည် ပူပူလေး\", \"နို့ဆီ ချိုချိုနဲ့ မနက်တိုင်း သောက်ချင်စရာ\", \"ရနံ့ မွှေးမွှေး၊ အရသာ ပြည့်ပြည့်နဲ့ လက်ဖက်ရည် တစ်ခွက်\"]}`,\n"
+        cadence: block
+      - id: expect-examples-answer
+        type: expect.preview
+        at: { afterAction: type-examples }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-answer }
+        textContains: "ထန်းလျက်ရဲ့ ချိုမြိန်တဲ့ အရသာနဲ့ ဖျော်ထားတဲ့ ကော်ဖီလေးပါ။"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-examples-tokens
+        type: expect.preview
+        at: { afterAction: expect-examples-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-2 }
+        attribute: { name: data-value, value: "119" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-examples-prompt
+        type: expect.preview
+        at: { afterAction: expect-examples-tokens }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-1 }
+        attribute: { name: data-value, value: "256" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: constraints
+    narration: >
+      [[mark:type-constraints]] နောက်ဆုံး constraint တွေ ထည့်ပါမယ်။ စာလုံး ၆၀ အောက်၊ မှတ်ချက်ထဲက အချက်တွေပဲ၊ ဈေးနှုန်းနဲ့ အခမဲ့၊ အကောင်းဆုံး လို မစစ်နိုင်တဲ့ စကား မပါဖို့၊ style မတောင်းရင် emoji မပါဖို့နဲ့ code fence မပါဖို့ ကန့်သတ်ထားပါတယ်။ [[mark:read-constraints]] အဖြေက code fence မပါတဲ့ JSON ဖြစ်သွားပြီး၊ ဖော်ပြချက်
+      သုံးခုလုံး တိုတိုလေးတွေ ဖြစ်လာပါပြီ။ [[mark:read-size]] ဒါပေမဲ့ Tokens card မှာ prompt က token ၅၄ ခုကနေ
+      ၃၁၀ ခု ဖြစ်လာတာကို ကြည့်ပါ။ ဒီ token တွေကို request တိုင်း ပို့ရလို့ prompt ရှည်လေ ကြာလေ ဖြစ်ပြီး၊
+      server ပေါ်က model ဆိုရင် ငွေလည်း ပိုကုန်ပါတယ်။ example နဲ့ အသေးစိတ်တွေ များလွန်းရင် model ကိုလည်း
+      ရှုပ်စေနိုင်ပါတယ်။ ဒါကြောင့် prompt ထဲက စာကြောင်း တိုင်းမှာ ရှင်းလင်းတဲ့ ရည်ရွယ်ချက် ရှိရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (prompt components: constraints, don't over-inflate)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: type-constraints
+        type: editor.type
+        at: { mark: type-constraints }
+        target: { file: src/prompt.js, after: "လက်ဖက်ရည် တစ်ခွက်\"]}`,\n", occurrence: 1 }
+        text: "  constraints: \"Each description under 60 characters. Use only facts from the notes: no prices, no discounts or free offers, no claims like best. No emoji unless the style asks. A warm, natural tone. The JSON alone, without code fences.\",\n"
+        cadence: block
+      - id: expect-constraints-answer
+        type: expect.preview
+        at: { afterAction: type-constraints }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-answer }
+        textContains: "အရသာကောင်းပြီး သာယာတဲ့ ထန်းလျက်ကော်ဖီ"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-constraints-tokens
+        type: expect.preview
+        at: { afterAction: expect-constraints-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-2 }
+        attribute: { name: data-value, value: "56" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-six-parts
+        type: expect.preview
+        at: { afterAction: expect-constraints-tokens }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts }
+        attribute: { name: data-count, value: "6" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-prompt-310
+        type: expect.preview
+        at: { mark: read-size }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-1 }
+        attribute: { name: data-value, value: "310" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: system-user
+    chapter: "System prompt နဲ့ user prompt"
+    narration: >
+      [[mark:draw-sys]] ဒီ အပိုင်းတွေထဲမှာ request တိုင်း မပြောင်းတာနဲ့ ပြောင်းတာ ရှိပါတယ်။
+      system prompt ဆိုတာ developer ရေးထားတဲ့၊ request တိုင်းမှာ မပြောင်းဘဲ ပါနေတဲ့ စည်းကမ်းတွေပါ။ role၊ အဖြေ ပုံစံ၊ example နဲ့ ဘေးကင်းရေး စည်းကမ်းတွေ ဒီမှာ ပါပါတယ်။ [[mark:draw-user]] user
+      prompt ကတော့ user ရဲ့ အခု လက်ရှိ တောင်းဆိုချက်ပါ။ [[mark:draw-roles]] model API အများစုက role ပါတဲ့
+      message စာရင်းကို လက်ခံလို့ ဒီ နှစ်ခုကို ခွဲပို့လို့ ရပါတယ်။ [[mark:close-sys]] code မှာ ခွဲကြည့်ရအောင်။
+      [[mark:open-main]] main ဖိုင်မှာ အခုထိ အပိုင်း အားလုံးကို message တစ်ခုတည်းနဲ့ ပို့နေပါတယ်။
+      [[mark:type-split]] အဲဒါကို system နဲ့ user ခွဲပို့တဲ့ function နဲ့ အစားထိုးတဲ့ စာကြောင်းကို အောက်မှာ
+      ထည့်ပါမယ်။ [[mark:read-split]] Prompt parts ဇယားမှာ input တစ်ခုပဲ user ဘက်မှာ ကျန်ပြီး၊ ကျန်တဲ့ ငါးခုက
+      system ဘက် ရောက်သွားပါပြီ။ အဖြေလည်း တိုတိုလေး သုံးခုပဲ ဖြစ်ပြီး prompt က token ၃၁၀ ခု အတိုင်းပါပဲ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (system versus user prompts)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-sys,
+          type: whiteboard.apply,
+          at: { mark: draw-sys },
+          open: true,
+          clear: true,
+          upsertIds: [d-title, d-sys, d-sys-t, d-sys-1, d-sys-2, d-sys-3, d-sys-4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-user,
+          type: whiteboard.apply,
+          at: { mark: draw-user },
+          upsertIds: [d-user, d-user-t, d-user-1, d-user-2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-roles,
+          type: whiteboard.apply,
+          at: { mark: draw-roles },
+          upsertIds: [d-roles],
+          drawMs: 1000,
+        }
+      - { id: close-sys, type: whiteboard.apply, at: { mark: close-sys }, open: false }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: src/main.js }
+      - id: sel-one
+        type: editor.select
+        at: { afterAction: open-main }
+        target: { file: src/main.js, text: "let toMessages = oneMessage;", occurrence: 1 }
+      - id: type-split
+        type: editor.type
+        at: { mark: type-split }
+        target: { file: src/main.js, after: "let toMessages = oneMessage;\n", occurrence: 1 }
+        text: "toMessages = systemAndUser;\n"
+        cadence: line-by-line
+      - id: expect-split-answer
+        type: expect.preview
+        at: { afterAction: type-split }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-answer }
+        textContains: "နို့ဆီမပါတဲ့ အရသာကောင်းလေး"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-split-context
+        type: expect.preview
+        at: { afterAction: expect-split-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts-1 }
+        textContains: "contextsystem"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-split-input
+        type: expect.preview
+        at: { afterAction: expect-split-context }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts-3 }
+        textContains: "inputuser"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-split-prompt
+        type: expect.preview
+        at: { afterAction: expect-split-input }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-tokens-1 }
+        attribute: { name: data-value, value: "310" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: constrained
+    chapter: "ခလုတ် တစ်ခုနဲ့ ပုံသေ အလုပ်"
+    narration: >
+      [[mark:type-page]] helper ရဲ့ အလုပ်က ပုံသေ ဖြစ်တဲ့အတွက် prompt အများစုကို system prompt ထဲမှာ
+      ကြိုထားလို့ ရပါတယ်။ ဒါကြောင့် ဝန်ထမ်းတွေ သုံးမယ့် page လေး ထည့်ပါမယ်။ [[mark:read-page]] panel ရဲ့
+      အပေါ်မှာ item ရွေးတဲ့ ခလုတ်၊ style ခလုတ်နဲ့ ဖော်ပြချက်တွေ ကြည့်မယ် ခလုတ် ပေါ်လာပါပြီ။ ခလုတ်မှာ ဖန်တီးမယ်
+      မဟုတ်ဘဲ ကြည့်မယ် လို့ ရေးထားတဲ့ အကြောင်းကို နောက်ပိုင်း U X lesson မှာ ပြောပါမယ်။ [[mark:click-item]] အုန်းနို့ခေါက်ဆွဲ ကို ရွေးပြီး၊
+      [[mark:click-show]] ခလုတ်ကို နှိပ်ကြည့်ရအောင်။ [[mark:read-show]] သောကြာနေ့မှာ ရနိုင်တာ၊ ကြက်သားနဲ့
+      ဟင်းရည် ပျစ်ပျစ် ဆိုတာတွေ ပါတဲ့ ဖော်ပြချက် သုံးခု ပေါ်လာပါပြီ။ system prompt က မပြောင်းဘဲ user prompt
+      ထဲက item ပဲ ပြောင်းသွားတာပါ။ [[mark:open-api]] Chrome ရဲ့ built in AI ထဲက Prompt API နဲ့ ရေးရင်လည်း
+      ပုံစံ အတူတူပါပဲ။ [[mark:sel-initial]] session ကို ဆောက်တုန်းက system prompt ကို တစ်ခါပဲ ပေးပြီး၊
+      [[mark:sel-prompt]] ခလုတ် နှိပ်တိုင်း session ကို clone လုပ်ပြီး item ရဲ့ စာကိုပဲ ပို့လို့၊ အရင် နှိပ်ခဲ့တဲ့ item တွေ မရောပါဘူး။ ဒါပေမဲ့ ဒီ ဖိုင်ကို ဒီ lesson မှာ run
+      မှာ မဟုတ်ပါဘူး။ built in AI က ဒီ preview ထဲမှာ အလုပ် မလုပ်သလို၊ Prompt API က မြန်မာစာကိုလည်း
+      အခုအချိန်မှာ support မလုပ်သေးလို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (constrained use cases)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+      - {
+          title: "Chrome for Developers: The Prompt API",
+          url: "https://developer.chrome.com/docs/ai/prompt-api",
+        }
+      - {
+          title: "Apache License 2.0, the licence of web.dev Learn AI's code (its Prompt API example is adapted in src/prompt-api.js)",
+          url: "https://www.apache.org/licenses/LICENSE-2.0",
+        }
+    actions:
+      - id: type-page
+        type: editor.type
+        at: { mark: type-page }
+        target: { file: src/main.js, after: "await show(item);\n", occurrence: 1 }
+        text: "helperPage(helper.newItems, show);\n"
+        cadence: line-by-line
+      - id: expect-page-item
+        type: expect.preview
+        at: { afterAction: type-page }
+        timeoutMs: 8000
+        target: { by: testId, value: item-1 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-page-button
+        type: expect.preview
+        at: { afterAction: expect-page-item }
+        timeoutMs: 5000
+        target: { by: testId, value: show-descriptions }
+        textContains: "ဖော်ပြချက်တွေ ကြည့်မယ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-item
+        type: preview.click
+        at: { mark: click-item }
+        timeoutMs: 5000
+        target: { by: testId, value: item-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-item-pressed
+        type: expect.preview
+        at: { afterAction: click-item }
+        timeoutMs: 5000
+        target: { by: testId, value: item-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: click-show
+        type: preview.click
+        at: { mark: click-show }
+        timeoutMs: 5000
+        target: { by: testId, value: show-descriptions }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-show-answer
+        type: expect.preview
+        at: { afterAction: click-show }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "အရသာရှိတဲ့ အုန်းနို့ခေါက်ဆွဲ"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-show-system
+        type: expect.preview
+        at: { afterAction: expect-show-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-parts-1 }
+        textContains: "contextsystem"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - { id: open-api, type: workspace.openFile, at: { mark: open-api }, path: src/prompt-api.js }
+      - id: sel-initial
+        type: editor.select
+        at: { mark: sel-initial }
+        target:
+          {
+            file: src/prompt-api.js,
+            text: 'initialPrompts: [{ role: "system", content: systemPrompt }],',
+            occurrence: 1,
+          }
+      - id: sel-prompt
+        type: editor.select
+        at: { mark: sel-prompt }
+        target:
+          {
+            file: src/prompt-api.js,
+            text: "const fresh = await session.clone();\n    const answer = await fresh.prompt(itemText);",
+            occurrence: 1,
+          }
+
+  - id: style
+    narration: >
+      ဝန်ထမ်းတွေက ပိုထိန်းချင်လာရင် prompt ရဲ့ အပိုင်း တချို့ကို page ပေါ်က ခလုတ်နဲ့ ရွေးခွင့် ပေးပြီး
+      user prompt ထဲ ထည့်ပေးလို့ ရပါတယ်။ style ခလုတ်က အဲဒီလို ပေးထားတာပါ။ [[mark:click-style]] emoji နဲ့ ဆိုတဲ့ style ကို ရွေးပြီး၊
+      [[mark:click-show-2]] ခလုတ်ကို ထပ်နှိပ်ကြည့်ရအောင်။ [[mark:read-style]] တတိယ ဖော်ပြချက်ရဲ့ နောက်ဆုံးမှာ
+      emoji တစ်ခု ပါလာပါပြီ။ system prompt က style မတောင်းရင် emoji မထည့်နဲ့ လို့ ပြောထားပြီး၊ ဝန်ထမ်း ရွေးတဲ့
+      style က တောင်းလိုက်လို့ပါ။ ဒါပေမဲ့ ခလုတ်တွေ များလာရင် page ရှုပ်လာလို့၊ user ကိုယ်တိုင် စာရိုက်ပြီး
+      ခိုင်းတဲ့ ပိုပွင့်တဲ့ design ကို ပြောင်းဖို့ စဉ်းစားရပါတယ်။ ဒါကို course ရဲ့ နောက်ဆုံး lesson မှာ
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (constrained use cases: moving parts into the UI)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - id: click-style
+        type: preview.click
+        at: { mark: click-style }
+        timeoutMs: 5000
+        target: { by: testId, value: style-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-style-pressed
+        type: expect.preview
+        at: { afterAction: click-style }
+        timeoutMs: 5000
+        target: { by: testId, value: style-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: click-show-2
+        type: preview.click
+        at: { mark: click-show-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: show-descriptions }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-style-answer
+        type: expect.preview
+        at: { afterAction: click-show-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "အရသာရှိပြီး စားလို့ကောင်းတယ် 😋"
+        retry: { maxAttempts: 3, delayMs: 500 }
+
+  - id: flexible
+    chapter: "Flexible task တွေ"
+    narration: >
+      [[mark:draw-flex]] prompt ရဲ့ ဘယ်အပိုင်းကို user လက်ထဲ ပေးမလဲ ဆိုတာ U X ဘယ်လောက် ပွင့်လဲ၊ model ဘယ်လောက် စွမ်းလဲ
+      ဆိုတာပေါ် မူတည်ပါတယ်။ [[mark:draw-btn]] ခလုတ် တစ်ခုနဲ့ ပုံသေ အလုပ်မှာ system prompt က အလုပ် အများစုကို လုပ်ပေးလို့ model သေးသေးနဲ့လည်း ရပါတယ်။ [[mark:draw-chat]] user က အကြံ တောင်းတာ၊ ပြန်ရေးခိုင်းတာ စတာတွေကို
+      ကိုယ်တိုင် ရေးခိုင်းတဲ့ flexible task မှာတော့ user prompt က အလုပ် ပိုလုပ်ရလို့ ပိုစွမ်းတဲ့ model
+      လိုပြီး၊ များသောအားဖြင့် server ပေါ်က model ကို သုံးရပါတယ်။ [[mark:draw-warn]] လက်တွေ့မှာ chatbot ကို
+      စောစော ထည့်ရင် မအောင်မြင်တာ များပါတယ်။ [[mark:draw-watch]] ဒါကြောင့် user တွေ တကယ် ဘာလုပ်လဲ
+      စောင့်ကြည့်ပါ။ ပိုပွင့်တိုင်း ပိုအကျိုးရှိတာ မဟုတ်ဘဲ၊ user မှာ prompt ရှည်ရှည် ရေးဖို့ အချိန်နဲ့
+      ကျွမ်းကျင်မှုလည်း လိုပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (flexible tasks rely on detailed user prompts)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-flex,
+          type: whiteboard.apply,
+          at: { mark: draw-flex },
+          open: true,
+          clear: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-btn,
+          type: whiteboard.apply,
+          at: { mark: draw-btn },
+          upsertIds: [e-btn, e-btn-t, e-btn-1, e-btn-2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-chat,
+          type: whiteboard.apply,
+          at: { mark: draw-chat },
+          upsertIds: [e-arrow, e-chat, e-chat-t, e-chat-1, e-chat-2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-warn,
+          type: whiteboard.apply,
+          at: { mark: draw-warn },
+          upsertIds: [e-warn],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-watch,
+          type: whiteboard.apply,
+          at: { mark: draw-watch },
+          upsertIds: [e-watch],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ helper ရဲ့ system prompt ထဲမှာ ဘာတွေ ထည့်သင့်လဲ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ model ရဲ့ role၊ အဖြေ ပုံစံ၊ စာလုံး အရေအတွက်
+      ကန့်သတ်ချက် လို မပြောင်းတဲ့ စည်းကမ်းတွေပါ။ ဘာကြောင့်လဲဆိုတော့ system prompt က request တိုင်းမှာ တူနေတဲ့
+      developer ရဲ့ အခြေခံ ဖြစ်လို့ပါ။ ဝန်ထမ်း ရွေးတဲ့ item လို အခု တောင်းတာကတော့ user prompt ထဲ ရောက်ရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering (Check your understanding)",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ prompt က page နဲ့ model ကြားက စာချုပ်ပါ။ [[mark:sel-parts]] instruction နဲ့ output format က စပြီး၊ အဖြေကို ကြည့်ရင်း လိုတဲ့ အပိုင်းကိုပဲ ထပ်ထည့်ပါ။ [[mark:sel-split]] မပြောင်းတဲ့
+      စည်းကမ်းတွေကို system prompt မှာ ထားပြီး၊ အခု တောင်းတာကိုပဲ user prompt နဲ့ ပို့ပါ။ [[mark:sel-page]]
+      ခလုတ် တစ်ခုနဲ့ ပုံသေ အလုပ်ဆိုရင် system prompt က အလုပ် အများစုကို လုပ်ပေးပါတယ်။ နောက် lesson မှာတော့
+      zero shot၊ few shot၊ chain of thought လို prompting နည်းလမ်းတွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Prompt engineering",
+          url: "https://web.dev/learn/ai/prompt-engineering",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - {
+          id: open-prompt-recap,
+          type: workspace.openFile,
+          at: { mark: sel-parts },
+          path: src/prompt.js,
+        }
+      - id: sel-parts
+        type: editor.select
+        at: { afterAction: open-prompt-recap }
+        target:
+          { file: src/prompt.js, text: "export const helperPrompt = (item) => ({", occurrence: 1 }
+      - {
+          id: open-main-recap,
+          type: workspace.openFile,
+          at: { mark: sel-split },
+          path: src/main.js,
+        }
+      - id: sel-split
+        type: editor.select
+        at: { afterAction: open-main-recap }
+        target: { file: src/main.js, text: "toMessages = systemAndUser;", occurrence: 1 }
+      - id: sel-page
+        type: editor.select
+        at: { mark: sel-page }
+        target: { file: src/main.js, text: "helperPage(helper.newItems, show);", occurrence: 1 }
+      - {
+          id: expect-final-prompt,
+          type: expect.file,
+          at: { afterAction: sel-page },
+          path: src/prompt.js,
+          contains: '  constraints: "Each description under 60 characters.',
+        }
+      - {
+          id: expect-final-main,
+          type: expect.file,
+          at: { afterAction: expect-final-prompt },
+          path: src/main.js,
+          contains: "let toMessages = oneMessage;\ntoMessages = systemAndUser;\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
