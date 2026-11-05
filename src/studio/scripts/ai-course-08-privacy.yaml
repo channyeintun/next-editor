@@ -1,0 +1,2399 @@
+# AI course, lesson 08: privacy and personal data (Burmese, hands-on, M0 only).
+#
+# Start state (ws/): data/reviews.json (COURSE-KIT §4.2, unchanged); src/customer.js (sample data
+# written for the lesson: what the shop's records hold about the member အောင်အောင် — name, phone,
+# township, order counts — and his two reviews r16 (his phone number typed in) and r21 (the counter's
+# လှလှ by name)); src/privacy.js (pinned: the PII patterns PHONE and KNOWN_NAMES, keepOnly, redact, the
+# panel cards `ai-check` (metrics "Privacy check", badge `rules · AI မပါ`: fields, phone numbers, names,
+# raw logs) and `ai-sent` (table "Leaves the browser": one "field · value" column), and showPrivacyControls, the
+# customer's page in #app); src/main.js builds what the page sends to the model on the server with his
+# reviews: his whole profile + both reviews, an empty rules list, keepDays = Infinity.
+#
+# Edits, all insert-only, one line each (line-by-line):
+#   1. keepOnly(reviews)             fields 5 → 1, phone numbers 2 → 1, names 2 → 1 (table 6 → 2 rows)
+#   2. rule [PHONE, "[ဖုန်း]"]         phone numbers 1 → 0; the first review shows [ဖုန်း]
+#   3. rule [KNOWN_NAMES, "[နာမည်]"]   names 1 → 0; the second review shows [နာမည်]
+#   4. keepDays = 30                 raw logs forever → 30 days
+#   5. showPrivacyControls(…)        #app: the label, the details button, the in-context consent
+# Clicks (after the last edit): how → the details (what is sent and why, what is removed, how long);
+# consent-1 သုံးပါ → the orders row leaves the browser too (fields 2, table 3 rows); consent-2 မသုံးပါနဲ့ → gone again.
+# All M0 (plain deterministic JavaScript); measured with tools/sim.ts and verify.
+#
+# Boards: (A) the mini blueprint, Governance highlighted; (G) the three dimensions × three layers;
+# (E) privacy expectations by audience; (P) anonymization / pseudonymization / aggregation;
+# (I) the intelligence layer; (S) the privacy summary per layer and the UX extras; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-08-privacy.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-08-privacy
+  title: "AI course 08: Privacy နဲ့ ကိုယ်ရေး data"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/reviews.json: |
+        {
+         "note": "Synthetic sample reviews written for the AI course (not real customers). lang: my, en, mixed, my-latn (romanized Burmese). sentiment and type are the shop's own labels; tags mark edge cases.",
+         "reviews": [
+          { "id": "r01", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ချိုဆိမ့် တစ်ခွက်နဲ့ မနက်တိုင်း စတယ်။ အရသာ တစ်ခါမှ မပြောင်းဘူး။" },
+          { "id": "r02", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "delivery နဲ့ မှာတာ တစ်နာရီ ကြာတယ်၊ ရောက်တော့ ဟင်းရည် အေးနေပြီ။" },
+          { "id": "r03", "item": "laphet-yay", "lang": "en", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Best tea in Bahan, but Sunday mornings are packed and slow." },
+          { "id": "r04", "item": "palata", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ပလာတာက ကြွပ်ပြီး ကောင်းတယ်၊ ဒါပေမဲ့ ဆီ နည်းနည်း များတယ်။" },
+          { "id": "r05", "item": "coffee", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "ကော်ဖီ ပူပူလေး သောက်ရတာ စိတ်ချမ်းသာတယ် ☕" },
+          { "id": "r06", "item": "shan-noodles", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မှာပြီးမှ ကုန်သွားပြီလို့ ပြောတယ်၊ ပိုက်ဆံ ပြန်ရဖို့ နှစ်ရက် စောင့်ရတယ်။" },
+          { "id": "r07", "item": "mohinga", "lang": "mixed", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "Mohinga က အရမ်း ကောင်းတယ်၊ but the price went up again." },
+          { "id": "r08", "item": "lime-juice", "lang": "en", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Lime juice was too sweet for me." },
+          { "id": "r09", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "ဝန်ထမ်းတွေ ယဉ်ကျေးတယ်၊ ဆိုင်လည်း သန့်တယ်။" },
+          { "id": "r10", "item": "laphet-yay", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["emoji"], "text": "👍👍👍" },
+          { "id": "r11", "item": "mohinga", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["sarcasm"], "text": "အရမ်း မြန်တာပဲ၊ နှစ်နာရီပဲ စောင့်ရတယ်။" },
+          { "id": "r12", "item": null, "lang": "en", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "Can I order 50 cups for an office event next Friday?" },
+          { "id": "r13", "item": "falooda", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နေပူတဲ့နေ့မှာ ဖာလူဒါ အေးအေးလေးက အကောင်းဆုံးပဲ။" },
+          { "id": "r14", "item": "mohinga", "lang": "my-latn", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "Mohinga ka a yan kg tl. Nout tit khout lr mal." },
+          { "id": "r15", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "ညနေ ၈ နာရီ ထိ ဖွင့်လား။" },
+          { "id": "r16", "item": "palata", "lang": "my", "stars": 1, "sentiment": "negative", "type": "complaint", "tags": ["pii"], "text": "အော်ဒါ မရောက်သေးဘူး။ 09 000 123 456 ကို ပြန်ဆက်ပေးပါ။" },
+          { "id": "r17", "item": "coffee", "lang": "en", "stars": 2, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Coffee tasted burnt today. Usually it's great." },
+          { "id": "r18", "item": "laphet-thoke", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "လက်ဖက်သုပ် အရသာ ပြည့်တယ်၊ နည်းနည်း စပ်တယ်။" },
+          { "id": "r19", "item": null, "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": ["long"], "text": "ဒီဆိုင်ကို ကျောင်းတက်ကတည်းက လာနေတာ ဆယ်နှစ်ကျော်ပြီ။ လက်ဖက်ရည် အရသာက အရင်အတိုင်း ကောင်းတုန်းပဲ။ ဒါပေမဲ့ စနေ တနင်္ဂနွေ မနက်ဆိုရင် ထိုင်ခုံ ရဖို့ ခက်တယ်၊ ကားရပ်ဖို့လည်း နေရာ မရှိဘူး။ delivery ကတော့ မြန်တယ်။" },
+          { "id": "r20", "item": "e-kya-kwe", "lang": "my", "stars": 3, "sentiment": "negative", "type": "complaint", "tags": [], "text": "အီကြာကွေး မနက်က ကြော်ထားတာ ညနေ ရောက်တော့ ပျော့နေပြီ။" },
+          { "id": "r21", "item": null, "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": ["pii"], "text": "ကောင်တာက လှလှ က ကျွန်တော် မှာနေကျကို မှတ်မိနေတယ်၊ အရမ်း သဘောကျတယ်။" },
+          { "id": "r22", "item": null, "lang": "my", "stars": null, "sentiment": null, "type": "question", "tags": [], "text": "စမ်းချောင်းကို delivery ပို့ပေးလား။" },
+          { "id": "r23", "item": "mohinga", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The mohinga is rich and the fish broth tastes fresh." },
+          { "id": "r24", "item": "shan-noodles", "lang": "my", "stars": 4, "sentiment": "mixed", "type": "praise", "tags": [], "text": "ရှမ်းခေါက်ဆွဲ အရသာ ကောင်းတယ်၊ ပမာဏ နည်းနည်း ထပ်ပေးရင် ပိုကောင်းမယ်။" },
+          { "id": "r25", "item": "laphet-yay", "lang": "en", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "The milk tea is strong and creamy, just how I like it." },
+          { "id": "r26", "item": "samosa", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "Crispy samosas, a little spicy, great with tea." },
+          { "id": "r27", "item": "nan-gyi-thoke", "lang": "en", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "The nan gyi thoke was too spicy and the noodles were soggy." },
+          { "id": "r28", "item": "mohinga", "lang": "en", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "Tasty mohinga, but we waited forty minutes on Sunday." },
+          { "id": "r29", "item": "falooda", "lang": "en", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "The falooda was cold and sweet, perfect for a hot afternoon." },
+          { "id": "r30", "item": "nan-gyi-thoke", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "နန်းကြီးသုပ်က စပ်စပ်လေးနဲ့ အရမ်း စားကောင်းတယ်။" },
+          { "id": "r31", "item": "samosa", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "စမူဆာက ဆီစိမ်ပြီး အေးနေတယ်။" },
+          { "id": "r32", "item": "lime-juice", "lang": "my", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "သံပုရာရည် ချဉ်ချဉ် အေးအေးလေး သောက်လို့ ကောင်းတယ်။" },
+          { "id": "r33", "item": "laphet-thoke", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "လက်ဖက်သုပ်က ငန်လွန်းတယ်၊ ပဲကြော်လည်း နည်းတယ်။" },
+          { "id": "r34", "item": "e-kya-kwe", "lang": "my", "stars": 5, "sentiment": "positive", "type": "praise", "tags": [], "text": "အီကြာကွေး ပူပူ ကြွပ်ကြွပ်ကို လက်ဖက်ရည်နဲ့ တွဲစားရတာ အရမ်း ကောင်းတယ်။" },
+          { "id": "r35", "item": "mohinga", "lang": "my", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "မုန့်ဟင်းခါး ဈေး တက်သွားပြီး ပမာဏက နည်းသွားတယ်။" },
+          { "id": "r36", "item": "coffee", "lang": "my", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "ကော်ဖီ အရသာ ကောင်းပေမယ့် ချိုလွန်းတယ်။" },
+          { "id": "r37", "item": "palata", "lang": "mixed", "stars": 4, "sentiment": "positive", "type": "praise", "tags": [], "text": "ပလာတာ ကြွပ်ကြွပ်လေး၊ really good with the bean curry." },
+          { "id": "r38", "item": "shan-noodles", "lang": "mixed", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Shan noodles ကုန်သွားပြန်ပြီ၊ third time this month." },
+          { "id": "r39", "item": "laphet-yay", "lang": "mixed", "stars": 3, "sentiment": "mixed", "type": "complaint", "tags": [], "text": "လက်ဖက်ရည်က ကောင်းတယ်၊ but it's hard to get a seat on Saturday morning." },
+          { "id": "r40", "item": "laphet-yay", "lang": "my-latn", "stars": 2, "sentiment": "negative", "type": "complaint", "tags": [], "text": "Laphet yay ka a cho lun tal." }
+         ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/customer.js: |
+        // Sample data written for this lesson (not a real customer): what the shop's records hold about one
+        // ရွှေ member, and the two reviews he wrote this week (r16 and r21 in data/reviews.json).
+        import data from "../data/reviews.json";
+
+        const review = (id) => data.reviews.find((r) => r.id === id).text;
+
+        export const customer = {
+          name: "အောင်အောင်",
+          phone: "09 000 123 456",
+          township: "ဗဟန်း",
+          orders: "လက်ဖက်ရည် 20 · မုန့်ဟင်းခါး 12",
+        };
+
+        export const reviews = [review("r16"), review("r21")];
+      src/main.js: |
+        import { customer, reviews } from "./customer.js";
+        import { PHONE, KNOWN_NAMES, keepOnly, redact, showSent, showPrivacyControls } from "./privacy.js";
+
+        // What the shop's page sends to the model on the server with အောင်အောင်'s two reviews:
+        let sent = { ...customer, reviews };
+
+        // 1. Only what the review analysis needs:
+
+        // 2. Rules that hide personal data (PII) in what he typed:
+        const rules = [
+        ];
+        sent = redact(sent, rules);
+
+        // 3. How many days the shop keeps its raw logs:
+        let keepDays = Infinity;
+
+        showSent(sent, keepDays);
+      src/privacy.js: |
+        // Privacy steps for the review analysis, and the customer's page. Plain rules: no model runs here.
+        import { panel } from "ai-panel";
+        import { button, choices, row } from "./ui.js";
+        import { customer } from "./customer.js";
+
+        // Patterns for personal data (PII) in free text.
+        export const PHONE = /09[ 0-9]{7,12}[0-9]/g; // a Myanmar mobile number
+        export const KNOWN_NAMES = /မြမြ|လှလှ|အောင်အောင်|မောင်မောင်/g; // names in the shop's records
+
+        // Keep only the fields the feature needs.
+        export const keepOnly = (sent, fields) =>
+          Object.fromEntries(Object.entries(sent).filter(([field]) => fields.includes(field)));
+
+        // Replace every match of each rule's pattern with its mark, in every text that is sent.
+        const clean = (text, rules) => rules.reduce((t, [pattern, mark]) => t.replace(pattern, mark), String(text));
+        export const redact = (sent, rules) =>
+          Object.fromEntries(
+            Object.entries(sent).map(([field, value]) => [
+              field,
+              Array.isArray(value) ? value.map((text) => clean(text, rules)) : clean(value, rules),
+            ]),
+          );
+
+        const texts = (sent) => Object.values(sent).flat().map(String);
+        const count = (sent, pattern) => texts(sent).reduce((n, text) => n + (text.match(pattern)?.length ?? 0), 0);
+
+        // The AI panel: what this page would send to the model on the server, and a check of it.
+        export function showSent(sent, keepDays) {
+          panel.metrics("Privacy check", {
+            fields: Object.keys(sent).length,
+            "phone numbers": count(sent, PHONE),
+            names: count(sent, KNOWN_NAMES),
+            "raw logs": Number.isFinite(keepDays) ? `${keepDays} days` : "forever",
+          }, { id: "check", badge: "rules · AI မပါ" });
+          // One column, "field · value", so a long review never squeezes the field names.
+          const rows = Object.entries(sent).flatMap(([field, value]) =>
+            Array.isArray(value)
+              ? value.map((text) => ({ "field · value": `${field.replace(/s$/, "")} · ${text}` })) // reviews → review
+              : [{ "field · value": `${field} · ${value}` }],
+          );
+          panel.table("Leaves the browser", rows, { id: "sent", columns: ["field · value"] });
+        }
+
+        // What the customer reads when he opens the details: what is sent and why, what is removed, how long.
+        function details(sent, keepDays) {
+          const reviews = sent.reviews?.length ?? 0;
+          const removed = count(sent, PHONE) === 0 && count(sent, KNOWN_NAMES) === 0;
+          return [
+            `review ${reviews} ခု · ဆိုင်ကို ဘာပြောလဲ သိဖို့`,
+            "orders" in sent ? "မှာခဲ့တာ အရေအတွက် · အကြံပေးဖို့" : null,
+            removed ? "ဖုန်း၊ နာမည် · ဒီ စက်ထဲမှာပဲ ဖယ်ပါတယ်" : "ဖုန်း၊ နာမည် · ပါနေပါတယ်",
+            Number.isFinite(keepDays) ? `log · ${keepDays} ရက်ပြီးရင် ဖျက်ပါတယ်` : "log · အမြဲ သိမ်းထားပါတယ်",
+          ].filter(Boolean).join("\n");
+        }
+
+        // The customer's page (#app): a label that says where his reviews go, the details behind it, and a
+        // question asked where it matters, before his past orders are used.
+        export function showPrivacyControls(sent, keepDays) {
+          let agreed = false;
+          let open = false;
+          const label = row();
+          const where = document.createElement("span");
+          where.dataset.testid = "where";
+          where.textContent = "review ကို စစ်ဖို့ server ကို လုံခြုံစွာ ပို့ပါတယ်";
+          label.append(where);
+          button("ဘယ်လို လုပ်လဲ", "how", () => {
+            open = !open;
+            draw();
+          }, label);
+          const more = row();
+          more.dataset.testid = "details";
+          more.style.whiteSpace = "pre-line";
+          more.style.display = "none";
+          choices("consent", ["သုံးပါ", "မသုံးပါနဲ့"], (choice) => {
+            agreed = choice === "သုံးပါ";
+            draw();
+          }, { label: "မှာခဲ့ဖူးတာတွေကို သုံးပြီး အကြံပေးရမလား" });
+          const draw = () => {
+            const now = agreed ? { ...sent, orders: customer.orders } : sent;
+            showSent(now, keepDays);
+            more.textContent = open ? details(now, keepDays) : "";
+            more.style.display = open ? "block" : "none";
+          };
+        }
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Governance is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 620,
+        height: 45,
+        text: "ဒီနေ့ · privacy နဲ့ ကိုယ်ရေး data",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board G: governance's three dimensions (privacy today, orange), each checked in the three layers.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 50,
+        text: "Governance · 3 ချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: g-p, kind: rectangle, x: 300, y: 228, width: 230, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: g-p-t,
+        kind: text,
+        x: 318,
+        y: 239,
+        width: 200,
+        height: 38,
+        text: "privacy",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: g-f, kind: rectangle, x: 545, y: 228, width: 230, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: g-f-t,
+        kind: text,
+        x: 563,
+        y: 239,
+        width: 200,
+        height: 38,
+        text: "fairness",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: g-t, kind: rectangle, x: 790, y: 228, width: 230, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: g-t-t,
+        kind: text,
+        x: 808,
+        y: 239,
+        width: 200,
+        height: 38,
+        text: "trust",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-n-p,
+        kind: text,
+        x: 318,
+        y: 296,
+        width: 200,
+        height: 38,
+        text: "ဒီနေ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g-n-f,
+        kind: text,
+        x: 563,
+        y: 296,
+        width: 200,
+        height: 38,
+        text: "lesson 09",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-n-t,
+        kind: text,
+        x: 808,
+        y: 296,
+        width: 200,
+        height: 38,
+        text: "lesson 10",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-each,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 600,
+        height: 38,
+        text: "တစ်ချက်ချင်းကို အလွှာ 3 ခုမှာ စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: g-d, kind: rectangle, x: 300, y: 402, width: 230, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: g-d-t,
+        kind: text,
+        x: 318,
+        y: 413,
+        width: 200,
+        height: 38,
+        text: "data",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: g-i, kind: rectangle, x: 545, y: 402, width: 230, height: 60, strokeColor: "#6741d9" }
+    - {
+        id: g-i-t,
+        kind: text,
+        x: 563,
+        y: 413,
+        width: 210,
+        height: 38,
+        text: "intelligence",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - { id: g-u, kind: rectangle, x: 790, y: 402, width: 230, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: g-u-t,
+        kind: text,
+        x: 808,
+        y: 413,
+        width: 200,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-sec,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 700,
+        height: 38,
+        text: "+ security · ဒီ course မှာ အသေးစိတ် မပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board E: how strict privacy must be depends on who the users are.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Privacy · user ပေါ် မူတည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-c-l,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 200,
+        height: 40,
+        text: "customer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-c,
+        kind: text,
+        x: 520,
+        y: 240,
+        width: 520,
+        height: 40,
+        text: "နာမည်၊ message၊ ကြည့်တာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-b-l,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 200,
+        height: 40,
+        text: "လုပ်ငန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-b,
+        kind: text,
+        x: 520,
+        y: 300,
+        width: 520,
+        height: 40,
+        text: "လျှို့ဝှက် data၊ ကိုယ်ပိုင် design",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-s,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 720,
+        height: 45,
+        text: "ကျန်းမာရေး · ငွေ · ပညာရေး",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: e-s2,
+        kind: text,
+        x: 300,
+        y: 432,
+        width: 520,
+        height: 45,
+        text: "→ ပိုတင်းကျပ်",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    # Board P: three ways to strip PII (names green, examples blue, what each keeps white).
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 50,
+        text: "PII ကို ဖယ်တဲ့ နည်း 3 မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-a-n,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 320,
+        height: 40,
+        text: "anonymization",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p-a-e,
+        kind: text,
+        x: 640,
+        y: 235,
+        width: 420,
+        height: 40,
+        text: "ဖုန်းနံပါတ် → [ဖုန်း]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-a-d,
+        kind: text,
+        x: 640,
+        y: 277,
+        width: 420,
+        height: 38,
+        text: "ဘယ်သူလဲ မသိနိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-p-n,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 320,
+        height: 40,
+        text: "pseudonymization",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p-p-e,
+        kind: text,
+        x: 640,
+        y: 335,
+        width: 420,
+        height: 40,
+        text: "အောင်အောင် → customer 7",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-p-d,
+        kind: text,
+        x: 640,
+        y: 377,
+        width: 420,
+        height: 38,
+        text: "ဆိုင်ကပဲ ပြန်ချိတ်နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-g-n,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 320,
+        height: 40,
+        text: "aggregation",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p-g-e,
+        kind: text,
+        x: 640,
+        y: 435,
+        width: 420,
+        height: 40,
+        text: "ဗဟန်း · review 12 ခု",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-g-d,
+        kind: text,
+        x: 640,
+        y: 477,
+        width: 420,
+        height: 38,
+        text: "စုပေါင်း ဂဏန်းပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-today,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 720,
+        height: 40,
+        text: "ဒီနေ့ · ဖုန်း၊ နာမည် → အမှတ်အသား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board I: privacy in the intelligence layer (risks red, what to do green).
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "Intelligence · model ဘက်က",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-free,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 760,
+        height: 40,
+        text: "free text ထဲ ကိုယ်ရေး data · rule က လွတ်နိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-log,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 760,
+        height: 40,
+        text: "provider က log သိမ်း၊ train လုပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-mem,
+        kind: text,
+        x: 300,
+        y: 336,
+        width: 760,
+        height: 40,
+        text: "model က အလွတ်မှတ်ပြီး ပြန်ပြော",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-vet,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 760,
+        height: 40,
+        text: "→ data policy စစ် · model card",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-own,
+        kind: text,
+        x: 300,
+        y: 444,
+        width: 760,
+        height: 40,
+        text: "ကိုယ်တိုင် train → township လို shortcut",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-client,
+        kind: text,
+        x: 300,
+        y: 498,
+        width: 760,
+        height: 40,
+        text: "sensitive → client side inference",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-fed,
+        kind: text,
+        x: 300,
+        y: 552,
+        width: 760,
+        height: 40,
+        text: "federated learning · device ပေါ်မှာ train",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board S: privacy per layer, the UX extras, and the motto.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Privacy · အလွှာ 3 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-d-l,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 190,
+        height: 40,
+        text: "data",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: s-d,
+        kind: text,
+        x: 540,
+        y: 235,
+        width: 540,
+        height: 40,
+        text: "လိုတာပဲ ယူ၊ PII ဖယ်၊ log ဖျက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-i-l,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 225,
+        height: 40,
+        text: "intelligence",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: s-i,
+        kind: text,
+        x: 540,
+        y: 295,
+        width: 540,
+        height: 40,
+        text: "provider စစ်၊ အလွတ်မှတ်တာ သတိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-u-l,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 190,
+        height: 40,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-u,
+        kind: text,
+        x: 540,
+        y: 355,
+        width: 540,
+        height: 40,
+        text: "label၊ လိုမှ မေး၊ ပိတ်လို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-u2,
+        kind: text,
+        x: 540,
+        y: 405,
+        width: 540,
+        height: 40,
+        text: "ကိုယ့် data စာမျက်နှာ · ဘာကြောင့် ယူလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-motto,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 50,
+        text: "နည်းနည်း ယူ၊ များများ ကာကွယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    # Board Z: the quiz (question white, the answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 640,
+        height: 45,
+        text: "review feature အတွက် ဘယ်ဟာ မှန်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 700,
+        height: 40,
+        text: "A · profile တစ်ခုလုံးပါ နောင်အတွက် ယူထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 320,
+        y: 336,
+        width: 700,
+        height: 40,
+        text: "B · review စာသားပဲ ယူပြီး PII ကို ဖယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o3,
+        kind: text,
+        x: 320,
+        y: 382,
+        width: 700,
+        height: 40,
+        text: "C · log တွေကို ဘယ်တော့မှ မဖျက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 305,
+        y: 326,
+        width: 545,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 700,
+        height: 45,
+        text: "B · မလိုတာ မယူရင် မပေါက်ကြား",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-note,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 700,
+        height: 40,
+        text: "A နဲ့ C က ပေါက်ကြားနိုင်တာကို ပိုများ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5108
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Privacy ဆိုတာ ဘာလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ ဖော်ပြချက် helper ကို တကယ် သုံးတဲ့ log တွေကနေ ဆက်တိုးတက်အောင်
+      လုပ်တဲ့ feedback loop ကို ကြည့်ခဲ့ပါတယ်။ အဲဒီ loop အတွက် user တွေရဲ့ တကယ့် data လိုလာတာနဲ့ privacy
+      မေးခွန်းလည်း ပေါ်လာပါတယ်။ [[mark:draw-mini]] blueprint မှာ ကြည့်ရင် ဒီနေ့ကစပြီး AI ကို တာဝန်သိသိ
+      ဆောက်တဲ့ Governance အပိုင်းကို လေ့လာပါမယ်။ [[mark:draw-today]] ပထမဆုံးက privacy ပါ။ ကိုယ်တို့ ဆိုင်အတွက်
+      privacy ဆိုတာ customer ရဲ့ ကိုယ်ရေး data ကို ဘယ်လောက် ယူမလဲ၊ ဘယ်ကို ပို့မလဲ၊ ဘယ်လောက်ကြာ သိမ်းမလဲ
+      ဆိုတာကို ဂရုတစိုက် ဆုံးဖြတ်ပြီး၊ customer ကိုလည်း သိအောင် ပြောပြတာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: governance
+    narration: >
+      [[mark:draw-dims]] governance ကို lesson သုံးခုမှာ အချက် သုံးချက်နဲ့ ကြည့်ပါမယ်။ ဒီနေ့ privacy၊ နောက်
+      lesson မှာ fairness၊ ပြီးရင် trust နဲ့ transparency ပါ။ [[mark:draw-layers]] အချက် တစ်ချက်ချင်းကို data၊
+      intelligence၊ U X အလွှာ သုံးခုလုံးမှာ စစ်ပါမယ်။ [[mark:draw-security]] security ကလည်း အရေးကြီးတဲ့
+      နောက်ထပ် အချက်ပါ၊ ဒါပေမဲ့ ဒီ course မှာ အသေးစိတ် မပါပါဘူး။ [[mark:draw-expect]] privacy ကို ဘယ်လောက်
+      တင်းကျပ်ရမလဲ ဆိုတာက user ပေါ် မူတည်ပါတယ်။ သာမန် customer တွေက သူတို့ နာမည်၊ message၊ ဘာတွေ ကြည့်လဲ
+      ဆိုတာကို ကာကွယ်ချင်ကြပါတယ်။ [[mark:draw-expect-b]] လုပ်ငန်းတွေကတော့ လျှို့ဝှက် data နဲ့ ကိုယ်ပိုင်
+      design၊ code လို ဖန်တီးမှုတွေကို ကာကွယ်ချင်ကြပါတယ်။ [[mark:draw-expect-s]] ကျန်းမာရေး၊ ငွေကြေး၊ ပညာရေး
+      လို လူတွေရဲ့ ဘဝနဲ့ ဆိုင်တဲ့ နယ်ပယ်တွေမှာ ပိုတင်းကျပ်ရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (three dimensions, privacy)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+      - {
+          title: "Google: Secure AI Framework (SAIF)",
+          url: "https://safety.google/cybersecurity-advancements/saif/",
+        }
+    actions:
+      - {
+          id: draw-dims,
+          type: whiteboard.apply,
+          at: { mark: draw-dims },
+          clear: true,
+          upsertIds: [g-title, g-p, g-p-t, g-f, g-f-t, g-t, g-t-t, g-n-p, g-n-f, g-n-t],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-layers,
+          type: whiteboard.apply,
+          at: { mark: draw-layers },
+          upsertIds: [g-each, g-d, g-d-t, g-i, g-i-t, g-u, g-u-t],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-security,
+          type: whiteboard.apply,
+          at: { mark: draw-security },
+          upsertIds: [g-sec],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-expect,
+          type: whiteboard.apply,
+          at: { mark: draw-expect },
+          clear: true,
+          upsertIds: [e-title, e-c-l, e-c],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-expect-b,
+          type: whiteboard.apply,
+          at: { mark: draw-expect-b },
+          upsertIds: [e-b-l, e-b],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-expect-s,
+          type: whiteboard.apply,
+          at: { mark: draw-expect-s },
+          upsertIds: [e-s, e-s2],
+          drawMs: 1400,
+        }
+
+  - id: payload
+    chapter: "Browser အပြင်ကို ဘာ ထွက်သွားလဲ"
+    narration: >
+      [[mark:close-expect]] ဒါဆို ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ [[mark:panel-ready]] ကိုယ်တို့က customer
+      ရေးတဲ့ review တွေကို အပြင် ကုမ္ပဏီ တစ်ခုရဲ့ server ပေါ်က model ဆီ ပို့ပြီး ဘာအကြောင်း ပြောလဲ ခွဲခိုင်းမယ့်
+      feature ကို ဆောက်နေပါတယ်။ ဆိုင်ပိုင်ရှင် မြမြ က ရလဒ်ကို dashboard မှာ ကြည့်ဖို့ပါ။ ညာဘက် AI panel မှာ ပို့မယ့် data
+      ကို ပြထားပါတယ်။ ဒီ data က lesson အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ [[mark:open-main]] program က member
+      အောင်အောင် ရေးတဲ့ review နှစ်ခုကို၊ [[mark:sel-sent]] ဆိုင်ရဲ့ record ထဲက သူ့ profile နဲ့ ပေါင်းပြီး
+      ပို့ဖို့ ပြင်ထားပါတယ်။ [[mark:read-sent]] Leaves the browser table မှာ နာမည်၊ ဖုန်းနံပါတ်၊ မြို့နယ်၊ မှာခဲ့တာ
+      အရေအတွက်နဲ့ review နှစ်ခု ပါပါတယ်။ ပထမ review ထဲမှာ သူ့ ဖုန်းနံပါတ်ကို သူကိုယ်တိုင် ရေးထားပြီး၊ ဒုတိယ
+      review မှာတော့ ကောင်တာက လှလှ ရဲ့ နာမည် ပါပါတယ်။ [[mark:read-check]] Privacy check card ကလည်း field
+      ငါးခု၊ ဖုန်းနံပါတ် နှစ်ခု၊ နာမည် နှစ်ခု ပါပြီး၊ ဆိုင်ဘက်မှာ သိမ်းမယ့် log ကိုလည်း အမြဲ ထားမယ်လို့ ပြနေပါတယ်။ ဒီလို စစ်တာ
+      model မလိုလို့၊ card ရဲ့ badge ကလည်း AI မပါဘူးလို့ ပြနေပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy: data)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-expect, type: whiteboard.apply, at: { mark: close-expect }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-two-cards
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: src/main.js }
+      - id: sel-reviews
+        type: editor.select
+        at: { afterAction: open-main }
+        target: { file: src/main.js, text: "reviews };", occurrence: 1 }
+      - id: sel-sent
+        type: editor.select
+        at: { mark: sel-sent }
+        target: { file: src/main.js, text: "...customer", occurrence: 1 }
+      - id: expect-sent-6
+        type: expect.preview
+        at: { mark: read-sent }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent }
+        attribute: { name: data-count, value: "6" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-sent-phone
+        type: expect.preview
+        at: { afterAction: expect-sent-6 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent-5 }
+        textContains: "review · အော်ဒါ မရောက်သေးဘူး။ 09 000 123 456"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-sent-name
+        type: expect.preview
+        at: { afterAction: expect-sent-phone }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent-6 }
+        textContains: "review · ကောင်တာက လှလှ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-fields-5
+        type: expect.preview
+        at: { mark: read-check }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-1 }
+        attribute: { name: data-value, value: "5" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-phones-2
+        type: expect.preview
+        at: { afterAction: expect-fields-5 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-2 }
+        attribute: { name: data-value, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-names-2
+        type: expect.preview
+        at: { afterAction: expect-phones-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-3 }
+        attribute: { name: data-value, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-logs-forever
+        type: expect.preview
+        at: { afterAction: expect-names-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-4 }
+        attribute: { name: data-value, value: "forever" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-check-badge
+        type: expect.preview
+        at: { afterAction: expect-logs-forever }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-badge }
+        textContains: "rules · AI မပါ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: collect
+    chapter: "လိုတာကိုပဲ ယူရအောင်"
+    narration: >
+      data အလွှာရဲ့ ပထမ စည်းကမ်းက feature အတွက် လိုတာကိုပဲ ယူဖို့ပါ။ review ဘာအကြောင်း ပြောလဲ ခွဲဖို့ review
+      စာသားပဲ လိုပြီး၊ customer ရဲ့ profile မလိုပါဘူး။ နောင် လိုမလား ဆိုပြီး အကုန် ယူထားရင်၊ ပေါက်ကြားတဲ့
+      နေ့မှာ ဆုံးရှုံးမယ့် data လည်း အကုန်ပါပဲ။ [[mark:type-keep]] ဒါကြောင့် review နှစ်ခုကိုပဲ ချန်ထားတဲ့
+      စာကြောင်း ထည့်ပါမယ်။ [[mark:read-keep]] field က ငါးခုကနေ တစ်ခု ဖြစ်သွားပြီး၊ review နှစ်ခုပဲ
+      ကျန်ပါတော့တယ်။ ဒါပေမဲ့ customer ရေးတဲ့ စာထဲမှာ ဖုန်းနံပါတ် တစ်ခုနဲ့ နာမည် တစ်ခု ကျန်နေသေးပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy: collect only what's needed)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - id: type-keep
+        type: editor.type
+        at: { mark: type-keep }
+        target:
+          {
+            file: src/main.js,
+            after: "// 1. Only what the review analysis needs:\n",
+            occurrence: 1,
+          }
+        text: "sent = keepOnly(sent, [\"reviews\"]);\n"
+        cadence: line-by-line
+      - id: expect-sent-2
+        type: expect.preview
+        at: { afterAction: type-keep }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-sent }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-fields-1
+        type: expect.preview
+        at: { afterAction: expect-sent-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-1 }
+        attribute: { name: data-value, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-phones-1
+        type: expect.preview
+        at: { mark: read-keep }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-2 }
+        attribute: { name: data-value, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-names-1
+        type: expect.preview
+        at: { afterAction: expect-phones-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-check-3 }
+        attribute: { name: data-value, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: redact
+    chapter: "PII ကို မပို့ခင် ဖယ်ရအောင်"
+    narration: >
+      [[mark:draw-strip]] အပြင်က model ဆီ မပို့ခင် PII ကို ဖယ်ရပါမယ်။ PII ဆိုတာ နာမည်၊ ဖုန်းနံပါတ် လို လူ
+      တစ်ယောက်ကို ခွဲခြား သိနိုင်တဲ့ အချက်တွေပါ။ ဖယ်တဲ့ နည်း သုံးမျိုး ရှိပါတယ်။
+      [[mark:draw-anon]] anonymization က ဘယ်သူလဲ လုံးဝ မသိနိုင်အောင် ဖယ်တာပါ၊ ဖုန်းနံပါတ်နေရာမှာ ဖုန်း ဆိုတဲ့
+      အမှတ်အသား ထည့်တာမျိုးပါ။ [[mark:draw-pseudo]] pseudonymization ကတော့ နာမည် အစစ်အစား customer ခုနစ် လို
+      အမှတ်အသား ပြောင်းထည့်တာ ဖြစ်လို့ ဆိုင်ကပဲ ပြန်ချိတ်နိုင်ပါတယ်။ [[mark:draw-agg]] aggregation က လူ
+      တစ်ယောက်ချင်း မဟုတ်ဘဲ၊ ဗဟန်း က review ဘယ်နှခု လို စုပေါင်း ကိန်းဂဏန်းပဲ သိမ်းတာပါ။
+      [[mark:draw-strip-today]] ဒီနေ့တော့ ပထမ နည်းအတိုင်း ဖုန်းနံပါတ်နဲ့ နာမည်ကို အမှတ်အသားနဲ့ အစားထိုးပါမယ်။
+      [[mark:close-strip]] code မှာ ကြည့်ရအောင်။ [[mark:sel-rules]] rule စာရင်းက အခု ဗလာ ဖြစ်နေလို့ ဘာမှ
+      မဖယ်ရသေးပါဘူး။ [[mark:type-phone]] ပထမ rule က ဖုန်းနံပါတ် ပုံစံ တွေ့ရင် ဖုန်း ဆိုတဲ့ အမှတ်အသားနဲ့
+      အစားထိုးပါတယ်။ [[mark:read-phone]] ပထမ review မှာ ဖုန်းနံပါတ်အစား အမှတ်အသားပဲ ကျန်ပြီး၊ Privacy check
+      မှာလည်း ဖုန်းနံပါတ် သုည ဖြစ်သွားပါပြီ။ [[mark:type-name]] ဒုတိယ rule က ဆိုင်ရဲ့ record ထဲက နာမည်တွေကို
+      နာမည် ဆိုတဲ့ အမှတ်အသားနဲ့ အစားထိုးပါတယ်။ [[mark:read-name]] ဒုတိယ review မှာလည်း လှလှ ရဲ့ နာမည်
+      မပါတော့လို့ နာမည်လည်း သုည ဖြစ်ပါပြီ။ model က review ကို ခွဲဖို့ ဖုန်းနဲ့ နာမည် မလိုပါဘူး။ rule
+      တွေက browser ထဲမှာပဲ run တာမို့၊ ဖုန်းနဲ့ နာမည်က page အပြင်ကို ရောက်မှာ မဟုတ်တော့ပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy: strip sensitive information)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-strip,
+          type: whiteboard.apply,
+          at: { mark: draw-strip },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-anon,
+          type: whiteboard.apply,
+          at: { mark: draw-anon },
+          upsertIds: [p-a-n, p-a-e, p-a-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-pseudo,
+          type: whiteboard.apply,
+          at: { mark: draw-pseudo },
+          upsertIds: [p-p-n, p-p-e, p-p-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-agg,
+          type: whiteboard.apply,
+          at: { mark: draw-agg },
+          upsertIds: [p-g-n, p-g-e, p-g-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-strip-today,
+          type: whiteboard.apply,
+          at: { mark: draw-strip-today },
+          upsertIds: [p-today],
+          drawMs: 1000,
+        }
+      - { id: close-strip, type: whiteboard.apply, at: { mark: close-strip }, open: false }
+      - id: sel-rules
+        type: editor.select
+        at: { mark: sel-rules }
+        target: { file: src/main.js, text: "const rules = [\n];\n", occurrence: 1 }
+      - id: type-phone
+        type: editor.type
+        at: { mark: type-phone }
+        target: { file: src/main.js, after: "const rules = [\n", occurrence: 1 }
+        text: "  [PHONE, \"[ဖုန်း]\"],\n"
+        cadence: line-by-line
+      - id: expect-phones-0
+        type: expect.preview
+        at: { afterAction: type-phone }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-check-2 }
+        attribute: { name: data-value, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-phone-mark
+        type: expect.preview
+        at: { mark: read-phone }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent-1 }
+        textContains: "review · အော်ဒါ မရောက်သေးဘူး။ [ဖုန်း] ကို ပြန်ဆက်ပေးပါ။"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-name
+        type: editor.type
+        at: { mark: type-name }
+        target: { file: src/main.js, after: "  [PHONE, \"[ဖုန်း]\"],\n", occurrence: 1 }
+        text: "  [KNOWN_NAMES, \"[နာမည်]\"],\n"
+        cadence: line-by-line
+      - id: expect-names-0
+        type: expect.preview
+        at: { afterAction: type-name }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-check-3 }
+        attribute: { name: data-value, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-name-mark
+        type: expect.preview
+        at: { mark: read-name }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent-2 }
+        textContains: "review · ကောင်တာက [နာမည်] က"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: retention
+    narration: >
+      ဆိုင်က ပို့တဲ့ data နဲ့ ပြန်ရတဲ့ အဖြေကို log အဖြစ် သိမ်းပြီး evaluation အတွက် သုံးပါတယ်။ ဒါပေမဲ့
+      သုံးပြီးရင် ဖျက်ရပါမယ်၊ ကြာကြာ မသိမ်းလေ အန္တရာယ် နည်းလေပါပဲ။ [[mark:type-days]] ဒါကြောင့် အစက
+      တန်ဖိုးရဲ့ အောက်မှာ ရက် ၃၀ ပြည့်ရင် ဖျက်မယ့် စာကြောင်း ထပ်ထည့်ပြီး အစားထိုးပါမယ်။ [[mark:read-days]] raw logs က အမြဲ ကနေ ရက် ၃၀
+      ဖြစ်သွားပါပြီ။ ဘာ data ယူလဲ၊ ဘာကြောင့် ယူလဲ၊ ဘယ်လောက်ကြာ သိမ်းလဲ ဆိုတာလည်း ရေးမှတ်ထားပါ။ မြမြ ကို
+      ရှင်းပြလို့ မရရင် အဲဒီ data flow က ရှုပ်လွန်းနေပြီ ဆိုတဲ့ သဘောပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy: limit retention, document)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - id: type-days
+        type: editor.type
+        at: { mark: type-days }
+        target: { file: src/main.js, after: "let keepDays = Infinity;\n", occurrence: 1 }
+        text: "keepDays = 30;\n"
+        cadence: line-by-line
+      - id: expect-logs-30
+        type: expect.preview
+        at: { afterAction: type-days }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-check-4 }
+        attribute: { name: data-value, value: "30 days" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: intelligence
+    chapter: "Model ဘက်က privacy"
+    narration: >
+      [[mark:draw-intel]] intelligence အလွှာကို ကြည့်ရင်၊ [[mark:draw-free]] customer တွေက ဖုန်းနံပါတ်၊ ကျန်းမာရေး အခြေအနေ လို ကိုယ်ရေး အချက်တွေကို free text ထဲမှာ သတိမထားမိဘဲ
+      ရေးတတ်ပါတယ်။ rule က ကိုယ်ပေးထားတဲ့ ပုံစံကိုပဲ ရှာနိုင်လို့၊ ဆိုင် မသိတဲ့ နာမည်၊ နို့ မတည့်တာ လို
+      အချက်တွေ လွတ်သွားနိုင်ပါတယ်။ [[mark:draw-log]] model က အပြင် provider ရဲ့ server ပေါ်မှာ run ရင်၊
+      provider က ပို့တဲ့ စာကို log သိမ်းတာ၊ model အသစ် train လုပ်ဖို့ သုံးတာ ရှိနိုင်ပါတယ်။ အဲဒီ စာတွေနဲ့ train လုပ်ထားတဲ့
+      model က တချို့ စာကို အလွတ်မှတ်ပြီး တခြား user တွေဆီ ပြန်ထုတ်ပေးမိတာလည်း ဖြစ်နိုင်ပါတယ်။ [[mark:draw-vet]] ဒါကြောင့် ဒီ
+      အချက်တွေကို provider ရဲ့ data policy မှာ သေချာ စစ်ပါ။ provider တချို့က
+      model ကို ဘယ်လို ဆောက်ပြီး ဘယ်လို စစ်ထားလဲ ရေးထားတဲ့ model card ကိုလည်း ထုတ်ပေးပါတယ်။ [[mark:draw-own]]
+      model ကို ကိုယ်တိုင် train လုပ်ရင်တော့ မြို့နယ် လို column က လူတွေရဲ့ အခြေအနေကို သွယ်ဝိုက်ပြီး
+      ပြနေတတ်တာကို သတိထားပါ၊ နောက် lesson မှာ ပြန်ကြည့်ပါမယ်။
+      [[mark:draw-client]] ကျန်းမာရေး လို sensitive ဖြစ်တဲ့ နယ်ပယ်မှာဆိုရင် user ရဲ့ device ထဲမှာပဲ model ကို
+      run တဲ့ client side inference က ပိုကောင်းပါတယ်။ [[mark:draw-fed]] federated learning ဆိုတဲ့ နည်းမှာတော့
+      data က user ရဲ့ device ထဲမှာပဲ ကျန်ပြီး၊ အဲဒီမှာ train လုပ်ထားတဲ့ model ရဲ့ ပြောင်းလဲမှုကိုပဲ server ကို ပို့ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy: intelligence)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-intel,
+          type: whiteboard.apply,
+          at: { mark: draw-intel },
+          open: true,
+          clear: true,
+          upsertIds: [i-title],
+        }
+      - {
+          id: draw-free,
+          type: whiteboard.apply,
+          at: { mark: draw-free },
+          upsertIds: [i-free],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-log,
+          type: whiteboard.apply,
+          at: { mark: draw-log },
+          upsertIds: [i-log, i-mem],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-vet,
+          type: whiteboard.apply,
+          at: { mark: draw-vet },
+          upsertIds: [i-vet],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-own,
+          type: whiteboard.apply,
+          at: { mark: draw-own },
+          upsertIds: [i-own],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-client,
+          type: whiteboard.apply,
+          at: { mark: draw-client },
+          upsertIds: [i-client],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-fed,
+          type: whiteboard.apply,
+          at: { mark: draw-fed },
+          upsertIds: [i-fed],
+          drawMs: 1000,
+        }
+
+  - id: ux
+    chapter: "User ကို မြင်အောင် ပြရအောင်"
+    narration: >
+      [[mark:close-intel]] U X အလွှာမှာတော့ ဘာဖြစ်နေလဲ user ကို မြင်အောင် ပြပြီး၊ ကိုယ့် data ကို ကိုယ်
+      ထိန်းခွင့် ပေးရပါမယ်။ [[mark:type-controls]] customer မြင်ရမယ့် page ကို ဆွဲပေးတဲ့ စာကြောင်း ထည့်ပါမယ်။
+      [[mark:read-label]] panel အပေါ်မှာ review ကို စစ်ဖို့ server ကို လုံခြုံစွာ ပို့ပါတယ် ဆိုတဲ့ label
+      တိုတိုလေး ပေါ်လာပါပြီ။ ဒီ စက်ထဲမှာပဲ စစ်လား၊ server ကို ပို့လား ဆိုတာ ဒီလို ပြောပြရင် user ရဲ့
+      ယုံကြည်မှု ရပါတယ်။ [[mark:click-how]] ဘယ်လို လုပ်လဲ ခလုတ်ကို နှိပ်ကြည့်ပါမယ်။ [[mark:read-how]] ဘာ
+      ပို့လဲ၊ ဘာကြောင့် ပို့လဲ၊ ဖုန်းနဲ့ နာမည်ကို ဒီ စက်ထဲမှာပဲ ဖယ်တာ၊ log ကို ရက် ၃၀ ပြီးရင် ဖျက်တာ
+      ပေါ်လာပါတယ်။ အစမှာ အတိုလေးပဲ ပြပြီး သိချင်တဲ့သူ နှိပ်မှ အသေးစိတ် ပြတာကို progressive disclosure လို့
+      ခေါ်ပါတယ်။ [[mark:read-consent]]
+      အောက်က မေးခွန်းကတော့ မှာခဲ့ဖူးတာတွေကို သုံးပြီး အကြံပေးရမလား လို့ data လိုတဲ့ နေရာမှာမှ မေးတာပါ။ account
+      ဖွင့်တုန်းက အကုန် သဘောတူလား လို့ တစ်ခါတည်း မေးတာထက် ပိုအဓိပ္ပာယ် ရှိပါတယ်။ [[mark:click-yes]] အောင်အောင်
+      က သုံးပါ ကို နှိပ်တယ် ဆိုပါစို့။ [[mark:read-yes]] table မှာ မှာခဲ့တာ အရေအတွက် row ပေါ်လာပြီး၊ အသေးစိတ်
+      စာမှာလည်း အကြံပေးဖို့ ဆိုတာ ပါလာပါတယ်။ [[mark:click-no]] စိတ်ပြောင်းပြီး မသုံးပါနဲ့ ကို နှိပ်ရင်၊ [[mark:read-no]]
+      အဲဒီ row ပျောက်သွားပါတယ်။ user က ရှင်းရှင်းလေး မြင်ရတဲ့ ခလုတ်နဲ့ ကိုယ့်ဘာသာ ပြန်ပိတ်နိုင်ရပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy: user experience)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-intel, type: whiteboard.apply, at: { mark: close-intel }, open: false }
+      - id: type-controls
+        type: editor.type
+        at: { mark: type-controls }
+        target: { file: src/main.js, after: "showSent(sent, keepDays);\n", occurrence: 1 }
+        text: "showPrivacyControls(sent, keepDays);\n"
+        cadence: line-by-line
+      - id: expect-label
+        type: expect.preview
+        at: { afterAction: type-controls }
+        timeoutMs: 8000
+        target: { by: testId, value: where }
+        textContains: "server ကို လုံခြုံစွာ ပို့ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-not-asked
+        type: expect.preview
+        at: { afterAction: expect-label }
+        timeoutMs: 5000
+        target: { by: testId, value: consent-1 }
+        attribute: { name: aria-pressed, value: "false" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-how
+        type: preview.click
+        at: { mark: click-how }
+        target: { by: testId, value: how }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-details
+        type: expect.preview
+        at: { afterAction: click-how }
+        timeoutMs: 5000
+        target: { by: testId, value: details }
+        textContains: "log · 30 ရက်ပြီးရင် ဖျက်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-details-removed
+        type: expect.preview
+        at: { afterAction: expect-details }
+        timeoutMs: 5000
+        target: { by: testId, value: details }
+        textContains: "ဖုန်း၊ နာမည် · ဒီ စက်ထဲမှာပဲ ဖယ်ပါတယ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-yes
+        type: preview.click
+        at: { mark: click-yes }
+        target: { by: testId, value: consent-1 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-yes-pressed
+        type: expect.preview
+        at: { afterAction: click-yes }
+        timeoutMs: 5000
+        target: { by: testId, value: consent-1 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-sent-3
+        type: expect.preview
+        at: { afterAction: expect-yes-pressed }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-orders-row
+        type: expect.preview
+        at: { mark: read-yes }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent-3 }
+        textContains: "orders · လက်ဖက်ရည် 20 · မုန့်ဟင်းခါး 12"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-details-orders
+        type: expect.preview
+        at: { afterAction: expect-orders-row }
+        timeoutMs: 5000
+        target: { by: testId, value: details }
+        textContains: "မှာခဲ့တာ အရေအတွက် · အကြံပေးဖို့"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-no
+        type: preview.click
+        at: { mark: click-no }
+        target: { by: testId, value: consent-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-no-pressed
+        type: expect.preview
+        at: { afterAction: click-no }
+        timeoutMs: 5000
+        target: { by: testId, value: consent-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-sent-back-2
+        type: expect.preview
+        at: { mark: read-no }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-sent }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: summary
+    narration: >
+      [[mark:draw-summary]] privacy ကို အလွှာ သုံးခုလုံးမှာ ပြန်စုကြည့်ရအောင်။ data မှာ လိုတာကိုပဲ ယူ၊ PII ကို
+      ဖယ်ပြီး log ကို အချိန်တန်ရင် ဖျက်ပါ။ [[mark:draw-sum-intel]] intelligence မှာ provider ကို စစ်ပြီး၊
+      ကိုယ်ရေး စာတွေကို model က အလွတ်မှတ်သွားမှာ သတိထားပါ။ [[mark:draw-sum-ux]] U X မှာ label နဲ့ ပြောပြ၊ လိုမှ
+      မေး၊ ပိတ်လို့ ရတဲ့ ခလုတ် ထားပါ။ customer က သူ့ data ကို ကိုယ်တိုင် ကြည့်ပြီး ဖျက်လို့ ရတဲ့
+      ကိုယ့် data စာမျက်နှာ သေးသေးလေးလည်း ထားသင့်ပါတယ်။ ဘာကြောင့် ယူလဲ ရှင်းပြရင် user တွေက data ပေးဖို့
+      ပိုစိတ်ချကြပါတယ်။ [[mark:draw-motto]] အတိုချုပ်ရရင် နည်းနည်း ယူပြီး များများ ကာကွယ်ဖို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (privacy summary)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-summary,
+          type: whiteboard.apply,
+          at: { mark: draw-summary },
+          open: true,
+          clear: true,
+          upsertIds: [s-title, s-d-l, s-d],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-sum-intel,
+          type: whiteboard.apply,
+          at: { mark: draw-sum-intel },
+          upsertIds: [s-i-l, s-i],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-sum-ux,
+          type: whiteboard.apply,
+          at: { mark: draw-sum-ux },
+          upsertIds: [s-u-l, s-u, s-u2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-motto,
+          type: whiteboard.apply,
+          at: { mark: draw-motto },
+          upsertIds: [s-motto],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ review feature အတွက် ဘယ်လို လုပ်တာ မှန်လဲ။ နောင် လိုမလား ဆိုပြီး
+      profile တစ်ခုလုံးပါ ယူထားတာလား၊ review စာသားကိုပဲ ယူပြီး PII ကို ဖယ်တာလား၊ log တွေကို မဖျက်ဘဲ
+      ထားတာလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      review စာသားကိုပဲ ယူပြီး PII ကို ဖယ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ ကိုယ့်ဆီမှာ မရှိတဲ့ data က ပေါက်ကြားလို့
+      မရလို့ပါ။ ကျန်တဲ့ နှစ်ခုကတော့ တစ်နေ့ ပေါက်ကြားရင် ထိခိုက်မယ့် data ကို ပိုများစေပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly (Check your understanding)",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-ring, z-a, z-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:sel-final-keep]] ဒီနေ့ program မှာ feature အတွက် လိုတာကိုပဲ ယူပြီး၊
+      [[mark:sel-final-rules]] PII ကို browser ထဲမှာပဲ ဖယ်ပြီးမှ ပို့ပါတယ်။ [[mark:sel-final-days]] log ကို
+      အချိန်တန်ရင် ဖျက်ပြီး၊ [[mark:sel-final-controls]] ဘာ ပို့လဲ user ကို ပြောပြ၊ လိုတဲ့ နေရာမှာမှ ခွင့်တောင်းပါတယ်။
+      နောက် lesson မှာတော့ governance ရဲ့ နောက်တစ်ချက် ဖြစ်တဲ့ fairness နဲ့ bias ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: AI governance: Build responsibly",
+          url: "https://web.dev/learn/ai/responsibility",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-final-keep
+        type: editor.select
+        at: { mark: sel-final-keep }
+        target: { file: src/main.js, text: 'sent = keepOnly(sent, ["reviews"]);', occurrence: 1 }
+      - id: sel-final-rules
+        type: editor.select
+        at: { mark: sel-final-rules }
+        target:
+          {
+            file: src/main.js,
+            text: "  [PHONE, \"[ဖုန်း]\"],\n  [KNOWN_NAMES, \"[နာမည်]\"],\n",
+            occurrence: 1,
+          }
+      - id: sel-final-days
+        type: editor.select
+        at: { mark: sel-final-days }
+        target: { file: src/main.js, text: "keepDays = 30;", occurrence: 1 }
+      - id: sel-final-controls
+        type: editor.select
+        at: { mark: sel-final-controls }
+        target: { file: src/main.js, text: "showPrivacyControls(sent, keepDays);", occurrence: 1 }
+      - {
+          id: expect-final-code,
+          type: expect.file,
+          at: { afterAction: sel-final-controls },
+          path: src/main.js,
+          contains: "sent = keepOnly(sent, [\"reviews\"]);\n\n// 2. Rules that hide personal data (PII) in what he typed:\nconst rules = [\n  [PHONE, \"[ဖုန်း]\"],\n  [KNOWN_NAMES, \"[နာမည်]\"],\n];\nsent = redact(sent, rules);\n\n// 3. How many days the shop keeps its raw logs:\nlet keepDays = Infinity;\nkeepDays = 30;\n\nshowSent(sent, keepDays);\nshowPrivacyControls(sent, keepDays);\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
