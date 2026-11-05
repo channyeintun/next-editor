@@ -1,0 +1,2654 @@
+# AI course, lesson 12: choosing a platform and hybrid AI (Burmese, hands-on).
+#
+# Start state (ws/): data/support.json (COURSE-KIT §4.4, sample data: the FAQ and 34 customer
+# messages); src/ml.js, src/ui.js (pinned, from base/); src/llm.js + data/responses.json +
+# data/PROVENANCE.md (recorded answers, from base-llm/, recorded for this lesson with
+# tools/record-llm.ts). src/assistant.js (pinned): the FAQ side (a second small naive Bayes model
+# trained in the page picks the FAQ answer), the server side (the shop's facts in a system prompt,
+# answered from recordings), the #app buttons (customer questions ask-1..3, device-1/2) and the cards
+# `ai-route` (metrics: route, routine, faq; badge: the router model, or rules · AI မပါ when a rule decided
+# before the model ran), `ai-answer` (FAQ answer · Server answer · Handoff),
+# `ai-test` (metrics "Messages": last month 34, routine 26, complex 8, train 24, test 10, right) and
+# `ai-mistakes` (table).
+# src/main.js: the router (trainNaiveBayes on 24 messages, shuffle seed 5112) and route(), with an
+# empty "rules decided in advance" section.
+#
+# Measured (sim, then verify): router test 8 of 10 right; mistakes: the address request → server
+# (routine 44%), the milk-allergy question → here (routine 97%, the FAQ side picks `preorder`).
+# Clicks before the first edit: ask-2 → server (routine 2%, recorded answer), ask-3 → here, 97%.
+# Edits (insert-only, one line each, line-by-line):
+#   1. the health rule (မတည့် → person)   right 9, mistakes 1; click ask-3 → person, handoff to လှလှ
+#   2. the compatibility check            click device-2 → ask-1 goes to the server (recorded answer)
+#
+# Boards: (A) the mini blueprint, Intelligence highlighted; (R) the platform analysis for the
+# assistant; (H) the hybrid router; (F) the two reasons to go to the server; (C) the cost of
+# flexibility; (Z) the quiz. The board is a modal: the panel is seen in `logs`, `router`, `ask`,
+# `rules`, the second half of `fallback` and the recap.
+#
+# Build: bun ~/Documents/ai-course-work/tools/build-lesson.ts template.yaml ws ai-course-12-hybrid.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-course-12-hybrid
+  title: "AI course 12: Platform ရွေးခြင်းနဲ့ hybrid AI"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI course
+    entryFilePath: src/main.js
+    files:
+      course/panel.js: |
+        // AI course · AI panel (runs in the preview page).
+        // Runs the lesson program that course/runner.js bundles after every change and draws what the
+        // program reports through the `ai-panel` module: inputs, outputs, scores, metrics, tables, the
+        // parts of a prompt, eval results and charts, plus everything it prints with console.log.
+        // Plain DOM, so the studio's rrweb recorder captures it and replay shows it exactly.
+        //
+        //   <script type="module" src="/course/panel.js" data-run="src/main.js"></script>
+        //
+        // In lesson code:  import { panel } from "ai-panel";
+        //   panel.input(label, value)     panel.output(label, value)    panel.note(text)
+        //   panel.scores(label, scores)   panel.metrics(label, values)  panel.table(label, rows)
+        //   panel.prompt(label, parts)    panel.evals(label, results)   panel.chart(label, series, { x })
+        //   every call takes a last { id, badge } option: id names the card's test id (ai-<id>);
+        //   a later call with the same id replaces that card in place (a click handler redraws a result).
+        const EVENT = "course:ai";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const entry = script?.dataset.run || "src/main.js";
+        const showConsole = script?.dataset.console !== "off";
+        const title = script?.dataset.title || "AI panel";
+        const SWAP_MS = 400;
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #15171c; }
+        #ai-panel { font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; padding: 0 0 24px; }
+        #ai-panel * { box-sizing: border-box; }
+        .aip-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", monospace; font-size: 13px; }
+        .aip-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1e2128; border-bottom: 1px solid #2d323c; }
+        .aip-logo { font-weight: 700; color: #fff; background: #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; letter-spacing: .04em; }
+        .aip-title { font-weight: 600; color: #fff; }
+        .aip-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+        .aip-status[data-state="done"] { background: #1f3d2a; color: #8fe0a6; }
+        .aip-status[data-state="error"], .aip-status[data-state="syntax"] { background: #4a1f24; color: #ffb3b8; }
+        .aip-status[data-state="notice"] { background: #47391a; color: #ffd98a; }
+        .aip-status[data-state="running"], .aip-status[data-state="waiting"] { background: #2d323c; color: #c6cbd4; }
+        .aip-cards { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-card { background: #1c1f26; border: 1px solid #2d323c; border-radius: 8px; padding: 10px 12px; }
+        .aip-card-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; flex-wrap: wrap; }
+        .aip-kind { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; }
+        .aip-card[data-kind="input"] .aip-kind { color: #74c0fc; }
+        .aip-card[data-kind="output"] .aip-kind { color: #8ce99a; }
+        .aip-card[data-kind="scores"] .aip-kind, .aip-card[data-kind="metrics"] .aip-kind { color: #ffc078; }
+        .aip-card[data-kind="prompt"] .aip-kind { color: #b197fc; }
+        .aip-card[data-kind="evals"] .aip-kind { color: #63e6be; }
+        .aip-card[data-kind="error"] { border-color: #6b2a31; background: #22191c; }
+        .aip-card[data-kind="error"] .aip-kind { color: #ff8787; }
+        .aip-card[data-kind="notice"] { border-color: #6b5420; background: #221e15; }
+        .aip-card[data-kind="notice"] .aip-kind { color: #ffd43b; }
+        .aip-label { font-weight: 600; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-badge { margin-left: auto; font-size: 11px; color: #ced4da; background: #2d323c; border-radius: 4px; padding: 1px 6px; }
+        .aip-value { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-row { display: grid; grid-template-columns: minmax(64px, 34%) 1fr auto; align-items: center; gap: 8px; padding: 2px 0; }
+        .aip-row-label { overflow-wrap: anywhere; }
+        .aip-bar { height: 10px; background: #2d323c; border-radius: 5px; overflow: hidden; }
+        .aip-bar > span { display: block; height: 100%; background: #ffa94d; border-radius: 5px; }
+        .aip-row[data-top="true"] .aip-bar > span { background: #ff922b; }
+        .aip-row[data-top="true"] .aip-row-label { color: #fff; font-weight: 600; }
+        .aip-pct { min-width: 54px; text-align: right; color: #e9ecef; }
+        .aip-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+        .aip-tile { background: #23272f; border-radius: 6px; padding: 6px 10px; }
+        .aip-tile-name { font-size: 12px; color: #adb5bd; }
+        .aip-tile-value { font-size: 20px; font-weight: 600; color: #fff; }
+        .aip-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .aip-table th { text-align: left; color: #adb5bd; font-weight: 600; border-bottom: 1px solid #343a46; padding: 3px 6px; }
+        .aip-table td { border-bottom: 1px solid #262a33; padding: 3px 6px; vertical-align: top; overflow-wrap: anywhere; }
+        .aip-yes { color: #8ce99a; } .aip-no { color: #ff8787; }
+        .aip-part { border-left: 3px solid #4dabf7; background: #1a2230; border-radius: 0 6px 6px 0; padding: 5px 10px; margin: 0 0 6px; }
+        .aip-part-name { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+        .aip-part-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f3f5; }
+        .aip-foot { font-size: 12px; color: #9aa3b2; margin-top: 4px; }
+        .aip-eval { display: grid; grid-template-columns: 20px 1fr; gap: 6px; padding: 2px 0; }
+        .aip-eval-mark { font-weight: 700; }
+        .aip-eval[data-pass="true"] .aip-eval-mark { color: #8ce99a; } .aip-eval[data-pass="false"] .aip-eval-mark { color: #ff8787; }
+        .aip-eval-detail { color: #adb5bd; font-size: 13px; }
+        .aip-summary { font-weight: 600; margin: 0 0 4px; }
+        .aip-summary[data-all="true"] { color: #8ce99a; } .aip-summary[data-all="false"] { color: #ffa8a8; }
+        .aip-chart svg { width: 100%; height: auto; display: block; }
+        .aip-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #ced4da; }
+        .aip-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+        .aip-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+        .aip-kv dt { color: #adb5bd; } .aip-kv dd { margin: 0; color: #f1f3f5; overflow-wrap: anywhere; }
+        .aip-sec { padding: 12px 12px 0; }
+        .aip-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .aip-empty { color: #8a93a3; }
+        .aip-log { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .aip-log[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .aip-log[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .aip-caret { color: #ff8787; }
+        .aip-errors:empty { display: none; }
+        .aip-errors { padding: 10px 12px 0; display: flex; flex-direction: column; gap: 10px; }
+        .aip-cards[data-stale="true"], .aip-sec[data-stale="true"] { opacity: .45; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+        const SVG = "http://www.w3.org/2000/svg";
+        const svg = (tag, attrs = {}, ...children) => {
+          const node = document.createElementNS(SVG, tag);
+          for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+          for (const child of children) node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const root = el("section", { id: "ai-panel", "data-testid": "ai-panel", "data-seq": "0", "aria-label": title });
+        const status = el("span", { class: "aip-status", "data-testid": "ai-status", "data-state": "waiting" }, "waiting…");
+        root.append(el("div", { class: "aip-head" }, el("span", { class: "aip-logo" }, "AI"), el("span", { class: "aip-title", "data-testid": "ai-title" }, title), status));
+        const errorsBox = el("div", { class: "aip-errors", "data-testid": "ai-errors", "data-count": "0" });
+        let cards = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+        root.append(errorsBox, cards);
+        const consoleBody = el("div", { "data-testid": "ai-console", "data-count": "0" });
+        const consoleSec = el("div", { class: "aip-sec" }, el("h2", { class: "aip-sec-title" }, "Console"), consoleBody);
+        if (showConsole) root.append(consoleSec);
+        function setStale(stale) {
+          cards.dataset.stale = String(stale);
+          consoleSec.dataset.stale = String(stale);
+        }
+        document.body.append(root);
+
+        const STATUS_TEXT = { waiting: "waiting…", running: "● running…", done: "✓ done", error: "✖ error", syntax: "✖ syntax error", notice: "⚠ check the notice" };
+        function setStatus(state) {
+          if (status.dataset.state === state) return;
+          status.dataset.state = state;
+          status.textContent = STATUS_TEXT[state];
+        }
+
+        // ---------------------------------------------------------------- formatting
+        export function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+              const list = Array.from(value);
+              if (!list.length) return "[]";
+              const shown = list.length > 10 ? list.slice(0, 8) : list;
+              const more = list.length - shown.length;
+              const items = shown.map((v) => inspect(v, depth + 1, seen));
+              if (more) items.push(`... ${more} more items`);
+              const prefix = ArrayBuffer.isView(value) ? `${value.constructor.name}(${list.length}) ` : "";
+              return `${prefix}[ ${items.join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        // Numbers on the panel and in data-* attributes: integers as they are, others to 4 places.
+        const num = (v) => (Number.isInteger(v) ? String(v) : Number.isFinite(v) ? String(Number(v.toFixed(4))) : String(v));
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+        const cell = (v) => (v === true ? el("span", { class: "aip-yes" }, "✓") : v === false ? el("span", { class: "aip-no" }, "✗") : typeof v === "number" ? num(v) : typeof v === "string" ? v : inspect(v, 1));
+        const text = (v) => (typeof v === "string" ? v : typeof v === "number" ? num(v) : inspect(v));
+
+        // ---------------------------------------------------------------- cards
+        const PART_COLORS = {
+          context: "#4dabf7", system: "#4dabf7", role: "#4dabf7",
+          instruction: "#b197fc", task: "#b197fc", user: "#69db7c",
+          input: "#69db7c", data: "#69db7c", assistant: "#adb5bd",
+          format: "#ffa94d", output: "#ffa94d", examples: "#3bc9db", example: "#3bc9db",
+          constraints: "#ff8787", rules: "#ff8787",
+        };
+        const SERIES_COLORS = ["#4dabf7", "#ffa94d", "#69db7c", "#da77f2"];
+
+        function scoreList(scores) {
+          if (Array.isArray(scores)) return scores.map((s) => ({ label: String(s.label), score: Number(s.score) }));
+          if (scores && Array.isArray(scores.labels) && Array.isArray(scores.scores)) return scores.labels.map((l, i) => ({ label: String(l), score: Number(scores.scores[i]) }));
+          return Object.entries(scores ?? {}).map(([label, score]) => ({ label, score: Number(score) }));
+        }
+
+        function promptParts(parts) {
+          if (typeof parts === "string") return [{ name: "prompt", text: parts }];
+          if (Array.isArray(parts)) return parts.map((m, i) => (typeof m === "string" ? { name: `part ${i + 1}`, text: m } : { name: String(m.role ?? m.name ?? `part ${i + 1}`), text: text(m.content ?? m.text ?? "") }));
+          return Object.entries(parts ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([name, v]) => ({ name, text: Array.isArray(v) ? v.map((x) => `- ${text(x)}`).join("\n") : text(v) }));
+        }
+
+        function lineChart(series, xs) {
+          const W = 400, H = 170, L = 34, R = 10, T = 10, B = 24;
+          const names = Object.keys(series);
+          const all = names.flatMap((n) => series[n].filter((v) => Number.isFinite(v)));
+          const n = Math.max(...names.map((k) => series[k].length), 1);
+          let lo = Math.min(...all), hi = Math.max(...all);
+          if (!all.length) { lo = 0; hi = 1; }
+          if (lo === hi) { lo -= 1; hi += 1; }
+          const x = (i) => L + (n === 1 ? 0 : (i * (W - L - R)) / (n - 1));
+          const y = (v) => T + ((hi - v) * (H - T - B)) / (hi - lo);
+          const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+          g.append(svg("line", { x1: L, y1: H - B, x2: W - R, y2: H - B, stroke: "#3a404b" }));
+          g.append(svg("text", { x: L - 4, y: T + 4, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(hi)));
+          g.append(svg("text", { x: L - 4, y: H - B, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, num(lo)));
+          if (xs?.length) {
+            g.append(svg("text", { x: x(0), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "start" }, String(xs[0])));
+            g.append(svg("text", { x: x(n - 1), y: H - 6, fill: "#adb5bd", "font-size": 11, "text-anchor": "end" }, String(xs[xs.length - 1])));
+          }
+          names.forEach((name, si) => {
+            const color = SERIES_COLORS[si % SERIES_COLORS.length];
+            const pts = series[name].map((v, i) => (Number.isFinite(v) ? [x(i), y(v)] : null)).filter(Boolean);
+            g.append(svg("polyline", { points: pts.map((p) => p.map((c) => c.toFixed(1)).join(",")).join(" "), fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": si === 0 ? "" : "5 4" }));
+            for (const [px, py] of pts) g.append(svg("circle", { cx: px.toFixed(1), cy: py.toFixed(1), r: 2.5, fill: color }));
+          });
+          return g;
+        }
+
+        function makeApi(run) {
+          const used = new Set();
+          // A call whose id is already on the panel (this run) replaces that card in place: same test id,
+          // same position, same card count. Click handlers use it to redraw a result after the run.
+          const named = new Map();
+          const card = (kind, label, opts, body, attrs = {}) => {
+            if (run.dead) return null;
+            const given = opts?.id != null && opts.id !== "" ? String(opts.id) : null;
+            const old = given !== null ? named.get(given) : null;
+            let id = given ?? String(run.count + 1);
+            if (!old) {
+              run.count += 1;
+              if (given === null) id = String(run.count);
+              while (used.has(id)) id = `${id}-${run.count}`;
+              used.add(id);
+            }
+            const testid = `ai-${id}`;
+            const node = el("div", { class: "aip-card", "data-testid": testid, "data-kind": kind, "data-label": label ?? "", ...attrs },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, kind), label ? el("span", { class: "aip-label" }, label) : null, opts?.badge ? el("span", { class: "aip-badge", "data-testid": `${testid}-badge` }, opts.badge) : null),
+              typeof body === "function" ? body(testid) : body);
+            if (old) old.replaceWith(node);
+            else run.add(node);
+            if (given !== null && id === given) named.set(given, node);
+            return node;
+          };
+          const value = (v) => el("div", { class: "aip-value" }, text(v));
+          const panel = {
+            input: (label, v, opts) => void card("input", label, opts, value(v), { "data-value": text(v) }),
+            output: (label, v, opts) => void card("output", label, opts, value(v), { "data-value": text(v) }),
+            note: (v, opts) => void card("note", "", opts, value(v), { "data-value": text(v) }),
+            notice: (v, opts) => void card("notice", "", opts, value(v), { "data-value": text(v) }),
+            scores(label, scores, opts) {
+              const list = scoreList(scores).sort((a, b) => b.score - a.score);
+              const top = list[0]?.label ?? "";
+              card("scores", label, opts, (tid) => list.map((s, i) =>
+                el("div", { class: "aip-row", "data-testid": `${tid}-${i + 1}`, "data-label": s.label, "data-score": num(s.score), "data-top": i === 0 },
+                  el("span", { class: "aip-row-label" }, s.label),
+                  el("span", { class: "aip-bar" }, el("span", { style: `width:${Math.max(0, Math.min(100, s.score * 100)).toFixed(1)}%` })),
+                  el("span", { class: "aip-pct aip-mono" }, pct(s.score)))), { "data-top": top, "data-count": list.length });
+            },
+            metrics(label, values, opts) {
+              const list = Object.entries(values ?? {});
+              card("metrics", label, opts, (tid) => el("div", { class: "aip-tiles" }, list.map(([name, v], i) =>
+                el("div", { class: "aip-tile", "data-testid": `${tid}-${i + 1}`, "data-name": name, "data-value": typeof v === "number" ? num(v) : text(v) },
+                  el("div", { class: "aip-tile-name" }, name), el("div", { class: "aip-tile-value aip-mono" }, typeof v === "number" ? num(v) : text(v))))), { "data-count": list.length });
+            },
+            table(label, rows, opts) {
+              const list = Array.isArray(rows) ? rows : Object.entries(rows ?? {}).map(([key, v]) => ({ key, value: v }));
+              const columns = opts?.columns ?? [...new Set(list.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : ["value"])))];
+              const shown = list.slice(0, 30);
+              card("table", label, opts, (tid) => [
+                el("table", { class: "aip-table" },
+                  el("thead", {}, el("tr", {}, columns.map((c) => el("th", {}, c)))),
+                  el("tbody", {}, shown.map((r, i) => el("tr", { "data-testid": `${tid}-${i + 1}` }, columns.map((c) => el("td", {}, cell(r && typeof r === "object" ? r[c] : r))))))),
+                list.length > shown.length ? el("div", { class: "aip-foot" }, `… ${list.length - shown.length} more rows`) : null,
+              ], { "data-count": list.length });
+            },
+            prompt(label, parts, opts) {
+              const list = promptParts(parts);
+              const chars = list.reduce((s, p) => s + [...p.text].length, 0);
+              card("prompt", label, opts, (tid) => [
+                ...list.map((p, i) => {
+                  const color = PART_COLORS[p.name.toLowerCase()] ?? "#868e96";
+                  return el("div", { class: "aip-part", style: `border-left-color:${color}`, "data-testid": `${tid}-${i + 1}`, "data-part": p.name },
+                    el("div", { class: "aip-part-name", style: `color:${color}` }, p.name), el("div", { class: "aip-part-text" }, p.text));
+                }),
+                el("div", { class: "aip-foot" }, `${list.length} ${list.length === 1 ? "part" : "parts"} · ${chars} characters`),
+              ], { "data-parts": list.length, "data-chars": chars });
+            },
+            evals(label, results, opts) {
+              const list = Array.isArray(results) ? results.map((r) => ({ name: String(r.name ?? ""), pass: !!r.pass, detail: r.detail ?? "" })) : Object.entries(results ?? {}).map(([name, pass]) => ({ name, pass: !!pass, detail: "" }));
+              const passed = list.filter((r) => r.pass).length;
+              card("evals", label, opts, (tid) => [
+                el("div", { class: "aip-summary", "data-all": passed === list.length }, `${passed} / ${list.length} passed`),
+                ...list.map((r, i) => el("div", { class: "aip-eval", "data-testid": `${tid}-${i + 1}`, "data-pass": r.pass, "data-name": r.name },
+                  el("span", { class: "aip-eval-mark" }, r.pass ? "✓" : "✗"),
+                  el("span", {}, r.name, r.detail ? el("div", { class: "aip-eval-detail" }, text(r.detail)) : null))),
+              ], { "data-passed": passed, "data-total": list.length });
+            },
+            chart(label, series, opts) {
+              const data = Array.isArray(series) ? { value: series } : series ?? {};
+              const names = Object.keys(data);
+              card("chart", label, opts, () => el("div", { class: "aip-chart" }, lineChart(data, opts?.x),
+                el("div", { class: "aip-legend" }, names.map((name, i) => el("span", {}, el("i", { style: `background:${SERIES_COLORS[i % SERIES_COLORS.length]}` }), `${name} · last ${num(data[name].at(-1))}`)))),
+              { "data-series": names.length, "data-points": data[names[0]]?.length ?? 0, "data-last": names.map((n) => num(data[n].at(-1))).join(" ") });
+            },
+            // Used by course/modules-*.js: a key/value card that can be updated in place.
+            model(label, info, opts) {
+              let node = null;
+              const render = (data) => el("dl", { class: "aip-kv" }, Object.entries(data).flatMap(([k, v]) => [el("dt", {}, k), el("dd", { "data-key": k }, text(v))]));
+              node = card("model", label, opts, render(info), { "data-status": info.status ?? "" });
+              return {
+                set(next) {
+                  if (!node || run.dead) return;
+                  node.lastChild.replaceWith(render(next));
+                  node.dataset.status = next.status ?? "";
+                },
+              };
+            },
+          };
+          return panel;
+        }
+
+        // ---------------------------------------------------------------- console
+        let consoleLines = [];
+        let consoleTimer = null;
+        function renderConsole() {
+          consoleTimer = null;
+          if (!showConsole) return;
+          consoleBody.dataset.count = String(consoleLines.length);
+          const rows = consoleLines.map((line, i) => el("div", { class: "aip-log aip-mono", "data-testid": `ai-log-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "aip-empty" }, "Nothing printed."));
+          consoleBody.replaceChildren(...rows);
+        }
+        const scheduleConsole = () => { if (!consoleTimer) consoleTimer = setTimeout(renderConsole, 30); };
+
+        // ---------------------------------------------------------------- runs
+        // Each report starts a new run; a run that is still awaiting (a model, a timer) when the next one
+        // starts is "dead": its console lines and panel calls are dropped.
+        const runs = {};
+        const loaders = (window.__courseModuleLoaders ??= {});
+        const loaded = {};
+        window.__courseRuns = runs;
+        let current = null;
+        let runCounter = 0;
+
+        function startRun() {
+          if (current) current.dead = true;
+          const id = ++runCounter;
+          const staged = el("div", { class: "aip-cards", "data-testid": "ai-cards", "data-count": "0" });
+          const run = {
+            id, dead: false, count: 0, swapped: false, lines: [],
+            add(node) {
+              staged.append(node);
+              staged.dataset.count = String(run.count);
+            },
+            swap() {
+              if (run.swapped || run.dead) return;
+              run.swapped = true;
+              errorsBox.replaceChildren();
+              errorsBox.dataset.count = "0";
+              setStale(false);
+              cards.replaceWith(staged);
+              cards = staged;
+              consoleLines = run.lines;
+              renderConsole();
+            },
+            module(name) {
+              if (name === "ai-panel") return { panel: run.panel, inspect };
+              if (name in loaded) return loaded[name];
+              throw new Error(`Cannot find module '${name}'`);
+            },
+          };
+          const push = (level) => (...args) => {
+            if (run.dead) return;
+            run.lines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (run.lines.length > 200) run.lines.shift();
+            if (run.swapped) scheduleConsole();
+          };
+          run.console = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          run.panel = makeApi(run);
+          runs[id] = run;
+          current = run;
+          window.__coursePanel.current = run;
+          return run;
+        }
+        window.__coursePanel = { current: null, inspect };
+
+        function finish(run, state) {
+          if (run.dead) return;
+          run.swap();
+          renderConsole();
+          setStatus(state);
+          delete runs[run.id];
+        }
+
+        // A build error keeps the last good result on screen, dimmed, under the error.
+        function showBuildErrors(run, errors) {
+          if (run.dead) return;
+          const nodes = errors.map((e, i) => {
+            const loc = e.line ? `${e.file.replace(/^src\//, "")}:${e.line}:${e.col}` : e.file;
+            const caret = e.lineText && e.col ? `${e.lineText}\n${" ".repeat(Math.max(0, e.col - 1))}^` : "";
+            return el("div", { class: "aip-card", "data-testid": i === 0 ? "ai-error" : `ai-error-${i + 1}`, "data-kind": "error", "data-file": e.file, "data-line": e.line },
+              el("div", { class: "aip-card-head" }, el("span", { class: "aip-kind" }, "Not run"), el("span", { class: "aip-label aip-mono" }, loc)),
+              el("div", { class: "aip-value" }, e.message),
+              caret ? el("div", { class: "aip-value aip-mono aip-caret" }, caret) : null);
+          });
+          errorsBox.replaceChildren(...nodes);
+          errorsBox.dataset.count = String(nodes.length);
+          setStale(true);
+          setStatus("syntax");
+          delete runs[run.id];
+        }
+
+        async function runProgram(report) {
+          const run = startRun();
+          if (!report.ok) {
+            showBuildErrors(run, report.errors);
+            return;
+          }
+          setStatus("running");
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const timer = setTimeout(() => run.swap(), SWAP_MS);
+          let url = null;
+          try {
+            for (const name of report.modules) {
+              if (name === "ai-panel" || name in loaded) continue;
+              if (!loaders[name]) continue;
+              loaded[name] = await loaders[name]();
+              if (run.dead) return;
+            }
+            // A superseded run whose module is still loading must not draw into the fresh #app: the guard
+            // stops its top level before any of the lesson code runs.
+            const prelude = `const __courseRun = globalThis.__courseRuns[${run.id}]; if (!__courseRun || __courseRun.dead) throw new Error("stale run"); const console = __courseRun.console;\n`;
+            url = URL.createObjectURL(new Blob([prelude + report.code], { type: "text/javascript" }));
+            await import(/* @vite-ignore */ url);
+            clearTimeout(timer);
+            finish(run, "done");
+          } catch (error) {
+            clearTimeout(timer);
+            if (run.dead) return;
+            if (error?.name === "CourseNotice") {
+              run.panel.notice(error.message);
+              finish(run, "notice");
+            } else {
+              run.lines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+              finish(run, "error");
+            }
+          } finally {
+            if (url) URL.revokeObjectURL(url);
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function onReport(report) {
+          if (!report || report.seq <= lastSeq) return;
+          lastSeq = report.seq;
+          root.dataset.seq = String(report.seq);
+          runProgram(report);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { entry });
+          import.meta.hot.on(EVENT, onReport);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/runner.js: |
+        // AI course · program runner (Vite plugin, runs in the dev server).
+        // Bundles the lesson program (src/ and data/) with esbuild after every change and sends the
+        // bundle, or the build errors, to the preview page (course/panel.js), which runs it and draws
+        // the AI panel. The page never imports src/ through Vite, so half-typed code can never raise a
+        // Vite overlay or reload the page: a syntax error shows up in the panel instead.
+        import { build } from "esbuild";
+        import { isAbsolute, relative, resolve } from "node:path";
+
+        const EVENT = "course:ai";
+        const DEBOUNCE_MS = 200;
+        const WATCHED = /\.(m?js|json)$/;
+
+        export default function courseRunner() {
+          return {
+            name: "course-ai-runner",
+            apply: "serve",
+            configureServer(server) {
+              const root = server.config.root;
+              let entry = "src/main.js";
+              let seq = 0;
+              let latest = null;
+              let timer = null;
+              let building = Promise.resolve();
+              const rebuild = () => {
+                building = building.then(async () => {
+                  latest = await bundle(root, entry, ++seq);
+                  server.ws.send({ type: "custom", event: EVENT, data: latest });
+                });
+                return building;
+              };
+              const inProgram = (file) => {
+                const rel = relative(root, resolve(file));
+                if (rel.startsWith("..") || isAbsolute(rel)) return false;
+                return (rel.startsWith("src/") || rel.startsWith("data/")) && WATCHED.test(rel);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (!inProgram(file)) return;
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                  timer = null;
+                  rebuild();
+                }, DEBOUNCE_MS);
+              });
+              server.ws.on(`${EVENT}:hello`, async (data, client) => {
+                const wanted = typeof data?.entry === "string" && data.entry ? data.entry : "src/main.js";
+                if (wanted !== entry || !latest) {
+                  entry = wanted;
+                  await rebuild();
+                } else {
+                  await building;
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        // Every bare import ("ai-panel", "@huggingface/transformers", …) becomes a lookup in the page's
+        // module table, so the bundle has no imports left and runs from a blob: URL.
+        const pageModules = {
+          name: "course-page-modules",
+          setup(b) {
+            b.onResolve({ filter: /^[^./]/ }, (args) => ({ path: args.path, namespace: "course-page" }));
+            b.onLoad({ filter: /.*/, namespace: "course-page" }, (args) => ({
+              contents: `module.exports = __courseRun.module(${JSON.stringify(args.path)});`,
+              loader: "js",
+            }));
+          },
+        };
+
+        async function bundle(root, entry, seq) {
+          const started = Date.now();
+          const externals = new Set();
+          const collect = {
+            name: "course-collect",
+            setup(b) {
+              b.onResolve({ filter: /^[^./]/ }, (args) => {
+                externals.add(args.path);
+                return undefined;
+              });
+            },
+          };
+          try {
+            const result = await build({
+              absWorkingDir: root,
+              entryPoints: [entry],
+              bundle: true,
+              write: false,
+              format: "esm",
+              platform: "browser",
+              target: "es2022",
+              charset: "utf8",
+              logLevel: "silent",
+              loader: { ".js": "js", ".mjs": "js", ".json": "json" },
+              plugins: [collect, pageModules],
+            });
+            return { seq, ms: Date.now() - started, entry, ok: true, code: result.outputFiles[0].text, modules: [...externals], errors: [] };
+          } catch (error) {
+            const errors = (error.errors ?? [{ text: String(error.message ?? error) }]).map((e) => ({
+              file: e.location?.file ? relative(root, resolve(root, e.location.file)).split("\\").join("/") : entry,
+              line: e.location?.line ?? 0,
+              col: e.location ? e.location.column + 1 : 0,
+              message: e.text,
+              lineText: e.location?.lineText ?? "",
+            }));
+            return { seq, ms: Date.now() - started, entry, ok: false, code: "", modules: [...externals], errors };
+          }
+        }
+      data/PROVENANCE.md: |
+        # Where these answers come from
+
+        Every answer in `responses.json` is a real answer from a real model, recorded ahead of time with
+        `tools/record-llm.ts` on 2026-11-05. The lesson does not run the model live:
+        `src/llm.js` looks up the exact same messages here and returns the recorded answer.
+
+        - Model: Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF
+        - File: https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf (sha256 `b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f`, license apache-2.0)
+        - Runtime: node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1
+        - Prompt: the model's own chat template from the GGUF file, thinking off
+        - Decoding: greedy (temperature 0), at most 300 new tokens, so the same messages always give the same answer
+        - Answers: 2
+      data/responses.json: |
+        {
+          "provenance": {
+            "label": "Gemma 4 E2B",
+            "model": "Gemma 4 E2B instruct (google/gemma-4-E2B-it), 4-bit GGUF",
+            "source": "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/blob/f064409f340b34190993560b2168133e5dbae558/gemma-4-E2B-it-UD-Q4_K_XL.gguf",
+            "sha256": "b3a80d7e35b801c55d4ce8dac7fd6b2b2165d65225870ed06c37c44a4971112f",
+            "license": "apache-2.0",
+            "runtime": "node-llama-cpp 3.22.2 (llama.cpp v0.7.0, Metal GPU) on an Apple M1",
+            "prompt": "the model's own chat template from the GGUF file, thinking off",
+            "decoding": {
+              "temperature": 0,
+              "maxTokens": 300,
+              "thinking": false,
+              "stop": "<turn|>",
+              "contextSize": 4096
+            },
+            "recordedOn": "2026-11-05",
+            "recordedBy": "tools/record-llm.ts"
+          },
+          "responses": [
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are the order-help assistant of Shwe Tea House, a tea shop in Bahan, Yangon.\nReply to the customer in Burmese, in at most two short sentences.\nUse only the shop facts below. If they don't answer the message, or the customer needs money back or an order checked, say that a staff member will check and reply soon.\nShop facts:\n- တနင်္လာကနေ သောကြာအထိ မနက် ၆ နာရီကနေ ည ၈ နာရီအထိ၊ စနေ တနင်္ဂနွေမှာ မနက် ၇ နာရီကနေ ည ၉ နာရီအထိ ဖွင့်ပါတယ်။\n- ဗဟန်း၊ ကမာရွတ်၊ စမ်းချောင်း၊ တာမွေ မြို့နယ်တွေကိုပဲ delivery ပို့ပေးပါတယ်။\n- အော်ဒါ တစ်ခုကို delivery ခ 1,000 ကျပ် ယူပါတယ်။\n- ဈေးနှုန်း အားလုံးကို website ရဲ့ menu မှာ ကြည့်လို့ ရပါတယ်။\n- ဆိုင်က အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန် မှာ ရှိပါတယ်။\n- ငွေသား ဒါမှမဟုတ် mobile banking နဲ့ လွှဲပြီး ပေးလို့ ရပါတယ်။\n- website မှာ ကြိုမှာထားလို့ ရပါတယ်။ ဆိုင်ဖွင့်ချိန်ထဲက အချိန် တစ်ခုကို ရွေးပေးပါ။\n- မှာထားတာ ကုန်သွားရင် ကောင်တာက အဲဒီနေ့မှာပဲ ငွေ ပြန်အမ်းပေးပါတယ်။"
+                },
+                {
+                  "role": "user",
+                  "content": "ငွေ နှစ်ခါ ဖြတ်သွားတယ်"
+                }
+              ],
+              "output": "ကျွန်တော်တို့က ငွေသား ဒါမှမဟုတ် mobile banking နဲ့ လွှဲပြီး ပေးလို့ရပါတယ်။ အော်ဒါကို စစ်ဆေးဖို့ ဝန်ထမ်းတစ်ဦးက မကြာခင် ပြန်ဖြေပေးပါလိမ့်မယ်။",
+              "promptTokens": 340,
+              "outputTokens": 50,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            },
+            {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are the order-help assistant of Shwe Tea House, a tea shop in Bahan, Yangon.\nReply to the customer in Burmese, in at most two short sentences.\nUse only the shop facts below. If they don't answer the message, or the customer needs money back or an order checked, say that a staff member will check and reply soon.\nShop facts:\n- တနင်္လာကနေ သောကြာအထိ မနက် ၆ နာရီကနေ ည ၈ နာရီအထိ၊ စနေ တနင်္ဂနွေမှာ မနက် ၇ နာရီကနေ ည ၉ နာရီအထိ ဖွင့်ပါတယ်။\n- ဗဟန်း၊ ကမာရွတ်၊ စမ်းချောင်း၊ တာမွေ မြို့နယ်တွေကိုပဲ delivery ပို့ပေးပါတယ်။\n- အော်ဒါ တစ်ခုကို delivery ခ 1,000 ကျပ် ယူပါတယ်။\n- ဈေးနှုန်း အားလုံးကို website ရဲ့ menu မှာ ကြည့်လို့ ရပါတယ်။\n- ဆိုင်က အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန် မှာ ရှိပါတယ်။\n- ငွေသား ဒါမှမဟုတ် mobile banking နဲ့ လွှဲပြီး ပေးလို့ ရပါတယ်။\n- website မှာ ကြိုမှာထားလို့ ရပါတယ်။ ဆိုင်ဖွင့်ချိန်ထဲက အချိန် တစ်ခုကို ရွေးပေးပါ။\n- မှာထားတာ ကုန်သွားရင် ကောင်တာက အဲဒီနေ့မှာပဲ ငွေ ပြန်အမ်းပေးပါတယ်။"
+                },
+                {
+                  "role": "user",
+                  "content": "ဆိုင် ဘယ်နှနာရီ ဖွင့်လဲ"
+                }
+              ],
+              "output": "တနင်္လာကနေ သောကြာအထိ မနက် ၆ နာရီကနေ ည ၈ နာရီအထိ၊ စနေ တနင်္ဂနွေမှာ မနက် ၇ နာရီကနေ ည ၉ နာရီအထိ ဖွင့်ပါတယ်။",
+              "promptTokens": 341,
+              "outputTokens": 67,
+              "stoppedAtLimit": false,
+              "recordedOn": "2026-11-05"
+            }
+          ]
+        }
+      data/support.json: |
+        {
+         "note": "Synthetic customer messages and the shop's FAQ answers, written for the AI course. route: routine (the FAQ answers it) or complex (a person or a stronger model on the server). Order 2417 is အောင်အောင်'s delivery order (a mohinga and a laphet-yay, paid twice by mistake).",
+         "faq": {
+          "hours": "တနင်္လာကနေ သောကြာအထိ မနက် ၆ နာရီကနေ ည ၈ နာရီအထိ၊ စနေ တနင်္ဂနွေမှာ မနက် ၇ နာရီကနေ ည ၉ နာရီအထိ ဖွင့်ပါတယ်။",
+          "delivery-area": "ဗဟန်း၊ ကမာရွတ်၊ စမ်းချောင်း၊ တာမွေ မြို့နယ်တွေကိုပဲ delivery ပို့ပေးပါတယ်။",
+          "delivery-fee": "အော်ဒါ တစ်ခုကို delivery ခ 1,000 ကျပ် ယူပါတယ်။",
+          "price": "ဈေးနှုန်း အားလုံးကို website ရဲ့ menu မှာ ကြည့်လို့ ရပါတယ်။",
+          "location": "ဆိုင်က အမှတ် ၁၂၊ ဗဟန်း၊ ရန်ကုန် မှာ ရှိပါတယ်။",
+          "payment": "ငွေသား ဒါမှမဟုတ် mobile banking နဲ့ လွှဲပြီး ပေးလို့ ရပါတယ်။",
+          "preorder": "website မှာ ကြိုမှာထားလို့ ရပါတယ်။ ဆိုင်ဖွင့်ချိန်ထဲက အချိန် တစ်ခုကို ရွေးပေးပါ။",
+          "refund-sold-out": "မှာထားတာ ကုန်သွားရင် ကောင်တာက အဲဒီနေ့မှာပဲ ငွေ ပြန်အမ်းပေးပါတယ်။"
+         },
+         "messages": [
+          { "id": "q01", "route": "routine", "intent": "hours", "text": "ဆိုင် ဘယ်နှနာရီ ဖွင့်လဲ" },
+          { "id": "q02", "route": "routine", "intent": "hours", "text": "စနေနေ့ ဖွင့်လား" },
+          { "id": "q03", "route": "routine", "intent": "hours", "text": "ညနေ ဘယ်အချိန် ပိတ်လဲ" },
+          { "id": "q04", "route": "routine", "intent": "hours", "text": "What time do you open on Sunday?" },
+          { "id": "q05", "route": "routine", "intent": "hours", "text": "မနက် ၆ နာရီဆို ဖွင့်ပြီလား" },
+          { "id": "q06", "route": "routine", "intent": "delivery-area", "text": "စမ်းချောင်းကို delivery ပို့လား" },
+          { "id": "q07", "route": "routine", "intent": "delivery-area", "text": "Do you deliver to Kamayut?" },
+          { "id": "q08", "route": "routine", "intent": "delivery-area", "text": "လှိုင်ကို ပို့ပေးလို့ ရလား" },
+          { "id": "q09", "route": "routine", "intent": "delivery-area", "text": "တာမွေ ဘက်ကို delivery ရလား" },
+          { "id": "q10", "route": "routine", "intent": "delivery-fee", "text": "delivery ခ ဘယ်လောက်လဲ" },
+          { "id": "q11", "route": "routine", "intent": "delivery-fee", "text": "delivery ခ အခမဲ့လား" },
+          { "id": "q12", "route": "routine", "intent": "delivery-fee", "text": "How much is delivery?" },
+          { "id": "q13", "route": "routine", "intent": "price", "text": "လက်ဖက်ရည် တစ်ခွက် ဘယ်လောက်လဲ" },
+          { "id": "q14", "route": "routine", "intent": "price", "text": "မုန့်ဟင်းခါး ဘယ်လောက်လဲ" },
+          { "id": "q15", "route": "routine", "intent": "price", "text": "How much is the tea leaf salad?" },
+          { "id": "q16", "route": "routine", "intent": "price", "text": "ရှမ်းခေါက်ဆွဲ ဈေးနှုန်း သိချင်လို့ပါ" },
+          { "id": "q17", "route": "routine", "intent": "location", "text": "ဆိုင် ဘယ်မှာလဲ" },
+          { "id": "q18", "route": "routine", "intent": "location", "text": "ဆိုင်လိပ်စာ ပို့ပေးပါ" },
+          { "id": "q19", "route": "routine", "intent": "location", "text": "Where is the shop?" },
+          { "id": "q20", "route": "routine", "intent": "payment", "text": "mobile banking နဲ့ ငွေချေလို့ ရလား" },
+          { "id": "q21", "route": "routine", "intent": "payment", "text": "ငွေသားနဲ့ပဲ ပေးရမလား" },
+          { "id": "q22", "route": "routine", "intent": "payment", "text": "Can I pay by bank transfer?" },
+          { "id": "q23", "route": "routine", "intent": "preorder", "text": "ကြိုမှာလို့ ရလား" },
+          { "id": "q24", "route": "routine", "intent": "preorder", "text": "မနက်ဖြန် မနက် ၇ နာရီအတွက် ကြိုမှာထားလို့ ရလား" },
+          { "id": "q25", "route": "routine", "intent": "refund-sold-out", "text": "မှာတာ ကုန်သွားရင် ပိုက်ဆံ ပြန်ရလား" },
+          { "id": "q26", "route": "routine", "intent": "refund-sold-out", "text": "ရှမ်းခေါက်ဆွဲ ကုန်သွားလို့ ပိုက်ဆံ ဘယ်လို ပြန်ယူရမလဲ" },
+          { "id": "q27", "route": "complex", "intent": "double-charge", "text": "ငွေ နှစ်ခါ ဖြတ်သွားတယ်" },
+          { "id": "q28", "route": "complex", "intent": "double-charge", "text": "I was charged twice for one order." },
+          { "id": "q29", "route": "complex", "intent": "wrong-order", "text": "မှာတာ မှားပို့တယ်၊ ပြန်လဲပေးပါ" },
+          { "id": "q30", "route": "complex", "intent": "bulk-order", "text": "ရုံးအတွက် ခွက် ၅၀ မှာရင် ဈေးလျှော့ပေးလား" },
+          { "id": "q31", "route": "complex", "intent": "health", "text": "နို့ မတည့်ဘူး၊ ဘာ သောက်လို့ ရမလဲ" },
+          { "id": "q32", "route": "complex", "intent": "health", "text": "ကလေးက မြေပဲ မတည့်ဘူး၊ စမူဆာထဲမှာ မြေပဲ ပါလား" },
+          { "id": "q33", "route": "complex", "intent": "order-status", "text": "အော်ဒါ 2417 ဘယ်ရောက်ပြီလဲ" },
+          { "id": "q34", "route": "complex", "intent": "missing-order", "text": "delivery လာပို့တဲ့သူက အော်ဒါ မပေးဘဲ ပြန်သွားတယ်" }
+         ]
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>AI course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-run="src/main.js" data-console="off"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "ai-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "esbuild": "0.21.5",
+            "vite": "5.4.21"
+          }
+        }
+      src/assistant.js: |
+        // The order-help assistant around the router in main.js: the FAQ side that answers in this page,
+        // the server side, and the buttons and cards. The server side's answers are recorded (src/llm.js):
+        // a small open model, run ahead of time with the shop's facts in its prompt.
+        import { panel } from "ai-panel";
+        import support from "../data/support.json";
+        import { trainNaiveBayes, predict, topLabel } from "./ml.js";
+        import { generate, model } from "./llm.js";
+        import { choices } from "./ui.js";
+
+        // The FAQ side: a second small model, trained in this page, picks the FAQ answer that fits.
+        const faqModel = trainNaiveBayes(
+          support.messages.filter((m) => m.route === "routine").map((m) => ({ text: m.text, label: m.intent })),
+        );
+        export const matchFaq = (question) => topLabel(predict(faqModel, question));
+
+        // The server side: the shop's facts go into the prompt with every request.
+        export const SHOP_FACTS = Object.values(support.faq).map((fact) => `- ${fact}`).join("\n");
+        export const SYSTEM = [
+          "You are the order-help assistant of Shwe Tea House, a tea shop in Bahan, Yangon.",
+          "Reply to the customer in Burmese, in at most two short sentences.",
+          "Use only the shop facts below. If they don't answer the message, or the customer needs money back or an order checked, say that a staff member will check and reply soon.",
+          "Shop facts:",
+          SHOP_FACTS,
+        ].join("\n");
+        export const askServer = (question) =>
+          generate([{ role: "system", content: SYSTEM }, { role: "user", content: question }], { show: false });
+
+        export const QUESTIONS = ["ဆိုင် ဘယ်နှနာရီ ဖွင့်လဲ", "ငွေ နှစ်ခါ ဖြတ်သွားတယ်", "နို့ မတည့်ဘူး၊ ဘာ သောက်လို့ ရမလဲ"];
+        const HANDOFF = "ကျန်းမာရေးနဲ့ ဆိုင်တဲ့ မေးခွန်းမို့ ကောင်တာက လှလှ ဆီ လွှဲပေးလိုက်ပါပြီ။";
+
+        // The buttons above the panel, and the Route and answer cards for the picked question.
+        export async function showAssistant(route, router) {
+          const device = { localModel: true };
+          let question = QUESTIONS[0];
+          const ask = async () => {
+            const to = route(question, device);
+            const ran = to !== "person" && !(to === "server" && !device.localModel);
+            const routine = ran ? `${Math.round(predict(router, question).routine * 100)}%` : "—";
+            const faq = to === "here" ? matchFaq(question) : "—";
+            // The badge says what decided the route: the router model, or a rule that ran before it.
+            const badge = ran ? "ဒီ page ထဲမှာ train ထားတဲ့ model" : "rules · AI မပါ";
+            panel.metrics("Route", { route: to, routine, faq }, { id: "route", badge });
+            if (to === "here") panel.output("FAQ answer", support.faq[faq], { id: "answer", badge: "rules · AI မပါ" });
+            else if (to === "person") panel.output("Handoff", HANDOFF, { id: "answer", badge: "rules · AI မပါ" });
+            else panel.output("Server answer", await askServer(question), { id: "answer", badge: `recorded · ${model.label} · greedy` });
+          };
+          choices("ask", QUESTIONS, (q) => {
+            question = q;
+            return ask();
+          }, { label: "customer", selected: question });
+          choices("device", ["local model ရ", "local model မရ"], (_d, i) => {
+            device.localModel = i === 0;
+            return ask();
+          }, { label: "device", selected: "local model ရ" });
+          await ask();
+        }
+
+        // Last month's messages as the shop's log counts them, and the router on the 10 it never saw:
+        // a routine message should stay here, a complex one should not.
+        export function showTest(messages, train, test, route) {
+          const device = { localModel: true };
+          const routine = messages.filter((m) => m.route === "routine").length;
+          const rows = test.map((m) => ({ message: m.text, kind: m.route, route: route(m.text, device) }));
+          const wrong = rows.filter((r) => (r.kind === "routine") !== (r.route === "here"));
+          panel.metrics("Messages", {
+            "last month": messages.length, routine, complex: messages.length - routine,
+            train: train.length, test: rows.length, right: rows.length - wrong.length,
+          }, { id: "test", badge: "ဒီ page ထဲမှာ train ထားတဲ့ model" });
+          panel.table("Mistakes", wrong, { id: "mistakes", columns: ["message", "kind", "route"] });
+        }
+      src/llm.js: |
+        // The lesson's stand-in for a model API.
+        // A real model is slow and can answer differently from run to run, so this lesson uses answers
+        // recorded ahead of time from a real model: data/responses.json (how: data/PROVENANCE.md).
+        // generate() returns the recorded answer for exactly these messages, and shows it in the panel.
+        import recorded from "../data/responses.json";
+        import { panel } from "ai-panel";
+
+        export const model = recorded.provenance;
+
+        const find = (messages) => {
+          const key = JSON.stringify(messages.map(({ role, content }) => ({ role, content })));
+          return recorded.responses.find((r) => JSON.stringify(r.messages) === key);
+        };
+
+        export async function generate(messages, { show = true } = {}) {
+          const hit = find(messages);
+          if (!hit) {
+            const error = new Error("No recorded answer for these exact messages yet.");
+            error.name = "CourseNotice";
+            throw error;
+          }
+          if (show) panel.output("Model answer", hit.output, { id: "answer", badge: `recorded · ${model.label} · greedy` });
+          return hit.output;
+        }
+
+        // The token counts the model's own tokenizer gave when the answer was recorded (the prompt includes
+        // the chat template's own tokens): { promptTokens, outputTokens }, or null when not recorded.
+        export function tokensFor(messages) {
+          const hit = find(messages);
+          return hit ? { promptTokens: hit.promptTokens, outputTokens: hit.outputTokens } : null;
+        }
+      src/main.js: |
+        import support from "../data/support.json";
+        import { trainNaiveBayes, predict, shuffle } from "./ml.js";
+        import { showAssistant, showTest } from "./assistant.js";
+
+        // The router: a small model trained in this page on last month's messages (routine or complex).
+        const messages = shuffle(support.messages, 5112);
+        const train = messages.slice(0, 24);
+        const test = messages.slice(24);
+        const router = trainNaiveBayes(train.map((m) => ({ text: m.text, label: m.route })));
+
+        // Where one customer message goes: "here" (the FAQ, in this page), "server" or "person".
+        function route(question, device) {
+          // Rules decided in advance (no model needed):
+
+          const routine = predict(router, question).routine;
+          return routine >= 0.5 ? "here" : "server";
+        }
+
+        await showAssistant(route, router);
+        showTest(support.messages, train, test, route);
+      src/ml.js: |
+        // Tiny machine learning in plain JavaScript: everything here runs in the page, with no
+        // downloads, and gives the same numbers every time.
+
+        // Burmese has no spaces between words, so the models count syllables instead.
+        // A syllable starts at a consonant, unless that consonant is stacked under the one
+        // before it (္) or killed by an asat (်) and so ends the syllable before it.
+        const STARTS = /[က-ဪဿ၌-၏]/;
+        export function syllables(word) {
+          const chars = [...word];
+          const out = [];
+          for (let i = 0; i < chars.length; i++) {
+            const next = chars[i + 1] === "့" ? chars[i + 2] : chars[i + 1];
+            const starts = STARTS.test(chars[i]) && chars[i - 1] !== "္" && next !== "်" && next !== "္";
+            if (starts || !out.length) out.push(chars[i]);
+            else out[out.length - 1] += chars[i];
+          }
+          return out;
+        }
+
+        export function tokenize(text) {
+          const tokens = [];
+          for (const [piece] of text.toLowerCase().matchAll(/[a-z0-9']+|[၀-၉]+|[က-ဿ၌-႟]+/g)) {
+            if (/^[က-ဿ၌-႟]/.test(piece)) tokens.push(...syllables(piece));
+            else tokens.push(piece);
+          }
+          return tokens;
+        }
+
+        // Naive Bayes: count how often each token appears with each label, then score a new
+        // text by how well its tokens fit each label.
+        export function trainNaiveBayes(examples) {
+          const labels = {};
+          const vocab = new Set();
+          for (const { text, label } of examples) {
+            const c = (labels[label] ??= { docs: 0, tokens: 0, counts: {} });
+            c.docs += 1;
+            for (const t of tokenize(text)) {
+              c.counts[t] = (c.counts[t] ?? 0) + 1;
+              c.tokens += 1;
+              vocab.add(t);
+            }
+          }
+          return { labels, vocab, total: examples.length };
+        }
+
+        export function predict(model, text) {
+          const tokens = tokenize(text).filter((t) => model.vocab.has(t));
+          const logs = {};
+          for (const [label, c] of Object.entries(model.labels)) {
+            let score = Math.log(c.docs / model.total);
+            for (const t of tokens) score += Math.log(((c.counts[t] ?? 0) + 1) / (c.tokens + model.vocab.size));
+            logs[label] = score;
+          }
+          const max = Math.max(...Object.values(logs));
+          const sum = Object.values(logs).reduce((s, v) => s + Math.exp(v - max), 0);
+          return Object.fromEntries(Object.entries(logs).map(([label, v]) => [label, Math.exp(v - max) / sum]));
+        }
+
+        export function topLabel(scores) {
+          return Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
+        }
+
+        // k nearest neighbours: find the training texts that share the most tokens with a new one.
+        function vector(text) {
+          const v = {};
+          for (const t of tokenize(text)) v[t] = (v[t] ?? 0) + 1;
+          return v;
+        }
+        function cosine(a, b) {
+          let dot = 0;
+          for (const t in a) if (t in b) dot += a[t] * b[t];
+          const norm = (v) => Math.sqrt(Object.values(v).reduce((s, x) => s + x * x, 0));
+          return dot === 0 ? 0 : dot / (norm(a) * norm(b));
+        }
+        export function nearest(examples, text, k = 3) {
+          const q = vector(text);
+          return examples
+            .map((e, i) => ({ ...e, similarity: cosine(q, vector(e.text)), i }))
+            .sort((a, b) => b.similarity - a.similarity || a.i - b.i)
+            .slice(0, k)
+            .map(({ i, ...rest }) => rest);
+        }
+        export function knnPredict(examples, text, k = 3) {
+          const votes = {};
+          for (const e of examples) votes[e.label] = 0;
+          for (const n of nearest(examples, text, k)) votes[n.label] += 1 / k;
+          return votes;
+        }
+
+        // A straight line through a series (least squares): the simplest forecast.
+        export function fitLine(ys) {
+          const n = ys.length;
+          const mx = (n - 1) / 2;
+          const my = ys.reduce((s, y) => s + y, 0) / n;
+          let num = 0;
+          let den = 0;
+          ys.forEach((y, x) => {
+            num += (x - mx) * (y - my);
+            den += (x - mx) ** 2;
+          });
+          const slope = den === 0 ? 0 : num / den;
+          const intercept = my - slope * mx;
+          return { slope, intercept, at: (x) => intercept + slope * x };
+        }
+
+        export function meanAbsoluteError(actual, predicted) {
+          return actual.reduce((s, a, i) => s + Math.abs(a - predicted[i]), 0) / actual.length;
+        }
+
+        // Accuracy, precision, recall and F1 for one label (the "positive" class).
+        export function scoreReport(rows, positive) {
+          let tp = 0, fp = 0, fn = 0, correct = 0;
+          for (const { expected, predicted } of rows) {
+            if (expected === predicted) correct += 1;
+            if (predicted === positive && expected === positive) tp += 1;
+            if (predicted === positive && expected !== positive) fp += 1;
+            if (predicted !== positive && expected === positive) fn += 1;
+          }
+          const precision = tp + fp === 0 ? 0 : tp / (tp + fp);
+          const recall = tp + fn === 0 ? 0 : tp / (tp + fn);
+          const f1 = precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+          return { accuracy: correct / rows.length, precision, recall, f1 };
+        }
+
+        // A shuffle that gives the same order every time for the same seed.
+        export function shuffle(list, seed = 1) {
+          let s = seed >>> 0;
+          const random = () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+          const out = [...list];
+          for (let i = out.length - 1; i > 0; i--) {
+            const j = Math.floor(random() * (i + 1));
+            [out[i], out[j]] = [out[j], out[i]];
+          }
+          return out;
+        }
+
+        // A seeded random number generator (0 ≤ x < 1): the same seed gives the same numbers every time.
+        export function rng(seed = 1) {
+          let s = seed >>> 0;
+          return () => {
+            s = (s + 0x6d2b79f5) >>> 0;
+            let t = s;
+            t = Math.imul(t ^ (t >>> 15), t | 1);
+            t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        // Logistic regression for tabular data: one weight per input column, learned by gradient descent
+        // from zero, on columns scaled to mean 0 and spread 1. Same data and settings → same weights.
+        //   const model = trainLogistic(rows, { columns: ["visits_30d", "days_since_last"], label: "stopped" });
+        //   model.weights → { visits_30d: -1.2, days_since_last: 1.9 } (on the scaled columns)
+        //   model.probability(row) → 0.72
+        export function trainLogistic(rows, { columns, label, epochs = 400, rate = 0.5 } = {}) {
+          const n = rows.length;
+          const mean = {};
+          const spread = {};
+          for (const c of columns) {
+            mean[c] = rows.reduce((s, r) => s + Number(r[c]), 0) / n;
+            const v = rows.reduce((s, r) => s + (Number(r[c]) - mean[c]) ** 2, 0) / n;
+            spread[c] = Math.sqrt(v) || 1;
+          }
+          const scaled = (r) => columns.map((c) => (Number(r[c]) - mean[c]) / spread[c]);
+          const xs = rows.map(scaled);
+          const ys = rows.map((r) => Number(r[label]));
+          const w = columns.map(() => 0);
+          let b = 0;
+          const sigmoid = (z) => 1 / (1 + Math.exp(-z));
+          for (let e = 0; e < epochs; e++) {
+            const gw = columns.map(() => 0);
+            let gb = 0;
+            for (let i = 0; i < n; i++) {
+              const p = sigmoid(xs[i].reduce((s, x, j) => s + x * w[j], b));
+              const err = p - ys[i];
+              for (let j = 0; j < w.length; j++) gw[j] += err * xs[i][j];
+              gb += err;
+            }
+            for (let j = 0; j < w.length; j++) w[j] -= (rate * gw[j]) / n;
+            b -= (rate * gb) / n;
+          }
+          const probability = (r) => sigmoid(scaled(r).reduce((s, x, j) => s + x * w[j], b));
+          return { columns, label, weights: Object.fromEntries(columns.map((c, j) => [c, w[j]])), bias: b, probability };
+        }
+
+        // Rows → { expected, predicted } at a threshold, ready for scoreReport(rows, "yes").
+        export function atThreshold(model, rows, threshold = 0.5) {
+          return rows.map((r) => ({
+            ...r,
+            probability: model.probability(r),
+            expected: Number(r[model.label]) === 1 ? "yes" : "no",
+            predicted: model.probability(r) >= threshold ? "yes" : "no",
+          }));
+        }
+      src/ui.js: |
+        // Page controls for the lesson program: a row of buttons or choices in #app, above the AI panel.
+        // Plain DOM, so the studio records every click and replay shows it exactly. Each control gets a
+        // data-testid for preview.click. #app starts empty on every run, so controls are drawn by the
+        // program each time. A handler that throws prints to the panel's Console (never the page).
+        //
+        //   import { row, button, choices } from "./ui.js";
+        //   choices("threshold", [0.5, 0.7, 0.9], (t) => show(t), { selected: 0.5 });
+        //     → buttons with test ids threshold-1, threshold-2, threshold-3 (1-based, in order)
+        //   button("ဖော်ပြချက်တွေ ကြည့်မယ်", "show-descriptions", () => …);
+        const STYLE_ID = "ui-style";
+        const STYLE = `
+        #app .ui-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px 0;
+          font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #d9dce2; }
+        #app .ui-label { color: #adb5bd; font-size: 13px; }
+        #app .ui-btn { font: inherit; color: #f1f3f5; background: #2d323c; border: 1px solid #3a404b; border-radius: 6px; padding: 3px 12px; cursor: pointer; }
+        #app .ui-btn[aria-pressed="true"] { background: #7048e8; border-color: #7048e8; color: #fff; font-weight: 600; }
+        `;
+
+        function ensureStyle() {
+          if (document.getElementById(STYLE_ID)) return;
+          const style = document.createElement("style");
+          style.id = STYLE_ID;
+          style.textContent = STYLE;
+          document.head.append(style);
+        }
+
+        const safe = (fn) => (...args) => {
+          try {
+            const result = fn(...args);
+            if (result && typeof result.catch === "function") result.catch((error) => console.error(error));
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        /** A new row in #app, optionally with a short label in front. Returns the row element. */
+        export function row(label = "") {
+          ensureStyle();
+          const el = document.createElement("div");
+          el.className = "ui-row";
+          if (label) {
+            const span = document.createElement("span");
+            span.className = "ui-label";
+            span.textContent = label;
+            el.append(span);
+          }
+          document.getElementById("app").append(el);
+          return el;
+        }
+
+        /** One button. `testid` is used as is. */
+        export function button(label, testid, onClick, parent = row()) {
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className = "ui-btn";
+          el.textContent = String(label);
+          el.dataset.testid = testid;
+          el.addEventListener("click", safe(onClick));
+          parent.append(el);
+          return el;
+        }
+
+        /** A row of choices; the picked one is shown pressed. Test ids are `<name>-1`, `<name>-2`, … */
+        export function choices(name, options, onPick, { label = name, selected } = {}) {
+          const parent = row(label);
+          const buttons = options.map((option, i) =>
+            button(option, `${name}-${i + 1}`, () => {
+              for (const b of buttons) b.setAttribute("aria-pressed", String(b === buttons[i]));
+              onPick(option, i);
+            }, parent),
+          );
+          for (const [i, b] of buttons.entries()) b.setAttribute("aria-pressed", String(options[i] === selected));
+          return buttons;
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseRunner from "./course/runner.js";
+
+        export default defineConfig({
+          plugins: [courseRunner()],
+        });
+  whiteboardAssets:
+    # Board A: the mini blueprint; Intelligence is today's layer (orange), the rest white.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "AI system blueprint",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: a-opp, kind: rectangle, x: 300, y: 220, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-opp-t,
+        kind: text,
+        x: 320,
+        y: 232,
+        width: 220,
+        height: 38,
+        text: "Opportunity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 284,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 190,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-data-t,
+        kind: text,
+        x: 318,
+        y: 337,
+        width: 120,
+        height: 38,
+        text: "Data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-intel,
+        kind: rectangle,
+        x: 505,
+        y: 320,
+        width: 230,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-intel-t,
+        kind: text,
+        x: 520,
+        y: 337,
+        width: 210,
+        height: 38,
+        text: "Intelligence",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: a-ux, kind: rectangle, x: 750, y: 320, width: 150, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: a-ux-t,
+        kind: text,
+        x: 768,
+        y: 337,
+        width: 80,
+        height: 38,
+        text: "UX",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 394,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: a-gov, kind: rectangle, x: 300, y: 430, width: 600, height: 60, strokeColor: "#1e1e1e" }
+    - {
+        id: a-gov-t,
+        kind: text,
+        x: 320,
+        y: 442,
+        width: 220,
+        height: 38,
+        text: "Governance",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-today,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 600,
+        height: 45,
+        text: "ဒီနေ့ · platform နဲ့ hybrid AI",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board R: what the assistant needs (white) → the criterion it weighs (orange) → the winner (green).
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 700,
+        height: 50,
+        text: "Assistant အတွက် ဘယ် platform လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r1-l,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 350,
+        height: 40,
+        text: "မေးခွန်း အမျိုးမျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r1-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 234,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r1-r,
+        kind: text,
+        x: 712,
+        y: 230,
+        width: 385,
+        height: 40,
+        text: "model power · accuracy",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r2-l,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 350,
+        height: 40,
+        text: "ဆိုင်ရဲ့ ကိုယ်ပိုင် အချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r2-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 289,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r2-r,
+        kind: text,
+        x: 712,
+        y: 285,
+        width: 385,
+        height: 40,
+        text: "customizability · RAG",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r3-l,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 350,
+        height: 40,
+        text: "customer အများ · ဖုန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r3-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 344,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r3-r,
+        kind: text,
+        x: 712,
+        y: 340,
+        width: 385,
+        height: 40,
+        text: "compatibility · scale",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r4-l,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 350,
+        height: 40,
+        text: "developer တစ်ယောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r4-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 399,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r4-r,
+        kind: text,
+        x: 712,
+        y: 395,
+        width: 385,
+        height: 40,
+        text: "maintenance",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r5-l,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 350,
+        height: 40,
+        text: "web skill · ML နည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r5-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 655,
+        y: 454,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r5-r,
+        kind: text,
+        x: 712,
+        y: 450,
+        width: 385,
+        height: 40,
+        text: "developer convenience",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r-win,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 760,
+        height: 50,
+        text: "server side · managed service + RAG",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    # Board H: the hybrid router, left to right and top to bottom (violet = models, green = the FAQ answer here).
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 480,
+        height: 50,
+        text: "Hybrid AI · router",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: h-q, kind: rectangle, x: 300, y: 250, width: 210, height: 100, strokeColor: "#1e1e1e" }
+    - {
+        id: h-q-t1,
+        kind: text,
+        x: 316,
+        y: 262,
+        width: 180,
+        height: 38,
+        text: "customer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-q-t2,
+        kind: text,
+        x: 316,
+        y: 302,
+        width: 180,
+        height: 38,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 520,
+        y: 284,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-router,
+        kind: rectangle,
+        x: 590,
+        y: 250,
+        width: 240,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-router-t1,
+        kind: text,
+        x: 606,
+        y: 262,
+        width: 200,
+        height: 38,
+        text: "router",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-router-t2,
+        kind: text,
+        x: 606,
+        y: 302,
+        width: 210,
+        height: 38,
+        text: "page ထဲမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 840,
+        y: 284,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-faq,
+        kind: rectangle,
+        x: 910,
+        y: 250,
+        width: 185,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: h-faq-t1,
+        kind: text,
+        x: 926,
+        y: 262,
+        width: 150,
+        height: 38,
+        text: "FAQ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: h-faq-t2,
+        kind: text,
+        x: 926,
+        y: 302,
+        width: 160,
+        height: 38,
+        text: "ဒီမှာ ဖြေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-faq-n,
+        kind: text,
+        x: 910,
+        y: 365,
+        width: 185,
+        height: 38,
+        text: "76% · မြန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: h-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 690,
+        y: 356,
+        width: 40,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-server,
+        kind: rectangle,
+        x: 590,
+        y: 410,
+        width: 240,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-server-t1,
+        kind: text,
+        x: 606,
+        y: 422,
+        width: 200,
+        height: 38,
+        text: "server",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-server-t2,
+        kind: text,
+        x: 606,
+        y: 462,
+        width: 210,
+        height: 38,
+        text: "ပိုစွမ်းတဲ့ model",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-server-n,
+        kind: text,
+        x: 590,
+        y: 522,
+        width: 330,
+        height: 38,
+        text: "ခက် · ရှား · မရှင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board F: the two reasons to send a request to the server; the same-model note in green.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "Server ကို ဘယ်အချိန် ပို့မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: f1, kind: rectangle, x: 300, y: 230, width: 390, height: 160, strokeColor: "#6741d9" }
+    - {
+        id: f1-t,
+        kind: text,
+        x: 316,
+        y: 242,
+        width: 360,
+        height: 40,
+        text: "capability escalation",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: f1-d1,
+        kind: text,
+        x: 316,
+        y: 292,
+        width: 360,
+        height: 38,
+        text: "ခက်လွန်းတဲ့ request",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f1-d2,
+        kind: text,
+        x: 316,
+        y: 338,
+        width: 360,
+        height: 38,
+        text: "rule ကို ကြိုသတ်မှတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: f2, kind: rectangle, x: 705, y: 230, width: 395, height: 160, strokeColor: "#f08c00" }
+    - {
+        id: f2-t,
+        kind: text,
+        x: 721,
+        y: 242,
+        width: 370,
+        height: 40,
+        text: "compatibility fallback",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f2-d1,
+        kind: text,
+        x: 721,
+        y: 292,
+        width: 360,
+        height: 38,
+        text: "device က model ကို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f2-d2,
+        kind: text,
+        x: 721,
+        y: 338,
+        width: 360,
+        height: 38,
+        text: "run မနိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f3a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 700,
+        height: 40,
+        text: "compatibility အတွက်ပဲ ဆိုရင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f3b,
+        kind: text,
+        x: 300,
+        y: 478,
+        width: 700,
+        height: 40,
+        text: "model တစ်ခုတည်းကို နှစ်ဘက်မှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board C: what hybrid costs (orange = work to carry, red = risk); when to skip it (green).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "Hybrid ရဲ့ ကုန်ကျစရိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 760,
+        height: 40,
+        text: "orchestration · route၊ retry၊ fallback",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 760,
+        height: 40,
+        text: "versioning · model တစ်ခုစီ prompt",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c3,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 760,
+        height: 40,
+        text: "monitoring · log 2 နေရာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c4,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 760,
+        height: 40,
+        text: "security · တိုက်ခိုက်ခံရနိုင်တဲ့ နေရာ 2 ခု",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c5,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 760,
+        height: 45,
+        text: "team သေး · မဖြစ်မနေ မဟုတ် → hybrid မလို",
+        strokeColor: "#2f9e44",
+        fontSize: 30,
+      }
+    - {
+        id: c6,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 760,
+        height: 45,
+        text: "use case + team ကနေ စ · platform ပြောင်းမယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 30,
+      }
+    # Board Z: the quiz (question white, answer green, the reason violet).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 560,
+        height: 45,
+        text: "Hybrid AI ရဲ့ အဓိက",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 560,
+        height: 45,
+        text: "အကျိုးကျေးဇူး ဘာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 640,
+        height: 50,
+        text: "အလုပ်ကို နေရာ 2 ခု ခွဲပေးတာ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-n1,
+        kind: text,
+        x: 300,
+        y: 462,
+        width: 700,
+        height: 40,
+        text: "လွယ်တာ → page ထဲ · မြန်၊ ငွေမကုန်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: z-a-n2,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 700,
+        height: 40,
+        text: "ခက်တာ → server · စွမ်းအား",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 5112
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Assistant အတွက် platform ရွေးရအောင်"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ platform လေးမျိုးကို criteria တွေနဲ့ ယှဉ်ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့
+      customer မေးခွန်းတွေကို ဖြေပေးမယ့် assistant အတွက် platform တစ်ခု တကယ် ရွေးပြီး၊ client side နဲ့ server
+      side ကို တွဲသုံးတဲ့ hybrid AI ဖြစ်အောင် လုပ်ကြည့်ပါမယ်။ [[mark:draw-mini]] blueprint မှာ ဒီနေ့ လုပ်မှာက
+      Solution ထဲက intelligence အလွှာပါ။ [[mark:draw-today]] model ကို ဘယ်မှာ run မလဲ၊ မေးခွန်း တစ်ခုကို ဘယ်
+      model ဆီ ပို့မလဲ ဆိုတာ ဒီ အလွှာမှာ ဆုံးဖြတ်ရလို့ပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform",
+          url: "https://web.dev/learn/ai/platform",
+        }
+      - {
+          title: "web.dev Learn AI: Introduction to AI on the web (the blueprint)",
+          url: "https://web.dev/learn/ai/introduction",
+        }
+      - {
+          title: "web.dev Learn AI: Welcome to Learn AI! (course credit: written by Dr. Janna Lipenkova with editorial guidance from Alexandra Klepper; text CC BY 4.0, code Apache 2.0; adapted into Burmese with the course's own tea-shop examples)",
+          url: "https://web.dev/learn/ai/welcome",
+        }
+      - {
+          title: "Creative Commons: Attribution 4.0 International (CC BY 4.0), the licence of the web.dev Learn AI text adapted here",
+          url: "https://creativecommons.org/licenses/by/4.0/",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - {
+          id: draw-mini,
+          type: whiteboard.apply,
+          at: { mark: draw-mini },
+          upsertIds:
+            [
+              a-opp,
+              a-opp-t,
+              a-arrow-1,
+              a-data,
+              a-data-t,
+              a-intel,
+              a-intel-t,
+              a-ux,
+              a-ux-t,
+              a-arrow-2,
+              a-gov,
+              a-gov-t,
+            ],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [a-today],
+          drawMs: 1000,
+        }
+
+  - id: analysis
+    narration: >
+      [[mark:draw-r]] ဆိုင်ပိတ်ချိန်မှာလည်း customer မေးတာကို ဖြေပေးနိုင်အောင် assistant တစ်ခု ထည့်ချင်ပါတယ်။ use
+      case က ဘာလိုလဲ၊ ဆိုင်နဲ့ team ဘက်က ဘာ ကန့်သတ်ချက် ရှိလဲ ဆိုတာကို အရင် ကြည့်ပါမယ်။
+      [[mark:draw-r1]] customer တွေက အော်ဒါ၊ delivery၊ အစားအသောက် အကြောင်း အမျိုးမျိုး မေးကြလို့ model ရဲ့
+      စွမ်းရည်နဲ့ မှန်ကန်မှု အရေးကြီးပြီး LLM တစ်ခု လိုပါတယ်။ [[mark:draw-r2]] အဖြေတွေက ဆိုင်ရဲ့ ကိုယ်ပိုင်
+      အချက်တွေနဲ့ ကိုက်ရပေမယ့် model ကို fine tune လုပ်စရာ မလိုပါဘူး။ RAG နဲ့ ဆိုင်ရဲ့ အချက်တွေထဲက
+      သက်ဆိုင်တာကို ရှာပြီး request တိုင်းမှာ prompt ထဲ ထည့်ပေးရင် ရပါတယ်။ [[mark:draw-r3]] ကန့်သတ်ချက် ဘက်မှာ
+      customer အများစုက ဖုန်းနဲ့ မှာကြလို့ device တိုင်းမှာ အလုပ်လုပ်ရပါမယ်။ [[mark:draw-r4]] ဆိုင်မှာ developer က
+      ကိုယ် တစ်ယောက်တည်းပါ။ launch လုပ်ပြီးရင် တခြား feature တွေကို ဆက်လုပ်ရမှာမို့၊ ထိန်းသိမ်းရ လွယ်ပြီး ML
+      ကျွမ်းကျင်မှု သိပ် မလိုတဲ့ နည်း ဖြစ်ရပါမယ်။ [[mark:draw-win]] ဒါတွေကို ပြီးခဲ့တဲ့ lesson ရဲ့ ဇယားနဲ့
+      တိုက်ကြည့်ရင်၊ model စွမ်းရည်နဲ့ compatibility မှာ server side က နိုင်ပါတယ်။ server side ထဲမှာဆိုရင်
+      ထိန်းသိမ်းရတာနဲ့ developer အဆင်ပြေတာမှာ managed service က နိုင်ပါတယ်။ စိတ်ကြိုက် ပြင်လို့ ရတာမှာတော့
+      self hosted model က နိုင်ပေမယ့်၊ ဆိုင်ရဲ့ အချက်တွေကို prompt နဲ့ ပေးလို့ ရတာမို့ အဲဒီ အားသာချက်ကို
+      လက်လွှတ်လို့ ရပါတယ်။ ဒါကြောင့် RAG နဲ့ တွဲထားတဲ့ managed service ကို စရွေးပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (analyze trade-offs)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - {
+          id: draw-r,
+          type: whiteboard.apply,
+          at: { mark: draw-r },
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r1,
+          type: whiteboard.apply,
+          at: { mark: draw-r1 },
+          upsertIds: [r1-l, r1-a, r1-r],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r2,
+          type: whiteboard.apply,
+          at: { mark: draw-r2 },
+          upsertIds: [r2-l, r2-a, r2-r],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r3,
+          type: whiteboard.apply,
+          at: { mark: draw-r3 },
+          upsertIds: [r3-l, r3-a, r3-r],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r4,
+          type: whiteboard.apply,
+          at: { mark: draw-r4 },
+          upsertIds: [r4-l, r4-a, r4-r, r5-l, r5-a, r5-r],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-win,
+          type: whiteboard.apply,
+          at: { mark: draw-win },
+          upsertIds: [r-win],
+          drawMs: 1600,
+        }
+
+  - id: logs
+    chapter: "Launch ပြီးနောက် log ကို ကြည့်ရအောင်"
+    narration: >
+      [[mark:close-r]] launch လုပ်ပြီး လအနည်းငယ် ကြာတော့ ဘာတွေ တွေ့ရလဲ ကြည့်ရအောင်။ [[mark:panel-ready]] ညာဘက်
+      AI panel မှာ ပြီးခဲ့တဲ့လ customer message တွေကို ရေတွက်ထားပါတယ်။ ဒီ message တွေက lesson အတွက်
+      ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ [[mark:read-logs]] Messages card ရဲ့ ပထမ တန်းမှာ message ၃၄ ခုထဲက ၂၆ ခုက routine
+      ဆိုတဲ့ ပုံမှန် မေးခွန်းပါ။ ဆိုင် ဖွင့်ချိန်၊ delivery ခ၊ ဈေးနှုန်း လို FAQ မှာ အဖြေ ရှိပြီးသား မေးခွန်းတွေ ဖြစ်လို့၊
+      managed service ဆီ ပို့တိုင်း ငွေကုန်ပြီး customer လည်း network ကို ဖြတ်ပြီး အဖြေကို စောင့်ရပါတယ်။ ငွေ
+      နှစ်ခါ ဖြတ်တာ၊ အစားအသောက် မတည့်တာ လို complex ဆိုတဲ့ ခက်တဲ့ မေးခွန်းက ၈ ခုပဲ ရှိပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (spot opportunities for hybrid AI)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - { id: close-r, type: whiteboard.apply, at: { mark: close-r }, open: false }
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-done
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-status }
+        attribute: { name: data-state, value: "done" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-four-cards
+        type: expect.preview
+        at: { afterAction: expect-done }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-cards }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-logs-34
+        type: expect.preview
+        at: { mark: read-logs }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-test-1 }
+        attribute: { name: data-value, value: "34" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-logs-26
+        type: expect.preview
+        at: { afterAction: expect-logs-34 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-test-2 }
+        attribute: { name: data-value, value: "26" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-logs-8
+        type: expect.preview
+        at: { afterAction: expect-logs-26 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-test-3 }
+        attribute: { name: data-value, value: "8" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: hybrid
+    chapter: "Hybrid AI ဆိုတာ"
+    narration: >
+      [[mark:draw-h]] ဒီလို အခြေအနေမှာ hybrid AI က အသုံးဝင်ပါတယ်။ hybrid AI ဆိုတာ client side နဲ့ server
+      side ကို တွဲပြီး အလုပ်ခွဲပေးတာပါ။ [[mark:draw-h1]] မေးခွန်း တစ်ခု ဝင်လာရင် browser ထဲက router ဆိုတဲ့
+      model သေးလေးက ပုံမှန်လား ခက်လား အရင် ခွဲပါတယ်။ [[mark:draw-h2]] message ရဲ့ ၇၆ ရာခိုင်နှုန်းလောက်က
+      ပုံမှန် မေးခွန်းတွေမို့၊ FAQ ထဲက အဖြေနဲ့ page ထဲမှာတင် ဖြေရင် မြန်ပြီး ငွေလည်း မကုန်ပါဘူး။ [[mark:draw-h3]] ခက်တာ၊ ရှားတာ၊ မရှင်းတာကိုတော့ server ပေါ်က
+      ပိုစွမ်းတဲ့ model ဆီ ပို့ပါတယ်။ default က client side ဖြစ်ပြီး လိုမှပဲ server ကို သုံးလို့၊ ကုန်ကျစရိတ်ရော
+      latency ပါ လျော့ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (hybrid AI)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - {
+          id: draw-h,
+          type: whiteboard.apply,
+          at: { mark: draw-h },
+          open: true,
+          clear: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-h1,
+          type: whiteboard.apply,
+          at: { mark: draw-h1 },
+          upsertIds: [h-q, h-q-t1, h-q-t2, h-a1, h-router, h-router-t1, h-router-t2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-h2,
+          type: whiteboard.apply,
+          at: { mark: draw-h2 },
+          upsertIds: [h-a2, h-faq, h-faq-t1, h-faq-t2, h-faq-n],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-h3,
+          type: whiteboard.apply,
+          at: { mark: draw-h3 },
+          upsertIds: [h-a3, h-server, h-server-t1, h-server-t2, h-server-n],
+          drawMs: 1800,
+        }
+
+  - id: router
+    narration: >
+      [[mark:close-h]] code ထဲမှာ ကြည့်ရအောင်။ [[mark:sel-train]] ဒီ router ကို ပြီးခဲ့တဲ့လ message ၂၄ ခုနဲ့
+      train လုပ်ထားပါတယ်။ ဒီ lesson အတွက် ရေးထားတဲ့ model သေးသေးလေး ဖြစ်ပြီး၊ ဒီ page ထဲမှာပဲ train
+      လုပ်တာပါ။ [[mark:sel-route]] route function က ပုံမှန် မေးခွန်း ဖြစ်နိုင်ခြေ ၅၀ ရာခိုင်နှုန်းနဲ့ အထက်ဆိုရင် ဒီ
+      page ထဲမှာ ဖြေပြီး၊ မဟုတ်ရင် server ကို ပို့ပါတယ်။ [[mark:read-test]] ဒုတိယ တန်းမှာတော့ model
+      မမြင်ဖူးတဲ့ message ၁၀ ခုထဲက ၈ ခုကို မှန်မှန် ပို့ထားပါတယ်။ [[mark:read-mistakes]] Mistakes card က မှားတဲ့
+      နှစ်ခုကို ပြပါတယ်။ ဆိုင်လိပ်စာ တောင်းတာက ပုံမှန် မေးခွန်း ဖြစ်ပေမယ့် server ကို ရောက်သွားလို့ ကုန်ကျစရိတ်
+      နည်းနည်း ပိုရုံပါ။ နို့ မတည့်တဲ့ customer ရဲ့ မေးခွန်းကို page ထဲမှာ ဖြေဖို့ ပို့ထားတာကတော့ ပိုဆိုးပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (distribute the workload)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - { id: close-h, type: whiteboard.apply, at: { mark: close-h }, open: false }
+      - id: sel-train
+        type: editor.select
+        at: { mark: sel-train }
+        target:
+          {
+            file: src/main.js,
+            text: "const router = trainNaiveBayes(train.map((m) => ({ text: m.text, label: m.route })));",
+            occurrence: 1,
+          }
+      - id: sel-route
+        type: editor.select
+        at: { mark: sel-route }
+        target:
+          { file: src/main.js, text: '  return routine >= 0.5 ? "here" : "server";', occurrence: 1 }
+      - id: expect-test-10
+        type: expect.preview
+        at: { mark: read-test }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-test-5 }
+        attribute: { name: data-value, value: "10" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-test-8
+        type: expect.preview
+        at: { afterAction: expect-test-10 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-test-6 }
+        attribute: { name: data-value, value: "8" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-mistakes-2
+        type: expect.preview
+        at: { mark: read-mistakes }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-mistakes }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-mistake-address
+        type: expect.preview
+        at: { afterAction: expect-mistakes-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-mistakes-1 }
+        textContains: "ဆိုင်လိပ်စာ ပို့ပေးပါroutineserver"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-mistake-milk
+        type: expect.preview
+        at: { afterAction: expect-mistake-address }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-mistakes-2 }
+        textContains: "complexhere"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: ask
+    narration: >
+      [[mark:read-buttons]] panel အပေါ်က ခလုတ်တွေက customer မေးခွန်း သုံးခုပါ။ တစ်ခု နှိပ်လိုက်ရင် program က
+      အဲဒီ မေးခွန်းကို route လုပ်ပါတယ်။ အခုတော့ ဆိုင် ဖွင့်ချိန် မေးခွန်းကို ရွေးထားပါတယ်။ [[mark:read-here]] Route card မှာ
+      ပုံမှန် မေးခွန်း ဖြစ်နိုင်ခြေ ၉၉ ရာခိုင်နှုန်း ရှိလို့ page ထဲမှာပဲ ဖြေပါတယ်။ FAQ ထဲက ဘယ် အဖြေနဲ့ ကိုက်လဲကို
+      ဒီ page ထဲက နောက်ထပ် model သေးလေး တစ်ခုက ရွေးပေမယ့်၊ အဖြေ စာကတော့ ဆိုင်က ရေးထားတာမို့ badge က AI
+      မပါဘူးလို့ ပြနေပါတယ်။ [[mark:click-charge]] ရွှေ member အောင်အောင် ရေးတဲ့ ငွေ နှစ်ခါ ဖြတ်သွားတယ် ဆိုတာကို
+      နှိပ်ကြည့်ပါမယ်။ [[mark:read-server]] ပုံမှန် ဖြစ်နိုင်ခြေ ၂ ရာခိုင်နှုန်းပဲ ရှိလို့ server ကို ပို့ပါတယ်။ ဒီ lesson
+      ရဲ့ server ဘက် အဖြေတွေက open model သေးသေးလေး တစ်ခုကို ဆိုင်ရဲ့ အချက်တွေ ပါတဲ့ prompt နဲ့ ကြိုပြီး run
+      ထားတုန်းက တကယ် ထွက်လာခဲ့တဲ့ အဖြေတွေပါ။ managed service ရဲ့ model ကြီး မဟုတ်ဘဲ၊ ဆိုင်က ကိုယ့် server
+      ပေါ်မှာ run နိုင်လောက်တဲ့ model မျိုးပါ။ [[mark:read-answer]] ပထမ စာကြောင်းက ငွေချေနည်းကို ပြန်ပြောနေလို့ မေးတာနဲ့ မဆိုင်ပေမယ့်၊ ဒုတိယ စာကြောင်းက
+      ဝန်ထမ်းက စစ်ပြီး ပြန်ဖြေမယ်လို့ ပြောပါတယ်။ server ဘက်က အဖြေကိုလည်း စစ်ဖို့ လိုပါတယ်။ [[mark:click-milk]]
+      နို့ မတည့်တဲ့ မေးခွန်းကိုလည်း နှိပ်ကြည့်ရအောင်။ [[mark:read-milk]] router က ပုံမှန် မေးခွန်းလို့ ၉၇
+      ရာခိုင်နှုန်း သေချာနေလို့၊ page ထဲမှာပဲ ကြိုမှာလို့ ရတယ် ဆိုတဲ့ FAQ အဖြေကို ပြန်ပေးလိုက်ပါတယ်။ ဒီ customer
+      အတွက် မှားပြီး အန္တရာယ်လည်း ရှိပါတယ်။ model သေချာတာနဲ့ အဖြေ မှန်တာ မတူပါဘူး။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (hybrid AI)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - id: expect-ask-1
+        type: expect.preview
+        at: { mark: read-buttons }
+        timeoutMs: 5000
+        target: { by: testId, value: ask-1 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-route-here
+        type: expect.preview
+        at: { mark: read-here }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-1 }
+        attribute: { name: data-value, value: "here" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-route-99
+        type: expect.preview
+        at: { afterAction: expect-route-here }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-2 }
+        attribute: { name: data-value, value: "99%" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-faq-hours
+        type: expect.preview
+        at: { afterAction: expect-route-99 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-3 }
+        attribute: { name: data-value, value: "hours" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-faq-badge
+        type: expect.preview
+        at: { afterAction: expect-faq-hours }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer-badge }
+        textContains: "rules · AI မပါ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-charge
+        type: preview.click
+        at: { mark: click-charge }
+        target: { by: testId, value: ask-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-route-server
+        type: expect.preview
+        at: { afterAction: click-charge }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-1 }
+        attribute: { name: data-value, value: "server" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-route-2
+        type: expect.preview
+        at: { afterAction: expect-route-server }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-2 }
+        attribute: { name: data-value, value: "2%" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-server-answer
+        type: expect.preview
+        at: { afterAction: expect-route-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "ဝန်ထမ်းတစ်ဦးက မကြာခင် ပြန်ဖြေပေးပါလိမ့်မယ်"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-server-badge
+        type: expect.preview
+        at: { mark: read-answer }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer-badge }
+        textContains: "recorded · Gemma 4 E2B · greedy"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-milk
+        type: preview.click
+        at: { mark: click-milk }
+        target: { by: testId, value: ask-3 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-milk-here
+        type: expect.preview
+        at: { afterAction: click-milk }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-1 }
+        attribute: { name: data-value, value: "here" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-milk-97
+        type: expect.preview
+        at: { afterAction: expect-milk-here }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-2 }
+        attribute: { name: data-value, value: "97%" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-milk-preorder
+        type: expect.preview
+        at: { afterAction: expect-milk-97 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "ကြိုမှာထားလို့ ရပါတယ်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: rules
+    chapter: "Rule တွေကို ကြိုသတ်မှတ်ရအောင်"
+    narration: >
+      [[mark:type-health]] ဒါကြောင့် rule တချို့ကို ဆိုင်ပိုင်ရှင် မြမြ နဲ့ တိုင်ပင်ပြီး ကြိုသတ်မှတ်ရပါမယ်။ မတည့်
+      ဆိုတဲ့ စကားလုံး ပါရင် model ကို မမေးဘဲ ဝန်ထမ်းဆီ တန်းလွှဲပါမယ်။ [[mark:read-health]] Messages card မှာ
+      မှန်တာ ၉ ခု ဖြစ်သွားပြီး၊ Mistakes card ထဲက နို့ မတည့်တဲ့ မေးခွန်း ပျောက်သွားပါပြီ။ [[mark:click-milk-2]] အဲဒီ
+      မေးခွန်းကို ပြန်နှိပ်ကြည့်ရအောင်။ [[mark:read-person]] route က person ဖြစ်သွားပြီး၊ ကောင်တာက လှလှ ဆီ
+      လွှဲပေးလိုက်ပြီလို့ ပြပါတယ်။ ဒီလို အလုပ်ကို ပိုစွမ်းတဲ့ model ဒါမှမဟုတ် လူဆီ လွှဲပေးတာကို escalation လို့
+      ခေါ်ပါတယ်။ ဘယ်အချိန် လွှဲမလဲ ဆိုတာကို model ရဲ့ သေချာမှုကိုပဲ အားမကိုးဘဲ ကြိုရေးထားတဲ့ rule နဲ့
+      ဆုံးဖြတ်တာပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (capability-based escalation)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - id: type-health
+        type: editor.type
+        at: { mark: type-health }
+        target:
+          {
+            file: src/main.js,
+            after: "  // Rules decided in advance (no model needed):\n",
+            occurrence: 1,
+          }
+        text: "  if (question.includes(\"မတည့်\")) return \"person\";\n"
+        cadence: line-by-line
+      - id: expect-test-9
+        type: expect.preview
+        at: { afterAction: type-health }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-test-6 }
+        attribute: { name: data-value, value: "9" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-mistakes-1
+        type: expect.preview
+        at: { afterAction: expect-test-9 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-mistakes }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-milk-2
+        type: preview.click
+        at: { mark: click-milk-2 }
+        target: { by: testId, value: ask-3 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-person
+        type: expect.preview
+        at: { afterAction: click-milk-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-1 }
+        attribute: { name: data-value, value: "person" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-handoff
+        type: expect.preview
+        at: { afterAction: expect-person }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "ကောင်တာက လှလှ ဆီ လွှဲပေးလိုက်ပါပြီ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: fallback
+    narration: >
+      [[mark:draw-f]] server ကို ပို့ရတဲ့ အကြောင်းရင်း နှစ်မျိုး ရှိပါတယ်။ [[mark:draw-f1]] ပထမက capability
+      based escalation ပါ။ ငွေ နှစ်ခါ ဖြတ်တာလို page ထဲက model အတွက် ခက်လွန်းတဲ့ မေးခွန်းကို ကြိုသတ်မှတ်ထားတဲ့
+      စံနဲ့ server ဆီ လွှဲတာပါ။ [[mark:draw-f2]] နောက်တစ်မျိုးက compatibility based fallback ပါ။ fallback ဆိုတာ တစ်ခု
+      မရရင် သုံးဖို့ ပြင်ထားတဲ့ အစားထိုး လမ်းပါ။ customer ရဲ့ ဖုန်းက page ထဲက model ကို run မနိုင်ရင် ပုံမှန်
+      မေးခွန်းကိုပါ server ကို ပို့ရပါတယ်။ [[mark:draw-f3]] compatibility အတွက်ပဲ server ကို သုံးမယ်ဆိုရင်
+      နှစ်ဘက်မှာ model တစ်ခုတည်းကို သုံးတာ ပိုကောင်းပါတယ်။ အဖြေ ပုံစံ တူပြီး ထိန်းရတာလည်း သက်သာလို့ပါ။
+      [[mark:close-f]] ဒါကို code ထဲ ထည့်ကြည့်ရအောင်။ [[mark:type-device]] device က page ထဲက model ကို run
+      မနိုင်ရင် server ကို တန်းပို့တဲ့ check ပါ။ panel အပေါ်က device ခလုတ်ကတော့ အဲဒီလို ဖုန်းမျိုးကို စမ်းကြည့်ဖို့ ထည့်ထားတာပါ။
+      [[mark:click-device]] local model မရ ဆိုတာကို နှိပ်ပါမယ်။ [[mark:read-fallback]] ဆိုင် ဖွင့်ချိန် မေးခွန်းက
+      server ကို ရောက်သွားပြီး၊ page ထဲက model ကို မ run လို့ ဖြစ်နိုင်ခြေလည်း မပြတော့ပါဘူး။ server ဘက်က model
+      ပေးခဲ့တဲ့ အဖြေက FAQ ထဲက ဖွင့်ချိန် စာကြောင်းကို စာလုံး မပြောင်းဘဲ ပြန်ကူးထားတာပါ။ customer အတွက် အဖြေ
+      အတူတူပဲ ဖြစ်ပေမယ့်၊ ဒီတစ်ခါမှာတော့ server ကုန်ကျစရိတ် ကုန်ပြီး network ကိုလည်း ဖြတ်ရပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (distribute the workload)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - {
+          id: draw-f,
+          type: whiteboard.apply,
+          at: { mark: draw-f },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f1,
+          type: whiteboard.apply,
+          at: { mark: draw-f1 },
+          upsertIds: [f1, f1-t, f1-d1, f1-d2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-f2,
+          type: whiteboard.apply,
+          at: { mark: draw-f2 },
+          upsertIds: [f2, f2-t, f2-d1, f2-d2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-f3,
+          type: whiteboard.apply,
+          at: { mark: draw-f3 },
+          upsertIds: [f3a, f3b],
+          drawMs: 1500,
+        }
+      - { id: close-f, type: whiteboard.apply, at: { mark: close-f }, open: false }
+      - id: type-device
+        type: editor.type
+        at: { mark: type-device }
+        target:
+          {
+            file: src/main.js,
+            after: "  if (question.includes(\"မတည့်\")) return \"person\";\n",
+            occurrence: 1,
+          }
+        text: "  if (!device.localModel) return \"server\";\n"
+        cadence: line-by-line
+      - id: expect-back-here
+        type: expect.preview
+        at: { afterAction: type-device }
+        timeoutMs: 8000
+        target: { by: testId, value: ai-route-1 }
+        attribute: { name: data-value, value: "here" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-device-1
+        type: expect.preview
+        at: { afterAction: expect-back-here }
+        timeoutMs: 5000
+        target: { by: testId, value: device-1 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: click-device
+        type: preview.click
+        at: { mark: click-device }
+        target: { by: testId, value: device-2 }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-device-server
+        type: expect.preview
+        at: { afterAction: click-device }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-1 }
+        attribute: { name: data-value, value: "server" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-device-no-model
+        type: expect.preview
+        at: { afterAction: expect-device-server }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-route-2 }
+        attribute: { name: data-value, value: "—" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-device-answer
+        type: expect.preview
+        at: { afterAction: expect-device-no-model }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer }
+        textContains: "စနေ တနင်္ဂနွေမှာ မနက် ၇ နာရီကနေ ည ၉ နာရီအထိ ဖွင့်ပါတယ်"
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-device-badge
+        type: expect.preview
+        at: { mark: read-fallback }
+        timeoutMs: 5000
+        target: { by: testId, value: ai-answer-badge }
+        textContains: "recorded · Gemma 4 E2B · greedy"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-device-pressed
+        type: expect.preview
+        at: { afterAction: expect-device-badge }
+        timeoutMs: 5000
+        target: { by: testId, value: device-2 }
+        attribute: { name: aria-pressed, value: "true" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: cost
+    chapter: "Hybrid ရဲ့ ကုန်ကျစရိတ်"
+    narration: >
+      [[mark:draw-c]] ဒါပေမဲ့ platform နှစ်ခု တွဲသုံးတာမှာ ကုန်ကျစရိတ် ရှိပါတယ်။ [[mark:draw-c1]] request ကို ဘယ်ကို
+      ပို့မလဲ၊ မရရင် ဘယ်လို ပြန်ကြိုးစားမလဲ ထိန်းတဲ့ orchestration logic ကို ရေးပြီး ထိန်းရပါတယ်။ ခုနက route
+      function က အဲဒီ logic ရဲ့ အစပါ။ [[mark:draw-c2]] model တူရင် version ကိုက်အောင် ထိန်းရပြီး၊ model မတူရင်
+      prompt ကို တစ်ခုချင်းအတွက် ရေးရပါတယ်။ [[mark:draw-c3]] log တွေ နှစ်နေရာ ခွဲနေပြီး၊ တိုက်ခိုက်ခံရနိုင်တဲ့
+      နေရာလည်း နှစ်ခု ဖြစ်လာပါတယ်။ [[mark:draw-c5]] ဒါကြောင့် team သေးရင်၊ ဒါမှမဟုတ် မဖြစ်မနေ လိုတဲ့ feature
+      မဟုတ်ရင် hybrid ကို မလုပ်သေးတာ ပိုကောင်းနိုင်ပါတယ်။ use case နဲ့ ကိုယ့် team ကနေ စပြီး၊ platform က
+      product နဲ့အတူ ပြောင်းသွားမယ်လို့ ကြိုမျှော်ထားပါ။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (flexibility introduces more complexity, your takeaways)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - {
+          id: draw-c,
+          type: whiteboard.apply,
+          at: { mark: draw-c },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c1,
+          type: whiteboard.apply,
+          at: { mark: draw-c1 },
+          upsertIds: [c1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c2,
+          type: whiteboard.apply,
+          at: { mark: draw-c2 },
+          upsertIds: [c2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c3,
+          type: whiteboard.apply,
+          at: { mark: draw-c3 },
+          upsertIds: [c3, c4],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c5,
+          type: whiteboard.apply,
+          at: { mark: draw-c5 },
+          upsertIds: [c5, c6],
+          drawMs: 2000,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ hybrid AI ရဲ့ အဓိက အကျိုးကျေးဇူးက ဘာလဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ အလုပ်ကို နေရာ နှစ်ခုမှာ ခွဲပေးနိုင်တာပါ။ ဘာကြောင့်လဲဆိုတော့
+      လွယ်တဲ့ မေးခွန်းကို page ထဲမှာ ဖြေရင် မြန်ပြီး ငွေ မကုန်သလို၊ ခက်တဲ့ မေးခွန်းကို server ကို ပို့ရင် ပိုစွမ်းတဲ့
+      model ရဲ့ အကူအညီ ရလို့ပါ။ ဒါပေမဲ့ fallback logic ကတော့ ခုနက device check လို ပိုတောင် လိုလာပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (Check your understanding)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-n1, z-a-n2],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ platform ကို use case လိုအပ်ချက်နဲ့ team ရဲ့ ကန့်သတ်ချက်ကနေ ရွေးပြီး၊
+      assistant အတွက် RAG နဲ့ managed service ကို စရွေးခဲ့ပါတယ်။ log မှာ ပုံမှန် မေးခွန်း များနေတော့ page ထဲက
+      router နဲ့ ပုံမှန် မေးခွန်းကို ဒီမှာ ဖြေပြီး၊ ခက်တာကို server ကို ပို့ခဲ့ပါတယ်။ [[mark:sel-rules]] ကြိုရေးထားတဲ့
+      rule က အန္တရာယ် ရှိတဲ့ မေးခွန်းကို လူဆီ လွှဲပြီး၊ compatibility check က model ကို run မနိုင်တဲ့ device ရဲ့
+      မေးခွန်းတွေကို server ဆီ ပို့ပါတယ်။ hybrid က ကုန်ကျစရိတ် လျော့ပေးပေမယ့် ရှုပ်ထွေးမှုလည်း တိုးပါတယ်။ နောက် lesson မှာတော့
+      browser ထဲက built in AI ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "web.dev Learn AI: Choose your platform (your takeaways)",
+          url: "https://web.dev/learn/ai/platform",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: recap }, open: false }
+      - id: sel-rules
+        type: editor.select
+        at: { mark: sel-rules }
+        target:
+          {
+            file: src/main.js,
+            text: "  if (question.includes(\"မတည့်\")) return \"person\";\n  if (!device.localModel) return \"server\";\n",
+            occurrence: 1,
+          }
+      - {
+          id: expect-final-rules,
+          type: expect.file,
+          at: { afterAction: sel-rules },
+          path: src/main.js,
+          contains: "  // Rules decided in advance (no model needed):\n  if (question.includes(\"မတည့်\")) return \"person\";\n  if (!device.localModel) return \"server\";\n\n  const routine = predict(router, question).routine;\n  return routine >= 0.5 ? \"here\" : \"server\";\n",
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
