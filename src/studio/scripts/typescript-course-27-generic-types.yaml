@@ -1,0 +1,1545 @@
+# TypeScript course, lesson 27: generic types (Burmese).
+#
+# Start state (ws/): src/api.ts holds the shop API's data types and two result types copied from
+# each other (MenuResult, OrderResult: `{ ok: true; data: X } | { ok: false; error: Error }`, each
+# written on two lines so one insert can replace it). src/main.ts builds a menu result and an
+# order result and prints them. Panel (data-modes default "errors types output"): 0 errors,
+# Output "menu 2 မျိုး" / "အော်ဒါ 7 ကို မတွေ့ပါ".
+# Edits, all insert-only: the generic `type ApiResult<TData>` (line-by-line); a KitchenResult
+# probe `ApiResult<Order[]>` with a ^? query; each copy becomes `ApiResult<…>` with the old union
+# left as a comment (one block insert each, always valid); a KitchenError type; a second parameter
+# `, TError` + `T` before `Error` (3 x TS2314 "requires 2 type argument(s)", query `any`); the
+# kitchen's second argument (2 left); a default ` = Error` (0); a constraint
+# ` extends { message: string }` (TS2344 at KitchenResult); `message: string; ` in KitchenError
+# (0, the extra `station` property is allowed). Boards: (A) a function for values vs a function
+# for types, (B) the meanings of `extends`.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-27-generic-types.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-27-generic-types
+  title: "TypeScript course 27: Generic type"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/api.ts: |
+        export type MenuItem = { name: string; price: number };
+        export type Order = { id: number; item: string; quantity: number };
+
+        // menu ရဲ့ ရလဒ်
+        export type MenuResult =
+          { ok: true; data: MenuItem[] } | { ok: false; error: Error };
+
+        // အော်ဒါ ရဲ့ ရလဒ် · data ကလွဲရင် အတူတူပါပဲ
+        export type OrderResult =
+          { ok: true; data: Order } | { ok: false; error: Error };
+      src/main.ts: |
+        import type { MenuResult, OrderResult } from "./api";
+
+        const menuResult: MenuResult = {
+          ok: true,
+          data: [
+            { name: "လက်ဖက်ရည်", price: 1500 },
+            { name: "ကော်ဖီ", price: 1800 },
+          ],
+        };
+
+        const orderResult: OrderResult = {
+          ok: false,
+          error: new Error("အော်ဒါ 7 ကို မတွေ့ပါ"),
+        };
+
+        if (menuResult.ok) console.log("menu", menuResult.data.length, "မျိုး");
+        if (!orderResult.ok) console.log(orderResult.error.message);
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: a function takes values and returns a value; a generic type takes types and returns a type.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Type တွေအတွက် function",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-v-in,
+        kind: text,
+        x: 270,
+        y: 272,
+        width: 150,
+        height: 40,
+        text: "1500, 2",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-v-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 440,
+        y: 270,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-v-box,
+        kind: rectangle,
+        x: 495,
+        y: 250,
+        width: 285,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-v-name,
+        kind: text,
+        x: 507,
+        y: 272,
+        width: 265,
+        height: 40,
+        text: "total(price, qty)",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-v-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 787,
+        y: 270,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-v-out,
+        kind: text,
+        x: 845,
+        y: 272,
+        width: 120,
+        height: 40,
+        text: "3000",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-v-note,
+        kind: text,
+        x: 270,
+        y: 345,
+        width: 780,
+        height: 40,
+        text: "function · တန်ဖိုး ထည့် → တန်ဖိုး ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t-in,
+        kind: text,
+        x: 270,
+        y: 437,
+        width: 170,
+        height: 40,
+        text: "MenuItem[]",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-t-arrow-1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 440,
+        y: 435,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-t-box,
+        kind: rectangle,
+        x: 495,
+        y: 415,
+        width: 285,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-t-name,
+        kind: text,
+        x: 507,
+        y: 437,
+        width: 265,
+        height: 40,
+        text: "ApiResult<TData>",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-t-arrow-2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 787,
+        y: 435,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-t-out,
+        kind: text,
+        x: 845,
+        y: 437,
+        width: 240,
+        height: 40,
+        text: "menu ရလဒ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-t-note,
+        kind: text,
+        x: 270,
+        y: 510,
+        width: 780,
+        height: 40,
+        text: "generic type · type ထည့် → type ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-words,
+        kind: text,
+        x: 270,
+        y: 590,
+        width: 820,
+        height: 40,
+        text: "TData = type parameter · MenuItem[] = type argument",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board B: the same keyword in four places.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 50,
+        text: "extends ရဲ့ အဓိပ္ပာယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-gen-code,
+        kind: text,
+        x: 270,
+        y: 232,
+        width: 620,
+        height: 40,
+        text: "TError extends { message: string }",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-gen-desc,
+        kind: text,
+        x: 310,
+        y: 275,
+        width: 760,
+        height: 40,
+        text: "type parameter ကို ကန့်သတ် · ဒီ lesson",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-cls-code,
+        kind: text,
+        x: 270,
+        y: 337,
+        width: 620,
+        height: 40,
+        text: "class DeliveryOrder extends Order",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-cls-desc,
+        kind: text,
+        x: 310,
+        y: 380,
+        width: 760,
+        height: 40,
+        text: "class ကနေ အမွေဆက်ခံ · lesson 18",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-int-code,
+        kind: text,
+        x: 270,
+        y: 442,
+        width: 620,
+        height: 40,
+        text: "interface Snack extends MenuItem",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-int-desc,
+        kind: text,
+        x: 310,
+        y: 485,
+        width: 760,
+        height: 40,
+        text: "interface ကို ချဲ့ · lesson 12",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-cond-code,
+        kind: text,
+        x: 270,
+        y: 547,
+        width: 620,
+        height: 40,
+        text: "T extends U ? X : Y",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-cond-desc,
+        kind: text,
+        x: 310,
+        y: 590,
+        width: 760,
+        height: 40,
+        text: "conditional type · နောက် lesson",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 2727
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "Type တွေအတွက် function"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ tsconfig ထဲက setting တွေနဲ့ TypeScript ရဲ့ စစ်ဆေးပုံကို ကိုယ့်
+      project နဲ့ ကိုက်အောင် ပြင်ဆင်ခဲ့ပါတယ်။ ဒီ lesson ကစပြီး ကိုယ့် type တွေကို ကိုယ်တိုင် design
+      လုပ်တဲ့ အပိုင်းကို ရောက်လာပါပြီ။ ပထမဆုံး ကြည့်မှာကတော့ generic type ပါ။ [[mark:draw-value-fn]]
+      ကိုယ် သိပြီးသား function တစ်ခုနဲ့ စဉ်းစားကြည့်ရအောင်။ ဈေးနှုန်းနဲ့ အရေအတွက်ကို ထည့်ပေးလိုက်ရင်
+      ကျသင့်ငွေကို ပြန်ပေးတဲ့ function ပါ။ code ကို တစ်ခါပဲ ရေးထားပေမယ့်၊ ထည့်ပေးတဲ့ တန်ဖိုး ပြောင်းတိုင်း
+      အဖြေ အသစ် ရပါတယ်။ [[mark:draw-type-fn]] generic type ဆိုတာ အဲဒီလို function မျိုးကို type ပိုင်းမှာ
+      ရေးတာပါ။ တန်ဖိုး မဟုတ်ဘဲ type တစ်ခုကို ထည့်ပေးလိုက်ရင်၊ type အသစ် တစ်ခု ပြန်ရပါတယ်။
+      ဥပမာအားဖြင့် ဆိုင်ရဲ့ API ရလဒ် type ထဲကို menu item array ကို ထည့်ပေးရင် menu ရဲ့ ရလဒ် type
+      ရပြီး၊ အော်ဒါ type ကို ထည့်ပေးရင်တော့ အော်ဒါ ရဲ့ ရလဒ် type ရပါတယ်။ [[mark:draw-words]] function
+      မှာ parameter နဲ့ argument ရှိသလိုပဲ၊ generic type မှာလည်း type ကို လက်ခံမယ့် နာမည်ကို type
+      parameter လို့ ခေါ်ပြီး၊ သုံးတဲ့အခါ ထည့်ပေးလိုက်တဲ့ type ကိုတော့ type argument လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (generic types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-types",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-value-fn
+        type: whiteboard.apply
+        at: { mark: draw-value-fn }
+        upsertIds: [a-v-in, a-v-arrow-1, a-v-box, a-v-name, a-v-arrow-2, a-v-out, a-v-note]
+        drawMs: 3200
+      - id: draw-type-fn
+        type: whiteboard.apply
+        at: { mark: draw-type-fn }
+        upsertIds: [a-t-in, a-t-arrow-1, a-t-box, a-t-name, a-t-arrow-2, a-t-out, a-t-note]
+        drawMs: 3200
+      - id: draw-words
+        type: whiteboard.apply
+        at: { mark: draw-words }
+        upsertIds: [a-words]
+        drawMs: 1600
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-api]] ဒါက ဆိုင်ရဲ့ API ကနေ ပြန်လာတဲ့
+      ရလဒ်တွေအတွက် type တွေ ရေးထားတဲ့ ဖိုင်ပါ။ [[mark:select-menu-result]] menu ကို တောင်းလိုက်ရင် ရလဒ်က
+      နှစ်မျိုး ဖြစ်နိုင်ပါတယ်။ အောင်မြင်ရင် ok က true ဖြစ်ပြီး data ထဲမှာ menu item တွေ ပါလာပါတယ်။
+      မအောင်မြင်ရင်တော့ ok က false ဖြစ်ပြီး error တစ်ခု ပါလာပါတယ်။ lesson ၁၁ မှာ လေ့လာခဲ့တဲ့
+      discriminated union ပါ။ [[mark:select-order-result]] အောက်က အော်ဒါ ရလဒ် type ကို ကြည့်ပါ။ data
+      ရဲ့ type တစ်ခုပဲ ကွာပြီး ကျန်တာ အားလုံး တစ်ထပ်တည်းပါ။ အပေါ်က type ကို ကူးပြီး ရေးထားတာပါ။ ဆိုင်မှာ
+      API အသစ် တစ်ခု ထပ်လာတိုင်း ဒီလို ထပ်ကူးရမှာ ဖြစ်ပြီး၊ နောင်မှာ ရလဒ်ရဲ့ ပုံစံကို ပြောင်းချင်ရင်လည်း
+      ကူးထားတဲ့ နေရာတိုင်းမှာ လိုက်ပြင်ရပါမယ်။ [[mark:open-main]] main ဖိုင်မှာတော့ ဒီ type နှစ်ခုနဲ့
+      menu ရလဒ် တစ်ခု၊ အော်ဒါ ရလဒ် တစ်ခု ရေးထားပါတယ်။ [[mark:select-prints]] နောက်ဆုံး နှစ်ကြောင်းက menu
+      မှာ ဘယ်နှစ်မျိုး ရှိလဲ ဆိုတာနဲ့၊ အော်ဒါ မအောင်မြင်တဲ့ အခါ error ရဲ့ message ကို ထုတ်ပြပါတယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Narrowing (discriminated unions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (generic types remove duplication)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-api
+        type: workspace.openFile
+        at: { mark: open-api }
+        path: src/api.ts
+      - id: select-menu-result
+        type: editor.select
+        at: { mark: select-menu-result }
+        target:
+          {
+            file: src/api.ts,
+            text: "export type MenuResult =\n  { ok: true; data: MenuItem[] } | { ok: false; error: Error };",
+            occurrence: 1,
+          }
+      - id: select-order-result
+        type: editor.select
+        at: { mark: select-order-result }
+        target:
+          {
+            file: src/api.ts,
+            text: "export type OrderResult =\n  { ok: true; data: Order } | { ok: false; error: Error };",
+            occurrence: 1,
+          }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-prints
+        type: editor.select
+        at: { mark: select-prints }
+        target:
+          {
+            file: src/main.ts,
+            text: "if (menuResult.ok) console.log(\"menu\", menuResult.data.length, \"မျိုး\");\nif (!orderResult.ok) console.log(orderResult.error.message);",
+            occurrence: 1,
+          }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output မှာ menu က နှစ်မျိုး ရှိတယ် ဆိုတာနဲ့၊ အော်ဒါ ၇ ကို
+      မတွေ့ဘူး ဆိုတဲ့ error message ထွက်လာပါတယ်။ Errors မှာလည်း ဘာမှ မရှိပါဘူး။ ဆိုတော့ program က
+      မှန်နေပေမယ့်၊ ပြဿနာက type တွေ ထပ်နေတာပါ။ ကူးထားတဲ့ type တွေကို type parameter ပါတဲ့ type
+      တစ်ခုတည်းနဲ့ အစားထိုးကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (generic types)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-clean
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-start-menu
+        type: expect.preview
+        at: { afterAction: expect-start-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "menu 2 မျိုး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-start-order
+        type: expect.preview
+        at: { afterAction: expect-start-menu }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "အော်ဒါ 7 ကို မတွေ့ပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: generic
+    chapter: "Type parameter"
+    narration: >
+      [[mark:type-generic]] api ဖိုင်ကို ပြန်သွားပြီး၊ ကူးထားတဲ့ type တွေရဲ့ အပေါ်မှာ type အသစ် တစ်ခု
+      ရေးပါမယ်။ နာမည်ကို ApiResult လို့ ပေးပြီး၊ နာမည်ရဲ့ နောက်မှာ TData ဆိုတဲ့ type parameter ကို
+      ကြေညာထားပါတယ်။ ညီမျှခြင်းရဲ့ ညာဘက်ကတော့ အရင် type တွေနဲ့ ပုံစံ အတူတူပါပဲ။ [[mark:select-tdata]]
+      ကွာတာက data ရဲ့ type နေရာမှာ type တစ်ခုကို ပုံသေ မရေးတော့ဘဲ TData ကို ထည့်ထားတာပါ။ function ရဲ့
+      parameter လိုပဲ၊ ဒီ နာမည်က သုံးတဲ့သူ ထည့်ပေးမယ့် type ကို ကိုယ်စားပြုပါတယ်။ panel မှာတော့ ဘာမှ
+      မပြောင်းသေးပါဘူး၊ type ကို ကြေညာရုံပဲ ရှိပြီး ဘယ်နေရာမှာမှ မသုံးရသေးလို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (generic types, type parameters)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-types",
+        }
+    actions:
+      - id: open-api-2
+        type: workspace.openFile
+        at: { mark: type-generic }
+        path: src/api.ts
+      - id: type-generic
+        type: editor.type
+        at: { afterAction: open-api-2 }
+        target:
+          {
+            file: src/api.ts,
+            after: "export type Order = { id: number; item: string; quantity: number };\n\n",
+            occurrence: 1,
+          }
+        text: "type ApiResult<TData> =\n  | { ok: true; data: TData }\n  | { ok: false; error: Error };\n\n"
+        cadence: line-by-line
+      - id: select-tdata
+        type: editor.select
+        at: { mark: select-tdata }
+        target: { file: src/api.ts, text: "data: TData", occurrence: 1 }
+      - id: expect-generic-clean
+        type: expect.preview
+        at: { afterAction: type-generic }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: kitchen
+    narration: >
+      [[mark:type-kitchen]] ဒါဆို ဒီ type ကို function ခေါ်သလို ခေါ်ကြည့်ရအောင်။ ဖိုင်ရဲ့ အောက်ဆုံးမှာ
+      မီးဖိုချောင် screen အတွက် ရလဒ် type တစ်ခု ရေးပါမယ်။ မီးဖိုချောင်က ဖျော်ရမယ့် အော်ဒါ စာရင်းကို
+      လိုချင်တာ ဖြစ်လို့၊ type argument အနေနဲ့ အော်ဒါ array ကို ထည့်ပေးပြီး၊ ဘာ ရလာလဲ ဆိုတာ query
+      comment နဲ့ မေးကြည့်ပါမယ်။ [[mark:read-kitchen]] Types အပိုင်းမှာ အဖြေ ပေါ်လာပါပြီ။ ok က false
+      ဖြစ်တဲ့ဘက်မှာ error ပါပြီး၊ true ဖြစ်တဲ့ဘက်မှာတော့ data က အော်ဒါ array ဖြစ်နေပါတယ်။ TData ရဲ့
+      နေရာမှာ ကိုယ် ထည့်ပေးလိုက်တဲ့ type ဝင်သွားပြီး၊ union အပြည့်အစုံ ထွက်လာတာပါ။ ဆိုတော့ တစ်ကြောင်းမှ
+      ကူးရေးစရာ မလိုဘဲ type အသစ် တစ်ခု ရသွားပါပြီ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (passing type arguments)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html",
+        }
+    actions:
+      - id: type-kitchen
+        type: editor.type
+        at: { mark: type-kitchen }
+        target:
+          {
+            file: src/api.ts,
+            after: "  { ok: true; data: Order } | { ok: false; error: Error };\n",
+            occurrence: 1,
+          }
+        text: "\n// မီးဖိုချောင် screen ရဲ့ ရလဒ်\nexport type KitchenResult = ApiResult<Order[]>;\n//          ^?\n"
+        cadence: line-by-line
+      - id: expect-kitchen-type
+        type: expect.preview
+        at: { afterAction: type-kitchen }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "type KitchenResult = {"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-kitchen-data
+        type: expect.preview
+        at: { afterAction: expect-kitchen-type }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "data: Order[];"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-kitchen-error
+        type: expect.preview
+        at: { afterAction: expect-kitchen-data }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "error: Error;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: replace
+    narration: >
+      [[mark:type-menu-alias]] အခု ကူးထားတဲ့ type တွေကိုလည်း ဒီ type နဲ့ အစားထိုးပါမယ်။ menu ရလဒ်ကို
+      ApiResult ထဲ menu item array ထည့်ပြီး ရေးလိုက်ပြီး၊ အဟောင်းကိုတော့ နှိုင်းယှဉ်ကြည့်လို့ ရအောင်
+      comment အနေနဲ့ ချန်ထားပါမယ်။ တကယ့် project မှာတော့ ဖျက်ပစ်လိုက်ရုံပါပဲ။ [[mark:type-order-alias]] အော်ဒါ ရလဒ်ကိုလည်း အဲဒီ အတိုင်း အော်ဒါ
+      type ကို ထည့်ပြီး ရေးလိုက်ပါမယ်။ [[mark:read-replaced]] Errors မှာ ဘာမှ မပေါ်လာသလို၊ Output
+      ကလည်း အရင်အတိုင်းပါပဲ။ ပုံစံ တူတဲ့ type တွေ ထွက်လာလို့ main ဖိုင်ကို ဘာမှ ပြင်စရာ မလိုပါဘူး။ type
+      တွေက run တဲ့ အချိန်မှာ ဖယ်ထုတ်ပြီးသား ဖြစ်လို့ program ရဲ့ အလုပ်လုပ်ပုံလည်း မပြောင်းပါဘူး။ အခုဆိုရင်
+      ရလဒ်ရဲ့ ပုံစံကို ApiResult တစ်နေရာတည်းမှာပဲ ထိန်းထားလို့၊ ပြောင်းချင်ရင် အဲဒီ တစ်နေရာကိုပဲ
+      ပြင်ရပါတော့မယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (generic types remove duplication)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-types",
+        }
+    actions:
+      - id: type-menu-alias
+        type: editor.type
+        at: { mark: type-menu-alias }
+        target: { file: src/api.ts, after: "export type MenuResult =\n", occurrence: 1 }
+        text: "  ApiResult<MenuItem[]>;\n//"
+        cadence: block
+      - id: type-order-alias
+        type: editor.type
+        at: { mark: type-order-alias }
+        target: { file: src/api.ts, after: "export type OrderResult =\n", occurrence: 1 }
+        text: "  ApiResult<Order>;\n//"
+        cadence: block
+      - id: expect-replaced-clean
+        type: expect.preview
+        at: { afterAction: type-order-alias }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-replaced-output
+        type: expect.preview
+        at: { afterAction: expect-replaced-clean }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-replaced-menu
+        type: expect.preview
+        at: { afterAction: expect-replaced-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "menu 2 မျိုး"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: two-params
+    chapter: "Type parameter နှစ်ခု"
+    narration: >
+      [[mark:type-kitchen-error]] မီးဖိုချောင်က ပြန်ပေးတဲ့ error တွေကတော့ ရိုးရိုး Error မဟုတ်ဘဲ၊ ဘယ်
+      အပိုင်းမှာ ပြဿနာ ဖြစ်လဲ ဆိုတာ ပါပါတယ်။ အဲဒီ ပုံစံကို station ဆိုတဲ့ property နဲ့ type တစ်ခု ရေးထားပါမယ်။
+      ဒါပေမဲ့ ApiResult ရဲ့ error က Error လို့ ပုံသေ ဖြစ်နေလို့၊ ဒီ type ကို ထည့်ပေးလို့ မရသေးပါဘူး။
+      [[mark:type-terror]] ဒါကြောင့် ApiResult မှာ TError ဆိုတဲ့ ဒုတိယ type parameter တစ်ခု ထပ်ထည့်ပြီး၊
+      [[mark:type-use-terror]] error ရဲ့ type နေရာမှာ သုံးလိုက်ပါမယ်။ [[mark:read-required]] Errors မှာ
+      error သုံးခု ပေါ်လာပါပြီ။ ApiResult ကို သုံးထားတဲ့ နေရာ သုံးနေရာလုံးမှာ type argument နှစ်ခု လိုတယ်လို့
+      ပြောနေတာပါ။ type parameter နှစ်ခု ကြေညာထားရင်၊ သုံးတဲ့ အခါမှာလည်း နှစ်ခုလုံး ထည့်ပေးရပါတယ်။ Types
+      မှာလည်း မီးဖိုချောင် ရလဒ်ကို တွက်လို့ မရတော့လို့ any လို့ ပြနေပါတယ်။ [[mark:type-kitchen-arg]]
+      မီးဖိုချောင် ရလဒ်မှာ ဒုတိယ type argument အနေနဲ့ ခုနက error type ကို ထည့်ပေးလိုက်ပါမယ်။
+      [[mark:read-kitchen-arg]] error တစ်ခု ပျောက်သွားပြီး၊ Types မှာ error ရဲ့ type က မီးဖိုချောင် error
+      type ဖြစ်သွားပါပြီ။ ကျန်တဲ့ error နှစ်ခုကတော့ menu နဲ့ အော်ဒါမှာ ဒုတိယ type argument မပါသေးလို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (multiple type parameters; all type arguments must be provided)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-types",
+        }
+    actions:
+      - id: type-kitchen-error
+        type: editor.type
+        at: { mark: type-kitchen-error }
+        target: { file: src/api.ts, after: "// မီးဖိုချောင် screen ရဲ့ ရလဒ်\n", occurrence: 1 }
+        text: "type KitchenError = { station: string };\n"
+        cadence: fast-explainer
+      - id: type-terror
+        type: editor.type
+        at: { mark: type-terror }
+        target: { file: src/api.ts, after: "type ApiResult<TData", occurrence: 1 }
+        text: ", TError"
+        cadence: fast-explainer
+      - id: type-use-terror
+        type: editor.type
+        at: { mark: type-use-terror }
+        target: { file: src/api.ts, after: "  | { ok: false; error: ", occurrence: 1 }
+        text: "T"
+        cadence: fast-explainer
+      - id: expect-three-errors
+        type: expect.preview
+        at: { afterAction: type-use-terror }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2314
+        type: expect.preview
+        at: { afterAction: expect-three-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2314" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-2314-text
+        type: expect.preview
+        at: { afterAction: expect-2314 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-3 }
+        textContains: "Generic type 'ApiResult' requires 2 type argument(s)."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-kitchen-any
+        type: expect.preview
+        at: { afterAction: expect-2314-text }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "type KitchenResult = any" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-kitchen-arg
+        type: editor.type
+        at: { mark: type-kitchen-arg }
+        target: { file: src/api.ts, after: "ApiResult<Order[]", occurrence: 1 }
+        text: ", KitchenError"
+        cadence: fast-explainer
+      - id: expect-two-errors
+        type: expect.preview
+        at: { afterAction: type-kitchen-arg }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-kitchen-error-type
+        type: expect.preview
+        at: { afterAction: expect-two-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "error: KitchenError;"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: default
+    chapter: "Default type ပေးခြင်း"
+    narration: >
+      [[mark:type-default]] menu နဲ့ အော်ဒါ အတွက်ကတော့ ရိုးရိုး Error ပဲ လိုတာ ဖြစ်လို့၊ နေရာတိုင်းမှာ
+      Error လို့ လိုက်ရေးမယ့်အစား TError ကို default type တစ်ခု ပေးလိုက်ပါမယ်။ function parameter ကို
+      default တန်ဖိုး ပေးတာနဲ့ သဘော အတူတူပါပဲ။ [[mark:read-default]] Errors မှာ error အားလုံး
+      ပျောက်သွားပါပြီ။ type argument တစ်ခုတည်း ထည့်ပေးရင် TError က Error ဖြစ်သွားပြီး၊ နှစ်ခု
+      ထည့်ပေးရင်တော့ ထည့်ပေးတဲ့ type ကို သုံးပါတယ်။ ဆိုတော့ default ပါတဲ့ type parameter က မထည့်လည်း ရတဲ့
+      parameter လို ဖြစ်သွားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (default type parameters)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic parameter defaults)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-parameter-defaults",
+        }
+    actions:
+      - id: type-default
+        type: editor.type
+        at: { mark: type-default }
+        target: { file: src/api.ts, after: "type ApiResult<TData, TError", occurrence: 1 }
+        text: " = Error"
+        cadence: fast-explainer
+      - id: expect-default-clean
+        type: expect.preview
+        at: { afterAction: type-default }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: constraint
+    chapter: "Constraint နဲ့ ကန့်သတ်ခြင်း"
+    narration: >
+      ဆိုင်ရဲ့ ငွေကိုင် screen က error တိုင်းရဲ့ message ကို ပြပေးရပါတယ်။
+      ဒါကြောင့် TError နေရာမှာ ဘယ် type ကို ထည့်ထည့်၊ message ဆိုတဲ့ string property တော့ ပါကို
+      ပါရမယ်လို့ စည်းကမ်း သတ်မှတ်ချင်ပါတယ်။ [[mark:type-constraint]] TError ရဲ့ နောက်မှာ extends နဲ့
+      message ပါတဲ့ object type ကို ရေးလိုက်ပါမယ်။ ဒါကို constraint လို့ ခေါ်ပါတယ်။ type parameter ကို
+      ဘာ type တွေပဲ လက်ခံမလဲ ကန့်သတ်တာပါ။ [[mark:read-constraint]] Errors မှာ error တစ်ခု ပေါ်လာပါပြီ။
+      မီးဖိုချောင် error type က constraint နဲ့ မကိုက်ဘူးလို့ ပြောပြီး၊ ဒုတိယ အပိုင်းမှာ message property
+      မပါဘူးလို့ အကြောင်းရင်းကို ပြထားပါတယ်။ error က ApiResult ကို သုံးတဲ့ နေရာမှာ ချက်ချင်း ပေါ်လာလို့၊
+      ငွေကိုင် screen ကို မရောက်ခင်ကတည်းက သိနိုင်ပါတယ်။ Error type ကတော့ message ရှိပြီးသား ဖြစ်လို့ menu
+      နဲ့ အော်ဒါမှာ error မရှိပါဘူး။ [[mark:type-message]] မီးဖိုချောင် error type ထဲကို message
+      ထည့်ပေးလိုက်ပါမယ်။ [[mark:read-message]] error ပျောက်သွားပါပြီ။ ဒီမှာ သတိထားရမှာက၊ station ဆိုတဲ့
+      property က constraint ထဲမှာ မပါပေမယ့် error မတက်တာပါ။ constraint က လိုအပ်တဲ့ property တွေ ပါမပါကိုပဲ
+      စစ်ပြီး၊ အပို property တွေကိုတော့ ခွင့်ပြုပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (type parameter constraints; constraints describe required properties)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Generics (generic constraints)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/generics.html#generic-constraints",
+        }
+    actions:
+      - id: type-constraint
+        type: editor.type
+        at: { mark: type-constraint }
+        target: { file: src/api.ts, after: "type ApiResult<TData, TError", occurrence: 1 }
+        text: " extends { message: string }"
+        cadence: fast-explainer
+      - id: expect-one-error
+        type: expect.preview
+        at: { afterAction: type-constraint }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-2344
+        type: expect.preview
+        at: { afterAction: expect-one-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        attribute: { name: data-code, value: "2344" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-2344-text
+        type: expect.preview
+        at: { afterAction: expect-2344 }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'message' is missing in type 'KitchenError'"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-message
+        type: editor.type
+        at: { mark: type-message }
+        target: { file: src/api.ts, after: "type KitchenError = { ", occurrence: 1 }
+        text: "message: string; "
+        cadence: fast-explainer
+      - id: expect-constraint-clean
+        type: expect.preview
+        at: { afterAction: type-message }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: extends
+    chapter: "extends ရဲ့ အဓိပ္ပာယ်"
+    narration: >
+      [[mark:board-extends]] ဒီ lesson မှာ extends ကို constraint အတွက် သုံးခဲ့ပေမယ့်၊ ဒီ စကားလုံးကို
+      အရင် lesson တွေမှာလည်း တွေ့ခဲ့ပြီးသားပါ။ [[mark:draw-generic]] type parameter ရဲ့ နောက်မှာ
+      ဆိုရင်၊ အဲဒီ type parameter ထဲကို ဘာ type တွေ ထည့်လို့ ရလဲ ကန့်သတ်တာပါ။ [[mark:draw-class]] class
+      ရဲ့ နောက်မှာ ဆိုရင်တော့ class တစ်ခုကနေ အမွေဆက်ခံတာ ဖြစ်ပြီး၊ ဒါက runtime မှာလည်း တကယ် ရှိတဲ့
+      JavaScript feature ပါ။ [[mark:draw-interface]] interface ရဲ့ နောက်မှာ ဆိုရင်တော့ တခြား interface
+      တစ်ခုရဲ့ property တွေကို ယူပြီး ချဲ့တာပါ။ စကားလုံး တစ်ခုတည်း ဖြစ်ပေမယ့်၊ ဘယ်နေရာမှာ ရေးလဲ ဆိုတာပေါ်
+      မူတည်ပြီး အဓိပ္ပာယ် ကွာသွားပါတယ်။ [[mark:draw-conditional]] နောက်ထပ် အဓိပ္ပာယ် တစ်ခုကတော့
+      conditional type ထဲက extends ပါ။ အဲဒီမှာတော့ type တစ်ခုက နောက် type တစ်ခုနဲ့ ကိုက်မကိုက် စစ်ပြီး၊ if
+      else လိုပဲ အဖြေ နှစ်ခုထဲက တစ်ခုကို ရွေးပါတယ်။ ဒါကို နောက် lesson မှာ အသေးစိတ် ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types (extends, extends, extends)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (extends clauses)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#extends-clauses",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (extending types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#extending-types",
+        }
+      - {
+          title: "TypeScript Handbook: Conditional Types",
+          url: "https://www.typescriptlang.org/docs/handbook/2/conditional-types.html",
+        }
+    actions:
+      - id: open-board-b
+        type: whiteboard.apply
+        at: { mark: board-extends }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-generic
+        type: whiteboard.apply
+        at: { mark: draw-generic }
+        upsertIds: [b-gen-code, b-gen-desc]
+        drawMs: 1800
+      - id: draw-class
+        type: whiteboard.apply
+        at: { mark: draw-class }
+        upsertIds: [b-cls-code, b-cls-desc]
+        drawMs: 1800
+      - id: draw-interface
+        type: whiteboard.apply
+        at: { mark: draw-interface }
+        upsertIds: [b-int-code, b-int-desc]
+        drawMs: 1800
+      - id: draw-conditional
+        type: whiteboard.apply
+        at: { mark: draw-conditional }
+        upsertIds: [b-cond-code, b-cond-desc]
+        drawMs: 1600
+
+  - id: recap
+    narration: >
+      [[mark:close-extends]] ဒါဆို ပြန်ချုပ်ရရင်၊ generic type ဆိုတာ type parameter တွေကို လက်ခံပြီး type
+      အသစ်ကို ပြန်ပေးတဲ့၊ type တွေအတွက် function တစ်ခုပါ။ ကူးရေးထားတဲ့ type တွေကို အဲဒီ type တစ်ခုတည်းမှာ
+      စုထားနိုင်ပါတယ်။ [[mark:recap-rules]] သုံးတဲ့အခါ type argument တွေကို အားလုံး ထည့်ပေးရပေမယ့်၊ default
+      type ပါတဲ့ parameter ကိုတော့ ချန်ထားလို့ ရပါတယ်။ extends နဲ့ constraint ထည့်ထားရင် လိုအပ်တဲ့ property
+      တွေကို စစ်ပေးပြီး၊ အပို property တွေကိုတော့ ခွင့်ပြုပါတယ်။ နောက် lesson မှာတော့ string ရဲ့ ပုံစံကို
+      type နဲ့ သတ်မှတ်ပေးတဲ့ template literal type နဲ့၊ type ပိုင်းမှာ if else လို စစ်ပေးတဲ့ conditional
+      type ကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 15: Designing Your Types",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/designing-your-types-in-typescript",
+        }
+    actions:
+      - id: close-extends
+        type: whiteboard.apply
+        at: { mark: close-extends }
+        open: false
+      - id: select-generic
+        type: editor.select
+        at: { mark: recap-rules }
+        target:
+          {
+            file: src/api.ts,
+            text: "type ApiResult<TData, TError extends { message: string } = Error> =",
+            occurrence: 1,
+          }
+      - id: expect-file-generic
+        type: expect.file
+        at: { afterAction: close-extends }
+        path: src/api.ts
+        contains: "type ApiResult<TData, TError extends { message: string } = Error> =\n  | { ok: true; data: TData }\n  | { ok: false; error: TError };"
+      - id: expect-file-aliases
+        type: expect.file
+        at: { afterAction: close-extends }
+        path: src/api.ts
+        contains: "export type MenuResult =\n  ApiResult<MenuItem[]>;"
+      - id: expect-file-kitchen
+        type: expect.file
+        at: { afterAction: close-extends }
+        path: src/api.ts
+        contains: "type KitchenError = { message: string; station: string };\nexport type KitchenResult = ApiResult<Order[], KitchenError>;"
+checks:
+  - type: timing.p95Ms
+    max: 300
