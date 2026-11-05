@@ -1,0 +1,1628 @@
+# TypeScript course, lesson 24: the weird parts, part 2 — `this`, callbacks, unions of functions,
+# and the type and value worlds (Burmese).
+#
+# Start state (ws/): src/main.ts (a module: it imports shopName from worlds.ts and prints it) has
+# `function summary()` using `this` with no annotation (2 × TS2683), table5 that carries it as a
+# property, table6 whose list() method maps with an arrow function that uses `this`, and a kitchen
+# bell `ring(onReady: OnReady)` whose callback takes fewer parameters than OnReady gives.
+# src/worlds.ts holds a type-only alias and a value-only const; the panel shows its JavaScript
+# output (data-modes "errors js types output", data-js src/worlds.ts).
+#   - `this: Table` parameter -> 0 errors; `summary()` called alone -> TS2684 at the call and the
+#     run stops with Chrome's "Cannot read properties of undefined (reading 'number')"; the call
+#     is then commented out.
+#   - `^?` on the arrow's `this` -> table6's object type (the arrow takes list's `this`).
+#   - fewer parameters are fine; a three-parameter function passed to ring -> TS2345 "Target
+#     signature provides too few arguments" and Output "… 5 undefined"; the call is commented out.
+#   - a union of two printer functions called with { item } -> TS2345 asking for the intersection
+#     `{ item: string; } & { table: number; }`; `, table: 5` fixes it; number vs string labels ->
+#     "not assignable to parameter of type 'never'" and a trim crash; the call is commented out.
+#   - worlds.ts gains an enum and a class (both worlds), a same-name const + type `Sugar`, and two
+#     uses; the JavaScript output keeps the value-world names and drops the type-world ones.
+# Boards: (A) who `this` is, (B) the type world and the value world.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-24-weird-functions.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-24-weird-functions
+  title: "TypeScript course 24: ထူးဆန်းတဲ့ အပိုင်း 2၊ type world နဲ့ function တွေ"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors js types output" data-js="src/worlds.ts"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/main.ts: |
+        import { shopName } from "./worlds";
+        console.log(shopName);
+
+        type Table = { number: number; orders: string[] };
+
+        function summary() {
+          return `စားပွဲ ${this.number} မှာ အော်ဒါ ${this.orders.length} ခု`;
+        }
+
+        const table5 = { number: 5, orders: ["လက်ဖက်ရည်", "ပလာတာ"], summary };
+        console.log(table5.summary());
+
+        const table6 = {
+          number: 6,
+          orders: ["ကော်ဖီ", "မုန့်ဟင်းခါး"],
+          list() {
+            return this.orders.map((item) => `${this.number}: ${item}`);
+          },
+        };
+        console.log(table6.list());
+
+        type OnReady = (item: string, table: number) => void;
+
+        function ring(onReady: OnReady) {
+          onReady("လက်ဖက်ရည်", 5);
+        }
+
+        ring((item) => console.log(item, "အဆင်သင့်"));
+      src/worlds.ts: |
+        export type TableNumber = number;
+        export const shopName = "ရွှေလက်ဖက်ရည်ဆိုင်";
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # Board A: a `function`'s this is decided by the call; an arrow takes the this around it.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "this က ဘယ်သူလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-rule,
+        kind: text,
+        x: 280,
+        y: 250,
+        width: 800,
+        height: 40,
+        text: "function → ခေါ်တဲ့ ပုံက this ကို ဆုံးဖြတ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: t-method,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 780,
+        height: 40,
+        text: "table5.summary() → this = table5",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-alone,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 780,
+        height: 40,
+        text: "summary() တစ်ခုတည်း → this = undefined",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow,
+        kind: text,
+        x: 280,
+        y: 480,
+        width: 800,
+        height: 40,
+        text: "arrow function → ရေးထားတဲ့ နေရာက this ကို ယူ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 520,
+        width: 620,
+        height: 20,
+        strokeColor: "#f08c00",
+      }
+    # Board B: names live in the type world, the value world, or both.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Type world နဲ့ value world",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-type-box,
+        kind: rectangle,
+        x: 260,
+        y: 235,
+        width: 390,
+        height: 200,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-type-name,
+        kind: text,
+        x: 280,
+        y: 250,
+        width: 350,
+        height: 36,
+        text: "Type world",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: w-type-sub,
+        kind: text,
+        x: 280,
+        y: 300,
+        width: 350,
+        height: 36,
+        text: "စစ်နေချိန်မှာပဲ ရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-type-ex,
+        kind: text,
+        x: 280,
+        y: 365,
+        width: 350,
+        height: 36,
+        text: "type TableNumber",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: w-value-box,
+        kind: rectangle,
+        x: 690,
+        y: 235,
+        width: 390,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: w-value-name,
+        kind: text,
+        x: 710,
+        y: 250,
+        width: 350,
+        height: 36,
+        text: "Value world",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: w-value-sub,
+        kind: text,
+        x: 710,
+        y: 300,
+        width: 350,
+        height: 36,
+        text: "run တဲ့ အချိန် ရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-value-ex,
+        kind: text,
+        x: 710,
+        y: 365,
+        width: 350,
+        height: 36,
+        text: "const shopName",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: w-both-box,
+        kind: rectangle,
+        x: 260,
+        y: 465,
+        width: 820,
+        height: 120,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-both-name,
+        kind: text,
+        x: 280,
+        y: 480,
+        width: 780,
+        height: 36,
+        text: "နှစ်ဘက်လုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: w-both-ex,
+        kind: text,
+        x: 280,
+        y: 530,
+        width: 780,
+        height: 36,
+        text: "class Cup · enum Size · const + type Sugar",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 2402
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "this က ဘယ်သူလဲ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ object type တွေ open ဖြစ်တာကြောင့် ဖြစ်လာတဲ့
+      ထူးဆန်းချက်တွေကို ကြည့်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ထူးဆန်းတဲ့ အပိုင်း ဒုတိယ ပိုင်းအနေနဲ့ function
+      တွေထဲက this ရယ်၊ callback ရဲ့ parameter အရေအတွက်ရယ်၊ function union တွေရယ်၊ နောက်ဆုံးမှာ type
+      world နဲ့ value world အကြောင်းကို ကြည့်သွားပါမယ်။ [[mark:draw-this-rule]] this ကနေ စကြည့်ရအောင်။
+      function keyword နဲ့ ရေးထားတဲ့ function ထဲက this ကို၊ function ရေးထားတဲ့ နေရာက မဆုံးဖြတ်ဘဲ ခေါ်တဲ့
+      ပုံက ဆုံးဖြတ်ပါတယ်။ [[mark:draw-this-method]] object တစ်ခုပေါ်ကနေ အစက်နဲ့ ခေါ်ရင်၊ this က အဲဒီ
+      အစက်ရှေ့က object ဖြစ်ပါတယ်။ [[mark:draw-this-alone]] အဲဒီ function ကိုပဲ object မပါဘဲ တစ်ခုတည်း
+      ခေါ်လိုက်ရင်တော့၊ module ထဲမှာ this က undefined ဖြစ်သွားပြီး this ပေါ်က property ကို ဖတ်တာနဲ့
+      program ရပ်သွားပါမယ်။ [[mark:draw-this-arrow]] arrow function မှာတော့ ကိုယ်ပိုင် this မရှိပါဘူး။
+      သူ့ကို ရေးထားတဲ့ နေရာ ပတ်လည်က this ကိုပဲ ယူသုံးပါတယ်။ ဒီ စည်းမျဉ်းတွေကို TypeScript က ဘယ်လို
+      စစ်ပေးလဲ ဆိုတာ code နဲ့ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts (this in functions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+      - {
+          title: "MDN: this",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/this",
+        }
+      - {
+          title: "MDN: Arrow function expressions (no own this)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Arrow_functions",
+        }
+    actions:
+      - id: open-board-a
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [t-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-this-rule
+        type: whiteboard.apply
+        at: { mark: draw-this-rule }
+        upsertIds: [t-rule]
+        drawMs: 1600
+      - id: draw-this-method
+        type: whiteboard.apply
+        at: { mark: draw-this-method }
+        upsertIds: [t-method]
+        drawMs: 1400
+      - id: draw-this-alone
+        type: whiteboard.apply
+        at: { mark: draw-this-alone }
+        upsertIds: [t-alone]
+        drawMs: 1400
+      - id: draw-this-arrow
+        type: whiteboard.apply
+        at: { mark: draw-this-arrow }
+        upsertIds: [t-arrow, t-arrow-line]
+        drawMs: 2000
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-main]] ဒါက ဆိုင်ရဲ့ စားပွဲတွေအတွက်
+      program ပါ။ ထိပ်ဆုံးမှာ ဆိုင်နာမည်ကို တခြား ဖိုင်ကနေ import လုပ်ပြီး ထုတ်ပြပါတယ်။
+      [[mark:select-summary]] ဒီ function က this ရဲ့ စားပွဲ နံပါတ်နဲ့ အော်ဒါ အရေအတွက်ကို စာကြောင်း
+      တစ်ကြောင်းအဖြစ် ပြန်ပေးပါတယ်။ [[mark:select-table5]] ငါးနံပါတ် စားပွဲ object က ဒီ function ကို
+      property အနေနဲ့ ယူထားပြီး၊ အောက်မှာ အစက်နဲ့ ခေါ်ထားပါတယ်။ [[mark:select-list]] ခြောက်နံပါတ်
+      စားပွဲမှာတော့ list ဆိုတဲ့ method ရှိပြီး၊ map ထဲက arrow function နဲ့ အော်ဒါ တစ်ခုချင်းကို စားပွဲ
+      နံပါတ်နဲ့ တွဲပေးပါတယ်။ [[mark:select-onready]] ဒါကတော့ မီးဖိုချောင်က အော်ဒါ အဆင်သင့် ဖြစ်တဲ့အခါ
+      ခေါ်မယ့် callback ရဲ့ type ပါ။ ပစ္စည်း နာမည်နဲ့ စားပွဲ နံပါတ်ကို ပေးပါတယ်။ [[mark:select-ring]]
+      ring function က အဲဒီ callback ကို လက်ဖက်ရည်နဲ့ ငါးနံပါတ် စားပွဲ ဆိုပြီး ခေါ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "MDN: Method definitions",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Method_definitions",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (function type expressions)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#function-type-expressions",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-summary
+        type: editor.select
+        at: { mark: select-summary }
+        target:
+          {
+            file: src/main.ts,
+            text: "function summary() {\n  return `စားပွဲ ${this.number} မှာ အော်ဒါ ${this.orders.length} ခု`;",
+            occurrence: 1,
+          }
+      - id: select-table5
+        type: editor.select
+        at: { mark: select-table5 }
+        target:
+          {
+            file: src/main.ts,
+            text: "const table5 = { number: 5, orders: [\"လက်ဖက်ရည်\", \"ပလာတာ\"], summary };\nconsole.log(table5.summary());",
+            occurrence: 1,
+          }
+      - id: select-list
+        type: editor.select
+        at: { mark: select-list }
+        target:
+          {
+            file: src/main.ts,
+            text: "  list() {\n    return this.orders.map((item) => `${this.number}: ${item}`);",
+            occurrence: 1,
+          }
+      - id: select-onready
+        type: editor.select
+        at: { mark: select-onready }
+        target:
+          {
+            file: src/main.ts,
+            text: "type OnReady = (item: string, table: number) => void;",
+            occurrence: 1,
+          }
+      - id: select-ring
+        type: editor.select
+        at: { mark: select-ring }
+        target:
+          {
+            file: src/main.ts,
+            text: "function ring(onReady: OnReady) {\n  onReady(\"လက်ဖက်ရည်\", 5);\n}",
+            occurrence: 1,
+          }
+
+  - id: this-param
+    chapter: "Function ရဲ့ this parameter"
+    narration: >
+      [[mark:panel-ready]] panel ရဲ့ Output မှာ ဆိုင်နာမည်၊ စားပွဲ ငါးမှာ အော်ဒါ နှစ်ခု၊ စားပွဲ
+      ခြောက်ရဲ့ အော်ဒါ စာရင်းနဲ့ လက်ဖက်ရည် အဆင်သင့် ဆိုတဲ့ စာတွေ ထွက်နေပါတယ်။ ဒါပေမဲ့ Errors မှာတော့
+      error နှစ်ခု ရှိပါတယ်။ [[mark:read-this-errors]] function ထဲက this နှစ်နေရာမှာ type annotation
+      မရှိလို့၊ this က any ဖြစ်နေတယ်လို့ ပြောတာပါ။ ဒီ function ကို ဘယ် object ပေါ်ကနေ ခေါ်မလဲ ဆိုတာ
+      TypeScript ကြိုမသိနိုင်လို့ပါ။ [[mark:type-this-param]] ဒါကြောင့် parameter နေရာရဲ့ ရှေ့ဆုံးမှာ
+      this ဆိုတဲ့ နာမည်နဲ့ Table type ကို ကြေညာပေးလိုက်ပါမယ်။ [[mark:read-this-fixed]] error နှစ်ခုလုံး
+      ပျောက်သွားပါပြီ။ ဒီ this parameter က တကယ့် parameter မဟုတ်ပါဘူး။ ခေါ်တဲ့ အခါ argument အနေနဲ့
+      ပေးစရာ မလိုဘဲ၊ this က ဘာ ဖြစ်ရမလဲ ဆိုတာကိုပဲ TypeScript ကို ပြောတာပါ။ [[mark:type-call-alone]]
+      ဒါဆို ဒီ function ကို object မပါဘဲ တစ်ခုတည်း ခေါ်ကြည့်ရအောင်။ [[mark:read-call-alone]] ခေါ်တဲ့
+      နေရာမှာ error ပေါ်လာပါပြီ။ this က void ဖြစ်နေလို့ Table နဲ့ မကိုက်ဘူးလို့ ပြောပါတယ်။ Output
+      မှာလည်း undefined ပေါ်က number ကို ဖတ်လို့ မရဘူး ဆိုတဲ့ အနီရောင် error နဲ့ program ရပ်သွားပါတယ်။
+      this parameter ပေးထားရင် ဒီလို အမှားကို ခေါ်တဲ့ နေရာမှာတင် ဖမ်းပေးတာပါ။ [[mark:type-comment-call]]
+      ဒီ line ကို comment လုပ်ပြီး ပိတ်လိုက်ပါမယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: More on Functions (declaring this in a function)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#declaring-this-in-a-function",
+        }
+      - {
+          title: "TSConfig: noImplicitThis",
+          url: "https://www.typescriptlang.org/tsconfig/#noImplicitThis",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts (this with function)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-two-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "2" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-this-any
+        type: expect.preview
+        at: { afterAction: expect-two-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'this' implicitly has type 'any' because it does not have a type annotation."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-this-any-code
+        type: expect.preview
+        at: { afterAction: expect-this-any }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-2 }
+        attribute: { name: data-code, value: "2683" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-start-output
+        type: expect.preview
+        at: { afterAction: expect-this-any-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "4" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-table5-line
+        type: expect.preview
+        at: { afterAction: expect-start-output }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "စားပွဲ 5 မှာ အော်ဒါ 2 ခု"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: select-this-uses
+        type: editor.select
+        at: { mark: read-this-errors }
+        target: { file: src/main.ts, text: "this.number", occurrence: 1 }
+      - id: type-this-param
+        type: editor.type
+        at: { mark: type-this-param }
+        target: { file: src/main.ts, after: "function summary(", occurrence: 1 }
+        text: "this: Table"
+      - id: expect-this-fixed
+        type: expect.preview
+        at: { afterAction: type-this-param }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-call-alone
+        type: editor.type
+        at: { mark: type-call-alone }
+        target: { file: src/main.ts, after: "console.log(table5.summary());\n", occurrence: 1 }
+        text: "console.log(summary());\n"
+        cadence: fast-explainer
+      - id: expect-call-error
+        type: expect.preview
+        at: { afterAction: type-call-alone }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-call-message
+        type: expect.preview
+        at: { afterAction: expect-call-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "The 'this' context of type 'void' is not assignable to method's 'this' of type 'Table'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-call-crash
+        type: expect.preview
+        at: { afterAction: expect-call-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "Uncaught TypeError: Cannot read properties of undefined (reading 'number')"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-comment-call
+        type: editor.type
+        at: { mark: type-comment-call }
+        target: { file: src/main.ts, after: "console.log(table5.summary());\n", occurrence: 1 }
+        text: "// "
+      - id: expect-call-off
+        type: expect.preview
+        at: { afterAction: type-comment-call }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: arrow
+    chapter: "Arrow function ရဲ့ this"
+    narration: >
+      [[mark:select-arrow]] အခု ခြောက်နံပါတ် စားပွဲရဲ့ list method ကို ကြည့်ရအောင်။ map ထဲက ဒီ arrow
+      function ကလည်း this ကို သုံးထားပေမယ့် error မရှိပါဘူး။ [[mark:type-arrow-query]] arrow function
+      ထဲက this ရဲ့ type ကို query comment နဲ့ မေးကြည့်ပါမယ်။ [[mark:read-arrow-query]] Types မှာ နံပါတ်၊
+      အော်ဒါ စာရင်းနဲ့ list method ပါတဲ့ object type ပေါ်လာပါတယ်။ ဒါက စားပွဲ ခြောက် object ရဲ့ type ပါ။
+      arrow function မှာ ကိုယ်ပိုင် this မရှိတဲ့အတွက်၊ သူ့ကို ရေးထားတဲ့ list method ရဲ့ this ကို
+      ယူသုံးတာပါ။ [[mark:read-arrow-output]] Output ထဲက အော်ဒါ နှစ်ခုလုံးရဲ့ ရှေ့မှာ စားပွဲ နံပါတ်
+      ခြောက် ပါနေတာလည်း ဒါကြောင့်ပါ။ arrow function မှာ this parameter ရေးခွင့် မရှိတာလည်း ဒီ
+      အကြောင်းကြောင့်ပါ။ map ထဲမှာ function keyword နဲ့ ရေးထားရင်တော့ သူ့မှာ ကိုယ်ပိုင် this
+      ရှိသွားပြီး၊ list ရဲ့ this ကို မမြင်ရတော့ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts (arrow functions and this)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+      - {
+          title: "TypeScript Handbook: Classes (arrow functions and this parameters)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/classes.html#arrow-functions",
+        }
+      - {
+          title: "MDN: Arrow function expressions (no own this)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/Arrow_functions",
+        }
+    actions:
+      - id: select-arrow
+        type: editor.select
+        at: { mark: select-arrow }
+        target: { file: src/main.ts, text: "(item) => `${this.number}: ${item}`", occurrence: 1 }
+      - id: type-arrow-query
+        type: editor.type
+        at: { mark: type-arrow-query }
+        target:
+          {
+            file: src/main.ts,
+            after: "    return this.orders.map((item) => `${this.number}: ${item}`);\n",
+            occurrence: 1,
+          }
+        text: "    //                                  ^?\n"
+        cadence: block
+      - id: expect-arrow-this
+        type: expect.preview
+        at: { afterAction: type-arrow-query }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "list(): string[];"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-arrow-this-start
+        type: expect.preview
+        at: { afterAction: expect-arrow-this }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-type-1 }
+        textContains: "this: {"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-arrow-output
+        type: expect.preview
+        at: { afterAction: expect-arrow-this-start }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "[ '6: ကော်ဖီ', '6: မုန့်ဟင်းခါး' ]"
+        retry: { maxAttempts: 3, delayMs: 300 }
+
+  - id: params
+    chapter: "Parameter နည်းရင် ရ၊ များရင် မရ"
+    narration: >
+      [[mark:select-onready-type]] နောက်ထပ် ထူးဆန်းချက်က callback ရဲ့ parameter အရေအတွက်ပါ။ callback
+      type က ပစ္စည်း နာမည်နဲ့ စားပွဲ နံပါတ်၊ parameter နှစ်ခု ပေးပါတယ်။ [[mark:select-short-callback]]
+      ဒါပေမဲ့ ring ကို ပေးထားတဲ့ ဒီ callback က ပစ္စည်း နာမည် တစ်ခုပဲ ယူထားပြီး၊ error လည်း မရှိပါဘူး။
+      JavaScript မှာ argument ပိုပေးရင် function က ပိုတာကို လျစ်လျူရှုလိုက်တဲ့အတွက်၊ မလိုတဲ့ parameter
+      ကို မယူတာက ဘေးကင်းလို့ပါ။ forEach ဒါမှမဟုတ် map ထဲမှာ item တစ်ခုတည်း ယူတဲ့ callback ရေးလို့
+      ရတာလည်း ဒါကြောင့်ပါ။ အဲဒီ method တွေက item ရယ်၊ index ရယ်၊ array တစ်ခုလုံးရယ်၊ argument သုံးခု
+      ပေးပေမယ့် ကိုယ် လိုတာကိုပဲ ယူလို့ ရပါတယ်။ [[mark:type-more-params]] ပြောင်းပြန် ကြည့်ရအောင်။ သကြား
+      အဆင့်ပါ လိုချင်လို့ parameter သုံးခု ယူတဲ့ function တစ်ခု ရေးပြီး ring ကို ပေးကြည့်ပါမယ်။
+      [[mark:read-more-params]] error ပေါ်လာပါပြီ။ callback type က argument နှစ်ခုပဲ ပေးနိုင်ပြီး၊ ဒီ
+      function က သုံးခု လိုနေတယ်လို့ ပြောပါတယ်။ Output မှာ သကြား နေရာ undefined ဖြစ်နေတာ မြင်ရပါတယ်။
+      ring က တတိယ argument ကို ဘယ်တော့မှ မပေးမှာ ဖြစ်လို့ TypeScript က လက်မခံတာပါ။
+      [[mark:type-comment-ring]] ဒီ ခေါ်တဲ့ line ကို comment လုပ်ပြီး ပိတ်လိုက်ပါမယ်။
+    sources:
+      - {
+          title: "TypeScript Handbook: Type Compatibility (comparing two functions)",
+          url: "https://www.typescriptlang.org/docs/handbook/type-compatibility.html#comparing-two-functions",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts (function assignability)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+    actions:
+      - id: select-onready-type
+        type: editor.select
+        at: { mark: select-onready-type }
+        target: { file: src/main.ts, text: "(item: string, table: number) => void", occurrence: 1 }
+      - id: select-short-callback
+        type: editor.select
+        at: { mark: select-short-callback }
+        target:
+          { file: src/main.ts, text: 'ring((item) => console.log(item, "အဆင်သင့်"));', occurrence: 1 }
+      - id: type-more-params
+        type: editor.type
+        at: { mark: type-more-params }
+        target:
+          {
+            file: src/main.ts,
+            after: "ring((item) => console.log(item, \"အဆင်သင့်\"));\n",
+            occurrence: 1,
+          }
+        text: "\nfunction ringWithSugar(item: string, table: number, sugar: string) {\n  console.log(item, table, sugar);\n}\nring(ringWithSugar);\n"
+        cadence: line-by-line
+      - id: expect-more-error
+        type: expect.preview
+        at: { afterAction: type-more-params }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-more-message
+        type: expect.preview
+        at: { afterAction: expect-more-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Target signature provides too few arguments. Expected 3 or more, but got 2."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-more-undefined
+        type: expect.preview
+        at: { afterAction: expect-more-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-5 }
+        textContains: "လက်ဖက်ရည် 5 undefined"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-comment-ring
+        type: editor.type
+        at: { mark: type-comment-ring }
+        target:
+          { file: src/main.ts, after: "  console.log(item, table, sugar);\n}\n", occurrence: 1 }
+        text: "// "
+      - id: expect-ring-off
+        type: expect.preview
+        at: { afterAction: type-comment-ring }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: unions
+    chapter: "Function union ကို ခေါ်ခြင်း"
+    narration: >
+      [[mark:type-printers]] function တွေရဲ့ နောက်ဆုံး ထူးဆန်းချက်က function union ပါ။ အော်ဒါ တစ်ခုကို
+      မီးဖိုချောင်နဲ့ ငွေကိုင် နှစ်နေရာလုံး ပို့ချင်လို့ printer function နှစ်ခုကို array ထဲ ထည့်ပါမယ်။
+      ပထမ တစ်ခုက ပစ္စည်း နာမည် ပါတဲ့ object ကို လိုပြီး၊ ဒုတိယ တစ်ခုက စားပွဲ နံပါတ် ပါတဲ့ object ကို
+      လိုပါတယ်။ ပြီးတော့ loop ပတ်ပြီး တစ်ခုချင်းကို ကော်ဖီ အော်ဒါနဲ့ ခေါ်ပါမယ်။ [[mark:read-printers]]
+      Output မှာ ငွေကိုင်ဆီ ရောက်တဲ့ စားပွဲ နံပါတ်က undefined ဖြစ်နေပြီး၊ Errors မှာလည်း error တစ်ခု
+      ပေါ်လာပါတယ်။ loop ထဲမှာ ခေါ်နေတာက နှစ်ခုထဲက ဘယ် function လဲ ဆိုတာ TypeScript မသိနိုင်တဲ့အတွက်၊
+      argument က နှစ်ခုလုံးနဲ့ ကိုက်ရပါမယ်။ ဒါကြောင့် parameter type နှစ်ခုကို ပေါင်းထားတဲ့ intersection
+      type ကို လိုချင်ပြီး၊ စားပွဲ နံပါတ် ပျောက်နေတယ်လို့ ပြောတာပါ။ [[mark:type-add-table]] စားပွဲ
+      နံပါတ်ကို ထည့်ပေးလိုက်ပါမယ်။ [[mark:read-add-table]] error ပျောက်ပြီး၊ ငွေကိုင်ဆီမှာလည်း စားပွဲ
+      ငါး ရောက်သွားပါပြီ။ [[mark:type-labels]] ဒါဆို parameter type တွေ လုံးဝ မတူတဲ့ function နှစ်ခု
+      ဆိုရင်ရော ဘာ ဖြစ်မလဲ။ ဂဏန်း လိုတဲ့ function နဲ့ စာသား လိုတဲ့ function ကို array ထဲ ထည့်ပြီး
+      ဂဏန်းနဲ့ ခေါ်ကြည့်ပါမယ်။ [[mark:read-labels]] ဒီတစ်ခါ argument ကို never နေရာမှာ ထည့်လို့
+      မရဘူးလို့ ပြောပါတယ်။ number လည်း ဖြစ် string လည်း ဖြစ်တဲ့ တန်ဖိုး မရှိတဲ့အတွက် intersection က
+      never ဖြစ်သွားတာပါ။ Output မှာလည်း ဂဏန်းကို စာသားလို trim လုပ်ဖို့ ကြိုးစားလို့ program
+      ရပ်သွားပါတယ်။ ဒီလို union ကို တိုက်ရိုက် မခေါ်ဘဲ၊ narrowing နဲ့ ဘယ် function လဲ ခွဲပြီးမှ
+      ခေါ်ရပါမယ်။ [[mark:type-comment-labels]] ဒီ line ကိုလည်း comment လုပ်ပြီး ပိတ်လိုက်ပါမယ်။
+    sources:
+      - {
+          title: "TypeScript 3.3 release notes: improved behavior for calling union types",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-3.html#improved-behavior-for-calling-union-types",
+        }
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts (unions of functions)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+      - {
+          title: "TypeScript Handbook: Object Types (intersection types)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/objects.html#intersection-types",
+        }
+    actions:
+      - id: type-printers
+        type: editor.type
+        at: { mark: type-printers }
+        target: { file: src/main.ts, after: "// ring(ringWithSugar);\n", occurrence: 1 }
+        text: "\nconst printers = [\n  (order: { item: string }) => console.log(\"မီးဖိုချောင်\", order.item),\n  (order: { table: number }) => console.log(\"ငွေကိုင်\", order.table),\n];\nfor (const print of printers) print({ item: \"ကော်ဖီ\" });\n"
+        cadence: line-by-line
+      - id: expect-printers-error
+        type: expect.preview
+        at: { afterAction: type-printers }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-printers-intersection
+        type: expect.preview
+        at: { afterAction: expect-printers-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "is not assignable to parameter of type '{ item: string; } & { table: number; }'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-printers-missing
+        type: expect.preview
+        at: { afterAction: expect-printers-intersection }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Property 'table' is missing in type '{ item: string; }' but required in type '{ table: number; }'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-cashier-undefined
+        type: expect.preview
+        at: { afterAction: expect-printers-missing }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-6 }
+        textContains: "ငွေကိုင် undefined"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-add-table
+        type: editor.type
+        at: { mark: type-add-table }
+        target: { file: src/main.ts, after: 'print({ item: "ကော်ဖီ"', occurrence: 1 }
+        text: ", table: 5"
+        cadence: fast-explainer
+      - id: expect-table-fixed
+        type: expect.preview
+        at: { afterAction: type-add-table }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-cashier-five
+        type: expect.preview
+        at: { afterAction: expect-table-fixed }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-6 }
+        textContains: "ငွေကိုင် 5"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-labels
+        type: editor.type
+        at: { mark: type-labels }
+        target:
+          { file: src/main.ts, after: "print({ item: \"ကော်ဖီ\", table: 5 });\n", occurrence: 1 }
+        text: "\nconst labels = [\n  (price: number) => `${price} ကျပ်`,\n  (name: string) => name.trim(),\n];\nfor (const label of labels) console.log(label(1500));\n"
+        cadence: line-by-line
+      - id: expect-never-error
+        type: expect.preview
+        at: { afterAction: type-labels }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-never-message
+        type: expect.preview
+        at: { afterAction: expect-never-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Argument of type '1500' is not assignable to parameter of type 'never'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-trim-crash
+        type: expect.preview
+        at: { afterAction: expect-never-message }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-8 }
+        textContains: "Uncaught TypeError: name.trim is not a function"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-comment-labels
+        type: editor.type
+        at: { mark: type-comment-labels }
+        target:
+          { file: src/main.ts, after: "  (name: string) => name.trim(),\n];\n", occurrence: 1 }
+        text: "// "
+      - id: expect-labels-off
+        type: expect.preview
+        at: { afterAction: type-comment-labels }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: worlds
+    chapter: "Type world နဲ့ value world"
+    narration: >
+      [[mark:board-worlds]] နောက်ဆုံး ထူးဆန်းချက်ကတော့ နာမည်တွေ နေတဲ့ နေရာ နှစ်ခုပါ။
+      [[mark:draw-type-world]] type world ဆိုတာ TypeScript စစ်နေတဲ့ အချိန်မှာပဲ ရှိပြီး JavaScript
+      ဖြစ်သွားတဲ့အခါ ပျောက်သွားတဲ့ နာမည်တွေပါ။ [[mark:draw-value-world]] value world ကတော့ program run
+      တဲ့ အချိန်မှာ တကယ် ရှိနေတဲ့ တန်ဖိုးတွေပါ။ [[mark:draw-both]] နာမည် တချို့ကတော့ နှစ်ဘက်လုံးမှာ
+      ရှိပါတယ်။ class ရယ်၊ enum ရယ်၊ နာမည်တူ ပေးထားတဲ့ const နဲ့ type ရယ်ပါ။ [[mark:close-worlds-board]]
+      ဒါကို JavaScript output နဲ့ ကြည့်ရအောင်။ [[mark:open-worlds-file]] ဒီ ဖိုင်မှာ type alias တစ်ခုနဲ့
+      ဆိုင်နာမည် const တစ်ခု ရှိပါတယ်။ panel ရဲ့ JavaScript output မှာ ဒီ ဖိုင်ကို ပြောင်းထားတဲ့
+      JavaScript ကို ပြထားပါတယ်။ အဲဒီမှာ const ပဲ ကျန်ပြီး type alias ပျောက်နေတာ တွေ့ရပါမယ်။ main ဖိုင်က
+      import လုပ်ခဲ့တာလည်း ဒီ value world ထဲက ဆိုင်နာမည်ပါ။ [[mark:type-enum-class]] enum တစ်ခုနဲ့ class
+      တစ်ခု ထည့်ပါမယ်။ [[mark:read-enum-class]] JavaScript output မှာ enum က object တစ်ခု ဖြစ်လာပြီး
+      class လည်း ရှိနေပါတယ်။ ဒါကြောင့် သူတို့က value world မှာလည်း ရှိပါတယ်။ [[mark:select-size-line]]
+      class ထဲက ဒီ line ကို ကြည့်ပါ။ Size ကို နှစ်ခါ သုံးထားပါတယ်။ ပထမ တစ်ခါက type annotation နေရာမှာ
+      type အနေနဲ့၊ ဒုတိယ တစ်ခါက တန်ဖိုး နေရာမှာ value အနေနဲ့ပါ။ JavaScript output မှာ type အနေနဲ့
+      သုံးထားတဲ့ အပိုင်း ပျောက်ပြီး value အပိုင်းပဲ ကျန်ပါတယ်။ [[mark:type-sugar]] နာမည်တူ const နဲ့
+      type ကိုလည်း ကိုယ်တိုင် ရေးလို့ ရပါတယ်။ as const object တစ်ခုနဲ့၊ သူ့ value တွေကနေ ထုတ်ထားတဲ့ type
+      ကို Sugar ဆိုတဲ့ နာမည် တစ်ခုတည်း ပေးပါမယ်။ [[mark:read-sugar]] JavaScript output မှာ const ပဲ
+      ကျန်ပြီး type line မပါပါဘူး။ [[mark:type-first]] အခု သူတို့ကို သုံးကြည့်ရအောင်။
+      [[mark:select-first-cup]] type annotation နေရာက Cup နဲ့ Sugar ပျောက်သွားပြီး၊ new နဲ့ ဖန်တီးတဲ့
+      Cup နဲ့ Sugar ရဲ့ Extra တန်ဖိုးကတော့ ကျန်နေပါတယ်။ နာမည် တူပေမယ့် TypeScript က ရေးထားတဲ့ နေရာကို
+      ကြည့်ပြီး ဘယ် world က နာမည်လဲ ခွဲသိတာပါ။ class ကို type အနေနဲ့ သုံးရင် အဲဒီ class နဲ့ ဖန်တီးထားတဲ့
+      object ကို ဆိုလိုပြီး၊ class ကိုယ်တိုင်ကို ဆိုလိုတာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts (the type and value worlds)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+      - {
+          title: "TypeScript Handbook: Declaration Merging (basic concepts: types, values, namespaces)",
+          url: "https://www.typescriptlang.org/docs/handbook/declaration-merging.html#basic-concepts",
+        }
+      - {
+          title: "TypeScript Handbook: Enums (enums at runtime)",
+          url: "https://www.typescriptlang.org/docs/handbook/enums.html#enums-at-runtime",
+        }
+    actions:
+      - id: board-worlds
+        type: whiteboard.apply
+        at: { mark: board-worlds }
+        open: true
+        clear: true
+        upsertIds: [w-title]
+      - id: draw-type-world
+        type: whiteboard.apply
+        at: { mark: draw-type-world }
+        upsertIds: [w-type-box, w-type-name, w-type-sub, w-type-ex]
+        drawMs: 2400
+      - id: draw-value-world
+        type: whiteboard.apply
+        at: { mark: draw-value-world }
+        upsertIds: [w-value-box, w-value-name, w-value-sub, w-value-ex]
+        drawMs: 2400
+      - id: draw-both
+        type: whiteboard.apply
+        at: { mark: draw-both }
+        upsertIds: [w-both-box, w-both-name, w-both-ex]
+        drawMs: 2400
+      - id: close-board-worlds
+        type: whiteboard.apply
+        at: { mark: close-worlds-board }
+        open: false
+      - id: open-worlds
+        type: workspace.openFile
+        at: { mark: open-worlds-file }
+        path: src/worlds.ts
+      - id: select-worlds-start
+        type: editor.select
+        at: { afterAction: open-worlds }
+        target:
+          {
+            file: src/worlds.ts,
+            text: "export type TableNumber = number;\nexport const shopName = \"ရွှေလက်ဖက်ရည်ဆိုင်\";",
+            occurrence: 1,
+          }
+      - id: expect-js-start
+        type: expect.preview
+        at: { afterAction: select-worlds-start }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'export const shopName = "ရွှေလက်ဖက်ရည်ဆိုင်";'
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: type-enum-class
+        type: editor.type
+        at: { mark: type-enum-class }
+        target:
+          { file: src/worlds.ts, after: "export const shopName = \"ရွှေလက်ဖက်ရည်ဆိုင်\";\n", occurrence: 1 }
+        text: "\nexport enum Size {\n  Small = \"small\",\n  Large = \"large\",\n}\n\nexport class Cup {\n  size: Size = Size.Small;\n}\n"
+        cadence: block
+      - id: expect-js-enum
+        type: expect.preview
+        at: { afterAction: type-enum-class }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'Size["Small"] = "small";'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-js-class
+        type: expect.preview
+        at: { afterAction: expect-js-enum }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "size = Size.Small;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-size-line
+        type: editor.select
+        at: { mark: select-size-line }
+        target: { file: src/worlds.ts, text: "size: Size = Size.Small;", occurrence: 1 }
+      - id: type-sugar
+        type: editor.type
+        at: { mark: type-sugar }
+        target: { file: src/worlds.ts, after: "  size: Size = Size.Small;\n}\n", occurrence: 1 }
+        text: "\nexport const Sugar = { Less: \"less\", Normal: \"normal\", Extra: \"extra\" } as const;\nexport type Sugar = (typeof Sugar)[keyof typeof Sugar];\n"
+        cadence: block
+      - id: expect-js-sugar
+        type: expect.preview
+        at: { afterAction: type-sugar }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: 'export const Sugar = { Less: "less", Normal: "normal", Extra: "extra" };'
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-first
+        type: editor.type
+        at: { mark: type-first }
+        target:
+          {
+            file: src/worlds.ts,
+            after: "export type Sugar = (typeof Sugar)[keyof typeof Sugar];\n",
+            occurrence: 1,
+          }
+        text: "\nexport const firstCup: Cup = new Cup();\nexport const firstSugar: Sugar = Sugar.Extra;\n"
+        cadence: line-by-line
+      - id: expect-js-first-cup
+        type: expect.preview
+        at: { afterAction: type-first }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "export const firstCup = new Cup();"
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-js-first-sugar
+        type: expect.preview
+        at: { afterAction: expect-js-first-cup }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-js-1 }
+        textContains: "export const firstSugar = Sugar.Extra;"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-worlds-clean
+        type: expect.preview
+        at: { afterAction: expect-js-first-sugar }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: select-first-cup
+        type: editor.select
+        at: { mark: select-first-cup }
+        target:
+          { file: src/worlds.ts, text: "export const firstCup: Cup = new Cup();", occurrence: 1 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ function keyword နဲ့ ရေးတဲ့ function ရဲ့ this က ခေါ်တဲ့
+      ပုံပေါ် မူတည်လို့ this parameter နဲ့ type ပေးနိုင်ပြီး၊ arrow function ကတော့ ပတ်လည်က this ကို
+      ယူပါတယ်။ callback က ပေးတာထက် parameter နည်းနည်း ယူလို့ ရပေမယ့် ပိုယူလို့ မရပါဘူး။
+      [[mark:recap-union]] function union ကို ခေါ်ရင် argument က အားလုံးနဲ့ ကိုက်ရလို့ intersection
+      ဖြစ်လာပြီး၊ never အထိ ဖြစ်သွားနိုင်ပါတယ်။ နာမည်တွေကတော့ type world ဒါမှမဟုတ် value world ဒါမှမဟုတ်
+      နှစ်ဘက်လုံးမှာ နေပြီး၊ JavaScript ထဲ ရောက်တာက value world ပဲ ဖြစ်ပါတယ်။ နောက် lesson မှာတော့
+      module ရယ် script ရယ်၊ type world အတွက်ပဲ ရေးထားတဲ့ declaration file တွေကို ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 12: The Weird Parts",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/the-weird-parts",
+        }
+    actions:
+      - id: open-main-recap
+        type: workspace.openFile
+        at: { mark: recap }
+        path: src/main.ts
+      - id: select-this-recap
+        type: editor.select
+        at: { afterAction: open-main-recap }
+        target: { file: src/main.ts, text: "function summary(this: Table) {", occurrence: 1 }
+      - id: expect-file-this
+        type: expect.file
+        at: { afterAction: select-this-recap }
+        path: src/main.ts
+        contains: "function summary(this: Table) {"
+      - id: expect-file-call
+        type: expect.file
+        at: { afterAction: expect-file-this }
+        path: src/main.ts
+        contains: "// console.log(summary());"
+      - id: expect-file-ring
+        type: expect.file
+        at: { afterAction: expect-file-call }
+        path: src/main.ts
+        contains: "// ring(ringWithSugar);"
+      - id: expect-file-print
+        type: expect.file
+        at: { afterAction: expect-file-ring }
+        path: src/main.ts
+        contains: 'for (const print of printers) print({ item: "ကော်ဖီ", table: 5 });'
+      - id: expect-file-labels
+        type: expect.file
+        at: { afterAction: expect-file-print }
+        path: src/main.ts
+        contains: "// for (const label of labels) console.log(label(1500));"
+      - id: expect-file-worlds
+        type: expect.file
+        at: { afterAction: expect-file-labels }
+        path: src/worlds.ts
+        contains: "export const firstCup: Cup = new Cup();\nexport const firstSugar: Sugar = Sugar.Extra;"
+checks:
+  - { type: timing.p95Ms, max: 300 }
