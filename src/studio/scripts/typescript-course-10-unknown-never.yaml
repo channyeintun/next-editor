@@ -1,0 +1,1403 @@
+# TypeScript course, lesson 10: unknown and never (Burmese).
+#
+# Start state (ws/): src/inbox.ts holds three JSON messages from an online ordering app (a good
+# order, one without an item, one cut off half way); src/main.ts parses each with JSON.parse (any)
+# and returns data.item as a string, inside a try/catch. Panel data-modes "errors types output":
+# 0 errors, Output "လက်ဖက်ရည်" / "undefined" / "ဖတ်လို့ မရပါ" — any hides the missing item.
+# Edits, all insert-only: `: unknown` on data (TS18046); a hasItem(value: unknown) guard built in
+# three steps whose ^? query shows the inferred type predicate changing (object | null → object →
+# object & Record<"item", unknown>); the guard and a typeof check in readItem (0 errors, "မသိပါ");
+# `, error.message` in catch (TS18046 on the catch variable) and an instanceof-or-rethrow line;
+# a `fail` arrow helper whose query shows `=> never`. Board: the ladder from unknown to never,
+# with any off to the side.
+#
+# Build: bun ~/Documents/typescript-course-work/tools/build-lesson.ts template.yaml ws typescript-course-10-unknown-never.yaml
+schemaVersion: 1
+lesson:
+  slug: typescript-course-10-unknown-never
+  title: "TypeScript course 10: unknown နဲ့ never"
+  locale: my-MM
+  workspace:
+    lessonType: typescript
+    name: TypeScript course
+    entryFilePath: src/main.ts
+    files:
+      course/checker.js: |
+        // TypeScript course · type checker (Vite plugin, runs in the dev server).
+        // Checks every file of the project with the real TypeScript compiler and sends the
+        // errors, the `// ^?` type queries, the JavaScript output and a runnable copy of the
+        // program to the preview page (course/panel.js) after every change.
+        import ts from "typescript";
+        import { existsSync, readFileSync } from "node:fs";
+        import { isAbsolute, join, relative, resolve } from "node:path";
+
+        const EVENT = "course:ts";
+        const DEBOUNCE_MS = 200;
+        const QUERY = /^(\s*)\/\/(\s*)\^\?\s*$/;
+
+        export default function courseTypeChecker() {
+          return {
+            name: "course-type-checker",
+            apply: "serve",
+            configureServer(server) {
+              const checker = createChecker(server.config.root);
+              let wants = { js: [], dts: [] };
+              let latest = checker.check(wants, 1);
+              let seq = 1;
+              let timer = null;
+              const publish = () => {
+                timer = null;
+                latest = checker.check(wants, ++seq);
+                server.ws.send({ type: "custom", event: EVENT, data: latest });
+              };
+              const schedule = () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(publish, DEBOUNCE_MS);
+              };
+              server.watcher.on("all", (_event, file) => {
+                if (checker.watches(file)) schedule();
+              });
+              server.ws.on(`${EVENT}:hello`, (data, client) => {
+                const next = {
+                  js: Array.isArray(data?.js) ? data.js.map(String) : [],
+                  dts: Array.isArray(data?.dts) ? data.dts.map(String) : [],
+                };
+                if (JSON.stringify(next) !== JSON.stringify(wants)) {
+                  wants = next;
+                  latest = checker.check(wants, ++seq);
+                }
+                client.send(EVENT, latest);
+              });
+            },
+          };
+        }
+
+        function createChecker(root) {
+          const configPath = join(root, "tsconfig.json");
+          const contents = new Map(); // project file -> { text, version }
+          let configText = null;
+          let parsed = null;
+
+          const isProjectFile = (file) => {
+            const rel = relative(root, file);
+            return !rel.startsWith("..") && !isAbsolute(rel) && !rel.split(/[\\/]/).includes("node_modules");
+          };
+
+          const readConfig = () => {
+            const text = existsSync(configPath) ? readFileSync(configPath, "utf8") : "{}";
+            if (text === configText && parsed) return;
+            configText = text;
+            const host = {
+              useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+              readDirectory: ts.sys.readDirectory,
+              fileExists: ts.sys.fileExists,
+              readFile: (file) => (resolve(file) === configPath ? text : ts.sys.readFile(file)),
+              getCurrentDirectory: () => root,
+              onUnRecoverableConfigFileDiagnostic: () => {},
+            };
+            parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host) ?? {
+              options: {},
+              fileNames: [],
+              errors: [],
+            };
+          };
+
+          const version = (file) => {
+            if (!isProjectFile(file)) return "0";
+            const text = ts.sys.readFile(file) ?? "";
+            const known = contents.get(file);
+            if (known && known.text === text) return String(known.version);
+            const next = { text, version: (known?.version ?? 0) + 1 };
+            contents.set(file, next);
+            return String(next.version);
+          };
+
+          readConfig();
+          const host = {
+            getScriptFileNames: () => parsed.fileNames,
+            getScriptVersion: version,
+            getScriptSnapshot: (file) => {
+              const text = ts.sys.readFile(file);
+              return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+            },
+            getCurrentDirectory: () => root,
+            getCompilationSettings: () => parsed.options,
+            getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+            fileExists: ts.sys.fileExists,
+            readFile: ts.sys.readFile,
+            readDirectory: ts.sys.readDirectory,
+            directoryExists: ts.sys.directoryExists,
+            getDirectories: ts.sys.getDirectories,
+            realpath: ts.sys.realpath,
+          };
+          const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const toDiagnostic = (d) => {
+            const out = {
+              file: d.file ? rel(d.file.fileName) : rel(configPath),
+              line: 0,
+              col: 0,
+              code: d.code,
+              category: ts.DiagnosticCategory[d.category].toLowerCase(),
+              // Project paths print relative to the project, so a message reads the same everywhere.
+              message: ts.flattenDiagnosticMessageText(d.messageText, "\n").split(`${root}/`).join(""),
+            };
+            if (d.file && d.start !== undefined) {
+              const pos = d.file.getLineAndCharacterOfPosition(d.start);
+              out.line = pos.line + 1;
+              out.col = pos.character + 1;
+            }
+            return out;
+          };
+
+          const queries = (file) => {
+            const text = ts.sys.readFile(file) ?? "";
+            const lines = text.split("\n");
+            const found = [];
+            let offset = 0;
+            const starts = lines.map((line) => {
+              const start = offset;
+              offset += line.length + 1;
+              return start;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const m = QUERY.exec(lines[i].replace(/\r$/, ""));
+              if (!m) continue;
+              const col = lines[i].indexOf("^");
+              const target = lines[i - 1];
+              let info;
+              for (const dc of [0, -1, 1, -2, 2]) {
+                const c = col + dc;
+                if (c < 0 || c >= target.length) continue;
+                info = service.getQuickInfoAtPosition(file, starts[i - 1] + c);
+                if (info) break;
+              }
+              found.push({
+                file: rel(file),
+                line: i,
+                col: col + 1,
+                text: info ? ts.displayPartsToString(info.displayParts) : "",
+                docs: info ? ts.displayPartsToString(info.documentation) : "",
+                tags: info?.tags
+                  ? info.tags.map((t) => `@${t.name} ${ts.displayPartsToString(t.text ?? [])}`.trim())
+                  : [],
+              });
+            }
+            return found;
+          };
+
+          const runnable = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: {
+                target: ts.ScriptTarget.ES2022,
+                module: ts.ModuleKind.CommonJS,
+                jsx: options.jsx ?? ts.JsxEmit.ReactJSX,
+                jsxImportSource: options.jsxImportSource,
+                esModuleInterop: true,
+                experimentalDecorators: options.experimentalDecorators,
+                useDefineForClassFields: true,
+              },
+            }).outputText;
+          };
+
+          const emitted = (file, options) => {
+            const text = ts.sys.readFile(file) ?? "";
+            return ts.transpileModule(text, {
+              fileName: file,
+              reportDiagnostics: false,
+              compilerOptions: { ...options, noEmit: false, declaration: false, sourceMap: false, inlineSourceMap: false },
+            }).outputText;
+          };
+
+          return {
+            watches: (file) => isProjectFile(resolve(file)) && /\.(c|m)?(ts|tsx|js|jsx)$|tsconfig\.json$/.test(file),
+            check(wants, seq) {
+              const started = Date.now();
+              readConfig();
+              const program = service.getProgram();
+              const files = program
+                .getSourceFiles()
+                .map((sf) => sf.fileName)
+                .filter((f) => isProjectFile(f));
+              const diagnostics = [];
+              const config = [...parsed.errors, ...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
+              for (const d of config) diagnostics.push(toDiagnostic(d));
+              const syntax = {};
+              for (const f of files) {
+                const syn = service.getSyntacticDiagnostics(f);
+                syntax[rel(f)] = syn.length;
+                for (const d of syn) diagnostics.push(toDiagnostic(d));
+                for (const d of service.getSemanticDiagnostics(f)) diagnostics.push(toDiagnostic(d));
+              }
+              const types = files.flatMap((f) => queries(f));
+              const run = {};
+              // Everything under src/ runs, including .js files the type check leaves out.
+              const runnables = new Set(files);
+              const srcDir = join(root, "src");
+              if (ts.sys.directoryExists(srcDir)) {
+                for (const f of ts.sys.readDirectory(srcDir, [".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs"])) runnables.add(resolve(f));
+              }
+              for (const f of runnables) if (!f.endsWith(".d.ts")) run[rel(f)] = runnable(f, parsed.options);
+              const js = {};
+              for (const name of wants.js) {
+                const f = join(root, name);
+                if (existsSync(f)) js[name] = emitted(f, parsed.options);
+              }
+              const dts = {};
+              for (const name of wants.dts) {
+                const f = join(root, name);
+                if (!existsSync(f)) continue;
+                const out = service.getEmitOutput(f, true, true);
+                dts[name] = out.outputFiles.find((o) => o.name.endsWith(".d.ts"))?.text ?? "";
+              }
+              return {
+                seq,
+                ms: Date.now() - started,
+                files: files.map(rel),
+                syntax,
+                diagnostics,
+                types,
+                run,
+                js,
+                dts,
+              };
+            },
+          };
+        }
+      course/panel.js: |
+        // TypeScript course · panel (runs in the preview page).
+        // Shows what course/checker.js reports: the errors, the `// ^?` types, the program's
+        // output and, when asked for, the JavaScript or .d.ts that TypeScript emits.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="errors types output" data-run="src/main.ts"
+        //           data-js="src/menu.ts" data-dts="src/menu.ts"></script>
+        const EVENT = "course:ts";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const modes = new Set((script?.dataset.modes || "errors types output").split(/\s+/).filter(Boolean));
+        const entry = script?.dataset.run || "src/main.ts";
+        const jsFiles = (script?.dataset.js || "").split(/\s+/).filter(Boolean);
+        const dtsFiles = (script?.dataset.dts || "").split(/\s+/).filter(Boolean);
+        if (jsFiles.length) modes.add("js");
+        if (dtsFiles.length) modes.add("dts");
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #16181d; }
+        #ts-panel { font: 13px/1.55 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d7dae0; padding: 0 0 24px; }
+        #ts-panel * { box-sizing: border-box; }
+        .tsp-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f2229; border-bottom: 1px solid #2c313a; }
+        .tsp-logo { font-weight: 700; color: #fff; background: #3178c6; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+        .tsp-title { font-weight: 600; color: #fff; }
+        .tsp-status { margin-left: auto; font-weight: 600; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+        .tsp-status[data-state="ok"] { background: #1f3d2a; color: #8fe0a6; }
+        .tsp-status[data-state="errors"] { background: #4a1f24; color: #ffb3b8; }
+        .tsp-status[data-state="waiting"] { background: #2c313a; color: #c2c7d0; }
+        .tsp-sec { padding: 10px 14px 4px; }
+        .tsp-sec-title { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9aa3b2; margin: 0 0 6px; font-weight: 600; }
+        .tsp-empty { color: #8a93a3; }
+        .tsp-err { border-left: 3px solid #f2545b; background: #22191c; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-loc { color: #ff9ca1; }
+        .tsp-code { color: #c2c7d0; margin-left: 8px; }
+        .tsp-msg { white-space: pre-wrap; overflow-wrap: anywhere; color: #f1f2f4; }
+        .tsp-type { border-left: 3px solid #4ea1ff; background: #182130; padding: 6px 10px; margin: 0 0 6px; border-radius: 0 4px 4px 0; }
+        .tsp-type-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #e8f1ff; }
+        .tsp-docs { white-space: pre-wrap; color: #b9c4d6; margin-top: 4px; font-family: system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", sans-serif; }
+        .tsp-out { white-space: pre-wrap; overflow-wrap: anywhere; padding: 2px 10px; border-left: 3px solid #3a404b; margin: 0 0 2px; }
+        .tsp-out[data-level="warn"] { border-color: #e0a800; color: #ffe08a; }
+        .tsp-out[data-level="error"] { border-color: #f2545b; color: #ffb3b8; }
+        .tsp-pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #1d2027; border: 1px solid #2c313a; border-radius: 4px; padding: 8px 10px; margin: 0 0 8px; color: #e6e6e6; }
+        .tsp-file { color: #9aa3b2; margin: 0 0 4px; }
+        .tsp-kw { color: #c792ea; } .tsp-str { color: #c3e88d; } .tsp-num { color: #f78c6c; } .tsp-com { color: #7f8a99; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        const appTemplate = document.getElementById("app")?.cloneNode(true) ?? null;
+        const panel = el("section", { id: "ts-panel", "data-testid": "ts-panel", "data-seq": "0", "aria-label": "TypeScript" });
+        document.body.append(panel);
+
+        const status = el("span", { class: "tsp-status", "data-testid": "ts-status", "data-state": "waiting", "data-count": "" }, "checking…");
+        panel.append(el("div", { class: "tsp-head" }, el("span", { class: "tsp-logo" }, "TS"), el("span", { class: "tsp-title" }, "TypeScript"), status));
+
+        const sections = {};
+        const addSection = (mode, title) => {
+          const body = el("div", { "data-testid": `ts-${mode}` });
+          sections[mode] = body;
+          panel.append(el("div", { class: "tsp-sec" }, el("h2", { class: "tsp-sec-title" }, title), body));
+        };
+        const TITLES = { errors: "Errors", types: "Types", output: "Output", js: "JavaScript output", dts: "Declaration output" };
+        // Sections appear in the order data-modes names them.
+        for (const mode of modes) if (TITLES[mode]) addSection(mode, TITLES[mode]);
+
+        // ---------------------------------------------------------------- rendering
+        const short = (file) => file.replace(/^src\//, "");
+        const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+        function renderErrors(diagnostics) {
+          const errors = diagnostics.filter((d) => d.category === "error");
+          status.dataset.state = errors.length ? "errors" : "ok";
+          status.dataset.count = String(errors.length);
+          status.textContent = errors.length ? `✖ ${plural(errors.length, "error", "errors")}` : "✓ No errors";
+          const body = sections.errors;
+          if (!body) return;
+          body.dataset.count = String(errors.length);
+          if (!errors.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "No errors."));
+            return;
+          }
+          body.replaceChildren(
+            ...errors.map((d, i) =>
+              el(
+                "div",
+                { class: "tsp-err", "data-testid": `ts-error-${i + 1}`, "data-code": d.code, "data-file": d.file, "data-line": d.line },
+                el("div", {}, el("span", { class: "tsp-loc" }, d.line ? `${short(d.file)}:${d.line}:${d.col}` : short(d.file)), el("span", { class: "tsp-code" }, `TS${d.code}`)),
+                el("div", { class: "tsp-msg" }, d.message),
+              ),
+            ),
+          );
+        }
+
+        function renderTypes(types) {
+          const body = sections.types;
+          if (!body) return;
+          body.dataset.count = String(types.length);
+          if (!types.length) {
+            body.replaceChildren(el("div", { class: "tsp-empty" }, "Write // ^? under a name to see its type."));
+            return;
+          }
+          body.replaceChildren(
+            ...types.map((t, i) =>
+              el(
+                "div",
+                { class: "tsp-type", "data-testid": `ts-type-${i + 1}`, "data-type": t.text, "data-file": t.file, "data-line": t.line },
+                el("div", { class: "tsp-type-text" }, t.text || "(no type here)"),
+                t.docs || t.tags.length ? el("div", { class: "tsp-docs" }, [t.docs, ...t.tags].filter(Boolean).join("\n")) : null,
+              ),
+            ),
+          );
+        }
+
+        const KEYWORDS = new Set("const let var function return export import from class extends new this if else for of in while switch case break default async await typeof void null undefined true false throw try catch interface type enum declare readonly private public protected static get set as satisfies keyof namespace module require exports super".split(" "));
+        function highlight(code) {
+          const out = [];
+          const token = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b\d[\d_]*(?:\.\d+)?n?\b)|([A-Za-z_$][\w$]*)/g;
+          let last = 0;
+          for (const m of code.matchAll(token)) {
+            if (m.index > last) out.push(code.slice(last, m.index));
+            const [text, com, str, num, word] = m;
+            if (com) out.push(el("span", { class: "tsp-com" }, text));
+            else if (str) out.push(el("span", { class: "tsp-str" }, text));
+            else if (num) out.push(el("span", { class: "tsp-num" }, text));
+            else if (word && KEYWORDS.has(word)) out.push(el("span", { class: "tsp-kw" }, text));
+            else out.push(text);
+            last = m.index + text.length;
+          }
+          out.push(code.slice(last));
+          return out;
+        }
+
+        function renderEmit(mode, map, files, ext) {
+          const body = sections[mode];
+          if (!body) return;
+          body.replaceChildren(
+            ...files.map((file, i) =>
+              el(
+                "div",
+                { "data-testid": `ts-${mode}-${i + 1}`, "data-file": file },
+                el("div", { class: "tsp-file" }, short(file).replace(/\.(c|m)?tsx?$/, ext)),
+                el("pre", { class: "tsp-pre" }, highlight((map[file] ?? "").replace(/\n+$/, ""))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- output
+        function inspect(value, depth = 0, seen = new Set()) {
+          const t = typeof value;
+          if (t === "string") return depth === 0 ? value : `'${value}'`;
+          if (t === "number" || t === "boolean") return String(value);
+          if (t === "bigint") return `${value}n`;
+          if (t === "undefined") return "undefined";
+          if (t === "symbol") return value.toString();
+          if (t === "function") return value.toString().startsWith("class") ? `[class ${value.name || "(anonymous)"}]` : `[Function: ${value.name || "(anonymous)"}]`;
+          if (value === null) return "null";
+          if (value instanceof Error) return `${value.name}: ${value.message}`;
+          if (value instanceof Date) return Number.isNaN(value.getTime()) ? "Invalid Date" : value.toISOString();
+          if (value instanceof Promise) return "Promise { <pending> }";
+          if (seen.has(value)) return "[Circular]";
+          if (depth > 2) return Array.isArray(value) ? "[Array]" : "[Object]";
+          seen.add(value);
+          try {
+            if (Array.isArray(value)) {
+              if (!value.length) return "[]";
+              return `[ ${value.map((v) => inspect(v, depth + 1, seen)).join(", ")} ]`;
+            }
+            if (value instanceof Map) {
+              const items = [...value].map(([k, v]) => `${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+              return `Map(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            if (value instanceof Set) {
+              const items = [...value].map((v) => inspect(v, depth + 1, seen));
+              return `Set(${value.size}) {${items.length ? ` ${items.join(", ")} ` : ""}}`;
+            }
+            const proto = Object.getPrototypeOf(value);
+            const name = proto && proto !== Object.prototype && proto.constructor?.name ? `${proto.constructor.name} ` : proto === null ? "[Object: null prototype] " : "";
+            const keys = Object.keys(value);
+            if (!keys.length) return `${name}{}`;
+            const items = keys.map((k) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`}: ${inspect(value[k], depth + 1, seen)}`);
+            return `${name}{ ${items.join(", ")} }`;
+          } finally {
+            seen.delete(value);
+          }
+        }
+
+        let runGeneration = 0;
+        let outputLines = [];
+        function renderOutput(note) {
+          const body = sections.output;
+          if (!body) return;
+          body.dataset.count = String(outputLines.length);
+          const rows = outputLines.map((line, i) => el("div", { class: "tsp-out", "data-testid": `ts-out-${i + 1}`, "data-level": line.level }, line.text));
+          if (!rows.length) rows.push(el("div", { class: "tsp-empty" }, note || "Nothing printed."));
+          body.replaceChildren(...rows);
+        }
+
+        const RESOLVE_EXT = ["", ".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx", "/index.js"];
+        function resolveModule(from, spec, sources) {
+          const base = from.split("/").slice(0, -1);
+          for (const part of spec.split("/")) {
+            if (part === "..") base.pop();
+            else if (part !== ".") base.push(part);
+          }
+          const path = base.join("/");
+          const stem = path.replace(/\.(c|m)?js$/, "");
+          for (const candidate of [...RESOLVE_EXT.map((e) => path + e), ...RESOLVE_EXT.map((e) => stem + e)]) {
+            if (candidate in sources) return candidate;
+          }
+          return null;
+        }
+
+        function runProgram(payload) {
+          const generation = ++runGeneration;
+          outputLines = [];
+          if (!sections.output) return;
+          const sources = payload.run || {};
+          if (!(entry in sources)) {
+            renderOutput(`${entry} not found.`);
+            return;
+          }
+          const broken = Object.entries(payload.syntax || {}).filter(([, n]) => n > 0).map(([f]) => short(f));
+          if (broken.length) {
+            renderOutput(`Not run: fix the syntax error in ${broken.join(", ")} first.`);
+            return;
+          }
+          const push = (level) => (...args) => {
+            if (generation !== runGeneration) return;
+            outputLines.push({ level, text: args.map((a) => inspect(a)).join(" ") });
+            if (outputLines.length > 200) outputLines.shift();
+            scheduleOutput();
+          };
+          const sandboxConsole = { log: push("log"), info: push("log"), debug: push("log"), warn: push("warn"), error: push("error"), dir: push("log"), table: push("log") };
+          // Fresh #app for every run, so a program can render into it from scratch.
+          const app = document.getElementById("app");
+          if (app && appTemplate) app.replaceWith(appTemplate.cloneNode(true));
+          const cache = {};
+          const load = (path) => {
+            if (cache[path]) return cache[path].exports;
+            const module = { exports: {} };
+            cache[path] = module;
+            const require = (spec) => {
+              if (!spec.startsWith(".") && !spec.startsWith("/")) {
+                const known = window.__courseModules?.[spec];
+                if (known) return known;
+                throw new Error(`Cannot find module '${spec}'`);
+              }
+              const target = resolveModule(path, spec, sources);
+              if (!target) throw new Error(`Cannot find module '${spec}'`);
+              return load(target);
+            };
+            const fn = new Function("exports", "require", "module", "console", `${sources[path]}\n//# sourceURL=${path}`);
+            fn(module.exports, require, module, sandboxConsole);
+            return module.exports;
+          };
+          try {
+            load(entry);
+          } catch (error) {
+            if (generation === runGeneration) outputLines.push({ level: "error", text: `Uncaught ${inspect(error)}` });
+          }
+          renderOutput();
+        }
+
+        let outputTimer = null;
+        function scheduleOutput() {
+          if (outputTimer) return;
+          outputTimer = setTimeout(() => {
+            outputTimer = null;
+            renderOutput();
+          }, 30);
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = 0;
+        function render(payload) {
+          if (!payload || payload.seq < lastSeq) return;
+          lastSeq = payload.seq;
+          panel.dataset.seq = String(payload.seq);
+          renderErrors(payload.diagnostics || []);
+          renderTypes(payload.types || []);
+          renderEmit("js", payload.js || {}, jsFiles, ".js");
+          renderEmit("dts", payload.dts || {}, dtsFiles, ".d.ts");
+          runProgram(payload);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { js: jsFiles, dts: dtsFiles });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>TypeScript course</title>
+          </head>
+          <body>
+            <div id="app" data-testid="app"></div>
+            <script type="module" src="/course/panel.js" data-modes="errors types output"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "typescript-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "typescript": "6.0.3",
+            "vite": "5.4.21"
+          }
+        }
+      src/inbox.ts: |
+        // online အော်ဒါ app ကနေ ဝင်လာတဲ့ စာတွေ (JSON စာသား)
+        export const messages = [
+          '{"item":"လက်ဖက်ရည်","cups":2}',
+          '{"cups":1}',
+          '{"item":',
+        ];
+      src/main.ts: |
+        import { messages } from "./inbox";
+
+        function readItem(text: string): string {
+          const data = JSON.parse(text);
+          return data.item;
+        }
+
+        for (const text of messages) {
+          try {
+            console.log(readItem(text));
+          } catch (error) {
+            console.log("ဖတ်လို့ မရပါ");
+          }
+        }
+      tsconfig.json: |
+        {
+          "compilerOptions": {
+            "target": "es2022",
+            "module": "preserve",
+            "strict": true,
+            "noEmit": true,
+            "skipLibCheck": true,
+            "moduleDetection": "force"
+          },
+          "include": ["src"]
+        }
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseTypeChecker from "./course/checker.js";
+
+        export default defineConfig({
+          plugins: [courseTypeChecker()],
+        });
+  whiteboardAssets:
+    # The ladder: the widest type at the top, the narrowest at the bottom; any is not on it.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 155,
+        width: 760,
+        height: 50,
+        text: "အကျယ်ဆုံး type ကနေ အကျဉ်းဆုံးထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-unknown-box,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 420,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-unknown-text,
+        kind: text,
+        x: 295,
+        y: 242,
+        width: 400,
+        height: 36,
+        text: "unknown · တန်ဖိုး အားလုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 300,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-middle-box,
+        kind: rectangle,
+        x: 270,
+        y: 345,
+        width: 420,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-middle-text,
+        kind: text,
+        x: 295,
+        y: 362,
+        width: 400,
+        height: 36,
+        text: "string · number · object",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 420,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-literal-box,
+        kind: rectangle,
+        x: 270,
+        y: 465,
+        width: 420,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-literal-text,
+        kind: text,
+        x: 295,
+        y: 482,
+        width: 400,
+        height: 36,
+        text: '"လက်ဖက်ရည်" · 1500',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-down-note,
+        kind: text,
+        x: 712,
+        y: 482,
+        width: 375,
+        height: 36,
+        text: "အောက်ဆင်းလေ တန်ဖိုး နည်းလေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-any-box,
+        kind: rectangle,
+        x: 770,
+        y: 225,
+        width: 300,
+        height: 130,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-any-text,
+        kind: text,
+        x: 795,
+        y: 240,
+        width: 100,
+        height: 36,
+        text: "any",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l-any-sub,
+        kind: text,
+        x: 795,
+        y: 290,
+        width: 260,
+        height: 36,
+        text: "type စစ်တာကို ပိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-arrow-3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 540,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-never-box,
+        kind: rectangle,
+        x: 270,
+        y: 580,
+        width: 420,
+        height: 65,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-never-text,
+        kind: text,
+        x: 295,
+        y: 594,
+        width: 400,
+        height: 36,
+        text: "never · တန်ဖိုး မရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-never-note,
+        kind: text,
+        x: 712,
+        y: 594,
+        width: 380,
+        height: 36,
+        text: "အမြဲ throw လုပ်တဲ့ function",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 3110
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: "unknown နဲ့ never ဆိုတာ"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ type of တို့၊ in တို့၊ instance of တို့လို JavaScript ရဲ့ စစ်ဆေးချက်တွေနဲ့
+      union type ကို narrow လုပ်ခဲ့ပါတယ်။ ဒီ lesson မှာတော့ ဘာ type မှန်း လုံးဝ မသိရတဲ့ တန်ဖိုးကို ဘေးကင်းကင်း
+      သုံးနည်းနဲ့၊ တန်ဖိုး တစ်ခုမှ မရှိနိုင်တဲ့ type အကြောင်းကို ကြည့်သွားပါမယ်။ [[mark:draw-ladder-top]]
+      type တွေကို အကျယ်ဆုံးကနေ အကျဉ်းဆုံးထိ လှေကားထစ်လို စီကြည့်ရအောင်။ အပေါ်ဆုံးမှာ unknown type ရှိပါတယ်။
+      unknown ဆိုတာ ဘာ တန်ဖိုး မဆို ဖြစ်နိုင်တယ်လို့ ပြောတဲ့ type ဖြစ်လို့၊ JavaScript ရဲ့ တန်ဖိုး အားလုံး
+      သူ့ထဲကို ဝင်ပါတယ်။ [[mark:draw-ladder-middle]] သူ့အောက်မှာ string တို့၊ number တို့၊ object တို့လို နေ့တိုင်း
+      သုံးနေတဲ့ type တွေ ရှိပါတယ်။ [[mark:draw-ladder-literal]] အဲဒီ အောက်မှာတော့ လက်ဖက်ရည် ဆိုတဲ့ စာသား
+      တစ်ခုတည်းကိုပဲ လက်ခံတဲ့ literal type လို ပိုကျဉ်းတဲ့ type တွေ ရှိပါတယ်။ ဆိုတော့ လှေကားအတိုင်း အောက်ကို
+      ဆင်းလေ၊ လက်ခံတဲ့ တန်ဖိုး နည်းလေ ဖြစ်ပါတယ်။ [[mark:draw-any]] any type ကတော့ ဒီ လှေကားပေါ်မှာ နေရာ
+      မရှိပါဘူး။ any ဆိုတာ type စစ်တာကို ပိတ်လိုက်တာ ဖြစ်လို့၊ ဘာ တန်ဖိုးကို ထည့်ထည့် လက်ခံသလို၊ သူ့ကို
+      ဘာ လုပ်လုပ် TypeScript က ဘာမှ မပြောတော့ပါဘူး။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: unknown and never (the widest and the narrowest type)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (unknown, never)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#unknown",
+        }
+      - {
+          title: "TypeScript Handbook: Everyday Types (any)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#any",
+        }
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [l-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-ladder-top
+        type: whiteboard.apply
+        at: { mark: draw-ladder-top }
+        upsertIds: [l-unknown-box, l-unknown-text]
+        drawMs: 2000
+      - id: draw-ladder-middle
+        type: whiteboard.apply
+        at: { mark: draw-ladder-middle }
+        upsertIds: [l-arrow-1, l-middle-box, l-middle-text]
+        drawMs: 2200
+      - id: draw-ladder-literal
+        type: whiteboard.apply
+        at: { mark: draw-ladder-literal }
+        upsertIds: [l-arrow-2, l-literal-box, l-literal-text, l-down-note]
+        drawMs: 3000
+      - id: draw-any
+        type: whiteboard.apply
+        at: { mark: draw-any }
+        upsertIds: [l-any-box, l-any-text, l-any-sub]
+        drawMs: 2200
+
+  - id: starter
+    narration: >
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-inbox]] ဆိုင်က online အော်ဒါ app
+      တစ်ခုနဲ့ ချိတ်ထားပြီး၊ app က အော်ဒါတွေကို JSON စာသား အနေနဲ့ ပို့ပါတယ်။ ဒီ ဖိုင်ထဲမှာ အဲဒီလို ဝင်လာတဲ့ စာ
+      သုံးစောင် ရှိပါတယ်။ [[mark:select-good]] ပထမ စာမှာ
+      လက်ဖက်ရည် နှစ်ခွက် ဆိုတဲ့ အော်ဒါ ပါပါတယ်။ [[mark:select-no-item]] ဒုတိယ စာမှာတော့ ခွက်ရေ ပါပေမယ့်
+      ပစ္စည်း နာမည် မပါပါဘူး။ [[mark:select-broken]] တတိယ စာကတော့ တစ်ဝက်မှာ ပြတ်သွားတဲ့ JSON ပါ။ program
+      ရဲ့ အပြင်ကနေ ဝင်လာတဲ့ data ဆိုတာ ဒီလိုပဲ ဘာ ဖြစ်လာမလဲ ကြိုမသိနိုင်ပါဘူး။ [[mark:open-main]] main
+      ဖိုင်ကို ကြည့်ရအောင်။ [[mark:select-read-item]] ဒီ function က JSON စာသားကို JSON parse နဲ့ object
+      ပြန်ပြောင်းပြီး၊ ပစ္စည်း နာမည်ကို string အနေနဲ့ ပြန်ပေးပါတယ်။ [[mark:select-loop]] အောက်က loop ကတော့
+      စာ တစ်ခုချင်းစီကို ဖတ်ပြီး ထုတ်ပြပါတယ်။ [[mark:select-catch-log]] ဖတ်လို့ မရတဲ့ စာ ဆိုရင်တော့ catch
+      ထဲကို ရောက်ပြီး၊ ဖတ်လို့ မရပါ ဆိုတဲ့ စာကို ပြပါတယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: unknown (values from outside the program)",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "MDN: JSON.parse()",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: close-board }
+        open: false
+      - id: open-inbox
+        type: workspace.openFile
+        at: { mark: open-inbox }
+        path: src/inbox.ts
+      - id: select-good
+        type: editor.select
+        at: { mark: select-good }
+        target: { file: src/inbox.ts, text: '''{"item":"လက်ဖက်ရည်","cups":2}''', occurrence: 1 }
+      - id: select-no-item
+        type: editor.select
+        at: { mark: select-no-item }
+        target: { file: src/inbox.ts, text: '''{"cups":1}''', occurrence: 1 }
+      - id: select-broken
+        type: editor.select
+        at: { mark: select-broken }
+        target: { file: src/inbox.ts, text: '''{"item":'',', occurrence: 1 }
+      - id: open-main
+        type: workspace.openFile
+        at: { mark: open-main }
+        path: src/main.ts
+      - id: select-read-item
+        type: editor.select
+        at: { mark: select-read-item }
+        target:
+          {
+            file: src/main.ts,
+            text: "function readItem(text: string): string {\n  const data = JSON.parse(text);\n  return data.item;\n}",
+            occurrence: 1,
+          }
+      - id: select-loop
+        type: editor.select
+        at: { mark: select-loop }
+        target: { file: src/main.ts, text: "    console.log(readItem(text));", occurrence: 1 }
+      - id: select-catch-log
+        type: editor.select
+        at: { mark: select-catch-log }
+        target:
+          {
+            file: src/main.ts,
+            text: "  } catch (error) {\n    console.log(\"ဖတ်လို့ မရပါ\");",
+            occurrence: 1,
+          }
+
+  - id: panel
+    narration: >
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Errors မှာ ဘာမှ မရှိပါဘူး။ ဒါပေမဲ့ Output ကို ကြည့်ပါ။
+      [[mark:read-output]] ပထမ စာက လက်ဖက်ရည် ဆိုပြီး မှန်ပေမယ့်၊ ဒုတိယ စာမှာ undefined ထွက်လာပါတယ်။
+      function က string ပြန်ပေးမယ်လို့ ကတိ ပေးထားပေမယ့်၊ တကယ်တော့ undefined ကို ပြန်ပေးလိုက်တာပါ။ တတိယ
+      စာကတော့ catch ထဲကို ရောက်သွားပါတယ်။ [[mark:read-why-any]] ဒါဆို ဒုတိယ စာရဲ့ ပြဿနာကို TypeScript က
+      ဘာလို့ မပြောတာလဲ။ JSON parse က any type ကို ပြန်ပေးလို့ပါ။ any ဖြစ်သွားတဲ့ တန်ဖိုးကနေ ဘာ property
+      ပဲ ယူယူ၊ TypeScript က လုံးဝ မစစ်တော့လို့ ကိုယ့် program ထဲကို undefined က လွတ်လွတ်လပ်လပ်
+      ဝင်လာတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: What's the difference between unknown and any?",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript lib: JSON.parse returns any",
+          url: "https://github.com/microsoft/TypeScript/blob/main/src/lib/es5.d.ts",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: panel-ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-no-errors
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 500 }
+      - id: expect-output-three
+        type: expect.preview
+        at: { afterAction: expect-no-errors }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-output }
+        attribute: { name: data-count, value: "3" }
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-tea
+        type: expect.preview
+        at: { afterAction: expect-output-three }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-1 }
+        textContains: "လက်ဖက်ရည်"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-undefined
+        type: expect.preview
+        at: { afterAction: expect-tea }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "undefined"
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-cannot-read
+        type: expect.preview
+        at: { afterAction: expect-undefined }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "ဖတ်လို့ မရပါ"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: unknown
+    chapter: "any အစား unknown"
+    narration: >
+      [[mark:select-parse]] ဒါကြောင့် JSON parse က ပြန်ပေးတဲ့ ဒီ တန်ဖိုးကို any အနေနဲ့ မထားတော့ဘဲ unknown
+      အနေနဲ့ လက်ခံပါမယ်။ [[mark:type-unknown]] ဒါအတွက် variable နာမည်ရဲ့ နောက်မှာ unknown type
+      annotation တစ်ခု ထည့်ပေးလိုက်ရုံပါပဲ။ [[mark:read-unknown-error]] data က unknown type ဖြစ်နေတယ် ဆိုတဲ့ error တစ်ခု ချက်ချင်း
+      ပေါ်လာပါပြီ။ unknown ကလည်း any လိုပဲ ဘာ တန်ဖိုး မဆို လက်ခံပါတယ်။ ဒါပေမဲ့ any နဲ့ မတူတာက၊ ဘာ တန်ဖိုး
+      ဖြစ်လဲ မစစ်ရသေးခင် သူ့ property ကို ယူတာ၊ method ခေါ်တာ ဘာမှ လုပ်ခွင့် မပေးတာပါ။ ဒါကြောင့် ပြင်ပကနေ
+      ဝင်လာတဲ့ data အတွက် unknown က any ထက် အများကြီး ဘေးကင်းပါတယ်။ [[mark:read-unknown-output]] Output
+      ကတော့ မပြောင်းပါဘူး။ type annotation က program run ပုံကို မပြောင်းဘဲ၊ စစ်ဖို့ လိုတဲ့ နေရာကိုပဲ
+      ပြပေးတာ ဖြစ်လို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: The widest type, unknown; unknown vs any",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript 3.0 release notes: the unknown type",
+          url: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-0.html#new-unknown-top-type",
+        }
+    actions:
+      - id: select-parse
+        type: editor.select
+        at: { mark: select-parse }
+        target: { file: src/main.ts, text: "const data = JSON.parse(text);", occurrence: 1 }
+      - id: type-unknown
+        type: editor.type
+        at: { mark: type-unknown }
+        target: { file: src/main.ts, after: "  const data", occurrence: 1 }
+        text: ": unknown"
+      - id: expect-unknown-error
+        type: expect.preview
+        at: { afterAction: type-unknown }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-unknown-code
+        type: expect.preview
+        at: { afterAction: expect-unknown-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'data' is of type 'unknown'."
+        retry: { maxAttempts: 2, delayMs: 300 }
+      - id: expect-still-undefined
+        type: expect.preview
+        at: { afterAction: expect-unknown-code }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "undefined"
+        retry: { maxAttempts: 2, delayMs: 300 }
+
+  - id: guard
+    chapter: "တစ်ဆင့်ချင်း narrow လုပ်ခြင်း"
+    narration: >
+      [[mark:type-guard]] ဒါဆို data က ပစ္စည်း နာမည် ပါတဲ့ object ဟုတ်မဟုတ် စစ်ပေးမယ့် function တစ်ခု
+      ရေးကြည့်ရအောင်။ parameter က unknown ဖြစ်ပြီး၊ ပထမ အဆင့်အနေနဲ့ object ဟုတ်မဟုတ်ကို type of နဲ့
+      စစ်ပါမယ်။ function နာမည်ရဲ့ အောက်မှာ query comment လည်း ထည့်ထားပါတယ်။ [[mark:read-guard-1]] Types
+      အပိုင်းကို ကြည့်ပါ။ ပြန်ပေးမယ့် type နေရာမှာ boolean အစား type predicate လို့ ခေါ်တဲ့ ပုံစံ
+      ပေါ်နေပါတယ်။ ဆိုလိုတာက ဒီ function က true ပြန်ပေးရင်၊ value က object ဒါမှမဟုတ် null ဖြစ်တယ် ဆိုတာပါ။
+      TypeScript ၅.၅ ကစပြီး ဒီလို စစ်ပေးတဲ့ function ရဲ့ type predicate ကို TypeScript က သူ့ဘာသာ infer
+      လုပ်ပေးပါတယ်။ null ပါနေတာကတော့ JavaScript မှာ null ကို type of နဲ့ စစ်ရင် object လို့ ထွက်လို့ပါ။
+      [[mark:type-not-null]] ဒါကြောင့် null မဟုတ်ဘူး ဆိုတဲ့ အဆင့်ကို ထပ်ထည့်ပါမယ်။ [[mark:read-guard-2]]
+      ဒီတစ်ခါ object တစ်ခုတည်း ကျန်ပါတော့တယ်။ [[mark:type-in-item]] နောက်ဆုံး အဆင့်အနေနဲ့ item ဆိုတဲ့
+      property ရှိမရှိကို in နဲ့ စစ်ပါမယ်။ [[mark:read-guard-3]] အခု item property ပါတဲ့ object လို့
+      ပြနေပါတယ်။ Record ဆိုတာ key နဲ့ value ရဲ့ type ကို ပြောတဲ့ type ဖြစ်ပြီး၊ နောက် lesson တွေမှာ
+      အသေးစိတ် ကြည့်ပါမယ်။ item ရဲ့ type ကတော့ unknown ဖြစ်နေတုန်းပါ။ ရှိတာ သေချာပေမယ့်၊ ဘာ တန်ဖိုးလဲ
+      ဆိုတာကို မစစ်ရသေးလို့ပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Narrowing unknown to a value; reusable type guards",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "Announcing TypeScript 5.5: inferred type predicates",
+          url: "https://devblogs.microsoft.com/typescript/announcing-typescript-5-5/#inferred-type-predicates",
+        }
+      - {
+          title: 'MDN: typeof null is "object"',
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/typeof#typeof_null",
+        }
+    actions:
+      - id: type-guard
+        type: editor.type
+        at: { mark: type-guard }
+        target:
+          { file: src/main.ts, after: "import { messages } from \"./inbox\";\n\n", occurrence: 1 }
+        text: "function hasItem(value: unknown) {\n  //     ^?\n  return typeof value === \"object\";\n}\n\n"
+        cadence: block
+      - id: expect-guard-1
+        type: expect.preview
+        at: { afterAction: type-guard }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          { name: data-type, value: "function hasItem(value: unknown): value is object | null" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-not-null
+        type: editor.type
+        at: { mark: type-not-null }
+        target: { file: src/main.ts, after: '  return typeof value === "object"', occurrence: 1 }
+        text: " && value !== null"
+        cadence: fast-explainer
+      - id: expect-guard-2
+        type: expect.preview
+        at: { afterAction: type-not-null }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute: { name: data-type, value: "function hasItem(value: unknown): value is object" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: type-in-item
+        type: editor.type
+        at: { mark: type-in-item }
+        target: { file: src/main.ts, after: " && value !== null", occurrence: 1 }
+        text: ' && "item" in value'
+        cadence: fast-explainer
+      - id: expect-guard-3
+        type: expect.preview
+        at: { afterAction: type-in-item }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-1 }
+        attribute:
+          {
+            name: data-type,
+            value: 'function hasItem(value: unknown): value is object & Record<"item", unknown>',
+          }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: use-guard
+    narration: >
+      [[mark:type-use-guard]] အခု ဒီ function ကို ပစ္စည်း နာမည် ဖတ်တဲ့ function ထဲမှာ သုံးပါမယ်။ စစ်လို့
+      မအောင်ရင် မသိပါ ဆိုတဲ့ စာနဲ့ စောစော return လုပ်ပါမယ်။ [[mark:read-use-guard]] item မပါတဲ့ ဒုတိယ စာက
+      ဒီ စစ်ဆေးချက်မှာ ကျသွားလို့၊ Output ရဲ့ ဒုတိယ line က undefined အစား မသိပါ ဖြစ်သွားပါပြီ။ error ကလည်း
+      ပြောင်းသွားပါတယ်။ data ကို သုံးလို့ ရသွားပေမယ့်၊ item ရဲ့ type က unknown ဖြစ်နေလို့ string ပြန်ပေးရမယ့်
+      နေရာမှာ ပြန်ပေးလို့ မရဘူးလို့ ပြောနေတာပါ။ [[mark:type-item-string]] ဒါကြောင့် item က string
+      ဟုတ်မဟုတ်ကိုပါ type of နဲ့ စစ်ပါမယ်။ [[mark:read-use-guard-fixed]] error မရှိတော့ပါဘူး။ ပြင်ပကနေ
+      ဝင်လာတဲ့ data ကို ဒီလို တစ်ဆင့်ချင်း စစ်ပြီးမှ သုံးရတာက unknown ရဲ့ အဓိက အလုပ်ပါ။ စစ်ရမယ့် အချက်တွေ
+      များလာရင်တော့ ဒီလို code ကို ကိုယ်တိုင် မရေးဘဲ Zod လို library ကို သုံးကြပြီး၊ course ရဲ့ နောက်ပိုင်းမှာ
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Narrowing unknown to a value",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (using type predicates)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#using-type-predicates",
+        }
+    actions:
+      - id: type-use-guard
+        type: editor.type
+        at: { mark: type-use-guard }
+        target:
+          { file: src/main.ts, after: "  const data: unknown = JSON.parse(text);\n", occurrence: 1 }
+        text: "  if (!hasItem(data)) return \"မသိပါ\";\n"
+        cadence: fast-explainer
+      - id: expect-use-guard-error
+        type: expect.preview
+        at: { afterAction: type-use-guard }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "Type 'unknown' is not assignable to type 'string'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-unknown-item
+        type: expect.preview
+        at: { afterAction: expect-use-guard-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "မသိပါ"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-item-string
+        type: editor.type
+        at: { mark: type-item-string }
+        target:
+          { file: src/main.ts, after: "  if (!hasItem(data)) return \"မသိပါ\";\n", occurrence: 1 }
+        text: "  if (typeof data.item !== \"string\") return \"မသိပါ\";\n"
+        cadence: line-by-line
+      - id: expect-use-guard-clean
+        type: expect.preview
+        at: { afterAction: type-item-string }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: catch
+    chapter: "catch ထဲက error"
+    narration: >
+      [[mark:select-catch]] အခု catch ကို ကြည့်ရအောင်။ ဖတ်လို့ မရပါ ဆိုရုံနဲ့ မလုံလောက်လို့၊ ဘာကြောင့် ဖတ်လို့
+      မရလဲ ဆိုတာပါ ပြချင်ပါတယ်။ [[mark:type-message]] ဒါကြောင့် ဒီ စာရဲ့ နောက်မှာ error ရဲ့ message
+      ကိုပါ ထည့်ပြီး ထုတ်ပြပါမယ်။ [[mark:read-catch-error]] Output ရဲ့ တတိယ line မှာ JSON စာ မဆုံးခင် ပြတ်သွားတယ် ဆိုတဲ့
+      message ပါလာပေမယ့်၊ Errors မှာတော့ error ဟာ unknown type ဖြစ်နေတယ် ဆိုတဲ့ error ပေါ်လာပါတယ်။
+      run တဲ့ အချိန်မှာ ဒီ error က တကယ် Error object ဖြစ်နေပေမယ့်၊ TypeScript က အဲဒါကို ကြိုမသိနိုင်ပါဘူး။
+      [[mark:read-catch-why]] ဘာကြောင့်လဲဆိုတော့ JavaScript မှာ Error object တင် မကဘဲ၊ စာသား ဖြစ်ဖြစ်၊ ဂဏန်း ဖြစ်ဖြစ်၊ ဘာကိုမဆို
+      throw လုပ်လို့ ရလို့ပါ။ ဒါကြောင့် strict mode မှာ catch ထဲက error ကို unknown လို့ သတ်မှတ်ထားတာပါ။
+      [[mark:type-instanceof]] ပြီးခဲ့တဲ့ lesson မှာလိုပဲ instance of နဲ့ Error ဟုတ်မဟုတ် စစ်ပါမယ်။ Error
+      မဟုတ်ရင်တော့ ဒီနေရာမှာ handle လုပ်လို့ မရတဲ့ တန်ဖိုး ဖြစ်လို့ ပြန် throw လုပ်လိုက်ပါမယ်။
+      [[mark:read-catch-fixed]] error ပျောက်သွားပါပြီ။ throw လုပ်တဲ့ line ရဲ့ အောက်မှာ error က Error
+      type ဖြစ်သွားလို့၊ message ကို သုံးလို့ ရသွားတာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: Narrowing errors with instanceof",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TSConfig: useUnknownInCatchVariables (part of strict)",
+          url: "https://www.typescriptlang.org/tsconfig/#useUnknownInCatchVariables",
+        }
+      - {
+          title: "MDN: throw (any expression can be thrown)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/throw",
+        }
+    actions:
+      - id: select-catch
+        type: editor.select
+        at: { mark: select-catch }
+        target: { file: src/main.ts, text: 'console.log("ဖတ်လို့ မရပါ");', occurrence: 1 }
+      - id: type-message
+        type: editor.type
+        at: { mark: type-message }
+        target: { file: src/main.ts, after: '    console.log("ဖတ်လို့ မရပါ"', occurrence: 1 }
+        text: ", error.message"
+      - id: expect-catch-error
+        type: expect.preview
+        at: { afterAction: type-message }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-error-1 }
+        textContains: "'error' is of type 'unknown'."
+        retry: { maxAttempts: 3, delayMs: 600 }
+      - id: expect-message-output
+        type: expect.preview
+        at: { afterAction: expect-catch-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-out-3 }
+        textContains: "ဖတ်လို့ မရပါ Unexpected end of JSON input"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: type-instanceof
+        type: editor.type
+        at: { mark: type-instanceof }
+        target: { file: src/main.ts, after: "  } catch (error) {\n", occurrence: 1 }
+        text: "    if (!(error instanceof Error)) throw error;\n"
+        cadence: line-by-line
+      - id: expect-catch-clean
+        type: expect.preview
+        at: { afterAction: type-instanceof }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "0" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: never
+    chapter: "never type"
+    narration: >
+      [[mark:board-never]] လှေကားကို ပြန်ကြည့်ရအောင်။ [[mark:draw-never]] အောက်ဆုံးမှာ never type
+      ရှိပါတယ်။ never ဆိုတာ တန်ဖိုး တစ်ခုမှ မရှိနိုင်တဲ့ type ပါ။ unknown ထဲကို ဘာ တန်ဖိုး မဆို ဝင်သလို၊ never
+      ထဲကိုတော့ ဘာ တန်ဖိုးမှ ဝင်လို့ မရပါဘူး။ ဒါဆို ဘယ်လို နေရာမှာ တွေ့ရမလဲ။ [[mark:close-ladder]]
+      code ထဲမှာ ကြည့်ရအောင်။ [[mark:type-fail]] ဆက်လုပ်လို့ မရတော့တဲ့ အခါ error ကို throw လုပ်ပေးမယ့်
+      helper function သေးသေးလေး တစ်ခု ရေးပါမယ်။ နာမည်ရဲ့ အောက်မှာ query comment လည်း ထည့်ထားပါတယ်။
+      [[mark:read-fail]] ပြန်ပေးမယ့် type ကို never လို့ ပြနေပါတယ်။ ဒီ function က အမြဲ throw လုပ်တဲ့အတွက်၊
+      ပုံမှန်အတိုင်း ပြီးဆုံးပြီး တန်ဖိုး ပြန်ပေးတာ ဘယ်တော့မှ မဖြစ်လို့ပါ။ void ကတော့ function က ပုံမှန်
+      ပြီးဆုံးပေမယ့် အသုံးဝင်တဲ့ တန်ဖိုး ပြန်မပေးတာ ဖြစ်လို့ အဓိပ္ပာယ် မတူပါဘူး။ [[mark:read-fail-keyword]]
+      တစ်ခု သတိထားရမှာက၊ ဒီ function ကို function keyword နဲ့ ရေးထားရင်တော့ TypeScript က void လို့ပဲ infer
+      လုပ်လို့၊ never ကို ကိုယ်တိုင် ရေးပေးရပါတယ်။ never ကို နောက်ထပ် တွေ့ရတဲ့ နေရာကတော့ union ထဲက type
+      တွေကို တစ်ခုချင်း narrow လုပ်ရင်း ဘာမှ မကျန်တော့တဲ့ နေရာပါ။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: The narrowest type, never; never vs void",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: More on Functions (never)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/functions.html#never",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (the never type)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#the-never-type",
+        }
+    actions:
+      - id: board-never
+        type: whiteboard.apply
+        at: { mark: board-never }
+        open: true
+      - id: draw-never
+        type: whiteboard.apply
+        at: { mark: draw-never }
+        upsertIds: [l-arrow-3, l-never-box, l-never-text, l-never-note]
+        drawMs: 2800
+      - id: close-ladder
+        type: whiteboard.apply
+        at: { mark: close-ladder }
+        open: false
+      - id: type-fail
+        type: editor.type
+        at: { mark: type-fail }
+        target:
+          {
+            file: src/main.ts,
+            after: "    console.log(\"ဖတ်လို့ မရပါ\", error.message);\n  }\n}\n",
+            occurrence: 1,
+          }
+        text: "\nconst fail = (reason: string) => {\n  //  ^?\n  throw new Error(reason);\n};\n"
+        cadence: block
+      - id: expect-fail-never
+        type: expect.preview
+        at: { afterAction: type-fail }
+        timeoutMs: 8000
+        target: { by: testId, value: ts-type-2 }
+        attribute: { name: data-type, value: "const fail: (reason: string) => never" }
+        retry: { maxAttempts: 3, delayMs: 600 }
+
+  - id: recap
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ unknown က ဘာ တန်ဖိုး မဆို လက်ခံတဲ့ အကျယ်ဆုံး type ဖြစ်ပြီး၊
+      မစစ်ရသေးခင် ဘာမှ လုပ်ခွင့် မပေးလို့ any ထက် ဘေးကင်းပါတယ်။ ပြင်ပကနေ ဝင်လာတဲ့ data နဲ့ catch ထဲက error
+      ကို unknown အနေနဲ့ လက်ခံပြီး၊ type of တို့၊ in တို့၊ instance of တို့နဲ့ တစ်ဆင့်ချင်း narrow
+      လုပ်ရပါတယ်။ [[mark:recap-guard]] ဒီ စစ်ဆေးချက်တွေကို function တစ်ခုထဲ ထည့်ထားရင်၊ TypeScript က type
+      predicate ကို infer လုပ်ပေးလို့ နေရာတိုင်းမှာ ပြန်သုံးလို့ ရပါတယ်။ [[mark:recap-never]] never ကတော့
+      တန်ဖိုး တစ်ခုမှ မရှိတဲ့ အကျဉ်းဆုံး type ဖြစ်ပြီး၊ အမြဲ throw လုပ်တဲ့ function က never ကို ပြန်ပေးပါတယ်။
+      နောက် lesson မှာတော့ status လိုမျိုး property တစ်ခုနဲ့ ခွဲခြားလို့ရတဲ့ discriminated union ကို
+      ကြည့်သွားပါမယ်။ အဲဒီမှာ never က union ထဲက type တွေ အကုန် handle လုပ်ပြီးပြီလား စစ်ပေးတာကိုပါ
+      တွေ့ရပါမယ်။
+    sources:
+      - {
+          title: "Total TypeScript Essentials, ch. 5: unknown and never",
+          url: "https://www.totaltypescript.com/books/total-typescript-essentials/unions-literals-and-narrowing",
+        }
+      - {
+          title: "TypeScript Handbook: Narrowing (exhaustiveness checking)",
+          url: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html#exhaustiveness-checking",
+        }
+    actions:
+      - id: select-unknown
+        type: editor.select
+        at: { mark: recap }
+        target: { file: src/main.ts, text: "const data: unknown", occurrence: 1 }
+      - id: select-guard
+        type: editor.select
+        at: { mark: recap-guard }
+        target:
+          {
+            file: src/main.ts,
+            text: '  return typeof value === "object" && value !== null && "item" in value;',
+            occurrence: 1,
+          }
+      - id: select-fail
+        type: editor.select
+        at: { mark: recap-never }
+        target: { file: src/main.ts, text: "const fail = (reason: string) => {", occurrence: 1 }
+      - id: expect-file-unknown
+        type: expect.file
+        at: { afterAction: select-unknown }
+        path: src/main.ts
+        contains: "  const data: unknown = JSON.parse(text);\n  if (!hasItem(data)) return \"မသိပါ\";\n  if (typeof data.item !== \"string\") return \"မသိပါ\";\n"
+      - id: expect-file-guard
+        type: expect.file
+        at: { afterAction: expect-file-unknown }
+        path: src/main.ts
+        contains: '  return typeof value === "object" && value !== null && "item" in value;'
+      - id: expect-file-catch
+        type: expect.file
+        at: { afterAction: expect-file-guard }
+        path: src/main.ts
+        contains: "    if (!(error instanceof Error)) throw error;\n    console.log(\"ဖတ်လို့ မရပါ\", error.message);"
+      - id: expect-file-fail
+        type: expect.file
+        at: { afterAction: expect-file-catch }
+        path: src/main.ts
+        contains: "const fail = (reason: string) => {\n  //  ^?\n  throw new Error(reason);\n};"
+checks:
+  - { type: timing.p95Ms, max: 300 }
