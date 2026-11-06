@@ -1,0 +1,2328 @@
+# Testing course, lesson 06: hooks and test isolation (Burmese).
+#
+# Teaches: tests must not depend on each other or on the order they run in (C15); state shared at
+# module level carries one test's leftovers into the next, so a correct test fails in the suite (and
+# would pass alone) and another passes by luck; Vitest isolates test FILES from each other, but the
+# tests of one file share the module (A07); beforeEach resets the state before every test; the four basic
+# hooks (beforeAll / beforeEach / afterEach / afterAll; Vitest also has aroundEach / aroundAll) and their order, hooks inside a describe
+# apply only there, after-hooks run in reverse (A27), afterEach runs even when a test fails; a hook
+# that throws points at the test set-up, not at the feature (web.dev); fixtures with test.extend give
+# each test its own fresh object (A32), and onTestFinished cleans up next to the set-up.
+#
+# Start state (ws/): src/kitchen.js "old code": a module-level queue with addOrder, nextOrder,
+# queueSize and a resetKitchen nobody calls; src/kitchen.test.js with three tests: "adds an order to
+# the queue" (pass), "serves orders in arrival order" (pass — but it serves test 1's leftover order,
+# the same customer by luck), "starts empty" (fail). Panel (data-modes "tests errors summary"): FAIL,
+# Tests 1 failed | 2 passed (3), "AssertionError: expected 2 to be +0 // Object.is equality" at
+# src/kitchen.test.js:16:23.
+#
+# Then, insert-only:
+#   1. kitchen.test.js, keystrokes, back to back: "beforeEach, " into the vitest import and
+#      ", resetKitchen" into the kitchen import (each state parses; the panel does not change).
+#   2. kitchen.test.js, one block below the imports: beforeEach(() => { resetKitchen(); }) ->
+#      PASS, Tests 3 passed (3).
+# Boards: (A) one shared queue under three tests, then what each test leaves behind (1, 2, and
+# test 3 sees 2), test 2's lucky pass, isolation; (B) the four basic hooks in order, top to bottom, what
+# each is for, describe scope, a throwing hook; (C) a fixture with test.extend (the builder form)
+# and a test that takes its own kitchen, onTestFinished.
+#
+# Build: bun ~/Documents/testing-course-work/tools/build-lesson.ts template.yaml ws testing-course-06-hooks-isolation.yaml
+# Adapted from web.dev Learn Testing (Sam Thorogood et al.; text CC BY 4.0, code Apache 2.0) and the
+# Vitest docs (MIT); every example is new.
+schemaVersion: 1
+lesson:
+  slug: testing-course-06-hooks-isolation
+  title: "Testing course 06: Hook တွေနဲ့ test isolation"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Testing course
+    entryFilePath: src/kitchen.js
+    files:
+      course/panel.js: |
+        // Testing course · Vitest panel (runs in the preview page; pinned, never edited).
+        // Draws what course/vitest-bridge.js reports from the real Vitest, laid out like Vitest's own
+        // terminal reporter: the test tree (✓ × ↓ □), the failures (FAIL, the error line, - Expected /
+        // + Received, the ❯ file:line:col code frame), the Test Files / Tests summary, console output,
+        // snapshots and coverage. Plain DOM only, so the studio's recording replays it exactly.
+        //
+        //   <script type="module" src="/course/panel.js"
+        //           data-modes="tests errors summary console" data-app="src/app.js"></script>
+        //
+        // data-modes: the sections, drawn in the order listed: tests errors summary console snapshot coverage
+        //             lint (ESLint on src/, when the workspace installs eslint).
+        // data-app:   a module whose default export mounts the lesson's UI: mount(rootElement). It is drawn
+        //             in #app above the report and mounted again whenever its code changes.
+        const EVENT = "course:vitest";
+        const script = document.querySelector('script[src$="/course/panel.js"]');
+        const MODES = ["tests", "errors", "summary", "console", "snapshot", "coverage", "lint"];
+        const modes = (script?.dataset.modes || "tests errors summary console").split(/\s+/).filter((m) => MODES.includes(m));
+        const appEntry = script?.dataset.app || "";
+
+        const STYLE = `
+        :root { color-scheme: dark; }
+        html, body { margin: 0; background: #1b1d23; }
+        #app { color-scheme: light; font: 15px/1.5 system-ui, "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif; color: #1f2328; background: #f7f4ee; }
+        #app:empty { display: none; }
+        #vt-panel { font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", monospace; color: #d6d9df; padding: 0 0 24px; }
+        #vt-panel * { box-sizing: border-box; }
+        .vt-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: #23262e; border-bottom: 1px solid #30343d; }
+        .vt-logo { font-weight: 700; color: #1b1d23; background: #fcc72b; border-radius: 4px; padding: 0 6px; font-size: 12px; }
+        .vt-title { font-weight: 600; color: #fff; }
+        .vt-status { margin-left: auto; font-weight: 700; padding: 1px 10px; border-radius: 4px; font-size: 12px; letter-spacing: .04em; }
+        .vt-status[data-state="pass"] { background: #2ea043; color: #fff; }
+        .vt-status[data-state="fail"] { background: #da3633; color: #fff; }
+        .vt-status[data-state="running"], .vt-status[data-state="waiting"] { background: #1f6feb; color: #fff; }
+        .vt-sec { padding: 8px 14px 2px; }
+        .vt-sec[data-empty] { display: none; }
+        .vt-row { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .vt-pass { color: #3fb950; } .vt-fail { color: #f85149; } .vt-skip, .vt-todo { color: #d29922; } .vt-dim { color: #8b929e; }
+        .vt-note { color: #8b929e; }
+        .vt-bar { color: #f85149; margin: 8px 0 6px; white-space: nowrap; overflow: hidden; }
+        .vt-err { margin: 0 0 14px; }
+        .vt-badge { display: inline-block; background: #da3633; color: #fff; font-weight: 700; padding: 0 5px; margin-right: 6px; border-radius: 2px; }
+        .vt-msg { color: #ff7b72; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; }
+        .vt-msg b { font-weight: 700; }
+        .vt-diff { margin: 8px 0 0; }
+        .vt-diff > div { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .vt-exp { color: #3fb950; } .vt-rec { color: #f85149; }
+        .vt-at { color: #79c0ff; margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .vt-at.vt-other { color: #8b929e; margin-top: 0; }
+        .vt-frame { position: relative; overflow-x: auto; font-size: 12px; color: #c9d1d9; margin: 2px 0 0; }
+        .vt-frame > div { white-space: pre; }
+        .vt-frame .vt-ln { color: #6e7681; }
+        .vt-frame .vt-caret { color: #f85149; }
+        .vt-frame .vt-pad::before { content: attr(data-pad); visibility: hidden; }
+        .vt-plugin { color: #d29922; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+        .vt-sum { white-space: pre; }
+        .vt-log { margin: 0 0 8px; }
+        .vt-log-head { color: #8b929e; overflow-wrap: anywhere; }
+        .vt-log-body { white-space: pre-wrap; overflow-wrap: anywhere; color: #e6edf3; }
+        .vt-log[data-type="stderr"] .vt-log-head { color: #d29922; }
+        .vt-snap { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: #23262e; border: 1px solid #30343d; border-radius: 4px; padding: 6px 8px; margin: 4px 0 8px; }
+        .vt-cov { border-collapse: collapse; font-size: 12px; width: 100%; }
+        .vt-cov th, .vt-cov td { padding: 1px 4px; text-align: right; white-space: nowrap; border-bottom: 1px solid #30343d; }
+        .vt-cov th:first-child, .vt-cov td:first-child { text-align: left; }
+        .vt-cov th { color: #8b929e; font-weight: 600; }
+        .vt-cov .vt-low { color: #f85149; } .vt-cov .vt-mid { color: #d29922; } .vt-cov .vt-high { color: #3fb950; }
+        .vt-lint-file { color: #e6edf3; text-decoration: underline; margin-top: 4px; }
+        .vt-lint-row { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 2ch; }
+        .vt-lint-row .vt-sev-error { color: #f85149; } .vt-lint-row .vt-sev-warning { color: #d29922; }
+        .vt-lint-row .vt-rule { color: #8b929e; }
+        .vt-lint-sum { margin-top: 6px; font-weight: 700; }
+        `;
+
+        const el = (tag, attrs = {}, ...children) => {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else node.setAttribute(k, String(v));
+          }
+          for (const child of children.flat()) {
+            if (child === null || child === undefined || child === false) continue;
+            node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+          }
+          return node;
+        };
+
+        const style = document.createElement("style");
+        style.textContent = STYLE;
+        document.head.append(style);
+
+        let app = null;
+        if (appEntry) {
+          app = el("div", { id: "app", "data-testid": "app" });
+          document.body.append(app);
+        }
+        const panel = el("section", { id: "vt-panel", "data-seq": "0", "aria-label": "Vitest" });
+        document.body.append(panel);
+        const status = el("span", { class: "vt-status", "data-testid": "vt-status", "data-state": "waiting" }, "starting");
+        panel.append(el("div", { class: "vt-head" }, el("span", { class: "vt-logo" }, "V"), el("span", { class: "vt-title" }, "Vitest"), status));
+
+        const sections = {};
+        for (const mode of modes) {
+          const body = el("div", { "data-testid": `vt-${mode === "tests" ? "tests" : mode}` });
+          const wrap = el("div", { class: "vt-sec", "data-section": mode }, body);
+          sections[mode] = { wrap, body };
+          panel.append(wrap);
+        }
+        const show = (mode, visible) => {
+          const s = sections[mode];
+          if (!s) return;
+          if (visible) s.wrap.removeAttribute("data-empty");
+          else s.wrap.setAttribute("data-empty", "");
+        };
+
+        // ---------------------------------------------------------------- the tree
+        const ICON = { pass: "✓", fail: "×", skip: "↓", todo: "□", pending: "·" };
+        const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+        function renderTests(report) {
+          const s = sections.tests;
+          if (!s) return;
+          let fileNo = 0;
+          let suiteNo = 0;
+          let testNo = 0;
+          const rows = [];
+          const row = (depth, attrs, icon, cls, text) =>
+            el("div", { class: "vt-row", style: `padding-left:${depth * 2}ch`, ...attrs }, el("span", { class: cls }, icon), ` ${text}`);
+          const walk = (nodes, depth, file) => {
+            for (const n of nodes) {
+              if (n.kind === "suite") {
+                suiteNo += 1;
+                const icon = n.state === "fail" ? "❯" : n.state === "skip" ? "↓" : "✓";
+                rows.push(row(depth, { "data-testid": `vt-suite-${suiteNo}`, "data-state": n.state, "data-name": n.fullName, "data-file": file }, icon, `vt-${n.state}`, `${n.name} (${n.count})`));
+                walk(n.children, depth + 1, file);
+              } else {
+                testNo += 1;
+                rows.push(row(depth, { "data-testid": `vt-test-${testNo}`, "data-state": n.state, "data-name": n.fullName, "data-file": file, "data-line": n.line || null }, ICON[n.state] ?? "·", `vt-${n.state}`, n.name));
+              }
+            }
+          };
+          for (const f of report.files ?? []) {
+            fileNo += 1;
+            const parts = [plural(f.count, "test")];
+            if (f.failed) parts.push(`${f.failed} failed`);
+            if (f.skipped) parts.push(`${f.skipped} skipped`);
+            if (f.todo) parts.push(`${f.todo} todo`);
+            const icon = f.state === "fail" ? "❯" : f.state === "skip" ? "↓" : "✓";
+            // Type tests (Vitest's typecheck, *.test-d.ts) carry Vitest's " TS " label.
+            rows.push(row(0, { "data-testid": `vt-file-${fileNo}`, "data-state": f.state, "data-file": f.file, "data-typecheck": f.typecheck ? "true" : null }, icon, `vt-${f.state}`, `${f.typecheck ? "TS " : ""}${f.file} (${parts.join(" | ")})`));
+            walk(f.tests, 1, f.file);
+          }
+          if (!rows.length) rows.push(el("div", { class: "vt-note" }, report.note || "No test files found."));
+          s.body.dataset.count = String(testNo);
+          s.body.dataset.files = String(fileNo);
+          s.body.replaceChildren(...joinLines(rows));
+        }
+
+        // ---------------------------------------------------------------- failures
+        const GROUPS = { start: "Startup Error", suite: "Failed Suites", test: "Failed Tests", unhandled: "Unhandled Errors" };
+
+        // Block elements plus "\n" text nodes: the layout is unchanged and textContent reads like the terminal.
+        const joinLines = (nodes) => nodes.flatMap((node, i) => (i ? ["\n", node] : [node]));
+
+        function diffLines(diff) {
+          return joinLines(
+            diff.split("\n").map((line) => {
+              const cls = line.startsWith("-") ? "vt-exp" : line.startsWith("+") ? "vt-rec" : null;
+              return el("div", { class: cls }, line === "" ? "\u00a0" : line);
+            }),
+          );
+        }
+
+        function frameBlock(frame, n, near) {
+          if (!frame?.length) return null;
+          const width = Math.max(...frame.filter((l) => l.no).map((l) => String(l.no).length), 2);
+          const code = frame.map((l) => l.text);
+          const indent = Math.min(...code.filter((t, i) => frame[i].no && t.trim()).map((t) => t.match(/^ */)[0].length));
+          const cut = Number.isFinite(indent) ? indent : 0;
+          // The caret sits under the column it names: an invisible copy of the code before it (Burmese
+          // vowel signs are narrower than one monospace cell, so counting characters would drift).
+          const failing = frame.findIndex((l) => !l.no) - 1;
+          const lines = frame.map((l) => {
+            const gutter = el("span", { class: "vt-ln" }, `${l.no ? String(l.no).padStart(width) : " ".repeat(width)}| `);
+            if (l.no) return el("div", {}, gutter, l.text.slice(cut));
+            const pad = (frame[failing]?.text ?? "").slice(cut, cut + Math.max(0, l.text.length - 1 - cut));
+            return el("div", {}, gutter, el("span", { class: "vt-pad", "data-pad": pad }), el("span", { class: "vt-caret" }, "^"));
+          });
+          return el(
+            "div",
+            { class: "vt-frame", "data-testid": `vt-frame-${n}`, "data-file": near.file, "data-line": near.line, "data-col": near.col },
+            joinLines(lines),
+          );
+        }
+
+        function renderErrors(report) {
+          const s = sections.errors;
+          const failures = report.failures ?? [];
+          if (!s) return;
+          s.body.dataset.count = String(failures.length);
+          show("errors", failures.length > 0);
+          const out = [];
+          let group = null;
+          failures.forEach((f, i) => {
+            const n = i + 1;
+            if (f.kind !== group) {
+              group = f.kind;
+              const count = failures.filter((x) => x.kind === group).length;
+              out.push(el("div", { class: "vt-bar" }, `⎯⎯⎯ ${GROUPS[group] ?? "Errors"} ${count} ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯`));
+            }
+            // The heading is Vitest's: "FAIL <file> > <test>", "FAIL <file> [ <file> ]", or the type of an
+            // unhandled error ("Unhandled Error", "Unhandled Rejection") after an ERROR badge.
+            const parts = [
+              el("div", { class: "vt-row" }, el("span", { class: "vt-badge" }, f.kind === "unhandled" ? "ERROR" : "FAIL"), " ", f.title),
+              el("div", { class: "vt-msg" }, el("b", {}, f.name), `: ${f.message}`),
+            ];
+            if (f.plugin) parts.push(el("div", { class: "vt-plugin" }, `  Plugin: ${f.plugin}\n  File: ${f.pluginFile ?? ""}${f.pluginFrame ? `\n${f.pluginFrame}` : ""}`));
+            if (f.codeFrame) parts.push(el("div", { class: "vt-plugin" }, f.codeFrame));
+            if (f.diff) parts.push(el("div", { class: "vt-diff", "data-testid": `vt-diff-${n}` }, diffLines(f.diff)));
+            (f.frames ?? []).forEach((fr, k) => {
+              parts.push(el("div", { class: k === 0 ? "vt-at" : "vt-at vt-other" }, ` ❯ ${fr.method ? `${fr.method} ` : ""}${fr.file}:${fr.line}:${fr.col}`));
+              if (k === 0) parts.push(frameBlock(f.frame, n, fr));
+            });
+            out.push(
+              el(
+                "div",
+                {
+                  class: "vt-err",
+                  "data-testid": `vt-error-${n}`,
+                  "data-kind": f.kind,
+                  "data-test": f.test || null,
+                  "data-name": f.name,
+                  "data-message": f.message,
+                  "data-expected": f.expected,
+                  "data-actual": f.actual,
+                  "data-file": f.file || null,
+                  "data-line": f.line || null,
+                },
+                joinLines(parts.filter(Boolean)),
+              ),
+            );
+          });
+          s.body.replaceChildren(...joinLines(out));
+          // A long failing line: scroll its frame sideways so the caret stays in view (Vitest's terminal
+          // cuts such lines off instead).
+          for (const frame of s.body.querySelectorAll(".vt-frame")) {
+            const caret = frame.querySelector(".vt-caret");
+            if (caret && caret.offsetLeft > frame.clientWidth - 24) frame.scrollLeft = Math.round(caret.offsetLeft - frame.clientWidth * 0.6);
+          }
+        }
+
+        // ---------------------------------------------------------------- summary
+        function renderSummary(report) {
+          const s = sections.summary;
+          if (!s) return;
+          const { files, tests } = report.summary ?? { files: {}, tests: {} };
+          const f = [files.failed && `${files.failed} failed`, files.passed && `${files.passed} passed`, files.skipped && `${files.skipped} skipped`].filter(Boolean);
+          const t = [tests.failed && `${tests.failed} failed`, tests.passed && `${tests.passed} passed`, tests.skipped && `${tests.skipped} skipped`, tests.todo && `${tests.todo} todo`].filter(Boolean);
+          const lines = [
+            ` Test Files  ${f.length ? f.join(" | ") : "no tests"} (${files.total ?? 0})`,
+            `      Tests  ${tests.total ? t.join(" | ") : "no tests"} (${tests.total ?? 0})`,
+          ];
+          const snap = report.snapshot;
+          if (snap && snap.written + snap.matched + snap.failed + snap.updated + snap.obsolete > 0) {
+            const p = [snap.failed && `${snap.failed} failed`, snap.written && `${snap.written} written`, snap.updated && `${snap.updated} updated`, snap.obsolete && `${snap.obsolete} obsolete`, snap.matched && `${snap.matched} passed`].filter(Boolean);
+            lines.push(`  Snapshots  ${p.join(" | ")}`);
+          }
+          const attrs = {
+            "data-files-failed": files.failed ?? 0,
+            "data-files-passed": files.passed ?? 0,
+            "data-files-total": files.total ?? 0,
+            "data-tests-failed": tests.failed ?? 0,
+            "data-tests-passed": tests.passed ?? 0,
+            "data-tests-skipped": tests.skipped ?? 0,
+            "data-tests-todo": tests.todo ?? 0,
+            "data-tests-total": tests.total ?? 0,
+          };
+          for (const [k, v] of Object.entries(attrs)) s.body.setAttribute(k, String(v));
+          s.body.replaceChildren(...joinLines(lines.map((line) => el("div", { class: "vt-sum" }, line))));
+        }
+
+        // ---------------------------------------------------------------- console
+        function renderConsole(report) {
+          const s = sections.console;
+          if (!s) return;
+          const logs = report.console ?? [];
+          s.body.dataset.count = String(logs.length);
+          show("console", logs.length > 0);
+          s.body.replaceChildren(
+            ...logs.map((log, i) =>
+              el(
+                "div",
+                { class: "vt-log", "data-testid": `vt-log-${i + 1}`, "data-type": log.type, "data-file": log.file, "data-test": log.test || null, "data-content": log.content },
+                el("div", { class: "vt-log-head" }, `${log.type} | ${log.file}${log.test ? ` > ${log.test}` : ""}`),
+                "\n",
+                el("div", { class: "vt-log-body" }, log.content),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- snapshots
+        function renderSnapshot(report) {
+          const s = sections.snapshot;
+          if (!s) return;
+          const snap = report.snapshot ?? { files: [] };
+          for (const k of ["written", "matched", "failed", "updated", "obsolete"]) s.body.setAttribute(`data-${k}`, String(snap[k] ?? 0));
+          s.body.dataset.count = String(snap.files?.length ?? 0);
+          show("snapshot", (snap.files?.length ?? 0) > 0);
+          s.body.replaceChildren(
+            ...(snap.files ?? []).flatMap((file, i) => [
+              el("div", { class: "vt-dim" }, file.file),
+              el("div", { class: "vt-snap", "data-testid": `vt-snap-${i + 1}`, "data-file": file.file }, file.content.replace(/^\/\/ Vitest Snapshot[^\n]*\n\n?/, "").replace(/\n+$/, "")),
+            ]),
+          );
+        }
+
+        // ---------------------------------------------------------------- coverage
+        function renderCoverage(report) {
+          const s = sections.coverage;
+          if (!s) return;
+          const cov = report.coverage;
+          show("coverage", !!cov);
+          if (!cov) {
+            s.body.dataset.count = "0";
+            s.body.replaceChildren();
+            return;
+          }
+          s.body.dataset.count = String(cov.rows.length);
+          const grade = (p) => (p >= 80 ? "vt-high" : p >= 50 ? "vt-mid" : "vt-low");
+          const cells = (r) => ["statements", "branches", "functions", "lines"].map((k) => el("td", { class: grade(r[k]) }, String(r[k])));
+          const attrs = (r) => ({ "data-statements": r.statements, "data-branches": r.branches, "data-functions": r.functions, "data-lines": r.lines });
+          s.body.replaceChildren(
+            el(
+              "table",
+              { class: "vt-cov" },
+              el("thead", {}, el("tr", {}, ["File", "% Stmts", "% Branch", "% Funcs", "% Lines", "Uncovered"].map((h) => el("th", {}, h)))),
+              el(
+                "tbody",
+                {},
+                el("tr", { "data-testid": "vt-cov-all", ...attrs(cov.all) }, el("td", {}, "All files"), cells(cov.all), el("td", {}, "")),
+                cov.rows.map((r, i) => el("tr", { "data-testid": `vt-cov-${i + 1}`, "data-file": r.file, "data-uncovered": r.uncovered, ...attrs(r) }, el("td", {}, ` ${r.file.replace(/^src\//, "")}`), cells(r), el("td", {}, r.uncovered))),
+              ),
+            ),
+          );
+        }
+
+        // ---------------------------------------------------------------- ESLint
+        // Laid out like ESLint's default "stylish" formatter.
+        let lastLint = null;
+        function renderLint(report) {
+          const s = sections.lint;
+          if (!s) return;
+          const lint = report.lint;
+          const key = JSON.stringify(lint ?? null);
+          if (key === lastLint) return;
+          lastLint = key;
+          const messages = lint?.messages ?? [];
+          s.body.dataset.count = String(messages.length);
+          s.body.dataset.errors = String(lint?.errors ?? 0);
+          s.body.dataset.warnings = String(lint?.warnings ?? 0);
+          const out = [el("div", { class: "vt-dim" }, "ESLint")];
+          if (lint?.error) out.push(el("div", { class: "vt-msg" }, lint.error));
+          let file = null;
+          messages.forEach((m, i) => {
+            if (m.file !== file) {
+              file = m.file;
+              out.push(el("div", { class: "vt-lint-file" }, m.file));
+            }
+            out.push(
+              el(
+                "div",
+                { class: "vt-lint-row", "data-testid": `vt-lint-${i + 1}`, "data-file": m.file, "data-line": m.line, "data-col": m.col, "data-rule": m.rule, "data-severity": m.severity, "data-message": m.message },
+                `${m.line}:${m.col}  `,
+                el("span", { class: `vt-sev-${m.severity}` }, m.severity),
+                `  ${m.message}  `,
+                el("span", { class: "vt-rule" }, m.rule),
+              ),
+            );
+          });
+          const n = messages.length;
+          out.push(
+            el(
+              "div",
+              { class: `vt-lint-sum ${n ? (lint.errors ? "vt-fail" : "vt-skip") : "vt-pass"}` },
+              n ? `✖ ${n} problem${n === 1 ? "" : "s"} (${lint.errors} error${lint.errors === 1 ? "" : "s"}, ${lint.warnings} warning${lint.warnings === 1 ? "" : "s"})` : lint ? "✓ no problems" : "…",
+            ),
+          );
+          s.body.replaceChildren(...joinLines(out));
+        }
+
+        // ---------------------------------------------------------------- the app
+        let mountedVersion = null;
+        async function mountApp(state) {
+          if (!app || !state?.version || state.version === mountedVersion) return;
+          mountedVersion = state.version;
+          const fresh = el("div", { id: "app", "data-testid": "app" });
+          app.replaceWith(fresh);
+          app = fresh;
+          try {
+            const mod = await import(/* @vite-ignore */ `/@course-app/${state.version}/${state.entry}`);
+            if (mountedVersion !== state.version) return;
+            if (typeof mod.default === "function") await mod.default(fresh);
+          } catch (error) {
+            if (mountedVersion === state.version) fresh.replaceChildren(el("div", { style: "padding:8px 14px;color:#b42318;font:13px ui-monospace,monospace" }, `${error?.name ?? "Error"}: ${error?.message ?? error}`));
+          }
+        }
+
+        // ---------------------------------------------------------------- wiring
+        let lastSeq = -1;
+        function render(report) {
+          if (!report) return;
+          const state = report.running ? "running" : report.state;
+          status.dataset.state = state;
+          status.textContent = { waiting: "starting", running: "running", pass: "PASS", fail: "FAIL" }[state] ?? state;
+          if (report.seq !== lastSeq) {
+            lastSeq = report.seq;
+            panel.dataset.seq = String(report.seq);
+            renderTests(report);
+            renderErrors(report);
+            renderSummary(report);
+            renderConsole(report);
+            renderSnapshot(report);
+            renderCoverage(report);
+          }
+          renderLint(report);
+          void mountApp(report.app);
+        }
+
+        if (import.meta.hot) {
+          const hello = () => import.meta.hot.send(`${EVENT}:hello`, { app: appEntry, lint: modes.includes("lint") });
+          import.meta.hot.on(EVENT, render);
+          import.meta.hot.on("vite:ws:connect", hello);
+          hello();
+        }
+      course/vitest-bridge.js: |
+        // Testing course · Vitest bridge (a Vite plugin that runs in the dev server; pinned, never edited).
+        //
+        // Starts the real Vitest (its Node API, watch mode) inside the dev-server process and sends the
+        // results of every test run to the preview page (course/panel.js) over Vite's HMR socket: test
+        // files → suites → tests with their state (pass / fail / skip / todo), each failure with Vitest's
+        // own error name, message, Expected / Received diff and the ❯ file:line:col code frame, errors
+        // outside tests (a syntax error, a failed import), console output from tests, the Test Files /
+        // Tests summary, snapshots and, when the config turns it on, coverage. Nothing is invented here:
+        // every value comes from Vitest's reporter API (TestModule / TestCase / onCoverage).
+        //
+        // Runs follow the dev server's file watcher. Typing in the studio writes a file chunk by chunk, so
+        // the bridge runs once the files have been quiet for QUIET_MS (the studio's natural typing pauses
+        // at most ~960 ms between keys), or for SYNTAX_QUIET_MS while a changed script does not parse yet
+        // (line-by-line typing pauses up to ~1.4 s between lines) — a real syntax error still shows.
+        // Vitest's own Vite server watches nothing, so it never reruns half-typed code by itself. Which
+        // tests rerun is Vitest's own watch-mode decision (vitest.watcher). An edit of vitest.config.js
+        // restarts Vitest with the new config; the page never reloads.
+        //
+        // The dev server starts listening only after the first test run has finished, so the first report
+        // is ready when the preview opens; a page that loads later asks for the latest report ("hello").
+        //
+        // A file watcher can miss a write: macOS FSEvents drops events under heavy disk I/O (it asks the
+        // consumer to rescan, which chokidar 3 does not do), and one lost event left a lesson's panel on an
+        // old report for the rest of a replay. So every POLL_MS the bridge also compares src/ and the
+        // Vitest config with what it last handed to Vitest (modification time and size), and treats a file
+        // that changed at least MISSED_AFTER_MS ago without any watcher event exactly like a watcher event
+        // (once per state of the file). When the watcher works, every change is already pending or handed
+        // over, and the check does nothing.
+        import { createHash } from "node:crypto";
+        import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+        import { isAbsolute, join, posix, relative } from "node:path";
+        import { PassThrough, Writable } from "node:stream";
+        import { pathToFileURL } from "node:url";
+        import * as vite from "vite";
+
+        const EVENT = "course:vitest";
+        const QUIET_MS = 1000;
+        const SYNTAX_QUIET_MS = 2500;
+        const NO_RUN_GRACE_MS = 700;
+        const POLL_MS = 500;
+        const MISSED_AFTER_MS = 300;
+        const FIRST_RUN_LIMIT_MS = 45000;
+        const CONFIG_FILES = ["vitest.config.js", "vitest.config.mjs", "vitest.config.ts"];
+        const SCRIPT = /\.(c|m)?(js|jsx|ts|tsx)$/;
+        const APP_PREFIX = "/@course-app/";
+        const OUTPUT_DIR = "node_modules/.course";
+
+        export default function courseVitestBridge() {
+          let bridge = null;
+          return {
+            name: "course-vitest-bridge",
+            enforce: "pre",
+            // Only in the dev server: Vitest's own Vite server runs in mode "test" and never applies it.
+            apply: (_config, env) => env.command === "serve" && env.mode !== "test",
+            async configureServer(server) {
+              bridge = createBridge(server);
+              await bridge.firstRun();
+            },
+            resolveId(id, importer) {
+              if (id.startsWith(APP_PREFIX)) return id.split("?")[0];
+              // A relative import inside the app copy stays inside the same immutable copy.
+              if (importer?.startsWith(APP_PREFIX) && id.startsWith(".")) return posix.join(posix.dirname(importer), id.split("?")[0]);
+              return null;
+            },
+            load(id) {
+              return id.startsWith(APP_PREFIX) ? (bridge?.appModule(id) ?? null) : null;
+            },
+            async buildEnd() {
+              await bridge?.close();
+            },
+          };
+        }
+
+        function createBridge(server) {
+          const root = server.config.root;
+          const rel = (file) => relative(root, file).split("\\").join("/");
+          const inProject = (file) => {
+            const r = relative(root, file);
+            return !!r && !r.startsWith("..") && !isAbsolute(r);
+          };
+          // Snapshot files are Vitest's own output: a write of one is no reason to run again (Vitest's own
+          // watch mode does not rerun for them either, since no test imports a .snap file).
+          const ignored = (file) =>
+            !inProject(file) || file.endsWith(".snap") || rel(file).split("/").some((part) => part === "node_modules" || part === ".git");
+
+          let current = null; // the Vitest instance (set in onInit, before its first run ends)
+          let starting = null; // a (re)start in progress
+          let closed = false;
+          let seq = 0; // finished runs
+          let running = true; // edits are waiting or a run is in flight
+          let latest = { seq: 0, state: "waiting", note: "Vitest is starting…", files: [], failures: [], console: [], summary: emptySummary(), snapshot: null, coverage: null, app: null };
+          let coverage = null;
+          let runStarted = false;
+          const vitestLog = [];
+
+          // ------------------------------------------------------------------ the page
+          const view = () => ({ ...latest, running });
+          const broadcast = () => server.ws.send({ type: "custom", event: EVENT, data: view() });
+          const setRunning = (value) => {
+            if (running === value) return;
+            running = value;
+            broadcast();
+          };
+          server.ws.on(`${EVENT}:hello`, async (data, client) => {
+            const app = typeof data?.app === "string" && data.app ? data.app : null;
+            if (app !== wantsApp || (app && !latest.app)) {
+              wantsApp = app;
+              latest = { ...latest, app: await appState() };
+            }
+            if (data?.lint && !wantsLint) {
+              wantsLint = true;
+              latest = { ...latest, lint: await lintNow() };
+            }
+            client.send(EVENT, view());
+          });
+
+          // ------------------------------------------------------------------ Vitest
+          // One reporter per Vitest instance: a closing instance (a restart) can still report a late run,
+          // and only the current instance's events may reach the page.
+          const makeReporter = () => {
+            let mine = null;
+            const live = () => mine !== null && mine === current;
+            return {
+              onInit(instance) {
+                mine = instance;
+                current = instance;
+                // Vitest's own file watcher is closed: only this bridge decides when to rerun.
+                void instance.vite?.watcher?.close();
+              },
+              onTestRunStart() {
+                if (!live()) return;
+                runStarted = true;
+                setRunning(true);
+              },
+              onCoverage(map) {
+                if (live()) coverage = summarizeCoverage(map, rel);
+              },
+              async onTestRunEnd(_modules, unhandledErrors) {
+                if (!live()) return;
+                const report = buildReport(current, unhandledErrors, { seq: seq + 1, root, rel, inProject });
+                report.coverage = current?.config?.coverage?.enabled ? coverage : null;
+                report.app = await appState();
+                report.lint = wantsLint ? await lintNow() : null;
+                if (!live()) return;
+                seq += 1;
+                report.seq = seq;
+                latest = report;
+                const t = latest.summary.tests;
+                process.stdout.write(
+                  `[course] vitest run ${seq}: ${latest.state === "pass" ? "PASS" : "FAIL"} · Tests ${t.failed} failed | ${t.passed} passed | ${t.skipped + t.todo} skipped (${t.total})\n`,
+                );
+                running = pending.size > 0;
+                broadcast();
+              },
+            };
+          };
+
+          // Vitest's own terminal output (and its Vite server's log) goes here, not to the dev terminal:
+          // the studio's verify step reads that terminal, and the panel already shows every result.
+          const remember = (text) => {
+            for (const line of String(text).split(/\r?\n/)) {
+              const clean = stripAnsi(line).trimEnd();
+              if (clean) vitestLog.push(clean);
+            }
+            if (vitestLog.length > 200) vitestLog.splice(0, vitestLog.length - 200);
+          };
+          const sink = new Writable({
+            write(chunk, _encoding, done) {
+              remember(chunk);
+              done();
+            },
+          });
+          const viteLogger = {
+            hasWarned: false,
+            info: remember,
+            warn: (text) => ((viteLogger.hasWarned = true), remember(text)),
+            warnOnce: (text) => ((viteLogger.hasWarned = true), remember(text)),
+            error: (text) => remember(text?.message ?? text),
+            clearScreen: () => {},
+            hasErrorLogged: () => false,
+          };
+
+          // Typecheck mode: Vitest's watch mode would run `tsc --watch`, which reruns on every write by
+          // itself (half-typed code, outside the quiet window). So with `typecheck.enabled` every rerun is a
+          // fresh one-off `vitest run` instead (tsc runs once per quiet window; 1.6–3 s locally).
+          const typecheckWanted = async (configFile) => {
+            try {
+              const config = (await import(`${pathToFileURL(configFile).href}?t=${Date.now()}`)).default;
+              const resolved = typeof config === "function" ? await config({ command: "serve", mode: "test" }) : config;
+              return resolved?.test?.typecheck?.enabled === true;
+            } catch {
+              return false;
+            }
+          };
+
+          const start = async () => {
+            const configFile = CONFIG_FILES.map((name) => join(root, name)).find((file) => existsSync(file));
+            coverage = null;
+            vitestLog.length = 0;
+            const before = seq;
+            try {
+              const watch = !(configFile && (await typecheckWanted(configFile)));
+              const { startVitest } = await import("vitest/node");
+              const instance = await startVitest(
+                [],
+                {
+                  root,
+                  config: configFile ?? false,
+                  watch,
+                  reporters: [makeReporter()],
+                  includeTaskLocation: true,
+                  // Node imports vitest.config.js itself: a broken config throws one error into the panel
+                  // instead of esbuild printing "✘ [ERROR]" lines into the dev terminal.
+                  configLoader: "native",
+                  // Coverage files stay out of the project: the studio would sync them into the editor.
+                  coverage: { reportsDirectory: join(root, OUTPUT_DIR, "coverage"), reporter: [["json-summary", {}]] },
+                },
+                { clearScreen: false, customLogger: viteLogger },
+                { stdin: new PassThrough(), stdout: sink, stderr: sink },
+              );
+              if (closed) {
+                await instance?.close();
+                return;
+              }
+              current = instance ?? current;
+              if (seq === before) await failStart(vitestLog);
+            } catch (error) {
+              const message = stripAnsi(error?.message ?? error);
+              await failStart([...vitestLog, /^\w*Error:/.test(message) ? message : `${error?.name ?? "Error"}: ${message}`]);
+            }
+          };
+
+          const failStart = async (log) => {
+            seq += 1;
+            const message = stripAnsi(log.filter(Boolean).slice(-12).join("\n")).split(`${root}/`).join("") || "Vitest did not start.";
+            latest = {
+              seq,
+              state: "fail",
+              note: "Vitest did not start.",
+              files: [],
+              failures: [{ kind: "start", title: "Vitest could not start", test: "", name: "Error", message, expected: null, actual: null, diff: "", plugin: null, pluginFile: null, pluginFrame: null, codeFrame: null, frames: [], file: "", line: 0, col: 0, frame: null }],
+              console: [],
+              summary: emptySummary(),
+              snapshot: null,
+              coverage: null,
+              app: await appState(),
+            };
+            running = pending.size > 0;
+            broadcast();
+          };
+
+          // `starting` covers the old instance's close too, so no second restart can begin meanwhile.
+          const restart = async () => {
+            setRunning(true);
+            const old = current;
+            current = null;
+            starting = (async () => {
+              await old?.close().catch(() => {});
+              await start();
+            })();
+            await starting;
+            starting = null;
+          };
+
+          // ------------------------------------------------------------------ edits
+          const pending = new Map(); // file -> "add" | "change" | "unlink"
+          let timer = null;
+          let noRunTimer = null;
+          let lastChangeAt = 0;
+          const schedule = (delay) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => void flush(), delay);
+          };
+
+          const flush = async () => {
+            timer = null;
+            if (starting) return schedule(QUIET_MS);
+            const quiet = Date.now() - lastChangeAt;
+            if (quiet < SYNTAX_QUIET_MS && (await Promise.all([...pending.keys()].map(parses))).includes(false)) {
+              return schedule(SYNTAX_QUIET_MS - quiet);
+            }
+            const changes = [...pending.entries()];
+            pending.clear();
+            if (!changes.length) return;
+            for (const [file] of changes) if (inPollScope(rel(file))) handled.set(rel(file), stamp(rel(file))?.sig ?? null);
+            // Typecheck mode reruns as a fresh one-off run (see typecheckWanted); a config edit restarts.
+            if (!current || current.config?.typecheck?.enabled || changes.some(([file]) => CONFIG_FILES.includes(rel(file)))) return restart();
+            runStarted = false;
+            for (const [file, event] of changes) {
+              if (event === "unlink") current.watcher.onFileDelete(file);
+              else if (event === "add") current.watcher.onFileCreate(file);
+              else current.watcher.onFileChange(file);
+            }
+            // A change that no test depends on runs nothing: show the last report as it was.
+            clearTimeout(noRunTimer);
+            noRunTimer = setTimeout(async () => {
+              if (runStarted || pending.size || starting) return;
+              if (wantsLint) latest = { ...latest, lint: await lintNow() };
+              running = false;
+              broadcast();
+            }, NO_RUN_GRACE_MS);
+          };
+
+          const onWatch = (event, file) => {
+            if (closed || !["add", "change", "unlink"].includes(event) || ignored(file)) return;
+            lastChangeAt = Date.now();
+            pending.set(file, pending.get(file) === "add" && event === "change" ? "add" : event);
+            setRunning(true);
+            schedule(QUIET_MS);
+          };
+          server.watcher.on("all", onWatch);
+
+          // The safety net for a missed watcher event (see the header), keyed by project-relative path:
+          // `handled` is each file of src/ and each config file as last handed to Vitest ("mtime:size",
+          // null = absent); `reported` is the state the check last reported for a file, so it reports a
+          // state at most once.
+          const inPollScope = (path) =>
+            CONFIG_FILES.includes(path) ||
+            (path.startsWith("src/") && !path.split("/").some((part) => part === "node_modules" || part.startsWith(".")) && !path.endsWith(".snap"));
+          const stamp = (path) => {
+            try {
+              const stats = statSync(join(root, path));
+              return stats.isFile() ? { sig: `${stats.mtimeMs}:${stats.size}`, mtimeMs: stats.mtimeMs } : null;
+            } catch {
+              return null;
+            }
+          };
+          const onDisk = () => {
+            const files = new Map();
+            const walk = (dir) => {
+              let entries;
+              try {
+                entries = readdirSync(join(root, dir), { withFileTypes: true });
+              } catch {
+                return;
+              }
+              for (const entry of entries) {
+                const path = `${dir}/${entry.name}`;
+                if (entry.isDirectory()) {
+                  if (entry.name !== "node_modules" && !entry.name.startsWith(".")) walk(path);
+                } else if (inPollScope(path)) {
+                  const now = stamp(path);
+                  if (now) files.set(path, now);
+                }
+              }
+            };
+            walk("src");
+            for (const path of CONFIG_FILES) {
+              const now = stamp(path);
+              if (now) files.set(path, now);
+            }
+            return files;
+          };
+          const handled = new Map([...onDisk()].map(([path, now]) => [path, now.sig]));
+          const reported = new Map();
+          const poll = setInterval(() => {
+            if (closed) return;
+            const disk = onDisk();
+            const waiting = new Set([...pending.keys()].map(rel));
+            const caught = [];
+            for (const [path, now] of disk) {
+              if (waiting.has(path) || Date.now() - now.mtimeMs < MISSED_AFTER_MS) continue;
+              const before = handled.get(path);
+              if (before === now.sig || reported.get(path) === now.sig) continue;
+              caught.push([before ? "change" : "add", path, now.sig]);
+            }
+            for (const [path, before] of handled) {
+              if (before && !disk.has(path) && !waiting.has(path) && reported.get(path) !== null) caught.push(["unlink", path, null]);
+            }
+            for (const [event, path, sig] of caught) {
+              reported.set(path, sig);
+              process.stdout.write(`[course] the file watcher missed ${event === "unlink" ? "the removal of" : "a change to"} ${path}; the bridge's own check caught it\n`);
+              onWatch(event, join(root, path));
+            }
+          }, POLL_MS);
+          poll.unref?.();
+
+          // ------------------------------------------------------------------ the #app region
+          // The page never imports a project file itself (half-typed code would raise Vite errors in it).
+          // The bridge serves an immutable copy of src/ under /@course-app/<version>/ instead, taken when
+          // a report is sent and only from files that parse, so the app is the code Vitest just tested.
+          let wantsApp = null;
+          const apps = new Map(); // version -> Map(path -> text)
+          let lastApp = null;
+          const appState = async () => {
+            if (!wantsApp) return null;
+            const files = new Map();
+            const walk = (dir) => {
+              if (!existsSync(dir)) return;
+              for (const name of readdirSync(dir).sort()) {
+                if (name === "node_modules" || name.startsWith(".")) continue;
+                const path = join(dir, name);
+                if (statSync(path).isDirectory()) walk(path);
+                else if (/\.(c|m)?(js|jsx|ts|tsx)$|\.(css|json|svg)$/.test(name)) files.set(rel(path), readFileSync(path, "utf8"));
+              }
+            };
+            walk(join(root, "src"));
+            if (!files.has(wantsApp)) return { entry: wantsApp, version: lastApp?.version ?? null, error: `${wantsApp} not found` };
+            const hash = createHash("sha256");
+            for (const [path, text] of files) hash.update(`${path}\0${text}\0`);
+            const version = hash.digest("hex").slice(0, 12);
+            if (apps.has(version)) return { entry: wantsApp, version, error: "" };
+            const scripts = [...files.keys()].filter((path) => SCRIPT.test(path));
+            if ((await Promise.all(scripts.map((path) => parses(join(root, path))))).includes(false)) {
+              return { entry: wantsApp, version: lastApp?.version ?? null, error: "" };
+            }
+            apps.set(version, files);
+            if (apps.size > 40) apps.delete(apps.keys().next().value);
+            lastApp = { version };
+            return { entry: wantsApp, version, error: "" };
+          };
+          const appModule = (id) => {
+            const rest = id.slice(APP_PREFIX.length);
+            const slash = rest.indexOf("/");
+            return apps.get(rest.slice(0, slash))?.get(rest.slice(slash + 1)) ?? null;
+          };
+
+          // ------------------------------------------------------------------ ESLint (data-modes "lint")
+          // The project's own ESLint (its eslint.config.js) on src/, through ESLint's Node API.
+          let wantsLint = false;
+          let eslint = null;
+          const lintNow = async () => {
+            try {
+              eslint ??= new (await import("eslint")).ESLint({ cwd: root });
+              const results = await eslint.lintFiles(["src"]);
+              const messages = results
+                .flatMap((r) => r.messages.map((m) => ({ file: rel(r.filePath), line: m.line ?? 0, col: m.column ?? 0, rule: m.ruleId ?? "", severity: m.severity === 2 ? "error" : "warning", message: m.message })))
+                .sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.col - b.col);
+              return { messages, errors: messages.filter((m) => m.severity === "error").length, warnings: messages.filter((m) => m.severity === "warning").length, error: "" };
+            } catch (error) {
+              eslint = null;
+              return { messages: [], errors: 0, warnings: 0, error: stripAnsi(error?.message ?? error).split(`${root}/`).join("") };
+            }
+          };
+
+          // ------------------------------------------------------------------ lifecycle
+          // The server listens once the first run has finished, or after FIRST_RUN_LIMIT_MS with a note
+          // in the panel (a first run that never ends usually means a test loops forever or Vitest hangs).
+          let firstRunPromise = null;
+          const firstRun = () =>
+            (firstRunPromise ??= Promise.race([
+              (starting = start()).finally(() => (starting = null)),
+              new Promise((done) =>
+                setTimeout(() => {
+                  if (!seq) latest = { ...latest, note: `Vitest's first run has not finished after ${FIRST_RUN_LIMIT_MS / 1000} s.` };
+                  done();
+                }, FIRST_RUN_LIMIT_MS),
+              ),
+            ]));
+          const close = async () => {
+            closed = true;
+            clearInterval(poll);
+            clearTimeout(timer);
+            clearTimeout(noRunTimer);
+            await starting?.catch(() => {});
+            await current?.close().catch(() => {});
+            current = null;
+          };
+          server.httpServer?.once("close", () => void close());
+
+          return { firstRun, close, appModule };
+        }
+
+        // Does a changed script parse yet? Vite 7: rollup's parser for JavaScript / JSX, esbuild for
+        // TypeScript (rollup cannot read types); Vite 8 would use oxc's parseSync for all of them.
+        async function parses(file) {
+          if (!SCRIPT.test(file) || !existsSync(file)) return true;
+          try {
+            const code = readFileSync(file, "utf8");
+            if (typeof vite.parseSync === "function") return !vite.parseSync(file, code).errors?.length;
+            if (/\.(c|m)?tsx?$/.test(file)) {
+              await vite.transformWithEsbuild(code, file, { loader: /x$/.test(file) ? "tsx" : "ts" });
+              return true;
+            }
+            vite.parseAst(code, { jsx: /x$/.test(file) });
+            return true;
+          } catch {
+            return false;
+          }
+        }
+
+        // -------------------------------------------------------------------- the report
+        const stripAnsi = (text) => String(text ?? "").replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+        const flatten = (nodes) => nodes.flatMap((n) => (n.kind === "suite" ? flatten(n.children) : [n]));
+
+        function emptySummary() {
+          return {
+            files: { failed: 0, passed: 0, skipped: 0, total: 0 },
+            tests: { failed: 0, passed: 0, skipped: 0, todo: 0, total: 0 },
+          };
+        }
+
+        function testState(testCase) {
+          const { state } = testCase.result();
+          if (state === "passed") return "pass";
+          if (state === "failed") return "fail";
+          if (state === "skipped") return testCase.options.mode === "todo" ? "todo" : "skip";
+          return "pending";
+        }
+
+        function buildReport(vitest, unhandledErrors, { seq, root, rel, inProject }) {
+          const local = (text) => stripAnsi(text).split(`${root}/`).join("");
+          const modules = (vitest?.state.getTestModules() ?? []).slice().sort((a, b) => a.relativeModuleId.localeCompare(b.relativeModuleId));
+          const summary = emptySummary();
+          const files = [];
+          const suiteFailures = [];
+          const testFailures = [];
+          const consoleLines = [];
+          const projectFile = (file) => !!file && inProject(file) && !file.split("/").includes("node_modules");
+
+          const framesOf = (error) => {
+            let frames = (error.stacks ?? []).map((s) => ({ method: s.method || "", file: s.file, line: s.line, col: s.column }));
+            if (!frames.length) frames = parseStack([error.stack, error.runnerError?.stack].filter(Boolean).join("\n"));
+            return frames.filter((f) => projectFile(f.file)).map((f) => ({ ...f, file: rel(f.file) }));
+          };
+
+          const entry = (kind, title, test, error) => {
+            const frames = framesOf(error);
+            const near = frames[0] ?? null;
+            const rollup = error.__vitest_rollup_error__;
+            return {
+              kind,
+              title: kind === "unhandled" && typeof error.type === "string" && error.type ? error.type : title,
+              test,
+              name: error.name || "Error",
+              message: local(error.message ?? String(error)),
+              expected: typeof error.expected === "string" ? local(error.expected) : null,
+              actual: typeof error.actual === "string" ? local(error.actual) : null,
+              diff: error.diff ? local(error.diff) : "",
+              plugin: rollup?.plugin ?? null,
+              pluginFile: rollup?.id ? `${rel(rollup.id)}${rollup.loc ? `:${rollup.loc.line}:${rollup.loc.column}` : ""}` : null,
+              pluginFrame: rollup?.frame ? local(rollup.frame) : null,
+              codeFrame: error.codeFrame ? local(error.codeFrame) : null,
+              frames,
+              file: near?.file ?? "",
+              line: near?.line ?? 0,
+              col: near?.col ?? 0,
+              frame: near ? codeFrame(join(root, near.file), near.line, near.col) : null,
+            };
+          };
+
+          const logsOf = (entity, file, test) => {
+            for (const log of entity.logs?.() ?? []) {
+              consoleLines.push({ type: log.type, file, test, content: local(log.content).replace(/\n$/, "") });
+            }
+          };
+
+          const walk = (collection, file) => {
+            const nodes = [];
+            for (const child of collection) {
+              if (child.type === "suite") {
+                logsOf(child, file, child.fullName);
+                const children = walk(child.children, file);
+                const states = flatten(children).map((n) => n.state);
+                const errors = child.errors();
+                nodes.push({
+                  kind: "suite",
+                  name: child.name,
+                  fullName: child.fullName,
+                  line: child.location?.line ?? 0,
+                  state: states.includes("fail") || errors.length ? "fail" : states.length && states.every((s) => s === "skip" || s === "todo") ? "skip" : "pass",
+                  count: states.length,
+                  children,
+                });
+                for (const error of errors) suiteFailures.push(entry("suite", `${file} > ${child.fullName}`, child.fullName, error));
+                continue;
+              }
+              const state = testState(child);
+              summary.tests.total += 1;
+              if (state === "pass") summary.tests.passed += 1;
+              else if (state === "fail") summary.tests.failed += 1;
+              else if (state === "todo") summary.tests.todo += 1;
+              else if (state === "skip") summary.tests.skipped += 1;
+              logsOf(child, file, child.fullName);
+              nodes.push({ kind: "test", name: child.name, fullName: child.fullName, line: child.location?.line ?? 0, state });
+              if (state === "fail") {
+                for (const error of child.result().errors ?? []) testFailures.push(entry("test", `${file} > ${child.fullName}`, child.fullName, error));
+              }
+            }
+            return nodes;
+          };
+
+          for (const module of modules) {
+            const file = module.relativeModuleId;
+            logsOf(module, file, "");
+            const tests = walk(module.children, file);
+            const moduleErrors = module.errors();
+            const flat = flatten(tests);
+            const count = (state) => flat.filter((n) => n.state === state).length;
+            const state = moduleErrors.length || count("fail") || !flat.length ? "fail" : flat.every((n) => n.state === "skip" || n.state === "todo") ? "skip" : "pass";
+            summary.files.total += 1;
+            summary.files[state === "fail" ? "failed" : state === "skip" ? "skipped" : "passed"] += 1;
+            let pool = "";
+            try {
+              pool = module.toTestSpecification().pool;
+            } catch {
+              // An older Vitest: no specification on the module.
+            }
+            files.push({ file, state, typecheck: pool === "typescript", count: flat.length, failed: count("fail"), skipped: count("skip"), todo: count("todo"), tests });
+            for (const error of moduleErrors) suiteFailures.push(entry("suite", `${file} [ ${file} ]`, "", error));
+            if (!flat.length && !moduleErrors.length) {
+              suiteFailures.push(entry("suite", `${file} [ ${file} ]`, "", { name: "Error", message: `No test suite found in file ${file}` }));
+            }
+          }
+          const unhandled = (unhandledErrors ?? []).map((error) => entry("unhandled", "Unhandled Error", "", error));
+          const failures = [...suiteFailures, ...testFailures, ...unhandled];
+
+          const s = vitest?.snapshot?.summary;
+          const snapshot = {
+            written: s?.added ?? 0,
+            matched: s?.matched ?? 0,
+            failed: s?.unmatched ?? 0,
+            updated: s?.updated ?? 0,
+            obsolete: s?.unchecked ?? 0,
+            files: snapshotFiles(root, rel),
+          };
+
+          const ok = modules.length && !failures.length && !summary.tests.failed && !summary.files.failed;
+          return {
+            seq,
+            state: ok ? "pass" : "fail",
+            note: modules.length ? "" : "No test files found.",
+            files,
+            failures,
+            console: consoleLines.slice(-60),
+            summary,
+            snapshot,
+            coverage: null,
+          };
+        }
+
+        function parseStack(stack) {
+          const frames = [];
+          for (const line of String(stack).split("\n")) {
+            const m = /^\s*at (?:(.+?) \()?(?:file:\/\/)?(\/[^():]+):(\d+):(\d+)\)?\s*$/.exec(line);
+            if (!m) continue;
+            const method = (m[1] ?? "").replace(/^async /, "");
+            frames.push({ method, file: m[2], line: Number(m[3]), col: Number(m[4]) });
+          }
+          return frames;
+        }
+
+        // Vitest's code frame: two lines either side of the failing line and a caret under its column.
+        function codeFrame(file, line, col) {
+          if (!existsSync(file)) return null;
+          const lines = readFileSync(file, "utf8").split(/\r?\n/);
+          const out = [];
+          for (let n = line - 2; n <= line + 2; n++) {
+            if (n < 1 || n > lines.length) continue;
+            out.push({ no: n, text: lines[n - 1].replace(/\t/g, " ") });
+            if (n === line) out.push({ no: null, text: `${" ".repeat(Math.max(0, col - 1))}^` });
+          }
+          return out;
+        }
+
+        function snapshotFiles(root, rel) {
+          const found = [];
+          const walk = (dir) => {
+            if (!existsSync(dir)) return;
+            for (const name of readdirSync(dir).sort()) {
+              if (name === "node_modules" || name.startsWith(".")) continue;
+              const path = join(dir, name);
+              if (statSync(path).isDirectory()) walk(path);
+              else if (name.endsWith(".snap")) found.push({ file: rel(path), content: readFileSync(path, "utf8") });
+            }
+          };
+          walk(join(root, "src"));
+          return found;
+        }
+
+        function summarizeCoverage(map, rel) {
+          if (!map || typeof map.files !== "function") return null;
+          const rows = [];
+          const total = { statements: [0, 0], branches: [0, 0], functions: [0, 0], lines: [0, 0] };
+          for (const file of map.files().sort()) {
+            const fc = map.fileCoverageFor(file);
+            const s = fc.toSummary();
+            const pct = (k) => (s[k].total ? Math.round((s[k].covered / s[k].total) * 10000) / 100 : 100);
+            for (const k of Object.keys(total)) {
+              total[k][0] += s[k].covered;
+              total[k][1] += s[k].total;
+            }
+            rows.push({ file: rel(file), statements: pct("statements"), branches: pct("branches"), functions: pct("functions"), lines: pct("lines"), uncovered: ranges(fc.getUncoveredLines().map(Number)) });
+          }
+          const all = (k) => (total[k][1] ? Math.round((total[k][0] / total[k][1]) * 10000) / 100 : 100);
+          return { rows, all: { statements: all("statements"), branches: all("branches"), functions: all("functions"), lines: all("lines") } };
+        }
+
+        function ranges(numbers) {
+          const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+          const out = [];
+          for (let i = 0; i < sorted.length; i++) {
+            let j = i;
+            while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+            out.push(i === j ? String(sorted[i]) : `${sorted[i]}-${sorted[j]}`);
+            i = j;
+          }
+          return out.join(",");
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>Testing course</title>
+          </head>
+          <body>
+            <script type="module" src="/course/panel.js" data-modes="tests errors summary"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "testing-course-tea-shop",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+            "test": "vitest"
+          },
+          "devDependencies": {
+            "vite": "7.3.7",
+            "vitest": "5.1.0"
+          }
+        }
+      src/kitchen.js: |
+        const queue = [];
+
+        export function addOrder(order) {
+          queue.push(order);
+        }
+
+        export function nextOrder() {
+          return queue.shift();
+        }
+
+        export function queueSize() {
+          return queue.length;
+        }
+
+        export function resetKitchen() {
+          queue.length = 0;
+        }
+      src/kitchen.test.js: |
+        import { expect, test } from "vitest";
+        import { addOrder, nextOrder, queueSize } from "./kitchen.js";
+
+        test("adds an order to the queue", () => {
+          addOrder({ id: "tea", customer: "မြမြ" });
+          expect(queueSize()).toBe(1);
+        });
+
+        test("serves orders in arrival order", () => {
+          addOrder({ id: "tea", customer: "မြမြ" });
+          addOrder({ id: "coffee", customer: "အောင်အောင်" });
+          expect(nextOrder().customer).toBe("မြမြ");
+        });
+
+        test("starts empty", () => {
+          expect(queueSize()).toBe(0);
+        });
+      vite.config.js: |
+        import { defineConfig } from "vite";
+        import courseVitestBridge from "./course/vitest-bridge.js";
+
+        // The course panel: the dev server runs the real Vitest and the preview shows its results.
+        export default defineConfig({
+          plugins: [courseVitestBridge()],
+        });
+      vitest.config.js: |
+        import { defineConfig } from "vitest/config";
+
+        export default defineConfig({
+          test: {
+          },
+        });
+  whiteboardAssets:
+    # Board A: three tests over one shared queue; later, what each test leaves behind.
+    - {
+        id: a-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "queue တစ်ခု၊ test သုံးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-t1-box,
+        kind: rectangle,
+        x: 280,
+        y: 228,
+        width: 260,
+        height: 128,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-t1-head,
+        kind: text,
+        x: 298,
+        y: 238,
+        width: 230,
+        height: 36,
+        text: "test 1",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-t1-do,
+        kind: text,
+        x: 298,
+        y: 276,
+        width: 230,
+        height: 36,
+        text: "အော်ဒါ 1 ခု ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t1-check,
+        kind: text,
+        x: 298,
+        y: 314,
+        width: 230,
+        height: 36,
+        text: "1 ခု ရှိရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t2-box,
+        kind: rectangle,
+        x: 555,
+        y: 228,
+        width: 260,
+        height: 128,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-t2-head,
+        kind: text,
+        x: 573,
+        y: 238,
+        width: 230,
+        height: 36,
+        text: "test 2",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-t2-do,
+        kind: text,
+        x: 573,
+        y: 276,
+        width: 230,
+        height: 36,
+        text: "2 ခု ထည့်၊ 1 ထုတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t2-check,
+        kind: text,
+        x: 573,
+        y: 314,
+        width: 230,
+        height: 36,
+        text: "မြမြ အရင် ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t3-box,
+        kind: rectangle,
+        x: 830,
+        y: 228,
+        width: 260,
+        height: 128,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-t3-head,
+        kind: text,
+        x: 848,
+        y: 238,
+        width: 230,
+        height: 36,
+        text: "test 3",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-t3-do,
+        kind: text,
+        x: 848,
+        y: 276,
+        width: 230,
+        height: 36,
+        text: "ဘာမှ မထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t3-check,
+        kind: text,
+        x: 848,
+        y: 314,
+        width: 230,
+        height: 36,
+        text: "0 ခု ရှိရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 390,
+        y: 362,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 665,
+        y: 362,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-arrow-3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 940,
+        y: 362,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-queue-box,
+        kind: rectangle,
+        x: 280,
+        y: 410,
+        width: 810,
+        height: 76,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-queue,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 770,
+        height: 36,
+        text: "kitchen.js ရဲ့ queue · ဖိုင်တစ်ခုလုံးမှာ 1 ခုတည်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-left-1,
+        kind: text,
+        x: 298,
+        y: 506,
+        width: 230,
+        height: 36,
+        text: "ကျန်: 1 ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-left-2,
+        kind: text,
+        x: 573,
+        y: 506,
+        width: 230,
+        height: 36,
+        text: "ကျန်: 2 ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-left-3,
+        kind: text,
+        x: 848,
+        y: 506,
+        width: 230,
+        height: 36,
+        text: "တွေ့: 2 ခု  ×",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-luck,
+        kind: text,
+        x: 290,
+        y: 558,
+        width: 800,
+        height: 36,
+        text: "test 2 ✓ = test 1 ထည့်ခဲ့တဲ့ မြမြ အော်ဒါ (ကံ)",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-isolation,
+        kind: text,
+        x: 290,
+        y: 606,
+        width: 800,
+        height: 36,
+        text: "isolation = test တိုင်း သီးခြား၊ အစဉ် မမူတည်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board B: the four basic hooks in the order Vitest runs them, top to bottom.
+    - {
+        id: b-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "အခြေခံ hook လေးမျိုးနဲ့ run တဲ့ အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-ba-box,
+        kind: rectangle,
+        x: 280,
+        y: 222,
+        width: 340,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-ba,
+        kind: text,
+        x: 300,
+        y: 227,
+        width: 300,
+        height: 36,
+        text: "before All",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-ba-note,
+        kind: text,
+        x: 650,
+        y: 227,
+        width: 440,
+        height: 36,
+        text: "တစ်ခါပဲ · အစမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 270,
+        width: 40,
+        height: 18,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-be-box,
+        kind: rectangle,
+        x: 280,
+        y: 290,
+        width: 340,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-be,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 300,
+        height: 36,
+        text: "before Each",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-be-note,
+        kind: text,
+        x: 650,
+        y: 295,
+        width: 440,
+        height: 36,
+        text: "test တိုင်း မစခင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 338,
+        width: 40,
+        height: 18,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-t-box,
+        kind: rectangle,
+        x: 280,
+        y: 358,
+        width: 340,
+        height: 46,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-t,
+        kind: text,
+        x: 300,
+        y: 363,
+        width: 300,
+        height: 36,
+        text: "test",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 406,
+        width: 40,
+        height: 18,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-ae-box,
+        kind: rectangle,
+        x: 280,
+        y: 426,
+        width: 340,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-ae,
+        kind: text,
+        x: 300,
+        y: 431,
+        width: 300,
+        height: 36,
+        text: "after Each",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-ae-note,
+        kind: text,
+        x: 650,
+        y: 431,
+        width: 440,
+        height: 36,
+        text: "test တိုင်း ပြီးရင် (ကျလည်း)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow-4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 474,
+        width: 40,
+        height: 18,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-aa-box,
+        kind: rectangle,
+        x: 280,
+        y: 494,
+        width: 340,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-aa,
+        kind: text,
+        x: 300,
+        y: 499,
+        width: 300,
+        height: 36,
+        text: "after All",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-aa-note,
+        kind: text,
+        x: 650,
+        y: 499,
+        width: 440,
+        height: 36,
+        text: "တစ်ခါပဲ · အဆုံးမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-scope,
+        kind: text,
+        x: 290,
+        y: 558,
+        width: 800,
+        height: 36,
+        text: "describe ထဲက hook → အဲဒီ test တွေအတွက်ပဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-throw,
+        kind: text,
+        x: 290,
+        y: 604,
+        width: 800,
+        height: 36,
+        text: "hook မှာ error → setup ပုံစံမှာ ပြဿနာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board C: a fixture in Vitest's builder form — every test gets its own kitchen.
+    - {
+        id: c-title,
+        kind: text,
+        x: 290,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "Fixture · test တိုင်း kitchen အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-code-1,
+        kind: text,
+        x: 290,
+        y: 232,
+        width: 800,
+        height: 36,
+        text: 'import { test as base } from "vitest";',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-2,
+        kind: text,
+        x: 290,
+        y: 272,
+        width: 800,
+        height: 36,
+        text: 'const test = base.extend("kitchen",',
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-3,
+        kind: text,
+        x: 290,
+        y: 312,
+        width: 800,
+        height: 36,
+        text: "  () => createKitchen());",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-4,
+        kind: text,
+        x: 290,
+        y: 372,
+        width: 800,
+        height: 36,
+        text: 'test("starts empty", ({ kitchen }) => {',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-5,
+        kind: text,
+        x: 290,
+        y: 412,
+        width: 800,
+        height: 36,
+        text: "  expect(kitchen.size()).toBe(0);",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-code-6,
+        kind: text,
+        x: 290,
+        y: 452,
+        width: 800,
+        height: 36,
+        text: "});",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-new,
+        kind: text,
+        x: 290,
+        y: 516,
+        width: 800,
+        height: 36,
+        text: "test တိုင်း kitchen အသစ် · ရှင်းဖို့ မေ့စရာ မရှိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-finished,
+        kind: text,
+        x: 290,
+        y: 572,
+        width: 800,
+        height: 36,
+        text: "onTestFinished(() => …) · test ပြီးရင် ပိတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese provider chosen in the
+  # render console (AthanLab with the user's own key, or VoxCPM2 when that feature is enabled).
+  voiceProfile: pocket-alba-v1
+  seed: 5106
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: open
+    chapter: "Test တွေ data ကို မျှသုံးရင်"
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ test တွေကို describe နဲ့ အုပ်စုဖွဲ့ပြီး၊ test တစ်ခုကို ပြင်ဆင်၊
+      လုပ်ဆောင်၊ စစ်ဆေး ဆိုတဲ့ အဆင့် သုံးဆင့်နဲ့ ရေးခဲ့ပါတယ်။ ဒီ lesson မှာတော့ test တွေ တစ်ခုနဲ့
+      တစ်ခု မထိခိုက်အောင် ဘယ်လို ခွဲထားမလဲ ဆိုတာ ကြည့်ပါမယ်။ [[mark:draw-queue]] ဆိုင်ရဲ့
+      မီးဖိုချောင်မှာ အော်ဒါ စာရွက်တွေကို ဝင်လာတဲ့ အစဉ်အတိုင်း တန်းစီထားတဲ့ queue တစ်ခု ရှိပါတယ်။
+      အရင် ဝင်လာတဲ့ အော်ဒါကို အရင် ချက်ပေးပါတယ်။ code ထဲမှာလည်း ဒီ queue က ဖိုင်တစ်ခုလုံးမှာ
+      တစ်ခုတည်းပဲ ရှိပါတယ်။ [[mark:draw-tests]] ဒီ queue အတွက် test သုံးခု ရေးထားပါတယ်။ ပထမ test က
+      အော်ဒါ တစ်ခု ထည့်ပြီး queue မှာ တစ်ခု ရှိလားလို့ စစ်ပါတယ်။ ဒုတိယ test က အော်ဒါ နှစ်ခု ထည့်ပြီး၊
+      အရင် ဝင်တဲ့ မြမြရဲ့ အော်ဒါ အရင် ထွက်လာလားလို့ စစ်ပါတယ်။ တတိယ test ကတော့ ဘာမှ မထည့်ရသေးတဲ့
+      queue က အလွတ် ဖြစ်ရမယ်လို့ စစ်ပါတယ်။ [[mark:draw-shared]] test သုံးခုလုံးက queue
+      တစ်ခုတည်းကိုပဲ သုံးနေကြတာ သတိထားကြည့်ပါ။ ဒါဆို test တစ်ခု ထည့်ခဲ့တဲ့ အော်ဒါက နောက် test
+      ထဲအထိ ကျန်နေမလား။
+    sources:
+      - {
+          title: "Vitest: Setup and Teardown",
+          url: "https://vitest.dev/guide/learn/setup-teardown",
+        }
+      - {
+          title: "Google Testing Blog: Test Sizes, tests must run in any order (facts C15)",
+          url: "https://testing.googleblog.com/2010/12/test-sizes.html",
+        }
+    actions:
+      - id: open-board
+        type: whiteboard.apply
+        at: { scene: start, offsetMs: -450 }
+        open: true
+        clear: true
+        upsertIds: [a-title]
+      - id: start-runtime
+        type: runtime.start
+        at: { mark: start }
+        timeoutMs: 60000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: draw-queue
+        type: whiteboard.apply
+        at: { mark: draw-queue }
+        upsertIds: [a-queue-box, a-queue]
+        drawMs: 2500
+      - id: draw-tests
+        type: whiteboard.apply
+        at: { mark: draw-tests }
+        upsertIds:
+          [
+            a-t1-box,
+            a-t1-head,
+            a-t1-do,
+            a-t1-check,
+            a-t2-box,
+            a-t2-head,
+            a-t2-do,
+            a-t2-check,
+            a-t3-box,
+            a-t3-head,
+            a-t3-do,
+            a-t3-check,
+          ]
+        drawMs: 5500
+      - id: draw-shared
+        type: whiteboard.apply
+        at: { mark: draw-shared }
+        upsertIds: [a-arrow-1, a-arrow-2, a-arrow-3]
+        drawMs: 1500
+
+  - id: starter
+    narration: >
+      code ကို ကြည့်ရအောင်။ ဒါက မီးဖိုချောင်ရဲ့ kitchen ဖိုင်ဖြစ်ပြီး၊ အရင်ကတည်းက ရှိခဲ့တဲ့ code
+      ဟောင်းပါ။ [[mark:select-queue]] queue ကို function တွေရဲ့ အပြင်ဘက်၊ ဖိုင်ရဲ့ ထိပ်ဆုံးမှာ တစ်ခါပဲ
+      ဆောက်ထားပါတယ်။ ဒါကြောင့် ဒီ ဖိုင်ကို ယူသုံးတဲ့ နေရာတိုင်းက array တစ်ခုတည်းကိုပဲ မျှသုံးကြပါတယ်။
+      [[mark:select-functions]] အော်ဒါ ထည့်တာ၊ အရင် ဝင်တာကို ထုတ်ပေးတာနဲ့ ဘယ်နှခု ရှိလဲ ပြတာ ဆိုတဲ့
+      function သုံးခုက အဲဒီ queue ကိုပဲ သုံးပါတယ်။ [[mark:select-reset]] အောက်ဆုံးက function ကတော့
+      queue ကို ရှင်းပြီး အလွတ် ပြန်ဖြစ်စေပါတယ်။ ဒါပေမဲ့ ဘယ်နေရာကမှ မခေါ်ရသေးပါဘူး။ [[mark:open-test]]
+      test ဖိုင်ကို ဖွင့်ကြည့်ရအောင်။ [[mark:select-first]] ပထမ test က မြမြရဲ့ လက်ဖက်ရည် အော်ဒါ တစ်ခု
+      ထည့်ပြီး၊ queue မှာ တစ်ခု ရှိရမယ်လို့ စစ်ပါတယ်။ [[mark:select-second]] ဒုတိယ test က မြမြရဲ့
+      လက်ဖက်ရည်နဲ့ အောင်အောင်ရဲ့ ကော်ဖီကို ထည့်ပြီး၊ ပထမ ထွက်လာတဲ့ အော်ဒါက မြမြရဲ့ အော်ဒါ
+      ဖြစ်ရမယ်လို့ စစ်ပါတယ်။ [[mark:select-third]] တတိယ test က queue အလွတ် ဖြစ်ရမယ်လို့ စစ်ထားပါတယ်။
+      ဆိုင် စဖွင့်ချိန်မှာ အော်ဒါ တစ်ခုမှ မရှိသေးတဲ့အတွက် ဒီ test က မှန်ပါတယ်။
+    sources:
+      - {
+          title: "web.dev Learn Testing: Assertions and other primitives, lifecycle methods",
+          url: "https://web.dev/learn/testing/assertions/tools#lifecycle_methods",
+        }
+      - {
+          title: "Vitest: Setup and Teardown, repeating setup for each test",
+          url: "https://vitest.dev/guide/learn/setup-teardown#repeating-setup-for-each-test",
+        }
+    actions:
+      - id: close-board
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: select-queue
+        type: editor.select
+        at: { mark: select-queue }
+        target: { file: src/kitchen.js, text: "const queue = [];", occurrence: 1 }
+      - id: select-functions
+        type: editor.select
+        at: { mark: select-functions }
+        target:
+          {
+            file: src/kitchen.js,
+            text: "export function addOrder(order) {\n  queue.push(order);\n}\n\nexport function nextOrder() {\n  return queue.shift();\n}\n\nexport function queueSize() {\n  return queue.length;\n}",
+            occurrence: 1,
+          }
+      - id: select-reset
+        type: editor.select
+        at: { mark: select-reset }
+        target:
+          {
+            file: src/kitchen.js,
+            text: "export function resetKitchen() {\n  queue.length = 0;\n}",
+            occurrence: 1,
+          }
+      - id: open-test
+        type: workspace.openFile
+        at: { mark: open-test }
+        path: src/kitchen.test.js
+      - id: select-first
+        type: editor.select
+        at: { mark: select-first }
+        target:
+          {
+            file: src/kitchen.test.js,
+            text: "addOrder({ id: \"tea\", customer: \"မြမြ\" });\n  expect(queueSize()).toBe(1);",
+            occurrence: 1,
+          }
+      - id: select-second
+        type: editor.select
+        at: { mark: select-second }
+        target:
+          {
+            file: src/kitchen.test.js,
+            text: "addOrder({ id: \"tea\", customer: \"မြမြ\" });\n  addOrder({ id: \"coffee\", customer: \"အောင်အောင်\" });\n  expect(nextOrder().customer).toBe(\"မြမြ\");",
+            occurrence: 1,
+          }
+      - id: select-third
+        type: editor.select
+        at: { mark: select-third }
+        target:
+          {
+            file: src/kitchen.test.js,
+            text: "test(\"starts empty\", () => {\n  expect(queueSize()).toBe(0);\n});",
+            occurrence: 1,
+          }
+
+  - id: panel
+    narration: >
+      [[mark:ready]] Vitest က ဘာ ပြလဲ ကြည့်ရအောင်။ ညာဘက်က panel ကလည်း ပြီးခဲ့တဲ့ lesson တွေကလိုပဲ၊
+      code ပြောင်းတိုင်း သူ့ဘာသာ ပြန် run နေတဲ့ တကယ့် Vitest ရဲ့ ရလဒ်ကို ပြတာပါ။ [[mark:read-tree]] အပေါ်မှာ အနီရောင် FAIL ပေါ်နေပြီး၊
+      test စာရင်းမှာ ရှေ့က test နှစ်ခုက အမှန်ခြစ်နဲ့ pass ဖြစ်ပေမဲ့ တတိယ test ကတော့ ကြက်ခြေခတ်နဲ့
+      ကျနေပါတယ်။ [[mark:read-message]]
+      အလယ်က Failed Tests အပိုင်းမှာ သုည ဖြစ်ရမယ့် နေရာမှာ ၂ ရနေတယ်လို့ ပြောနေပါတယ်။ အစိမ်းရောင်
+      Expected က သုည၊ အနီရောင် Received က ၂ ပါ။ ဆိုလိုတာက အလွတ် ဖြစ်ရမယ့် queue ထဲမှာ အော်ဒါ နှစ်ခု
+      ရှိနေတာပါ။ [[mark:read-summary]] အောက်ဆုံးက summary မှာလည်း တစ်ခု fail နဲ့ နှစ်ခု pass လို့
+      ပြနေပါတယ်။
+    sources:
+      - {
+          title: "Vitest: Writing Tests, reading test output",
+          url: "https://vitest.dev/guide/learn/writing-tests#reading-test-output",
+        }
+    actions:
+      - id: wait-ready
+        type: runtime.waitForReady
+        at: { mark: ready }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-ready }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-start-fail
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-status }
+        attribute: { name: data-state, value: fail }
+        retry: { maxAttempts: 3, delayMs: 1000 }
+      - id: expect-start-two-passed
+        type: expect.preview
+        at: { afterAction: expect-start-fail }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "2" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-start-third-fails
+        type: expect.preview
+        at: { afterAction: expect-start-two-passed }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-test-3 }
+        attribute: { name: data-state, value: fail }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-start-message
+        type: expect.preview
+        at: { afterAction: expect-start-third-fails }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-error-1 }
+        attribute: { name: data-message, value: "expected 2 to be +0 // Object.is equality" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+
+  - id: order-dependence
+    chapter: "Test တစ်ခုက နောက် test ကို ထိခိုက်ရင်"
+    narration: >
+      တတိယ test က မှားနေတာလား။ မမှားပါဘူး၊ ဆိုင် စဖွင့်ချိန်မှာ queue က အလွတ် ဖြစ်ရပါမယ်။ ဒါဆို အော်ဒါ
+      နှစ်ခု ဘယ်က ရောက်လာတာလဲ။ [[mark:board-left]] Vitest က ဖိုင်တစ်ခုထဲက test တွေကို အပေါ်ကနေ အောက်ကို
+      တစ်ခုပြီးတစ်ခု run ပြီး၊ kitchen ဖိုင်ကိုလည်း တစ်ခါပဲ load လုပ်ပါတယ်။ ဒါကြောင့် queue က test တွေကြားမှာ
+      ရှင်းမသွားပါဘူး။ [[mark:draw-left-1]] ပထမ test ပြီးတော့ queue ထဲမှာ အော်ဒါ တစ်ခု ကျန်ခဲ့ပါတယ်။
+      [[mark:draw-left-2]] ဒုတိယ test က နှစ်ခု ထပ်ထည့်ပြီး တစ်ခု ထုတ်လိုက်တော့ နှစ်ခု ကျန်ခဲ့ပါတယ်။
+      [[mark:draw-left-3]] တတိယ test က သုည ဖြစ်ရမယ်လို့ စစ်တော့ ၂ ကို တွေ့ပြီး ကျသွားတာပါ။ ဒီ test
+      တစ်ခုတည်းကိုပဲ run ရင်တော့ pass ဖြစ်မှာ ဖြစ်ပြီး၊ တခြား test တွေနဲ့ အတူ run မှ ကျတာပါ။
+      [[mark:draw-luck]] ဒုတိယ test ကလည်း မှန်ကန်တဲ့ အကြောင်းကြောင့် pass ဖြစ်တာ မဟုတ်ပါဘူး။ သူ ထုတ်လိုက်တဲ့ အော်ဒါက ပထမ
+      test ထည့်ခဲ့တဲ့ မြမြရဲ့ လက်ဖက်ရည် ဖြစ်ပြီး၊ မှာတဲ့သူ နာမည် တူနေလို့ ကံကောင်းပြီး pass ဖြစ်နေတာပါ။
+      [[mark:draw-isolation]] ဆိုလိုတာက test တစ်ခုရဲ့ ရလဒ်က တခြား test တွေပေါ်၊ run တဲ့ အစဉ်ပေါ်
+      မူတည်နေပါတယ်။ test ကောင်းတွေကတော့ တစ်ခုတည်း run တာဖြစ်ဖြစ်၊ ဘယ် အစဉ်နဲ့ run တာဖြစ်ဖြစ် ရလဒ်
+      တူရပါမယ်။
+      ဒီလို test တစ်ခုက နောက် test တစ်ခုကို မထိခိုက်ဘဲ သီးခြား ဖြစ်နေတာကို isolation လို့ ခေါ်ပါတယ်။
+      [[mark:files-isolated]] Vitest က test ဖိုင် တစ်ဖိုင်ချင်းကိုတော့ သီးခြား ပတ်ဝန်းကျင်မှာ run တဲ့အတွက်၊ တခြား
+      ဖိုင်က test တွေက ဒီ queue ကို မထိနိုင်ပါဘူး။ ပြဿနာက ဖိုင်တစ်ခုတည်းထဲက test တွေက module
+      တစ်ခုတည်းကို မျှသုံးနေတာပါ။
+    sources:
+      - {
+          title: "Google Testing Blog: Test Sizes, tests must run in any order (facts C15)",
+          url: "https://testing.googleblog.com/2010/12/test-sizes.html",
+        }
+      - {
+          title: "Vitest: Features, each test file runs isolated (facts A07)",
+          url: "https://vitest.dev/guide/features",
+        }
+      - {
+          title: "Vitest: isolate (default true, facts A07)",
+          url: "https://vitest.dev/config/isolate",
+        }
+    actions:
+      - id: board-left
+        type: whiteboard.apply
+        at: { mark: board-left }
+        open: true
+        upsertIds: [a-title]
+      - id: draw-left-1
+        type: whiteboard.apply
+        at: { mark: draw-left-1 }
+        upsertIds: [a-left-1]
+        drawMs: 1000
+      - id: draw-left-2
+        type: whiteboard.apply
+        at: { mark: draw-left-2 }
+        upsertIds: [a-left-2]
+        drawMs: 1000
+      - id: draw-left-3
+        type: whiteboard.apply
+        at: { mark: draw-left-3 }
+        upsertIds: [a-left-3]
+        drawMs: 1000
+      - id: draw-luck
+        type: whiteboard.apply
+        at: { mark: draw-luck }
+        upsertIds: [a-luck]
+        drawMs: 2000
+      - id: draw-isolation
+        type: whiteboard.apply
+        at: { mark: draw-isolation }
+        upsertIds: [a-isolation]
+        drawMs: 2000
+
+  - id: before-each
+    chapter: "Before Each နဲ့ အစကနေ ပြန်စရအောင်"
+    narration: >
+      ဒါဆို test တိုင်း မစခင် queue ကို ရှင်းပေးရပါမယ်။ ရှင်းတဲ့ function ကို test တိုင်းရဲ့ ထိပ်မှာ ကိုယ်တိုင်
+      ခေါ်နေမယ့်အစား၊ hook ကို သုံးပါမယ်။ hook ဆိုတာ test တစ်ခုချင်း မစခင် ဒါမှမဟုတ် ပြီးတဲ့နောက် Vitest က အလိုလို run
+      ပေးတဲ့ function ပါ။ [[mark:type-imports]] ဖိုင်ရဲ့ ထိပ်မှာ vitest ကနေ before Each ကို ယူပြီး၊ kitchen
+      ဖိုင်ကနေလည်း queue ကို ရှင်းတဲ့ function ကို ယူပါမယ်။ [[mark:type-hook]] ပြီးတော့ import တွေရဲ့ အောက်မှာ
+      before Each hook တစ်ခု ထည့်ပါမယ်။ test တစ်ခု မစခင်တိုင်း queue ကို ရှင်းခိုင်းထားတာပါ။
+      [[mark:select-hook]] ဒီ hook ကို describe တစ်ခုခုထဲမှာ မထည့်ဘဲ ဖိုင်ရဲ့ အပြင်ဆုံး အဆင့်မှာ
+      ရေးထားတဲ့အတွက်၊ ဖိုင်ထဲက test အားလုံးအတွက် အလုပ်လုပ်ပါတယ်။
+      [[mark:read-green]] panel ကို ကြည့်ပါ။ test သုံးခုလုံး pass ဖြစ်ပြီး၊ အပေါ်မှာ အစိမ်းရောင် PASS
+      ပေါ်လာပါပြီ။ တတိယ test က queue အလွတ်နဲ့ စလို့ pass ဖြစ်ပြီး၊ ဒုတိယ test ကလည်း အခုတော့ သူ
+      ကိုယ်တိုင် ထည့်ထားတဲ့ အော်ဒါကို ထုတ်ပြီး pass ဖြစ်တာပါ။ test တွေရဲ့ အစဉ် ပြောင်းသွားရင်လည်း ရလဒ်
+      မပြောင်းတော့ပါဘူး။
+    sources:
+      - { title: "Vitest: Hooks, beforeEach", url: "https://vitest.dev/api/hooks#beforeeach" }
+      - {
+          title: "Vitest: Setup and Teardown",
+          url: "https://vitest.dev/guide/learn/setup-teardown",
+        }
+    actions:
+      - id: close-left
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+      - id: type-import-hook
+        type: editor.type
+        at: { mark: type-imports }
+        target: { file: src/kitchen.test.js, after: "import { ", occurrence: 1 }
+        text: "beforeEach, "
+      - id: type-import-reset
+        type: editor.type
+        at: { afterAction: type-import-hook }
+        target: { file: src/kitchen.test.js, after: "queueSize", occurrence: 1 }
+        text: ", resetKitchen"
+      - id: type-hook
+        type: editor.type
+        at: { mark: type-hook }
+        target: { file: src/kitchen.test.js, after: "from \"./kitchen.js\";\n", occurrence: 1 }
+        text: "\nbeforeEach(() => {\n  resetKitchen();\n});\n"
+        # One block (pilot note 1): one write, one run.
+        cadence: block
+      - id: expect-green
+        type: expect.preview
+        at: { afterAction: type-hook }
+        timeoutMs: 8000
+        target: { by: testId, value: vt-status }
+        attribute: { name: data-state, value: pass }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-three-passed
+        type: expect.preview
+        at: { afterAction: expect-green }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-summary }
+        attribute: { name: data-tests-passed, value: "3" }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: expect-third-passes
+        type: expect.preview
+        at: { afterAction: expect-three-passed }
+        timeoutMs: 5000
+        target: { by: testId, value: vt-test-3 }
+        attribute: { name: data-state, value: pass }
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: select-hook
+        type: editor.select
+        at: { mark: select-hook }
+        target:
+          {
+            file: src/kitchen.test.js,
+            text: "beforeEach(() => {\n  resetKitchen();\n});",
+            occurrence: 1,
+          }
+      - id: expect-hook-file
+        type: expect.file
+        at: { afterAction: select-hook }
+        path: src/kitchen.test.js
+        contains: "import { beforeEach, expect, test } from \"vitest\";\nimport { addOrder, nextOrder, queueSize, resetKitchen } from \"./kitchen.js\";\n\nbeforeEach(() => {\n  resetKitchen();\n});"
+
+  - id: hook-order
+    chapter: "အခြေခံ hook လေးမျိုးနဲ့ သူတို့ရဲ့ အစဉ်"
+    narration: >
+      [[mark:board-hooks]] Vitest ရဲ့ အခြေခံ hook လေးမျိုးကို၊ run တဲ့ အစဉ်အတိုင်း အပေါ်ကနေ အောက်ကို
+      ဆွဲကြည့်ရအောင်။ [[mark:draw-before-all]] before All က ဖိုင်ထဲက test တွေ မစခင် တစ်ခါပဲ run ပါတယ်။
+      database ချိတ်တာ၊ ဖိုင်ကြီး တစ်ခု ဖတ်တာလို အချိန်ကြာတဲ့ setup ကို တစ်ခါတည်း လုပ်ချင်တဲ့အခါ
+      သုံးပါတယ်။ ဒီ lesson ရဲ့ queue ကို before All နဲ့ ရှင်းခဲ့ရင်တော့ အစမှာ တစ်ခါပဲ ရှင်းမှာမို့၊ test
+      တွေကြားမှာ အော်ဒါတွေ ကျန်နေဦးမှာပါ။ [[mark:draw-each]] before Each က test တိုင်း မစခင် run ပြီး၊ test ပြီးတဲ့နောက်မှာတော့
+      after Each က run ပါတယ်။ test ကျသွားရင်တောင် after Each က run ပေးလို့၊ test တစ်ခု
+      ပြောင်းထားခဲ့တာတွေကို ပြန်ရှင်းဖို့ ကောင်းပါတယ်။ နောက် lesson တွေမှာ အတု လုပ်ထားတဲ့ နာရီနဲ့ function တွေကို မူလအတိုင်း ပြန်ထားဖို့
+      after Each ကို သုံးပါမယ်။ [[mark:draw-after-all]] after All က test အားလုံး ပြီးတဲ့နောက် တစ်ခါပဲ run
+      ပြီး၊ before All မှာ ဖွင့်ခဲ့တာတွေကို ပိတ်ဖို့ သုံးပါတယ်။ [[mark:draw-scope]] hook ကို describe ထဲမှာ ရေးရင်
+      အဲဒီ describe ထဲက test တွေအတွက်ပဲ အလုပ်လုပ်ပါတယ်။ hook တွေ အဆင့်ဆင့် ရှိနေရင် after hook
+      တွေကတော့ ပြောင်းပြန် အစဉ်နဲ့ run ပြီး၊ အတွင်းဘက်က after Each က အရင်၊ အပြင်ဘက်က after Each က
+      နောက်မှ run ပါတယ်။ [[mark:draw-throw]] hook ကိုယ်တိုင် error တက်ရင်တော့၊ စစ်နေတဲ့ အလုပ်လုပ်ပုံ
+      မှားတာထက် test တွေကို ပြင်ဆင်ထားပုံမှာ ပြဿနာ ရှိတယ် ဆိုတဲ့ လက္ခဏာပါ။
+    sources:
+      - {
+          title: "web.dev Learn Testing: Assertions and other primitives, lifecycle methods",
+          url: "https://web.dev/learn/testing/assertions/tools#lifecycle_methods",
+        }
+      - {
+          title: "Vitest: Setup and Teardown, one-time setup, scoping with describe, execution order",
+          url: "https://vitest.dev/guide/learn/setup-teardown",
+        }
+      - { title: "Vitest: Hooks", url: "https://vitest.dev/api/hooks" }
+      - {
+          title: "Vitest: Migrating from Jest, hooks run as a stack (facts A27)",
+          url: "https://vitest.dev/guide/migration/jest",
+        }
+    actions:
+      - id: board-hooks
+        type: whiteboard.apply
+        at: { mark: board-hooks }
+        open: true
+        clear: true
+        upsertIds: [b-title]
+      - id: draw-before-all
+        type: whiteboard.apply
+        at: { mark: draw-before-all }
+        upsertIds: [b-ba-box, b-ba, b-ba-note]
+        drawMs: 2000
+      - id: draw-each
+        type: whiteboard.apply
+        at: { mark: draw-each }
+        upsertIds:
+          [
+            b-arrow-1,
+            b-be-box,
+            b-be,
+            b-be-note,
+            b-arrow-2,
+            b-t-box,
+            b-t,
+            b-arrow-3,
+            b-ae-box,
+            b-ae,
+            b-ae-note,
+          ]
+        drawMs: 5000
+      - id: draw-after-all
+        type: whiteboard.apply
+        at: { mark: draw-after-all }
+        upsertIds: [b-arrow-4, b-aa-box, b-aa, b-aa-note]
+        drawMs: 2000
+      - id: draw-scope
+        type: whiteboard.apply
+        at: { mark: draw-scope }
+        upsertIds: [b-scope]
+        drawMs: 1800
+      - id: draw-throw
+        type: whiteboard.apply
+        at: { mark: draw-throw }
+        upsertIds: [b-throw]
+        drawMs: 1800
+
+  - id: fixtures
+    narration: >
+      ဒီ lesson ရဲ့ kitchen ဖိုင်က queue တစ်ခုတည်းကို မျှသုံးတဲ့ code ဟောင်း ဖြစ်လို့ before Each နဲ့
+      ရှင်းပေးရပါတယ်။ [[mark:board-fixture]] code အသစ်တွေမှာတော့ kitchen အသစ် တစ်ခုကို ဆောက်ပေးတဲ့
+      function ရှိတာ များပါတယ်။ အဲဒီလို ဆိုရင် Vitest ရဲ့ fixture ကို သုံးနိုင်ပါတယ်။ fixture ဆိုတာ test
+      အတွက် ကြိုပြင်ပေးထားတဲ့ data ဒါမှမဟုတ် object ပါ။ [[mark:draw-extend]] test extend နဲ့ kitchen
+      ဆိုတဲ့ fixture တစ်ခုကို သတ်မှတ်ထားပြီး၊ [[mark:draw-use]] test က သူ့ parameter ထဲကနေ kitchen ကို
+      တောင်းယူလိုက်ရင်၊ Vitest က test တိုင်းအတွက် kitchen အသစ် တစ်ခုစီ ဆောက်ပေးပါတယ်။
+      [[mark:draw-new]] ဒါကြောင့် test တစ်ခုစီက သူ့ကိုယ်ပိုင် queue နဲ့ စပြီး၊ ရှင်းဖို့ မေ့စရာ မရှိတော့ပါဘူး။
+      [[mark:draw-finished]] test တစ်ခုထဲမှာ ဖွင့်ခဲ့တာကို test ပြီးရင် ပိတ်ချင်ရင်တော့ on Test Finished ကို
+      သုံးပြီး၊ ပိတ်တဲ့ code ကို ဖွင့်တဲ့ နေရာနားမှာပဲ ရေးထားလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Vitest: Test Context, extend test context, builder pattern (facts A32)",
+          url: "https://vitest.dev/guide/test-context#builder-pattern",
+        }
+      - {
+          title: "Vitest: Setup and Teardown, fixtures with test.extend and cleanup with onTestFinished",
+          url: "https://vitest.dev/guide/learn/setup-teardown#fixtures-with-test-extend",
+        }
+      - {
+          title: "Vitest: Hooks, onTestFinished",
+          url: "https://vitest.dev/api/hooks#ontestfinished",
+        }
+    actions:
+      - id: board-fixture
+        type: whiteboard.apply
+        at: { mark: board-fixture }
+        clear: true
+        upsertIds: [c-title]
+      - id: draw-extend
+        type: whiteboard.apply
+        at: { mark: draw-extend }
+        upsertIds: [c-code-1, c-code-2, c-code-3]
+        drawMs: 2500
+      - id: draw-use
+        type: whiteboard.apply
+        at: { mark: draw-use }
+        upsertIds: [c-code-4, c-code-5, c-code-6]
+        drawMs: 2500
+      - id: draw-new
+        type: whiteboard.apply
+        at: { mark: draw-new }
+        upsertIds: [c-new]
+        drawMs: 1800
+      - id: draw-finished
+        type: whiteboard.apply
+        at: { mark: draw-finished }
+        upsertIds: [c-finished]
+        drawMs: 1800
+
+  - id: recap
+    chapter: "ပြန်ချုပ်ရရင်"
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ test တွေက module ထဲက data တစ်ခုတည်းကို မျှသုံးရင်၊ test တစ်ခု ထားခဲ့တာက
+      နောက် test ထဲ ရောက်သွားပြီး၊ test ရဲ့ ရလဒ်က run တဲ့ အစဉ်ပေါ် မူတည်သွားပါတယ်။ test
+      တိုင်းကို before Each နဲ့ အစကနေ ပြန်စပေးပြီး၊ test ပြောင်းထားခဲ့တာတွေကို after Each နဲ့ ပြန်ရှင်းပါ။ [[mark:recap-all]] before All နဲ့
+      after All ကတော့ ဖိုင် ဒါမှမဟုတ် describe တစ်ခုအတွက် တစ်ခါပဲ run ပြီး၊ code အသစ်မှာဆိုရင် fixture နဲ့
+      test တိုင်းကို ကိုယ်ပိုင် object ပေးလို့ ရပါတယ်။ နောက် lesson မှာတော့ code ရေးနေတုန်း watch mode
+      နဲ့ Vitest ကို ဘယ်လို ဖွင့်ထားရလဲ၊ ကိုယ် လိုချင်တဲ့ test တွေကိုပဲ ဘယ်လို ရွေး run ရလဲ ဆိုတာ
+      ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "Vitest: Setup and Teardown",
+          url: "https://vitest.dev/guide/learn/setup-teardown",
+        }
+      - {
+          title: "web.dev Learn Testing: Assertions and other primitives, lifecycle methods",
+          url: "https://web.dev/learn/testing/assertions/tools#lifecycle_methods",
+        }
+    actions:
+      - id: close-fixture
+        type: whiteboard.apply
+        at: { scene: start }
+        open: false
+checks:
+  - { type: timing.p95Ms, max: 300 }
