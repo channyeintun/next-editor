@@ -1835,7 +1835,7 @@ scenes:
   - id: zero
     chapter: "Zero shot နဲ့ few shot"
     narration: >
-      [[mark:close-tech]] ပထမ အလုပ်က ဆိုင်ပိုင်ရှင် မြမြ ဆီ ရောက်လာတဲ့ customer စာတွေကို ချီးကျူးတာ၊
+      [[mark:close-tech]] ပထမ အလုပ်က ဆိုင်ပိုင်ရှင် ဆီ ရောက်လာတဲ့ customer စာတွေကို ချီးကျူးတာ၊
       တိုင်ကြားတာ၊ မေးခွန်း ဆိုပြီး ခွဲတာပါ။ [[mark:open-sorter]] ဒါက sorter ဖိုင်ပါ။ customer စာ တစ်ခုချင်းကို model ဆီ request တစ်ခုစီ ပို့ပါတယ်။ [[mark:sel-task]] zero
       shot prompt မှာ label သုံးမျိုးထဲက တစ်ခုကို ရွေးပြီး JSON နဲ့ ပြန်ပေးဖို့ပဲ ပြောထားပါတယ်။
       [[mark:panel-ready]] AI panel ရဲ့ zero shot card မှာ customer စာ ရှစ်ခုကို ခွဲထားပါတယ်။ ဒီ စာတွေက lesson
