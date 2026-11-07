@@ -663,7 +663,7 @@ scenes:
       [[mark:d-proto]] ဒီ မျဉ်းပေါ်မှာ အန္တရာယ် အများဆုံးက ဘယ်ဘက်မှာ ဆောက်ခဲ့တဲ့ အရာ တစ်ခုက ညာဘက်ကို မသိမသာ
       ရွေ့သွားတာပါ။ စမ်းဖို့ ဆောက်ထားတဲ့ အကြမ်းကို prototype လို့ ခေါ်ပြီး၊ တကယ့် customer တွေ သုံးနေတဲ့ ဟာကို
       production လို့ ခေါ်ပါတယ်။ [[mark:d-story]] ဥပမာ ကြိုမှာ app ကို မဆောက်ခင် ပုံစံ ကြည့်ဖို့၊ ညတစ်ည vibe
-      coding နဲ့ form လေး တစ်ခု ဆောက်ထားတယ် ဆိုပါစို့။ ဆိုင်ပိုင်ရှင် မြမြ က သဘောကျလို့ ဆိုင်ရဲ့ page မှာ link
+      coding နဲ့ form လေး တစ်ခု ဆောက်ထားတယ် ဆိုပါစို့။ ဆိုင်ပိုင်ရှင် က သဘောကျလို့ ဆိုင်ရဲ့ page မှာ link
       တင်လိုက်ပါတယ်။ နောက်နေ့ မနက်ကစပြီး တကယ့် customer တွေက နာမည်နဲ့ ဖုန်းနံပါတ် ထည့်ပြီး မှာလာကြပါတယ်။
       [[mark:d-drift]] ဒါပေမဲ့ အဲဒီ form ရဲ့ code ကို ဘယ်သူမှ မဖတ်ရသေးသလို၊ ဖုန်းနံပါတ်တွေ ဘယ်ရောက်သွားလဲ၊
       အရေအတွက် သုည ထည့်ရင် ဘာဖြစ်လဲ ဆိုတာကိုလည်း ဘယ်သူမှ မစစ်ရသေးပါဘူး။ ဘယ်သူမှ မဆုံးဖြတ်ဘဲ prototype က production
@@ -721,7 +721,7 @@ scenes:
         type: editor.type
         at: { mark: type-rule }
         target: { file: notes.md, after: "# Notes\n", occurrence: 1 }
-        text: "\n## Lesson 03 · Prototype နဲ့ production\n- prototype — စမ်းဖို့ပဲ။ တကယ့် customer data မထည့်ဘူး။\n- production — customer data ဒါမှမဟုတ် ငွေချေတာ ပါရင် spec၊ test၊ လူ့ review ပါမှ တင်မယ်။\n- prototype ကို တကယ် သုံးချင်ရင် — မြမြ နဲ့ တိုင်ပင်ပြီး risk နဲ့ ကိုက်တဲ့ စစ်ဆေးမှု ထည့်မယ်။\n"
+        text: "\n## Lesson 03 · Prototype နဲ့ production\n- prototype — စမ်းဖို့ပဲ။ တကယ့် customer data မထည့်ဘူး။\n- production — customer data ဒါမှမဟုတ် ငွေချေတာ ပါရင် spec၊ test၊ လူ့ review ပါမှ တင်မယ်။\n- prototype ကို တကယ် သုံးချင်ရင် — ဆိုင်ပိုင်ရှင် နဲ့ တိုင်ပင်ပြီး risk နဲ့ ကိုက်တဲ့ စစ်ဆေးမှု ထည့်မယ်။\n"
         cadence: line-by-line
       - {
           id: expect-rule,
@@ -748,7 +748,7 @@ scenes:
           target:
             {
               file: notes.md,
-              text: "- prototype ကို တကယ် သုံးချင်ရင် — မြမြ နဲ့ တိုင်ပင်ပြီး risk နဲ့ ကိုက်တဲ့ စစ်ဆေးမှု ထည့်မယ်။",
+              text: "- prototype ကို တကယ် သုံးချင်ရင် — ဆိုင်ပိုင်ရှင် နဲ့ တိုင်ပင်ပြီး risk နဲ့ ကိုက်တဲ့ စစ်ဆေးမှု ထည့်မယ်။",
               occurrence: 1,
             },
         }
