@@ -1,0 +1,926 @@
+# AI Builder, lesson 23: version control as save points (Burmese, docs kind).
+#
+# Start state (ws/): base-docs only (package.json with a no-op dev script, notes.md = "# Notes\n"
+# byte for byte). Nothing runs. notes.md is lesson-local (COURSE-KIT §4, §4.15): the lesson types,
+# after "# Notes\n", "## Lesson 23 · …" with the shop's working rhythm (### Rhythm, four steps), the
+# two example commit messages (### Commit messages, good vs vague, as in the binder) and two safety
+# lines (### Safety: a remote copy; never commit a secret — the bridge to lesson 24).
+#
+# Boards: (S) save points on a line left to right (blue commits: problem → spec → plan → BUG-3),
+# the history note, then a branch going down from "plan" (orange commits, the AI note feature from
+# lesson 22) that ends in "merge" under the green merge commit, and the red "delete the branch"
+# outcome; (D) a diff (red line out, green line in: coffee 1,800 → 2,000 in the menu file) and its
+# size, then a revert drawn below it (the reverse diff as a new commit; history keeps both); (Z) the
+# quiz (30 edits broke the order form: hunt and fix, or go back and redo in smaller steps).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-23-version-control.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-23-version-control
+  title: "AI Builder 23: Version control နဲ့ save point"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board S: save points on one line (blue), the history note (orange), then a branch (orange)
+    # going down from "plan" and ending in "merge" under the green merge commit.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Version control · save point",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-main,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 80,
+        height: 40,
+        text: "main",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: c1, kind: ellipse, x: 400, y: 228, width: 44, height: 44, strokeColor: "#1971c2" }
+    - {
+        id: l1,
+        kind: text,
+        x: 372,
+        y: 285,
+        width: 145,
+        height: 40,
+        text: "problem",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 452,
+        y: 230,
+        width: 78,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c2, kind: ellipse, x: 540, y: 228, width: 44, height: 44, strokeColor: "#1971c2" }
+    - {
+        id: l2,
+        kind: text,
+        x: 530,
+        y: 285,
+        width: 100,
+        height: 40,
+        text: "spec",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 592,
+        y: 230,
+        width: 78,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c3, kind: ellipse, x: 680, y: 228, width: 44, height: 44, strokeColor: "#1971c2" }
+    - {
+        id: l3,
+        kind: text,
+        x: 670,
+        y: 285,
+        width: 100,
+        height: 40,
+        text: "plan",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 732,
+        y: 230,
+        width: 78,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c4, kind: ellipse, x: 820, y: 228, width: 44, height: 44, strokeColor: "#1971c2" }
+    - {
+        id: l4,
+        kind: text,
+        x: 800,
+        y: 285,
+        width: 110,
+        height: 40,
+        text: "BUG-3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-history,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 780,
+        height: 40,
+        text: "commit တိုင်း · ဘယ်သူ · ဘယ်တော့ · ဘာ · ဘာကြောင့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: bd,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 687,
+        y: 330,
+        width: 30,
+        height: 48,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b1, kind: ellipse, x: 680, y: 388, width: 44, height: 44, strokeColor: "#f08c00" }
+    - {
+        id: ba1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 732,
+        y: 390,
+        width: 78,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: b2, kind: ellipse, x: 820, y: 388, width: 44, height: 44, strokeColor: "#f08c00" }
+    - {
+        id: b-label,
+        kind: text,
+        x: 640,
+        y: 448,
+        width: 440,
+        height: 40,
+        text: "branch · AI မှတ်ချက် စမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: ba2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 872,
+        y: 390,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-merge,
+        kind: text,
+        x: 950,
+        y: 390,
+        width: 120,
+        height: 40,
+        text: "merge",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 872,
+        y: 230,
+        width: 78,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c5, kind: ellipse, x: 960, y: 228, width: 44, height: 44, strokeColor: "#2f9e44" }
+    - {
+        id: b-drop,
+        kind: text,
+        x: 640,
+        y: 505,
+        width: 440,
+        height: 40,
+        text: "မကောင်းရင် · branch ကို ဖျက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board D: a diff (red out, green in) and its size, then a revert as a new commit below it.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Diff · ဘာ ပြောင်းသွားလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-file,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 440,
+        height: 40,
+        text: "menu ဖိုင် · ကော်ဖီ ဈေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-minus,
+        kind: text,
+        x: 320,
+        y: 280,
+        width: 400,
+        height: 40,
+        text: "-  ကော်ဖီ · 1,800 ကျပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-plus,
+        kind: text,
+        x: 320,
+        y: 325,
+        width: 400,
+        height: 40,
+        text: "+  ကော်ဖီ · 2,000 ကျပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: d-size,
+        kind: text,
+        x: 760,
+        y: 302,
+        width: 320,
+        height: 40,
+        text: "ဖိုင် 1 ခု · 1 ကြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 330,
+        y: 378,
+        width: 30,
+        height: 46,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-label,
+        kind: text,
+        x: 380,
+        y: 381,
+        width: 440,
+        height: 40,
+        text: "revert · commit အသစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r-minus,
+        kind: text,
+        x: 320,
+        y: 435,
+        width: 400,
+        height: 40,
+        text: "-  ကော်ဖီ · 2,000 ကျပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: r-plus,
+        kind: text,
+        x: 320,
+        y: 480,
+        width: 400,
+        height: 40,
+        text: "+  ကော်ဖီ · 1,800 ကျပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-note,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 780,
+        height: 40,
+        text: "history ထဲ နှစ်ခုလုံး ကျန် · တခြား commit မထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 780,
+        height: 40,
+        text: "agent ပြင်ထားတာ 30 နေရာ · အော်ဒါ form ပျက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 272,
+        width: 780,
+        height: 40,
+        text: "ဘယ်ပြင်ချက်ကြောင့်လဲ မသိ · ဘာလုပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 780,
+        height: 40,
+        text: "က · agent ကို ပျက်တဲ့နေရာ ရှာပြီး ပြင်ခိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 780,
+        height: 40,
+        text: "ခ · task မစခင်က save point ကို ပြန်သွား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2b,
+        kind: text,
+        x: 345,
+        y: 440,
+        width: 600,
+        height: 40,
+        text: "အပိုင်း သေးသေးလေးတွေနဲ့ ပြန်ခိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 780,
+        height: 45,
+        text: "အဖြေ · ခ — အလုပ်လုပ်တဲ့ save point သေချာ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 780,
+        height: 40,
+        text: "ခန့်မှန်းပြင်တဲ့ loop မဝင် · အပိုင်းတိုင်း commit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6123
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: ပြင်ပြီးမှ မကြိုက်ရင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ customer ရဲ့ မှတ်ချက်ကနေ အော်ဒါ option တွေ ထုတ်ပေးတဲ့ AI feature ကို၊ နမူနာ
+      အများကြီးနဲ့ အမှတ်ပေး စစ်တဲ့ eval နဲ့ စစ်ခဲ့ပါတယ်။ ဒီ lesson ကစပြီး app ကို တကယ့် customer တွေဆီ ဘေးကင်းကင်း
+      ရောက်အောင် ထုတ်ပေးတဲ့ အပိုင်းကို လေ့လာပါမယ်။ [[mark:open-notes]] ဒီနေ့ ဆုံးဖြတ်တာတွေကို editor ထဲက notes
+      ဖိုင်မှာ မှတ်သွားပါမယ်။ အရင်ဆုံး ပြဿနာ တစ်ခု ကြည့်ရအောင်။ agent ကို task တစ်ခု အပ်လိုက်ရင် သူက ဖိုင်
+      ဆယ်ခုလောက်ကို တစ်ခါတည်း ပြင်သွားနိုင်ပါတယ်။ ရလဒ်ကို မကြိုက်ရင် မပြင်ခင်က အခြေအနေကို ဘယ်လို ပြန်ရမလဲ။ ဘာတွေ
+      ပြောင်းသွားလဲ ဆိုတာကော ဘယ်လို သိမလဲ။ [[mark:s-title]] ဒီ မေးခွန်း နှစ်ခုကို ဖြေပေးတာက version control ပါ။
+      version control ဆိုတာ project ရဲ့ save point တွေနဲ့ history ကို မှတ်ထားပေးတဲ့ စနစ်ပါ။ Git က အဲဒီလို စနစ်
+      တစ်ခုပါ။ ဒီနေ့ ရိုက်ရတဲ့ command တွေကို မသင်ဘဲ၊ agent ကို စိတ်ချရအောင် ခိုင်းနိုင်ဖို့ သိထားရမယ့် အယူအဆ
+      တွေကိုပဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Pro Git: About Version Control",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (version and review the agent's rules like code)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-notes, type: workspace.openFile, at: { mark: open-notes }, path: notes.md }
+      - {
+          id: open-board-s,
+          type: whiteboard.apply,
+          at: { mark: s-title },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+          drawMs: 900,
+        }
+
+  - id: save-points
+    narration: >
+      [[mark:s-c1]] commit ဆိုတာ game တွေထဲက save point လိုပါပဲ။ project တစ်ခုလုံးကို အဲဒီ အချိန်လေးမှာ ဓာတ်ပုံ
+      ရိုက်ထားသလို မှတ်ထားတာပါ။ ဖိုင် တစ်ခုချင်း မဟုတ်ဘဲ၊ ဖိုင် အားလုံး အဲဒီ အချိန်က ဘယ်လို ရှိခဲ့လဲ ဆိုတာကို ဘာ
+      ပြင်ခဲ့လဲ ပြောတဲ့ စာတို message တစ်ခုနဲ့ တွဲပြီး မှတ်ထားတာပါ။ [[mark:s-c234]] ကိုယ်တို့ project ကို commit
+      တွေနဲ့ မှတ်လာခဲ့ရင်၊ problem စာမျက်နှာ ပြီးတဲ့ အချိန်၊ spec ပြီးတဲ့ အချိန်၊ plan ပြီးတဲ့ အချိန်နဲ့ BUG သုံး
+      ကို ပြင်ပြီးတဲ့ အချိန် ဆိုပြီး save point တွေ တန်းစီနေမှာပါ။ ဘယ် save point ကိုမဆို ပြန်ဖွင့်ကြည့်လို့
+      ရပါတယ်။ [[mark:s-history]] save point တွေ စီထားတဲ့ ဒီ မျဉ်းကို history လို့ ခေါ်ပါတယ်။ commit တိုင်းမှာ
+      ဘယ်သူ ပြင်လဲ၊ ဘယ်တော့ ပြင်လဲ၊ ဘာ ပြောင်းသွားလဲ ဆိုတာ အလိုလို ပါပြီး၊ ဘာကြောင့်လဲ ဆိုတာကိုတော့ commit
+      လုပ်တဲ့သူ ရေးတဲ့ message က ပြောပါတယ်။ ကိုယ် ပြင်တာရော agent ပြင်တာရော commit အဖြစ် ဝင်လာတော့၊ လ အနည်းငယ်
+      ကြာမှ AGENTS.md ထဲက rule တစ်ခုကို ဘယ်တုန်းက၊ ဘာကြောင့် ထည့်ခဲ့လဲ လို့ မေးရင်တောင် history ထဲမှာ အဖြေ
+      ရှိနေပါတယ်။
+    sources:
+      - {
+          title: "Pro Git: What is Git? (every commit stores a snapshot of all the project's files)",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F",
+        }
+      - {
+          title: "Pro Git: About Version Control (see who modified something, and when)",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control",
+        }
+    actions:
+      - {
+          id: draw-c1,
+          type: whiteboard.apply,
+          at: { mark: s-c1 },
+          upsertIds: [c1, l1],
+          drawMs: 800,
+        }
+      - {
+          id: draw-c234,
+          type: whiteboard.apply,
+          at: { mark: s-c234 },
+          upsertIds: [a1, c2, l2, a2, c3, l3, a3, c4, l4],
+          drawMs: 2700,
+        }
+      - {
+          id: draw-history,
+          type: whiteboard.apply,
+          at: { mark: s-history },
+          upsertIds: [s-history],
+          drawMs: 1200,
+        }
+
+  - id: branch
+    chapter: Branch ပေါ်မှာ စမ်းရအောင်
+    narration: >
+      [[mark:b-main]] ဒီ မျဉ်းက customer တွေဆီ ရောက်မယ့် app ရဲ့ အဓိက မျဉ်းပါ။ main လို့ ခေါ်လေ့ ရှိပါတယ်။
+      ပြီးခဲ့တဲ့ lesson က AI မှတ်ချက် feature လို၊ အလုပ်ဖြစ်မဖြစ် မသေချာသေးတဲ့ အရာကို ဒီ မျဉ်းပေါ်မှာ တိုက်ရိုက်
+      စမ်းရင်၊ မပြီးသေးတဲ့ အပိုင်းတွေ customer ဆီ ရောက်သွားနိုင်ပါတယ်။ [[mark:b-branch]] ဒါကြောင့် branch တစ်ခု
+      ခွဲထုတ်ပါတယ်။ branch ဆိုတာ main ကို မထိဘဲ စမ်းဖို့ ခွဲထုတ်ထားတဲ့ မိတ္တူ မျဉ်းပါ။ agent ကို ဒီ branch
+      ပေါ်မှာပဲ အလုပ်လုပ်ခိုင်းရင်၊ save point တွေ ဘယ်လောက် တိုးလာလာ main က မပြောင်းပါဘူး။ [[mark:b-merge]] eval
+      pass ဖြစ်ပြီး၊ ကိုယ်ကလည်း ပြန်စစ်ပြီး review လုပ်လို့ ကျေနပ်မှ၊ branch ကို main ထဲ ပြန်ပေါင်းပါတယ်။ ဒါကို
+      merge လုပ်တယ် လို့ ခေါ်ပါတယ်။ [[mark:b-drop]] မကောင်းဘူး ဆိုရင်တော့ branch ကို ဖျက်လိုက်ရုံပါပဲ။ main ကို
+      တစ်ခါမှ မထိခဲ့လို့ ပြန်ရှင်းစရာ မရှိပါဘူး။ ဒါကြောင့် branch ပေါ်မှာ စိတ်ချလက်ချ စမ်းလို့ ရတာပါ။
+    sources:
+      - {
+          title: "Pro Git: Branches in a Nutshell (diverge from the main line and work without changing it)",
+          url: "https://git-scm.com/book/en/v2/Git-Branching-Branches-in-a-Nutshell",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (separate prototyping from production by project, branch and environment)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-main,
+          type: whiteboard.apply,
+          at: { mark: b-main },
+          upsertIds: [s-main],
+          drawMs: 600,
+        }
+      - {
+          id: draw-branch,
+          type: whiteboard.apply,
+          at: { mark: b-branch },
+          upsertIds: [bd, b1, ba1, b2, b-label],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-merge,
+          type: whiteboard.apply,
+          at: { mark: b-merge },
+          upsertIds: [ba2, b-merge, a4, c5],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-drop,
+          type: whiteboard.apply,
+          at: { mark: b-drop },
+          upsertIds: [b-drop],
+          drawMs: 1000,
+        }
+
+  - id: diff
+    chapter: Diff နဲ့ revert
+    narration: >
+      [[mark:d-title]] branch ပေါ်မှာ ဖြစ်ဖြစ်၊ main ပေါ်မှာ ဖြစ်ဖြစ်၊ save point နှစ်ခုကြားမှာ ဘာ ပြောင်းသွားလဲ
+      ဆိုတာကို အတိအကျ ပြတာကို diff လို့ ခေါ်ပါတယ်။ [[mark:d-ask]] ဥပမာ ဆိုင်ပိုင်ရှင် မြမြ က ကော်ဖီ ဈေးကို ၁၈၀၀
+      ကျပ်ကနေ ၂၀၀၀ ကျပ် အထိ တိုးဖို့ ဆုံးဖြတ်လို့၊ agent ကို menu ဖိုင်မှာ ပြင်ခိုင်းတယ် ဆိုပါစို့။
+      [[mark:d-lines]] diff မှာ ဖယ်လိုက်တဲ့ စာကြောင်းကို အနီ၊ ထည့်လိုက်တဲ့ စာကြောင်းကို အစိမ်းနဲ့ ပြလေ့ ရှိပါတယ်။
+      ဈေးဟောင်း ထွက်ပြီး ဈေးသစ် ဝင်လာတာကို တစ်ချက်ကြည့်ရုံနဲ့ သိပါတယ်။ [[mark:d-size]] code ကို မဖတ်တတ်ရင်တောင်၊
+      diff က ဖိုင် ဘယ်နှခု၊ စာကြောင်း ဘယ်နှကြောင်း ပြောင်းသွားလဲ ဆိုတာ ပြပါတယ်။ ဈေး တစ်ခု ပြောင်းခိုင်းတာကို ဖိုင်
+      ကိုးခု ပြင်ထားရင် ရပ်ပြီး မေးရမယ့် အချိန်ပါ။ review lesson မှာ agent က spec ထဲက AC သုံး ကို
+      ပြင်သွားတာမျိုးကလည်း၊ diff ထဲမှာ အနီနဲ့ အစိမ်း စာကြောင်းတွေ အဖြစ် တန်းမြင်ရမှာပါ။
+    sources:
+      - {
+          title: "Pro Git: About Version Control (compare changes over time)",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control",
+        }
+      - {
+          title: "Chris Beams: How to Write a Git Commit Message (a diff tells you what changed)",
+          url: "https://cbea.ms/git-commit/",
+        }
+    actions:
+      - {
+          id: open-board-d,
+          type: whiteboard.apply,
+          at: { mark: d-title },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-d-file,
+          type: whiteboard.apply,
+          at: { mark: d-ask },
+          upsertIds: [d-file],
+          drawMs: 800,
+        }
+      - {
+          id: draw-d-lines,
+          type: whiteboard.apply,
+          at: { mark: d-lines },
+          upsertIds: [d-minus, d-plus],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-d-size,
+          type: whiteboard.apply,
+          at: { mark: d-size },
+          upsertIds: [d-size],
+          drawMs: 900,
+        }
+
+  - id: revert
+    narration: >
+      [[mark:r-revert]] နောက်တော့ မြမြ က ဈေးတိုးတာကို နောက်လမှ စချင်တယ် ဆိုပါစို့။ ဒီအခါ revert လုပ်ပါတယ်။ revert
+      ဆိုတာ commit တစ်ခုရဲ့ ပြောင်းလဲမှုကို သေသေချာချာ ပြန်ဖျက်တာပါ။ [[mark:r-lines]] ဈေးတိုးခဲ့တဲ့ commit ကို
+      history ထဲက ဖယ်ပစ်တာ မဟုတ်ဘဲ၊ ပြောင်းပြန် diff ပါတဲ့ commit အသစ် တစ်ခုကို ထပ်ထည့်ပါတယ်။ ဈေးသစ် ထွက်ပြီး
+      ဈေးဟောင်း ပြန်ဝင်လာတာပါ။ [[mark:r-note]] ဒါကြောင့် history ထဲမှာ ဈေးတိုးခဲ့တာရော၊ ပြန်ပြောင်းခဲ့တာရော
+      နှစ်ခုလုံး ကျန်နေပါတယ်။ အဲဒီ ကြားထဲ ဝင်လာတဲ့ တခြား commit တွေကိုလည်း မထိပါဘူး။ ပြောင်းလဲမှု တစ်ခုကို commit
+      တစ်ခုစီ ခွဲထားမှ၊ ဒီလို တစ်ခုတည်းကို ရွေးပြီး ပြန်ဖျက်လို့ ရတာပါ။
+    sources:
+      - {
+          title: "Git documentation: git revert (record new commits that reverse the effect of earlier commits)",
+          url: "https://git-scm.com/docs/git-revert",
+        }
+    actions:
+      - {
+          id: draw-r-label,
+          type: whiteboard.apply,
+          at: { mark: r-revert },
+          upsertIds: [r-arrow, r-label],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-r-lines,
+          type: whiteboard.apply,
+          at: { mark: r-lines },
+          upsertIds: [r-minus, r-plus],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-r-note,
+          type: whiteboard.apply,
+          at: { mark: r-note },
+          upsertIds: [r-note],
+          drawMs: 1000,
+        }
+
+  - id: rhythm
+    chapter: Task တိုင်းရဲ့ အစဉ်
+    narration: >
+      [[mark:close-d]] ဒီ အယူအဆ တွေကို agent ကို အလုပ်ခိုင်းတိုင်း လိုက်လုပ်မယ့် အစဉ် တစ်ခု အဖြစ်
+      ချရေးကြည့်ရအောင်။ [[mark:type-rhythm]] task တစ်ခုစီမှာ အဆင့် လေးဆင့် ရှိပါတယ်။ အဓိက စည်းကမ်းကတော့ version
+      control မရှိဘဲ agent ကို ဘယ်တော့မှ အလုပ် မခိုင်းဖို့ပါ။ [[mark:sel-step1]] ပထမ အဆင့်ကြောင့် ကိုယ်
+      ပြင်ထားသမျှက agent မစခင် save point ထဲ ရောက်ပြီးသား ဖြစ်နေပါတယ်။ ဒါကြောင့် နောက်မှ ကြည့်မယ့် diff ထဲမှာ
+      ကိုယ့် ပြင်ချက်တွေ မရောဘဲ၊ ဒီ task ရဲ့ ပြောင်းလဲမှုတွေပဲ ပါပါတယ်။ [[mark:sel-step3]] တတိယ အဆင့်ကို
+      မကျော်ပါနဲ့။ agent က ပြီးပြီ ဆိုတဲ့ အဖြေ ပြန်ပေးရုံနဲ့ မလုံလောက်ပါဘူး။ review lesson က checklist ကို
+      ဒီနေရာမှာ သုံးပါတယ်။ [[mark:sel-step4]] နောက်ဆုံး အဆင့်က စစ်ပြီးသား အလုပ်ကို save point အသစ် အဖြစ်
+      မှတ်လိုက်တာပါ။ task တစ်ခုကို commit တစ်ခု ထားတာက တစ်ကြိမ်မှာ task တစ်ခုပဲ၊ ပြောင်းလဲမှု သေးသေးလေးပဲ
+      လုပ်ခိုင်းထားတဲ့ AGENTS.md ထဲက rule နဲ့လည်း ကိုက်ပါတယ်။ နောက်မှ ပြဿနာ ပေါ်လာရင်လည်း ဘယ် commit ကြောင့်လဲ
+      ဆိုတာ ရှာရတာ မြန်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices for Claude Code (checkpoints work alongside git, not instead of it)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (review every line of agent output you ship)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-d, type: whiteboard.apply, at: { mark: close-d }, open: false }
+      - id: type-rhythm
+        type: editor.type
+        at: { mark: type-rhythm }
+        target: { file: notes.md, after: "# Notes\n", occurrence: 1 }
+        text: "\n## Lesson 23 · Version control နဲ့ save point\n### Rhythm\n1. မစခင် — commit လုပ်ထား။\n2. agent — task တစ်ခုပဲ လုပ်ခိုင်း။\n3. diff — ကိုယ်တိုင် review လုပ်။\n4. ပြီးရင် — ဘာ၊ ဘာကြောင့် ပါတဲ့ message နဲ့ commit လုပ်။\n"
+        cadence: line-by-line
+      - {
+          id: sel-step1,
+          type: editor.select,
+          at: { mark: sel-step1 },
+          target: { file: notes.md, text: "1. မစခင် — commit လုပ်ထား။", occurrence: 1 },
+        }
+      - {
+          id: sel-step3,
+          type: editor.select,
+          at: { mark: sel-step3 },
+          target: { file: notes.md, text: "3. diff — ကိုယ်တိုင် review လုပ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-step4,
+          type: editor.select,
+          at: { mark: sel-step4 },
+          target:
+            {
+              file: notes.md,
+              text: "4. ပြီးရင် — ဘာ၊ ဘာကြောင့် ပါတဲ့ message နဲ့ commit လုပ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: expect-rhythm,
+          type: expect.file,
+          at: { afterAction: sel-step4 },
+          path: notes.md,
+          contains: "1. မစခင် — commit လုပ်ထား။",
+        }
+
+  - id: messages
+    narration: >
+      [[mark:type-msg]] commit တိုင်းမှာ message တစ်ခု ပါရပါတယ်။ ကောင်းတဲ့ message နဲ့ ဝေဝါးတဲ့ message ကို
+      ယှဉ်ပြီး notes မှာ မှတ်ထားပါမယ်။ [[mark:sel-bad]] ဒုတိယ message က တစ်ခုခု ပြင်ခဲ့တယ် ဆိုတာကလွဲရင် ဘာမှ
+      မပြောပါဘူး။ ခြောက်လလောက် ကြာပြီး history ကို ပြန်ကြည့်ရင် ဘာကို ဘာကြောင့် ပြင်ခဲ့လဲ ဘယ်သူမှ မသိတော့ပါဘူး။
+      [[mark:sel-kind]] ပထမ message ရဲ့ ရှေ့ဆုံး စကားလုံးက ပြောင်းလဲမှု အမျိုးအစားပါ။ bug ပြင်တာမို့ fix လို့
+      ရေးပါတယ်။ [[mark:sel-what]] နောက်က အပိုင်းက ဘာ ပြောင်းသွားလဲ ဆိုတာကို တိုတိုနဲ့ ပြောပါတယ်။ [[mark:sel-why]]
+      ကွင်းထဲက BUG နံပါတ်ကတော့ ဘာကြောင့်လဲ ဆိုတာကို ညွှန်ပါတယ်။ bug report ကို ဖွင့်ရင် ကျောင်းသား မောင်မောင်
+      တွေ့ခဲ့တဲ့ ပြဿနာနဲ့ ပြန်ဖြစ်စေတဲ့ အဆင့်တွေ ရှိနေပါတယ်။ diff က ဘာ ပြောင်းသွားလဲ ပြနိုင်ပေမယ့်၊ ဘာကြောင့်
+      ပြောင်းခဲ့လဲ ဆိုတာက code ထဲမှာ မရှိလို့ message ထဲမှာ ရေးထားမှ ကျန်ပါတယ်။ [[mark:sel-good]] agent ကို
+      message ရေးခိုင်းလို့လည်း ရပါတယ်။ ဒါပေမဲ့ agent ဆီ ပေးထားတဲ့ စာထဲမှာ အကြောင်းရင်း မပါရင်၊ message ထဲမှာ
+      မှန်တဲ့ အကြောင်းရင်း ပါမလာနိုင်ပါဘူး။ ဒါကြောင့် ဘာကြောင့်လဲ ပါမပါ commit မလုပ်ခင် ကိုယ်တိုင် စစ်ပြီး လိုရင်
+      ထပ်ဖြည့်ပါ။
+    sources:
+      - {
+          title: "Chris Beams: How to Write a Git Commit Message (only the message can tell you why)",
+          url: "https://cbea.ms/git-commit/",
+        }
+      - {
+          title: "Conventional Commits 1.0.0 (a type such as fix, then a short description)",
+          url: "https://www.conventionalcommits.org/en/v1.0.0/",
+        }
+    actions:
+      - id: type-msg
+        type: editor.type
+        at: { mark: type-msg }
+        target: { file: notes.md, after: "message နဲ့ commit လုပ်။\n", occurrence: 1 }
+        text: "\n### Commit messages\n- ✅ fix: count Burmese digits in the quantity (BUG-3)\n- ❌ update stuff\n"
+        cadence: line-by-line
+      - {
+          id: sel-bad,
+          type: editor.select,
+          at: { mark: sel-bad },
+          target: { file: notes.md, text: "update stuff", occurrence: 1 },
+        }
+      - {
+          id: sel-kind,
+          type: editor.select,
+          at: { mark: sel-kind },
+          target: { file: notes.md, text: "fix:", occurrence: 1 },
+        }
+      - {
+          id: sel-what,
+          type: editor.select,
+          at: { mark: sel-what },
+          target: { file: notes.md, text: "count Burmese digits in the quantity", occurrence: 1 },
+        }
+      - {
+          id: sel-why,
+          type: editor.select,
+          at: { mark: sel-why },
+          target: { file: notes.md, text: "(BUG-3)", occurrence: 1 },
+        }
+      - {
+          id: sel-good,
+          type: editor.select,
+          at: { mark: sel-good },
+          target:
+            {
+              file: notes.md,
+              text: "fix: count Burmese digits in the quantity (BUG-3)",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: expect-msg,
+          type: expect.file,
+          at: { afterAction: sel-good },
+          path: notes.md,
+          contains: "- ✅ fix: count Burmese digits in the quantity (BUG-3)",
+        }
+
+  - id: safety
+    narration: >
+      [[mark:type-safety]] notes ရဲ့ အဆုံးမှာ project ကို ကာကွယ်တဲ့ စည်းကမ်း နှစ်ခု ထည့်ပါမယ်။ [[mark:sel-remote]]
+      ပထမ စည်းကမ်းက remote copy အကြောင်းပါ။ remote copy ဆိုတာ GitHub လို အင်တာနက်ပေါ်က နေရာမှာ ထားတဲ့ project ရဲ့
+      မိတ္တူပါ။ history တစ်ခုလုံး အဲဒီမှာ ရှိနေလို့ laptop ပျောက်ရင်၊ ပျက်ရင်တောင် project က မပျောက်ပါဘူး။ code
+      ဖတ်တတ်တဲ့ reviewer တစ်ယောက်ကို ပြချင်ရင်လည်း အဲဒီကနေ ပြလို့ ရပါတယ်။ [[mark:sel-secret]] ဒုတိယ စည်းကမ်းက
+      secret တွေကို ကာကွယ်တာပါ။ secret ဆိုတာ password၊ key လို လျှို့ဝှက်ထားရမယ့် စာသားပါ။ commit ထဲ တစ်ခါ
+      ရောက်သွားရင်၊ နောက် commit မှာ ဖျက်လိုက်လည်း အရင် save point တွေထဲမှာ ကျန်နေပါတယ်။ remote copy ဆီ
+      ရောက်ပြီးရင်တော့ ပြန်ရှင်းဖို့ အရမ်း ခက်ပါတယ်။
+    sources:
+      - {
+          title: "Pro Git: About Version Control (a single place is a single point of failure; every clone is a full backup)",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control",
+        }
+      - {
+          title: "Pro Git: Working with Remotes (versions of your project hosted on the Internet or network)",
+          url: "https://git-scm.com/book/en/v2/Git-Basics-Working-with-Remotes",
+        }
+      - {
+          title: "GitHub Docs: Removing sensitive data from a repository",
+          url: "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+        }
+    actions:
+      - id: type-safety
+        type: editor.type
+        at: { mark: type-safety }
+        target: { file: notes.md, after: "- ❌ update stuff\n", occurrence: 1 }
+        text: "\n### Safety\n- project ကို remote copy တစ်ခုမှာပါ ထား။\n- secret (password၊ key) ကို ဘယ်တော့မှ commit မလုပ်နဲ့။\n"
+        cadence: line-by-line
+      - {
+          id: sel-remote,
+          type: editor.select,
+          at: { mark: sel-remote },
+          target: { file: notes.md, text: "- project ကို remote copy တစ်ခုမှာပါ ထား။", occurrence: 1 },
+        }
+      - {
+          id: sel-secret,
+          type: editor.select,
+          at: { mark: sel-secret },
+          target:
+            {
+              file: notes.md,
+              text: "- secret (password၊ key) ကို ဘယ်တော့မှ commit မလုပ်နဲ့။",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ အော်ဒါ form အတွက် agent ကို အပ်ထားတဲ့ task ရဲ့ ရလဒ် ပြန်ရောက်လာပါပြီ။
+      ဖိုင် အများကြီးမှာ နေရာ သုံးဆယ်လောက် ပြင်ထားပြီး၊ စမ်းကြည့်တော့ အော်ဒါ form က အလုပ် မလုပ်တော့ပါဘူး။ ဘယ်
+      ပြင်ချက်ကြောင့်လဲ မသိပါဘူး။ agent ကို ပျက်တဲ့ နေရာ ရှာပြီး ပြင်ခိုင်းမလား။ ဒါမှမဟုတ် task မစခင်က save point
+      ကို ပြန်သွားပြီး၊ task ကို အပိုင်း သေးသေးလေးတွေနဲ့ ပြန်ခိုင်းမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ task မစခင်က save point မှာ app အလုပ်လုပ်တယ်
+      ဆိုတာ သေချာနေလို့ပါ။ [[mark:quiz-why]] ပြင်ချက် သုံးဆယ်ထဲက တစ်ခုကို ရှာခိုင်းရင်၊ agent က ခန့်မှန်းပြီး
+      ပြင်လိုက်၊ မရရင် ကိုယ်က ထပ်ခိုင်းလိုက်နဲ့ debug lesson မှာ မြင်ခဲ့တဲ့ loop ထဲ ပြန်ရောက်နိုင်ပါတယ်။ အပိုင်း
+      သေးသေးလေးတွေနဲ့ ပြန်ခိုင်းပြီး တစ်ခုစီ commit လုပ်ရင်တော့၊ ထပ်ပျက်ခဲ့ရင်တောင် ဘယ်အပိုင်းကြောင့်လဲ ဆိုတာ
+      ချက်ချင်း သိပါတယ်။
+    sources:
+      - {
+          title: "Pro Git: About Version Control (revert the entire project back to a previous state)",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development (prompting loops)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-q2, z-o1, z-o2, z-o2b],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-why,
+          type: whiteboard.apply,
+          at: { mark: quiz-why },
+          upsertIds: [z-a-note],
+          drawMs: 1000,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ commit က project တစ်ခုလုံးရဲ့ save point ဖြစ်ပြီး၊ history က ဘယ်သူ
+      ဘာကို ဘာကြောင့် ပြင်လဲ ဆိုတာကို မှတ်ထားပါတယ်။ branch ပေါ်မှာ ဘေးကင်းကင်း စမ်းနိုင်သလို၊ diff နဲ့
+      ပြောင်းလဲမှုကို အတိအကျ ကြည့်ပြီး မလိုတာကို revert နဲ့ ပြန်ဖျက်နိုင်ပါတယ်။ [[mark:rc-rhythm]] agent ကို task
+      မအပ်ခင် commit လုပ်ပါ။ diff ကို ကိုယ်တိုင် review လုပ်ပြီးမှ၊ ဘာကြောင့်လဲ ပါတဲ့ message နဲ့ commit လုပ်ပါ။
+      [[mark:rc-secret]] နောက် lesson မှာတော့ ဒီ save point တွေထဲ ဘယ်တော့မှ မဝင်ရမယ့် secret တွေ အပါအဝင်၊ code
+      မရေးတဲ့ builder တစ်ယောက်လည်း တာဝန်ယူရမယ့် security နဲ့ privacy အခြေခံတွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Pro Git: About Version Control",
+          url: "https://git-scm.com/book/en/v2/Getting-Started-About-Version-Control",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: rc-rhythm,
+          type: editor.select,
+          at: { mark: rc-rhythm },
+          target:
+            {
+              file: notes.md,
+              text: "1. မစခင် — commit လုပ်ထား။\n2. agent — task တစ်ခုပဲ လုပ်ခိုင်း။\n3. diff — ကိုယ်တိုင် review လုပ်။\n4. ပြီးရင် — ဘာ၊ ဘာကြောင့် ပါတဲ့ message နဲ့ commit လုပ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: rc-secret,
+          type: editor.select,
+          at: { mark: rc-secret },
+          target:
+            {
+              file: notes.md,
+              text: "- secret (password၊ key) ကို ဘယ်တော့မှ commit မလုပ်နဲ့။",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
