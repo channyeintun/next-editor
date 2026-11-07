@@ -12,9 +12,9 @@
 # Start state (ws/): src/menu.js and src/order.js (canonical); src/legacy-receipt.js, the shop's old
 # printReceipt(lines, customer): var, a for loop, string concatenation, a running total, a missing qty
 # printed as x1, amounts without separators; src/legacy-receipt.test.js with one order (two teas, one
-# coffee without a qty) and "prints မြမြ's receipt", whose expected value is an empty template literal.
+# coffee without a qty) and "prints လှလှ's receipt", whose expected value is an empty template literal.
 # Panel (data-modes "tests summary errors snapshot"): FAIL, the whole receipt under Received:
-# "+ မြမြ / + လက်ဖက်ရည် x2 3000 / + ကော်ဖီ x1 1800 / + စုစုပေါင်း 4800 ကျပ်".
+# "+ လှလှ / + လက်ဖက်ရည် x2 3000 / + ကော်ဖီ x1 1800 / + စုစုပေါင်း 4800 ကျပ်".
 #
 # Then, insert-only:
 #   1. legacy-receipt.test.js, one block between the backticks: the four received lines -> PASS,
@@ -1233,8 +1233,8 @@ lesson:
 
         const order = [{ id: "tea", qty: 2 }, { id: "coffee" }];
 
-        test("prints မြမြ's receipt", () => {
-          expect(printReceipt(order, "မြမြ")).toBe(``);
+        test("prints လှလှ's receipt", () => {
+          expect(printReceipt(order, "လှလှ")).toBe(``);
         });
       src/menu.js: |
         export const MENU = {
@@ -1816,7 +1816,7 @@ scenes:
       ငွေကို စာကြောင်း တစ်ကြောင်းစီ ဆက်ပေါင်းသွားပါတယ်။ [[mark:select-total]] စုစုပေါင်း ငွေကိုလည်း
       ဒီမှာ တစ်ခါတည်း ပေါင်းသွားပါတယ်။ ဖတ်ရ ခက်လို့ refactor လုပ်ချင်ပေမဲ့၊ test မရှိရင်
       ပြင်ပြီးတဲ့အခါ ဘာ ပြောင်းသွားလဲ သိနိုင်မှာ မဟုတ်ပါဘူး။ [[mark:open-test]] ဒါကြောင့် test
-      ဖိုင်ကို အရင် ကြည့်ရအောင်။ [[mark:select-order]] မြမြ ရဲ့ အော်ဒါမှာ လက်ဖက်ရည် နှစ်ခွက်နဲ့ ကော်ဖီ
+      ဖိုင်ကို အရင် ကြည့်ရအောင်။ [[mark:select-order]] လှလှ ရဲ့ အော်ဒါမှာ လက်ဖက်ရည် နှစ်ခွက်နဲ့ ကော်ဖီ
       ပါပြီး၊ ကော်ဖီ line မှာ ခွက်ရေ မထည့်ထားပါဘူး။ [[mark:select-empty]] test က ဒီ အော်ဒါရဲ့
       ဘောင်ချာကို ထုတ်ခိုင်းပြီး၊ ဖြစ်ရမယ့် တန်ဖိုး နေရာမှာ template literal အလွတ်ကိုပဲ
       ထည့်ထားပါတယ်။ ဘောင်ချာ ဘယ်လို ဖြစ်ရမလဲ ကိုယ်လည်း မသိလို့ပါ။ test က ကျမှာ သေချာပေမဲ့၊ ကျတဲ့အခါ
@@ -1872,7 +1872,7 @@ scenes:
       [[mark:ready]] ညာဘက်က Vitest panel ကို ကြည့်ရအောင်။ ဒါက code ပြောင်းတိုင်း သူ့ဘာသာ ပြန် run
       ပေးတဲ့ တကယ့် Vitest ရဲ့ ရလဒ်ပါ။ [[mark:read-received]] test က ကြက်ခြေခတ်နဲ့ fail ဖြစ်နေပါတယ်။
       Failed Tests အပိုင်းက diff မှာ အစိမ်းရောင် Expected ဘက်က ဘာမှ မရှိဘဲ၊ အနီရောင် Received
-      ဘက်မှာတော့ code ထုတ်ပေးလိုက်တဲ့ ဘောင်ချာ တစ်ခုလုံးကို line လေးကြောင်းနဲ့ ပြနေပါတယ်။ မြမြ ရဲ့
+      ဘက်မှာတော့ code ထုတ်ပေးလိုက်တဲ့ ဘောင်ချာ တစ်ခုလုံးကို line လေးကြောင်းနဲ့ ပြနေပါတယ်။ လှလှ ရဲ့
       နာမည်၊ အော်ဒါ line နှစ်ကြောင်းနဲ့ စုစုပေါင်း ငွေပါ။ ဒါက ဒီ code ဒီနေ့ တကယ် လုပ်နေတဲ့
       အလုပ်ပါပဲ။
     sources:
@@ -1916,7 +1916,7 @@ scenes:
         timeoutMs: 5000
         target: { by: testId, value: vt-error-1 }
         attribute:
-          { name: data-actual, value: "မြမြ\nလက်ဖက်ရည် x2 3000\nကော်ဖီ x1 1800\nစုစုပေါင်း 4800 ကျပ်" }
+          { name: data-actual, value: "လှလှ\nလက်ဖက်ရည် x2 3000\nကော်ဖီ x1 1800\nစုစုပေါင်း 4800 ကျပ်" }
         retry: { maxAttempts: 2, delayMs: 500 }
 
   - id: characterize
@@ -1930,7 +1930,7 @@ scenes:
       မပြင်ပါဘူး။ [[mark:contrast]] TDD lesson တွေမှာတော့ code ထုတ်ပေးတဲ့ အဖြေကို Expected ထဲ
       ကူးထည့်တာ အမှားလို့ ပြောခဲ့ပါတယ်။ characterization test ရဲ့ ရည်ရွယ်ချက်ကတော့ ဒီနေ့
       အလုပ်လုပ်ပုံကို မှတ်ထားဖို့ ဖြစ်လို့၊ ဒီ နေရာမှာတော့ ကူးထည့်တာ မှန်ပါတယ်။ test နာမည်ကလည်း
-      ဘောင်ချာ မှန်တယ်လို့ မပြောဘဲ၊ မြမြ ရဲ့ ဘောင်ချာကို ထုတ်တယ် ဆိုတာကိုပဲ ပြောထားပါတယ်။
+      ဘောင်ချာ မှန်တယ်လို့ မပြောဘဲ၊ လှလှ ရဲ့ ဘောင်ချာကို ထုတ်တယ် ဆိုတာကိုပဲ ပြောထားပါတယ်။
     sources:
       - {
           title: "Michael Feathers: Characterization Testing (facts C05)",
@@ -1949,7 +1949,7 @@ scenes:
         type: editor.type
         at: { mark: type-paste }
         target: { file: src/legacy-receipt.test.js, after: "toBe(`", occurrence: 1 }
-        text: "မြမြ\nလက်ဖက်ရည် x2 3000\nကော်ဖီ x1 1800\nစုစုပေါင်း 4800 ကျပ်"
+        text: "လှလှ\nလက်ဖက်ရည် x2 3000\nကော်ဖီ x1 1800\nစုစုပေါင်း 4800 ကျပ်"
         # One block: four lines between the backticks land in one write (one run, no half-typed states).
         cadence: block
       - id: expect-pass
@@ -2006,7 +2006,7 @@ scenes:
         at: { mark: type-snap }
         target:
           { file: src/legacy-receipt.test.js, after: "စုစုပေါင်း 4800 ကျပ်`);\n});\n", occurrence: 1 }
-        text: "\ntest(\"matches the recorded receipt\", () => {\n  const receipt = printReceipt(order, \"မြမြ\");\n  expect(receipt).toMatchSnapshot();\n});\n"
+        text: "\ntest(\"matches the recorded receipt\", () => {\n  const receipt = printReceipt(order, \"လှလှ\");\n  expect(receipt).toMatchSnapshot();\n});\n"
         # One block (pilot note 1): line by line, the Enter-first newline and the blank line parse,
         # and the long test( line's pause can pass the bridge's 1 s quiet window.
         cadence: block
@@ -2207,12 +2207,12 @@ scenes:
         type: expect.file
         at: { afterAction: expect-import-file }
         path: src/legacy-receipt.test.js
-        contains: "toBe(`မြမြ\nလက်ဖက်ရည် x2 3000\nကော်ဖီ x1 1800\nစုစုပေါင်း 4800 ကျပ်`);"
+        contains: "toBe(`လှလှ\nလက်ဖက်ရည် x2 3000\nကော်ဖီ x1 1800\nစုစုပေါင်း 4800 ကျပ်`);"
       - id: expect-snap-test-file
         type: expect.file
         at: { afterAction: expect-test-file }
         path: src/legacy-receipt.test.js
-        contains: "  const receipt = printReceipt(order, \"မြမြ\");\n  expect(receipt).toMatchSnapshot();"
+        contains: "  const receipt = printReceipt(order, \"လှလှ\");\n  expect(receipt).toMatchSnapshot();"
 
   - id: change
     chapter: "Snapshot ကို ဘယ်တော့ update လုပ်မလဲ"
