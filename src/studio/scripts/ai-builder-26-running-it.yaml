@@ -1,0 +1,972 @@
+# AI Builder, lesson 26: running the app in production (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused) and
+# docs/runbook.md pinned with only its title line. Nothing runs. The lesson writes docs/runbook.md
+# (lesson-local, COURSE-KIT §4.18 outline; full text in DESIGN.md and _runbook-final.md): Signals (the
+# shop's three numbers, one alert rule, လှလှ's notes), If orders stop arriving (five steps, customer
+# first, the agent reads logs but never edits production), After an incident (what, why without blame,
+# what we change).
+#
+# Boards: (S) log / error / metric, each with a tea-shop example; (A) an alert for every error (red) vs
+# only when there is something to do (green); (Z) the quiz (7:10, no orders for 20 minutes, no alert:
+# read the error log, or try one order on a phone?); (I) an incident, top to bottom: customers first,
+# tell people, cause after, learn without blame. The steps section is typed after the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-26-running-it.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-26-running-it
+  title: "AI Builder 26: Production မှာ app ကို စောင့်ကြည့်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/runbook.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/runbook.md: |+
+        # Runbook · ကြိုမှာ app
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board S: three signals as rows — the term (orange, this lesson's subject), what it answers (white),
+    # a tea-shop example (white; the error example red).
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "app ထဲမှာ ဘာဖြစ်နေလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-log,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 150,
+        height: 45,
+        text: "log",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: s-log-g,
+        kind: text,
+        x: 470,
+        y: 240,
+        width: 600,
+        height: 40,
+        text: "ဘာဖြစ်ခဲ့လဲ · အချိန်နဲ့ မှတ်တမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-log-e,
+        kind: text,
+        x: 470,
+        y: 282,
+        width: 600,
+        height: 40,
+        text: "7:02 · အော်ဒါ #105 ဝင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-err,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 150,
+        height: 45,
+        text: "error",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: s-err-g,
+        kind: text,
+        x: 470,
+        y: 350,
+        width: 600,
+        height: 40,
+        text: "ဘာ ပျက်ခဲ့လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-err-e,
+        kind: text,
+        x: 470,
+        y: 392,
+        width: 600,
+        height: 40,
+        text: "7:05 · အော်ဒါ သိမ်းလို့ မရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-met,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 150,
+        height: 45,
+        text: "metric",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: s-met-g,
+        kind: text,
+        x: 470,
+        y: 460,
+        width: 600,
+        height: 40,
+        text: "ဘယ်နှခု၊ ဘယ်လောက် ကြာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-met-e,
+        kind: text,
+        x: 470,
+        y: 502,
+        width: 600,
+        height: 40,
+        text: "ဒီမနက် 23 ခု · ပျက် 1 · 2 စက္ကန့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-ask,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 770,
+        height: 40,
+        text: "agent ကို ဒီ သုံးမျိုး ထည့်ခိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board A: alerts. Left (red): one for every error; right (green): only when there is something to do.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "alert · ဘယ်တော့ ဖုန်းမြည်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-bad-h,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 360,
+        height: 45,
+        text: "error တိုင်း",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: a-bad-1,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 360,
+        height: 40,
+        text: "တစ်နေ့ 20 ခါ မြည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-bad-2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 360,
+        height: 40,
+        text: "မကြည့်တော့ဘူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-bad-3,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 360,
+        height: 40,
+        text: "တကယ့် ပြဿနာ လွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-good-h,
+        kind: text,
+        x: 680,
+        y: 235,
+        width: 410,
+        height: 45,
+        text: "လုပ်စရာ ရှိမှ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: a-good-1,
+        kind: text,
+        x: 680,
+        y: 295,
+        width: 410,
+        height: 40,
+        text: "ဆိုင်ဖွင့်ချိန်အတွင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-good-2,
+        kind: text,
+        x: 680,
+        y: 340,
+        width: 410,
+        height: 40,
+        text: "3 ခု ဆက်တိုက် ပျက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-good-3,
+        kind: text,
+        x: 680,
+        y: 385,
+        width: 410,
+        height: 40,
+        text: "customer ထိခိုက်နေပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, two options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 770,
+        height: 45,
+        text: "7:10 · အော်ဒါ မဝင်တာ 20 မိနစ် · alert မလာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 680,
+        height: 40,
+        text: "ပထမဆုံး ဘာလုပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 680,
+        height: 40,
+        text: "က · error log ကို ဖတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 680,
+        height: 40,
+        text: "ခ · ဖုန်းနဲ့ အော်ဒါ တစ်ခု ကိုယ်တိုင် မှာကြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 680,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 780,
+        height: 40,
+        text: "page မပေါ်ရင် log ဆီ ဘာမှ မရောက် · alert မလာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board I: an incident, top to bottom (arrows down); step 1 orange (customers first), the rest white.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 640,
+        height: 50,
+        text: "incident · ဘာ အရင်လုပ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-1-box,
+        kind: rectangle,
+        x: 300,
+        y: 228,
+        width: 640,
+        height: 58,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: i-1,
+        kind: text,
+        x: 320,
+        y: 237,
+        width: 600,
+        height: 40,
+        text: "1 · customer ပြန်မှာလို့ ရအောင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-ar1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 290,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-2-box,
+        kind: rectangle,
+        x: 300,
+        y: 326,
+        width: 640,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-2,
+        kind: text,
+        x: 320,
+        y: 335,
+        width: 600,
+        height: 40,
+        text: "2 · မြမြ၊ လှလှ ကို ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-ar2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 388,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-3-box,
+        kind: rectangle,
+        x: 300,
+        y: 424,
+        width: 640,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-3,
+        kind: text,
+        x: 320,
+        y: 433,
+        width: 600,
+        height: 40,
+        text: "3 · ပြီးမှ ဘာကြောင့်လဲ ရှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-ar3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 486,
+        width: 40,
+        height: 32,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-4-box,
+        kind: rectangle,
+        x: 300,
+        y: 522,
+        width: 640,
+        height: 58,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: i-4,
+        kind: text,
+        x: 320,
+        y: 531,
+        width: 600,
+        height: 40,
+        text: "4 · အပြစ်မတင်ဘဲ သင်ခန်းစာ ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6126
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: App အခု အလုပ်လုပ်နေလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ version အသစ်ကို staging မှာ အရင် စစ်ပြီး၊ ဆိုင်မှာ လူနည်းတဲ့ အချိန်မှ release လုပ်ဖို့
+      checklist ရေးခဲ့ပါတယ်။ အဲဒီ checklist ထဲမှာ release ပြီးရင် error တွေကို စောင့်ကြည့်မယ် လို့ ပါပေမဲ့၊ ဘာကို
+      ဘယ်လို ကြည့်ရမလဲ ဆိုတာ မပြောရသေးပါဘူး။ အခု app က customer တွေ တကယ် သုံးနေတဲ့ production ပေါ် ရောက်နေပြီး၊
+      member အောင်အောင် လို customer တွေ မနက်တိုင်း ကြိုမှာနေကြပြီ ဆိုပါစို့။ [[mark:ask-mm]] ဆိုင်ပိုင်ရှင် မြမြ
+      က app အဆင်ပြေရဲ့လား လို့ မေးရင် ကိုယ် ဘယ်လို ဖြေမလဲ။ ကောင်းနေမှာပါ လို့ပဲ ခန့်မှန်းပြီး ဖြေရရင်၊ ပြဿနာ
+      ရှိနေတာကို customer တွေက ကိုယ့်ထက် အရင် သိသွားမှာပါ။ မမြင်ရတဲ့ ပြဿနာကို ပြင်လို့ မရပါဘူး။ [[mark:open-run]]
+      ဒါကြောင့် ဒီနေ့ app ကို ဘယ်လို မြင်အောင် ကြည့်မလဲ၊ ပြဿနာ ဖြစ်ရင် ဘာလုပ်မလဲ ဆိုတာကို runbook ဆိုတဲ့ ဖိုင်
+      တစ်ခုမှာ ရေးပါမယ်။ runbook ဆိုတာ ပြဿနာ ဖြစ်ရင် ဘာလုပ်ရမလဲ ဆိုတာကို အဆင့်လိုက် ရေးထားတဲ့ စာတမ်းပါ။ ပြဿနာ
+      ဖြစ်နေတဲ့ အချိန်မှာ အေးအေးဆေးဆေး စဉ်းစားဖို့ ခက်လို့ ကြိုရေးထားတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Harness engineering (observability)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google SRE book: Managing Incidents (develop and document procedures in advance)",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - { id: open-run, type: workspace.openFile, at: { mark: open-run }, path: docs/runbook.md }
+
+  - id: signals
+    chapter: Log၊ error၊ metric
+    narration: >
+      [[mark:s-title]] app ထဲမှာ ဘာဖြစ်နေလဲ မြင်ရဖို့ ကြည့်စရာ သုံးမျိုး ရှိပါတယ်။ [[mark:s-log]] ပထမက log ပါ။ log
+      ဆိုတာ app ထဲမှာ ဘာဖြစ်ခဲ့လဲ ဆိုတာကို အချိန်နဲ့ တစ်ကြောင်းချင်း ချရေးထားတဲ့ မှတ်တမ်းပါ။ ဥပမာ မနက် ခုနစ်နာရီ
+      နှစ်မိနစ်မှာ အော်ဒါ နံပါတ် ၁၀၅ ဝင်လာတယ် ဆိုတဲ့ စာကြောင်းမျိုးပါ။ [[mark:s-err]] ဒုတိယက error ပါ။ error ဆိုတာ
+      ဘာ ပျက်ခဲ့လဲ ဆိုတာပါ။ ဥပမာ customer တစ်ယောက် မှာမယ် ကို နှိပ်ပေမဲ့ အော်ဒါကို သိမ်းလို့ မရခဲ့ရင်၊
+      ဘယ်အချိန်မှာ ဘာကြောင့် မရခဲ့လဲ ဆိုတာ log ထဲမှာ error အဖြစ် ပါလာပါတယ်။ [[mark:s-met]] တတိယက metric ပါ။ metric
+      ဆိုတာ ရေတွက်ထားတဲ့ ကိန်းဂဏန်းတွေပါ။ ဒီမနက် အော်ဒါ ဘယ်နှခု ဝင်လဲ၊ ဘယ်နှခု ပျက်လဲ၊ page တစ်ခု ပေါ်ဖို့
+      ဘယ်နှစက္ကန့် ကြာလဲ ဆိုတာမျိုးပါ။ log က တစ်ခုချင်းရဲ့ အသေးစိတ်ကို ပြပြီး၊ metric တွေကတော့ အားလုံးကို ခြုံပြီး
+      ပြပါတယ်။ [[mark:s-ask]] ဒီ သုံးမျိုးက ကိုယ် မတောင်းရင် app ထဲမှာ ပါမလာနိုင်ပါဘူး။ ဒါကြောင့် agent ကို app
+      ဆောက်ခိုင်းတဲ့အခါ၊ ဒါတွေကို ကြည့်လို့ရအောင် ထည့်ပေးဖို့ပါ brief ထဲမှာ ရေးရပါမယ်။
+    sources:
+      - {
+          title: "OpenTelemetry: Observability primer (logs, metrics)",
+          url: "https://opentelemetry.io/docs/concepts/observability-primer/",
+        }
+      - {
+          title: "Google SRE book: Monitoring Distributed Systems (latency, traffic, errors)",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Building production-ready agents (observability, traces)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-s-title,
+          type: whiteboard.apply,
+          at: { mark: s-title },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-log,
+          type: whiteboard.apply,
+          at: { mark: s-log },
+          upsertIds: [s-log, s-log-g, s-log-e],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-s-err,
+          type: whiteboard.apply,
+          at: { mark: s-err },
+          upsertIds: [s-err, s-err-g, s-err-e],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-s-met,
+          type: whiteboard.apply,
+          at: { mark: s-met },
+          upsertIds: [s-met, s-met-g, s-met-e],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-s-ask,
+          type: whiteboard.apply,
+          at: { mark: s-ask },
+          upsertIds: [s-ask],
+          drawMs: 900,
+        }
+
+  - id: numbers
+    narration: >
+      [[mark:close-s]] ဆိုင်အတွက် ဘယ် metric တွေကို ကြည့်မလဲ runbook မှာ ရေးရအောင်။ [[mark:type-signals]] metric
+      တွေကို အများကြီး ရေတွက်လို့ ရပေမဲ့၊ ဆိုင်အတွက် တကယ် အရေးကြီးတဲ့ သုံးခုကိုပဲ ရွေးထားပါမယ်။ metric ငါးဆယ်
+      ရှိနေရင် ဘယ်တစ်ခုကိုမှ သေချာ မကြည့်ဖြစ်လို့ပါ။ [[mark:sel-n1]] ပထမ တစ်ခုက problem statement မှာ မြမြ နဲ့
+      သဘောတူခဲ့တဲ့ ပန်းတိုင်ပါ။ app က ဆိုင်ရဲ့ ပြဿနာကို တကယ် ဖြေရှင်းနေလား ဆိုတာ ဒီ ဂဏန်းက ပြပါတယ်။
+      [[mark:sel-n2]] ဒုတိယ တစ်ခုက ပုံမှန်ဆိုရင် သုည ဖြစ်ရမယ့် ဂဏန်းပါ။ သုည မဟုတ်တော့ဘူး ဆိုရင် customer
+      တစ်ယောက်ယောက် မှာလို့ မရခဲ့တာ ဖြစ်ပါတယ်။ [[mark:sel-n3]] တတိယ တစ်ခုကတော့ ငွေကို ကောင်တာမှာပဲ ချေမယ်လို့
+      ဆုံးဖြတ်တုန်းက၊ ပြန်စဉ်းစားရမယ့် အခြေအနေ အဖြစ် decision record ထဲ ရေးခဲ့တဲ့ ဂဏန်းပါ။ ဒီ ဂဏန်းကို မကြည့်ရင်
+      အဲဒီ ဆုံးဖြတ်ချက်ကို ဘယ်တော့ ပြန်စဉ်းစားရမလဲ ဘယ်သူမှ မသိနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "Google SRE book: Monitoring Distributed Systems (a few signals that matter; symptoms users see)",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - { id: close-s, type: whiteboard.apply, at: { mark: close-s }, open: false }
+      - id: type-signals
+        type: editor.type
+        at: { mark: type-signals }
+        target: { file: docs/runbook.md, after: "# Runbook · ကြိုမှာ app\n\n", occurrence: 1 }
+        text: "## Signals\n- ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက် (problem.md)\n- မအောင်မြင်တဲ့ အော်ဒါ — ပုံမှန် 0၊ error log ထဲမှာ ကြည့်\n- လာမယူတဲ့ အော်ဒါ — တစ်မနက် 5 ခုထက် များရင် ADR-001 ကို ပြန်ကြည့်\n"
+        cadence: line-by-line
+      - {
+          id: sel-n1,
+          type: editor.select,
+          at: { mark: sel-n1 },
+          target:
+            {
+              file: docs/runbook.md,
+              text: "- ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက် (problem.md)\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-n2,
+          type: editor.select,
+          at: { mark: sel-n2 },
+          target: { file: docs/runbook.md, text: "ပုံမှန် 0", occurrence: 1 },
+        }
+      - {
+          id: sel-n3,
+          type: editor.select,
+          at: { mark: sel-n3 },
+          target:
+            {
+              file: docs/runbook.md,
+              text: "- လာမယူတဲ့ အော်ဒါ — တစ်မနက် 5 ခုထက် များရင် ADR-001 ကို ပြန်ကြည့်\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: alerts
+    narration: >
+      [[mark:a-title]] ဒီ ဂဏန်းတွေကို တစ်နေကုန် ထိုင်ကြည့်နေလို့ မရလို့၊ တစ်ခုခု ဖြစ်ရင် ကိုယ့်ဖုန်းကို အလိုလို
+      သတိပေးတဲ့ alert ကို သုံးပါတယ်။ [[mark:a-bad]] ဒါပေမဲ့ error တစ်ခု ဖြစ်တိုင်း ဖုန်း မြည်နေရင်၊ တစ်နေ့ အကြိမ်
+      နှစ်ဆယ်လောက် မြည်ပြီး နောက်ဆုံးမှာ alert ကို ဘယ်သူမှ မကြည့်တော့ပါဘူး။ တကယ့် ပြဿနာ ရောက်လာတဲ့ နေ့ကျမှ
+      လွတ်သွားတတ်ပါတယ်။ [[mark:a-good]] ဒါကြောင့် alert ကို ကိုယ် ချက်ချင်း တစ်ခုခု လုပ်ရမယ့် အခါမှပဲ ပို့ပါ။ ဥပမာ
+      ဆိုင်ဖွင့်ချိန်အတွင်း အော်ဒါ သုံးခု ဆက်တိုက် မအောင်မြင်ရင်တော့ customer တွေ တကယ် ထိခိုက်နေပြီ ဖြစ်လို့ ဖုန်း
+      မြည်သင့်ပါတယ်။ [[mark:close-a]] ဒီ စည်းကမ်းကို runbook ထဲမှာ မှတ်ထားရအောင်။ [[mark:type-alert]] ဒီ
+      တစ်ကြောင်းက ဖုန်း မြည်ရမယ့် အခြေအနေကို တိတိကျကျ သတ်မှတ်ထားတာပါ။ ဖုန်း မြည်တိုင်း ကိုယ် ထကြည့်ရမယ့် အကြောင်း
+      ရှိနေတော့၊ alert ကို ယုံလို့ ရလာပါတယ်။
+    sources:
+      - {
+          title: "Google SRE book: Monitoring Distributed Systems (every page should be actionable; noise makes people ignore alerts)",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - {
+          id: draw-a-title,
+          type: whiteboard.apply,
+          at: { mark: a-title },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - {
+          id: draw-a-bad,
+          type: whiteboard.apply,
+          at: { mark: a-bad },
+          upsertIds: [a-bad-h, a-bad-1, a-bad-2, a-bad-3],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-a-good,
+          type: whiteboard.apply,
+          at: { mark: a-good },
+          upsertIds: [a-good-h, a-good-1, a-good-2, a-good-3],
+          drawMs: 1600,
+        }
+      - { id: close-a, type: whiteboard.apply, at: { mark: close-a }, open: false }
+      - id: type-alert
+        type: editor.type
+        at: { mark: type-alert }
+        target: { file: docs/runbook.md, after: "ADR-001 ကို ပြန်ကြည့်\n", occurrence: 1 }
+        text: "- alert — ဖွင့်ချိန်မှာ အော်ဒါ ဆက်တိုက် 3 ခု မအောင်မြင်မှ ကိုယ့်ဖုန်းကို ပို့\n"
+        cadence: line-by-line
+
+  - id: notes
+    narration: >
+      [[mark:type-notes]] metric နဲ့ log တွေ အပြင် နောက်ထပ် data တစ်မျိုး ရှိပါသေးတယ်။ ကောင်တာက လှလှ ရဲ့ မှတ်စုပါ။
+      [[mark:sel-notes]] customer တွေ ကောင်တာမှာ ပြောသွားတာတွေကို လှလှ က မှတ်ထားပြီး၊ ကိုယ်က နေ့တိုင်း ဖတ်ပါမယ်။
+      ဥပမာ ကြိုမှာတဲ့ အော်ဒါ မများလာဘဲ၊ customer တချို့က app ရှိမှန်းကို မသိသေးဘူး လို့ ပြောသွားတယ် ဆိုပါစို့။
+      metric က ဘယ်နှခု ဆိုတာကို ပြပေမဲ့၊ ဘာကြောင့်လဲ ဆိုတာကိုတော့ customer ရဲ့ စကားက ပြပေးတာပါ။ customer ပြောတာကို
+      ညည်းတာ လို့ မမြင်ဘဲ data အဖြစ် သဘောထားပါ။ ပြဿနာကို စရေးတုန်းကလည်း လှလှ ရေတွက်ထားတဲ့ ကိန်းဂဏန်းက အခြေခံ
+      ဖြစ်ခဲ့ပါတယ်။
+    sources:
+      - {
+          title: "Google SRE book: Monitoring Distributed Systems (watch symptoms as users see them)",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - id: type-notes
+        type: editor.type
+        at: { mark: type-notes }
+        target: { file: docs/runbook.md, after: "ကိုယ့်ဖုန်းကို ပို့\n", occurrence: 1 }
+        text: "- လှလှ ရဲ့ မှတ်စု — customer ပြောတာတွေကို နေ့တိုင်း ဆိုင်ပိတ်ပြီး ဖတ်\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-signals,
+          type: expect.file,
+          at: { afterAction: type-notes },
+          path: docs/runbook.md,
+          contains: "- လှလှ ရဲ့ မှတ်စု — customer ပြောတာတွေကို နေ့တိုင်း ဆိုင်ပိတ်ပြီး ဖတ်",
+        }
+      - {
+          id: sel-notes,
+          type: editor.select,
+          at: { mark: sel-notes },
+          target:
+            {
+              file: docs/runbook.md,
+              text: "- လှလှ ရဲ့ မှတ်စု — customer ပြောတာတွေကို နေ့တိုင်း ဆိုင်ပိတ်ပြီး ဖတ်\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မနက် ခုနစ်နာရီ ဆယ်မိနစ်မှာ လှလှ က မိနစ် နှစ်ဆယ်လုံး ကြိုမှာတဲ့ အော်ဒါ
+      တစ်ခုမှ မဝင်လာဘူး လို့ ပြောပါတယ်။ ကိုယ့်ဖုန်းကိုလည်း alert တစ်ခုမှ မလာပါဘူး။ ပထမဆုံး ဘာလုပ်မလဲ။ error log
+      ကို ဖွင့်ဖတ်မလား၊ ဖုန်းနဲ့ အော်ဒါ တစ်ခု ကိုယ်တိုင် မှာကြည့်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဖုန်းနဲ့ ကိုယ်တိုင် မှာကြည့်တာပါ။ ဘာကြောင့်လဲဆိုတော့ customer မြင်နေရတာကို
+      တစ်မိနစ်အတွင်း ကိုယ်တိုင် မြင်ရလို့ပါ။ ဖုန်းမှာ page လုံးဝ မပေါ်တော့ရင် အော်ဒါတွေက server ဆီ မရောက်တော့လို့၊
+      error log ထဲမှာ ဘာမှ မပေါ်သလို alert လည်း မလာနိုင်ပါဘူး။ log တိတ်နေတာက app ကောင်းနေတယ် လို့ မဆိုလိုပါဘူး။
+      release ပြီးတိုင်း ကိုယ်တိုင် အော်ဒါ တစ်ခု မှာကြည့်တဲ့ အလေ့အထကိုပဲ ဒီမှာလည်း သုံးတာပါ။
+    sources:
+      - {
+          title: "Google SRE book: Monitoring Distributed Systems (black-box monitoring: test behaviour as a user would see it)",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-q2, z-o1, z-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1200,
+        }
+
+  - id: incident
+    chapter: Incident ဖြစ်ရင်
+    narration: >
+      [[mark:i-title]] ဒီလို customer တွေ ထိခိုက်နေတဲ့ ပြဿနာကို incident လို့ ခေါ်ပါတယ်။ incident ဖြစ်ရင် ဘာကို
+      အရင် လုပ်မလဲ ဆိုတဲ့ အစဉ်က အရေးကြီးပါတယ်။ [[mark:i-1]] ပထမဆုံး customer တွေ ပြန်မှာလို့ ရအောင် လုပ်ပါ။
+      ဘာကြောင့် ဖြစ်တာလဲ မသိသေးလည်း ရပါတယ်။ [[mark:i-2]] ပြီးတော့ ဘာဖြစ်နေလဲ၊ ဘာလုပ်နေလဲ ဆိုတာကို မြမြ နဲ့ လှလှ
+      ကို စောစော ပြောပါ။ ပြင်လို့ မပြီးသေးခင်ကတည်းက ပြောထားရပါမယ်။ ဒါမှ သူတို့ဘက်က customer တွေကို ဘာပြောရမလဲ
+      သိပါတယ်။ [[mark:i-3]] customer တွေ ပြန်မှာလို့ ရသွားမှ ဘာကြောင့် ဖြစ်ခဲ့လဲ ဆိုတာကို အေးအေးဆေးဆေး ရှာပါ။
+      [[mark:i-4]] နောက်ဆုံးမှာ ဘာသင်ခဲ့လဲ ဆိုတာကို ရေးပါ။ ဒီ အဆင့်ကို ခဏနေမှ ပြန်ပြောပါမယ်။
+    sources:
+      - {
+          title: "Google SRE book: Managing Incidents (stop the bleeding and restore service, then root-cause; communicate with stakeholders)",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - {
+          id: draw-i-title,
+          type: whiteboard.apply,
+          at: { mark: i-title },
+          open: true,
+          clear: true,
+          upsertIds: [i-title],
+        }
+      - {
+          id: draw-i-1,
+          type: whiteboard.apply,
+          at: { mark: i-1 },
+          upsertIds: [i-1-box, i-1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-i-2,
+          type: whiteboard.apply,
+          at: { mark: i-2 },
+          upsertIds: [i-ar1, i-2-box, i-2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-i-3,
+          type: whiteboard.apply,
+          at: { mark: i-3 },
+          upsertIds: [i-ar2, i-3-box, i-3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-i-4,
+          type: whiteboard.apply,
+          at: { mark: i-4 },
+          upsertIds: [i-ar3, i-4-box, i-4],
+          drawMs: 1200,
+        }
+
+  - id: steps-first
+    narration: >
+      [[mark:close-i]] အခုတော့ ဒီ အစဉ်ကို အော်ဒါတွေ ရပ်သွားတဲ့ ပြဿနာအတွက် runbook ထဲမှာ အဆင့်လိုက် ရေးကြည့်ရအောင်။
+      [[mark:type-steps1]] ဒီ အပိုင်းက အော်ဒါတွေ ရပ်သွားရင် လိုက်လုပ်ရမယ့် အဆင့်တွေပါ။ ပထမ နှစ်ဆင့်က အကြောင်းရင်း
+      မရှာခင် customer ကို အရင် ကာကွယ်တဲ့ အဆင့်တွေပါ။ [[mark:sel-step1]] ပထမ အဆင့်က ခုနက မေးခွန်းရဲ့ အဖြေပါ။
+      customer မြင်နေရတာကို ကိုယ်တိုင် အရင် ကြည့်ပါတယ်။ [[mark:sel-step2]] app နဲ့ မှာလို့ မရရင်၊
+      မပြင်ရသေးခင်ကတည်းက လှလှ က ဖုန်းနဲ့ အော်ဒါ လက်ခံပေးလို့ customer တွေ မပြန်သွားပါဘူး။ app မရှိခင်က ဆိုင်မှာ
+      သုံးနေခဲ့တဲ့ နည်းလမ်းကို အရန် အဖြစ် ပြန်သုံးတာပါ။
+    sources:
+      - {
+          title: "Google SRE book: Managing Incidents (restore service first)",
+          url: "https://sre.google/sre-book/managing-incidents/",
+        }
+    actions:
+      - { id: close-i, type: whiteboard.apply, at: { mark: close-i }, open: false }
+      - id: type-steps1
+        type: editor.type
+        at: { mark: type-steps1 }
+        target: { file: docs/runbook.md, after: "ဆိုင်ပိတ်ပြီး ဖတ်\n\n", occurrence: 1 }
+        text: "## If orders stop arriving\n1. ဖုန်းနဲ့ အော်ဒါ တစ်ခု ကိုယ်တိုင် မှာကြည့်။\n2. မရရင် လှလှ နဲ့ မြမြ ကို ပြော။ ပြန်ကောင်းတဲ့အထိ ဖုန်းနဲ့ အော်ဒါ လက်ခံ။\n"
+        cadence: line-by-line
+      - {
+          id: sel-step1,
+          type: editor.select,
+          at: { mark: sel-step1 },
+          target: { file: docs/runbook.md, text: "1. ဖုန်းနဲ့ အော်ဒါ တစ်ခု ကိုယ်တိုင် မှာကြည့်။\n", occurrence: 1 },
+        }
+      - {
+          id: sel-step2,
+          type: editor.select,
+          at: { mark: sel-step2 },
+          target: { file: docs/runbook.md, text: "ပြန်ကောင်းတဲ့အထိ ဖုန်းနဲ့ အော်ဒါ လက်ခံ။", occurrence: 1 },
+        }
+
+  - id: steps-then
+    narration: >
+      [[mark:type-steps2]] နောက် သုံးဆင့်ကတော့ customer တွေ ဖုန်းနဲ့ မှာလို့ ရနေတုန်းမှာ၊ ပြဿနာ ဘယ်မှာလဲ ရှာပြီး
+      ပြင်တဲ့ အဆင့်တွေပါ။ [[mark:sel-step3]] app ကို တင်ထားတဲ့ hosting service ဘက်မှာ ပြဿနာ ရှိနေရင် ကိုယ်က
+      ပြင်လို့ မရလို့၊ service အလုပ်လုပ်နေလား ပြတဲ့ သူတို့ရဲ့ status page ကို အရင် ကြည့်ပါတယ်။ [[mark:sel-step4]]
+      release အသစ် လုပ်ပြီးကတည်းက ဖြစ်တာ ဆိုရင်တော့ အကြောင်းရင်း မရှာခင် rollback ကို အရင် လုပ်ပါတယ်။ ပြီးခဲ့တဲ့
+      lesson မှာ rollback လုပ်နည်းကို ကြိုရေးထားတာ ဒီလို အချိန်အတွက်ပါ။ [[mark:sel-step5]] နောက်ဆုံး အဆင့်မှာ
+      error log ကို ဖတ်ပါတယ်။ log ရှည်ရင် agent ကို ဖတ်ခိုင်းပြီး အကြောင်းရင်း ရှာခိုင်းလို့ ရပါတယ်။ ဒါပေမဲ့
+      production ကို တိုက်ရိုက် ပြင်ခွင့်တော့ မပေးပါဘူး။ security lesson မှာ ပြောခဲ့သလို agent ကို လိုတဲ့
+      ဖတ်ခွင့်ပဲ ပေးပါတယ်။ ပြင်တာကို local မှာ လုပ်ပြီး၊ checklist အတိုင်း ဆိုင်မှာ လူနည်းတဲ့ အချိန်ကျမှ release
+      လုပ်ပါမယ်။
+    sources:
+      - {
+          title: "OWASP GenAI Security Project: LLM06:2025 Excessive Agency (read-only access when only reading is needed)",
+          url: "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/",
+        }
+      - {
+          title: "Google SRE workbook: Canarying Releases (roll back a bad release)",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      - id: type-steps2
+        type: editor.type
+        at: { mark: type-steps2 }
+        target: { file: docs/runbook.md, after: "ဖုန်းနဲ့ အော်ဒါ လက်ခံ။\n", occurrence: 1 }
+        text: "3. hosting ရဲ့ status page ကို ကြည့်။\n4. release အသစ် ပြီးကတည်းက ဖြစ်တာဆိုရင် rollback လုပ်။\n5. error log ကို ကြည့်။ agent ကို log ဖတ်ခိုင်းလို့ရတယ်၊ production ကို ပြင်ခွင့် မပေးဘူး။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-steps,
+          type: expect.file,
+          at: { afterAction: type-steps2 },
+          path: docs/runbook.md,
+          contains: "5. error log ကို ကြည့်။ agent ကို log ဖတ်ခိုင်းလို့ရတယ်၊ production ကို ပြင်ခွင့် မပေးဘူး။",
+        }
+      - {
+          id: sel-step3,
+          type: editor.select,
+          at: { mark: sel-step3 },
+          target:
+            { file: docs/runbook.md, text: "3. hosting ရဲ့ status page ကို ကြည့်။\n", occurrence: 1 },
+        }
+      - {
+          id: sel-step4,
+          type: editor.select,
+          at: { mark: sel-step4 },
+          target:
+            {
+              file: docs/runbook.md,
+              text: "4. release အသစ် ပြီးကတည်းက ဖြစ်တာဆိုရင် rollback လုပ်။\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-step5,
+          type: editor.select,
+          at: { mark: sel-step5 },
+          target: { file: docs/runbook.md, text: "production ကို ပြင်ခွင့် မပေးဘူး။", occurrence: 1 },
+        }
+
+  - id: after-incident
+    chapter: အပြစ်မတင်ဘဲ သင်ယူ
+    narration: >
+      [[mark:type-after]] နောက်ဆုံး အပိုင်းက incident ပြီးတဲ့နောက် ရေးမယ့် မှတ်တမ်းပါ။ customer တွေ ပြန်မှာလို့
+      ရသွားရုံနဲ့ မရပ်ဘဲ၊ နောက်တစ်ခါ ထပ်မဖြစ်အောင် သင်ယူဖို့ပါ။ [[mark:sel-why]] အရေးအကြီးဆုံးက ဒီ စာကြောင်းပါ။
+      ဘယ်သူ မှားလဲ လို့ မမေးဘဲ၊ ဘာက ဒီလို မှားခွင့်ပေးခဲ့လဲ လို့ မေးပါ။ ဥပမာ version တစ်ခုက staging မှာ မစစ်ဘဲ
+      ထွက်သွားခဲ့တယ် ဆိုပါစို့။ လူကို အပြစ်တင်ရင် နောက်တစ်ခါ ပြဿနာကို ဖုံးထားချင်လာကြပါလိမ့်မယ်။ အဲဒီအစား
+      checklist ကို ကျော်လို့ ရနေတာကို ပြင်ပါ။ [[mark:sel-change]] နောက်ဆုံး စာကြောင်းကတော့ သင်ခန်းစာကို
+      မှတ်တမ်းထဲမှာပဲ မထားဘဲ၊ နောက်တစ်ခါ ကြိုမိနိုင်အောင် project ထဲက တစ်ခုခုကို တကယ် ပြောင်းခိုင်းတာပါ။ ဒီလို
+      အပြစ်မတင်ဘဲ သင်ယူတဲ့ ယဉ်ကျေးမှုကို ပိုနက်နက် လေ့လာချင်ရင်တော့ SRE from zero course မှာ ဆက်ကြည့်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Google SRE book: Postmortem Culture: Learning from Failure (blameless; contributing causes; follow-up actions)",
+          url: "https://sre.google/sre-book/postmortem-culture/",
+        }
+    actions:
+      - id: type-after
+        type: editor.type
+        at: { mark: type-after }
+        target: { file: docs/runbook.md, after: "ပြင်ခွင့် မပေးဘူး။\n\n", occurrence: 1 }
+        text: "## After an incident\n- ဘာဖြစ်ခဲ့လဲ — ဘယ်အချိန်ကနေ ဘယ်အချိန်ထိ၊ customer ဘယ်နှယောက် ထိခိုက်လဲ\n- ဘာကြောင့်လဲ — လူကို အပြစ်မတင်ဘဲ ဘာက ဖြစ်ခွင့်ပေးခဲ့လဲ ရှာ\n- ဘာပြောင်းမလဲ — test၊ rule ဒါမှမဟုတ် ဒီ runbook ထဲ တစ်ကြောင်း\n"
+        cadence: line-by-line
+      - {
+          id: expect-after,
+          type: expect.file,
+          at: { afterAction: type-after },
+          path: docs/runbook.md,
+          contains: "- ဘာကြောင့်လဲ — လူကို အပြစ်မတင်ဘဲ ဘာက ဖြစ်ခွင့်ပေးခဲ့လဲ ရှာ",
+        }
+      - {
+          id: sel-why,
+          type: editor.select,
+          at: { mark: sel-why },
+          target:
+            {
+              file: docs/runbook.md,
+              text: "- ဘာကြောင့်လဲ — လူကို အပြစ်မတင်ဘဲ ဘာက ဖြစ်ခွင့်ပေးခဲ့လဲ ရှာ\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-change,
+          type: editor.select,
+          at: { mark: sel-change },
+          target:
+            {
+              file: docs/runbook.md,
+              text: "- ဘာပြောင်းမလဲ — test၊ rule ဒါမှမဟုတ် ဒီ runbook ထဲ တစ်ကြောင်း\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:rc-signals]] ဒါဆို ပြန်ချုပ်ရရင်၊ မမြင်ရတာကို ပြင်လို့ မရလို့ log၊ error နဲ့ metric တွေကို ကြည့်ပြီး
+      app ထဲမှာ ဘာဖြစ်နေလဲ မြင်အောင် လုပ်ပါ။ metric တွေထဲကလည်း ဆိုင်အတွက် အရေးကြီးတဲ့ သုံးခုကိုပဲ ရွေးကြည့်ပါ။
+      alert ကို လုပ်စရာ ရှိမှ ပို့ပြီး၊ လှလှ ရဲ့ မှတ်စုကိုလည်း data အဖြစ် ဖတ်ပါ။ [[mark:rc-steps]] incident
+      ဖြစ်ရင် customer ကို အရင် ကာကွယ်ပြီး အကြောင်းရင်းကို နောက်မှ ရှာပါ။ agent ကို log ဖတ်ခိုင်းလို့ ရပေမဲ့
+      production ကို ပြင်ခွင့် မပေးပါနဲ့။ [[mark:rc-after]] ပြီးရင် လူကို အပြစ်မတင်ဘဲ system ကို ပြင်ပါ။ နောက်
+      lesson မှာတော့ ဒီ app ကို ဆောက်တာ၊ run ထားတာနဲ့ agent သုံးတာ အားလုံး ဘယ်လောက် ကုန်ကျလဲ၊ စနစ်တကျ လုပ်တာက
+      ကုန်ကျစရိတ်ကို ဘယ်လို လျှော့ပေးလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Harness engineering (observability)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google SRE book: Postmortem Culture: Learning from Failure",
+          url: "https://sre.google/sre-book/postmortem-culture/",
+        }
+    actions:
+      - {
+          id: rc-signals,
+          type: editor.select,
+          at: { mark: rc-signals },
+          target: { file: docs/runbook.md, text: "## Signals", occurrence: 1 },
+        }
+      - {
+          id: rc-steps,
+          type: editor.select,
+          at: { mark: rc-steps },
+          target: { file: docs/runbook.md, text: "## If orders stop arriving", occurrence: 1 },
+        }
+      - {
+          id: rc-after,
+          type: editor.select,
+          at: { mark: rc-after },
+          target: { file: docs/runbook.md, text: "## After an incident", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
