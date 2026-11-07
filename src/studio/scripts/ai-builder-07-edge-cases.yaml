@@ -1,0 +1,951 @@
+# AI Builder, lesson 07: edge cases and assumptions (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md) and
+# docs/requirements.md pinned exactly as COURSE-KIT §4.2 stands after L06 (through `## Scope (v1)`,
+# followed by a blank line). Nothing runs. The lesson types the binder's last three sections:
+# Edge cases · Assumptions · Questions for မြမြ (one line-by-line action each).
+# Deliberate gap (binder note): the Burmese-digit requirement is NOT made an edge case here.
+#
+# Boards: (C) the happy path, then the what-if checklist drawn item by item (3 × 3 orange boxes);
+# (E) one story and the four ways to decide an edge (green handle, red refuse clearly, white ignore on
+# purpose, orange ask), with the rule that the agent must not decide it; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-07-edge-cases.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-07-edge-cases
+  title: "AI Builder 07: Edge case နဲ့ assumption"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/requirements.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/requirements.md: |+
+        # Requirements · ကြိုမှာ app
+
+        ## User stories
+        - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
+        - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
+        - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
+        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+
+        ## Non-functional
+        - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
+        - မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။
+        - customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။
+        - စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။
+        - run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။
+
+        ## Constraints
+        - app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။
+        - ငွေကို ကောင်တာမှာပဲ ချေမယ်။
+        - ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00
+
+        ## Scope (v1)
+        Must
+        - လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ
+        - အော်ဒါနံပါတ်
+        - ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ
+        Should
+        - အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ
+        Won't (for now)
+        - delivery
+        - online ငွေပေးချေမှု
+        - customer account နဲ့ login
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board C: the happy path (green), then the what-if checklist: an orange title and nine orange
+    # boxes with white labels, drawn two at a time as the narration names them.
+    - {
+        id: c-happy,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 40,
+        text: "happy path · 2 ခွက်၊ 8:30 → #101",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-happy-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 196,
+        width: 520,
+        height: 16,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-q,
+        kind: text,
+        x: 300,
+        y: 236,
+        width: 290,
+        height: 40,
+        text: "အရေအတွက် 0 ဆိုရင်?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-edge,
+        kind: text,
+        x: 610,
+        y: 236,
+        width: 220,
+        height: 40,
+        text: "→ edge case",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 286,
+        width: 460,
+        height: 45,
+        text: "edge case ရှာတဲ့ စာရင်း",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - { id: c-b1, kind: rectangle, x: 300, y: 345, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t1,
+        kind: text,
+        x: 318,
+        y: 358,
+        width: 214,
+        height: 40,
+        text: "အလွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b2, kind: rectangle, x: 570, y: 345, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t2,
+        kind: text,
+        x: 588,
+        y: 358,
+        width: 214,
+        height: 40,
+        text: "သုည",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b3, kind: rectangle, x: 840, y: 345, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t3,
+        kind: text,
+        x: 858,
+        y: 358,
+        width: 214,
+        height: 40,
+        text: "များလွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b4, kind: rectangle, x: 300, y: 425, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t4,
+        kind: text,
+        x: 318,
+        y: 438,
+        width: 214,
+        height: 40,
+        text: "အမျိုးအစား မှား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b5, kind: rectangle, x: 570, y: 425, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t5,
+        kind: text,
+        x: 588,
+        y: 438,
+        width: 214,
+        height: 40,
+        text: "နှစ်ခါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b6, kind: rectangle, x: 840, y: 425, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t6,
+        kind: text,
+        x: 858,
+        y: 438,
+        width: 214,
+        height: 40,
+        text: "တစ်ပြိုင်နက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b7, kind: rectangle, x: 300, y: 505, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t7,
+        kind: text,
+        x: 318,
+        y: 518,
+        width: 214,
+        height: 40,
+        text: "စော / နောက်ကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b8, kind: rectangle, x: 570, y: 505, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t8,
+        kind: text,
+        x: 588,
+        y: 518,
+        width: 214,
+        height: 40,
+        text: "network ပြတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-b9, kind: rectangle, x: 840, y: 505, width: 250, height: 64, strokeColor: "#f08c00" }
+    - {
+        id: c-t9,
+        kind: text,
+        x: 858,
+        y: 518,
+        width: 214,
+        height: 40,
+        text: "လူမှား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-agent,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 640,
+        height: 40,
+        text: "agent လည်း ရှာပေးနိုင် · ဆုံးဖြတ်တာက လူ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board E: one story (blue box) and four ways to decide an edge, as a 2 × 2 grid under it:
+    # green handle, red refuse clearly, white ignore on purpose (written down), orange ask မြမြ.
+    # The violet rule: what isn't written, the agent guesses.
+    - {
+        id: e-story-box,
+        kind: rectangle,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-story,
+        kind: text,
+        x: 320,
+        y: 172,
+        width: 560,
+        height: 40,
+        text: "story · customer က ဖုန်းကနေ ကြိုမှာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 580,
+        y: 230,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-h-box,
+        kind: rectangle,
+        x: 300,
+        y: 280,
+        width: 380,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-h-head,
+        kind: text,
+        x: 318,
+        y: 290,
+        width: 340,
+        height: 40,
+        text: "handle လုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: e-h-ex,
+        kind: text,
+        x: 318,
+        y: 338,
+        width: 340,
+        height: 40,
+        text: "2 ခါ နှိပ် → တစ်ခုပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-r-box,
+        kind: rectangle,
+        x: 710,
+        y: 280,
+        width: 380,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-r-head,
+        kind: text,
+        x: 728,
+        y: 290,
+        width: 340,
+        height: 40,
+        text: "ရှင်းရှင်း ငြင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-r-ex,
+        kind: text,
+        x: 728,
+        y: 338,
+        width: 340,
+        height: 40,
+        text: "0 ခွက် → 1–20 ရွေးခိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-i-box,
+        kind: rectangle,
+        x: 300,
+        y: 405,
+        width: 380,
+        height: 110,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-i-head,
+        kind: text,
+        x: 318,
+        y: 415,
+        width: 340,
+        height: 40,
+        text: "တမင် ချန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-i-ex,
+        kind: text,
+        x: 318,
+        y: 463,
+        width: 340,
+        height: 40,
+        text: "အော်ဒါ ရာချီ → ရေးထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-a-box,
+        kind: rectangle,
+        x: 710,
+        y: 405,
+        width: 380,
+        height: 110,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-a-head,
+        kind: text,
+        x: 728,
+        y: 415,
+        width: 340,
+        height: 40,
+        text: "မေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-a-ex,
+        kind: text,
+        x: 728,
+        y: 463,
+        width: 340,
+        height: 40,
+        text: "လာမယူရင် → မြမြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 680,
+        height: 45,
+        text: "မရေးထားရင် agent က ခန့်မှန်းပြီး ရွေး",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    # Board Z: the quiz (white question, green answer, white reason, orange: ask မြမြ).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 560,
+        height: 40,
+        text: "ကြာသပတေး 19:55 မှာ ကြိုမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 640,
+        height: 40,
+        text: "လာယူချိန် 20:30 · ဆိုင် 20:00 ပိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q3,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 560,
+        height: 45,
+        text: "handle? ငြင်း? ချန်?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · ရှင်းရှင်း ငြင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 560,
+        height: 40,
+        text: "ဒီနေ့ ဖွင့်ချိန်ကို ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-ask,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 640,
+        height: 40,
+        text: "ပိတ်ခါနီး မှာခွင့် → မြမြ ကို မေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6107
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Happy path ရဲ့ အပြင်ဘက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ app ရဲ့ ပထမ version အတွက် ဘာလုပ်မယ်၊ ဘာမလုပ်သေးဘူး ဆိုတဲ့ scope ကို
+      ဆုံးဖြတ်ခဲ့ပါတယ်။ [[mark:sel-scope]] app က ဘာလုပ်ပေးရမလဲ ဆိုတဲ့ requirement တွေ ရေးထားတဲ့ ဒီ ဖိုင်ရဲ့ scope အပိုင်းမှာ၊
+      မဖြစ်မနေ လုပ်မယ့် အရာတွေနဲ့ ဒီတစ်ခါ မလုပ်သေးမယ့် အရာတွေကို ခွဲရေးခဲ့ပါတယ်။ scope ကျဉ်းသွားပေမဲ့ ဒီ စာမျက်နှာမှာ ပြဿနာ တစ်ခု ကျန်နေပါသေးတယ်။ [[mark:sel-stories]] ဒီ user
+      story တွေ၊ ဆိုလိုတာက user ဘက်ကနေ ရေးထားတဲ့ requirement တွေက အရာအားလုံး ပုံမှန်အတိုင်း ဖြစ်တဲ့
+      အချိန်ကိုပဲ ပြောပါတယ်။ [[mark:happy]] ဥပမာ member
+      အောင်အောင် က လက်ဖက်ရည် နှစ်ခွက်ကို မနက် ရှစ်နာရီခွဲမှာ လာယူမယ်လို့ မှာပြီး၊ အော်ဒါနံပါတ် ရသွားတာမျိုးပါ။
+      အားလုံး ပုံမှန်အတိုင်း ဖြစ်သွားတဲ့ ဒီ လမ်းကို happy path လို့ ခေါ်ပါတယ်။ agent ကို ဒီ requirement
+      တွေ ပေးလိုက်ရင်၊ agent က happy path ကို အရင်ဆုံး ထုတ်ပေးတတ်ပါတယ်။ ကိုယ်တို့ လူတွေကလည်း app
+      တစ်ခုကို စိတ်ကူးတဲ့အခါ ပုံမှန် အော်ဒါ တစ်ခုကိုပဲ အရင် မြင်ယောင်တတ်ပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-scope,
+          type: editor.select,
+          at: { mark: sel-scope },
+          target: { file: docs/requirements.md, text: "## Scope (v1)", occurrence: 1 },
+        }
+      - {
+          id: sel-stories,
+          type: editor.select,
+          at: { mark: sel-stories },
+          target: { file: docs/requirements.md, text: "## User stories", occurrence: 1 },
+        }
+      - {
+          id: open-board-c,
+          type: whiteboard.apply,
+          at: { mark: happy },
+          open: true,
+          clear: true,
+          upsertIds: [c-happy, c-happy-line],
+          drawMs: 1400,
+        }
+
+  - id: edge
+    narration: >
+      [[mark:what-if]] ဒါပေမဲ့ အောင်အောင် က အရေအတွက်ကို သုည လို့ ထည့်မိရင် ဘာဖြစ်မလဲ။ requirement ထဲမှာ
+      ဒီအကြောင်း ဘာမှ မရေးထားရင်၊ agent က မေးမယ့်အစား ဖြစ်နိုင်လောက်တဲ့ အဖြေ တစ်ခုကို ရွေးပြီး
+      ဆက်သွားတတ်ပါတယ်။ သုည ခွက်ကို လက်ခံမလား၊ တစ်ခွက်လို့ တိတ်တိတ်လေး ပြောင်းပေးမလား ဆိုတာ ဘယ်သူမှ
+      မသိလိုက်ပါဘူး။ ထွက်လာတဲ့ app ကို ကြည့်ရင်လည်း မှန်နေသလိုပဲ ထင်ရပါတယ်။ [[mark:c-edge]] ဒီလို ပုံမှန် မဟုတ်တဲ့
+      အနားသတ်က အခြေအနေကို edge case လို့ ခေါ်ပါတယ်။ ဒီနေ့ lesson မှာ edge case တွေကို ဘယ်လို ရှာမလဲ၊ တွေ့ရင်
+      ဘယ်လို ဆုံးဖြတ်မလဲ၊ မသေချာတာတွေကို ဘယ်လို မှတ်ထားမလဲ ဆိုတာ ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - { title: "Wikipedia: Edge case", url: "https://en.wikipedia.org/wiki/Edge_case" }
+    actions:
+      - {
+          id: draw-c-q,
+          type: whiteboard.apply,
+          at: { mark: what-if },
+          upsertIds: [c-q],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-edge,
+          type: whiteboard.apply,
+          at: { mark: c-edge },
+          upsertIds: [c-edge],
+          drawMs: 700,
+        }
+
+  - id: checklist
+    chapter: ဘာဖြစ်မလဲ ဆိုရင်
+    narration: >
+      [[mark:c-list]] edge case တွေကို ကံကောင်းမှ တွေ့တာမျိုး မဖြစ်အောင်၊ user story တစ်ခုချင်းကို မေးခွန်း စာရင်း တစ်ခုနဲ့
+      စစ်ကြည့်လို့ ရပါတယ်။ [[mark:c-g1]] ပထမ နှစ်ခုက အလွတ်နဲ့ သုည ပါ။ ဖုန်းနံပါတ်ကို မထည့်ဘဲ မှာရင်ကော၊
+      သုည ခွက် မှာရင်ကော ဆိုတာမျိုးပါ။ [[mark:c-g2]] နောက် နှစ်ခုက များလွန်းတာနဲ့ အမျိုးအစား မှားတာပါ။
+      လက်ဖက်ရည် ခွက်ပေါင်း တစ်ရာ မှာတာ၊ ဖုန်းနံပါတ် နေရာမှာ နာမည် ရိုက်ထည့်တာ မျိုးပါ။ [[mark:c-g3]] ပြီးတော့
+      နှစ်ခါနဲ့ တစ်ပြိုင်နက် ကိစ္စတွေ ရှိပါတယ်။ မှာမယ် ခလုတ်ကို နှစ်ခါ နှိပ်မိတာ၊ customer နှစ်ယောက်က
+      တစ်စက္ကန့်တည်းမှာ မှာတာ မျိုးပါ။ [[mark:c-g4]] အချိန် စောလွန်း နောက်ကျလွန်းတာလည်း ရှိပါတယ်။ ဥပမာ
+      ဆိုင်ပိတ်ထားတဲ့ မနက် နှစ်နာရီမှာ လာယူမယ်လို့ ရွေးတာပါ။ ကျောင်းသား မောင်မောင် ရဲ့ ဖုန်းမှာ data
+      နှေးနေတုန်း၊ မှာမယ် နှိပ်လိုက်တဲ့ အချိန်မှာ network ပြတ်သွားတာလည်း ဖြစ်နိုင်ပါတယ်။ [[mark:c-g5]] နောက်ဆုံးက
+      လူမှားပါ။ အောင်အောင် ရဲ့ အော်ဒါကို တခြားလူ တစ်ယောက်က လာယူသွားရင် ဘာဖြစ်မလဲ ဆိုတာမျိုးပါ။ ဒီ
+      စာရင်းနဲ့ story တိုင်းကို တစ်ခါ ဖြတ်စစ်ရုံနဲ့ ကိုယ် မမြင်မိခဲ့တဲ့ ကိစ္စ အများကြီး ထွက်လာတတ်ပါတယ်။
+      [[mark:c-agent]] agent ကိုလည်း ဒီ story ရဲ့ edge case တွေ ရှာပေးပါလို့ ခိုင်းလို့ ရပါတယ်။ ဒါပေမဲ့ တွေ့လာတဲ့
+      ကိစ္စ တစ်ခုချင်းကို ဘယ်လို လုပ်မလဲ ဆိုတာကတော့ လူက ဆုံးဖြတ်ရပါမယ်။
+    sources:
+      - { title: "Wikipedia: Edge case", url: "https://en.wikipedia.org/wiki/Edge_case" }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-c-title,
+          type: whiteboard.apply,
+          at: { mark: c-list },
+          upsertIds: [c-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-g1,
+          type: whiteboard.apply,
+          at: { mark: c-g1 },
+          upsertIds: [c-b1, c-t1, c-b2, c-t2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-g2,
+          type: whiteboard.apply,
+          at: { mark: c-g2 },
+          upsertIds: [c-b3, c-t3, c-b4, c-t4],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-g3,
+          type: whiteboard.apply,
+          at: { mark: c-g3 },
+          upsertIds: [c-b5, c-t5, c-b6, c-t6],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-g4,
+          type: whiteboard.apply,
+          at: { mark: c-g4 },
+          upsertIds: [c-b7, c-t7, c-b8, c-t8],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-g5,
+          type: whiteboard.apply,
+          at: { mark: c-g5 },
+          upsertIds: [c-b9, c-t9],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-agent,
+          type: whiteboard.apply,
+          at: { mark: c-agent },
+          upsertIds: [c-agent],
+          drawMs: 1000,
+        }
+
+  - id: outcomes
+    chapter: Handle၊ ငြင်း၊ ချန်၊ မေး
+    narration: >
+      [[mark:e-story]] edge case တစ်ခုကို တွေ့ပြီ ဆိုရင် ရွေးစရာ လေးမျိုး ရှိပါတယ်။ customer က ဖုန်းကနေ
+      ကြိုမှာတဲ့ story တစ်ခုတည်းကို ယူပြီး ကြည့်ရအောင်။ [[mark:e-handle]] ပထမက app က မှန်အောင် handle
+      လုပ်ပေးတာပါ။ မှာမယ် ကို နှစ်ခါ နှိပ်မိရင်လည်း အော်ဒါ တစ်ခုပဲ ဖြစ်ရပါမယ်။ [[mark:e-refuse]] ဒုတိယက
+      ရှင်းရှင်းလင်းလင်း ငြင်းတာပါ။ သုည ခွက်ကို လက်မခံဘဲ၊ ၁ ကနေ ၂၀ အထိ ရွေးပါလို့ customer မြင်ရအောင်
+      screen ပေါ်မှာ ပြရပါမယ်။ တိတ်တိတ်လေး ပြင်ပေးတာ၊ ဘာမှ မပြောဘဲ ပျောက်သွားတာ မဟုတ်ပါဘူး။ [[mark:e-ignore]]
+      တတိယက တမင် ချန်ထားတာပါ။ တစ်မနက် အော်ဒါ ရာချီ ဝင်လာရင် ဘာလုပ်မလဲ ဆိုတာကို ပထမ version
+      မှာ မဖြေရှင်းဘဲ ချန်ထားနိုင်ပါတယ်။ ဒါပေမဲ့ ဘာကြောင့် ချန်လဲ ဆိုတာကို ရေးထားရပါမယ်။ [[mark:e-ask]]
+      နောက်ဆုံး တစ်မျိုးကတော့ ဘယ်လို လုပ်ရမလဲ မသိသေးရင် မေးတာပါ။ လာမယူတဲ့ အော်ဒါကို ဘာလုပ်မလဲ ဆိုတာက ဆိုင်ရဲ့
+      စည်းကမ်း ဖြစ်လို့၊ ဆိုင်ပိုင်ရှင် မြမြ ကပဲ ဆုံးဖြတ်လို့ ရပါတယ်။ [[mark:e-rule]] ဒီ လေးမျိုးထဲက ဘယ်ဟာကို
+      ရွေးရွေး၊ ရွေးတဲ့ အဖြေကို စာနဲ့ ရေးထားရပါမယ်။ မရေးထားတဲ့ ကိစ္စကိုတော့ agent က ခန့်မှန်းပြီး
+      သူ့ဘာသာ ရွေးသွားမှာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-e,
+          type: whiteboard.apply,
+          at: { mark: e-story },
+          open: true,
+          clear: true,
+          upsertIds: [e-story-box, e-story, e-arrow],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-handle,
+          type: whiteboard.apply,
+          at: { mark: e-handle },
+          upsertIds: [e-h-box, e-h-head, e-h-ex],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-e-refuse,
+          type: whiteboard.apply,
+          at: { mark: e-refuse },
+          upsertIds: [e-r-box, e-r-head, e-r-ex],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-e-ignore,
+          type: whiteboard.apply,
+          at: { mark: e-ignore },
+          upsertIds: [e-i-box, e-i-head, e-i-ex],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-e-ask,
+          type: whiteboard.apply,
+          at: { mark: e-ask },
+          upsertIds: [e-a-box, e-a-head, e-a-ex],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-e-rule,
+          type: whiteboard.apply,
+          at: { mark: e-rule },
+          upsertIds: [e-rule],
+          drawMs: 1000,
+        }
+
+  - id: type-edges
+    narration: >
+      [[mark:close-e]] ဒါဆို ဒီ ဆုံးဖြတ်ချက်တွေကို requirement ဖိုင်ထဲ ရေးကြည့်ရအောင်။ [[mark:type-edges]] scope
+      အပိုင်းရဲ့ အောက်မှာ edge case အပိုင်း အသစ် ထည့်ပါတယ်။ တစ်ကြောင်းချင်းမှာ မြှားရဲ့ ဘယ်ဘက်က
+      ကိစ္စ၊ ညာဘက်က ဆုံးဖြတ်ချက် ဖြစ်ပါတယ်။ ငြင်းတဲ့ ကိစ္စတွေမှာလည်း ငြင်းရုံ မဟုတ်ဘဲ၊ customer ဘာဆက်လုပ်ရမလဲ
+      သိအောင် ပြခိုင်းထားတာ ရှိပါတယ်။ ပြရမယ့် ဖွင့်ချိန်တွေကတော့ ရွေးလို့မရတဲ့ ကန့်သတ်ချက်တွေ ရေးတဲ့ constraint
+      အပိုင်းမှာ ရေးထားပြီးသားပါ။ [[mark:sel-range]] ပထမ စာကြောင်းက အရေအတွက်ရဲ့ အနည်းဆုံးနဲ့ အများဆုံးကို
+      သတ်မှတ်ထားတာပါ။ ဒီ စည်းကမ်း တစ်ခုတည်းထဲမှာ သုည၊ အနုတ်၊ များလွန်းတာ သုံးမျိုးလုံး
+      ပါသွားပါတယ်။ စစ်တဲ့အခါမှာလည်း အနားသတ်ကို ကပ်ပြီး စစ်ရပါမယ်။ သုည နဲ့ ၁၊ ၂၀ နဲ့ ၂၁ လို
+      အနားသတ်ရဲ့ နှစ်ဘက်မှာ အမှားတွေ တွေ့ရလေ့ ရှိလို့ပါ။ [[mark:sel-twice]] နောက်ဆုံး စာကြောင်းကတော့
+      ငြင်းတာ မဟုတ်ဘဲ handle လုပ်ပေးရမယ့် ကိစ္စပါ။ network ပြတ်လို့ မောင်မောင် က ထပ်နှိပ်တဲ့အခါ၊ ကောင်တာမှာ
+      သူ့ အော်ဒါကို နှစ်ခါ ပြင်ထားမိတာမျိုး မဖြစ်အောင် ကာကွယ်ပေးတာပါ။
+    sources:
+      - {
+          title: "Wikipedia: Boundary-value analysis",
+          url: "https://en.wikipedia.org/wiki/Boundary-value_analysis",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-e, type: whiteboard.apply, at: { mark: close-e }, open: false }
+      - id: type-edges
+        type: editor.type
+        at: { mark: type-edges }
+        target:
+          { file: docs/requirements.md, after: "- customer account နဲ့ login\n\n", occurrence: 1 }
+        text: "## Edge cases\n- အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ\n- ဆိုင်ပိတ်ချိန် လာယူချိန် → လက်မခံ၊ ဖွင့်ချိန်ကို ပြ\n- ဖုန်းနံပါတ် မပါ → လက်မခံ\n- မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-edges,
+          type: expect.file,
+          at: { afterAction: type-edges },
+          path: docs/requirements.md,
+          contains: "- မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ",
+        }
+      - {
+          id: sel-range,
+          type: editor.select,
+          at: { mark: sel-range },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-twice,
+          type: editor.select,
+          at: { mark: sel-twice },
+          target:
+            { file: docs/requirements.md, text: "- မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ", occurrence: 1 },
+        }
+
+  - id: assumptions
+    chapter: Assumption နဲ့ မေးခွန်း
+    narration: >
+      [[mark:type-assume]] နောက် အပိုင်းမှာ assumption တွေကို ရေးပါတယ်။ assumption ဆိုတာ စစ်မထားရသေးဘဲ
+      ဟုတ်မယ်လို့ ယူဆထားတာပါ။ app တစ်ခု ဆောက်တိုင်း ဒီလို ယူဆချက်တွေ အမြဲ ရှိပါတယ်။ ပြဿနာက အဲဒီ
+      ယူဆချက်တွေ ခေါင်းထဲမှာပဲ ရှိနေရင် ဘယ်သူမှ မစစ်ဖြစ်တာပါ။ [[mark:sel-two-hours]] ပထမ assumption က customer တွေ
+      မှာပြီး ဘယ်လောက် မြန်မြန် လာယူမလဲ ဆိုတာပါ။ တကယ်တမ်း မနက်က မှာထားပြီး ညနေမှ လာယူတဲ့သူ များနေရင်၊
+      ကောင်တာမှာ အေးသွားတဲ့ လက်ဖက်ရည်တွေ ပုံနေပါလိမ့်မယ်။ [[mark:sel-fifty]] ဒုတိယ assumption က
+      တစ်မနက် အော်ဒါ ဘယ်လောက် ဝင်လာမလဲ ဆိုတာပါ။ ခုနက အော်ဒါ ရာချီ ကိစ္စကို တမင်
+      ချန်ထားတဲ့ အကြောင်းပြချက်လည်း ဒါပါပဲ။ ရေးထားတော့ app စသုံးပြီး ပထမ အပတ်မှာ ကောင်တာက လှလှ ရဲ့
+      မှတ်စုနဲ့ တိုက်စစ်လို့ ရပါတယ်။ မှားနေရင် ချန်ထားတဲ့ ကိစ္စကို ပြန်ဆုံးဖြတ်ရမှာပါ။ [[mark:sel-assume-head]] ဒီ
+      assumption အပိုင်းက ကိုယ့်အတွက်ပဲ မဟုတ်ပါဘူး။ agent ထုတ်ပေးတဲ့ code ထဲမှာလည်း ဘယ်သူမှ မရေးထားတဲ့
+      ယူဆချက်တွေ ပါလာတတ်ပါတယ်။ ဒါကြောင့် မဆောက်ခင်မှာ ထုတ်ပေးမယ့် code က ဘယ်အချက်တွေကို ဟုတ်တယ်လို့ ယူထားမလဲ
+      ဆိုတာကို agent ကို စာရင်းလုပ်ပြီး ပြန်ပေးခိုင်းပါ။ ဒီ အပိုင်းနဲ့ တိုက်ကြည့်ရင် ကွာနေတာတွေကို မြင်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the alpha phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-alpha-phase-works",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-assume
+        type: editor.type
+        at: { mark: type-assume }
+        target: { file: docs/requirements.md, after: "→ အော်ဒါ တစ်ခုပဲ\n\n", occurrence: 1 }
+        text: "## Assumptions\n- customer တွေ မှာပြီး 2 နာရီအတွင်း လာယူမယ်။\n- တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ 50 ထက် မများဘူး။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-two-hours,
+          type: editor.select,
+          at: { mark: sel-two-hours },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- customer တွေ မှာပြီး 2 နာရီအတွင်း လာယူမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-fifty,
+          type: editor.select,
+          at: { mark: sel-fifty },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ 50 ထက် မများဘူး။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-assume-head,
+          type: editor.select,
+          at: { mark: sel-assume-head },
+          target: { file: docs/requirements.md, text: "## Assumptions", occurrence: 1 },
+        }
+
+  - id: questions
+    narration: >
+      [[mark:type-questions]] နောက်ဆုံး အပိုင်းကတော့ မြမြ ကို မေးရမယ့် မေးခွန်းတွေပါ။ ကိုယ် မသိတာကို
+      ခန့်မှန်းပြီး ရေးမယ့်အစား မေးခွန်း အဖြစ် ချန်ထားတာပါ။ [[mark:sel-cancel]] ပထမ မေးခွန်းက ခုနက နှစ်နာရီ
+      ဆိုတဲ့ assumption နဲ့ ဆက်စပ်နေပါတယ်။ customer မလာရင် ပြင်ထားတဲ့ အော်ဒါကို ဘယ်လောက်ထိ ထားပေးမလဲ
+      ဆိုတာက ဆိုင်ရဲ့ ငွေနဲ့ ပစ္စည်းကို ထိခိုက်လို့၊ မြမြ ကပဲ ဆုံးဖြတ်ရပါမယ်။ ဒုတိယ မေးခွန်းကတော့ ဆိုင်ပိတ်ခါနီးမှာ
+      ကြိုမှာတာ အကြောင်းပါ။ [[mark:sel-q-head]] ဒီ အပိုင်းက မြမြ အတွက် ဖြစ်ပေမဲ့၊
+      မနက်ခင်း ကောင်တာ အလုပ်နဲ့ ဆိုင်တဲ့ မေးခွန်း ဆိုရင်တော့ လှလှ ကို မေးရပါမယ်။ ဥပမာ ကြိုမှာတဲ့ အော်ဒါ
+      တစ်ခုကို ပြင်ဖို့ ဘယ်လောက် ကြာလဲ ဆိုတာမျိုးပါ။ မေးခွန်းတွေကို ဒီလို စာရင်းလုပ်ထားတော့
+      မြမြ နဲ့ တွေ့တဲ့အခါ တစ်ခါတည်း မေးလို့ ရပါတယ်။ ဖြေပြီးရင် အဖြေကို ဒီ ဖိုင်ထဲ ပြန်ထည့်ရပြီး၊ အဖြေ မရသေးခင်
+      ဒီ ကိစ္စတွေကို မဆောက်ဖို့ agent ကိုလည်း ပြောထားလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-questions
+        type: editor.type
+        at: { mark: type-questions }
+        target: { file: docs/requirements.md, after: "50 ထက် မများဘူး။\n\n", occurrence: 1 }
+        text: "## Questions for မြမြ\n- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။\n- ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။\n"
+        cadence: line-by-line
+      - {
+          id: expect-questions,
+          type: expect.file,
+          at: { afterAction: type-questions },
+          path: docs/requirements.md,
+          contains: "- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။",
+        }
+      - {
+          id: sel-cancel,
+          type: editor.select,
+          at: { mark: sel-cancel },
+          target:
+            { file: docs/requirements.md, text: "- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။", occurrence: 1 },
+        }
+      - {
+          id: sel-q-head,
+          type: editor.select,
+          at: { mark: sel-q-head },
+          target: { file: docs/requirements.md, text: "## Questions for မြမြ", occurrence: 1 },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကြာသပတေးနေ့ ညနေ ခုနစ်နာရီ ငါးဆယ့်ငါးမိနစ်မှာ customer
+      တစ်ယောက်က ည ရှစ်နာရီခွဲမှာ လာယူမယ်လို့ ကြိုမှာတယ် ဆိုပါစို့။ ကြာသပတေးနေ့ ဆိုတော့ ဆိုင်က ည ရှစ်နာရီ ပိတ်ပါတယ်။ ဒီ
+      edge case ကို handle လုပ်မလား၊ ငြင်းမလား၊ ချန်ထားမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ရှင်းရှင်းလင်းလင်း ငြင်းတာပါ။ ဘာကြောင့်လဲဆိုတော့ လာယူချိန်က ဆိုင်ပိတ်ပြီးမှ
+      ဖြစ်နေလို့ပါ။ ငြင်းတဲ့အခါမှာလည်း ဒီနေ့ ဖွင့်ချိန်ကို customer မြင်အောင် ပြပေးရပါမယ်။ [[mark:quiz-ask]]
+      ဒါပေမဲ့ ပိတ်ခါနီး ငါးမိနစ်မှာ ကြိုမှာတာကို လက်ခံမလား ဆိုတာကတော့ ကိုယ် ဆုံးဖြတ်ရမယ့် ကိစ္စ
+      မဟုတ်ပါဘူး။ ဒါကြောင့် မြမြ ကို မေးမယ့် ဒုတိယ မေးခွန်းအဖြစ် ရေးထားခဲ့တာပါ။
+    sources:
+      - { title: "Wikipedia: Edge case", url: "https://en.wikipedia.org/wiki/Edge_case" }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-q3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-quiz-ask,
+          type: whiteboard.apply,
+          at: { mark: quiz-ask },
+          upsertIds: [z-ask],
+          drawMs: 1000,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent ရော လူရော happy path ကို အရင် ဆောက်တတ်လို့၊ ပုံမှန်
+      မဟုတ်တဲ့ အနားသတ်တွေကို ကိုယ်တိုင် ရှာရပါမယ်။ [[mark:sel-edges2]] story တိုင်းကို ဘာဖြစ်မလဲ ဆိုတဲ့
+      စာရင်းနဲ့ စစ်ပြီး၊ edge case တစ်ခုချင်းကို handle လုပ်မလား၊ ငြင်းမလား၊ ချန်မလား ဆုံးဖြတ်ပြီး ရေးထားပါ။
+      [[mark:sel-assume2]] စစ်မထားရသေးတဲ့ ယူဆချက်တွေကို assumption အဖြစ် ရေးထားပါ။ [[mark:sel-questions2]]
+      မသိတာကိုတော့ မခန့်မှန်းဘဲ၊ ဆုံးဖြတ်ရမယ့်သူကို မေးပါ။ နောက် lesson မှာတော့ ဒီ ဆုံးဖြတ်ချက်တွေကနေ၊ ပြီးပြီ
+      ဆိုတာကို ဘယ်သူမဆို စစ်လို့ရအောင် acceptance criteria အဖြစ် ဘယ်လို ရေးမလဲ ဆိုတာ လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "GOV.UK Service Manual: How the alpha phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-alpha-phase-works",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-edges2,
+          type: editor.select,
+          at: { mark: sel-edges2 },
+          target: { file: docs/requirements.md, text: "## Edge cases", occurrence: 1 },
+        }
+      - {
+          id: sel-assume2,
+          type: editor.select,
+          at: { mark: sel-assume2 },
+          target: { file: docs/requirements.md, text: "## Assumptions", occurrence: 1 },
+        }
+      - {
+          id: sel-questions2,
+          type: editor.select,
+          at: { mark: sel-questions2 },
+          target: { file: docs/requirements.md, text: "## Questions for မြမြ", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
