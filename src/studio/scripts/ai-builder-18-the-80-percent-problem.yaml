@@ -1,0 +1,1434 @@
+# AI Builder, lesson 18: the 80% problem (Burmese, preview kind).
+#
+# Start state (ws/): the tea-shop pre-order app exactly as base-app/ ("the first version an agent
+# built", prepared for the lesson; never edited, never typed into), docs/requirements.md (COURSE-KIT
+# §4.2, complete), docs/spec.md (§4.3 without AC-6) and notes.md with only "# Notes".
+# The runtime starts at the first mark; the recall and the iceberg board carry ~1,500 narration
+# characters before runtime.waitForReady.
+#
+# Boards: (I) the iceberg: above the waterline the screen and the happy path (blue, the agent's fast
+# 80% in violet), below it edges, unwritten rules, refusing bad input and the parts connecting (red
+# box, "20% · ကိုယ်က စစ်" in orange); reopened after the tries and annotated in red. (A) time and
+# attention: the 2025 study as measured, with its caveat, then where to spend attention (two
+# columns). (Z) the quiz.
+# Preview: အောင်အောင်'s order (2 milk teas, 08:30) → #101, 3,000 ကျပ်; then requirements.md's first
+# three edge cases, one change at a time: quantity 0 → #102, 0 ကျပ်; quantity back to 2, pickup 02:00
+# → #103, 02:00; pickup back to 08:30, phone empty → #104. Each is accepted (COURSE-KIT §3).
+# notes.md gets "## Lesson 18 · 80% problem" and three lines; the recap selects them.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-18-the-80-percent-problem.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-18-the-80-percent-problem
+  title: "AI Builder 18: 80% problem"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/requirements.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/requirements.md: |
+        # Requirements · ကြိုမှာ app
+
+        ## User stories
+        - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
+        - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
+        - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
+        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+
+        ## Non-functional
+        - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
+        - မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။
+        - customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။
+        - စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။
+        - run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။
+
+        ## Constraints
+        - app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။
+        - ငွေကို ကောင်တာမှာပဲ ချေမယ်။
+        - ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00
+
+        ## Scope (v1)
+        Must
+        - လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ
+        - အော်ဒါနံပါတ်
+        - ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ
+        Should
+        - အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ
+        Won't (for now)
+        - delivery
+        - online ငွေပေးချေမှု
+        - customer account နဲ့ login
+
+        ## Edge cases
+        - အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ
+        - ဆိုင်ပိတ်ချိန် လာယူချိန် → လက်မခံ၊ ဖွင့်ချိန်ကို ပြ
+        - ဖုန်းနံပါတ် မပါ → လက်မခံ
+        - မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ
+
+        ## Assumptions
+        - customer တွေ မှာပြီး 2 နာရီအတွင်း လာယူမယ်။
+        - တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ 50 ထက် မများဘူး။
+
+        ## Questions for မြမြ
+        - လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။
+        - ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင် · ကြိုမှာ</title>
+            <link rel="stylesheet" href="/src/style.css" />
+          </head>
+          <body>
+            <main class="app">
+              <header class="top">
+                <p class="shop">ရွှေလက်ဖက်ရည်ဆိုင်</p>
+                <h1>ကြိုမှာပြီး လာယူပါ</h1>
+              </header>
+
+              <form id="order-form" class="card" novalidate>
+                <label>
+                  ဘာမှာမလဲ
+                  <select id="item" name="item" data-testid="item"></select>
+                </label>
+                <label>
+                  အရေအတွက်
+                  <input id="quantity" name="quantity" type="text" inputmode="numeric" data-testid="qty" />
+                </label>
+                <label>
+                  လာယူမယ့် အချိန်
+                  <input id="pickup" name="pickup" type="time" data-testid="pickup" />
+                </label>
+                <label>
+                  နာမည်
+                  <input id="name" name="name" type="text" autocomplete="name" data-testid="name" />
+                </label>
+                <label>
+                  ဖုန်း
+                  <input id="phone" name="phone" type="tel" autocomplete="tel" data-testid="phone" />
+                </label>
+                <button type="submit" data-testid="order">မှာမယ်</button>
+              </form>
+
+              <section id="result" class="card result" data-testid="result" hidden>
+                <p class="ok" data-testid="result-number"></p>
+                <p data-testid="result-line"></p>
+                <p class="total" data-testid="result-total"></p>
+                <p data-testid="result-pickup"></p>
+                <p class="hint">ငွေကို ကောင်တာမှာ ချေပါ</p>
+              </section>
+            </main>
+            <script type="module" src="/src/main.js"></script>
+          </body>
+        </html>
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "shwe-tea-preorder",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      src/main.js: |
+        // Shwe Tea House pre-order: the order form.
+        const MENU = [
+          { id: "laphet-yay", name: "လက်ဖက်ရည်", price: 1500 },
+          { id: "coffee", name: "ကော်ဖီ", price: 1800 },
+          { id: "lime-juice", name: "သံပုရာရည်", price: 1200 },
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500 },
+          { id: "palata", name: "ပလာတာ", price: 1200 },
+          { id: "e-kya-kwe", name: "အီကြာကွေး", price: 500 },
+        ];
+
+        let nextNumber = 101;
+
+        const form = document.querySelector("#order-form");
+        const itemSelect = document.querySelector("#item");
+        const result = document.querySelector("#result");
+
+        function formatKyat(amount) {
+          return `${amount.toLocaleString("en-US")} ကျပ်`;
+        }
+
+        for (const item of MENU) {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = `${item.name} · ${formatKyat(item.price)}`;
+          itemSelect.append(option);
+        }
+
+        function showOrder(order) {
+          const field = (id) => result.querySelector(`[data-testid="${id}"]`);
+          field("result-number").textContent = `အော်ဒါ #${order.number} ရပါပြီ`;
+          field("result-line").textContent = `${order.item.name} × ${order.quantity}`;
+          field("result-total").textContent = `စုစုပေါင်း ${formatKyat(order.total)}`;
+          field("result-pickup").textContent = `လာယူချိန် ${order.pickup || "-"}`;
+          result.hidden = false;
+        }
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const item = MENU.find((entry) => entry.id === data.get("item"));
+          const quantity = parseInt(data.get("quantity"), 10);
+          showOrder({
+            number: nextNumber++,
+            item,
+            quantity,
+            total: item.price * quantity,
+            pickup: data.get("pickup"),
+            name: data.get("name"),
+            phone: data.get("phone"),
+          });
+        });
+      src/style.css: |
+        :root {
+          color-scheme: light;
+          --ink: #1e1e1e;
+          --muted: #5f6368;
+          --line: #d7d4c8;
+          --accent: #b5651d;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          background: #f6f1e7;
+          color: var(--ink);
+          font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif;
+        }
+
+        .app {
+          max-width: 420px;
+          margin: 0 auto;
+          padding: 16px;
+        }
+
+        .top .shop {
+          margin: 0;
+          color: var(--accent);
+          font-weight: 700;
+        }
+
+        .top h1 {
+          margin: 0 0 8px;
+          font-size: 20px;
+          line-height: 1.5;
+        }
+
+        .card {
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          padding: 12px;
+          margin-bottom: 10px;
+        }
+
+        label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+        }
+
+        input,
+        select {
+          display: block;
+          width: 100%;
+          margin-top: 2px;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          font: inherit;
+          font-weight: 400;
+        }
+
+        button {
+          width: 100%;
+          padding: 8px;
+          border: 0;
+          border-radius: 8px;
+          background: var(--accent);
+          color: #fff;
+          font: inherit;
+          font-weight: 700;
+        }
+
+        .result p {
+          margin: 0 0 2px;
+        }
+
+        .result .ok {
+          font-weight: 700;
+          color: #2f7d32;
+        }
+
+        .result .total {
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .result .hint {
+          color: var(--muted);
+          font-size: 14px;
+        }
+  whiteboardAssets:
+    # Board I: the iceberg. Above the line: the product's visible part (blue) and the agent's fast 80%
+    # (violet). Below: the hidden part (red box, white labels) and ours to check (orange). Reopened in
+    # `below` for the red findings on the right.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 50,
+        text: "80% problem",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-top-box,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 400,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: i-top1,
+        kind: text,
+        x: 330,
+        y: 255,
+        width: 200,
+        height: 40,
+        text: "screen",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-top2,
+        kind: text,
+        x: 330,
+        y: 310,
+        width: 250,
+        height: 40,
+        text: "happy path",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: i-agent,
+        kind: text,
+        x: 730,
+        y: 280,
+        width: 360,
+        height: 40,
+        text: "80% · agent မြန်မြန်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: i-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 280,
+        y: 372,
+        width: 810,
+        height: 24,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: i-bot-box,
+        kind: rectangle,
+        x: 300,
+        y: 415,
+        width: 400,
+        height: 225,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: i-b1,
+        kind: text,
+        x: 325,
+        y: 430,
+        width: 340,
+        height: 40,
+        text: "edge case",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-b2,
+        kind: text,
+        x: 325,
+        y: 480,
+        width: 340,
+        height: 40,
+        text: "မရေးထားတဲ့ စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-b3,
+        kind: text,
+        x: 325,
+        y: 530,
+        width: 340,
+        height: 40,
+        text: "မှားရင် ငြင်းပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-b4,
+        kind: text,
+        x: 325,
+        y: 580,
+        width: 360,
+        height: 40,
+        text: "ဖုန်း → ကောင်တာ ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-me,
+        kind: text,
+        x: 730,
+        y: 430,
+        width: 340,
+        height: 40,
+        text: "20% · ကိုယ်က စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: i-x1,
+        kind: text,
+        x: 730,
+        y: 480,
+        width: 360,
+        height: 40,
+        text: "0 · 02:00 · ဖုန်း မပါ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-x2,
+        kind: text,
+        x: 730,
+        y: 530,
+        width: 360,
+        height: 40,
+        text: "ငြင်းစာ မပြဘဲ လက်ခံ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-x3,
+        kind: text,
+        x: 730,
+        y: 580,
+        width: 360,
+        height: 40,
+        text: "ကောင်တာစာရင်း မရှိသေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board A: time and attention. The 2025 study as measured (context white, felt faster white,
+    # measured slower red, the authors' caveat white), the lesson's point (orange), then where to
+    # spend attention: what a glance or a machine checks (white) vs ours (orange).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 50,
+        text: "အချိန် နဲ့ အာရုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-ctx,
+        kind: text,
+        x: 640,
+        y: 170,
+        width: 430,
+        height: 40,
+        text: "2025 · developer 16 ယောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-s1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 460,
+        height: 40,
+        text: "ထင်ခဲ့တာ · AI နဲ့ ပိုမြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-s2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 460,
+        height: 40,
+        text: "တိုင်းကြည့်တော့ · 19% ပိုကြာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-cav,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 560,
+        height: 40,
+        text: "developer တိုင်း · tool တိုင်း မဟုတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-s3,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 520,
+        height: 40,
+        text: "ထုတ်တာ မြန် ≠ ပြီးတာ မြန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-h1,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 330,
+        height: 40,
+        text: "တစ်ချက် ကြည့်ရုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l1,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 330,
+        height: 40,
+        text: "page ပေါ်လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l2,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 330,
+        height: 40,
+        text: "စာ မှန်မှန် ပေါ်လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-h2,
+        kind: text,
+        x: 680,
+        y: 450,
+        width: 410,
+        height: 40,
+        text: "ကိုယ့် အာရုံ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-r1,
+        kind: text,
+        x: 680,
+        y: 500,
+        width: 410,
+        height: 40,
+        text: "ဆိုင်ရဲ့ စည်းကမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-r2,
+        kind: text,
+        x: 680,
+        y: 550,
+        width: 410,
+        height: 40,
+        text: "edge case",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-r3,
+        kind: text,
+        x: 680,
+        y: 600,
+        width: 410,
+        height: 40,
+        text: "ကောင်တာအထိ လမ်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 640,
+        height: 40,
+        text: "လက်ဖက်ရည် 2 ခွက် · အားလုံး မှန်ပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 640,
+        height: 40,
+        text: "နောက် တစ်ခါပဲ စမ်းခွင့် ရှိရင်?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 640,
+        height: 40,
+        text: "က · ကော်ဖီ 3 ခွက်၊ ပုံမှန် အော်ဒါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 640,
+        height: 40,
+        text: "ခ · 5 မိနစ်ပဲ ကြိုတဲ့ လာယူချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 300,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-r1,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 640,
+        height: 40,
+        text: "spec · အနည်းဆုံး 15 မိနစ် ကြိုမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-r2,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 640,
+        height: 40,
+        text: "screen မှာ မမြင်ရတဲ့ ရေအောက်က rule",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6118
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: အလုပ်လုပ်တာနဲ့ မှန်တာ
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ agent က မလိုတဲ့ အပိုတွေ ထည့်တတ်လို့ အရိုးရှင်းဆုံး နည်းကို
+      ရွေးခိုင်းပြီး၊ app ကို သေးသေး ထိန်းခဲ့ပါတယ်။ ဒီနေ့တော့ order form ရဲ့ ပထမ version ကို
+      စစ်ကြည့်ပါမယ်။ form ကို ဖြည့်ပြီး မှာမယ် ကို နှိပ်လိုက်ရင် အော်ဒါနံပါတ် ထွက်လာတော့၊ ပြီးသွားပြီလို့
+      ထင်စရာ ရှိပါတယ်။ [[mark:sel-rules]] ဒါပေမဲ့ app တစ်ခု အလုပ်လုပ်တာနဲ့ မှန်တာ မတူပါဘူး။ ဒီ requirement
+      ဖိုင်ထဲက edge case တွေလို ဆိုင်ပိုင်ရှင် မြမြ ရဲ့ စည်းကမ်းတွေ၊ ကောင်တာက လှလှ ရဲ့ မနက်ခင်း အလုပ်နဲ့
+      ကိုက်မှပဲ မှန်တယ်လို့ ပြောလို့ ရပါတယ်။ ဒီ lesson မှာ အဲဒီ ကွာခြားချက်ကို ရှာကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: start-runtime,
+          type: runtime.start,
+          at: { mark: start },
+          timeoutMs: 60000,
+          retry: { maxAttempts: 2, delayMs: 500 },
+        }
+      - {
+          id: open-req-start,
+          type: workspace.openFile,
+          at: { mark: sel-rules, offsetMs: -700 },
+          path: docs/requirements.md,
+        }
+      - {
+          id: sel-rules,
+          type: editor.select,
+          at: { mark: sel-rules },
+          target: { file: docs/requirements.md, text: "## Edge cases", occurrence: 1 },
+        }
+
+  - id: iceberg
+    narration: >
+      [[mark:i-title]] ဒီလို ကွာခြားချက်ကို ၈၀ ရာခိုင်နှုန်း problem လို့ ခေါ်ကြပါတယ်။ ၈၀ နဲ့ ၂၀ ဆိုတာ
+      တိုင်းထားတဲ့ ကိန်းဂဏန်း မဟုတ်ဘဲ၊ မှတ်မိလွယ်အောင် ပြောတဲ့ ပုံစံပါ။ ရေခဲတောင် ပုံလေး တစ်ခုနဲ့
+      ကြည့်ရအောင်။ [[mark:i-top]] ရေပေါ်မှာ ပေါ်နေတဲ့ အပိုင်းက screen တွေနဲ့ happy path ပါ။ happy path ဆိုတာ
+      customer က ပုံမှန်အတိုင်း ဖြည့်ပြီး ပုံမှန်အတိုင်း မှာသွားတဲ့ လမ်းပါ။ [[mark:i-agent]] ဒီ အပိုင်းကို agent
+      က အရမ်း မြန်မြန် ထုတ်ပေးနိုင်ပါတယ်။ မျက်စိနဲ့ မြင်ရလွယ်တော့ စမ်းရလည်း လွယ်ပြီး၊ ဒီ အပိုင်း မှန်နေရင် app
+      တစ်ခုလုံး မှန်ပြီလို့ ထင်မိတတ်ပါတယ်။ [[mark:i-line]] ဒီ မျဉ်းက ရေမျက်နှာပြင်ပါ။ အောက်ကို ငုံ့ကြည့်မှ
+      မြင်ရတဲ့ အပိုင်းတွေ ရှိပါတယ်။ [[mark:i-below]] ပုံမှန် မဟုတ်တဲ့ အနားသတ်က edge case တွေ၊ ဘယ်သူမှ
+      ချရေးမထားတဲ့ ဆိုင်ရဲ့ စည်းကမ်းတွေ ရှိပါတယ်။ customer က မှားထည့်ရင် ငြင်းပြီး ဘာလုပ်ရမလဲ
+      ပြောပြတာ၊ ပြီးတော့ customer ရဲ့ ဖုန်းကနေ ကောင်တာအထိ အပိုင်းချင်း ချိတ်ဆက်တာတွေလည်း
+      ရှိပါတယ်။ [[mark:i-why]] ဒီ အပိုင်းတွေက ဆိုင်ကို သိမှ မှန်အောင် လုပ်နိုင်တဲ့ အပိုင်းတွေပါ။ document
+      တွေမှာ ရေးထားရင်တောင် agent က အကုန် လိုက်လုပ်မယ်လို့ အာမခံချက် မရှိပါဘူး။ မရေးထားတဲ့ ကိစ္စ
+      ဆိုရင်တော့ ဖြစ်နိုင်လောက်တာကို ခန့်မှန်းပြီး ထုတ်ပေးတာပါ။ [[mark:i-me]] ဒါကြောင့် ရေအောက်က အပိုင်းကို
+      ကိုယ်က စစ်ရပါမယ်။ ထွက်လာတာ မှန်မမှန် စစ်တဲ့ ဒီ အလုပ်ကို verification လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (implementation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-i,
+          type: whiteboard.apply,
+          at: { mark: i-title },
+          open: true,
+          clear: true,
+          upsertIds: [i-title],
+        }
+      - {
+          id: draw-i-top,
+          type: whiteboard.apply,
+          at: { mark: i-top },
+          upsertIds: [i-top-box, i-top1, i-top2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-i-agent,
+          type: whiteboard.apply,
+          at: { mark: i-agent },
+          upsertIds: [i-agent],
+          drawMs: 900,
+        }
+      - {
+          id: draw-i-line,
+          type: whiteboard.apply,
+          at: { mark: i-line },
+          upsertIds: [i-line],
+          drawMs: 900,
+        }
+      - {
+          id: draw-i-below,
+          type: whiteboard.apply,
+          at: { mark: i-below },
+          upsertIds: [i-bot-box, i-b1, i-b2, i-b3, i-b4],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-i-me,
+          type: whiteboard.apply,
+          at: { mark: i-me },
+          upsertIds: [i-me],
+          drawMs: 900,
+        }
+
+  - id: app
+    chapter: ရေပေါ်က အပိုင်းကို စစ်ရအောင်
+    narration: >
+      [[mark:ready]] ကဲ၊ ရေပေါ်က အပိုင်းကို အရင် စစ်ကြည့်ရအောင်။ ညာဘက်မှာ ကြိုမှာ app ကို မြင်ရပါပြီ။
+      ဒီ app က agent တစ်ခု ထုတ်ပေးတဲ့ order form ရဲ့ ပထမ version လို့ သဘောထားပြီး lesson အတွက် ပြင်ဆင်ထားတာပါ။
+      [[mark:menu]] member အောင်အောင် မနက်တိုင်း မှာနေကျ အော်ဒါနဲ့ စမ်းပါမယ်။ လက်ဖက်ရည်ကို ရွေးပြီးသား
+      ဖြစ်နေပါတယ်။ [[mark:qty]] အရေအတွက်ကို နှစ်ခွက်လို့ ထည့်ပါမယ်။ [[mark:time]] လာယူချိန်ကို မနက်
+      ရှစ်နာရီခွဲ လို့ ရွေးပါမယ်။ [[mark:name]] နာမည်နေရာမှာ အောင်အောင် လို့ ရိုက်ပါမယ်။ [[mark:phone]]
+      ဖုန်းနေရာမှာ lesson အတွက် နမူနာ နံပါတ် ထည့်ပါမယ်။ [[mark:order]] ပြီးတော့ မှာမယ် ကို နှိပ်လိုက်ပါမယ်။
+      [[mark:card]] အော်ဒါနံပါတ် ၁၀၁ ရပါပြီ။ လက်ဖက်ရည် နှစ်ခွက်၊ စုစုပေါင်း ၃၀၀၀ ကျပ်၊ လာယူချိန်
+      ရှစ်နာရီခွဲ ဆိုတော့၊ spec ထဲမှာ ပြီးပြီ ဆိုတာ စစ်ဖို့ ရေးထားတဲ့ acceptance criteria ရဲ့ ပထမ တစ်ခု၊ AC
+      တစ်နဲ့ ကိုက်ပါတယ်။ ရေအောက်ကိုတော့ မစမ်းရသေးပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: close-board-i,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -400 },
+          open: false,
+        }
+      - {
+          id: wait-ready,
+          type: runtime.waitForReady,
+          at: { mark: ready },
+          timeoutMs: 30000,
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: open-preview,
+          type: preview.open,
+          at: { afterAction: wait-ready },
+          timeoutMs: 10000,
+          mode: docked,
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: expect-menu,
+          type: expect.preview,
+          at: { mark: menu },
+          timeoutMs: 5000,
+          target: { by: testId, value: item },
+          textContains: "လက်ဖက်ရည်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: in-qty,
+          type: preview.input,
+          at: { mark: qty },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "2",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-time,
+          type: preview.input,
+          at: { mark: time },
+          timeoutMs: 5000,
+          target: { by: testId, value: pickup },
+          value: "08:30",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-name,
+          type: preview.input,
+          at: { mark: name },
+          timeoutMs: 5000,
+          target: { by: testId, value: name },
+          value: "အောင်အောင်",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-phone,
+          type: preview.input,
+          at: { mark: phone },
+          timeoutMs: 5000,
+          target: { by: testId, value: phone },
+          value: "09 000 111 222",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-order,
+          type: preview.click,
+          at: { mark: order },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-number,
+          type: expect.preview,
+          at: { mark: card },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#101",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-line,
+          type: expect.preview,
+          at: { afterAction: expect-number },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-line },
+          textContains: "လက်ဖက်ရည် × 2",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-total,
+          type: expect.preview,
+          at: { afterAction: expect-line },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "3,000 ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-pickup,
+          type: expect.preview,
+          at: { afterAction: expect-total },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-pickup },
+          textContains: "08:30",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: edge-zero
+    chapter: Edge case တစ်ခုချင်း စမ်းရအောင်
+    narration: >
+      [[mark:open-req]] အခု ရေအောက်ကို ဆင်းကြည့်ရအောင်။ ခေါင်းထဲ ပေါ်လာတာကို လျှောက်စမ်းမယ့်အစား၊
+      requirement ဖိုင်ထဲမှာ ရေးထားခဲ့တဲ့ edge case စာရင်းကို တစ်ကြောင်းချင်း လိုက်စမ်းပါမယ်။ တစ်ခါ စမ်းတိုင်း
+      တစ်ခုတည်းကိုပဲ ပြောင်းပြီး၊ ကျန်တာတွေကို ပုံမှန်အတိုင်း ထားပါမယ်။ ဒါမှ ရလဒ် ထူးလာရင် ဘာကြောင့်လဲ ဆိုတာ
+      ရှင်းရှင်းလင်းလင်း သိရမှာပါ။ [[mark:sel-zero]] ပထမ တစ်ကြောင်းက အရေအတွက်ပါ။ course ရဲ့ ပထမဆုံး lesson
+      မှာ သုည ခွက် အော်ဒါကို သံသယ အဖြစ်ပဲ မှတ်ခဲ့ပါတယ်။ အခုတော့ အဖြေကို ရေးထားပြီးပါပြီ။ လက်မခံဘဲ
+      တစ်ခွက်ကနေ အစိတ်အထိ ရွေးခိုင်းရမှာပါ။ [[mark:zero]] အရေအတွက်ကို သုည လို့ ပြောင်းထည့်ပါမယ်။
+      [[mark:order-zero]] မှာမယ် ကို နှိပ်ပြီး ဘာဖြစ်လဲ ကြည့်ပါမယ်။ [[mark:card-zero]] ငြင်းတဲ့ စာ
+      တစ်ကြောင်းမှ မပေါ်ဘဲ၊ အော်ဒါနံပါတ် ၁၀၂ နဲ့ သုည ကျပ် အော်ဒါ တစ်ခု ဖြစ်သွားပါတယ်။ ဒါက AC နှစ်နဲ့
+      မကိုက်ပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (testing and quality assurance)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-req,
+          type: workspace.openFile,
+          at: { mark: open-req },
+          path: docs/requirements.md,
+        }
+      - {
+          id: sel-zero,
+          type: editor.select,
+          at: { mark: sel-zero },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: in-qty-0,
+          type: preview.input,
+          at: { mark: zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "0",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-zero,
+          type: preview.click,
+          at: { mark: order-zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-zero,
+          type: expect.preview,
+          at: { mark: card-zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "စုစုပေါင်း 0 ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-number-2,
+          type: expect.preview,
+          at: { afterAction: expect-zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#102",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: edge-closed
+    narration: >
+      [[mark:sel-closed]] ဒုတိယ တစ်ကြောင်းက ဆိုင်ပိတ်ထားတဲ့ အချိန်ကို လာယူချိန်အဖြစ် ရွေးတာပါ။ ဒါကို စမ်းဖို့
+      ခုနက ပြောင်းခဲ့တဲ့ အရေအတွက်ကို အရင် ပြန်ထားရပါမယ်။ [[mark:qty-back]] အရေအတွက်ကို နှစ်ခွက် ပြန်ထည့်ပါမယ်။
+      [[mark:closed]] လာယူချိန်ကို မနက် နှစ်နာရီ လို့ ပြောင်းပါမယ်။ [[mark:order-closed]] ပြီးရင် မှာမယ် ကို
+      ထပ်နှိပ်ပါမယ်။ [[mark:card-closed]] အော်ဒါနံပါတ် ၁၀၃ ရသွားပြီး၊ လာယူချိန် မနက် နှစ်နာရီ လို့
+      ပြနေပါတယ်။ ဆိုင်က ဘယ်နေ့မှ မနက် ခြောက်နာရီ မတိုင်ခင် မဖွင့်ပါဘူး။ ဒီ customer က ပိတ်ထားတဲ့ ဆိုင်ရှေ့မှာ
+      ရောက်နေမှာပါ။ AC သုံးကတော့ ဒီ အော်ဒါကို ငြင်းပြီး ဖွင့်ချိန်ကို ပြခိုင်းထားပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-closed,
+          type: editor.select,
+          at: { mark: sel-closed },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- ဆိုင်ပိတ်ချိန် လာယူချိန် → လက်မခံ၊ ဖွင့်ချိန်ကို ပြ",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: in-qty-back,
+          type: preview.input,
+          at: { mark: qty-back },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "2",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-time-closed,
+          type: preview.input,
+          at: { mark: closed },
+          timeoutMs: 5000,
+          target: { by: testId, value: pickup },
+          value: "02:00",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-closed,
+          type: preview.click,
+          at: { mark: order-closed },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-closed,
+          type: expect.preview,
+          at: { mark: card-closed },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-pickup },
+          textContains: "02:00",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-number-3,
+          type: expect.preview,
+          at: { afterAction: expect-closed },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#103",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: edge-phone
+    narration: >
+      [[mark:sel-phone]] တတိယ တစ်ကြောင်းက ဖုန်းနံပါတ် မပါတဲ့ အော်ဒါပါ။ [[mark:time-back]] လာယူချိန်ကို
+      ရှစ်နာရီခွဲ ပြန်ရွေးပါမယ်။ [[mark:phone-empty]] ဖုန်းနံပါတ်ကိုတော့ ဖျက်ပြီး အလွတ် ထားလိုက်ပါမယ်။
+      [[mark:order-phone]] မှာမယ် ကို နောက်တစ်ခါ နှိပ်ပါမယ်။ [[mark:card-phone]] ဒီတစ်ခါလည်း အော်ဒါနံပါတ်
+      ၁၀၄ နဲ့ လက်ခံသွားပါတယ်။ customer မလာရင် ကောင်တာက လှလှ ဖုန်းဆက်စရာ နံပါတ်
+      မရှိတော့ပါဘူး။ AC လေးအရ ဒီလို အော်ဒါမှာ ဖုန်းနံပါတ် ထည့်ခိုင်းရမှာပါ။
+      စာရင်းရဲ့ နောက်ဆုံး တစ်ကြောင်းကိုတော့ နောက် lesson မှာ စမ်းပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-phone,
+          type: editor.select,
+          at: { mark: sel-phone },
+          target: { file: docs/requirements.md, text: "- ဖုန်းနံပါတ် မပါ → လက်မခံ", occurrence: 1 },
+        }
+      - {
+          id: in-time-back,
+          type: preview.input,
+          at: { mark: time-back },
+          timeoutMs: 5000,
+          target: { by: testId, value: pickup },
+          value: "08:30",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-phone-empty,
+          type: preview.input,
+          at: { mark: phone-empty },
+          timeoutMs: 5000,
+          target: { by: testId, value: phone },
+          value: "",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-phone,
+          type: preview.click,
+          at: { mark: order-phone },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-number-4,
+          type: expect.preview,
+          at: { mark: card-phone },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#104",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-pickup-4,
+          type: expect.preview,
+          at: { afterAction: expect-number-4 },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-pickup },
+          textContains: "08:30",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-total-4,
+          type: expect.preview,
+          at: { afterAction: expect-pickup-4 },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "3,000 ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: below
+    narration: >
+      [[mark:i-reopen]] ရေခဲတောင်ကို ပြန်ကြည့်ရအောင်။ [[mark:i-found]] စာရင်းထဲက စမ်းခဲ့တဲ့ သုံးကြောင်းလုံးမှာ
+      app က ငြင်းရမယ့် အော်ဒါကို လက်ခံသွားပါတယ်။ app ပျက်သွားတာ၊ error ပြတာ တစ်ခုမှ မရှိပါဘူး။
+      [[mark:i-shift]] အရင်က code ထဲမှာ စာလုံး တစ်လုံး မှားရုံနဲ့ program က လုံးဝ
+      အလုပ်မလုပ်တော့တတ်လို့ အမှားကို ချက်ချင်း မြင်ရလေ့ ရှိပါတယ်။ agent ထုတ်ပေးတဲ့ code မှာတော့ အဲဒီလို အမှား နည်းလာပြီး၊
+      ချောချောမွေ့မွေ့ အလုပ်လုပ်ပေမယ့် ယူဆချက် မှားနေတဲ့ အမှားတွေ ပိုတွေ့လာရပါတယ်။ ဒီ app ကလည်း ဘယ်
+      အရေအတွက်၊ ဘယ်အချိန် ဖြစ်ဖြစ် ရတယ်လို့ ယူဆထားသလိုပါပဲ။ မှန်သလို ပုံပေါ်နေလို့ ဖမ်းရ ပိုခက်တာပါ။
+      [[mark:i-counter]] ရေအောက်မှာ နောက်တစ်ခု ကျန်ပါသေးတယ်။ customer ရဲ့ ဖုန်းပေါ်မှာ အော်ဒါနံပါတ်
+      ရပေမယ့်၊ လှလှ ကြည့်ရမယ့် ကောင်တာစာရင်းကို မဆောက်ရသေးပါဘူး။ customer ဘက်က ကြည့်ရင် ပြီးနေသလို ထင်ရပေမယ့်၊
+      အော်ဒါက ကောင်တာဆီ မရောက်သေးတာပါ။ [[mark:close-i]] ဒီ တွေ့ရှိချက်တွေကို notes ဖိုင်ထဲမှာ တိုတိုလေး
+      မှတ်ထားရအောင်။ [[mark:type-found]] ရေပေါ် တစ်ကြောင်း၊ ရေအောက် တစ်ကြောင်း ခွဲရေးထားတော့၊ app ကို
+      ဘယ်နေရာမှာ ယုံလို့ရပြီး ဘယ်နေရာမှာ မယုံရသေးလဲ ဆိုတာ တစ်ချက်ကြည့်ရုံနဲ့ သိရပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: reopen-i, type: whiteboard.apply, at: { mark: i-reopen }, open: true }
+      - {
+          id: draw-i-found,
+          type: whiteboard.apply,
+          at: { mark: i-found },
+          upsertIds: [i-x1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-i-shift,
+          type: whiteboard.apply,
+          at: { mark: i-shift },
+          upsertIds: [i-x2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-i-counter,
+          type: whiteboard.apply,
+          at: { mark: i-counter },
+          upsertIds: [i-x3],
+          drawMs: 900,
+        }
+      - { id: close-i, type: whiteboard.apply, at: { mark: close-i }, open: false }
+      - { id: open-notes, type: workspace.openFile, at: { afterAction: close-i }, path: notes.md }
+      - id: type-found
+        type: editor.type
+        at: { mark: type-found }
+        target: { file: notes.md, after: "# Notes\n", occurrence: 1 }
+        text: "\n## Lesson 18 · 80% problem\n- ရေပေါ် — ပုံမှန် အော်ဒါ မှန်တယ် (AC-1)။\n- ရေအောက် — 0 ခွက်၊ 02:00၊ ဖုန်း မပါ၊ သုံးခုလုံး လက်ခံတယ်။\n"
+        cadence: line-by-line
+
+  - id: attention
+    chapter: အာရုံကို ဘယ်မှာ ထားမလဲ
+    narration: >
+      [[mark:a-title]] ဒါဆို agent နဲ့ဆိုရင် အလုပ်က တကယ် ပိုမြန်သွားသလား။ [[mark:a-study]] ၂၀၂၅ ခုနှစ်
+      အစပိုင်းက AI tool တွေနဲ့ လုပ်ခဲ့တဲ့ လေ့လာမှု တစ်ခုမှာ၊ အတွေ့အကြုံ ရင့်တဲ့ developer ၁၆ ယောက်ကို
+      သူတို့ နှစ်နဲ့ချီ ရေးလာခဲ့တဲ့ project ကြီးတွေထဲက တကယ့် task တွေနဲ့ စမ်းခဲ့ပါတယ်။ AI tool သုံးခွင့် ရတဲ့ task တွေမှာ ပိုမြန်မယ်လို့
+      သူတို့ ထင်ခဲ့ကြပေမယ့်၊ [[mark:a-measured]] တကယ် တိုင်းကြည့်တော့ ၁၉ ရာခိုင်နှုန်း ပိုကြာခဲ့ပါတယ်။
+      ပြီးသွားတဲ့ နောက်မှာတောင် ပိုမြန်ခဲ့တယ်လို့ ထင်နေကြတုန်းပါ။ [[mark:a-caveat]] ဒီ ရလဒ်က developer တိုင်း၊
+      tool တိုင်းအတွက် မှန်တယ်လို့ လေ့လာသူတွေကိုယ်တိုင် မပြောပါဘူး။ နောက်ပိုင်း tool အသစ်တွေနဲ့ ရလဒ်
+      ပြောင်းနိုင်တယ်လို့လည်း သူတို့ ဆိုပါတယ်။ [[mark:a-point]] ဘယ်လိုပဲ ဖြစ်ဖြစ်၊ ထုတ်ပေးတာ မြန်တာနဲ့ အလုပ်
+      ပြီးတာ မြန်တာ မတူပါဘူး။ ထွက်လာတာကို စစ်တာ၊ ပြင်တာက အချိန် တကယ် ယူပြီး၊ မြန်တယ် နှေးတယ်
+      ဆိုတာကိုလည်း ခံစားချက်နဲ့ မဟုတ်ဘဲ တိုင်းကြည့်မှ သိရပါတယ်။ [[mark:a-cheap]] အချိန်က အကန့်အသတ်
+      ရှိတော့၊ အာရုံကို ဘယ်မှာ ထားမလဲ ရွေးရပါမယ်။ page ပေါ်လား၊ မြန်မာစာတွေ မှန်မှန် ပေါ်လား ဆိုတာမျိုးက
+      တစ်ချက် ကြည့်ရုံနဲ့ သိရပြီး၊ နောက်ပိုင်းမှာ စက်ကို အလိုလို စစ်ခိုင်းလို့လည်း ရပါတယ်။ [[mark:a-mine]]
+      ကိုယ့် အာရုံကို အများဆုံး ပေးရမှာကတော့ ဆိုင်ကို သိမှ ဆုံးဖြတ်လို့ရတဲ့ နေရာတွေပါ။ ဆိုင်ရဲ့ စည်းကမ်းတွေ၊
+      edge case တွေ၊ ပြီးတော့ အော်ဒါ တစ်ခု ကောင်တာအထိ ရောက်တဲ့ လမ်းတစ်လျှောက်လုံးပါ။ agent ထုတ်ပေးသမျှကို
+      လက်ခံပြီး မြန်အောင် လုပ်မယ့်အစား၊ ကိုယ့် အသိ အရေးပါဆုံး နေရာမှာ အချိန်ပေးရပါမယ်။ [[mark:close-a]]
+      ဒီ အချက်ကိုလည်း notes ထဲ ထည့်ထားပါမယ်။ [[mark:type-attention]] ဒီ စာကြောင်းက နောက်တစ်ခါ app ကို
+      စစ်တဲ့အခါ ဘယ်ကနေ စမလဲ ဆိုတာကို ဆုံးဖြတ်ထားတာပါ။ screen ရဲ့ ပုံစံထက်၊ ငြင်းရမယ့် ကိစ္စတွေကို
+      အရင် စမ်းမှာ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "METR: Measuring the Impact of Early-2025 AI on Experienced Open-Source Developer Productivity",
+          url: "https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/",
+        }
+      - {
+          title: "METR: We are Changing our Developer Productivity Experiment Design (2026-02-24 update)",
+          url: "https://metr.org/blog/2026-02-24-uplift-update/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (implementation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { mark: a-title },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - {
+          id: draw-a-study,
+          type: whiteboard.apply,
+          at: { mark: a-study },
+          upsertIds: [a-ctx, a-s1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-a-measured,
+          type: whiteboard.apply,
+          at: { mark: a-measured },
+          upsertIds: [a-s2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-caveat,
+          type: whiteboard.apply,
+          at: { mark: a-caveat },
+          upsertIds: [a-cav],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-point,
+          type: whiteboard.apply,
+          at: { mark: a-point },
+          upsertIds: [a-s3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-cheap,
+          type: whiteboard.apply,
+          at: { mark: a-cheap },
+          upsertIds: [a-h1, a-l1, a-l2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-a-mine,
+          type: whiteboard.apply,
+          at: { mark: a-mine },
+          upsertIds: [a-h2, a-r1, a-r2, a-r3],
+          drawMs: 1800,
+        }
+      - { id: close-a, type: whiteboard.apply, at: { mark: close-a }, open: false }
+      - id: type-attention
+        type: editor.type
+        at: { mark: type-attention }
+        target: { file: notes.md, after: "သုံးခုလုံး လက်ခံတယ်။\n", occurrence: 1 }
+        text: "- အာရုံ — ရေအောက်ကို အရင် စစ်။\n"
+        cadence: line-by-line
+      - {
+          id: expect-notes,
+          type: expect.file,
+          at: { afterAction: type-attention },
+          path: notes.md,
+          contains: "- ရေအောက် — 0 ခွက်၊ 02:00၊ ဖုန်း မပါ၊ သုံးခုလုံး လက်ခံတယ်။",
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ အောင်အောင် ရဲ့ လက်ဖက်ရည် နှစ်ခွက် အော်ဒါက အားလုံး မှန်နေပါပြီ။
+      နောက်ထပ် တစ်ခါပဲ စမ်းခွင့် ရှိတယ် ဆိုပါစို့။ ကော်ဖီ သုံးခွက်နဲ့ ပုံမှန် အော်ဒါ တစ်ခု စမ်းမလား၊ အခုချိန်ကနေ
+      ငါးမိနစ်ပဲ ကြိုပြီး လာယူမယ့် အော်ဒါ စမ်းမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ငါးမိနစ်ပဲ ကြိုတဲ့ အော်ဒါပါ။ ဘာကြောင့်လဲဆိုတော့ spec ရဲ့ စည်းကမ်းထဲမှာ
+      အနည်းဆုံး ၁၅ မိနစ် ကြိုမှာရမယ်လို့ ရှိပြီး၊ အဲဒါက screen ပေါ်မှာ မမြင်ရတဲ့ ရေအောက်က အပိုင်းမို့ပါ။ ဒီ စည်းကမ်းကို စစ်မယ့် AC လည်း မရှိသေးပါဘူး။ ကော်ဖီ
+      အော်ဒါကတော့ ခုနက မှန်ခဲ့တဲ့ လမ်းအတိုင်းပဲ သွားမှာ ဖြစ်လို့ အသစ် သိရမှာ နည်းပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-o1, z-o2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-r1, z-r2],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent က မြင်ရလွယ်တဲ့ ရေပေါ်က အပိုင်းကို မြန်မြန် ထုတ်ပေးနိုင်ပါတယ်။
+      [[mark:sel-top]] ဒါကြောင့် ပုံမှန် အော်ဒါ တစ်ခု မှန်တာက စမှတ်ပဲ ရှိပါသေးတယ်။ [[mark:sel-bottom]] edge case၊
+      စည်းကမ်း၊ ငြင်းပုံ၊ အပိုင်းချင်း ချိတ်တာ စတဲ့ ရေအောက်က အပိုင်းကိုတော့ ကိုယ်တိုင် စမ်းမှ တွေ့ရပြီး၊ ဒီနေ့
+      စမ်းတဲ့ သုံးခုလုံးမှာ app က မှားနေတာကို မြင်ခဲ့ရပါတယ်။ [[mark:sel-attention]] စစ်တာက အချိန် တကယ်
+      ယူလို့၊ ကိုယ့် အာရုံကို ဆိုင်ကို သိမှ ဆုံးဖြတ်လို့ရတဲ့ နေရာမှာ ထားရပါမယ်။ ဒီနေ့က စာရင်းကို လက်နဲ့
+      လိုက်စမ်းပြီး တိုတိုပဲ မှတ်ခဲ့ပါတယ်။ နောက် lesson မှာတော့ ဘယ်သူမဆို ထပ်ခါထပ်ခါ စနစ်တကျ စစ်နိုင်အောင်၊ ဘာမြင်ရမလဲ
+      ဆိုတာကို မစမ်းခင် ကြိုရေးထားတဲ့ test plan ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-top,
+          type: editor.select,
+          at: { mark: sel-top },
+          target: { file: notes.md, text: "ရေပေါ် — ပုံမှန် အော်ဒါ မှန်တယ် (AC-1)။", occurrence: 1 },
+        }
+      - {
+          id: sel-bottom,
+          type: editor.select,
+          at: { mark: sel-bottom },
+          target:
+            { file: notes.md, text: "ရေအောက် — 0 ခွက်၊ 02:00၊ ဖုန်း မပါ၊ သုံးခုလုံး လက်ခံတယ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-attention,
+          type: editor.select,
+          at: { mark: sel-attention },
+          target: { file: notes.md, text: "အာရုံ — ရေအောက်ကို အရင် စစ်။", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
