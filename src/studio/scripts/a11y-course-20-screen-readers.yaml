@@ -525,7 +525,7 @@ lesson:
               </section>
 
               <form class="order-form" id="order" data-testid="order-form">
-                <input id="name" name="name" type="text" autocomplete="name" placeholder="ဥပမာ မြမြ" data-testid="input-name" />
+                <input id="name" name="name" type="text" autocomplete="name" placeholder="ဥပမာ လှလှ" data-testid="input-name" />
                 <button class="order-btn" type="button" data-testid="order-button">မှာမယ်</button>
               </form>
             </div>
@@ -1634,7 +1634,7 @@ scenes:
         at: { afterAction: expect-order-emoji }
         timeoutMs: 5000
         target: { by: testId, value: a11y-input-name }
-        textContains: 'textbox "ဥပမာ မြမြ" from placeholder'
+        textContains: 'textbox "ဥပမာ လှလှ" from placeholder'
         retry: { maxAttempts: 3, delayMs: 300 }
 
   - id: fix-structure
@@ -1873,7 +1873,7 @@ scenes:
         target:
           {
             file: index.html,
-            text: '<input id="name" name="name" type="text" autocomplete="name" placeholder="ဥပမာ မြမြ"',
+            text: '<input id="name" name="name" type="text" autocomplete="name" placeholder="ဥပမာ လှလှ"',
             occurrence: 1,
           }
       - id: type-label-el
