@@ -613,7 +613,7 @@ lesson:
         import { orderTotal, type Order } from "./order";
 
         const order: Order = {
-          customer: { name: "မြမြ", table: 5 },
+          customer: { name: "လှလှ", table: 5 },
           item: "လက်ဖက်ရည်",
           quantiy: 2,
         };
@@ -1130,8 +1130,8 @@ scenes:
       ဒီ property က မပါလည်း ရတယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ customer တိုင်း မှတ်ချက် ရေးမှာ မဟုတ်လို့ပါ။
       [[mark:select-total]] အောက်က function ကတော့ အရေအတွက်ကို တစ်ခွက်ဈေးနဲ့ မြှောက်ပြီး ကျသင့်ငွေကို
       တွက်ပေးပါတယ်။ [[mark:open-main]] main ဖိုင်မှာတော့ အော်ဒါ နှစ်ခု ရှိပါတယ်။ [[mark:select-mya-order]]
-      ပထမ တစ်ခုက မြမြ မှာတဲ့ လက်ဖက်ရည် နှစ်ခွက်ပါ။ [[mark:select-form-order]] ဒုတိယ တစ်ခုကတော့ ဖောင်ကနေ
-      ဝင်လာတဲ့ အောင်အောင်ရဲ့ ကော်ဖီ တစ်ခွက်ပါ။ [[mark:select-note-log]] နောက်ဆုံး line ကတော့ မြမြရဲ့
+      ပထမ တစ်ခုက လှလှ မှာတဲ့ လက်ဖက်ရည် နှစ်ခွက်ပါ။ [[mark:select-form-order]] ဒုတိယ တစ်ခုကတော့ ဖောင်ကနေ
+      ဝင်လာတဲ့ အောင်အောင်ရဲ့ ကော်ဖီ တစ်ခွက်ပါ။ [[mark:select-note-log]] နောက်ဆုံး line ကတော့ လှလှရဲ့
       မှတ်ချက်ကို ထုတ်ပြပါတယ်။
     sources:
       - {
@@ -1178,7 +1178,7 @@ scenes:
         target:
           {
             file: src/main.ts,
-            text: "  customer: { name: \"မြမြ\", table: 5 },\n  item: \"လက်ဖက်ရည်\",",
+            text: "  customer: { name: \"လှလှ\", table: 5 },\n  item: \"လက်ဖက်ရည်\",",
             occurrence: 1,
           }
       - id: select-form-order
@@ -1289,7 +1289,7 @@ scenes:
     narration: >
       [[mark:select-note-call]] program ရပ်သွားတဲ့ နေရာကနေ စကြည့်ရအောင်။ ဒီ line က မှတ်ချက်ရဲ့ ရှေ့နောက်က
       နေရာလွတ်တွေကို ဖယ်ပြီး ထုတ်ပြပါတယ်။ panel ရဲ့ တတိယ error က မှတ်ချက်ဟာ undefined ဖြစ်နိုင်တယ်လို့
-      ပြောနေပါတယ်။ မှတ်ချက်က မပါလည်း ရတဲ့ property ဖြစ်ပြီး မြမြရဲ့ အော်ဒါမှာ တကယ်ကို မပါလို့၊ run
+      ပြောနေပါတယ်။ မှတ်ချက်က မပါလည်း ရတဲ့ property ဖြစ်ပြီး လှလှရဲ့ အော်ဒါမှာ တကယ်ကို မပါလို့၊ run
       လိုက်တော့ undefined ပေါ်မှာ method ကို ခေါ်မိပြီး ရပ်သွားတာပါ။ [[mark:type-optional]] ဒါကြောင့်
       မှတ်ချက်ရဲ့ နောက်မှာ question mark တစ်လုံး ထည့်ပါမယ်။ ဒါက မှတ်ချက် မရှိရင် method ကို မခေါ်တော့ဘဲ undefined ကိုပဲ ပြန်ပေးတဲ့ optional chaining ပါ။ [[mark:type-default]] ပြီးတော့ undefined ဖြစ်တဲ့အခါ
       မရှိပါ ဆိုတဲ့ စာကို ပြဖို့၊ nullish coalescing operator နဲ့ default တန်ဖိုး ထည့်ပေးပါမယ်။
@@ -1341,7 +1341,7 @@ scenes:
   - id: typo
     chapter: "Error က အကြောင်းရင်းနားမှာ ပေါ်တယ်"
     narration: >
-      [[mark:select-typo]] အခု NaN ဘယ်က လာလဲ ကြည့်ရအောင်။ ပထမ error က မြမြရဲ့ အော်ဒါထဲက ဒီ property ကို
+      [[mark:select-typo]] အခု NaN ဘယ်က လာလဲ ကြည့်ရအောင်။ ပထမ error က လှလှရဲ့ အော်ဒါထဲက ဒီ property ကို
       ညွှန်ပြနေပါတယ်။ အရေအတွက်ရဲ့ နာမည်မှာ စာလုံး တစ်လုံး ကျနေပါတယ်။ ဒါကြောင့် TypeScript က ဒီ နာမည် Order
       type ထဲမှာ မရှိဘူးလို့ ပြောပြီး၊ စာလုံး မှန်တဲ့ နာမည်ကို ရေးချင်တာလား လို့ အကြံပေးနေပါတယ်။
       [[mark:close-to-cause]] JavaScript သက်သက်ဆိုရင်တော့ NaN ပေါ်တဲ့ နေရာကနေ နောက်ပြန် လိုက်ရှာရမှာ
