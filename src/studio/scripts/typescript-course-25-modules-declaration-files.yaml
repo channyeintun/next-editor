@@ -638,7 +638,7 @@ lesson:
         // ဆိုင်ရဲ့ website က ထည့်ပေးတဲ့ global တွေ
       src/main.ts: |
         // ဆိုင်ရဲ့ အော်ဒါ screen
-        const name = "မြမြ";
+        const name = "လှလှ";
         const special = todaySpecial.item;
         const tables = window.tableCount;
 
@@ -1138,7 +1138,7 @@ scenes:
       - id: select-name
         type: editor.select
         at: { mark: select-name }
-        target: { file: src/main.ts, text: 'const name = "မြမြ";', occurrence: 1 }
+        target: { file: src/main.ts, text: 'const name = "လှလှ";', occurrence: 1 }
       - id: select-globals
         type: editor.select
         at: { mark: select-globals }
@@ -1160,7 +1160,7 @@ scenes:
 
   - id: symptoms
     narration: >
-      [[mark:panel-ready]] panel ရဲ့ Output မှာ မြမြ ကို နှုတ်ဆက်စာ၊ ဒီနေ့ special နဲ့ စားပွဲ
+      [[mark:panel-ready]] panel ရဲ့ Output မှာ လှလှ ကို နှုတ်ဆက်စာ၊ ဒီနေ့ special နဲ့ စားပွဲ
       အရေအတွက်၊ သုံးကြောင်းလုံး မှန်မှန် ထွက်လာပါတယ်။ website ရဲ့ script က တန်ဖိုးတွေကို တကယ်
       ထည့်ပေးထားလို့ပါ။ [[mark:read-errors]] ဒါပေမဲ့ Errors မှာတော့ error သုံးခု ရှိပါတယ်။ ဒုတိယနဲ့ တတိယ error
       က special ဟင်းလျာကို ရှာမတွေ့ဘူး၊ window ပေါ်မှာ စားပွဲ အရေအတွက် မရှိဘူးလို့ ပြောနေပါတယ်။ HTML ထဲက
@@ -1208,7 +1208,7 @@ scenes:
         at: { afterAction: expect-start-output }
         timeoutMs: 5000
         target: { by: testId, value: ts-out-1 }
-        textContains: "မင်္ဂလာပါ မြမြ"
+        textContains: "မင်္ဂလာပါ လှလှ"
         retry: { maxAttempts: 2, delayMs: 300 }
       - id: expect-out-special
         type: expect.preview
