@@ -1,0 +1,1125 @@
+# AI Builder, lesson 10: context engineering and AGENTS.md (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md), docs/spec.md complete
+# as L09 leaves it (COURSE-KIT §4.3 without AC-6) and AGENTS.md pinned with only its title line.
+# Nothing runs.
+#
+# Typed into AGENTS.md (COURSE-KIT §4.4 base text, English, line group by line group, each explained
+# in Burmese and never read): Project · Stack · Rules (two groups: how things show, how the agent
+# works) · Done means. The final file equals §4.4's base block (tools/sim-docs.ts).
+#
+# Boards: (K) a new teammate's first day → six kinds of context around the agent, later reopened with
+# where each kind lives; (D) desk vs shelf: always loaded (AGENTS.md) vs read when the task needs it
+# (spec, requirements, skills); (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-10-context-engineering.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-10-context-engineering
+  title: "AI Builder 10: Context engineering နဲ့ AGENTS.md"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: AGENTS.md
+    sidebarStartsCollapsed: true
+    files:
+      AGENTS.md: |+
+        # AGENTS.md · Shwe Tea House pre-order app
+
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board K: six kinds of context around the agent (violet). Left and right columns, each a box with
+    # the kind's English name (white) and what it is for the shop (orange; guardrails red). Reopened
+    # later with where each kind lives (blue: the two documents).
+    - {
+        id: k-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 640,
+        height: 45,
+        text: "agent ကို ပေးရမယ့် context 6 မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: k-agent-box,
+        kind: ellipse,
+        x: 600,
+        y: 330,
+        width: 180,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-agent,
+        kind: text,
+        x: 648,
+        y: 357,
+        width: 90,
+        height: 35,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: k1-box,
+        kind: rectangle,
+        x: 300,
+        y: 222,
+        width: 280,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: k1,
+        kind: text,
+        x: 318,
+        y: 228,
+        width: 250,
+        height: 35,
+        text: "instructions",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k1-d,
+        kind: text,
+        x: 318,
+        y: 264,
+        width: 250,
+        height: 35,
+        text: "ဘာ လုပ်ရမလဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k2-box,
+        kind: rectangle,
+        x: 300,
+        y: 330,
+        width: 280,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: k2,
+        kind: text,
+        x: 318,
+        y: 336,
+        width: 250,
+        height: 35,
+        text: "knowledge",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k2-d,
+        kind: text,
+        x: 318,
+        y: 372,
+        width: 250,
+        height: 35,
+        text: "spec · ဖွင့်ချိန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k3-box,
+        kind: rectangle,
+        x: 300,
+        y: 438,
+        width: 280,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: k3,
+        kind: text,
+        x: 318,
+        y: 444,
+        width: 250,
+        height: 35,
+        text: "memory",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k3-d,
+        kind: text,
+        x: 318,
+        y: 480,
+        width: 250,
+        height: 35,
+        text: "ဖိုင်ထဲ မှတ်ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k4-box,
+        kind: rectangle,
+        x: 800,
+        y: 222,
+        width: 290,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: k4,
+        kind: text,
+        x: 818,
+        y: 228,
+        width: 260,
+        height: 35,
+        text: "examples",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k4-d,
+        kind: text,
+        x: 818,
+        y: 264,
+        width: 260,
+        height: 35,
+        text: "အော်ဒါ ဥပမာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k5-box,
+        kind: rectangle,
+        x: 800,
+        y: 330,
+        width: 290,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: k5,
+        kind: text,
+        x: 818,
+        y: 336,
+        width: 260,
+        height: 35,
+        text: "tools",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k5-d,
+        kind: text,
+        x: 818,
+        y: 372,
+        width: 260,
+        height: 35,
+        text: "run ခွင့် ရှိတာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k6-box,
+        kind: rectangle,
+        x: 800,
+        y: 438,
+        width: 290,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k6,
+        kind: text,
+        x: 818,
+        y: 444,
+        width: 260,
+        height: 35,
+        text: "guardrails",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: k6-d,
+        kind: text,
+        x: 818,
+        y: 480,
+        width: 260,
+        height: 35,
+        text: "မချိုးရတဲ့ rule",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: k-where1,
+        kind: text,
+        x: 300,
+        y: 548,
+        width: 760,
+        height: 35,
+        text: "AGENTS.md · instructions · tools · guardrails",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: k-where2,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 760,
+        height: 35,
+        text: "spec.md · knowledge · examples",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    # Board D: the desk (violet, always loaded every session) vs the shelf (white, read when the task
+    # needs it); orange = why not everything on the desk; green = the rule of thumb.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 400,
+        height: 45,
+        text: "စားပွဲ နဲ့ စင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-desk-h,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 380,
+        height: 35,
+        text: "စားပွဲ · session တိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: d-desk,
+        kind: rectangle,
+        x: 300,
+        y: 265,
+        width: 380,
+        height: 180,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-a1,
+        kind: text,
+        x: 325,
+        y: 282,
+        width: 330,
+        height: 35,
+        text: "AGENTS.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-a2,
+        kind: text,
+        x: 325,
+        y: 332,
+        width: 330,
+        height: 35,
+        text: "ဆယ်ကြောင်းလောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-a3,
+        kind: text,
+        x: 325,
+        y: 382,
+        width: 330,
+        height: 35,
+        text: "အလုပ်တိုင်း လိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-shelf-h,
+        kind: text,
+        x: 720,
+        y: 222,
+        width: 370,
+        height: 35,
+        text: "စင် · task လိုမှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-shelf,
+        kind: rectangle,
+        x: 720,
+        y: 265,
+        width: 370,
+        height: 180,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: d-s1,
+        kind: text,
+        x: 745,
+        y: 282,
+        width: 320,
+        height: 35,
+        text: "docs/spec.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-s2,
+        kind: text,
+        x: 745,
+        y: 332,
+        width: 320,
+        height: 35,
+        text: "requirements.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: d-s3,
+        kind: text,
+        x: 745,
+        y: 382,
+        width: 320,
+        height: 35,
+        text: "skill တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-why,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 760,
+        height: 35,
+        text: "စားပွဲ ပြည့်ရင် · rule မြုပ် · ငွေ ပိုကုန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 760,
+        height: 35,
+        text: "တိုတို ထား · ကျန်တာကို ညွှန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white, follow-up orange).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 700,
+        height: 40,
+        text: "ဒသမ နဲ့ ပြတာ တစ်ပတ်မှာ နှစ်ခါ · ဘယ်မှာ ပြင်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 700,
+        height: 40,
+        text: "က · ဒီနေ့ chat ထဲ ပိုပြင်းပြင်း ထပ်ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 700,
+        height: 40,
+        text: "ခ · AGENTS.md မှာ rule တစ်ကြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 700,
+        height: 45,
+        text: "အဖြေ · ခ — session တိုင်း ဖတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 472,
+        width: 700,
+        height: 40,
+        text: "chat က session နဲ့အတူ ပျောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a-twice,
+        kind: text,
+        x: 300,
+        y: 522,
+        width: 700,
+        height: 40,
+        text: "အမှား တူ နှစ်ခါ → rule တစ်ကြောင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: z-a-more,
+        kind: text,
+        x: 300,
+        y: 577,
+        width: 700,
+        height: 40,
+        text: "ရှိရက်နဲ့ လွတ်ရင် · ဖိုင် ရှည်လွန်းလား စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6110
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Agent ကို ဘာ ပေးမလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဘာကြောင့် ဆောက်လဲ၊ ဘာ ဆောက်မလဲ၊ ဘာ မဆောက်ဘူးလဲ၊ ဘယ်လို စစ်မလဲ ဆိုတာကို spec တစ်စောင်ထဲ
+      စုရေးခဲ့ပါတယ်။ ဒါပေမဲ့ spec ရှိရုံနဲ့ မလုံလောက်သေးပါဘူး။ agent တွေ ဘယ်လို အလုပ်လုပ်လဲ ကြည့်ခဲ့တုန်းက၊ agent
+      နဲ့ အလုပ် တစ်ခါ စလုပ်တဲ့ session အသစ် တိုင်းမှာ agent က စားပွဲ အလွတ်နဲ့ ပြန်စတယ် ဆိုတာ မြင်ခဲ့ပါတယ်။ ဒါဆို
+      ဒီ project က ဘာလဲ၊ ဘာနဲ့ ဆောက်ရမလဲ၊ ဘယ် rule ကို ဘယ်တော့မှ မချိုးရဘူးလဲ ဆိုတာတွေ စားပွဲပေါ်ကို ဘယ်လို
+      ရောက်လာမလဲ။ [[mark:context]] AI နဲ့ အလုပ်လုပ်တဲ့အခါ စကားလုံး ကောင်းကောင်း ရွေးပြီး ခိုင်းတာထက်၊ agent
+      ရှေ့မှာ ဘာ အချက်အလက်တွေ ရှိနေလဲ ဆိုတာက ရလဒ်ကို ပိုဆုံးဖြတ်ပါတယ်။ agent ကို မှန်တဲ့ အချက်အလက်တွေ မှန်တဲ့
+      နေရာမှာ ပေးတဲ့ အလုပ်ကို context engineering လို့ ခေါ်ပါတယ်။ context ဆိုတာ agent ရဲ့ စားပွဲပေါ်မှာ ရှိနေတဲ့
+      စာတွေ အားလုံးပါ။ [[mark:sel-title]] ဒီနေ့ AGENTS.md ဆိုတဲ့ ဖိုင် တစ်ခုကို ရေးပါမယ်။ အခုတော့ ခေါင်းစဉ်ပဲ
+      ရှိပါသေးတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Anthropic: Effective context engineering for AI agents",
+          url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+        }
+      - {
+          title: "Claude Code docs: How Claude remembers your project (each session starts with a fresh context window)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: sel-title,
+          type: editor.select,
+          at: { mark: sel-title },
+          target:
+            { file: AGENTS.md, text: "# AGENTS.md · Shwe Tea House pre-order app", occurrence: 1 },
+        }
+
+  - id: six-kinds
+    chapter: Context ခြောက်မျိုး
+    narration: >
+      [[mark:k-open]] ပြီးခဲ့တဲ့ lesson မှာ spec ကို လူသစ် တစ်ယောက်လို ပြန်ဖတ်ကြည့်ဖို့ ပြောခဲ့ပါတယ်။ ဒီတစ်ခါတော့
+      ဘာ context တွေ ပေးရမလဲ သိဖို့ အဲဒီ လူသစ်ဘက်ကနေ စကြည့်ရအောင်။ code ရေးတာ ကျွမ်းကျင်တဲ့ developer တစ်ယောက်
+      တနင်္လာနေ့မှာ team ထဲ ဝင်လာတယ် ဆိုပါစို့။ သူ ပထမဆုံးနေ့မှာ အလုပ် ကောင်းကောင်း လုပ်နိုင်ဖို့ ဘာတွေ သိဖို့
+      လိုမလဲ။ agent အတွက် အဖြေကလည်း အတူတူပါပဲ။ [[mark:k-1]] ပထမက instructions၊ ညွှန်ကြားချက်ပါ။ ဘာ အလုပ်လဲ၊
+      ပန်းတိုင်က ဘာလဲ၊ ဘယ်အထိ လုပ်ခွင့် ရှိလဲ ဆိုတာပါ။ [[mark:k-2]] ဒုတိယက knowledge၊ အလုပ်အတွက် လိုတဲ့
+      အချက်အလက်ပါ။ ကိုယ်တို့ ဆိုင်မှာဆိုရင် spec၊ menu၊ ဖွင့်ချိန် တို့ပါ။ [[mark:k-3]] တတိယက memory ပါ။ session
+      တစ်ခုနဲ့ တစ်ခုကြား ဘာ ကျန်ခဲ့မလဲ ဆိုတာပါ။ model က session ကြား ဘာမှ သိမ်းမထားလို့၊ ဖိုင်ထဲမှာ ရေးထားတာပဲ
+      နောက် session အထိ ကျန်ပါတယ်။ [[mark:k-4]] စတုတ္ထက examples၊ ဥပမာတွေပါ။ spec ထဲ ထည့်ခဲ့တဲ့ နမူနာ အော်ဒါ၊
+      customer ဆီ ပို့ရမယ့် စာ တစ်စောင်ရဲ့ နမူနာ လို အရာတွေပါ။ [[mark:k-5]] ပဉ္စမက tools ပါ။ ကွန်ပျူတာကို
+      ခိုင်းတဲ့ command တွေထဲက agent ဘာကို run ခွင့် ရှိလဲ၊ အပြင်က ဘာ service တွေကို သုံးခွင့် ရှိလဲ ဆိုတာပါ။
+      [[mark:k-6]] နောက်ဆုံးက guardrail တွေပါ။ agent ဘယ်တော့မှ မချိုးဖောက်ရတဲ့ rule တွေပါ။ ဥပမာ customer ရဲ့
+      ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူ့ကိုမှ မပြရဘူး ဆိုတာမျိုးပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering (six kinds of context; a new team member)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: How Claude remembers your project (a new teammate would need the same context)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: open-board-k,
+          type: whiteboard.apply,
+          at: { mark: k-open },
+          open: true,
+          clear: true,
+          upsertIds: [k-title, k-agent-box, k-agent],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-k1,
+          type: whiteboard.apply,
+          at: { mark: k-1 },
+          upsertIds: [k1-box, k1, k1-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k2,
+          type: whiteboard.apply,
+          at: { mark: k-2 },
+          upsertIds: [k2-box, k2, k2-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k3,
+          type: whiteboard.apply,
+          at: { mark: k-3 },
+          upsertIds: [k3-box, k3, k3-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k4,
+          type: whiteboard.apply,
+          at: { mark: k-4 },
+          upsertIds: [k4-box, k4, k4-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k5,
+          type: whiteboard.apply,
+          at: { mark: k-5 },
+          upsertIds: [k5-box, k5, k5-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k6,
+          type: whiteboard.apply,
+          at: { mark: k-6 },
+          upsertIds: [k6-box, k6, k6-d],
+          drawMs: 1200,
+        }
+
+  - id: desk-shelf
+    chapter: အမြဲလား၊ လိုမှလား
+    narration: >
+      [[mark:d-open]] ဒီ ခြောက်မျိုးလုံးကို session တိုင်း agent ရဲ့ စားပွဲပေါ် အကုန် တင်ထားဖို့ မလိုပါဘူး။
+      ဒါကြောင့် နှစ်မျိုး ခွဲပါတယ်။ [[mark:d-desk]] တစ်မျိုးက session တိုင်း အမြဲ တင်ပေးတဲ့ context ပါ။ project
+      ရဲ့ အကျဉ်း၊ ဘာနဲ့ ဆောက်လဲ၊ မချိုးရတဲ့ rule တွေ လို အလုပ်တိုင်းမှာ လိုတဲ့ အချက်တွေကို rule file တစ်ခုထဲမှာ
+      ရေးထားရင်၊ agent က session စတိုင်း အဲဒီ ဖိုင်ကို ဖတ်ပါတယ်။ [[mark:d-shelf]] နောက်တစ်မျိုးကတော့ စင်ပေါ်မှာ
+      ထားပြီး လုပ်နေတဲ့ အလုပ်၊ task က လိုမှ ယူဖတ်တဲ့ context ပါ။ spec၊ requirements လို ရှည်တဲ့ စာတမ်းတွေနဲ့၊
+      အဆင့်လိုက် လုပ်ရတဲ့ ညွှန်ကြားချက်တွေပါ။ task လိုမှ agent ဖတ်တဲ့ အဲဒီလို ညွှန်ကြားချက် အထုပ်ကို skill
+      လို့လည်း ခေါ်ကြပါတယ်။ [[mark:d-why]] ဘာကြောင့် အကုန်လုံးကို စားပွဲပေါ် မတင်တာလဲ။ စားပွဲပေါ်က စာ များလေ၊
+      session တိုင်းမှာ ငွေ ပိုကုန်လေ ဖြစ်သလို၊ အရေးကြီးတဲ့ rule တစ်ကြောင်းက စာတွေကြားမှာ မြုပ်ပြီး model က
+      လွတ်သွားတတ်လေ ဖြစ်လို့ပါ။ ဒါပေမဲ့ နည်းလွန်းပြန်ရင်လည်း၊ အလုပ်တိုင်း လိုတဲ့ rule က agent ရှေ့မှာ မရှိတော့လို့
+      အဲဒီ rule နဲ့ မကိုက်တဲ့ code ကို ထုတ်ပေးနိုင်ပါတယ်။ [[mark:d-rule]] ဒါကြောင့် စားပွဲပေါ်က ဖိုင်ကို တိုတို
+      ထားပြီး၊ ကျန်တာတွေကို ဘယ်မှာ ရှိလဲ ညွှန်ပေးထားပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering (static vs dynamic context; skills)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices (keep CLAUDE.md short; skills load when needed)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "Anthropic: Effective context engineering for AI agents (context as a finite resource)",
+          url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+        }
+    actions:
+      - {
+          id: open-board-d,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-d-desk,
+          type: whiteboard.apply,
+          at: { mark: d-desk },
+          upsertIds: [d-desk-h, d-desk, d-a1, d-a2, d-a3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-d-shelf,
+          type: whiteboard.apply,
+          at: { mark: d-shelf },
+          upsertIds: [d-shelf-h, d-shelf, d-s1, d-s2, d-s3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-d-why,
+          type: whiteboard.apply,
+          at: { mark: d-why },
+          upsertIds: [d-why],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-d-rule,
+          type: whiteboard.apply,
+          at: { mark: d-rule },
+          upsertIds: [d-rule],
+          drawMs: 1000,
+        }
+
+  - id: project
+    chapter: AGENTS.md ရေးရအောင်
+    narration: >
+      [[mark:close-d]] ကဲ၊ ကိုယ်တို့ project အတွက် agent ရဲ့ စားပွဲပေါ် တင်မယ့် ဖိုင်ကို ရေးကြည့်ရအောင်။
+      [[mark:sel-name]] AGENTS.md ဆိုတာ project ထဲ ဝင်လာတဲ့ agent တိုင်း အရင်ဖတ်တဲ့ rule file ပါ။ team ထဲ ဝင်လာတဲ့
+      လူသစ်အတွက် ရေးပေးတဲ့ မှတ်စုနဲ့ ဆင်ပါတယ်။ coding agent အများအပြား ဖတ်တဲ့ ပုံစံ တစ်ခု ဖြစ်ပြီး၊ tool တချို့က
+      CLAUDE.md၊ GEMINI.md လို tool နာမည် ပါတဲ့ ဖိုင်ကို ဖတ်ကြပေမဲ့ သဘောတရားက အတူတူပါပဲ။ [[mark:type-project]] ပထမ
+      အပိုင်းရဲ့ ပထမ စာကြောင်းက ဒီ project ဘာလဲ ဆိုတာကို agent အတွက် အတိုချုပ် ရေးထားတာပါ။ ဘယ် ဆိုင်အတွက်လဲ၊
+      customer တွေ ဘာ လုပ်ကြမလဲ ဆိုတာ ပါပါတယ်။ [[mark:sel-read-spec]] ဒုတိယ စာကြောင်းကတော့ agent ကို spec ဆီ
+      လမ်းညွှန်ပေးပြီး၊ spec မှာ မပါတဲ့ ကိစ္စတွေကို agent က သူ့ဘာသာ ခန့်မှန်းပြီး မဆုံးဖြတ်အောင် ကာကွယ်ပေးတာပါ။
+      [[mark:open-spec]] spec ဖိုင်က စာကြောင်း လေးဆယ်ကျော် ရှိပြီး၊ task တိုင်းမှာ အကုန် မလိုပါဘူး။
+      [[mark:back-agents]] ဒါကြောင့် ဒီ ဖိုင်ထဲကို မကူးဘဲ၊ စင်ပေါ်က နေရာကိုပဲ ညွှန်ထားတာပါ။ ဒီ ဖိုင်ကိုတော့ agent
+      က session တိုင်း အမြဲ ဖတ်ပါတယ်။ အမြဲ ဖတ်ရတဲ့ ဖိုင် ဖြစ်လို့ တိုနိုင်သမျှ တိုအောင်၊ တခြား စာတမ်းတွေနဲ့ မတူဘဲ
+      English စာကြောင်း တိုတိုတွေနဲ့ ရေးထားပါတယ်။ စာကြောင်းတွေကို မဖတ်ပြဘဲ ဘာ ဆုံးဖြတ်ထားလဲ ဆိုတာကို မြန်မာလို
+      ရှင်းပြသွားပါမယ်။ English က model အတွက် ဘာကြောင့် ပိုတိုလဲ ဆိုတာကိုတော့ နောက်ပိုင်း lesson တစ်ခုမှာ
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "AGENTS.md: a simple, open format for guiding coding agents",
+          url: "https://agents.md/",
+        }
+      - {
+          title: "Claude Code docs: How Claude remembers your project (CLAUDE.md, AGENTS.md)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+      - {
+          title: "Gemini CLI docs: Provide context with GEMINI.md files",
+          url: "https://geminicli.com/docs/cli/gemini-md",
+        }
+    actions:
+      - { id: close-d, type: whiteboard.apply, at: { mark: close-d }, open: false }
+      - {
+          id: sel-name,
+          type: editor.select,
+          at: { mark: sel-name },
+          target: { file: AGENTS.md, text: "# AGENTS.md", occurrence: 1 },
+        }
+      - id: type-project
+        type: editor.type
+        at: { mark: type-project }
+        target:
+          {
+            file: AGENTS.md,
+            after: "# AGENTS.md · Shwe Tea House pre-order app\n\n",
+            occurrence: 1,
+          }
+        text: "## Project\nA pre-order web app for a tea shop in Yangon. Customers order ahead and pick up at the counter.\nRead docs/spec.md before any change. If the spec does not answer a question, stop and ask.\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-read-spec,
+          type: editor.select,
+          at: { mark: sel-read-spec },
+          target:
+            {
+              file: AGENTS.md,
+              text: "Read docs/spec.md before any change. If the spec does not answer a question, stop and ask.",
+              occurrence: 1,
+            },
+        }
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - { id: back-agents, type: workspace.openFile, at: { mark: back-agents }, path: AGENTS.md }
+
+  - id: stack
+    narration: >
+      [[mark:type-stack]] နောက်တစ်ပိုင်းက app ကို ဘာ နည်းပညာနဲ့ ဆောက်မလဲ ဆိုတာကို ပုံသေ ချထားတာပါ။ framework ဆိုတာ
+      app ဆောက်ဖို့ တခြားသူတွေ အသင့် ရေးထားတဲ့ code အစု ကြီးတွေပါ။ ဒီ ရွေးချယ်မှုကို မရေးထားရင် agent က session
+      တစ်ခုမှာ framework တစ်ခု၊ နောက် session မှာ တခြား တစ်ခု ရွေးသွားနိုင်ပါတယ်။ [[mark:sel-stack]] အခု code
+      မရှိသေးတော့ ဒီ ဆုံးဖြတ်ချက်ကို code ကနေ ရှာဖတ်လို့ မရပါဘူး။ agent ကိုယ်တိုင် ရှာမတွေ့နိုင်တာတွေက ဒီ ဖိုင်ရဲ့
+      အဓိက အကြောင်းအရာပါ။ project ကြီးလာရင် app မှန်မမှန် စစ်တဲ့ test တွေကို run တဲ့ command တွေကိုလည်း ဒီလို
+      ဖိုင်မှာ ရေးကြပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices (only write down what Claude can't find by reading the repo)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "AGENTS.md: what to include (project overview, build and test commands)",
+          url: "https://agents.md/",
+        }
+    actions:
+      - id: type-stack
+        type: editor.type
+        at: { mark: type-stack }
+        target:
+          {
+            file: AGENTS.md,
+            after: "If the spec does not answer a question, stop and ask.\n\n",
+            occurrence: 1,
+          }
+        text: "## Stack\nPlain HTML, CSS and JavaScript. No framework.\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-stack,
+          type: editor.select,
+          at: { mark: sel-stack },
+          target:
+            {
+              file: AGENTS.md,
+              text: "Plain HTML, CSS and JavaScript. No framework.",
+              occurrence: 1,
+            },
+        }
+
+  - id: rules
+    narration: >
+      [[mark:type-rules-a]] အခု rule တွေကို အုပ်စု နှစ်ခု ခွဲပြီး ထည့်ပါမယ်။ ပထမ အုပ်စုက app ထဲမှာ customer
+      မြင်ရမယ့် အရာတွေ ဘယ်လို ပေါ်ရမလဲ ဆိုတာပါ။ [[mark:sel-kyat]] ဒီ သုံးကြောင်းက ဈေးနှုန်း ပြပုံ၊ customer
+      ဖတ်ရမယ့် ဘာသာစကားနဲ့ ဆိုင်ရှိတဲ့ မြို့ရဲ့ အချိန်ကို ပုံသေ ချထားတဲ့ guardrail တွေပါ။ code ကို ဘယ်နေရာမှာ
+      ပြင်ပြင် ထိနိုင်တဲ့ အချက်တွေ ဖြစ်လို့၊ ဘယ် task မှာမဆို agent ရှေ့မှာ ရှိနေရပါမယ်။ [[mark:type-rules-b]]
+      နောက် နှစ်ကြောင်းကတော့ agent ဘယ်လို အလုပ်လုပ်ရမလဲ ဆိုတဲ့ rule တွေပါ။ [[mark:sel-package]] package ဆိုတာ
+      ကိုယ် မရေးဘဲ ယူသုံးတဲ့ တခြားသူ့ code ပါ။ ဒီ စာကြောင်းက project ထဲ ဝင်လာမယ့် တခြားသူ့ code ကို ကိုယ်က
+      ထိန်းထားနိုင်အောင် agent ရဲ့ tools ကို နယ်သတ်ပေးတာပါ။ နောက်ဆုံး စာကြောင်းကတော့ ကိုယ့်ဘက်က ပြန်စစ်ရ လွယ်အောင်
+      ထားတာပါ။ ပြောင်းလဲမှု သေးလေ၊ agent ဘာ ပြင်သွားလဲ ဆိုတာကို တစ်ကြောင်းချင်း ကြည့်နိုင်လေပါ။
+    sources:
+      - {
+          title: "AGENTS.md: a simple, open format for guiding coding agents",
+          url: "https://agents.md/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (stack, conventions, hard rules)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-rules-a
+        type: editor.type
+        at: { mark: type-rules-a }
+        target: { file: AGENTS.md, after: "No framework.\n\n", occurrence: 1 }
+        text: "## Rules\n- Prices are whole kyat (integers). Never use decimals.\n- Customer-facing text is Burmese (Unicode).\n- Times are Asia/Yangon.\n"
+        cadence: line-by-line
+      - {
+          id: sel-kyat,
+          type: editor.select,
+          at: { mark: sel-kyat },
+          target:
+            {
+              file: AGENTS.md,
+              text: "- Prices are whole kyat (integers). Never use decimals.\n- Customer-facing text is Burmese (Unicode).\n- Times are Asia/Yangon.\n",
+              occurrence: 1,
+            },
+        }
+      - id: type-rules-b
+        type: editor.type
+        at: { mark: type-rules-b }
+        target: { file: AGENTS.md, after: "- Times are Asia/Yangon.\n", occurrence: 1 }
+        text: "- Ask before adding any package.\n- One task at a time. Keep each change small.\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-rules,
+          type: expect.file,
+          at: { afterAction: type-rules-b },
+          path: AGENTS.md,
+          contains: "- Ask before adding any package.",
+        }
+      - {
+          id: sel-package,
+          type: editor.select,
+          at: { mark: sel-package },
+          target: { file: AGENTS.md, text: "- Ask before adding any package.", occurrence: 1 },
+        }
+
+  - id: done-means
+    narration: >
+      [[mark:type-done]] နောက်ဆုံး အပိုင်းကတော့ ပြီးပြီ လို့ ပြောခွင့်ကို app ကြည့်ရတာ ကောင်းနေရုံနဲ့ မပေးဘဲ၊ spec
+      ထဲက acceptance criteria တွေနဲ့ ချိတ်ထားတာပါ။ [[mark:sel-summary]] ဒီ စာကြောင်းက agent အလုပ် ပြီးသွားတဲ့အခါ
+      ကိုယ့်ဆီ ပြန်ရောက်လာမယ့် အစီရင်ခံစာမှာ ဘာတွေ ပါရမလဲ သတ်မှတ်ထားတာပါ။ မလုပ်ခဲ့တာတွေပါ ပါလာတော့၊ ကိုယ်က ဘာကို
+      ဆက်စစ်ရမလဲ ဆိုတာ ရှင်းသွားပါတယ်။
+    sources:
+      - {
+          title: "AGENTS.md: a simple, open format for guiding coding agents",
+          url: "https://agents.md/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (tests and evals as the contract)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-done
+        type: editor.type
+        at: { mark: type-done }
+        target: { file: AGENTS.md, after: "Keep each change small.\n\n", occurrence: 1 }
+        text: "## Done means\n- The acceptance criteria named in the task pass.\n- Summarise what you changed and what you did not do.\n"
+        cadence: line-by-line
+      - {
+          id: expect-done,
+          type: expect.file,
+          at: { afterAction: type-done },
+          path: AGENTS.md,
+          contains: "- Summarise what you changed and what you did not do.",
+        }
+      - {
+          id: sel-summary,
+          type: editor.select,
+          at: { mark: sel-summary },
+          target:
+            {
+              file: AGENTS.md,
+              text: "- Summarise what you changed and what you did not do.",
+              occurrence: 1,
+            },
+        }
+
+  - id: grow
+    chapter: ဆယ်ကြောင်းကနေ စပါ
+    narration: >
+      [[mark:k-reopen]] context ခြောက်မျိုးကို ပြန်ကြည့်ရအောင်။ [[mark:k-where1]] ခုနက ရေးလိုက်တဲ့ AGENTS.md ထဲမှာ
+      instructions၊ tools နဲ့ guardrail တွေ ရှိပါတယ်။ [[mark:k-where2]] knowledge နဲ့ ဥပမာကတော့ spec ထဲမှာ
+      ရှိပြီး၊ memory ကတော့ ကိုယ်တို့ ရေးထားတဲ့ ဖိုင်တွေ ကိုယ်တိုင်ပါပဲ။ အားလုံးကို နေရာ တစ်ခုထဲ မပုံဘဲ၊ နေရာ
+      မှန်မှန်မှာ ခွဲထားတာပါ။ [[mark:close-k]] ဖိုင်ကို ပြန်ကြည့်ရင် အကြောင်းအရာ စာကြောင်း ဆယ်ကြောင်းပဲ ရှိပါတယ်။
+      [[mark:sel-whole]] ဒီလောက်နဲ့ စတာ ကောင်းပါတယ်။ ဒီဖိုင်ကို တစ်ခါတည်း ပြီးအောင် ရေးစရာ မလိုပါဘူး။ project
+      နဲ့အတူ တဖြည်းဖြည်း ကြီးလာမှာ ဖြစ်ပြီး၊ မမှန်တော့တဲ့ စာကြောင်းကိုလည်း ဖယ်ရပါမယ်။ ဒီ course ထဲမှာလည်း
+      ရိုးရှင်းအောင် ထားဖို့၊ လုံခြုံရေးနဲ့ စစ်ဆေးမှု အတွက် အပိုင်းတွေကို နောက် lesson တွေမှာ ဒီဖိုင်ထဲ
+      ထပ်ထည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (start AGENTS.md with about ten lines; add a rule for each repeated mistake)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: How Claude remembers your project (when to add: the same mistake a second time)",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: reopen-k,
+          type: whiteboard.apply,
+          at: { mark: k-reopen },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              k-title,
+              k-agent-box,
+              k-agent,
+              k1-box,
+              k1,
+              k1-d,
+              k2-box,
+              k2,
+              k2-d,
+              k3-box,
+              k3,
+              k3-d,
+              k4-box,
+              k4,
+              k4-d,
+              k5-box,
+              k5,
+              k5-d,
+              k6-box,
+              k6,
+              k6-d,
+            ],
+        }
+      - {
+          id: draw-k-where1,
+          type: whiteboard.apply,
+          at: { mark: k-where1 },
+          upsertIds: [k-where1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k-where2,
+          type: whiteboard.apply,
+          at: { mark: k-where2 },
+          upsertIds: [k-where2],
+          drawMs: 1000,
+        }
+      - { id: close-k, type: whiteboard.apply, at: { mark: close-k }, open: false }
+      - {
+          id: sel-whole,
+          type: editor.select,
+          at: { mark: sel-whole },
+          target:
+            {
+              file: AGENTS.md,
+              text: "## Project\nA pre-order web app for a tea shop in Yangon. Customers order ahead and pick up at the counter.\nRead docs/spec.md before any change. If the spec does not answer a question, stop and ask.\n\n## Stack\nPlain HTML, CSS and JavaScript. No framework.\n\n## Rules\n- Prices are whole kyat (integers). Never use decimals.\n- Customer-facing text is Burmese (Unicode).\n- Times are Asia/Yangon.\n- Ask before adding any package.\n- One task at a time. Keep each change small.\n\n## Done means\n- The acceptance criteria named in the task pass.\n- Summarise what you changed and what you did not do.",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီ ဖိုင် မရှိဘဲ app ကို ဆောက်နေတယ် ဆိုပါစို့။ agent ထုတ်ပေးတဲ့ code က
+      ဈေးနှုန်းကို ဒသမ နဲ့ ပြတာ တစ်ပတ်အတွင်း နှစ်ခါ ဖြစ်ခဲ့ပါတယ်။ ပြင်ဖို့ ဒီနေ့ chat ထဲမှာ ပိုရှည်ရှည်၊
+      ပိုပြင်းပြင်း ထပ်ပြောမလား၊ AGENTS.md ထဲမှာ rule တစ်ကြောင်း ထည့်မလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ AGENTS.md ထဲမှာ rule ထည့်တာပါ။ ဘာကြောင့်လဲဆိုတော့ ဒီနေ့
+      chat ထဲမှာ ဘယ်လောက် ပြင်းပြင်း ပြောပြော၊ နောက် session က စားပွဲ အလွတ်နဲ့ ပြန်စတော့ အဲဒီ စကား မရှိတော့လို့ပါ။
+      ဒသမ မပါရဘူး ဆိုတာက နောက်လည်း အမြဲ မှန်ရမယ့် rule ဖြစ်လို့၊ session စတိုင်း ဖတ်တဲ့ ဖိုင်ထဲမှာ နေရာ
+      ရသင့်ပါတယ်။ [[mark:quiz-twice]] ဒီလို အမှား တစ်ခုတည်း နှစ်ခါ ပြန်ဖြစ်တာကပဲ rule တစ်ကြောင်း ထည့်ရမယ့်
+      အချိန်ပါ။ ဈေးနှုန်း rule က spec ထဲမှာ ရှိပြီးသား ဖြစ်ပေမဲ့၊ code ရဲ့ နေရာ အများကြီးကို ထိတဲ့ guardrail
+      ဖြစ်လို့ session စတိုင်း ဖတ်တဲ့ ဒီ ဖိုင်မှာလည်း တစ်ကြောင်း ထပ်ထားတာပါ။ [[mark:quiz-more]] rule က ဖိုင်ထဲမှာ
+      ရှိရက်နဲ့ agent က ဆက် လွတ်နေသေးရင်တော့၊ စကားလုံး ပိုပြင်းအောင် ပြင်တာထက် ဖိုင်က ရှည်လွန်းလို့ rule
+      မြုပ်နေလား အရင် စစ်ပါ။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices (if Claude keeps ignoring a line, the file may be too long)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "Claude Code docs: How Claude remembers your project",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-quiz-twice,
+          type: whiteboard.apply,
+          at: { mark: quiz-twice },
+          upsertIds: [z-a-twice],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-more,
+          type: whiteboard.apply,
+          at: { mark: quiz-more },
+          upsertIds: [z-a-more],
+          drawMs: 1000,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent ဘာ ထုတ်ပေးမလဲ ဆိုတာကို ခိုင်းတဲ့ စကားလုံးထက် agent ရှေ့မှာ
+      ရှိတဲ့ context က ပိုဆုံးဖြတ်ပါတယ်။ team ထဲ ဝင်လာတဲ့ လူသစ် တစ်ယောက် ပထမနေ့မှာ လိုမယ့် အရာတွေကို စဉ်းစားပြီး၊
+      session တိုင်း လိုတာကိုပဲ AGENTS.md ထဲမှာ တိုတို ရေးပါ။ [[mark:r-spec]] ရှည်တဲ့ spec လို စာတမ်းကိုတော့
+      ညွှန်ထားပြီး၊ task က လိုမှ ဖတ်ခိုင်းပါ။ [[mark:r-kyat]] ဘယ်တော့မှ မချိုးရတဲ့ rule တွေကို ဒီ ဖိုင်ထဲမှာ
+      ထားပါ။ [[mark:r-done]] ပြီးပြီ ဆိုတာ ဘာလဲ ဆိုတာကိုလည်း ရေးထားပါ။ ဆယ်ကြောင်းလောက်နဲ့ စပြီး၊ အမှား တစ်ခု
+      နှစ်ခါ ထပ်ဖြစ်တိုင်း rule တစ်ကြောင်း ထည့်ပါ။ နောက် lesson မှာတော့ ဒီ context တွေ အသင့် ရှိပြီဆိုတော့၊ agent
+      ကို task တစ်ခု ဘယ်လို အပ်မလဲ၊ brief တစ်စောင် ဘယ်လို ရေးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: r-spec,
+          type: editor.select,
+          at: { mark: r-spec },
+          target: { file: AGENTS.md, text: "Read docs/spec.md before any change.", occurrence: 1 },
+        }
+      - {
+          id: r-kyat,
+          type: editor.select,
+          at: { mark: r-kyat },
+          target: { file: AGENTS.md, text: "## Rules", occurrence: 1 },
+        }
+      - {
+          id: r-done,
+          type: editor.select,
+          at: { mark: r-done },
+          target: { file: AGENTS.md, text: "## Done means", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
