@@ -2222,7 +2222,7 @@ scenes:
       [[mark:draw-burmese]] preview အပြင်ဘက်၊ desktop Chrome ၁၅၆ ရဲ့ top level page မှာ မြန်မာစာ ဘယ်လို
       ဖြစ်လဲ ကြည့်ရအောင်။ ဒါတွေက documentation နဲ့ ကြိုစမ်းထားတဲ့ ရလဒ်တွေပါ။
       [[mark:draw-b1]] Summarizer က English စာကို အနှစ်ချုပ်ပေးနိုင်ပေမယ့် မြန်မာစာကို မရသေးပါဘူး။
-      [[mark:draw-b2]] Translator မှာလည်း မြန်မာ ဘာသာ မပါသေးလို့၊ English review တွေကို ဆိုင်ပိုင်ရှင် မြမြ
+      [[mark:draw-b2]] Translator မှာလည်း မြန်မာ ဘာသာ မပါသေးလို့၊ English review တွေကို ဆိုင်ပိုင်ရှင်
       အတွက် မြန်မာလို ပြန်ခိုင်းလို့ မရပါဘူး။ [[mark:draw-b3]] Language Detector ကတော့ မြန်မာစာ ဖြစ်ကြောင်း
       ခွဲပေးနိုင်ပါတယ်။ [[mark:draw-b4]] Prompt API ကလည်း မြန်မာစာကို support မလုပ်သေးလို့၊ ဆိုင်ရဲ့
       မြန်မာ review တွေအတွက်တော့ တခြား platform ကို ရွေးရပါမယ်။ [[mark:draw-w3c]] နောက် တစ်ချက်က API
