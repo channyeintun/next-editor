@@ -185,7 +185,7 @@ Narration rules specific to this course:
 - No tooling lines and no "save"; lesson 1 introduces the panel as real Vitest rerunning by itself,
   later lessons recall it in one clause; the opening fills the runtime gap with content (≥ 1,600
   characters before the first `runtime.waitForReady`, ≥ 2,400 for DOM, React, ESLint and coverage).
-- People are only မြမြ, လှလှ, အောင်အောင် and မောင်မောင်; test names are short English; Burmese digits
+- People are only လှလှ, အောင်အောင် and မောင်မောင်; test names are short English; Burmese digits
   without separators, also inside code values (`TEA ဆယ်` for TEA10, `V ၈` for v8).
 - Code, test names and messages are described, not read; API names are split for the voice (`to Be`,
   `spy On`); the panel is read in draw order; Expected and Received get colours only in the diff.

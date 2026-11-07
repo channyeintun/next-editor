@@ -143,7 +143,7 @@ question by typing it into the code.
 The course data is synthetic, and each lesson that uses it says so once. The tea shop's members,
 reviews, orders and menu are mostly Burmese, with some English and romanized reviews, and they live
 in the hands-on workspaces' `data/` (the concept lessons 2 and 11 keep their tables in `src/`).
-People are only မြမြ, လှလှ, အောင်အောင် and မောင်မောင်.
+People are only လှလှ, အောင်အောင် and မောင်မောင်; the shop owner is unnamed (ဆိုင်ပိုင်ရှင်).
 
 The recording cannot show GPU training, DevTools, a terminal, a built-in AI answer or live
 generation, and the lessons never claim it does. They say where those happen and show what the

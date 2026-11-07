@@ -130,7 +130,7 @@ editor.
 Narration rules specific to this course:
 
 - No lines about tooling (dev server, installs, the preview reloading).
-- People are only မြမြ, လှလှ, အောင်အောင် and မောင်မောင်.
+- People are only လှလှ, အောင်အောင် and မောင်မောင်.
 - Numbers are Burmese digits without a thousands separator.
 - Code is described, not read aloud.
 - Error codes are named at most once, to help the learner search.

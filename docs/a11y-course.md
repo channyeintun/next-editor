@@ -89,7 +89,7 @@ reader _would_ announce, show it in the panel, and invite the learner to try Voi
 TalkBack themselves.
 
 Narration rules specific to this course: no lines about tooling (dev server, installs, the preview
-opening); people are only မြမြ, လှလှ, အောင်အောင် and မောင်မောင်; numbers are Burmese digits without a
+opening); people are only လှလှ, အောင်အောင် and မောင်မောင် (the low-vision persona is unnamed: ဆရာမ, a retired teacher); numbers are Burmese digits without a
 thousands separator; screen-reader output is phrased as "would announce".
 
 ## The deck
