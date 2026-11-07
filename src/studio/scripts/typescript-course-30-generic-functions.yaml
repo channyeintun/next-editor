@@ -1206,7 +1206,7 @@ scenes:
         type: editor.type
         at: { mark: type-names }
         target: { file: src/main.ts, after: "latest.quantity, \"ခွက်\");\n", occurrence: 1 }
-        text: "\nconst lastName = lastOf([\"မြမြ\", \"အောင်အောင်\"]);\n//               ^?\n"
+        text: "\nconst lastName = lastOf([\"လှလှ\", \"အောင်အောင်\"]);\n//               ^?\n"
         cadence: line-by-line
       - id: expect-names-count
         type: expect.preview
