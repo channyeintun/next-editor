@@ -34,7 +34,7 @@ lesson:
         မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
 
         ## Users
-        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင်
 
         ## Rules
         - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
@@ -72,7 +72,7 @@ lesson:
         - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
 
         ## Open questions
-        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+        requirements.md ရဲ့ Questions for the owner ကို ကြည့်ပါ။
       notes.md: |
         # Notes
       package.json: |
