@@ -2,7 +2,7 @@
 #
 # Start state (ws/): data/reviews.json and data/support.json (COURSE-KIT §4.2, §4.4, unchanged) and
 # src/data.js's older labelled reviews (from base/); src/messages.js (pinned) builds the sorter's
-# sample data: seven new messages for မြမြ's inbox (r18 r22 q15 q13 r23 r11 q27), 16 messages she
+# sample data: seven new messages for the owner's inbox (r18 r22 q15 q13 r23 r11 q27), 16 messages she
 # checked by hand last week, and 89 labelled training messages; src/inbox.js (pinned) draws the inbox
 # in #app (group chips; the badge and the "why" button when view() adds them; the line choices) and
 # the panel cards `ai-about` (input "Training data": sources, languages, version, where it is weak) and
@@ -807,7 +807,7 @@ lesson:
         // Cups of milk tea sold on each of the last 14 days.
         export const cupsPerDay = [182, 190, 187, 201, 205, 199, 214, 220, 216, 229, 233, 228, 241, 246];
       src/inbox.js: |
-        // မြမြ's inbox in #app, and the AI panel's cards about the sorter. The sorter itself is in main.js.
+        // the owner's inbox in #app, and the AI panel's cards about the sorter. The sorter itself is in main.js.
         import { panel } from "ai-panel";
         import { predict, tokenize, topLabel } from "./ml.js";
         import { choices } from "./ui.js";
@@ -835,7 +835,7 @@ lesson:
         }
 
         // The AI panel: what the sorter was trained on (data provenance), and how it did on the messages
-        // မြမြ checked by hand.
+        // the owner checked by hand.
         export function showAbout(training, checked, model) {
           const n = (key, value) => count(training, (m) => m[key] === value);
           const en = checked.filter((m) => m.lang === "en");
@@ -897,7 +897,7 @@ lesson:
           const open = new Set();
           const list = el("div", "ib-list", undefined, "inbox");
           app.append(
-            el("div", "ib-head", "မြမြ ရဲ့ message တွေ · AI က ခွဲထားတာပါ"),
+            el("div", "ib-head", "ဆိုင်ပိုင်ရှင် ရဲ့ message တွေ · AI က ခွဲထားတာပါ"),
             el("div", "ib-note", "အင်္ဂလိပ်လို ရေးထားတာကို မှားတတ်ပါတယ်", "limits"),
             list,
           );
@@ -951,7 +951,7 @@ lesson:
         // The sorter: a small model trained in this page on the shop's labelled messages.
         const sorter = trainNaiveBayes(training);
 
-        // What မြမြ sees for one message: the group the sorter picked, and cues that say how sure it is.
+        // What the owner sees for one message: the group the sorter picked, and cues that say how sure it is.
         function view(text, line) {
           const scores = predict(sorter, text);
           const group = topLabel(scores);
@@ -983,11 +983,11 @@ lesson:
           })),
         ];
 
-        // This morning's new messages in မြမြ's inbox.
+        // This morning's new messages in the owner's inbox.
         const NEW = ["r18", "r22", "q15", "q13", "r23", "r11", "q27"];
         export const inbox = NEW.map((id) => all.find((m) => m.id === id));
 
-        // The rest: 16 messages မြမြ checked by hand last week, and the training data.
+        // The rest: 16 messages the owner checked by hand last week, and the training data.
         const rest = shuffle(all.filter((m) => !NEW.includes(m.id)), 5110);
         export const checked = rest.slice(0, 16);
         export const training = [
@@ -1513,7 +1513,7 @@ lesson:
         y: 298,
         width: 225,
         height: 40,
-        text: "မြမြ · မသုံးတော့",
+        text: "မသုံးတော့",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -1946,7 +1946,7 @@ scenes:
   - id: dial
     narration: >
       [[mark:draw-dial]] user ရဲ့ ယုံကြည်မှုကို အစွန်း နှစ်ဖက် ရှိတဲ့ အတိုင်းအတာ တစ်ခုလို စဉ်းစားကြည့်ရအောင်။
-      [[mark:draw-under]] တစ်ဖက်စွန်းမှာ ယုံကြည်မှု နည်းလွန်းလို့ မသုံးတော့တာ ရှိပါတယ်။ ဆိုင်ပိုင်ရှင် မြမြ က
+      [[mark:draw-under]] တစ်ဖက်စွန်းမှာ ယုံကြည်မှု နည်းလွန်းလို့ မသုံးတော့တာ ရှိပါတယ်။ ဆိုင်ပိုင်ရှင် က
       AI တစ်ခါ မှားတာ မြင်ပြီး dashboard ကို လုံးဝ မဖွင့်တော့တာမျိုးပါ။ [[mark:draw-over]] နောက်တစ်ဖက်စွန်းမှာ
       လွန်ကဲ ယုံကြည်တာ ရှိပါတယ်။ ကောင်တာက လှလှ က AI ရေးပေးတဲ့ စာကို မဖတ်ဘဲ customer ဆီ ပို့လိုက်တာမျိုးပါ။
       [[mark:draw-calibrated]] ကိုယ် လိုချင်တာက အလယ်က calibrated trust ပါ။ AI ကို အချိန်ကုန်သက်သာဖို့
@@ -1990,7 +1990,7 @@ scenes:
   - id: inbox
     chapter: "Message တွေကို ခွဲရအောင်"
     narration: >
-      [[mark:close-dial]] ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ [[mark:panel-ready]] မြမြ ဆီကို review တွေ၊ customer
+      [[mark:close-dial]] ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ [[mark:panel-ready]] ဆိုင်ပိုင်ရှင် ဆီကို review တွေ၊ customer
       message တွေ နေ့တိုင်း ရောက်လာလို့၊ ချီးကျူးတာ၊ တိုင်ကြားတာ၊ မေးခွန်း ဆိုပြီး model က အုပ်စု ခွဲပေးပါတယ်။
       [[mark:open-main]] ဒီ model က lesson အတွက် ရေးထားတဲ့ model သေးသေးလေး ဖြစ်ပြီး၊ ဒီ page ထဲမှာပဲ train
       လုပ်တာပါ။ [[mark:sel-view]] view function က message တစ်ခုချင်းအတွက် model ရွေးတဲ့ အုပ်စုကိုပဲ
@@ -1998,8 +1998,8 @@ scenes:
       ပြထားပါတယ်။ ဒီ message တွေက lesson အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ [[mark:read-wrong]] အများစု
       မှန်ပေမယ့်၊ လက်ဖက်ရည် တစ်ခွက် ဘယ်လောက်လဲ ဆိုတဲ့ မေးခွန်းကို တိုင်ကြားတာလို့ ခွဲထားပါတယ်။ အရမ်း မြန်တာပဲ၊
       နှစ်နာရီပဲ စောင့်ရတယ် လို့ ရွဲ့ပြီး တိုင်ကြားထားတာကိုလည်း ချီးကျူးတာလို့ ခွဲထားပါတယ်။ ဘယ်ဟာကို
-      စစ်ရမလဲ ဆိုတာကိုတော့ page က မြမြ ကို ဘာမှ မပြောပြပါဘူး။ [[mark:read-past-all]] အောက်က Past checks card ကတော့
-      မြမြ ပြီးခဲ့တဲ့ အပတ်က လက်နဲ့ စစ်ထားတဲ့ message ၁၆ ခုမှာ model က ၁၂ ခု မှန်ခဲ့တယ်လို့ ပြနေပါတယ်။
+      စစ်ရမလဲ ဆိုတာကိုတော့ page က ဆိုင်ပိုင်ရှင် ကို ဘာမှ မပြောပြပါဘူး။ [[mark:read-past-all]] အောက်က Past checks card ကတော့
+      ဆိုင်ပိုင်ရှင် ပြီးခဲ့တဲ့ အပတ်က လက်နဲ့ စစ်ထားတဲ့ message ၁၆ ခုမှာ model က ၁၂ ခု မှန်ခဲ့တယ်လို့ ပြနေပါတယ်။
     sources:
       - {
           title: "web.dev Learn AI: AI governance: Build responsibly (trust and transparency)",
@@ -2200,7 +2200,7 @@ scenes:
       သုံးဖို့ ပြင်ထားတဲ့ အစားထိုး လမ်းပါ။ [[mark:type-fallback]] ဖြစ်နိုင်ခြေ ၆၀ ရာခိုင်နှုန်း မရောက်ရင်
       အုပ်စု မခွဲဘဲ မခွဲရသေးတာ ထဲ ပို့တဲ့ စာကြောင်း ထည့်ပါမယ်။ [[mark:read-fallback]] လက်ဖက်ရည် ဈေးမေးတဲ့
       message က တိုင်ကြားတာ အုပ်စုကနေ မခွဲရသေးတာ ကို ရောက်သွားပါပြီ။ မှားမှား ခွဲထားတာထက် မသေချာဘူးလို့
-      ဝန်ခံတာက မြမြ ရဲ့ ယုံကြည်မှုကို ပိုထိန်းပေးပါတယ်။
+      ဝန်ခံတာက ဆိုင်ပိုင်ရှင် ရဲ့ ယုံကြည်မှုကို ပိုထိန်းပေးပါတယ်။
     sources:
       - {
           title: "web.dev Learn AI: AI governance: Build responsibly (trust: safe fallbacks)",
@@ -2231,10 +2231,10 @@ scenes:
       [[mark:read-reason]] အရမ်း နဲ့ မြန်တာပဲ ဆိုတဲ့ စကားလုံးတွေကြောင့် ချီးကျူးတာလို့ ၉၂ ရာခိုင်နှုန်း
       ခွဲထားတာပါ။ model က စကားလုံးတွေ ဘယ် အုပ်စုမှာ ခဏခဏ ပါလဲ ဆိုတာကိုပဲ ကြည့်တာမို့ ရွဲ့ပြောတာကို ခွဲထုတ်လို့
       မရပါဘူး။ ဒါကြောင့်
-      သေချာမှု မြင့်တာနဲ့ မှန်တာ မတူပါဘူး။ ဘာကြောင့် ဒီ အဖြေ ထွက်လာလဲ ရှင်းပြနိုင်ရင် မြမြ က အမှားကို မြန်မြန်
+      သေချာမှု မြင့်တာနဲ့ မှန်တာ မတူပါဘူး။ ဘာကြောင့် ဒီ အဖြေ ထွက်လာလဲ ရှင်းပြနိုင်ရင် ဆိုင်ပိုင်ရှင် က အမှားကို မြန်မြန်
       တွေ့ပါတယ်။ [[mark:click-line]] မျဉ်းကို ၉၅ ရာခိုင်နှုန်း တင်ကြည့်ရင်၊ [[mark:read-line]] ဒီ message ပါ
       စစ်ပေးပါ ဖြစ်သွားပြီး၊ Past checks မှာလည်း သေချာမှု မြင့်တဲ့ ခုနစ်ခုလုံး မှန်ပါတယ်။ ဒါပေမဲ့ ၁၆ ခုမှာ
-      စစ်ရမယ့်ဟာ ကိုးခု ဖြစ်သွားပါတယ်။ ဒါကြောင့် မျဉ်းကို ဘယ်မှာ ထားမလဲ ဆိုတာက မှားရင် ဘယ်လောက် နစ်နာလဲ၊ မြမြ
+      စစ်ရမယ့်ဟာ ကိုးခု ဖြစ်သွားပါတယ်။ ဒါကြောင့် မျဉ်းကို ဘယ်မှာ ထားမလဲ ဆိုတာက မှားရင် ဘယ်လောက် နစ်နာလဲ၊ ဆိုင်ပိုင်ရှင်
       မှာ အချိန် ဘယ်လောက် ရှိလဲ ဆိုတာပေါ် မူတည်ပါတယ်။
     sources:
       - {
@@ -2316,7 +2316,7 @@ scenes:
       [[mark:draw-ux]] U X အလွှာမှာ ယုံကြည်မှုကို ညှိဖို့ နည်းတွေ ရှိပါသေးတယ်။ AI အကြောင်း မသိသေးတဲ့ user အတွက်
       ရှင်းပြချက် ပိုပေးပြီး၊ ကျွမ်းကျင်တဲ့ user အတွက်တော့ badge လို အမှတ်အသား တိုတိုလေးပဲ ပေးပါ။
       [[mark:draw-ux-disclose]] AI က ခွဲထားတာပါ ဆိုတဲ့ စာ တိုတိုနဲ့ စပြီး၊ ဘာကြောင့်လဲ နှိပ်မှ အသေးစိတ် ပြတာက
-      progressive disclosure ပါ။ [[mark:draw-ux-feedback]] မြမြ ပြင်ပေးတဲ့ အုပ်စုတွေကို နောက် version မှာ ထည့်သုံးပြီး၊
+      progressive disclosure ပါ။ [[mark:draw-ux-feedback]] ဆိုင်ပိုင်ရှင် ပြင်ပေးတဲ့ အုပ်စုတွေကို နောက် version မှာ ထည့်သုံးပြီး၊
       ဘာ ပြောင်းသွားလဲ ပြန်ပြောပြပါ။ ဥပမာ ဈေးမေးတဲ့ message တွေကို အခု မေးခွန်းထဲ ခွဲပါပြီ လို့ ပြတာမျိုးပါ။
       feedback က အလကား မဖြစ်ဘူးလို့ မြင်ရရင် ပိုယုံပါတယ်။
       [[mark:draw-ux-error]] AI မှားတဲ့အခါ ဝန်ခံပြီး၊ ဒီ အကြံက မှားနိုင်ပါတယ်၊ မသုံးခင် စစ်ပါ လို့ user ကို
@@ -2412,11 +2412,11 @@ scenes:
 
   - id: quiz
     narration: >
-      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မြမြ က ဒီ model ကို calibrated trust နဲ့ သုံးတယ် ဆိုတာ ဘယ်လို
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ပိုင်ရှင် က ဒီ model ကို calibrated trust နဲ့ သုံးတယ် ဆိုတာ ဘယ်လို
       သုံးတာလဲ။ ခွဲထားတာတွေကို မစစ်ဘဲ အကုန် ယုံတာလား၊ တစ်ခါ မှားလို့ လုံးဝ မသုံးတော့တာလား၊ model ကို
       သုံးရင်းနဲ့ ရလဒ်ကို ကိုယ်တိုင် စစ်တာလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
       အဖြေကတော့ model ကို အချိန် သက်သာဖို့ သုံးရင်းနဲ့ ရလဒ်ကို ကိုယ်တိုင် စစ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ model က
-      အသုံးဝင်ပေမယ့် မှားနိုင်လို့၊ ခုနက ရွဲ့ပြီး တိုင်ကြားထားတာလို အမှားကို မြမြ ကပဲ နောက်ဆုံး ဖမ်းနိုင်လို့ပါ။
+      အသုံးဝင်ပေမယ့် မှားနိုင်လို့၊ ခုနက ရွဲ့ပြီး တိုင်ကြားထားတာလို အမှားကို ဆိုင်ပိုင်ရှင် ကပဲ နောက်ဆုံး ဖမ်းနိုင်လို့ပါ။
       အကုန် ယုံတာက လွန်ကဲ ယုံကြည်တာ ဖြစ်ပြီး၊ လုံးဝ မသုံးတာက ယုံကြည်မှု နည်းလွန်းတာပါ။
     sources:
       - {
