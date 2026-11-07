@@ -4,7 +4,7 @@
 # drinks (HotDrink, a union of two drink names; ColdDrink is declared but unused), seatLabel takes
 # a table number, and sugarLabel turns a sugar level into spoons, but its Sugar type is plain
 # `string` although the comment above it lists three levels. src/main.ts prints two orders:
-# မြမြ (tea, table 5, less) and အောင်အောင် (lemonade, takeaway "ပါဆယ်", sugar "exta" — a typo for
+# မောင်မောင် (tea, table 5, less) and အောင်အောင် (lemonade, takeaway "ပါဆယ်", sugar "exta" — a typo for
 # extra). The panel (data-modes "errors output") shows 2 errors (the cold drink, the takeaway
 # text) and Output gives the typo the normal 2 spoons with no error at all.
 #
@@ -618,7 +618,7 @@ lesson:
       src/main.ts: |
         import { cupLabel, seatLabel, sugarLabel } from "./order";
 
-        console.log("မြမြ", cupLabel("လက်ဖက်ရည်"), seatLabel(5), sugarLabel("less"));
+        console.log("မောင်မောင်", cupLabel("လက်ဖက်ရည်"), seatLabel(5), sugarLabel("less"));
         console.log("အောင်အောင်", cupLabel("သံပုရာရည်"), seatLabel("ပါဆယ်"), sugarLabel("exta"));
       src/order.ts: |
         export type HotDrink = "လက်ဖက်ရည်" | "ကော်ဖီ";
@@ -1208,7 +1208,7 @@ scenes:
       [[mark:select-sugar-type]] အောက်က comment မှာ သကြား အဆင့် သုံးမျိုး ရှိတယ်လို့ ရေးထားပေမယ့်၊ type
       ကတော့ string ဖြစ်နေပါတယ်။ [[mark:select-sugar-fn]] function က နည်းနည်း ဆိုရင် တစ်ဇွန်း၊ များများ
       ဆိုရင် သုံးဇွန်း ထည့်ပြီး၊ ကျန်တာ အားလုံးကို နှစ်ဇွန်းလို့ ယူပါတယ်။ [[mark:open-main]] main ဖိုင်မှာ
-      အော်ဒါ နှစ်ခု ရှိပါတယ်။ [[mark:select-mya]] မြမြက စားပွဲ ၅ မှာ လက်ဖက်ရည် သကြား နည်းနည်းနဲ့
+      အော်ဒါ နှစ်ခု ရှိပါတယ်။ [[mark:select-mya]] မောင်မောင်က စားပွဲ ၅ မှာ လက်ဖက်ရည် သကြား နည်းနည်းနဲ့
       မှာပြီး၊ [[mark:select-aung]] အောင်အောင်ကတော့ သံပုရာရည်ကို ပါဆယ် ယူမယ်၊ သကြား များများ ထည့်ပါ လို့
       မှာထားပါတယ်။
     sources:
