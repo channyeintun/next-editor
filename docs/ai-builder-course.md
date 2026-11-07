@@ -21,8 +21,9 @@ that were opened and checked on 8 November 2026 and are cited in the scene that 
 is named in the audio.
 
 The running example is the Yangon tea shop of the CSS, accessibility, TypeScript, AI and Testing
-courses, ရွှေလက်ဖက်ရည်ဆိုင်. Its owner မြမြ wants customers to order ahead and pick up (ကြိုမှာ), because
-the morning queue sends regulars away. The narrator and learner, ကိုယ်, build the app for her with an
+courses, ရွှေလက်ဖက်ရည်ဆိုင်. Its owner, who has no name and is always called ဆိုင်ပိုင်ရှင် (the
+owner), wants customers to order ahead and pick up (ကြိုမှာ), because the morning queue sends regulars
+away. The narrator and learner, ကိုယ်, build the app for her with an
 AI agent and never write code. လှလှ runs the counter, အောင်အောင် is a member who comes every morning,
 and မောင်မောင် is a student with a cheap phone and a Burmese keyboard.
 
