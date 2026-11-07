@@ -9,7 +9,7 @@
 # ADR-002 as one block walked through with selects. The final file equals §4.10's first block
 # (tools/sim-docs.ts).
 #
-# Boards: (K) who decides a trade-off (orange: us and မြမြ, the business; violet: the agent builds the
+# Boards: (K) who decides a trade-off (orange: us and the owner, the business; violet: the agent builds the
 # decided design) and three common kinds with the shop's question for each; (T) a balance scale for
 # where the database lives: own server vs managed service, gains green and costs red on each side,
 # costs today and later (orange), the question that would change our mind (orange) and the choice (green); (A) the ADR's four parts
@@ -54,7 +54,7 @@ lesson:
         မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
 
         ## Users
-        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင်
 
         ## Rules
         - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
@@ -92,7 +92,7 @@ lesson:
         - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
 
         ## Open questions
-        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+        requirements.md ရဲ့ Questions for the owner ကို ကြည့်ပါ။
       notes.md: |
         # Notes
       package.json: |
@@ -124,9 +124,9 @@ lesson:
         kind: text,
         x: 320,
         y: 247,
-        width: 220,
+        width: 300,
         height: 36,
-        text: "ကိုယ်နဲ့ မြမြ",
+        text: "ကိုယ်နဲ့ ဆိုင်ပိုင်ရှင်",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -671,10 +671,10 @@ scenes:
     narration: >
       [[mark:k-title]] ဒီလို မေးခွန်းကို agent ကို မေးကြည့်ရင်၊ ယုတ္တိရှိပုံရတဲ့ အဖြေ တစ်ခုကို ချက်ချင်း
       ထုတ်ပေးနိုင်ပါတယ်။ ဒါပေမဲ့ ဘယ်အဖြေက မှန်လဲ ဆိုတာ နည်းပညာထက် ဆိုင်ရဲ့ ငွေ၊ လူ၊ အချိန် လို business
-      ကိစ္စတွေပေါ်မှာ ပိုမူတည်ပါတယ်။ [[mark:k-business]] ဥပမာ ဆိုင်ပိုင်ရှင် မြမြ က app ကို ဆက် အလုပ်လုပ်နေအောင်
+      ကိစ္စတွေပေါ်မှာ ပိုမူတည်ပါတယ်။ [[mark:k-business]] ဥပမာ ဆိုင်ပိုင်ရှင် က app ကို ဆက် အလုပ်လုပ်နေအောင်
       ထားဖို့ တစ်လ ၃၀၀၀၀ ကျပ်ထက် မသုံးချင်ပါဘူး။ app ကို ကိုယ်တစ်ယောက်တည်း ထိန်းရမှာ ဖြစ်ပြီး၊ ဆိုင်
       အလုပ်အများဆုံး အချိန်က မနက်ပိုင်းပါ။ ဒီလို အချက်တွေကို ကိုယ်က ရေးမပေးရင် agent ဆီမှာ မရှိပါဘူး။ ဒါကြောင့် ဒီ
-      အချက်တွေကို ချိန်ပြီး ဆုံးဖြတ်တာက ကိုယ်နဲ့ မြမြ ရဲ့ အလုပ်ပါ။ [[mark:k-agent]] ဆုံးဖြတ်ပြီးသား ပုံစံကို
+      အချက်တွေကို ချိန်ပြီး ဆုံးဖြတ်တာက ကိုယ်နဲ့ ဆိုင်ပိုင်ရှင် ရဲ့ အလုပ်ပါ။ [[mark:k-agent]] ဆုံးဖြတ်ပြီးသား ပုံစံကို
       ရှင်းရှင်း ရေးပေးထားရင်တော့၊ အဲဒီအတိုင်း ဆောက်တာမှာ agent က မြန်ပါတယ်။ ဆိုတော့ ဆုံးဖြတ်တာနဲ့ အဲဒီ
       ဆုံးဖြတ်ချက်ကို ရေးထားတာက ကိုယ့်ဘက်က အလုပ် ဖြစ်ပြီး၊ ရေးထားတဲ့အတိုင်း ဆောက်တာက agent ဘက်က အလုပ်ပါ။
     sources:
@@ -895,7 +895,7 @@ scenes:
     narration: >
       [[mark:close-a]] ကဲ၊ ကိုယ်တို့ ဆိုင်ရဲ့ ADR တွေကို ရေးကြည့်ရအောင်။ [[mark:open-dec]] docs ထဲက decisions
       ဖိုင်မှာ project တစ်ခုလုံးရဲ့ ADR တွေကို အစဉ်လိုက် စုထားမှာ ဖြစ်ပြီး၊ အခု ခေါင်းစဉ်ပဲ ရှိပါသေးတယ်။
-      [[mark:type-adr1a]] ပထမ ADR က ဘာလုပ်မယ်၊ ဘာမလုပ်ဘူး ဆိုတဲ့ scope ကို ဆုံးဖြတ်တုန်းက မြမြ နဲ့ ရွေးခဲ့တဲ့
+      [[mark:type-adr1a]] ပထမ ADR က ဘာလုပ်မယ်၊ ဘာမလုပ်ဘူး ဆိုတဲ့ scope ကို ဆုံးဖြတ်တုန်းက ဆိုင်ပိုင်ရှင် နဲ့ ရွေးခဲ့တဲ့
       ငွေချေနည်းပါ။ ခေါင်းစဉ် တစ်ကြောင်းတည်း ဖတ်ရုံနဲ့ ဆုံးဖြတ်ချက်ကို သိနိုင်အောင် ရေးပြီး ရက်စွဲ တပ်ထားပါတယ်။
       [[mark:sel-adr1-ctx]] Context ကို ကြည့်ပါ။ ဆုံးဖြတ်တဲ့ နေ့က အခြေအနေကို မှတ်ထားတာ ဖြစ်လို့၊ နောက်တစ်ချိန် ဒီ
       အခြေအနေ ပြောင်းသွားရင် ဆုံးဖြတ်ချက်ကိုလည်း ပြန်စဉ်းစားလို့ ရပါတယ်။ [[mark:sel-adr1-opt]] Options မှာ
