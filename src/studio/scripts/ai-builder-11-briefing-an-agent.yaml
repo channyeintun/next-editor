@@ -1,0 +1,1309 @@
+# AI Builder, lesson 11: briefing an agent on one task (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md), AGENTS.md (COURSE-KIT
+# §4.4 base, as L10 left it), docs/spec.md (§4.3 without AC-6, as L09 left it), tasks/01-plan.md
+# (§4.5 example plan, pinned, never typed) and tasks/01-order-form.md pinned with only its title line.
+# Nothing runs. The lesson types the brief section by section (line-by-line); the Constraints section
+# is typed with two lines, and the plan review adds the third (login) — the final brief equals §4.5.
+#
+# Boards: (B) the five questions a capable newcomer asks, one per brief section; (S) step-by-step
+# orders vs success criteria with the agent's do → check → fix loop; (P) brief → plan → review → code
+# and the three plan-review questions; (Z) the quiz (an SMS step: a v1 Should, but not this task).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-11-briefing-an-agent.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-11-briefing-an-agent
+  title: "AI Builder 11: Agent ကို task တစ်ခု အပ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: AGENTS.md
+    sidebarStartsCollapsed: true
+    files:
+      AGENTS.md: |
+        # AGENTS.md · Shwe Tea House pre-order app
+
+        ## Project
+        A pre-order web app for a tea shop in Yangon. Customers order ahead and pick up at the counter.
+        Read docs/spec.md before any change. If the spec does not answer a question, stop and ask.
+
+        ## Stack
+        Plain HTML, CSS and JavaScript. No framework.
+
+        ## Rules
+        - Prices are whole kyat (integers). Never use decimals.
+        - Customer-facing text is Burmese (Unicode).
+        - Times are Asia/Yangon.
+        - Ask before adding any package.
+        - One task at a time. Keep each change small.
+
+        ## Done means
+        - The acceptance criteria named in the task pass.
+        - Summarise what you changed and what you did not do.
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      tasks/01-order-form.md: |+
+        # Task 01 · Order form
+
+      tasks/01-plan.md: |
+        # Example plan · the agent's reply to Task 01
+
+        1. index.html မှာ order form ဆောက်မယ် — item၊ အရေအတွက်၊ လာယူချိန်၊ နာမည်၊ ဖုန်း
+        2. စုစုပေါင်း ဈေးနှုန်းကို တွက်ပြမယ်
+        3. customer account နဲ့ login စာမျက်နှာ ထည့်မယ် — နောက်တစ်ခါ အလွယ်တကူ မှာနိုင်အောင်
+        4. AC-1 ကနေ AC-4 ကို ဖုန်း screen အရွယ်နဲ့ စစ်မယ်
+        5. ပြင်ခဲ့တာတွေကို အကျဉ်းချုပ် ပြန်ပေးမယ်
+  whiteboardAssets:
+    # Board B: the brief's five sections as the five questions a capable newcomer would ask
+    # (orange = the sections this lesson writes; white = the question; violet = the agent).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 640,
+        height: 50,
+        text: "brief · လူသစ် မေးမယ့် မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-l1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 230,
+        height: 40,
+        text: "Goal",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-q1,
+        kind: text,
+        x: 560,
+        y: 240,
+        width: 480,
+        height: 40,
+        text: "ဘာ ရချင်တာလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 230,
+        height: 40,
+        text: "Read first",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-q2,
+        kind: text,
+        x: 560,
+        y: 300,
+        width: 480,
+        height: 40,
+        text: "ဘာ အရင် ဖတ်ရမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-l3,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 230,
+        height: 40,
+        text: "Constraints",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-q3,
+        kind: text,
+        x: 560,
+        y: 360,
+        width: 480,
+        height: 40,
+        text: "ဘာ မလုပ်ရဘူးလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-l4,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 230,
+        height: 40,
+        text: "Done when",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-q4,
+        kind: text,
+        x: 560,
+        y: 420,
+        width: 480,
+        height: 40,
+        text: "ပြီးပြီ ဘယ်လို သိမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-l5,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 230,
+        height: 40,
+        text: "If unsure",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: b-q5,
+        kind: text,
+        x: 560,
+        y: 480,
+        width: 480,
+        height: 40,
+        text: "မသေချာရင် ဘာလုပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-agent-box,
+        kind: rectangle,
+        x: 300,
+        y: 560,
+        width: 620,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-agent,
+        kind: text,
+        x: 320,
+        y: 572,
+        width: 580,
+        height: 40,
+        text: "agent က မမေးဘဲ ခန့်မှန်းပြီး ဆက်လုပ်တတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board S: two columns flowing down. Left (red): step-by-step orders end in "nothing to check".
+    # Right (green): give what done means (blue AC box) → the agent's loop (violet) → orange ↻ label.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 50,
+        text: "ဘယ်လို ခိုင်းမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-h1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 370,
+        height: 45,
+        text: "အဆင့်တိုင်း ခိုင်း",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 370,
+        height: 40,
+        text: "1 · ဖုန်း အကွက် ဒီမှာ ထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-l2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 370,
+        height: 40,
+        text: "2 · ဒီလို တွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 370,
+        height: 40,
+        text: "3 · ဒီ ခလုတ် ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-bad-box,
+        kind: rectangle,
+        x: 300,
+        y: 460,
+        width: 380,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-bad,
+        kind: text,
+        x: 318,
+        y: 476,
+        width: 350,
+        height: 40,
+        text: "မှန်မမှန် စစ်စရာ မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-h2,
+        kind: text,
+        x: 720,
+        y: 230,
+        width: 370,
+        height: 45,
+        text: "ပြီးတယ် ဆိုတာ ပေး",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: s-ac-box,
+        kind: rectangle,
+        x: 720,
+        y: 285,
+        width: 360,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-ac,
+        kind: text,
+        x: 740,
+        y: 297,
+        width: 320,
+        height: 40,
+        text: "AC-1 ကနေ AC-4",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 880,
+        y: 353,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: s-loop-box,
+        kind: rectangle,
+        x: 720,
+        y: 398,
+        width: 360,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-loop,
+        kind: text,
+        x: 740,
+        y: 410,
+        width: 320,
+        height: 40,
+        text: "လုပ် → စစ် → ပြင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: s-loop-label,
+        kind: text,
+        x: 720,
+        y: 476,
+        width: 360,
+        height: 40,
+        text: "↻ pass ဖြစ်တဲ့အထိ ပြန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-me,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 760,
+        height: 40,
+        text: "ဘာ ရရမလဲ — ကိုယ် ထိန်း · ဘယ်လို လုပ်မလဲ — agent ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board P: brief (blue, our document) → plan (violet, agent output) → review (orange, our step) →
+    # code (violet), then the three questions to ask of every plan.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 50,
+        text: "plan ကို အရင် တောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-b1-box,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 160,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-b1,
+        kind: text,
+        x: 340,
+        y: 250,
+        width: 100,
+        height: 40,
+        text: "brief",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 464,
+        y: 250,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-b2-box,
+        kind: rectangle,
+        x: 510,
+        y: 235,
+        width: 160,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b2,
+        kind: text,
+        x: 555,
+        y: 250,
+        width: 100,
+        height: 40,
+        text: "plan",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 674,
+        y: 250,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-b3-box,
+        kind: rectangle,
+        x: 720,
+        y: 235,
+        width: 160,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-b3,
+        kind: text,
+        x: 745,
+        y: 250,
+        width: 120,
+        height: 40,
+        text: "review",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 884,
+        y: 250,
+        width: 42,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-b4-box,
+        kind: rectangle,
+        x: 930,
+        y: 235,
+        width: 160,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b4,
+        kind: text,
+        x: 975,
+        y: 250,
+        width: 100,
+        height: 40,
+        text: "code",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-qh,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 560,
+        height: 40,
+        text: "plan ကို ဖတ်ရင် မေးရမယ့် မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: p-q1,
+        kind: text,
+        x: 330,
+        y: 415,
+        width: 560,
+        height: 40,
+        text: "ခိုင်းတဲ့ အလုပ်ကိုပဲ လုပ်မှာလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-q2,
+        kind: text,
+        x: 330,
+        y: 470,
+        width: 560,
+        height: 40,
+        text: "မခိုင်းတာ ထည့်ထားလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-q3,
+        kind: text,
+        x: 330,
+        y: 525,
+        width: 560,
+        height: 40,
+        text: "ပြီးရင် ဘယ်လို စစ်မလဲ ပါလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 600,
+        height: 45,
+        text: "ပြန်လာတဲ့ plan ထဲက အဆင့်သစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 330,
+        y: 295,
+        width: 600,
+        height: 40,
+        text: "အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 330,
+        y: 350,
+        width: 600,
+        height: 40,
+        text: "requirements မှာ Should ပါပြီးသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o3,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 600,
+        height: 40,
+        text: "Task 01 မှာ လက်ခံမလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 620,
+        height: 50,
+        text: "အဖြေ · မခံ — ဒီ task မဟုတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 700,
+        height: 40,
+        text: "ဖြုတ်ခိုင်း · နောက်မှ task သီးသန့် အပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6111
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Task တစ်ခု၊ ရလဒ် တစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ project ထဲ ဝင်လာတဲ့ agent တိုင်း အရင်ဖတ်တဲ့ AGENTS.md ကို ရေးခဲ့ပါတယ်။
+      [[mark:sel-one-task]] အဲဒီထဲက ဒီ rule က agent ရဲ့ ပြောင်းလဲမှု တစ်ခုချင်းကို ကိုယ် ပြန်စစ်နိုင်လောက်အောင်
+      သေးသေးလေး ထားခိုင်းတာပါ။ ဒီနေ့တော့ agent ကို ပထမဆုံး အလုပ် တစ်ခု၊ task တစ်ခု အပ်ကြည့်ပါမယ်။ customer တွေ
+      ဖုန်းကနေ ကြိုမှာလို့ရမယ့် order form ပါ။ chat ထဲမှာ တစ်ကြောင်းတည်း ခိုင်းရင်လည်း form တစ်ခု ထွက်လာမှာပါ။
+      ဒါပေမဲ့ ဘာတွေ ပါရမလဲ၊ ဘာ မထိရဘူးလဲ၊ ဘယ်တော့ ပြီးလဲ ဆိုတာကို ကိုယ် မပြောထားရင်၊ agent က ကွက်လပ်တွေကို သူ့
+      ခန့်မှန်းချက်တွေနဲ့ ဖြည့်သွားမှာပါ။ [[mark:open-brief]] ဒါကြောင့် agent ကို task တစ်ခု အပ်တဲ့ စာ၊ task brief
+      တစ်စောင်ကို tasks folder ထဲက ဒီ ဖိုင်မှာ ရေးပါမယ်။ ဖိုင်ထဲမှာ ခေါင်းစဉ် တစ်ကြောင်းပဲ ရှိပါသေးတယ်။ task
+      တစ်ခုမှာ ရလဒ် တစ်ခုပဲ ရှိရပါမယ်။ ဒီ task ရဲ့ ရလဒ်က app တစ်ခုလုံး မဟုတ်ဘဲ order form တစ်ခုပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (specification)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices (write a specific prompt)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - { title: "AGENTS.md: a README for agents", url: "https://agents.md/" }
+    actions:
+      - {
+          id: sel-one-task,
+          type: editor.select,
+          at: { mark: sel-one-task },
+          target:
+            {
+              file: AGENTS.md,
+              text: "- One task at a time. Keep each change small.",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: open-brief,
+          type: workspace.openFile,
+          at: { mark: open-brief },
+          path: tasks/01-order-form.md,
+        }
+
+  - id: brief-parts
+    narration: >
+      [[mark:b-title]] brief ကောင်း တစ်စောင်မှာ ဘာတွေ ပါရမလဲ။ ပြီးခဲ့တဲ့ lesson မှာ team ထဲ ဝင်ခါစ လူသစ်ကို
+      စဉ်းစားခဲ့သလိုပဲ၊ ကျွမ်းကျင်တဲ့ လူသစ် တစ်ယောက်ကို အလုပ် တစ်ခု အပ်လိုက်ရင် သူ ပြန်မေးမယ့် မေးခွန်းတွေကို
+      စဉ်းစားကြည့်ပါ။ [[mark:b-goal]] ပထမဆုံး ဘာ ရချင်တာလဲ လို့ မေးပါလိမ့်မယ်။ [[mark:b-read]] ပြီးရင် project ထဲက
+      ဘာတွေကို အရင် ဖတ်ရမလဲ လို့ မေးပါမယ်။ [[mark:b-limits]] ဘာတွေကို မထိရ၊ မလုပ်ရဘူးလဲ ဆိုတာလည်း
+      သိချင်ပါလိမ့်မယ်။ [[mark:b-done]] ပြီးပြီလို့ ဘယ်လို သိမလဲ လို့လည်း မေးပါလိမ့်မယ်။ [[mark:b-unsure]]
+      နောက်ဆုံးတော့ မသေချာတာ ကြုံရင် ဘာလုပ်ရမလဲ ဆိုတာပါ။ brief ရဲ့ အပိုင်း ငါးပိုင်းက ဒီ မေးခွန်း ငါးခုကို
+      ဖြေထားတာပါ။ [[mark:b-agent]] လူကတော့ မရှင်းရင် ပြန်မေးတတ်ပေမဲ့၊ agent ကတော့ မေးမယ့်အစား ဖြစ်နိုင်လောက်တဲ့
+      အဖြေကို ရွေးပြီး ဆက်လုပ်သွားတတ်ပါတယ်။ ဒါကြောင့် အဖြေတွေကို brief ထဲမှာ ကြိုရေးထားရတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering (what a new team member needs)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem: missing clarification)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-b-title,
+          type: whiteboard.apply,
+          at: { mark: b-title },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-goal,
+          type: whiteboard.apply,
+          at: { mark: b-goal },
+          upsertIds: [b-l1, b-q1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-read,
+          type: whiteboard.apply,
+          at: { mark: b-read },
+          upsertIds: [b-l2, b-q2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-limits,
+          type: whiteboard.apply,
+          at: { mark: b-limits },
+          upsertIds: [b-l3, b-q3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-done,
+          type: whiteboard.apply,
+          at: { mark: b-done },
+          upsertIds: [b-l4, b-q4],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-unsure,
+          type: whiteboard.apply,
+          at: { mark: b-unsure },
+          upsertIds: [b-l5, b-q5],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-agent,
+          type: whiteboard.apply,
+          at: { mark: b-agent },
+          upsertIds: [b-agent-box, b-agent],
+          drawMs: 1200,
+        }
+
+  - id: goal
+    chapter: Brief ကို ရေးရအောင်
+    narration: >
+      [[mark:close-b]] ကဲ၊ order form အတွက် brief ကို editor ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:type-goal]] ပထမ အပိုင်းက
+      ဒီ task ပြီးရင် ဘာ ရရမလဲ ဆိုတာကို စာကြောင်း တစ်ကြောင်းတည်းနဲ့ ဆုံးဖြတ်ထားပါတယ်။ ဘယ်သူ သုံးမလဲ၊ ဘာနဲ့ သုံးမလဲ
+      ဆိုတာ ပါပြီး၊ form တစ်ခုထက် ပိုမပါပါဘူး။ app တစ်ခုလုံး လုပ်ပေးပါ လို့ ရေးရင် ပြောင်းလဲမှုက
+      အရမ်းကြီးသွားပြီး၊ ကိုယ် ပြန်စစ်ဖို့လည်း ခက်ပါတယ်။ ရလဒ်က သေးသေးလေး ဖြစ်မှ agent က ရလဒ် ပြန်ပေးတဲ့အခါ
+      ပြီးပြီလား မပြီးသေးဘူးလား ဆိုတာကို တိတိကျကျ ပြောလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (specification, decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-b, type: whiteboard.apply, at: { mark: close-b }, open: false }
+      - id: type-goal
+        type: editor.type
+        at: { mark: type-goal }
+        target: { file: tasks/01-order-form.md, after: "# Task 01 · Order form\n\n", occurrence: 1 }
+        text: "## Goal\ncustomer က ဖုန်းကနေ ကြိုမှာလို့ရတဲ့ form တစ်ခု။\n\n"
+        cadence: line-by-line
+
+  - id: read-first
+    narration: >
+      [[mark:type-read]] နောက် အပိုင်းက agent ဘာတွေ အရင် ဖတ်ရမလဲ ဆိုတာပါ။ [[mark:sel-read-spec]] spec တစ်ခုလုံးကို
+      chat ထဲ ကူးထည့်မယ့်အစား၊ ဖိုင်ရဲ့ နေရာနဲ့ ဒီ task နဲ့ ဆိုင်တဲ့ အပိုင်းတွေကိုပဲ ညွှန်ပြထားပါတယ်။ ပြီးခဲ့တဲ့
+      lesson မှာ ပြောခဲ့သလို AGENTS.md က agent နဲ့ ပြောတဲ့ session တိုင်းမှာ ဖတ်တဲ့ ဖိုင် ဖြစ်ပြီး၊ spec ကတော့
+      task က လိုမှ ဖွင့်ဖတ်တဲ့ ဖိုင်ပါ။ ကူးထည့်ထားတဲ့ စာက spec ကို ပြင်လိုက်ရင် ဟောင်းသွားပေမဲ့၊ ဖိုင်ကို
+      ညွှန်ပြထားရင်တော့ agent က နောက်ဆုံး version ကို ဖတ်မှာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering (static and dynamic context)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Common workflows (reference files and directories)",
+          url: "https://code.claude.com/docs/en/common-workflows",
+        }
+    actions:
+      - id: type-read
+        type: editor.type
+        at: { mark: type-read }
+        target: { file: tasks/01-order-form.md, after: "form တစ်ခု။\n\n", occurrence: 1 }
+        text: "## Read first\n- docs/spec.md — Rules, AC-1 ကနေ AC-4\n- AGENTS.md\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-read-spec,
+          type: editor.select,
+          at: { mark: sel-read-spec },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "- docs/spec.md — Rules, AC-1 ကနေ AC-4",
+              occurrence: 1,
+            },
+        }
+
+  - id: constraints
+    narration: >
+      [[mark:type-limits]] တတိယ အပိုင်းက ဒီ task မှာ မလုပ်ရတာတွေပါ။ ပထမ စာကြောင်းက အလုပ်ကို order form မှာပဲ
+      ကန့်ထားပါတယ်။ ကောင်တာက လှလှ ကြည့်မယ့် အော်ဒါစာရင်းက ဒီ task ထဲ ရောမပါလာအောင်၊ နောက် task တစ်ခုအဖြစ်
+      ခွဲထားတာပါ။ [[mark:sel-package]] ဒုတိယ စာကြောင်းကတော့ project ထဲကို တခြားသူ့ code အသစ် မဝင်လာအောင်
+      ကာထားတာပါ။ ကိုယ် မရေးဘဲ ယူသုံးတဲ့ အဲဒီလို code ကို package လို့ ခေါ်ပါတယ်။ AGENTS.md က package မထည့်ခင်
+      မေးခိုင်းထားပေမဲ့၊ ဒီ task အတွက်တော့ အဖြေကို ကြိုဆုံးဖြတ်ထားတာပါ။ form တစ်ခုအတွက် package အသစ် မလိုပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-limits
+        type: editor.type
+        at: { mark: type-limits }
+        target: { file: tasks/01-order-form.md, after: "- AGENTS.md\n\n", occurrence: 1 }
+        text: "## Constraints\n- order form တစ်ခုတည်း။ ကောင်တာစာရင်းက Task 03။\n- package အသစ် မထည့်ပါနဲ့။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-package,
+          type: editor.select,
+          at: { mark: sel-package },
+          target: { file: tasks/01-order-form.md, text: "- package အသစ် မထည့်ပါနဲ့။", occurrence: 1 },
+        }
+
+  - id: done-when
+    narration: >
+      [[mark:type-done]] နောက် အပိုင်းက ပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတာပါ။ [[mark:sel-done-ac]] ပထမ စာကြောင်းက
+      ပြီးပြီ ဆိုတာကို ကောင်းကောင်း လုပ်ပါ လို စကားနဲ့ မထားဘဲ၊ spec ထဲက acceptance criteria၊ AC နံပါတ်တွေနဲ့
+      ဆုံးဖြတ်ထားပါတယ်။ ဘယ် screen အရွယ်မှာ စစ်ရမလဲ ဆိုတာလည်း သတ်မှတ်ထားလို့၊ agent စစ်မယ့် စစ်ချက်နဲ့ ကိုယ်
+      စစ်မယ့် စစ်ချက်က တူတူ ဖြစ်သွားပါတယ်။ [[mark:sel-done-list]] ဒုတိယ စာကြောင်းကတော့ agent က အလုပ် ပြီးလို့
+      ပြန်ပေးတဲ့အခါ ကိုယ် ပြန်စစ်ဖို့၊ review လုပ်ဖို့ လိုတာကို တောင်းထားတာပါ။ ပြီးပါပြီ ဆိုတဲ့ စကား တစ်ခွန်းထက်၊
+      ဘာ ပြောင်းသွားလဲ၊ ဘာ ကျန်ခဲ့လဲ သိမှ စစ်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices (give Claude a check to run)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The factory model (success criteria)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-done
+        type: editor.type
+        at: { mark: type-done }
+        target: { file: tasks/01-order-form.md, after: "- package အသစ် မထည့်ပါနဲ့။\n\n", occurrence: 1 }
+        text: "## Done when\n- AC-1 ကနေ AC-4 အထိ ဖုန်း screen အရွယ်မှာ pass ဖြစ်ရမယ်။\n- ဘာပြင်ခဲ့လဲ၊ ဘာမလုပ်ခဲ့လဲ စာရင်း ပြန်ပေးပါ။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-done,
+          type: expect.file,
+          at: { afterAction: type-done },
+          path: tasks/01-order-form.md,
+          contains: "- AC-1 ကနေ AC-4 အထိ ဖုန်း screen အရွယ်မှာ pass ဖြစ်ရမယ်။",
+        }
+      - {
+          id: sel-done-ac,
+          type: editor.select,
+          at: { mark: sel-done-ac },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "- AC-1 ကနေ AC-4 အထိ ဖုန်း screen အရွယ်မှာ pass ဖြစ်ရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-done-list,
+          type: editor.select,
+          at: { mark: sel-done-list },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "- ဘာပြင်ခဲ့လဲ၊ ဘာမလုပ်ခဲ့လဲ စာရင်း ပြန်ပေးပါ။",
+              occurrence: 1,
+            },
+        }
+
+  - id: criteria
+    chapter: အဆင့်တွေထက် ပြီးတယ် ဆိုတာ
+    narration: >
+      [[mark:s-title]] ဒီနေရာမှာ အရေးကြီးတဲ့ ရွေးချယ်မှု တစ်ခု ရှိပါတယ်။ [[mark:s-steps]] agent ကို ဖုန်းနံပါတ်
+      အကွက်ကို ဒီနေရာမှာ ထား၊ ဒီလို တွက်၊ ပြီးရင် ဒီ ခလုတ် ထည့် ဆိုပြီး အဆင့်တိုင်း ခိုင်းလို့ ရပါတယ်။
+      [[mark:s-bad]] ဒါပေမဲ့ အဲဒီလို ခိုင်းရင်၊ ဒီဇိုင်း အသေးစိတ်တိုင်းကို ကိုယ်တိုင် ဆုံးဖြတ်နေရပြီး၊ အဆင့် တစ်ခု
+      မှားနေရင်လည်း agent က အဲဒီအတိုင်းပဲ လုပ်သွားမှာပါ။ ရလဒ် မှန်မမှန် စစ်စရာ တစ်ခုမှ မပေးထားလို့ပါ။
+      [[mark:s-good]] အဲဒီအစား ပြီးတယ် ဆိုတာကို AC နံပါတ်တွေနဲ့ ပေးလိုက်ပါ။ [[mark:s-loop]] ဒါဆိုရင် agent က
+      တစ်ခုခု ပြင်၊ AC နဲ့ စစ်၊ မကိုက်ရင် ထပ်ပြင်ပြီး ပြန်စစ်တဲ့ အဝိုင်း၊ loop ကို AC အားလုံး အောင်တဲ့အထိ၊ pass
+      ဖြစ်တဲ့အထိ ပတ်နိုင်ပါတယ်။ [[mark:s-me]] ဆိုလိုတာက ဘယ်လို လုပ်မလဲ ဆိုတာကို agent ကို ရွေးခွင့်ပေးပြီး၊ ဘာ
+      ရရမလဲ ဆိုတာကိုတော့ ကိုယ်က ထိန်းထားတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The factory model (success criteria over step-by-step instructions)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices (give Claude a check to run)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - {
+          id: draw-s-title,
+          type: whiteboard.apply,
+          at: { mark: s-title },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-steps,
+          type: whiteboard.apply,
+          at: { mark: s-steps },
+          upsertIds: [s-h1, s-l1, s-l2, s-l3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-bad,
+          type: whiteboard.apply,
+          at: { mark: s-bad },
+          upsertIds: [s-bad-box, s-bad],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-good,
+          type: whiteboard.apply,
+          at: { mark: s-good },
+          upsertIds: [s-h2, s-ac-box, s-ac],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-s-loop,
+          type: whiteboard.apply,
+          at: { mark: s-loop },
+          upsertIds: [s-a1, s-loop-box, s-loop, s-loop-label],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-me,
+          type: whiteboard.apply,
+          at: { mark: s-me },
+          upsertIds: [s-me],
+          drawMs: 1000,
+        }
+
+  - id: unsure
+    narration: >
+      [[mark:close-s]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-unsure]] brief ရဲ့ နောက်ဆုံး အပိုင်းက မသေချာတဲ့
+      အချိန်မှာ agent ဘာလုပ်ရမလဲ ဆိုတာကို ကြိုဆုံးဖြတ်ထားတာပါ။ [[mark:sel-unsure]] အထူးသဖြင့် ဆိုင်ရဲ့ စည်းကမ်း၊
+      business rule တွေကို ကာကွယ်ထားတာပါ။ ဥပမာ ဆိုင်ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ ဆိုတာကို
+      ဆိုင်ပိုင်ရှင် မြမြ မဖြေရသေးပါဘူး။ agent က ဆယ်မိနစ် လို ဂဏန်း တစ်ခုကို သူ့ဘာသာ ရွေးပြီး ဆက်သွားတာထက်၊
+      ရပ်ပြီး မေးတာက နည်းနည်း နှေးပေမဲ့ ပိုစိတ်ချရပါတယ်။ အဲဒီ မေးခွန်းကို မြမြ ဆီ ယူသွားဖို့ကတော့ ကိုယ့်တာဝန်ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem: business-logic assumptions)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-s, type: whiteboard.apply, at: { mark: close-s }, open: false }
+      - id: type-unsure
+        type: editor.type
+        at: { mark: type-unsure }
+        target: { file: tasks/01-order-form.md, after: "စာရင်း ပြန်ပေးပါ။\n\n", occurrence: 1 }
+        text: "## If unsure\nရပ်ပြီး မေးပါ။ business rule တွေကို ခန့်မှန်းပြီး မဆုံးဖြတ်ပါနဲ့။\n"
+        cadence: line-by-line
+      - {
+          id: sel-unsure,
+          type: editor.select,
+          at: { mark: sel-unsure },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "business rule တွေကို ခန့်မှန်းပြီး မဆုံးဖြတ်ပါနဲ့။",
+              occurrence: 1,
+            },
+        }
+
+  - id: plan-first
+    chapter: Plan ကို အရင် တောင်းပါ
+    narration: >
+      [[mark:p-title]] brief ရေးပြီးပြီ ဆိုပေမဲ့ code ကို ချက်ချင်း မရေးခိုင်းသေးပါဘူး။ [[mark:p-flow]] brief ကို
+      ပေးပြီး၊ plan ကို အရင် ပြန်ပေးခိုင်းပါမယ်။ plan ဆိုတာ agent က မလုပ်ခင် ဘာတွေ လုပ်မလဲ ပြန်ပြောတဲ့ စာရင်းပါ။
+      [[mark:p-review]] ကိုယ်က plan ကို ပြန်စစ်ကြည့်ပြီး၊ သဘောတူမှ code ကို စရေးခိုင်းပါတယ်။ coding agent
+      တချို့မှာ ဒီလို plan အရင် ပြပြီး ခွင့်ပြုချက် ရမှ ဖိုင်တွေကို ပြင်တဲ့ သီးသန့် mode တောင် ပါပါတယ်။ plan
+      စာရင်း တစ်ခုကို ပြင်တာက ရေးပြီးသား code ကို ပြင်တာထက် အများကြီး မြန်ပါတယ်။ [[mark:p-q1]] plan ကို ဖတ်တဲ့အခါ
+      မေးခွန်း သုံးခု မေးပါ။ ပထမက ခိုင်းတဲ့ အလုပ်ကိုပဲ လုပ်မှာလား ဆိုတာပါ။ [[mark:p-q2]] ဒုတိယက မခိုင်းတာ
+      ထပ်ထည့်ထားလား ဆိုတာပါ။ [[mark:p-q3]] တတိယက ပြီးရင် ဘယ်လို စစ်မလဲ ဆိုတာ ပါလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "Claude Code docs: Common workflows (plan before editing)",
+          url: "https://code.claude.com/docs/en/common-workflows",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (evaluation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-p-title,
+          type: whiteboard.apply,
+          at: { mark: p-title },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-flow,
+          type: whiteboard.apply,
+          at: { mark: p-flow },
+          upsertIds: [p-b1-box, p-b1, p-a1, p-b2-box, p-b2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-p-review,
+          type: whiteboard.apply,
+          at: { mark: p-review },
+          upsertIds: [p-a2, p-b3-box, p-b3, p-a3, p-b4-box, p-b4],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-p-q1,
+          type: whiteboard.apply,
+          at: { mark: p-q1 },
+          upsertIds: [p-qh, p-q1],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-p-q2,
+          type: whiteboard.apply,
+          at: { mark: p-q2 },
+          upsertIds: [p-q2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-q3,
+          type: whiteboard.apply,
+          at: { mark: p-q3 },
+          upsertIds: [p-q3],
+          drawMs: 900,
+        }
+
+  - id: plan-review
+    narration: >
+      [[mark:close-p]] ဥပမာ အနေနဲ့ agent က ဒီလို plan ပြန်ပေးတယ် ဆိုပါစို့။ tasks folder ထဲက plan ဖိုင်ပါ။
+      [[mark:sel-steps12]] ပထမ နှစ်ဆင့်က ရည်မှန်းချက်ထဲက form ကို တိုက်ရိုက် ဆောက်မယ့် အဆင့်တွေ ဖြစ်လို့
+      ကိုက်ပါတယ်။ [[mark:sel-step4]] စတုတ္ထ အဆင့်ကလည်း brief ထဲက ပြီးတယ် ဆိုတဲ့ စစ်ချက်တွေကို ဘယ်လို စစ်မလဲ ဆိုတာ
+      ပြထားလို့၊ တတိယ မေးခွန်းကို ဖြေထားပါတယ်။ [[mark:sel-step3]] ဒါပေမဲ့ တတိယ အဆင့်ကို ကြည့်ပါ။ brief မှာ
+      ဘယ်နေရာမှ မပါတဲ့ အကောင့်နဲ့ ဝင်ရတဲ့ စာမျက်နှာ၊ login တစ်ခုလုံးကို ထပ်ဆောက်ဖို့ ပါနေပါတယ်။ customer တွေ
+      နောက်တစ်ခါ မှာရလွယ်အောင် ဆိုတဲ့ အကြောင်းပြချက်က ကောင်းသလို ထင်ရပေမဲ့၊ ဒါက ကိုယ် မခိုင်းထားတဲ့ အလုပ်ပါ။
+    sources:
+      - {
+          title: "Claude Code docs: Common workflows (plan before editing)",
+          url: "https://code.claude.com/docs/en/common-workflows",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (evaluation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-p, type: whiteboard.apply, at: { mark: close-p }, open: false }
+      - {
+          id: open-plan,
+          type: workspace.openFile,
+          at: { afterAction: close-p },
+          path: tasks/01-plan.md,
+        }
+      - {
+          id: sel-steps12,
+          type: editor.select,
+          at: { mark: sel-steps12 },
+          target:
+            {
+              file: tasks/01-plan.md,
+              text: "1. index.html မှာ order form ဆောက်မယ် — item၊ အရေအတွက်၊ လာယူချိန်၊ နာမည်၊ ဖုန်း\n2. စုစုပေါင်း ဈေးနှုန်းကို တွက်ပြမယ်\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-step4,
+          type: editor.select,
+          at: { mark: sel-step4 },
+          target:
+            {
+              file: tasks/01-plan.md,
+              text: "4. AC-1 ကနေ AC-4 ကို ဖုန်း screen အရွယ်နဲ့ စစ်မယ်",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-step3,
+          type: editor.select,
+          at: { mark: sel-step3 },
+          target:
+            {
+              file: tasks/01-plan.md,
+              text: "3. customer account နဲ့ login စာမျက်နှာ ထည့်မယ် — နောက်တစ်ခါ အလွယ်တကူ မှာနိုင်အောင်",
+              occurrence: 1,
+            },
+        }
+
+  - id: out-of-scope
+    narration: >
+      [[mark:open-spec]] spec ကို ပြန်ကြည့်ရအောင်။ [[mark:sel-out-login]] ဒီ version မှာ မဆောက်မယ့် အရာတွေကို
+      ရေးထားတဲ့ အပိုင်းမှာ login ပါပြီးသားပါ။ login တစ်ခု ထည့်လိုက်တာနဲ့ password သိမ်းတာ၊ customer ရဲ့ data ကို
+      ကာကွယ်တာ လို ကိုယ် စစ်ရမယ့် အလုပ်တွေ အများကြီး ပါလာပါတယ်။ ဒါကြောင့် တတိယ အဆင့်ကို ဖြုတ်ပြီး plan ကို
+      ပြန်ပေးပါ လို့ agent ကို ပြန်ပြောပါမယ်။ ပြင်ထားတဲ့ plan ကို သဘောတူမှ code စရေးခိုင်းပါမယ်။
+      [[mark:open-brief2]] ဒီ အမှားက brief ဘက်ကိုလည်း သင်ခန်းစာ ပေးပါတယ်။ ကိုယ့် brief က spec ရဲ့ rule နဲ့ AC
+      တွေကိုပဲ ညွှန်ထားပြီး၊ မဆောက်ရမယ့် အရာတွေကို တိုက်ရိုက် မပြောထားခဲ့ပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (evaluation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - {
+          id: sel-out-login,
+          type: editor.select,
+          at: { mark: sel-out-login },
+          target:
+            {
+              file: docs/spec.md,
+              text: "Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: open-brief2,
+          type: workspace.openFile,
+          at: { mark: open-brief2 },
+          path: tasks/01-order-form.md,
+        }
+
+  - id: fix-brief
+    narration: >
+      [[mark:type-login]] ဒါကြောင့် မလုပ်ရတဲ့ အပိုင်းကို စာကြောင်း တစ်ကြောင်း ထပ်ဖြည့်ပြီး၊ spec က ဆုံးဖြတ်ထားတဲ့
+      စည်းကို brief ထဲမှာ တိုက်ရိုက် ထည့်ထားပါမယ်။ ဒီ brief ကို နောက်တစ်ခါ ပြန်သုံးတဲ့အခါ ဒီ အမှား ထပ်ဖြစ်ဖို့
+      နည်းသွားပါမယ်။ [[mark:sel-done-list2]] agent က ပြီးပါပြီ လို့ ပြန်ပေးတဲ့အခါမှာလည်း ကိုယ့်အလုပ်
+      မပြီးသေးပါဘူး။ အရင်ဆုံး ဒီ စာကြောင်းက တောင်းထားတဲ့ အကျဉ်းချုပ်ကို ဖတ်ပါ။ AC အားလုံး pass ပါတယ် ဆိုတဲ့ စကား
+      တစ်ခွန်းတည်းကို မယုံဘဲ၊ ဘယ်လို စစ်ခဲ့လဲ ဆိုတဲ့ အထောက်အထားကို တောင်းပြီး၊ ဖုန်းပေါ်မှာ ကိုယ်တိုင် ထပ်စစ်ပါ။
+      ပြီးပြီလို့ နောက်ဆုံး ဆုံးဖြတ်တာက ကိုယ်ပါ။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices (ask for evidence, not just a claim that tests pass)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (evaluation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-login
+        type: editor.type
+        at: { mark: type-login }
+        target: { file: tasks/01-order-form.md, after: "- package အသစ် မထည့်ပါနဲ့။\n", occurrence: 1 }
+        text: "- login နဲ့ account မဆောက်ပါနဲ့။\n"
+        cadence: line-by-line
+      - {
+          id: expect-login,
+          type: expect.file,
+          at: { afterAction: type-login },
+          path: tasks/01-order-form.md,
+          contains: "- login နဲ့ account မဆောက်ပါနဲ့။",
+        }
+      - {
+          id: sel-done-list2,
+          type: editor.select,
+          at: { mark: sel-done-list2 },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "- ဘာပြင်ခဲ့လဲ၊ ဘာမလုပ်ခဲ့လဲ စာရင်း ပြန်ပေးပါ။",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ပြင်ပြီး ပြန်လာတဲ့ plan ထဲမှာ အော်ဒါ အသင့်ဖြစ်ရင် customer ဆီ SMS
+      ပို့ပေးမယ် ဆိုတဲ့ အဆင့် အသစ် တစ်ခု ပါလာတယ် ဆိုပါစို့။ requirements မှာ ဖြစ်ရင် ကောင်းမယ့် Should အုပ်စုထဲ
+      ပါပြီးသား feature ပါ။ ဒီ အဆင့်ကို လက်ခံမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
+      အဖြေကတော့ ဒီ task မှာ လက်မခံပါဘူး။ ဘာကြောင့်လဲဆိုတော့ SMS က ရှိရင် ကောင်းတဲ့ feature ဖြစ်ပေမဲ့၊ ဒီ task ရဲ့
+      ရလဒ်က order form တစ်ခုတည်းမို့လို့ပါ။ အဲဒီ အဆင့်ကို ဖြုတ်ခိုင်းပြီး၊ နောက်မှ သူ့ brief နဲ့သူ task သီးသန့်
+      တစ်ခုအဖြစ် အပ်ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition, evaluation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o3],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1400,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent ကို task အပ်တဲ့အခါ ရလဒ် တစ်ခုပဲ ပါတဲ့ brief ကို ရေးပါ။
+      [[mark:rc-read]] ဖတ်ရမယ့် အပိုင်းတွေကို ကူးမထည့်ဘဲ ညွှန်ပြပါ။ [[mark:rc-limits]] မလုပ်ရတာတွေကို ရေးထားပါ။
+      [[mark:rc-done]] အဆင့်တိုင်း မခိုင်းဘဲ ပြီးတယ် ဆိုတာကို AC နံပါတ်နဲ့ ပေးပါ။ [[mark:rc-unsure]] မသေချာရင်
+      ခန့်မှန်းပြီး ဆက်မလုပ်ဘဲ ရပ်ပြီး မေးခိုင်းပါ။ code မရေးခင် plan ကို တောင်းပြီး review လုပ်ပါ၊
+      ပြီးတဲ့အခါမှာလည်း ကိုယ်တိုင် ပြန်စစ်ပါ။ ဒါပေမဲ့ agent ရပ်ပြီး မေးလာတဲ့ မေးခွန်းတွေရဲ့ အဖြေက မြမြ နဲ့ လှလှ
+      ဆီမှာ ရှိပါတယ်။ နောက် lesson မှာတော့ ဆက်သွယ် ပြောဆိုတဲ့ အလုပ်ရဲ့ ကျန်တဲ့ တစ်ဝက်ဖြစ်တဲ့ လူတွေနဲ့ ပြောဆိုတာကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The factory model (success criteria)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Common workflows (plan before editing)",
+          url: "https://code.claude.com/docs/en/common-workflows",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: rc-read,
+          type: editor.select,
+          at: { mark: rc-read },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "- docs/spec.md — Rules, AC-1 ကနေ AC-4",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: rc-limits,
+          type: editor.select,
+          at: { mark: rc-limits },
+          target:
+            { file: tasks/01-order-form.md, text: "- login နဲ့ account မဆောက်ပါနဲ့။", occurrence: 1 },
+        }
+      - {
+          id: rc-done,
+          type: editor.select,
+          at: { mark: rc-done },
+          target:
+            {
+              file: tasks/01-order-form.md,
+              text: "- AC-1 ကနေ AC-4 အထိ ဖုန်း screen အရွယ်မှာ pass ဖြစ်ရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: rc-unsure,
+          type: editor.select,
+          at: { mark: rc-unsure },
+          target: { file: tasks/01-order-form.md, text: "ရပ်ပြီး မေးပါ။", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
