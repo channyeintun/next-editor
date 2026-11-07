@@ -1,0 +1,969 @@
+# AI Builder, lesson 14: the parts of a web app (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md) + docs/plan.md as
+# COURSE-KIT §4.7 (L13's final file; the recall points at row 1) + docs/system-map.md pinned with only
+# its title line. Nothing runs. The lesson writes docs/system-map.md (COURSE-KIT §4.8, lesson-local;
+# its full text is this lesson's): Parts · One order's journey · Where rules are checked.
+#
+# Boards: (J) one order's journey left to right — phone screen (frontend) → server (backend) → the
+# counter's tablet, the database under the server, the reply on the phone, API on the first arrow,
+# outside services at the bottom (blue = the product's parts, orange = this lesson's point, green =
+# what works, red = what can fail, white = someone else's); (R) where a rule is checked, with the
+# quantity rule as the example: the screen (convenient, can be skipped) vs the server (every order
+# passes it); (Z) the quiz on the pickup-time rule.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-14-how-software-fits.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-14-how-software-fits
+  title: "AI Builder 14: Software ရဲ့ အစိတ်အပိုင်းတွေ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/plan.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/plan.md: |
+        # Plan · v1
+
+        | # | Task | Done when |
+        |---|---|---|
+        | 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |
+        | 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |
+        | 3 | ကောင်တာစာရင်း | AC-5 |
+        | 4 | နေ့စဉ် အော်ဒါနံပါတ် | Rules |
+        | 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |
+        | 6 | staging ပေါ် တင်တာ | release checklist |
+      docs/system-map.md: |+
+        # System map · ကြိုမှာ app
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board J: one order's journey (left to right; the database under the server).
+    - {
+        id: j-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "အော်ဒါ တစ်ခုရဲ့ ခရီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: j-phone-box,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 210,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-phone,
+        kind: text,
+        x: 315,
+        y: 250,
+        width: 185,
+        height: 40,
+        text: "ဖုန်း screen",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-phone-sub,
+        kind: text,
+        x: 315,
+        y: 290,
+        width: 185,
+        height: 40,
+        text: "frontend",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 520,
+        y: 268,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: j-api,
+        kind: text,
+        x: 522,
+        y: 210,
+        width: 60,
+        height: 30,
+        text: "API",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: j-server-box,
+        kind: rectangle,
+        x: 590,
+        y: 240,
+        width: 210,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-server,
+        kind: text,
+        x: 605,
+        y: 250,
+        width: 185,
+        height: 40,
+        text: "server",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-server-sub,
+        kind: text,
+        x: 605,
+        y: 290,
+        width: 185,
+        height: 40,
+        text: "backend",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 340,
+        width: 40,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: j-db-box,
+        kind: rectangle,
+        x: 590,
+        y: 415,
+        width: 210,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-db,
+        kind: text,
+        x: 605,
+        y: 437,
+        width: 185,
+        height: 40,
+        text: "database",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-reply,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 290,
+        height: 40,
+        text: "#101 · 3,000 ကျပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: j-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 810,
+        y: 268,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: j-counter-box,
+        kind: rectangle,
+        x: 880,
+        y: 240,
+        width: 210,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-counter,
+        kind: text,
+        x: 895,
+        y: 250,
+        width: 185,
+        height: 40,
+        text: "ကောင်တာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-counter-sub,
+        kind: text,
+        x: 895,
+        y: 290,
+        width: 185,
+        height: 40,
+        text: "tablet",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: j-out-box,
+        kind: rectangle,
+        x: 300,
+        y: 535,
+        width: 480,
+        height: 75,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: j-out,
+        kind: text,
+        x: 315,
+        y: 555,
+        width: 455,
+        height: 40,
+        text: "အပြင် service · hosting · SMS",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-phone,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 250,
+        height: 40,
+        text: "data နှေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-server,
+        kind: text,
+        x: 650,
+        y: 345,
+        width: 235,
+        height: 40,
+        text: "ရပ်ရင် မမှာနိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-db,
+        kind: text,
+        x: 815,
+        y: 437,
+        width: 260,
+        height: 40,
+        text: "ပျက်ရင် ပျောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-counter,
+        kind: text,
+        x: 895,
+        y: 345,
+        width: 200,
+        height: 40,
+        text: "ပိတ်ရင် မမြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-out,
+        kind: text,
+        x: 805,
+        y: 555,
+        width: 270,
+        height: 40,
+        text: "ရပ်ရင် app ရပ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board R: where a rule is checked (the quantity rule as the example; not the quiz's rule).
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 50,
+        text: "rule ကို ဘယ်မှာ စစ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r-ex,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 520,
+        height: 40,
+        text: "ဥပမာ · အရေအတွက် 1 ကနေ 20",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-h1,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 360,
+        height: 40,
+        text: "ဖုန်း screen မှာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r-l1,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 360,
+        height: 40,
+        text: "ချက်ချင်း သိ · အဆင်ပြေ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-l2,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 360,
+        height: 40,
+        text: "ကျော်ပြီး ပို့လို့ ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: r-h2,
+        kind: text,
+        x: 680,
+        y: 295,
+        width: 410,
+        height: 40,
+        text: "server မှာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-r1,
+        kind: text,
+        x: 680,
+        y: 350,
+        width: 410,
+        height: 40,
+        text: "အော်ဒါ တိုင်း ဖြတ်ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-r2,
+        kind: text,
+        x: 680,
+        y: 405,
+        width: 410,
+        height: 40,
+        text: "တကယ် ဆုံးဖြတ်တဲ့ နေရာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: r-rule,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 760,
+        height: 45,
+        text: "screen မှာ စစ်နိုင် · server မှာ အမြဲ စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board Z: the quiz (question white, answer green, reason white, fix green).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 640,
+        height: 40,
+        text: "agent ရဲ့ plan · လာယူချိန် rule ကို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q1b,
+        kind: text,
+        x: 345,
+        y: 275,
+        width: 600,
+        height: 40,
+        text: "ဖုန်း screen မှာပဲ စစ်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 500,
+        height: 45,
+        text: "ဒါ လုံလောက်လား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · မလုံလောက်ဘူး",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 640,
+        height: 40,
+        text: "screen မပါဘဲ request ပို့လို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-fix,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 640,
+        height: 40,
+        text: "server မှာလည်း စစ်ခိုင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6114
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: အော်ဒါ တစ်ခု ဘယ်ကို သွားလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ပထမ version ကို agent ဆီ တစ်ခုချင်း အပ်နိုင်တဲ့ task လေးတွေ ခွဲပြီး plan ရေးခဲ့ပါတယ်။
+      [[mark:open-plan]] ဒီ plan ကို ပြန်ကြည့်ရအောင်။ [[mark:sel-row1]] ပထမ task က screen ကနေ database အထိ
+      ဖြတ်သွားတဲ့ slice ပါ။ ဒါပေမဲ့ screen၊ server၊ database ဆိုတာ တကယ်တော့ ဘာတွေလဲ၊ ဘယ်လို ချိတ်ထားလဲ ဆိုတာ
+      မပြောရသေးပါဘူး။ code မရေးတဲ့ builder တစ်ယောက်က ဒီ အပိုင်းတွေကို ကိုယ်တိုင် ဆောက်တတ်ဖို့ မလိုပေမဲ့၊ မြေပုံ
+      တစ်ခုလို ခေါင်းထဲမှာ ရှိထားဖို့တော့ လိုပါတယ်။ ဒါမှ agent နဲ့ ပြောတဲ့အခါ အပိုင်းတွေကို နာမည်နဲ့
+      ပြောနိုင်ပြီး၊ agent ရဲ့ plan မှာ ဘာ လိုနေလဲ ဆိုတာကိုလည်း မြင်နိုင်မှာပါ။ [[mark:open-map]] ဒီနေ့ ရေးမယ့်
+      system map ဖိုင်ကို ဖွင့်ထားပါတယ်။ system map ဆိုတာ app ရဲ့ အပိုင်းတွေနဲ့ သူတို့ ဘယ်လို ချိတ်ထားလဲ ဆိုတာကို
+      ရေးထားတဲ့ စာမျက်နှာပါ။ [[mark:j-title]] မြေပုံ မရေးခင် member အောင်အောင် မနက်တိုင်း မှာနေကျ အော်ဒါကို
+      လိုက်ကြည့်ရအောင်။ လက်ဖက်ရည် နှစ်ခွက်ကို မနက် ရှစ်နာရီခွဲ လာယူမယ့် အော်ဒါပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-plan, type: workspace.openFile, at: { mark: open-plan }, path: docs/plan.md }
+      - {
+          id: sel-row1,
+          type: editor.select,
+          at: { mark: sel-row1 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |",
+              occurrence: 1,
+            },
+        }
+      - { id: open-map, type: workspace.openFile, at: { mark: open-map }, path: docs/system-map.md }
+      - {
+          id: open-board-j,
+          type: whiteboard.apply,
+          at: { mark: j-title },
+          open: true,
+          clear: true,
+          upsertIds: [j-title],
+        }
+
+  - id: phone
+    narration: >
+      [[mark:j-phone]] အော်ဒါ စတာက အောင်အောင် ရဲ့ ဖုန်းထဲက browser မှာပါ။ browser ဆိုတာ website တွေကို
+      ဖွင့်ကြည့်တဲ့ program ပါ။ အဲဒီထဲမှာ ပေါ်တဲ့ form ကို customer က မြင်ပြီး နှိပ်ရတာ ဖြစ်လို့၊ ဒီဘက်ကို
+      frontend လို့ ခေါ်ပါတယ်။ user ရဲ့ ဖုန်းထဲက screen ဘက်ပါ။ [[mark:j-a1]] အောင်အောင် က မှာမယ် ကို
+      နှိပ်လိုက်တဲ့အခါ၊ screen က အော်ဒါရဲ့ အချက်တွေကို စာ တစ်စောင်လို ထုပ်ပြီး internet ကနေ ပို့ပါတယ်။ ဒီလို
+      တစ်ခုခု တောင်းဆိုပြီး ပို့တဲ့ စာကို request လို့ ခေါ်ပါတယ်။ ဆိုလိုတာက ဖုန်းက အော်ဒါကို ကိုယ်တိုင် သိမ်းထားတာ
+      မဟုတ်ဘဲ၊ တခြား နေရာ တစ်ခုဆီ ပို့လိုက်တာပါ။
+    sources:
+      - {
+          title: "MDN: How the web works",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works",
+        }
+    actions:
+      - {
+          id: draw-j-phone,
+          type: whiteboard.apply,
+          at: { mark: j-phone },
+          upsertIds: [j-phone-box, j-phone, j-phone-sub],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-j-a1,
+          type: whiteboard.apply,
+          at: { mark: j-a1 },
+          upsertIds: [j-a1],
+          drawMs: 700,
+        }
+
+  - id: server
+    narration: >
+      [[mark:j-server]] request ရောက်သွားတဲ့ နေရာက server ပါ။ server ဆိုတာ အော်ဒါကို စစ်ပြီး သိမ်းပေးတဲ့ ဘက်က
+      ကွန်ပျူတာပါ။ customer မမြင်ရတဲ့ နောက်ကွယ်မှာ ရှိလို့ backend လို့လည်း ခေါ်ပါတယ်။ server က ပထမဆုံး spec ထဲက
+      rule တွေနဲ့ စစ်ပါတယ်။ အရေအတွက် မှန်ရဲ့လား၊ ဆိုင်ဖွင့်ချိန် ဟုတ်ရဲ့လား၊ ဖုန်းနံပါတ် ပါရဲ့လား ဆိုတာမျိုးပါ။
+      စုစုပေါင်း ဈေးကိုလည်း menu ထဲက ဈေးနဲ့ သူကိုယ်တိုင် တွက်ပါတယ်။ [[mark:j-db]] အားလုံး မှန်ရင် အော်ဒါကို
+      database ထဲ သိမ်းပါတယ်။ database ဆိုတာ data ကို စနစ်တကျ သိမ်းထားတဲ့ နေရာပါ။ server ကို ပိတ်ပြီး
+      ပြန်ဖွင့်လည်း အော်ဒါတွေ မပျောက်ဘဲ ကျန်နေတာ database ကြောင့်ပါ။ [[mark:j-reply]] ပြီးတော့ server က
+      အော်ဒါနံပါတ်ကို ဖုန်းဆီ ပြန်ပို့တော့၊ အောင်အောင် ရဲ့ screen မှာ အော်ဒါနံပါတ် ၁၀၁ နဲ့ စုစုပေါင်း ၃၀၀၀ ကျပ်
+      ဆိုပြီး ပေါ်လာပါတယ်။
+    sources:
+      - {
+          title: "MDN: Client-server overview",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/First_steps/Client-Server_overview",
+        }
+    actions:
+      - {
+          id: draw-j-server,
+          type: whiteboard.apply,
+          at: { mark: j-server },
+          upsertIds: [j-server-box, j-server, j-server-sub],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-j-db,
+          type: whiteboard.apply,
+          at: { mark: j-db },
+          upsertIds: [j-a3, j-db-box, j-db],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-j-reply,
+          type: whiteboard.apply,
+          at: { mark: j-reply },
+          upsertIds: [j-reply],
+          drawMs: 900,
+        }
+
+  - id: counter
+    narration: >
+      [[mark:j-counter]] အော်ဒါရဲ့ ခရီးက ဒီမှာ မဆုံးသေးပါဘူး။ ကောင်တာက လှလှ ရဲ့ tablet မှာလည်း screen တစ်ခု
+      ရှိပါတယ်။ အဲဒီ screen က server ကို အော်ဒါ အသစ် ရှိလား လို့ မေးပြီး၊ server က database ထဲက အော်ဒါတွေကို
+      လာယူချိန်အလိုက် စီပြီး ပြန်ပေးပါတယ်။ ဒါကြောင့် ရှစ်နာရီခွဲ မရောက်ခင်ကတည်းက အောင်အောင် ရဲ့ လက်ဖက်ရည်
+      နှစ်ခွက်ကို လှလှ ပြင်ထားနိုင်ပါတယ်။ ဒီ ကောင်တာ screen က plan ထဲမှာ task သုံး ဖြစ်ပြီး၊ မဆောက်ရသေးပါဘူး။
+    sources:
+      - {
+          title: "MDN: Client-server overview",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/First_steps/Client-Server_overview",
+        }
+    actions:
+      - {
+          id: draw-j-counter,
+          type: whiteboard.apply,
+          at: { mark: j-counter },
+          upsertIds: [j-a2, j-counter-box, j-counter, j-counter-sub],
+          drawMs: 1500,
+        }
+
+  - id: api
+    chapter: API နဲ့ အပြင်က service
+    narration: >
+      [[mark:j-api]] ဖုန်း screen နဲ့ server၊ ကောင်တာ screen နဲ့ server တို့ စကားပြောတဲ့ ပုံစံကို ကြိုပြီး
+      သဘောတူထားရပါတယ်။ ဒါကို API လို့ ခေါ်ပါတယ်။ ဆိုင်က ကွက်လပ်တွေ ပုံသေ ပါတဲ့ အော်ဒါ စာရွက်လိုပါပဲ။ ဘာ မှာလဲ၊
+      ဘယ်နှခွက်၊ ဘယ်အချိန် ဆိုတာ အမြဲ တစ်နေရာတည်းမှာ ရေးထားလို့ ဖတ်တဲ့သူက ချက်ချင်း သိပါတယ်။ API ကလည်း ဘာတွေ
+      ပို့ရမလဲ၊ အဖြေ ဘယ်လို ပြန်လာမလဲ ဆိုတာကို သတ်မှတ်ထားပါတယ်။ [[mark:j-out]] app ရဲ့ အပိုင်း တချို့ကိုတော့
+      ကိုယ်တို့ ကိုယ်တိုင် မ run ပါဘူး။ ဆိုလိုတာက အဲဒီ အပိုင်းတွေ အမြဲ အလုပ်လုပ်နေအောင် ကိုယ်တို့က ထိန်းထားတာ
+      မဟုတ်ပါဘူး။ app ကို internet ပေါ်မှာ အမြဲ ရှိနေအောင် ထားပေးတဲ့ hosting၊ နောက်ပိုင်း ထည့်မယ့် SMS ပို့တဲ့
+      service တွေက တခြား ကုမ္ပဏီတွေ run ထားတဲ့ third party service တွေပါ။ ကိုယ်တို့က သူတို့ရဲ့ API ကို
+      ခေါ်သုံးရုံပါပဲ။ online ငွေပေးချေမှုကလည်း ဒီလို service မျိုး ဖြစ်ပေမဲ့ ပထမ version မှာ မထည့်ပါဘူး။
+      [[mark:j-depend]] ဒီ service တွေကြောင့် ကိုယ့် အလုပ် သက်သာပေမဲ့၊ သူတို့ကို မှီခိုရပါတယ်။ ငွေ ကုန်နိုင်သလို၊
+      သူတို့ ရပ်သွားရင် ကိုယ့် app ပါ ရပ်သွားနိုင်ပါတယ်။
+    sources:
+      - { title: "MDN Glossary: API", url: "https://developer.mozilla.org/en-US/docs/Glossary/API" }
+      - {
+          title: "MDN: Third-party APIs",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Client-side_APIs/Third_party_APIs",
+        }
+    actions:
+      - {
+          id: draw-j-api,
+          type: whiteboard.apply,
+          at: { mark: j-api },
+          upsertIds: [j-api],
+          drawMs: 600,
+        }
+      - {
+          id: draw-j-out,
+          type: whiteboard.apply,
+          at: { mark: j-out },
+          upsertIds: [j-out-box, j-out],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-j-depend,
+          type: whiteboard.apply,
+          at: { mark: j-depend },
+          upsertIds: [f-out],
+          drawMs: 800,
+        }
+
+  - id: fail
+    narration: >
+      မြေပုံ ရှိလာတော့ ကိုယ့် အပိုင်းတွေ တစ်ခုချင်း ဘယ်လို ပျက်နိုင်လဲ ဆိုတာလည်း မြင်ရပါပြီ။ [[mark:f-phone]]
+      ကျောင်းသား မောင်မောင် လို ဈေးပေါတဲ့ ဖုန်း၊ နှေးတဲ့ data နဲ့ဆိုရင် request ရောက်ဖို့ ကြာနိုင်ပြီး၊ server
+      ရပ်သွားရင်တော့ ဘယ်သူမှ မမှာနိုင်ပါဘူး။ [[mark:f-db]] database ပျက်ရင် သိမ်းထားတဲ့ အော်ဒါတွေ ပျောက်နိုင်ပြီး၊
+      လှလှ ရဲ့ tablet ပိတ်နေရင် အော်ဒါ ဝင်လာပေမဲ့ ဘယ်သူမှ မမြင်ပါဘူး။ ဒါတွေကို ကိုယ်တိုင် ပြင်တတ်ဖို့ မလိုပါဘူး။
+      ဒါပေမဲ့ agent ဆီ task အပ်တဲ့အခါ၊ ဒီ အပိုင်း ပျက်ရင် customer က ဘာမြင်ရမလဲ လို့ မေးနိုင်ရင်၊ ဘယ်သူမှ
+      မစဉ်းစားမိတဲ့ နေရာတွေကို စောစော တွေ့ပါတယ်။
+    sources:
+      - {
+          title: "MDN: How the web works (a server can be temporarily unavailable)",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-f-phone,
+          type: whiteboard.apply,
+          at: { mark: f-phone },
+          upsertIds: [f-phone, f-server],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-f-db,
+          type: whiteboard.apply,
+          at: { mark: f-db },
+          upsertIds: [f-db, f-counter],
+          drawMs: 1000,
+        }
+
+  - id: type-parts
+    chapter: System map ရေးရအောင်
+    narration: >
+      [[mark:close-j]] ကဲ၊ ဒီ မြေပုံကို စာနဲ့ ရေးထားရအောင်။ [[mark:type-parts]] ပထမ အပိုင်းမှာ app ရဲ့
+      အစိတ်အပိုင်း ငါးခုကို တစ်ကြောင်းစီ ရေးပါတယ်။ ကိုယ်က agent နဲ့ ပြောတဲ့အခါ၊ လှလှ နဲ့ ပြောတဲ့အခါ အပိုင်း
+      တစ်ခုကို အမြဲ ဒီ နာမည်နဲ့ပဲ ခေါ်ဖို့ပါ။ [[mark:sel-db]] database က ဘာတွေ သိမ်းလဲ ကြည့်ပါ။ အော်ဒါထဲမှာ
+      customer ရဲ့ ဖုန်းနံပါတ်လည်း ပါတော့၊ ဒီ အပိုင်းကို ကိုယ်ရေး အချက်အလက် လုံခြုံအောင် သေချာ ကာကွယ်ရမယ် ဆိုတာ
+      ဒီကတည်းက မြင်ရပါတယ်။ [[mark:sel-out]] နောက်ဆုံး စာကြောင်းကတော့ ကိုယ် မှီခိုနေရတဲ့ အပြင် service တွေရဲ့
+      စာရင်းပါ။ လစဉ် ကုန်ကျစရိတ် တွက်တဲ့အခါ၊ တစ်ခုခု ရပ်သွားတဲ့အခါ ဒီ စာကြောင်းကို ပြန်ကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture: decisions written down)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-j, type: whiteboard.apply, at: { mark: close-j }, open: false }
+      - id: type-parts
+        type: editor.type
+        at: { mark: type-parts }
+        target: { file: docs/system-map.md, after: "# System map · ကြိုမှာ app\n\n", occurrence: 1 }
+        text: "## Parts\n- Screen — customer ဖုန်းရဲ့ browser ထဲက order form (frontend)\n- Server — အော်ဒါကို စစ်ပြီး သိမ်းပေးတဲ့ ကွန်ပျူတာ (backend)\n- Database — အော်ဒါတွေနဲ့ menu ကို သိမ်းထားတဲ့ နေရာ\n- Counter screen — ကောင်တာက လှလှ ရဲ့ tablet ပေါ်က အော်ဒါစာရင်း\n- Outside services — app ကို တင်ထားတဲ့ hosting၊ နောက်မှ SMS\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-db,
+          type: editor.select,
+          at: { mark: sel-db },
+          target:
+            {
+              file: docs/system-map.md,
+              text: "- Database — အော်ဒါတွေနဲ့ menu ကို သိမ်းထားတဲ့ နေရာ",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-out,
+          type: editor.select,
+          at: { mark: sel-out },
+          target:
+            {
+              file: docs/system-map.md,
+              text: "- Outside services — app ကို တင်ထားတဲ့ hosting၊ နောက်မှ SMS",
+              occurrence: 1,
+            },
+        }
+
+  - id: type-journey
+    narration: >
+      [[mark:type-journey]] ဒုတိယ အပိုင်းမှာ ခုနက လိုက်ကြည့်ခဲ့တဲ့ ခရီးကို အဆင့် ငါးဆင့်နဲ့ ရေးပါတယ်။ အော်ဒါ
+      တစ်ခုတည်းကို ဥပမာ ယူပြီး ရေးထားတော့၊ ဘယ်သူ ဖတ်ဖတ် အစကနေ အဆုံးထိ လိုက်ကြည့်လို့ ရပါတယ်။ [[mark:sel-step3]] ဒီ
+      စာရင်းက agent ပြန်ပေးတဲ့ plan ကို ပြန်စစ်ပြီး review လုပ်တဲ့အခါ အသုံးဝင်ပါတယ်။ plan တစ်ခုက အော်ဒါကို
+      ဖုန်းထဲမှာပဲ မှတ်ထားမယ် ဆိုရင်၊ database ထဲ သိမ်းတဲ့ ဒီ အဆင့် မပါတော့ အော်ဒါက လှလှ ဆီ ဘယ်တော့မှ
+      မရောက်နိုင်ဘူး ဆိုတာ ချက်ချင်း မြင်ရပါတယ်။ ပြီးခဲ့တဲ့ lesson က slice တစ်ခု ဆိုတာလည်း ဒီ အဆင့် ငါးဆင့်လုံးကို
+      ဖြတ်သွားတဲ့ အပိုင်းလေး တစ်ခုပါပဲ။
+    sources:
+      - {
+          title: "MDN: Client-server overview",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/First_steps/Client-Server_overview",
+        }
+    actions:
+      - id: type-journey
+        type: editor.type
+        at: { mark: type-journey }
+        target: { file: docs/system-map.md, after: "နောက်မှ SMS\n\n", occurrence: 1 }
+        text: "## One order's journey\n1. အောင်အောင် က လက်ဖက်ရည် 2 ခွက်၊ 8:30 ကို ရွေးပြီး မှာမယ် ကို နှိပ်တယ်။\n2. Screen က အော်ဒါကို internet ကနေ server ရဲ့ API ဆီ ပို့တယ်။\n3. Server က rule တွေကို စစ်ပြီး database ထဲ သိမ်းတယ်၊ အော်ဒါနံပါတ် ပြန်ပေးတယ်။\n4. Screen က အော်ဒါ #101 နဲ့ စုစုပေါင်း 3,000 ကျပ်ကို ပြတယ်။\n5. Counter screen က server ကနေတစ်ဆင့် အော်ဒါတွေကို လာယူချိန်အလိုက် ဖတ်ပြီး လှလှ ကို ပြတယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-step3,
+          type: editor.select,
+          at: { mark: sel-step3 },
+          target:
+            {
+              file: docs/system-map.md,
+              text: "3. Server က rule တွေကို စစ်ပြီး database ထဲ သိမ်းတယ်၊ အော်ဒါနံပါတ် ပြန်ပေးတယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: rules
+    chapter: Rule ကို ဘယ်မှာ စစ်မလဲ
+    narration: >
+      [[mark:r-title]] ဒီ မြေပုံမှာ အရေးကြီးတဲ့ မေးခွန်း တစ်ခု ကျန်ပါသေးတယ်။ spec ထဲက rule တွေကို ဘယ် အပိုင်းမှာ
+      စစ်မလဲ ဆိုတာပါ။ [[mark:r-ex]] အရေအတွက်ကို တစ်ကနေ အစိတ်အထိပဲ ခွင့်ပြုတဲ့ rule ကို ဥပမာ ယူကြည့်ရအောင်။
+      [[mark:r-screen]] ဖုန်း screen မှာ စစ်ရင် customer မှားရိုက်လိုက်တာနဲ့ ချက်ချင်း သတိပေးစာ ပေါ်လာလို့ သုံးရတာ
+      အဆင်ပြေပါတယ်။ [[mark:r-bypass]] ဒါပေမဲ့ API က internet ပေါ်မှာ ရှိနေတော့၊ တစ်ယောက်ယောက်က ကိုယ်တို့ form ကို
+      မသုံးဘဲ request ကို server ဆီ တိုက်ရိုက် ပို့လို့ ရပါတယ်။ ဒါဆို screen ရဲ့ စစ်ဆေးချက်ကို ကျော်သွားပြီး၊ ခွက်
+      ငါးရာ ဆိုတဲ့ အော်ဒါတောင် ရောက်လာနိုင်ပါတယ်။ [[mark:r-server]] အော်ဒါ တိုင်းက server ကို ဖြတ်ရတော့၊ တကယ်
+      ဆုံးဖြတ်တဲ့ နေရာက server ပါ။ [[mark:r-rule]] ဒါကြောင့် rule တွေကို screen မှာ အဆင်ပြေဖို့ စစ်နိုင်ပေမဲ့၊
+      server မှာတော့ အမြဲ စစ်ရပါမယ်။
+    sources:
+      - {
+          title: "MDN: Client-side form validation",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Form_validation",
+        }
+    actions:
+      - {
+          id: draw-r-title,
+          type: whiteboard.apply,
+          at: { mark: r-title },
+          open: true,
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-ex,
+          type: whiteboard.apply,
+          at: { mark: r-ex },
+          upsertIds: [r-ex],
+          drawMs: 900,
+        }
+      - {
+          id: draw-r-screen,
+          type: whiteboard.apply,
+          at: { mark: r-screen },
+          upsertIds: [r-h1, r-l1],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-r-bypass,
+          type: whiteboard.apply,
+          at: { mark: r-bypass },
+          upsertIds: [r-l2],
+          drawMs: 800,
+        }
+      - {
+          id: draw-r-server,
+          type: whiteboard.apply,
+          at: { mark: r-server },
+          upsertIds: [r-h2, r-r1, r-r2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-r-rule,
+          type: whiteboard.apply,
+          at: { mark: r-rule },
+          upsertIds: [r-rule],
+          drawMs: 1000,
+        }
+
+  - id: type-rules
+    narration: >
+      [[mark:close-r]] ဒီ ဆုံးဖြတ်ချက်ကို map ထဲမှာ ရေးထားရအောင်။ [[mark:type-rules]] နောက်ဆုံး အပိုင်းက rule
+      တစ်ခုကို နေရာ နှစ်ခုမှာ စစ်မယ်၊ ဒါပေမဲ့ နေရာ တစ်ခုစီရဲ့ တာဝန် မတူဘူး ဆိုတာကို ဆုံးဖြတ်ထားတာပါ။
+      [[mark:sel-server-rule]] server ဘက်က စာကြောင်းက ကိုယ်တို့ form ကို ဖြတ်မလာတဲ့ အော်ဒါတွေကနေ ဆိုင်ကို
+      ကာကွယ်ပေးတာပါ။ spec ထဲကို rule အသစ် ထည့်တိုင်း၊ အဲဒီ rule ကို server မှာ ဘယ်လို စစ်မလဲ ဆိုတာကို ဒီ
+      စာကြောင်းက သတိပေးနေပါလိမ့်မယ်။ [[mark:sel-map-title]] ဒီ map ကို agent ဆီ task အပ်တဲ့အခါ အရင်ဖတ်ရမယ့်
+      စာရင်းထဲ ထည့်ပေးပါ။ ဘယ်အပိုင်းတွေ ထားမလဲ၊ rule တွေကို ဘယ်မှာ စစ်မလဲ ဆိုတာက ဆိုင်ရဲ့ လိုအပ်ချက်ပေါ် မူတည်တဲ့
+      ဆုံးဖြတ်ချက် ဖြစ်လို့ ကိုယ်တို့ လူတွေက ဆုံးဖြတ်ရပါတယ်။ ဆုံးဖြတ်ပြီး ရေးထားတဲ့ map ရှိရင်တော့၊ agent က အဲဒီ
+      ပုံစံအတိုင်း code ကို မြန်မြန် ထုတ်ပေးနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "MDN: Client-side form validation",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Form_validation",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture: humans decide, agents implement a documented design)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-r, type: whiteboard.apply, at: { mark: close-r }, open: false }
+      - id: type-rules
+        type: editor.type
+        at: { mark: type-rules }
+        target: { file: docs/system-map.md, after: "လှလှ ကို ပြတယ်။\n\n", occurrence: 1 }
+        text: "## Where rules are checked\n- Screen မှာ — customer ချက်ချင်း သိအောင်၊ အဆင်ပြေဖို့ပဲ။\n- Server မှာ — တကယ် စစ်တဲ့ နေရာ။ Screen ကို ကျော်ပြီး ပို့လာတဲ့ request ကိုလည်း ငြင်းရမယ်။\n"
+        cadence: line-by-line
+      - {
+          id: sel-server-rule,
+          type: editor.select,
+          at: { mark: sel-server-rule },
+          target:
+            {
+              file: docs/system-map.md,
+              text: "- Server မှာ — တကယ် စစ်တဲ့ နေရာ။ Screen ကို ကျော်ပြီး ပို့လာတဲ့ request ကိုလည်း ငြင်းရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-map-title,
+          type: editor.select,
+          at: { mark: sel-map-title },
+          target: { file: docs/system-map.md, text: "# System map · ကြိုမှာ app", occurrence: 1 },
+        }
+      - {
+          id: expect-map-rules,
+          type: expect.file,
+          at: { afterAction: sel-server-rule },
+          path: docs/system-map.md,
+          contains: "- Server မှာ — တကယ် စစ်တဲ့ နေရာ။ Screen ကို ကျော်ပြီး ပို့လာတဲ့ request ကိုလည်း ငြင်းရမယ်။",
+        }
+      - {
+          id: expect-map-parts,
+          type: expect.file,
+          at: { afterAction: expect-map-rules },
+          path: docs/system-map.md,
+          contains: "- Server — အော်ဒါကို စစ်ပြီး သိမ်းပေးတဲ့ ကွန်ပျူတာ (backend)",
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ agent ပြန်ပေးတဲ့ plan ထဲမှာ လာယူချိန် rule ကို ဖုန်း screen ရဲ့ code
+      ထဲမှာပဲ စစ်မယ် လို့ ပါလာတယ် ဆိုပါစို့။ ဆိုင်ပိတ်ချိန်ကို ရွေးရင် screen က ငြင်းပါလိမ့်မယ်။ ဒါ
+      လုံလောက်ပြီလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ မလုံလောက်ပါဘူး။
+      ဘာကြောင့်လဲဆိုတော့ screen ကို မသုံးဘဲ request ကို server ဆီ တိုက်ရိုက် ပို့လို့ ရတော့၊ မနက် နှစ်နာရီမှာ
+      လာယူမယ် ဆိုတဲ့ အော်ဒါလည်း ရောက်လာနိုင်လို့ပါ။ [[mark:quiz-fix]] ဒါကြောင့် plan ကို review လုပ်တဲ့အခါ၊ server
+      မှာလည်း စစ်ခိုင်းပြီး system map ရဲ့ နောက်ဆုံး အပိုင်းကို ညွှန်ပြပါ။
+    sources:
+      - {
+          title: "MDN: Client-side form validation",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Form_validation",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-q1b, z-q2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-quiz-fix,
+          type: whiteboard.apply,
+          at: { mark: quiz-fix },
+          upsertIds: [z-fix],
+          drawMs: 900,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ အော်ဒါ တစ်ခုက ဖုန်းထဲက frontend ကနေ request အဖြစ် internet ကို
+      ဖြတ်ပြီး backend ဖြစ်တဲ့ server ဆီ ရောက်ပါတယ်။ server က စစ်ပြီး database ထဲ သိမ်းပါတယ်။ ကောင်တာ screen ကတော့
+      server ကနေတစ်ဆင့် ပြန်ဖတ်ပြီး လှလှ ကို ပြပါတယ်။ [[mark:rc-parts]] အပိုင်းတွေက API နဲ့ စကားပြောပြီး၊ hosting
+      လို အပြင် service တွေကိုလည်း မှီခိုနေရပါတယ်။ [[mark:rc-rules]] rule တိုင်းကို server မှာ အမြဲ စစ်ရပြီး၊
+      screen ပေါ်က စစ်ဆေးချက်ကတော့ customer အဆင်ပြေဖို့ ထပ်ထည့်တာပါ။ နောက် lesson မှာတော့ ဒီ အပိုင်းတွေကြား
+      သွားလာနေတဲ့ data ရဲ့ ပုံစံကို၊ agent က ပထမ တစ်ခါတည်းမှာ မှန်မှန် ဆောက်နိုင်အောင် ဘယ်လို ရေးထားမလဲ ဆိုတာ
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "MDN: How the web works",
+          url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: rc-parts,
+          type: editor.select,
+          at: { mark: rc-parts },
+          target: { file: docs/system-map.md, text: "## Parts", occurrence: 1 },
+        }
+      - {
+          id: rc-rules,
+          type: editor.select,
+          at: { mark: rc-rules },
+          target: { file: docs/system-map.md, text: "## Where rules are checked", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
