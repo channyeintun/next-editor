@@ -1,0 +1,1372 @@
+# AI Builder, lesson 02: how coding agents work (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md = "# Notes\n"). No
+# binder document exists before L04. Nothing runs. The lesson types the agent loop (five lines) into
+# notes.md, and after the quiz one line on where lasting rules belong.
+#
+# Boards: (C) chatbot vs agent, two columns flowing down; (L) the loop top to bottom (orange goal,
+# violet steps, ↻ back to plan, green stop), reopened to annotate which part does each step; (D) the
+# context window as a desk (violet), what is on it (white) and off it (red); (G) strengths (green) vs
+# weaknesses (red) with the orange warning; (W) where agents live, three boxes; (Z) the two-option quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-02-how-agents-work.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-02-how-agents-work
+  title: "AI Builder 02: Coding agent တွေ ဘယ်လို အလုပ်လုပ်သလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board C: chatbot (white, left) vs agent (violet, right), two columns flowing down.
+    - {
+        id: c-h1,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 260,
+        height: 45,
+        text: "chatbot",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-l1-box,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 360,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        x: 320,
+        y: 242,
+        width: 320,
+        height: 40,
+        text: "မေးခွန်း တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-la1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 300,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l2-box,
+        kind: rectangle,
+        x: 300,
+        y: 345,
+        width: 360,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        x: 320,
+        y: 362,
+        width: 320,
+        height: 40,
+        text: "အဖြေ တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-la2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 420,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l3-box,
+        kind: rectangle,
+        x: 300,
+        y: 465,
+        width: 360,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-l3,
+        kind: text,
+        x: 320,
+        y: 482,
+        width: 320,
+        height: 40,
+        text: "ကိုယ် ထပ်မေးမှ ဆက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-h2,
+        kind: text,
+        x: 720,
+        y: 160,
+        width: 260,
+        height: 45,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 36,
+      }
+    - {
+        id: c-r1-box,
+        kind: rectangle,
+        x: 720,
+        y: 225,
+        width: 370,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-r1,
+        kind: text,
+        x: 740,
+        y: 242,
+        width: 330,
+        height: 40,
+        text: "ပန်းတိုင် တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-ra1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 300,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-r2-box,
+        kind: rectangle,
+        x: 720,
+        y: 345,
+        width: 370,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-r2,
+        kind: text,
+        x: 740,
+        y: 362,
+        width: 330,
+        height: 40,
+        text: "↻ loop ပတ်ပြီး လုပ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-ra2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 420,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-r3-box,
+        kind: rectangle,
+        x: 720,
+        y: 465,
+        width: 370,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-r3,
+        kind: text,
+        x: 740,
+        y: 482,
+        width: 330,
+        height: 40,
+        text: "ပြီးမှ ပြန်ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board L: the loop, top to bottom (orange goal = ours; violet steps = the agent's; ↻ back to plan;
+    # green stop). Right column (scene parts): which part of the agent does each step.
+    - {
+        id: l-goal-box,
+        kind: rectangle,
+        x: 300,
+        y: 160,
+        width: 340,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-goal,
+        kind: text,
+        x: 320,
+        y: 170,
+        width: 300,
+        height: 40,
+        text: "ပန်းတိုင် · ကိုယ်က ပေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 220,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-plan-box,
+        kind: rectangle,
+        x: 300,
+        y: 258,
+        width: 340,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-plan,
+        kind: text,
+        x: 320,
+        y: 268,
+        width: 300,
+        height: 40,
+        text: "plan · အဆင့် စီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 318,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-act-box,
+        kind: rectangle,
+        x: 300,
+        y: 356,
+        width: 340,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-act,
+        kind: text,
+        x: 320,
+        y: 366,
+        width: 300,
+        height: 40,
+        text: "act · tool နဲ့ လုပ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 416,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-obs-box,
+        kind: rectangle,
+        x: 300,
+        y: 454,
+        width: 340,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-obs,
+        kind: text,
+        x: 320,
+        y: 464,
+        width: 300,
+        height: 40,
+        text: "observe · ရလဒ် ကြည့်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 360,
+        y: 514,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-again,
+        kind: text,
+        x: 300,
+        y: 554,
+        width: 210,
+        height: 40,
+        text: "↻ plan ကို ပြန်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-a5,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 560,
+        y: 514,
+        width: 40,
+        height: 34,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-done,
+        kind: text,
+        x: 530,
+        y: 554,
+        width: 140,
+        height: 40,
+        text: "ပြီး / ရပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p-model,
+        kind: text,
+        x: 690,
+        y: 268,
+        width: 360,
+        height: 40,
+        text: "model · ခန့်မှန်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-tool,
+        kind: text,
+        x: 690,
+        y: 366,
+        width: 380,
+        height: 40,
+        text: "tool · ဖတ်၊ run၊ ပြင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-ctx,
+        kind: text,
+        x: 690,
+        y: 464,
+        width: 380,
+        height: 40,
+        text: "ရလဒ် → context window",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-orch,
+        kind: text,
+        x: 690,
+        y: 554,
+        width: 380,
+        height: 40,
+        text: "orchestration · loop",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-setup,
+        kind: text,
+        x: 690,
+        y: 170,
+        width: 400,
+        height: 40,
+        text: "tool နဲ့ rule ကွာ → ရလဒ် ကွာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board D: the context window as the agent's desk (violet frame); on it (white); off it (red).
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 50,
+        text: "context window = agent ရဲ့ စားပွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-desk,
+        kind: rectangle,
+        x: 300,
+        y: 230,
+        width: 420,
+        height: 300,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-on1,
+        kind: text,
+        x: 325,
+        y: 250,
+        width: 370,
+        height: 40,
+        text: "task · ဒီနေ့ အလုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-on2,
+        kind: text,
+        x: 325,
+        y: 305,
+        width: 370,
+        height: 40,
+        text: "ဖတ်ထားတဲ့ file အနည်းငယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-on3,
+        kind: text,
+        x: 325,
+        y: 360,
+        width: 370,
+        height: 40,
+        text: "app ရဲ့ rule တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-on4,
+        kind: text,
+        x: 325,
+        y: 415,
+        width: 370,
+        height: 40,
+        text: "tool ရဲ့ ရလဒ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-limit,
+        kind: text,
+        x: 325,
+        y: 475,
+        width: 370,
+        height: 40,
+        text: "နေရာ အကန့်အသတ် ရှိ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: d-off-h,
+        kind: text,
+        x: 760,
+        y: 250,
+        width: 320,
+        height: 40,
+        text: "စားပွဲပေါ် မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-off1,
+        kind: text,
+        x: 760,
+        y: 305,
+        width: 320,
+        height: 40,
+        text: "ကိုယ့် ခေါင်းထဲက rule",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-off2,
+        kind: text,
+        x: 760,
+        y: 360,
+        width: 320,
+        height: 40,
+        text: "မဖတ်ရသေးတဲ့ file",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: d-new,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 700,
+        height: 40,
+        text: "session အသစ် = စားပွဲ အလွတ်၊ file ပဲ ပြန်ပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board G: strengths (green, left) vs weaknesses (red, right); orange warning; white "so we check".
+    - {
+        id: g-h1,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 360,
+        height: 45,
+        text: "အားသာတာ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: g-g1,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 380,
+        height: 40,
+        text: "ရှင်းပြီး စစ်လို့ရတဲ့ အလုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-g2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 380,
+        height: 40,
+        text: "ပထမ အကြမ်း မြန်မြန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-g3,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 380,
+        height: 40,
+        text: "file အများကြီး ဖတ်တာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: g-h2,
+        kind: text,
+        x: 720,
+        y: 160,
+        width: 360,
+        height: 45,
+        text: "အားနည်းတာ",
+        strokeColor: "#e03131",
+        fontSize: 36,
+      }
+    - {
+        id: g-w1,
+        kind: text,
+        x: 720,
+        y: 225,
+        width: 370,
+        height: 40,
+        text: "ပန်းတိုင် မရှင်းရင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-w2,
+        kind: text,
+        x: 720,
+        y: 285,
+        width: 370,
+        height: 40,
+        text: "ရေးမထားတဲ့ rule",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-w3,
+        kind: text,
+        x: 720,
+        y: 345,
+        width: 370,
+        height: 40,
+        text: "ဆိုင်ရဲ့ လုပ်ငန်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-w4,
+        kind: text,
+        x: 720,
+        y: 405,
+        width: 370,
+        height: 40,
+        text: "မသိဘူး လို့ ပြောတာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: g-sure,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 45,
+        text: "သေချာသလို ထွက်လာပေမယ့် မှားနိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: g-check,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 600,
+        height: 40,
+        text: "ဒါကြောင့် ကိုယ်က စစ်ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board W: where agents live, three boxes in a row (no product names on the board).
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 50,
+        text: "agent တွေ ဘယ်မှာ တွေ့ရလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: w-b1, kind: rectangle, x: 290, y: 260, width: 250, height: 120, strokeColor: "#6741d9" }
+    - {
+        id: w-t1,
+        kind: text,
+        x: 310,
+        y: 275,
+        width: 210,
+        height: 40,
+        text: "editor ထဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: w-s1,
+        kind: text,
+        x: 310,
+        y: 325,
+        width: 220,
+        height: 40,
+        text: "ရိုက်နေရင်း ကူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: w-b2, kind: rectangle, x: 565, y: 260, width: 250, height: 120, strokeColor: "#6741d9" }
+    - {
+        id: w-t2,
+        kind: text,
+        x: 585,
+        y: 275,
+        width: 210,
+        height: 40,
+        text: "terminal ထဲ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: w-s2,
+        kind: text,
+        x: 585,
+        y: 325,
+        width: 220,
+        height: 40,
+        text: "အနီးကပ် ကြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: w-b3, kind: rectangle, x: 840, y: 260, width: 250, height: 120, strokeColor: "#6741d9" }
+    - {
+        id: w-t3,
+        kind: text,
+        x: 860,
+        y: 275,
+        width: 210,
+        height: 40,
+        text: "background",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: w-s3,
+        kind: text,
+        x: 860,
+        y: 325,
+        width: 220,
+        height: 40,
+        text: "အပ်ပြီး ပြန်လာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-same,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 560,
+        height: 45,
+        text: "အထဲက loop က အတူတူ",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board Z: the two-option quiz (question and options white, answer green, fix white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 640,
+        height: 40,
+        text: "မနေ့က chat · ဈေးနှုန်း ကျပ် ကိန်းပြည့်ပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 760,
+        height: 40,
+        text: "ဒီနေ့ session အသစ် · 1,500.00 ကျပ် · ဘာကြောင့်လဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 640,
+        height: 40,
+        text: "က · model က တစ်ညအတွင်း ညံ့သွားလို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 640,
+        height: 40,
+        text: "ခ · rule က မနေ့က chat ထဲမှာပဲ ရှိခဲ့လို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-fix,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 640,
+        height: 40,
+        text: "ကြာကြာ သုံးမယ့် rule → file ထဲ ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6102
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Chatbot နဲ့ agent ဘာကွာလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ agent တစ်ခုက အလုပ်လုပ်သလို ပုံပေါ်တဲ့ app ကို မြန်မြန် ထုတ်ပေးနိုင်ပေမယ့်၊ ဘာက မှန်လဲ
+      သိတာနဲ့ ထွက်လာတာကို စစ်တာကတော့ ကိုယ့်အလုပ် ဖြစ်တယ် ဆိုတာ မြင်ခဲ့ပါတယ်။ agent ကို မှန်မှန် ခိုင်းပြီး
+      မှန်မှန် စစ်နိုင်ဖို့ဆိုရင်၊ agent ရဲ့ အထဲမှာ တကယ် ဘာတွေ ဖြစ်နေလဲ သိထားရပါမယ်။ [[mark:r-what]] agent က လူ
+      တစ်ယောက် မဟုတ်သလို၊ ဘာမဆို လုပ်နိုင်တဲ့ အရာလည်း မဟုတ်ပါဘူး။ အစိတ်အပိုင်း တချို့ကို loop တစ်ခုနဲ့ ချိတ်ထားတဲ့
+      software ပါ။ loop ဆိုတာ အဆင့်တွေကို ပြီးတဲ့အထိ ထပ်ခါထပ်ခါ ပြန်ပတ်တာပါ။ [[mark:open-notes]] ဒီနေ့
+      နားလည်လာတာကို editor ထဲက notes ဖိုင်မှာ မှတ်သွားပါမယ်။ [[mark:c-open]] အရင်ဆုံး ကိုယ်တို့ သုံးနေကျ chatbot
+      နဲ့ agent ဘာကွာလဲ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+    actions:
+      - { id: open-notes, type: workspace.openFile, at: { mark: open-notes }, path: notes.md }
+      - {
+          id: open-board-c,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-h1, c-h2],
+        }
+
+  - id: chatbot-agent
+    narration: >
+      [[mark:c-bot]] chatbot ကို မေးခွန်း တစ်ခု မေးရင်၊ အဖြေ တစ်ခု ပြန်ပေးပြီး အဲဒီမှာတင် ရပ်ပါတယ်။ ဥပမာ ကြိုမှာ
+      app ရဲ့ form မှာ ဘာတွေ ပါသင့်လဲ လို့ မေးရင်၊ စာရင်း တစ်ခု ပြန်ရပါမယ်။ [[mark:c-bot2]] အဲဒီ စာရင်းကို ယူပြီး
+      ဘာဆက်လုပ်မလဲ၊ မှန်မမှန် ဘယ်လို စမ်းမလဲ ဆိုတာကတော့ ကိုယ့်တာဝန်ပါ။ ကိုယ် ထပ်မမေးရင် chatbot က ဘာမှ
+      ဆက်မလုပ်ပါဘူး။ [[mark:c-agent]] agent ကိုတော့ မေးခွန်း မဟုတ်ဘဲ ပန်းတိုင် တစ်ခု ပေးပါတယ်။ ဥပမာ form မှာ
+      လာယူချိန် ရွေးလို့ရအောင် လုပ်ပေးပါ လို့ ပေးလိုက်ရင်၊ agent က app ရဲ့ file တွေကို ဖတ်၊ ပြင်ပြီး app ကို run
+      ကြည့်ပါတယ်။ run ဆိုတာ program ကို တကယ် အလုပ်လုပ်ခိုင်းတာပါ။ ရလဒ် မှားနေရင် ထပ်ပြင်ပြီး ထပ်စမ်းပါတယ်။
+      [[mark:c-done]] ပြီးသွားမှ ဘာလုပ်ခဲ့လဲ ကိုယ့်ကို ပြန်ပြောပါတယ်။ ဆိုလိုတာက chatbot က အဖြေ တစ်ခု ပေးတဲ့ tool
+      ဖြစ်ပြီး၊ agent ကတော့ ပန်းတိုင် ရောက်တဲ့အထိ loop ပတ်ပြီး ဆက်လုပ်တဲ့ tool ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+    actions:
+      - {
+          id: draw-c-bot,
+          type: whiteboard.apply,
+          at: { mark: c-bot },
+          upsertIds: [c-l1-box, c-l1, c-la1, c-l2-box, c-l2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-bot2,
+          type: whiteboard.apply,
+          at: { mark: c-bot2 },
+          upsertIds: [c-la2, c-l3-box, c-l3],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-c-agent,
+          type: whiteboard.apply,
+          at: { mark: c-agent },
+          upsertIds: [c-r1-box, c-r1, c-ra1, c-r2-box, c-r2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-done,
+          type: whiteboard.apply,
+          at: { mark: c-done },
+          upsertIds: [c-ra2, c-r3-box, c-r3],
+          drawMs: 1100,
+        }
+
+  - id: loop
+    chapter: Agent ရဲ့ loop
+    narration: >
+      [[mark:l-goal]] ဒီ loop ကို အဆင့်လိုက် ခွဲကြည့်ရအောင်။ အစက ကိုယ်ပေးတဲ့ ပန်းတိုင်ပါ။ [[mark:l-plan]] agent က
+      ပထမဆုံး ဘာတွေ လုပ်ရမလဲ ဆိုတဲ့ အဆင့်တွေကို စီပါတယ်။ ဘယ် file ကို ဖတ်မလဲ၊ ဘယ်နေရာကို ပြင်မလဲ ဆိုတာမျိုးပါ။
+      ဒါကို plan လို့ ခေါ်ပါတယ်။ [[mark:l-act]] ပြီးတော့ အဆင့် တစ်ဆင့်ကို လက်တွေ့ လုပ်ပါတယ်။ file ဖတ်တာ၊ command
+      run တာ၊ code ပြင်တာ စတာတွေကို tool တွေနဲ့ လုပ်တာပါ။ command ဆိုတာ ကွန်ပျူတာကို စာနဲ့ ခိုင်းတဲ့
+      ညွှန်ကြားချက်ပါ။ [[mark:l-obs]] လုပ်ပြီးတိုင်း ရလဒ်ကို ပြန်ကြည့်ပါတယ်။ error လို့ ခေါ်တဲ့ အမှားပြစာ တက်လား၊
+      form မှာ အချိန် ရွေးတဲ့ အကွက် တကယ် ပါလာလား ဆိုတာမျိုးပါ။ ဒီ အဆင့်က agent ရဲ့ ခန့်မှန်းချက် မဟုတ်ဘဲ၊ အပြင်က
+      တကယ့် ရလဒ်ကို ပြန်ရတဲ့ အဆင့် ဖြစ်လို့ အရေးကြီးပါတယ်။ [[mark:l-again]] ရလဒ် မှားနေရင် plan ကို ပြန်သွားပြီး
+      loop ကို ထပ်ပတ်ပါတယ်။ [[mark:l-done]] ပန်းတိုင် ရောက်သွားရင်တော့ ရပ်ပါတယ်။ မရောက်သေးရင်တောင် ရပ်ရမယ့်
+      အခြေအနေတွေ ရှိပါတယ်။ ပတ်ခွင့်ရှိတဲ့ အကြိမ်ရေ ပြည့်သွားတာ၊ ကိုယ်က ရပ်ခိုင်းတာ၊ ဒါမှမဟုတ် ဆက်မလုပ်နိုင်လို့
+      ကိုယ့်ကို ပြန်မေးတာ မျိုးပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+    actions:
+      - {
+          id: open-board-l,
+          type: whiteboard.apply,
+          at: { mark: l-goal },
+          clear: true,
+          upsertIds: [l-goal-box, l-goal],
+          drawMs: 900,
+        }
+      - {
+          id: draw-l-plan,
+          type: whiteboard.apply,
+          at: { mark: l-plan },
+          upsertIds: [l-a1, l-plan-box, l-plan],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-l-act,
+          type: whiteboard.apply,
+          at: { mark: l-act },
+          upsertIds: [l-a2, l-act-box, l-act],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-l-obs,
+          type: whiteboard.apply,
+          at: { mark: l-obs },
+          upsertIds: [l-a3, l-obs-box, l-obs],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-l-again,
+          type: whiteboard.apply,
+          at: { mark: l-again },
+          upsertIds: [l-a4, l-again],
+          drawMs: 900,
+        }
+      - {
+          id: draw-l-done,
+          type: whiteboard.apply,
+          at: { mark: l-done },
+          upsertIds: [l-a5, l-done],
+          drawMs: 900,
+        }
+
+  - id: type-loop
+    narration: >
+      [[mark:close-l]] ဒီ loop ကို notes ထဲမှာ မှတ်ထားရအောင်။ [[mark:type-loop]] အဆင့် တစ်ဆင့်ကို စာကြောင်း
+      တစ်ကြောင်းစီ ရေးထားပြီး၊ နောက်ဆုံး စာကြောင်းက loop ကို ဘယ်အချိန်ထိ ပြန်ပတ်မလဲ ဆိုတာကို မှတ်ထားတာပါ။
+      [[mark:sel-goal]] ပထမ စာကြောင်းကို ကြည့်ပါ။ loop တစ်ခုလုံးမှာ ကိုယ့်လက်ထဲမှာ ရှိတဲ့ အဆင့်က ဒါပါ။ ဒီ အဆင့်
+      မရှင်းရင် loop တစ်ခုလုံးက မှားတဲ့ ဘက်ကို မြန်မြန် လည်သွားနိုင်ပါတယ်။ [[mark:sel-observe]] observe
+      အဆင့်ကိုလည်း သတိထား ကြည့်ပါ။ ရလဒ်ကို စစ်လို့ရတဲ့ အလုပ်ဆိုရင် agent က အမှားကို တွေ့ပြီး ပြင်နိုင်ပေမယ့်၊
+      စစ်စရာ မရှိတဲ့ အလုပ်ဆိုရင်တော့ ခန့်မှန်းချက် တစ်ခုနဲ့တင် ပြီးပြီလို့ ပြောသွားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+    actions:
+      - { id: close-l, type: whiteboard.apply, at: { mark: close-l }, open: false }
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: notes.md, after: "# Notes\n", occurrence: 1 }
+        text: "\n## Lesson 02 · Agent ရဲ့ loop\n1. goal — ကိုယ်က ပန်းတိုင် ပေးတယ်။\n2. plan — agent က လုပ်မယ့် အဆင့်တွေကို စီတယ်။\n3. act — tool နဲ့ file ဖတ်၊ command run၊ ပြင်တယ်။\n4. observe — ရလဒ်ကို ပြန်ကြည့်တယ်။\n5. ↻ — ပြီးတဲ့အထိ ဒါမှမဟုတ် ရပ်ရမယ့်အထိ ပြန်ပတ်တယ်။\n"
+        cadence: line-by-line
+      - {
+          id: expect-loop,
+          type: expect.file,
+          at: { afterAction: type-loop },
+          path: notes.md,
+          contains: "4. observe — ရလဒ်ကို ပြန်ကြည့်တယ်။",
+        }
+      - {
+          id: sel-goal,
+          type: editor.select,
+          at: { mark: sel-goal },
+          target: { file: notes.md, text: "1. goal — ကိုယ်က ပန်းတိုင် ပေးတယ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-observe,
+          type: editor.select,
+          at: { mark: sel-observe },
+          target: { file: notes.md, text: "4. observe — ရလဒ်ကို ပြန်ကြည့်တယ်။", occurrence: 1 },
+        }
+
+  - id: parts
+    narration: >
+      [[mark:p-reopen]] ဒီ အဆင့်တွေကို agent ရဲ့ ဘယ် အစိတ်အပိုင်းက လုပ်လဲ ဆိုတာ ခုနက ပုံပေါ်မှာပဲ ကြည့်ရအောင်။
+      [[mark:p-model]] plan ချတဲ့ အပိုင်းက model ပါ။ model ဆိုတာ စာသားကို ဆက်ခန့်မှန်းပေးတဲ့ AI ရဲ့ အူတိုင်ပါ။
+      သူ့ရှေ့မှာ ရှိတဲ့ စာတွေကို ကြည့်ပြီး၊ နောက်တစ်ဆင့်မှာ ဘာလုပ်သင့်လဲ ဆိုတာကို ခန့်မှန်းပြီး ထုတ်ပေးတာပါ။
+      [[mark:p-tool]] model ကိုယ်တိုင်က file ကို မဖွင့်နိုင်ပါဘူး။ file ဖတ်တာ၊ command run တာ၊ ပြင်တာတွေကို tool
+      တွေက လုပ်ပေးပါတယ်။ tool ဆိုတာ agent ခေါ်သုံးလို့ရတဲ့ လုပ်ဆောင်ချက်တွေပါ။ [[mark:p-ctx]] tool ရဲ့ ရလဒ်ကတော့
+      model မြင်ရတဲ့ စာသားတွေ၊ context window ထဲကို ပြန်ဝင်လာပြီး၊ model က နောက်တစ်ပတ်မှာ အဲဒါကို မြင်ရပါတယ်။
+      [[mark:p-orch]] model ကို ခေါ်တာ၊ tool ကို run ပေးတာ၊ ရလဒ်ကို ပြန်ထည့်ပေးတာ၊ ဘယ်နှပတ်ထိ ပတ်ခွင့်ရှိလဲ
+      ကန့်သတ်တာ စတဲ့၊ loop ကို လည်ပတ်စေတဲ့ code ကိုတော့ orchestration လို့ ခေါ်ပါတယ်။ [[mark:p-setup]] model
+      တစ်ခုတည်းကိုပဲ tool မတူတာ၊ rule မတူတာနဲ့ ထားရင် အလုပ်လုပ်ပုံ တော်တော် ကွာသွားပါတယ်။ model ပတ်လည်က ဒီ အစီအစဉ်
+      တစ်ခုလုံးကို harness လို့ ခေါ်ပြီး၊ lesson ၂၈ မှာ ပြန်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Harness engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+    actions:
+      - { id: reopen-l, type: whiteboard.apply, at: { mark: p-reopen }, open: true }
+      - {
+          id: draw-p-model,
+          type: whiteboard.apply,
+          at: { mark: p-model },
+          upsertIds: [p-model],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-tool,
+          type: whiteboard.apply,
+          at: { mark: p-tool },
+          upsertIds: [p-tool],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-ctx,
+          type: whiteboard.apply,
+          at: { mark: p-ctx },
+          upsertIds: [p-ctx],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-orch,
+          type: whiteboard.apply,
+          at: { mark: p-orch },
+          upsertIds: [p-orch],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-setup,
+          type: whiteboard.apply,
+          at: { mark: p-setup },
+          upsertIds: [p-setup],
+          drawMs: 1100,
+        }
+
+  - id: context
+    chapter: Agent ရဲ့ စားပွဲ
+    narration: >
+      [[mark:d-title]] context window ကို ပိုမြင်သာအောင် စားပွဲ တစ်လုံးလို ပုံဆွဲကြည့်ရအောင်။ context window ဆိုတာ
+      agent က အခု မြင်နေရတဲ့ စာသား အားလုံးပါ။ [[mark:d-on]] ဒီ စားပွဲပေါ်မှာ ကိုယ်ပေးလိုက်တဲ့ အလုပ်၊ agent
+      ဖတ်ထားတဲ့ file အနည်းငယ်၊ app ရဲ့ rule တွေနဲ့ tool တွေ ပြန်ပေးတဲ့ ရလဒ်တွေ ရှိပါတယ်။ ကိုယ့် app အကြောင်း agent
+      က သိသလို ပြောနိုင်တာ အားလုံးက ဒီ စားပွဲပေါ်ကနေ လာတာပါ။ [[mark:d-off]] စားပွဲပေါ်မှာ မရှိတာကိုတော့ agent
+      မမြင်ရပါဘူး။ ဥပမာ စနေ တနင်္ဂနွေမှာ ဆိုင်က မနက် ခုနစ်နာရီမှ ဖွင့်တယ် ဆိုတာ ကိုယ့်ခေါင်းထဲမှာပဲ ရှိနေရင်၊
+      agent အတွက်တော့ အဲဒီ rule မရှိသလိုပါပဲ။ agent မဖတ်ရသေးတဲ့ file ထဲက အချက်တွေလည်း ဒီလိုပါပဲ။ [[mark:d-limit]]
+      စားပွဲမှာ နေရာလည်း အကန့်အသတ် ရှိပါတယ်။ စာတွေ အရမ်း များလာရင် အရေးကြီးတဲ့ အချက်ကို model က လွတ်သွားတတ်လို့၊
+      များများ တင်တာထက် မှန်တာကို ရွေးပြီး တင်ပေးတာက ပိုအရေးကြီးပါတယ်။ [[mark:d-new]] session ဆိုတာ agent နဲ့
+      အလုပ် တစ်ခါ စလုပ်တဲ့ အကြိမ် တစ်ကြိမ်ပါ။ session အသစ် စတိုင်း စားပွဲ အလွတ်နဲ့ ပြန်စပါတယ်။ model ကိုယ်တိုင်က
+      session တစ်ခုနဲ့ တစ်ခုကြား ဘာကိုမှ မှတ်မထားပါဘူး။ session စတိုင်း agent ဖတ်တဲ့ file တွေကတော့ စားပွဲပေါ်
+      ပြန်ရောက်လာလို့၊ ကြာကြာ လိုမယ့် အချက်ဆိုရင် အဲဒီလို file ထဲမှာ ရှိမှ နောက် session မှာ ကျန်ပါတယ်။
+    sources:
+      - {
+          title: "Claude API docs: Context windows",
+          url: "https://platform.claude.com/docs/en/build-with-claude/context-windows",
+        }
+      - {
+          title: "Claude Code docs: How Claude remembers your project",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-d,
+          type: whiteboard.apply,
+          at: { mark: d-title },
+          clear: true,
+          upsertIds: [d-title, d-desk],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-d-on,
+          type: whiteboard.apply,
+          at: { mark: d-on },
+          upsertIds: [d-on1, d-on2, d-on3, d-on4],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-d-off,
+          type: whiteboard.apply,
+          at: { mark: d-off },
+          upsertIds: [d-off-h, d-off1, d-off2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-d-limit,
+          type: whiteboard.apply,
+          at: { mark: d-limit },
+          upsertIds: [d-limit],
+          drawMs: 800,
+        }
+      - {
+          id: draw-d-new,
+          type: whiteboard.apply,
+          at: { mark: d-new },
+          upsertIds: [d-new],
+          drawMs: 1200,
+        }
+
+  - id: good-weak
+    chapter: ဘာမှာ အားသာပြီး ဘာမှာ အားနည်းလဲ
+    narration: >
+      [[mark:g-good]] ဒါဆို agent က ဘယ်လို အလုပ်မျိုးမှာ အားသာလဲ။ ဘာလုပ်ရမလဲ ရှင်းရှင်း ရေးထားပြီး မှန်မမှန်
+      စစ်လို့ရတဲ့ အလုပ်မှာ အကောင်းဆုံး ရလဒ် ထွက်ပါတယ်။ observe အဆင့်မှာ အမှားကို တွေ့နိုင်လို့ပါ။ ပထမ အကြမ်း
+      တစ်ခုကို မြန်မြန် ထုတ်ပေးတာ၊ file အများကြီးကို မြန်မြန် ဖတ်တာမှာလည်း အားသာပါတယ်။ [[mark:g-weak]] ဒါပေမဲ့
+      ဘာလိုချင်လဲ ဝေဝါးနေရင်၊ ဒါမှမဟုတ် ရေးမထားတဲ့ rule တွေ ရှိရင်တော့ အားနည်းပါတယ်။ ဥပမာ အနည်းဆုံး ၁၅ မိနစ်
+      ကြိုမှာရမယ် ဆိုတဲ့ ဆိုင်ရဲ့ rule ကို ဘယ်မှာမှ မရေးထားရင်၊ agent က အဲဒီ rule ကို သူ့ဘာသာ ခန့်မှန်းလို့
+      မရပါဘူး။ ဆိုင်ရဲ့ လုပ်ငန်း အခြေအနေကိုလည်း ကိုယ်က ပြောပြမှပဲ agent မြင်ရပါတယ်။ [[mark:g-sure]] အန္တရာယ်
+      အများဆုံးကတော့ မသေချာတဲ့ နေရာမှာ မသိဘူးလို့ ပြောမယ့်အစား၊ ဖြစ်နိုင်လောက်တဲ့ အဖြေကို သေချာသလို ပုံစံနဲ့
+      ထုတ်ပေးတတ်တာပါ။ model တွေကို လေ့ကျင့်တဲ့အခါရော၊ စစ်ဆေးတဲ့အခါမှာပါ၊ မသိဘူး လို့ ဖြေတာထက် ခန့်မှန်းဖြေတာကို
+      ပိုအမှတ်ပေးလေ့ ရှိလို့ပါ။ [[mark:g-check]] ဒါကြောင့် agent ဆီက အဖြေက ဘယ်လောက်ပဲ ယုံချင်စရာ ကောင်းကောင်း၊
+      ထွက်လာတာကို ကိုယ်က စစ်ရပါမယ်။
+    sources:
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+      - {
+          title: "Kalai et al.: Why Language Models Hallucinate (arXiv 2509.04664)",
+          url: "https://arxiv.org/abs/2509.04664",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Coding agents in practice",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-g,
+          type: whiteboard.apply,
+          at: { mark: g-good },
+          clear: true,
+          upsertIds: [g-h1, g-g1, g-g2, g-g3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-g-weak,
+          type: whiteboard.apply,
+          at: { mark: g-weak },
+          upsertIds: [g-h2, g-w1, g-w2, g-w3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-g-sure,
+          type: whiteboard.apply,
+          at: { mark: g-sure },
+          upsertIds: [g-w4, g-sure],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-g-check,
+          type: whiteboard.apply,
+          at: { mark: g-check },
+          upsertIds: [g-check],
+          drawMs: 800,
+        }
+
+  - id: where
+    narration: >
+      [[mark:w-title]] နောက်ဆုံး၊ ဒီ agent တွေကို ဘယ်နေရာတွေမှာ တွေ့ရလဲ ကြည့်ရအောင်။ [[mark:w-editor]] ပထမ နေရာက
+      code ရေးတဲ့ program ဖြစ်တဲ့ editor ထဲပါ။ GitHub Copilot လို tool မျိုးက code ရိုက်နေရင်း နောက် ရိုက်မယ့်
+      စာကို အကြံပေးတာ၊ မေးတာကို ဖြေပေးတာ လုပ်ပါတယ်။ [[mark:w-term]] ဒုတိယ နေရာက terminal ထဲပါ။ terminal ဆိုတာ ခုနက
+      command တွေကို ရိုက်ထည့်ရတဲ့ window ပါ။ Claude Code လို agent မျိုးကို အဲဒီမှာ ပန်းတိုင် ပေးလိုက်ရင်၊ app
+      ရဲ့ file အားလုံးပေါ်မှာ loop ပတ်ပြီး လုပ်နေတာကို ကိုယ်က အနီးကပ် ကြည့်လို့ ရပါတယ်။ [[mark:w-bg]] တတိယ နေရာက
+      နောက်ကွယ်၊ background ပါ။ Jules လို tool မျိုးမှာ ကိုယ် တခြား အလုပ်လုပ်နေတုန်း၊ agent က အင်တာနက်ပေါ်က
+      သီးသန့် စက် တစ်လုံးမှာ အပ်ထားတဲ့ အလုပ်ကို လုပ်ပြီး၊ ကိုယ်က နောက်မှ ပြန်စစ်ပါတယ်။ ဒီ နာမည်တွေက နေရာကို
+      မြင်သာအောင် ဥပမာ ပြတာပဲ ဖြစ်ပြီး၊ ဘယ်ဟာ သုံးပါ လို့ ညွှန်တာ မဟုတ်ပါဘူး။ [[mark:w-same]] နေရာ မတူပေမယ့် အထဲက
+      loop ကတော့ အတူတူပါပဲ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Coding agents in practice",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "GitHub Docs: About GitHub Copilot",
+          url: "https://docs.github.com/en/copilot/get-started/what-is-github-copilot",
+        }
+      - { title: "Claude Code docs: Overview", url: "https://code.claude.com/docs/en/overview" }
+      - { title: "Jules docs: Getting started", url: "https://jules.google/docs/" }
+    actions:
+      - {
+          id: open-board-w,
+          type: whiteboard.apply,
+          at: { mark: w-title },
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-w-editor,
+          type: whiteboard.apply,
+          at: { mark: w-editor },
+          upsertIds: [w-b1, w-t1, w-s1],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-w-term,
+          type: whiteboard.apply,
+          at: { mark: w-term },
+          upsertIds: [w-b2, w-t2, w-s2],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-w-bg,
+          type: whiteboard.apply,
+          at: { mark: w-bg },
+          upsertIds: [w-b3, w-t3, w-s3],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-w-same,
+          type: whiteboard.apply,
+          at: { mark: w-same },
+          upsertIds: [w-same],
+          drawMs: 900,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မနေ့က chat ထဲမှာ agent ကို ဈေးနှုန်းတွေ ကျပ် ကိန်းပြည့်နဲ့ပဲ ပြပါ
+      လို့ ပြောခဲ့တယ် ဆိုပါစို့။ ဒီနေ့ session အသစ်မှာတော့ agent က ဈေးနှုန်းကို ဒသမ နဲ့ ပြန်ပြနေပါတယ်။
+      ဘာကြောင့်လဲ။ ပထမ အဖြေက model က တစ်ညအတွင်း ညံ့သွားလို့ပါ။ ဒုတိယ အဖြေက အဲဒီ rule က မနေ့က chat ထဲမှာပဲ
+      ရှိခဲ့လို့ပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ အဖြေ ပါ။
+      ဘာကြောင့်လဲဆိုတော့ session အသစ်က စားပွဲ အလွတ်နဲ့ စတာမို့၊ chat ထဲမှာပဲ ပြောခဲ့တဲ့ rule က ဒီနေ့ စားပွဲပေါ်မှာ
+      မရှိတော့လို့ပါ။ ဒီ ဖြစ်ရပ်မှာ model က ညံ့သွားတာ မဟုတ်ပါဘူး။ ပြင်ချင်ရင် ကြာကြာ သုံးမယ့် rule ကို agent က
+      session တိုင်း ဖတ်တဲ့ file ထဲမှာ ရေးထားရပါမယ်။ အဲဒီ file ကို lesson ၁၀ မှာ ရေးကြမှာပါ။ [[mark:close-quiz]]
+      ဒါကိုလည်း notes ထဲမှာ မှတ်ထားရအောင်။ [[mark:type-rule]] ဒီ စာကြောင်းက နောက်ပိုင်း rule အသစ် ပေါ်လာတိုင်း၊
+      ဘယ်မှာ ရေးရမလဲ ဆိုတာကို ဆုံးဖြတ်ထားတာပါ။
+    sources:
+      - {
+          title: "Claude Code docs: How Claude remembers your project",
+          url: "https://code.claude.com/docs/en/memory",
+        }
+      - { title: "AGENTS.md", url: "https://agents.md/" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-o1, z-o2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-fix],
+          drawMs: 1400,
+        }
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        target: { file: notes.md, after: "ပြန်ပတ်တယ်။\n", occurrence: 1 }
+        text: "\n- မှတ်ရန် — chat ထဲက rule က session နဲ့ ပျောက်တယ်။ ကြာကြာ သုံးမယ့် rule ကို file ထဲ ရေး။\n"
+        cadence: line-by-line
+      - {
+          id: expect-rule,
+          type: expect.file,
+          at: { afterAction: type-rule },
+          path: notes.md,
+          contains: "ကြာကြာ သုံးမယ့် rule ကို file ထဲ ရေး။",
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:sel-loop]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent ဆိုတာ ပန်းတိုင် တစ်ခုအတွက် plan ချ၊ tool နဲ့ လုပ်၊ ရလဒ်ကို
+      ကြည့်ပြီး၊ ပြီးတဲ့အထိ loop ပတ်တဲ့ software ပါ။ model၊ tool နဲ့ orchestration က အဲဒီ loop ကို အတူ
+      လည်ပတ်စေပါတယ်။ [[mark:sel-rule]] agent က context window လို့ ခေါ်တဲ့ စားပွဲပေါ်က စာကိုပဲ မြင်ရလို့၊
+      နောက်နေ့ထိ လိုမယ့် စည်းကမ်းကို agent ဖတ်မယ့် နေရာမှာ ထားရပါမယ်။ ထွက်လာတဲ့ အဖြေက သေချာသလို ပုံပေါ်ရင်တောင်
+      မှားနိုင်လို့ ကိုယ်က စစ်ရပါမယ်။ နောက် lesson မှာတော့ agent ပတ်လည်မှာ စည်းကမ်းနဲ့ စစ်ဆေးမှု ဘယ်လောက် ထားမလဲ
+      ဆိုတာကို၊ အလုပ် မှားရင် ဘယ်လောက် နစ်နာမလဲ ဆိုတဲ့ risk ပေါ်မူတည်ပြီး ဘယ်လို ရွေးမလဲ လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Anthropic: Building effective agents",
+          url: "https://www.anthropic.com/engineering/building-effective-agents",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-loop,
+          type: editor.select,
+          at: { mark: sel-loop },
+          target:
+            {
+              file: notes.md,
+              text: "1. goal — ကိုယ်က ပန်းတိုင် ပေးတယ်။\n2. plan — agent က လုပ်မယ့် အဆင့်တွေကို စီတယ်။\n3. act — tool နဲ့ file ဖတ်၊ command run၊ ပြင်တယ်။\n4. observe — ရလဒ်ကို ပြန်ကြည့်တယ်။\n5. ↻ — ပြီးတဲ့အထိ ဒါမှမဟုတ် ရပ်ရမယ့်အထိ ပြန်ပတ်တယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-rule,
+          type: editor.select,
+          at: { mark: sel-rule },
+          target: { file: notes.md, text: "ကြာကြာ သုံးမယ့် rule ကို file ထဲ ရေး။", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
