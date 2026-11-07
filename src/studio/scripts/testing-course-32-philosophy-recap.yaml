@@ -1905,7 +1905,7 @@ scenes:
     narration: >
       test list ရဲ့ ပထမ item ကနေ စရအောင်။ [[mark:type-first]] todo ရဲ့ နေရာမှာ test အစစ်ကို ထည့်ပြီး၊ todo
       line ကိုတော့ comment လုပ်ပြီး ပြီးသွားကြောင်း မှတ်ထားပါမယ်။ [[mark:select-first]] fake store နဲ့ booking
-      စနစ်ကို ဆောက်ပြီး၊ မြမြက ညနေ ၆ နာရီမှာ စားပွဲ နံပါတ် ၅ ကို မှာရင် အဲဒီ booking ပြန်ရရမယ်လို့
+      စနစ်ကို ဆောက်ပြီး၊ လှလှက ညနေ ၆ နာရီမှာ စားပွဲ နံပါတ် ၅ ကို မှာရင် အဲဒီ booking ပြန်ရရမယ်လို့
       စစ်ထားပါတယ်။ [[mark:read-first]] panel ကို ကြည့်ပါ။ test အသစ်က red မဖြစ်ဘဲ ချက်ချင်း pass ဖြစ်သွားပြီး၊
       summary မှာ တစ်ခု pass နဲ့ todo တစ်ခုလို့ ပြနေပါတယ်။ [[mark:second-look]] TDD မှာ test အသစ်က
       ချက်ချင်း pass ဖြစ်ရင် တစ်ချက် ပြန်စဉ်းစားသင့်ပါတယ်။ code က ဒီ အလုပ်ကို လုပ်ပြီးသား ဖြစ်လို့လား၊
@@ -1928,7 +1928,7 @@ scenes:
             after: "import { createBookings, memoryStore } from \"./booking.js\";\n\n",
             occurrence: 1,
           }
-        text: "test(\"books a free table\", async () => {\n  const bookings = createBookings(memoryStore());\n  const booking = await bookings.book(5, \"18:00\", \"မြမြ\");\n  expect(booking).toEqual({ table: 5, time: \"18:00\", customer: \"မြမြ\" });\n});\n// "
+        text: "test(\"books a free table\", async () => {\n  const bookings = createBookings(memoryStore());\n  const booking = await bookings.book(5, \"18:00\", \"လှလှ\");\n  expect(booking).toEqual({ table: 5, time: \"18:00\", customer: \"လှလှ\" });\n});\n// "
         # One block at the todo line's first character: the test lands above the todo, which becomes
         # a comment under it in the same write (COURSE-KIT §5; curriculum Decision 21).
         cadence: block
@@ -1959,13 +1959,13 @@ scenes:
         target:
           {
             file: src/booking.test.js,
-            text: "const booking = await bookings.book(5, \"18:00\", \"မြမြ\");\n  expect(booking).toEqual({ table: 5, time: \"18:00\", customer: \"မြမြ\" });",
+            text: "const booking = await bookings.book(5, \"18:00\", \"လှလှ\");\n  expect(booking).toEqual({ table: 5, time: \"18:00\", customer: \"လှလှ\" });",
             occurrence: 1,
           }
 
   - id: red
     narration: >
-      ဒုတိယ item ကို ဆက်ရေးပါမယ်။ [[mark:type-second]] ဒီ test မှာ မြမြက ညနေ ၆ နာရီ စားပွဲ ၅ ကို မှာထားပြီးမှ၊
+      ဒုတိယ item ကို ဆက်ရေးပါမယ်။ [[mark:type-second]] ဒီ test မှာ လှလှက ညနေ ၆ နာရီ စားပွဲ ၅ ကို မှာထားပြီးမှ၊
       အောင်အောင်က အဲဒီ စားပွဲ အဲဒီ အချိန်ကိုပဲ ထပ်မှာပါတယ်။ [[mark:select-second]] ဒုတိယ booking ဟာ
       မှာထားပြီးသား ဖြစ်တယ် ဆိုတဲ့ error နဲ့ reject ဖြစ်ရမယ်လို့ စစ်ထားပါတယ်။ promise ကို await နဲ့ စောင့်ပြီး
       rejects နဲ့ စစ်တာကို async lesson မှာ ကြည့်ခဲ့ပါတယ်။ [[mark:read-red]] panel ကို ကြည့်ပါ။ test အသစ်က
@@ -1987,7 +1987,7 @@ scenes:
             after: "// test.todo(\"books a free table\");\n",
             occurrence: 1,
           }
-        text: "\ntest(\"refuses a table that is already booked\", async () => {\n  const bookings = createBookings(memoryStore());\n  await bookings.book(5, \"18:00\", \"မြမြ\");\n  const second = bookings.book(5, \"18:00\", \"အောင်အောင်\");\n  await expect(second).rejects.toThrow(\"is taken\");\n});\n// "
+        text: "\ntest(\"refuses a table that is already booked\", async () => {\n  const bookings = createBookings(memoryStore());\n  await bookings.book(5, \"18:00\", \"လှလှ\");\n  const second = bookings.book(5, \"18:00\", \"အောင်အောင်\");\n  await expect(second).rejects.toThrow(\"is taken\");\n});\n// "
         # One block at the second todo's first character, like the first item.
         cadence: block
       - id: expect-red
