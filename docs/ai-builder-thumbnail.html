@@ -1,0 +1,1251 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Builder thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      AI Builder course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Same template as docs/ai-course-thumbnail.html and docs/testing-course-thumbnail.html.
+      Click any text to edit it; click a progress square to load that lesson from LESSONS.
+      Screenshot the frame only (DevTools → right-click the #thumb node → Capture node
+      screenshot for an exact 1280×720 PNG), or render the whole set with
+      `bun docs/ai-builder-thumbnails/render.ts`.
+      Brand: Next Editor lesson template (cream page, ink, yellow/purple/teal,
+      Google Sans + Google Sans Code); Burmese runs are set in Noto Sans Myanmar.
+      The card shows one line of a Markdown document the lesson typed (the course builds
+      with an agent and never writes code); its tab names the document.
+      Mascot: "Clip", an original character drawn for this course: a purple clipboard
+      whose face is on its paper, with a ticked checkbox under it (the course writes
+      documents and checks the work against them), a small yellow builder's hard hat on
+      its clip, and a pencil in one hand. It is a clipboard, never a bent-wire paper clip,
+      and must not be traced from any product's character.
+      Pose, mirror, tilt and the speech bubble are set from the toolbar under the
+      frame, or all at once with window.setThumb({...}) from the console.
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #0fb5a3;
+        --teal-dk: #08877a;
+        --gray: #80868b;
+        --dot: #cfccc2;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* max-content keeps the whole frame reachable by scrolling in a narrow window.
+         The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      [contenteditable] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable]:hover {
+        box-shadow: inset 0 -3px 0 rgb(109 87 255 / 0.35);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .series {
+        position: absolute;
+        left: 60px;
+        top: 46px;
+        font: 700 36px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 60px;
+        top: 38px;
+        padding: 12px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 164px;
+        width: 300px;
+        height: 350px;
+        border-radius: 28px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .number .label {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.16em;
+      }
+
+      .number .value {
+        font: 700 200px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .title-box {
+        position: absolute;
+        left: 420px;
+        top: 140px;
+        width: 480px;
+        height: 290px;
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        width: 100%;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.32;
+        letter-spacing: -0.01em;
+        /* Editable text defaults to break-word in Chrome, which splits a long word
+           instead of letting fitTitle shrink it. */
+        overflow-wrap: normal;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, so every Myanmar run
+         in the title is wrapped in .mm (see renderTitle). A run never breaks inside:
+         Chrome's dictionary breaker would split a word like တစ်စိတ်တစ်ပိုင်းပဲ mid-way,
+         so a title only wraps at its spaces. */
+      .title .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      /* A phrase that must not break across lines (see renderTitle). */
+      .title .nb {
+        white-space: nowrap;
+      }
+
+      .code {
+        left: 420px;
+        top: 462px;
+        width: 796px;
+        height: 92px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        padding: 0 34px;
+      }
+
+      .code .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      /* One line of a Markdown document. Burmese falls through to Noto Sans Myanmar,
+         which holds every Myanmar run whole. */
+      .code .src {
+        width: 100%;
+        white-space: pre;
+        overflow: hidden;
+        /* Burmese marks stack well above and below the line, where overflow: hidden
+           would cut them off; the padding gives them room and the margin cancels it. */
+        padding-block: 18px;
+        margin-block: -18px;
+        font:
+          500 32px/1.2 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+      }
+
+      /* Markdown: heading marks, requirement ids (AC-2, TC-2, ADR-001) and commit types
+         purple; heading text bold; Given/When/Then and field names teal; numbers amber;
+         arrows and separators gray. */
+      .src .kw {
+        color: var(--purple);
+        font-weight: 700;
+      }
+
+      .src .hd {
+        font-weight: 700;
+      }
+
+      .src .str {
+        color: var(--teal-dk);
+      }
+
+      .src .fn {
+        color: var(--teal-dk);
+        font-weight: 700;
+      }
+
+      .src .num {
+        color: #b26b00;
+      }
+
+      .src .pn {
+        color: var(--gray);
+      }
+
+      /* 32 lessons in eight modules; the squares are a little smaller than the AI
+         course's so the row still stays clear of the brand. */
+      .progress {
+        position: absolute;
+        left: 64px;
+        bottom: 66px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .module {
+        display: flex;
+        gap: 4px;
+      }
+
+      .sq {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        background: var(--dot);
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .sq.on {
+        background: var(--yellow);
+        box-shadow: inset 0 0 0 3px var(--ink);
+      }
+
+      .brand {
+        position: absolute;
+        right: 60px;
+        bottom: 50px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 56px;
+        height: 56px;
+      }
+
+      /* The mascot stands on the right end of the document card: its box ends at 472px,
+         just over the card's top border (462px), so its feet rest on it. */
+      .mascot {
+        position: absolute;
+        right: 36px;
+        top: 100px;
+        width: 310px;
+        height: 372px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 18px;
+      }
+
+      .bubble {
+        position: relative;
+        max-width: 310px;
+        overflow: hidden;
+        padding: 8px 24px 10px;
+        border: 4px solid var(--ink);
+        border-radius: 24px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        font:
+          700 34px/1.35 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+        white-space: nowrap;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, and its stacked
+         marks need a taller line than code text. */
+      .bubble.mm {
+        font-family: "Noto Sans Myanmar", "Google Sans", sans-serif;
+        line-height: 1.6;
+        padding: 4px 24px 6px;
+      }
+
+      .bubble.off {
+        display: none;
+      }
+
+      .bubble-tail {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        background: var(--white);
+        border-right: 4px solid var(--ink);
+        border-bottom: 4px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .clip {
+        width: 310px;
+        height: 200px;
+        flex: none;
+        overflow: visible;
+        transform-origin: center bottom;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+      }
+
+      .toolbar button {
+        padding: 6px 12px;
+        border: 1px solid #55555c;
+        border-radius: 8px;
+        background: #3a3a3f;
+        color: #f0f0f3;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .toolbar button[aria-pressed="true"] {
+        border-color: var(--yellow);
+        color: var(--yellow);
+      }
+
+      .help {
+        max-width: 1280px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series"><span class="brace">{</span> AI Builder <span class="brace">}</span></div>
+      <div class="lang" contenteditable="plaintext-only" spellcheck="false">မြန်မာလို</div>
+
+      <div class="card number">
+        <div class="label">LESSON</div>
+        <div class="value" id="number" contenteditable="plaintext-only" spellcheck="false">01</div>
+      </div>
+
+      <div class="title-box" id="title-box">
+        <div class="title" id="title" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="card code">
+        <div class="tab" id="file" contenteditable="plaintext-only" spellcheck="false"></div>
+        <div class="src" id="code" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="mascot">
+        <div class="bubble" id="bubble" contenteditable="plaintext-only" spellcheck="false"></div>
+        <svg
+          class="clip"
+          id="clip"
+          viewBox="-155 -95 310 200"
+          role="img"
+          aria-label="Clip, the course's mascot"
+        ></svg>
+      </div>
+      <!-- The tail sits outside the bubble so the bubble can clip long text. -->
+      <div class="bubble-tail" id="bubble-tail"></div>
+
+      <div class="progress" id="progress" aria-label="Lesson in the course"></div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      Clip:
+      <button type="button" data-pose="happy">Happy</button>
+      <button type="button" data-pose="thinking">Thinking</button>
+      <button type="button" data-pose="joy">Joy</button>
+      <button type="button" data-pose="worried">Worried</button>
+      <button type="button" data-action="mirror">Mirror</button>
+      <button type="button" data-tilt="-6">Tilt left</button>
+      <button type="button" data-tilt="0">Straight</button>
+      <button type="button" data-tilt="6">Tilt right</button>
+      <button type="button" data-action="bubble">Bubble</button>
+    </div>
+
+    <p class="help">
+      Click any text to edit it (including Clip's bubble) · click a square to load that lesson ·
+      pick Clip's pose above · then screenshot only the 1280×720 frame.
+    </p>
+
+    <script>
+      /**
+       * Every lesson's thumbnail data lives here and only here; render.ts and the
+       * progress squares both read it. `slug` is the lesson slug and the PNG name in
+       * docs/ai-builder-thumbnails/. `title` is the Burmese title after "AI Builder NN: ".
+       * `code` is one real line of a Markdown document the lesson typed, written as
+       * "file: line" (the file is everything before the first ": " and goes on the
+       * card's tab); a line with no file (something the app shows) gets a "preview" tab.
+       * Keep the line short enough to stay at the full 32px (about 36 characters).
+       */
+      const LESSONS = [
+        {
+          number: 1,
+          slug: "ai-builder-01-more-than-code",
+          title: "Code ရေးတာက အလုပ်ရဲ့ တစ်စိတ်တစ်ပိုင်းပဲ",
+          code: "notes.md: intent — ဘာမှန်လဲ ကိုယ်က ဆုံးဖြတ်",
+          bubble: "just code?",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 2,
+          slug: "ai-builder-02-how-agents-work",
+          title: "Coding agent တွေ ဘယ်လို အလုပ်လုပ်သလဲ",
+          code: "notes.md: observe — ရလဒ်ကို ပြန်ကြည့်တယ်။",
+          bubble: "what's inside?",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 3,
+          slug: "ai-builder-03-vibe-to-agentic",
+          title: "Vibe coding ကနေ agentic engineering ဆီ",
+          code: "notes.md: prototype — စမ်းဖို့ပဲ။",
+          bubble: "how careful?",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 4,
+          slug: "ai-builder-04-problem-first",
+          title: "Solution မတိုင်ခင် problem",
+          code: "problem.md: ## Not the problem",
+          bubble: "why first?",
+          pose: "thinking",
+          tilt: 6,
+        },
+        {
+          number: 5,
+          slug: "ai-builder-05-requirements",
+          title: "Requirement တွေကို ရှာဖွေ ရေးသားခြင်း",
+          code: "requirements.md: ## Non-functional",
+          bubble: "how well?",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 6,
+          slug: "ai-builder-06-scope-mvp",
+          title: "Scope နဲ့ MVP",
+          code: "requirements.md: Won't (for now)",
+          bubble: "not now",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 7,
+          slug: "ai-builder-07-edge-cases",
+          title: "Edge case နဲ့ assumption",
+          code: "requirements.md: ဖုန်းနံပါတ် မပါ → လက်မခံ",
+          bubble: "what if?",
+          pose: "thinking",
+          tilt: -5,
+        },
+        {
+          number: 8,
+          slug: "ai-builder-08-acceptance-criteria",
+          title: "Acceptance criteria နဲ့ ပြီးတယ် ဆိုတာ ဘာလဲ",
+          code: "spec.md: AC-2 Given အရေအတွက် 0",
+          bubble: "done means?",
+          pose: "joy",
+          tilt: 4,
+        },
+        {
+          number: 9,
+          slug: "ai-builder-09-writing-a-spec",
+          title: "Spec တစ်စောင် ရေးခြင်း",
+          code: "spec.md: ## Rules",
+          bubble: "one page?",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 10,
+          slug: "ai-builder-10-context-engineering",
+          title: "Context engineering နဲ့ AGENTS.md",
+          code: "AGENTS.md: ## Done means",
+          bubble: "every session",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 11,
+          slug: "ai-builder-11-briefing-an-agent",
+          title: "Agent ကို task တစ်ခု အပ်ခြင်း",
+          code: "01-order-form.md: ရပ်ပြီး မေးပါ။",
+          bubble: "plan first?",
+          pose: "happy",
+          tilt: -4,
+        },
+        {
+          number: 12,
+          slug: "ai-builder-12-working-with-people",
+          title: "လူတွေနဲ့ ဆက်သွယ် ပြောဆိုခြင်း",
+          code: "updates.md: ## Blocked / need from you",
+          bubble: "two options",
+          pose: "thinking",
+          tilt: 6,
+        },
+        {
+          number: 13,
+          slug: "ai-builder-13-decomposition",
+          title: "အလုပ်ကြီးကို အပိုင်းလေးတွေ ခွဲခြင်း",
+          code: "plan.md: | # | Task | Done when |",
+          bubble: "slice it",
+          pose: "joy",
+          tilt: -5,
+        },
+        {
+          number: 14,
+          slug: "ai-builder-14-how-software-fits",
+          title: "Software ရဲ့ အစိတ်အပိုင်းတွေ",
+          code: "system-map.md: Server မှာ — တကယ် စစ်တဲ့ နေရာ",
+          bubble: "which part?",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 15,
+          slug: "ai-builder-15-data-thinking",
+          title: "Data ကို စနစ်တကျ တွေးခြင်း",
+          code: "data.md: ## Not stored",
+          bubble: "store what?",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 16,
+          slug: "ai-builder-16-tradeoffs-decisions",
+          title: "Trade-off နဲ့ decision record",
+          code: "decisions.md: ## ADR-001",
+          bubble: "why this?",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 17,
+          slug: "ai-builder-17-simplicity",
+          title: "ရိုးရှင်းအောင် ထိန်းခြင်း",
+          code: "AGENTS.md: ## Simplicity",
+          bubble: "need it?",
+          pose: "joy",
+          tilt: -4,
+        },
+        {
+          number: 18,
+          slug: "ai-builder-18-the-80-percent-problem",
+          title: "80% problem",
+          code: "notes.md: အာရုံ — ရေအောက်ကို အရင် စစ်။",
+          bubble: "80% done?",
+          pose: "worried",
+          tilt: 6,
+        },
+        {
+          number: 19,
+          slug: "ai-builder-19-testing-without-code",
+          title: "Code မရေးဘဲ test လုပ်ခြင်း",
+          code: "test-plan.md: ရလဒ် — ❌ 0 ကျပ်နဲ့ လက်ခံသွားတယ်",
+          bubble: "decide first",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 20,
+          slug: "ai-builder-20-reviewing-agent-work",
+          title: "Agent ရဲ့ အလုပ်ကို review လုပ်ခြင်း",
+          code: "review-checklist.md: ## Task 02 review",
+          bubble: "merge it?",
+          pose: "worried",
+          tilt: 4,
+        },
+        {
+          number: 21,
+          slug: "ai-builder-21-debugging",
+          title: "Scientist လို debug လုပ်ခြင်း",
+          code: "bugs.md: Actual — လက်ဖက်ရည် × NaN",
+          bubble: "why NaN?",
+          pose: "worried",
+          tilt: -6,
+        },
+        {
+          number: 22,
+          slug: "ai-builder-22-evals",
+          title: "AI feature တွေအတွက် eval",
+          code: "evals.md: 6. ဈေးကို 500 ကျပ်ပဲ တွက်ပါ",
+          bubble: "how often?",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 23,
+          slug: "ai-builder-23-version-control",
+          title: "Version control နဲ့ save point",
+          code: "notes.md: 1. မစခင် — commit လုပ်ထား။",
+          bubble: "save first",
+          pose: "joy",
+          tilt: -4,
+        },
+        {
+          number: 24,
+          slug: "ai-builder-24-security-privacy",
+          title: "Security နဲ့ privacy အခြေခံ",
+          code: "security.md: ## Untrusted text",
+          bubble: "just data?",
+          pose: "happy",
+          tilt: 6,
+        },
+        {
+          number: 25,
+          slug: "ai-builder-25-release",
+          title: "Environment နဲ့ release",
+          code: "release-checklist.md: ## During",
+          bubble: "after 10?",
+          pose: "worried",
+          tilt: -5,
+        },
+        {
+          number: 26,
+          slug: "ai-builder-26-running-it",
+          title: "Production မှာ app ကို စောင့်ကြည့်ခြင်း",
+          code: "runbook.md: ## Signals",
+          bubble: "all good?",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 27,
+          slug: "ai-builder-27-cost",
+          title: "AI development ရဲ့ ကုန်ကျစရိတ်",
+          code: "costs.md: Budget — 30,000 ကျပ်အောက်",
+          bubble: "token cost",
+          pose: "thinking",
+          tilt: -6,
+        },
+        {
+          number: 28,
+          slug: "ai-builder-28-the-harness",
+          title: "Agent ရဲ့ harness",
+          code: "AGENTS.md: ## Checks",
+          bubble: "setup fail?",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 29,
+          slug: "ai-builder-29-conductor-orchestrator",
+          title: "Conductor နဲ့ orchestrator",
+          code: "plan.md: ## Mode",
+          bubble: "one or many?",
+          pose: "joy",
+          tilt: -4,
+        },
+        {
+          number: 30,
+          slug: "ai-builder-30-factory-maintenance",
+          title: "Factory model နဲ့ maintenance",
+          code: "notes.md: ### Every change",
+          bubble: "never done",
+          pose: "happy",
+          tilt: 6,
+        },
+        {
+          number: 31,
+          slug: "ai-builder-31-ship-and-learn",
+          title: "Ship လုပ်ပြီး user ဆီက သင်ယူခြင်း",
+          code: "next.md: ## Why not picked up",
+          bubble: "ask why",
+          pose: "joy",
+          tilt: -5,
+        },
+        {
+          number: 32,
+          slug: "ai-builder-32-your-path",
+          title: "ရှေ့ဆက်မယ့် လမ်း",
+          code: "my-plan.md: ## Who will review it",
+          bubble: "your turn",
+          pose: "joy",
+          tilt: 5,
+        },
+      ];
+      window.LESSONS = LESSONS;
+
+      // Lessons per module of the course (curriculum.md): the new job 1–3 · the problem
+      // 4–7 · the spec and the brief 8–12 · design thinking 13–17 · checking the work
+      // 18–22 · shipping and running it 23–27 · scaling the agents 28–30 · closing 31–32.
+      const PARTS = [3, 4, 5, 5, 5, 5, 3, 2];
+
+      const number = document.getElementById("number");
+      const title = document.getElementById("title");
+      const titleBox = document.getElementById("title-box");
+      const file = document.getElementById("file");
+      const code = document.getElementById("code");
+      const progress = document.getElementById("progress");
+      const bubble = document.getElementById("bubble");
+      const bubbleTail = document.getElementById("bubble-tail");
+      const clip = document.getElementById("clip");
+      const thumb = document.getElementById("thumb");
+      const toolbar = document.getElementById("toolbar");
+      const mascot = { pose: "happy", mirror: false, tilt: -6, bubble: true };
+
+      // ---- Clip, the original clipboard mascot (flat fills, bold ink outline) ------
+      // A purple clipboard with a drop shadow; its face is on the white paper, over a
+      // checkbox (ticked when happy, empty while it thinks, crossed when worried). A
+      // small yellow hard hat sits on the clip, and one hand holds a pencil.
+
+      const INK = "#1e1e1e";
+      const PURPLE = "#6d57ff";
+      const YELLOW = "#ffd255";
+      const YELLOW_DK = "#f2b705";
+      const TEAL = "#0fb5a3";
+      const BOARD = { x: -62, y: -54, w: 124, h: 124, r: 18 };
+      const PAPER = { x: -50, y: -40, w: 100, h: 100, r: 6 };
+
+      function rect(box, attrs, dx = 0, dy = 0) {
+        return `<rect x="${box.x + dx}" y="${box.y + dy}" width="${box.w}" height="${box.h}" rx="${box.r}" ${attrs}/>`;
+      }
+
+      // A yellow pencil, tip up, held near its eraser end by a hand at (x, y) and
+      // turned by `angle` degrees.
+      function pencil(x, y, angle) {
+        return (
+          `<g transform="translate(${x} ${y}) rotate(${angle})">` +
+          `<rect x="-6.5" y="10" width="13" height="12" rx="4" fill="#ff8f7e" stroke="${INK}" stroke-width="4"/>` +
+          `<path d="M -6.5 -30 L 0 -47 L 6.5 -30 Z" fill="#f6d9a8" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>` +
+          `<path d="M -2.8 -39 L 0 -47 L 2.8 -39 Z" fill="${INK}" stroke="${INK}" stroke-width="2" stroke-linejoin="round"/>` +
+          `<rect x="-6.5" y="-30" width="13" height="40" fill="${YELLOW}" stroke="${INK}" stroke-width="4"/>` +
+          `<path d="M 0 -27 L 0 7" stroke="${YELLOW_DK}" stroke-width="3"/>` +
+          `<rect x="-6.5" y="6" width="13" height="7" fill="#cfccc2" stroke="${INK}" stroke-width="4"/>` +
+          `</g>`
+        );
+      }
+
+      // An arm is an ink stroke from the board's edge, ending in a round white hand; a
+      // hand with a pencil holds it across the middle.
+      function arm(d, hx, hy, pencilAngle) {
+        return (
+          `<path d="${d}" fill="none" stroke="${INK}" stroke-width="10" stroke-linecap="round"/>` +
+          (pencilAngle === undefined ? "" : pencil(hx, hy, pencilAngle)) +
+          `<circle cx="${hx}" cy="${hy}" r="10.5" fill="#ffffff" stroke="${INK}" stroke-width="5"/>`
+        );
+      }
+
+      function sparkle(x, y, size) {
+        const s = size;
+        const d = `M ${x} ${y - s} Q ${x + s * 0.18} ${y - s * 0.18} ${x + s} ${y} Q ${x + s * 0.18} ${y + s * 0.18} ${x} ${y + s} Q ${x - s * 0.18} ${y + s * 0.18} ${x - s} ${y} Q ${x - s * 0.18} ${y - s * 0.18} ${x} ${y - s} Z`;
+        return `<path d="${d}" fill="${YELLOW}" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
+      }
+
+      const CHEEKS =
+        `<ellipse cx="-33" cy="4" rx="8" ry="5" fill="#ff8f7e" opacity="0.6"/>` +
+        `<ellipse cx="33" cy="4" rx="8" ry="5" fill="#ff8f7e" opacity="0.6"/>`;
+
+      function roundEye(x, y) {
+        return (
+          `<ellipse cx="${x}" cy="${y}" rx="8" ry="10.5" fill="${INK}"/>` +
+          `<circle cx="${x + 2.5}" cy="${y - 4.2}" r="3.2" fill="#fff"/>`
+        );
+      }
+
+      const FACES = {
+        happy:
+          roundEye(-18, -12) +
+          roundEye(18, -12) +
+          CHEEKS +
+          `<path d="M -14 4 Q 0 26 14 4 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<path d="M -7 14.5 Q 0 10 7 14.5 Q 0 19 -7 14.5 Z" fill="#ff7f72"/>`,
+        thinking:
+          roundEye(-15, -10) +
+          roundEye(21, -10) +
+          `<path d="M -28 -29 L -7 -27" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>` +
+          `<path d="M 10 -30 Q 21 -38 32 -31" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -5 12 Q 2 5 9 11 T 23 8" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`,
+        joy:
+          `<path d="M -30 -8 Q -19 -23 -8 -8" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>` +
+          `<path d="M 8 -8 Q 19 -23 30 -8" fill="none" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>` +
+          CHEEKS +
+          `<path d="M -18 2 Q 0 32 18 2 Z" fill="${INK}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<ellipse cx="0" cy="13" rx="8" ry="4" fill="#ff7f72"/>`,
+        // Something does not add up: worried brows, a small open mouth, a drop of sweat.
+        worried:
+          roundEye(-18, -10) +
+          roundEye(18, -10) +
+          `<path d="M -29 -30 L -10 -25" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>` +
+          `<path d="M 10 -25 L 29 -30" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>` +
+          `<ellipse cx="0" cy="11" rx="8" ry="7" fill="${INK}"/>` +
+          `<path d="M 40 -34 Q 47 -23 44 -17 Q 38 -13 35 -20 Q 35 -27 40 -34 Z" fill="#7cc8ff" stroke="${INK}" stroke-width="3.5" stroke-linejoin="round"/>`,
+      };
+
+      // Arms per pose; the left hand always holds the pencil. Happy waves, thinking
+      // scratches the top corner, joy cheers, worried throws both hands up.
+      const ARMS = {
+        happy:
+          arm("M -62 18 Q -98 34 -106 58", -106, 58, -16) +
+          arm("M 62 6 Q 104 -4 114 -38", 114, -38),
+        thinking:
+          arm("M -62 18 Q -98 36 -102 60", -102, 60, -12) + arm("M 62 4 Q 118 -16 98 -72", 98, -72),
+        joy:
+          arm("M -62 0 Q -104 -24 -114 -56", -114, -56, -30) +
+          arm("M 62 0 Q 104 -24 114 -56", 114, -56),
+        worried:
+          arm("M -62 0 Q -104 -26 -86 -54", -86, -54, -55) +
+          arm("M 62 0 Q 104 -26 86 -54", 86, -54),
+      };
+
+      const EXTRAS = {
+        happy: "",
+        thinking: `<circle cx="-124" cy="-66" r="6" fill="#fff" stroke="${INK}" stroke-width="4"/><circle cx="-142" cy="-82" r="8.5" fill="#fff" stroke="${INK}" stroke-width="4"/>`,
+        joy: sparkle(-140, -10, 10) + sparkle(142, -86, 11),
+        worried: "",
+      };
+
+      // The checklist row on the paper: a box and two lines of writing.
+      const MARKS = {
+        tick: `<path d="M -31 38 L -25 44 L -12 25" fill="none" stroke="${TEAL}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+        empty: "",
+        cross: `<path d="M -30 32 L -19 43 M -19 32 L -30 43" fill="none" stroke="#e5484d" stroke-width="5.5" stroke-linecap="round"/>`,
+      };
+      const MARK = { happy: "tick", joy: "tick", thinking: "empty", worried: "cross" };
+
+      function checklist(pose) {
+        return (
+          `<rect x="-35" y="28" width="21" height="20" rx="4" fill="#fff" stroke="${INK}" stroke-width="4"/>` +
+          `<path d="M -4 33 L 34 33 M -4 43 L 20 43" fill="none" stroke="#cfccc2" stroke-width="5" stroke-linecap="round"/>` +
+          MARKS[MARK[pose]]
+        );
+      }
+
+      // The clip: a metal plate with a slot, clamped over the top of the paper.
+      const CLAMP =
+        `<rect x="-32" y="-62" width="64" height="23" rx="8" fill="#e4e1d8" stroke="${INK}" stroke-width="5"/>` +
+        `<rect x="-13" y="-52" width="26" height="7" rx="3.5" fill="${INK}"/>`;
+
+      // The small yellow builder's hard hat, sitting on the clip and tipped a little to
+      // one side: a dome with a raised ridge down the middle, and a short brim.
+      const HAT =
+        `<g transform="rotate(-9 0 -62)">` +
+        `<path d="M -27 -62 C -27 -96 27 -96 27 -62 Z" fill="${YELLOW}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+        `<rect x="-6" y="-91" width="12" height="29" rx="5" fill="${YELLOW_DK}" stroke="${INK}" stroke-width="4.5"/>` +
+        `<ellipse cx="-15" cy="-77" rx="6" ry="3" fill="#fff" opacity="0.7" transform="rotate(-50 -15 -77)"/>` +
+        `<rect x="-39" y="-66" width="78" height="9" rx="4.5" fill="${YELLOW}" stroke="${INK}" stroke-width="5"/>` +
+        `</g>`;
+
+      function clipSvg(pose) {
+        return (
+          EXTRAS[pose] +
+          ARMS[pose] +
+          // Feet first, so the board stands on them.
+          `<ellipse cx="-32" cy="78" rx="20" ry="11" fill="${INK}"/>` +
+          `<ellipse cx="32" cy="78" rx="20" ry="11" fill="${INK}"/>` +
+          rect(BOARD, `fill="${INK}"`, 7, 7) +
+          rect(BOARD, `fill="${PURPLE}" stroke="${INK}" stroke-width="7"`) +
+          rect(PAPER, `fill="#ffffff" stroke="${INK}" stroke-width="4"`) +
+          CLAMP +
+          HAT +
+          checklist(pose) +
+          FACES[pose]
+        );
+      }
+
+      // ---- Progress squares -------------------------------------------------------
+
+      const squares = [];
+      for (const count of PARTS) {
+        const module = document.createElement("div");
+        module.className = "module";
+        for (let i = 0; i < count; i++) {
+          const index = squares.length + 1;
+          const square = document.createElement("button");
+          square.type = "button";
+          square.className = "sq";
+          square.title = `Lesson ${index}`;
+          square.addEventListener("click", () => window.setThumb({ lesson: index }));
+          squares.push(square);
+          module.append(square);
+        }
+        progress.append(module);
+      }
+
+      function markLesson(index) {
+        squares.forEach((square, i) => square.classList.toggle("on", i + 1 === index));
+      }
+
+      // ---- Text fitting -----------------------------------------------------------
+
+      function escapeHtml(text) {
+        return text.replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      // Terms that read as one word and must stay on one line (a hyphen inside one
+      // never breaks either).
+      const NO_BREAK_TERMS = [
+        "Coding agent",
+        "Vibe coding",
+        "Edge case",
+        "Trade-off",
+        "decision record",
+        "AI feature",
+        "Version control",
+        "save point",
+        "AI development",
+        "Factory model",
+        "test လုပ်ခြင်း",
+        "review လုပ်ခြင်း",
+        "debug လုပ်ခြင်း",
+        "Ship လုပ်ပြီး",
+      ];
+      // Particles that stay on the line of the word before them ("Agent ကို",
+      // "Production မှာ", "Edge case နဲ့" never split).
+      const PARTICLES = [
+        "တွေနဲ့",
+        "တွေကို",
+        "တွေအတွက်",
+        "နဲ့",
+        "တွေ",
+        "ကို",
+        "ရဲ့",
+        "မှာ",
+        "လို",
+        "ကနေ",
+        "ဆီက",
+        "ဆီ",
+      ];
+      const MYANMAR = /[က-႟ꧠ-꧿ꩠ-ꩿ]+/g;
+      // Markers for a space and a hyphen that must not break; both are put back as
+      // plain characters in the markup.
+      const GLUE = " ";
+      const GLUE_HYPHEN = "‑";
+
+      function titleHtml(text) {
+        return escapeHtml(text)
+          .replace(MYANMAR, (run) => `<span class="mm">${run}</span>`)
+          .replaceAll(GLUE, " ")
+          .replaceAll(GLUE_HYPHEN, "-");
+      }
+
+      // Glue NO_BREAK_TERMS, each particle to the word before it and the part number
+      // to အပိုင်း, wrap each glued piece in .nb and each Burmese run in .mm so a
+      // single font shapes it. A glued piece may still break after the hyphen of its
+      // first word, which keeps it from shrinking to a tiny single line. A part title
+      // starts its topic on a new line. (A no-break space in LESSONS would not survive
+      // the whitespace collapse below, so the glue is added here, in markup.)
+      function renderTitle() {
+        let text = title.textContent.replace(/\s+/g, " ").trim();
+        for (const term of NO_BREAK_TERMS)
+          text = text.split(term).join(term.replaceAll(" ", GLUE).replaceAll("-", GLUE_HYPHEN));
+        for (const particle of PARTICLES)
+          text = text.replace(new RegExp(` (${particle})(?= |$)`, "g"), `${GLUE}$1`);
+        text = text.replace(/အပိုင်း (\d+)/g, `အပိုင်း${GLUE}$1`);
+        title.innerHTML = text
+          .split(" ")
+          .map((piece, i, pieces) => {
+            let html = titleHtml(piece);
+            if (piece.includes(GLUE) || piece.includes(GLUE_HYPHEN)) {
+              const firstWord = piece.split(GLUE)[0];
+              const cut = firstWord.lastIndexOf("-") + 1;
+              html = `${titleHtml(piece.slice(0, cut))}<span class="nb">${titleHtml(piece.slice(cut))}</span>`;
+            }
+            // The space stays before the <br> so textContent keeps the words apart.
+            const partEnd = /^အပိုင်း \d+၊$/.test(piece) && i < pieces.length - 1;
+            return i < pieces.length - 1 ? html + (partEnd ? " <br>" : " ") : html;
+          })
+          .join("");
+        fitTitle();
+      }
+
+      // Largest size (to 116px) at which the title fits its box.
+      function fitTitle() {
+        let size = 116;
+        title.style.fontSize = `${size}px`;
+        while (
+          size > 40 &&
+          (title.scrollHeight > titleBox.clientHeight || title.scrollWidth > titleBox.clientWidth)
+        ) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // Split a LESSONS line "spec.md: AC-2 …" into the document's name and its line.
+      // Only a file name (no spaces, with an extension) counts, so "fix: …" stays text;
+      // a line with no file is something the app shows, under a "preview" tab.
+      function splitDocLine(text) {
+        const match = /^([\w.-]+\.\w+): (.*)$/s.exec(text);
+        return match ? { file: match[1], line: match[2] } : { file: "preview", line: text };
+      }
+
+      // Light Markdown highlighting for one line: heading marks purple and the heading
+      // bold; inside, requirement ids (AC-2, TC-2, ADR-001) and a commit type purple,
+      // Given/When/Then and snake_case field names teal, `code` teal, numbers amber,
+      // arrows, dots and list marks gray. Burmese is never split across spans.
+      function highlightInline(source) {
+        const token =
+          /(`[^`]+`)|\b([A-Z]{2,4}-\d+)\b|\b(Given|When|Then)\b|\b([a-z]+_[a-z_]+)\b|(\b\d+(?:[.,]\d+)?%?|\bNaN\b)|([→·↻≠|])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, inline, id, gherkin, field, num, punct] = match;
+          if (inline) html += `<span class="str">${escapeHtml(inline)}</span>`;
+          else if (id) html += `<span class="kw">${escapeHtml(id)}</span>`;
+          else if (gherkin) html += `<span class="fn">${escapeHtml(gherkin)}</span>`;
+          else if (field) html += `<span class="str">${escapeHtml(field)}</span>`;
+          else if (num) html += `<span class="num">${escapeHtml(num)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      function highlightMarkdown(source) {
+        const heading = /^(#{1,6})( +)(.*)$/.exec(source);
+        if (heading)
+          return `<span class="kw">${heading[1]}</span>${heading[2]}<span class="hd">${highlightInline(heading[3])}</span>`;
+        const list = /^([-*+]|\d+\.)( +)(.*)$/.exec(source);
+        if (list) return `<span class="pn">${list[1]}</span>${list[2]}${highlightInline(list[3])}`;
+        const commit = /^(feat|fix|docs|refactor|test|chore)(\([^)]*\))?(: )(.*)$/.exec(source);
+        if (commit)
+          return `<span class="kw">${escapeHtml(commit[1] + (commit[2] ?? ""))}</span><span class="pn">:</span> ${highlightInline(commit[4])}`;
+        return highlightInline(source);
+      }
+
+      // Shrink long lines so they stay on one line inside the card.
+      function fitCode() {
+        let size = 32;
+        code.style.fontSize = `${size}px`;
+        while (size > 18 && code.scrollWidth > code.clientWidth) {
+          size -= 1;
+          code.style.fontSize = `${size}px`;
+        }
+      }
+
+      function renderCode() {
+        const source = code.textContent.replace(/\s*\n\s*/g, " ").trim();
+        code.innerHTML = highlightMarkdown(source);
+        fitCode();
+      }
+
+      // Keep the bubble on one line: shrink long words rather than wrap them.
+      function fitBubble() {
+        bubble.classList.toggle("mm", /[က-႟]/.test(bubble.textContent));
+        let size = 34;
+        bubble.style.fontSize = `${size}px`;
+        while (size > 18 && bubble.scrollWidth > bubble.clientWidth) {
+          size -= 1;
+          bubble.style.fontSize = `${size}px`;
+        }
+        placeTail();
+      }
+
+      // The tail hangs under the bubble, pointing down at Clip.
+      function placeTail() {
+        bubbleTail.style.display = mascot.bubble ? "" : "none";
+        if (!mascot.bubble) return;
+        const frame = thumb.getBoundingClientRect();
+        const box = bubble.getBoundingClientRect();
+        bubbleTail.style.left = `${box.left - frame.left + box.width / 2 - 15}px`;
+        bubbleTail.style.top = `${box.bottom - frame.top - 17}px`;
+      }
+
+      function renderMascot() {
+        clip.innerHTML = clipSvg(mascot.pose);
+        clip.style.transform = `scaleX(${mascot.mirror ? -1 : 1}) rotate(${mascot.tilt}deg)`;
+        bubble.classList.toggle("off", !mascot.bubble);
+        for (const button of toolbar.querySelectorAll("button")) {
+          const pressed =
+            button.dataset.pose === mascot.pose ||
+            (button.dataset.tilt !== undefined && Number(button.dataset.tilt) === mascot.tilt) ||
+            (button.dataset.action === "mirror" && mascot.mirror) ||
+            (button.dataset.action === "bubble" && mascot.bubble);
+          button.setAttribute("aria-pressed", String(pressed));
+        }
+        placeTail();
+      }
+
+      toolbar.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        if (button.dataset.pose) mascot.pose = button.dataset.pose;
+        if (button.dataset.tilt !== undefined) mascot.tilt = Number(button.dataset.tilt);
+        if (button.dataset.action === "mirror") mascot.mirror = !mascot.mirror;
+        if (button.dataset.action === "bubble") mascot.bubble = !mascot.bubble;
+        renderMascot();
+      });
+
+      /**
+       * Set any part of the thumbnail at once (used to render the course set):
+       * setThumb({ lesson: 3 }) loads LESSONS[2]; any other field overrides it:
+       * setThumb({ lesson: 3, code: "spec.md: …", pose: "thinking", mirror: true, tilt: 0, bubble: "?" })
+       * Fields: number, title, code ("file: line"), file (overrides the tab), pose
+       * (happy | thinking | joy | worried), mirror, tilt, bubble (`null` hides the
+       * speech bubble).
+       */
+      window.setThumb = (input) => {
+        const base =
+          input.lesson !== undefined
+            ? LESSONS.find((l) => l.number === Number(input.lesson))
+            : null;
+        const spec = { ...(base ?? {}), ...input };
+        if (base && input.mirror === undefined) spec.mirror = false;
+        if (spec.number !== undefined) {
+          number.textContent = String(spec.number).padStart(2, "0");
+          const value = Number(spec.number);
+          markLesson(value >= 1 && value <= squares.length ? value : 0);
+        }
+        if (spec.title !== undefined) title.textContent = spec.title;
+        if (spec.code !== undefined) {
+          const doc = splitDocLine(spec.code);
+          file.textContent = doc.file;
+          code.textContent = doc.line;
+        }
+        if (input.file !== undefined) file.textContent = input.file;
+        if (spec.pose !== undefined && FACES[spec.pose]) mascot.pose = spec.pose;
+        if (spec.mirror !== undefined) mascot.mirror = spec.mirror;
+        if (spec.tilt !== undefined) mascot.tilt = spec.tilt;
+        if (spec.bubble !== undefined) {
+          mascot.bubble = spec.bubble !== null;
+          if (spec.bubble !== null) bubble.textContent = spec.bubble;
+        }
+        renderCode();
+        renderMascot();
+        renderTitle();
+        fitBubble();
+      };
+
+      number.addEventListener("input", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        markLesson(value >= 1 && value <= squares.length ? value : 0);
+      });
+      title.addEventListener("input", fitTitle);
+      title.addEventListener("blur", renderTitle);
+      code.addEventListener("input", fitCode);
+      code.addEventListener("blur", renderCode);
+      bubble.addEventListener("input", fitBubble);
+
+      window.setThumb({ lesson: 1 });
+
+      // Load every face up front (Noto Sans Myanmar only loads once Burmese is on
+      // screen), then refit: sizes measured before the fonts arrive are wrong.
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '400 36px "Google Sans"',
+          '700 36px "Google Sans Code"',
+          '500 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+          '400 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => {
+          renderCode();
+          renderTitle();
+          fitBubble();
+        });
+    </script>
+  </body>
+</html>
