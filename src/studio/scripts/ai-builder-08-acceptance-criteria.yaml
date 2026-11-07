@@ -1,0 +1,957 @@
+# AI Builder, lesson 08: acceptance criteria and the definition of done (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md),
+# docs/requirements.md complete (COURSE-KIT §4.2, as L07 leaves it) and docs/spec.md pinned with its
+# title line only (`# Spec · ကြိုမှာ app (v1)` + a blank line). Nothing runs. The lesson types
+# `## Acceptance criteria` (AC-1…AC-5) and `## Definition of done` exactly as COURSE-KIT §4.3, leaving
+# the title line and its blank line where L09 inserts Goal…Out of scope.
+#
+# Boards: (A) who checks "done" (violet agent claim → orange question), then one criterion's anatomy
+# (Given / When / Then with AC-4's example), the one-behaviour rule, and later the contract row
+# (violet: the agent builds to it; green: we check by it); (V) vague → checkable, three pairs (red →
+# green) and an orange rule; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-08-acceptance-criteria.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-08-acceptance-criteria
+  title: "AI Builder 08: Acceptance criteria နဲ့ ပြီးတယ် ဆိုတာ ဘာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/requirements.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/requirements.md: |
+        # Requirements · ကြိုမှာ app
+
+        ## User stories
+        - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
+        - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
+        - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
+        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+
+        ## Non-functional
+        - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
+        - မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။
+        - customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။
+        - စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။
+        - run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။
+
+        ## Constraints
+        - app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။
+        - ငွေကို ကောင်တာမှာပဲ ချေမယ်။
+        - ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00
+
+        ## Scope (v1)
+        Must
+        - လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ
+        - အော်ဒါနံပါတ်
+        - ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ
+        Should
+        - အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ
+        Won't (for now)
+        - delivery
+        - online ငွေပေးချေမှု
+        - customer account နဲ့ login
+
+        ## Edge cases
+        - အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ
+        - ဆိုင်ပိတ်ချိန် လာယူချိန် → လက်မခံ၊ ဖွင့်ချိန်ကို ပြ
+        - ဖုန်းနံပါတ် မပါ → လက်မခံ
+        - မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ
+
+        ## Assumptions
+        - customer တွေ မှာပြီး 2 နာရီအတွင်း လာယူမယ်။
+        - တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ 50 ထက် မများဘူး။
+
+        ## Questions for မြမြ
+        - လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။
+        - ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။
+      docs/spec.md: |+
+        # Spec · ကြိုမှာ app (v1)
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board A: the claim and the question, then the anatomy of one criterion (AC-4: no phone number),
+    # the one-behaviour rule, and (reopened later) the contract row.
+    - {
+        id: a-claim,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 270,
+        height: 40,
+        text: "agent · ပြီးပါပြီ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 168,
+        width: 60,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-check,
+        kind: text,
+        x: 660,
+        y: 165,
+        width: 330,
+        height: 40,
+        text: "တခြားလူ စစ်လို့ ရလား?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-g-key,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 120,
+        height: 45,
+        text: "Given",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-g-gloss,
+        kind: text,
+        x: 300,
+        y: 287,
+        width: 230,
+        height: 40,
+        text: "ဘယ်အခြေအနေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-g-box,
+        kind: rectangle,
+        x: 560,
+        y: 245,
+        width: 530,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-g-ex,
+        kind: text,
+        x: 580,
+        y: 262,
+        width: 490,
+        height: 40,
+        text: "ဖုန်းနံပါတ် မထည့်ရသေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-w-key,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 120,
+        height: 45,
+        text: "When",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-w-gloss,
+        kind: text,
+        x: 300,
+        y: 382,
+        width: 230,
+        height: 40,
+        text: "ဘာလုပ်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-w-box,
+        kind: rectangle,
+        x: 560,
+        y: 340,
+        width: 530,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-w-ex,
+        kind: text,
+        x: 580,
+        y: 357,
+        width: 490,
+        height: 40,
+        text: "မှာမယ် ကို နှိပ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-t-key,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 120,
+        height: 45,
+        text: "Then",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-t-gloss,
+        kind: text,
+        x: 300,
+        y: 477,
+        width: 230,
+        height: 40,
+        text: "ဘာမြင်ရမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-t-box,
+        kind: rectangle,
+        x: 560,
+        y: 435,
+        width: 530,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-t-ex,
+        kind: text,
+        x: 580,
+        y: 452,
+        width: 490,
+        height: 40,
+        text: "အော်ဒါ မဖြစ်၊ ဖုန်း ထည့်ခိုင်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-one,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 520,
+        height: 40,
+        text: "AC တစ်ခု = behaviour တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-build,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 230,
+        height: 40,
+        text: "agent · ဆောက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-test,
+        kind: text,
+        x: 560,
+        y: 585,
+        width: 200,
+        height: 40,
+        text: "ကိုယ် · စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-agree,
+        kind: text,
+        x: 790,
+        y: 585,
+        width: 290,
+        height: 40,
+        text: "မြမြ · သဘောတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board V: vague (red) → checkable (green), three pairs, and the orange rule.
+    - {
+        id: v-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "မရှင်း → စစ်လို့ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: v-1a,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 320,
+        height: 40,
+        text: "ဖုန်းမှာ အဆင်ပြေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: v-1x,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 252,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: v-1b,
+        kind: text,
+        x: 680,
+        y: 250,
+        width: 410,
+        height: 40,
+        text: "ဘေးမဆွဲဘဲ form အကုန် မြင်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: v-2a,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 320,
+        height: 40,
+        text: "သုံးရ လွယ်ရမယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: v-2x,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 342,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: v-2b,
+        kind: text,
+        x: 680,
+        y: 340,
+        width: 410,
+        height: 40,
+        text: "အကူမပါ 1 မိနစ်နဲ့ မှာပြီး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: v-3a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 320,
+        height: 40,
+        text: "error ကောင်းကောင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: v-3x,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 432,
+        width: 45,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: v-3b,
+        kind: text,
+        x: 680,
+        y: 430,
+        width: 410,
+        height: 40,
+        text: "1 ကနေ 20 အထိ ရွေးပါ လို့ ပြ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: v-rule,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 600,
+        height: 45,
+        text: "ဘာမြင်ရမလဲ? ဘယ်လို တိုင်းမလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board Z: the quiz (white question, green answer, white reason, green rewrite per person).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 600,
+        height: 40,
+        text: "Then · အော်ဒါကို မှန်မှန် သိမ်းရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 560,
+        height: 45,
+        text: "ဒီ Then ကို စစ်လို့ ရလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 500,
+        height: 50,
+        text: "အဖြေ · မရဘူး",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 640,
+        height: 40,
+        text: "သိမ်းတာ မမြင်ရ · မှန်မှန် ဆိုတာ မရှင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-fix1,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 640,
+        height: 40,
+        text: "customer · နံပါတ်၊ စုစုပေါင်း၊ အချိန်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: z-fix2,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 640,
+        height: 40,
+        text: "လှလှ · ကောင်တာစာရင်းထဲမှာ အော်ဒါ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6108
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: ပြီးပြီ ဆိုတာ ဘယ်သူ စစ်မလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ app က ဘာလုပ်ပေးရမလဲ ရေးထားတဲ့ requirement ဖိုင်ထဲကို အပိုင်း သုံးပိုင်း ထပ်ထည့်ခဲ့ပါတယ်။
+      ပုံမှန် မဟုတ်တဲ့ edge case တွေ၊ စစ်မထားရသေးတဲ့ ယူဆချက်၊ assumption တွေနဲ့ ဆိုင်ပိုင်ရှင် မြမြ ကို မေးရမယ့် မေးခွန်းတွေပါ။ [[mark:sel-edges]] ဒီ edge case အပိုင်းမှာ သုည ခွက်၊ ဆိုင်ပိတ်ချိန်နဲ့
+      ဖုန်းနံပါတ် မပါတဲ့ အော်ဒါတွေကို ငြင်းမယ်လို့ ဆုံးဖြတ်ခဲ့ပါတယ်။ ဆုံးဖြတ်ချက်တွေ ရှိလာပြီ ဆိုတော့ agent ကို
+      ဆောက်ခိုင်းလို့ ရပါပြီ။ [[mark:a-claim]] ဒါပေမဲ့ agent က ပြီးပါပြီ ဆိုတဲ့ အဖြေ ပြန်ပေးလာတဲ့အခါ တကယ် ပြီးပြီလား
+      ဆိုတာ ဘယ်လို သိမလဲ။ အဲဒီ အဖြေက agent ထုတ်ပေးလိုက်တဲ့ စာသား တစ်ကြောင်းပဲ ဖြစ်ပြီး၊ တစ်ယောက်ယောက်
+      စစ်ပြီးသား အထောက်အထား မဟုတ်ပါဘူး။ [[mark:a-check]] ဒါကြောင့် ပြီးပြီ ဆိုတာကို ဆောက်တဲ့သူ မဟုတ်တဲ့
+      တခြားလူ တစ်ယောက်က စစ်လို့ ရရပါမယ်။ ဥပမာ ကောင်တာက လှလှ ဆိုရင် code ကို မဖတ်ဘဲ၊ ဖုန်းနဲ့ မှာကြည့်ရုံနဲ့
+      မှန်မမှန် ပြောနိုင်ရပါမယ်။ အဲဒီလို စစ်လို့ရအောင် ပြီးပြီ ဆိုတာကို ကြိုရေးထားတဲ့ စည်းကမ်းချက်တွေကို
+      acceptance criteria လို့ ခေါ်ပါတယ်။ တိုတိုပြောရင် AC ပါ။
+    sources:
+      - {
+          title: "Agile Alliance glossary: Acceptance Testing",
+          url: "https://www.agilealliance.org/glossary/acceptance/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (testing: tests and evals carry intent)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-edges,
+          type: editor.select,
+          at: { mark: sel-edges },
+          target: { file: docs/requirements.md, text: "## Edge cases", occurrence: 1 },
+        }
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { mark: a-claim },
+          open: true,
+          clear: true,
+          upsertIds: [a-claim],
+          drawMs: 800,
+        }
+      - {
+          id: draw-a-check,
+          type: whiteboard.apply,
+          at: { mark: a-check },
+          upsertIds: [a-arrow, a-check],
+          drawMs: 1100,
+        }
+
+  - id: anatomy
+    chapter: Given၊ When၊ Then
+    narration: >
+      [[mark:a-given]] AC တစ်ခုကို အပိုင်း သုံးပိုင်းနဲ့ ရေးလေ့ ရှိပါတယ်။ ပထမ အပိုင်း Given က ဘယ်လို
+      အခြေအနေမှာလဲ ဆိုတာပါ။ ဥပမာ customer က ဖုန်းနံပါတ် မထည့်ရသေးတဲ့ အခြေအနေပါ။ [[mark:a-when]] ဒုတိယ
+      အပိုင်း When က app ကို သုံးတဲ့ user က ဘာလုပ်လိုက်လဲ ဆိုတာပါ။ ဒီမှာတော့ မှာမယ် ခလုတ်ကို နှိပ်တာပါ။ [[mark:a-then]]
+      တတိယ အပိုင်း Then ကတော့ အဲဒီအခါ ဘာကို မြင်ရမလဲ ဆိုတာပါ။ အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းတာကို
+      customer မြင်ရရပါမယ်။ Then မှာ app ရဲ့ အထဲမှာ ဘာဖြစ်လဲ ဆိုတာကို မရေးဘဲ၊ အပြင်ကနေ screen ပေါ်မှာ
+      မြင်ရတဲ့ ရလဒ်ကိုပဲ ရေးရပါမယ်။ Given၊ When၊ Then
+      ဆိုတဲ့ စကားလုံး သုံးလုံးကိုတော့ English လိုပဲ ထားပြီး၊ အခြေအနေကို မြန်မာလို ရေးပါမယ်။ [[mark:a-one]] နောက်ထပ် စည်းကမ်း
+      တစ်ခုက AC တစ်ခုမှာ app ရဲ့ အပြုအမူ၊ behaviour တစ်ခုပဲ ထားဖို့ပါ။ ဒါမှ AC တစ်ခု မအောင်မြင်ရင် ဘယ်
+      အပြုအမူ ပျက်နေလဲ ဆိုတာ ချက်ချင်း သိရမှာပါ။
+    sources:
+      - { title: "Cucumber: Gherkin reference", url: "https://cucumber.io/docs/gherkin/reference/" }
+      - {
+          title: "Agile Alliance glossary: Given - When - Then",
+          url: "https://www.agilealliance.org/glossary/gwt/",
+        }
+    actions:
+      - {
+          id: draw-a-given,
+          type: whiteboard.apply,
+          at: { mark: a-given },
+          upsertIds: [a-g-key, a-g-gloss, a-g-box, a-g-ex],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-when,
+          type: whiteboard.apply,
+          at: { mark: a-when },
+          upsertIds: [a-w-key, a-w-gloss, a-w-box, a-w-ex],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-then,
+          type: whiteboard.apply,
+          at: { mark: a-then },
+          upsertIds: [a-t-key, a-t-gloss, a-t-box, a-t-ex],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-one,
+          type: whiteboard.apply,
+          at: { mark: a-one },
+          upsertIds: [a-one],
+          drawMs: 900,
+        }
+
+  - id: type-ac1
+    narration: >
+      [[mark:close-a]] ကဲ၊ ကိုယ်တို့ app ရဲ့ AC တွေကို editor ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:open-spec]] ဒါက spec ဖိုင်
+      အသစ်ပါ။ spec ဆိုတာ app ကို ဘာကြောင့် ဆောက်လဲ၊ ဘာလုပ်ရမလဲ၊ ဘယ်လို စစ်မလဲ ဆိုတာကို
+      စုရေးထားတဲ့ စာတမ်းပါ။ အခု ခေါင်းစဉ်ပဲ ရှိပါသေးတယ်။ ဒီနေ့ AC တွေကို ရေးမှာ ဖြစ်ပြီး၊ app ကို ဘာကြောင့် ဆောက်လဲ ဆိုတဲ့ အပိုင်းတွေကိုတော့ နောက် lesson မှာ ဖြည့်ပါမယ်။
+      [[mark:type-ac1]] ပထမ AC က အားလုံး ပုံမှန်အတိုင်း ဖြစ်တဲ့ happy path ပါ။ member အောင်အောင် လို
+      ပုံမှန် customer တစ်ယောက်ရဲ့ အော်ဒါ အောင်မြင်ရမယ် ဆိုတာကို သတ်မှတ်ထားတာပါ။ Given မှာ စစ်မယ့်သူ ဘာထည့်ရမလဲ
+      ဆိုတာကို အရေအတွက်နဲ့ အချိန် အတိအကျနဲ့ ရေးထားပါတယ်။ [[mark:sel-ac1-then]]
+      Then ကို ကြည့်ပါ။ မှာပြီးတဲ့အခါ customer က screen ပေါ်မှာ ဘာတွေ မြင်ရမလဲ ဆိုတာကို တစ်ခုချင်း ရေးထားပါတယ်။
+      စုစုပေါင်းကိုလည်း ကျပ် အတိအကျနဲ့ ရေးထားလို့၊ ဘယ်သူမဆို ဖုန်းနဲ့ တစ်ခါ မှာကြည့်ရုံနဲ့ မှန်မမှန် စစ်လို့ ရပါတယ်။
+    sources:
+      - { title: "Cucumber: Gherkin reference", url: "https://cucumber.io/docs/gherkin/reference/" }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (testing: tests and evals carry intent)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-a, type: whiteboard.apply, at: { mark: close-a }, open: false }
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - id: type-ac1
+        type: editor.type
+        at: { mark: type-ac1 }
+        target: { file: docs/spec.md, after: "# Spec · ကြိုမှာ app (v1)\n\n", occurrence: 1 }
+        text: "## Acceptance criteria\nAC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်\n     When မှာမယ် ကို နှိပ်တယ်\n     Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်\n"
+        cadence: line-by-line
+      - {
+          id: sel-ac1-then,
+          type: editor.select,
+          at: { mark: sel-ac1-then },
+          target:
+            {
+              file: docs/spec.md,
+              text: "Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်",
+              occurrence: 1,
+            },
+        }
+
+  - id: refusals
+    narration: >
+      [[mark:type-ac2]] နောက် AC သုံးခုက ပြီးခဲ့တဲ့ lesson မှာ ငြင်းမယ်လို့ ဆုံးဖြတ်ခဲ့တဲ့ edge case တွေပါ။
+      ပထမဆုံးက သုည ခွက် မှာတဲ့ အခြေအနေပါ။ [[mark:sel-ac2-msg]] Then မှာ အော်ဒါ မဖြစ်ရဘူး ဆိုတာနဲ့အတူ၊ customer
+      မြင်ရမယ့် စာကို အတိအကျ ရေးထားပါတယ်။ ငြင်းတဲ့ အပြုအမူအတွက် AC မရေးထားရင်၊ agent ရဲ့ ပထမ version က
+      သုည ခွက်ကို လက်ခံသွားနိုင်ပြီး၊ ဘယ်သူ့ စစ်ဆေးချက်ကမှ မမိနိုင်ပါဘူး။ ဒါကြောင့် ငြင်းတာကိုလည်း happy path
+      လိုပဲ behaviour တစ်ခုအဖြစ် ရေးရပါမယ်။ [[mark:type-ac34]] ဆိုင်ပိတ်ချိန် ရွေးတာနဲ့ ဖုန်းနံပါတ်
+      မထည့်တာကိုလည်း AC တစ်ခုစီ ခွဲရေးပါတယ်။ When က သုံးခုလုံး အတူတူပဲ ဖြစ်ပြီး၊ Given နဲ့ Then ပဲ
+      ကွာပါတယ်။ [[mark:sel-ac3]] AC သုံးကို ကြည့်ပါ။ ဒီ နှစ်ခုကို AC တစ်ခုတည်းထဲ ပေါင်းရေးလိုက်ရင်၊ မအောင်မြင်တဲ့အခါ
+      ဆိုင်ပိတ်ချိန် ကြောင့်လား၊ ဖုန်းနံပါတ် ကြောင့်လား ခွဲမသိရတော့ပါဘူး။ ခွဲရေးထားတော့ AC သုံး မအောင်မြင်ရင်
+      ဖွင့်ချိန် စစ်တာ ပျက်နေတယ် ဆိုတာ ချက်ချင်း သိရပါတယ်။
+    sources:
+      - { title: "Cucumber: Gherkin reference", url: "https://cucumber.io/docs/gherkin/reference/" }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-ac2
+        type: editor.type
+        at: { mark: type-ac2 }
+        target: { file: docs/spec.md, after: "8:30 ကို မြင်ရမယ်\n", occurrence: 1 }
+        text: "AC-2 Given အရေအတွက် 0\n     When မှာမယ် ကို နှိပ်တယ်\n     Then အော်ဒါ မဖြစ်ဘဲ \"1 ကနေ 20 အထိ ရွေးပါ\" လို့ ပြမယ်\n"
+        cadence: line-by-line
+      - {
+          id: expect-ac2,
+          type: expect.file,
+          at: { afterAction: type-ac2 },
+          path: docs/spec.md,
+          contains: 'Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်',
+        }
+      - {
+          id: sel-ac2-msg,
+          type: editor.select,
+          at: { mark: sel-ac2-msg },
+          target: { file: docs/spec.md, text: '"1 ကနေ 20 အထိ ရွေးပါ"', occurrence: 1 },
+        }
+      - id: type-ac34
+        type: editor.type
+        at: { mark: type-ac34 }
+        target: { file: docs/spec.md, after: "ရွေးပါ\" လို့ ပြမယ်\n", occurrence: 1 }
+        text: "AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ\n     When မှာမယ် ကို နှိပ်တယ်\n     Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်\nAC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး\n     When မှာမယ် ကို နှိပ်တယ်\n     Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်\n"
+        cadence: line-by-line
+      - {
+          id: sel-ac3,
+          type: editor.select,
+          at: { mark: sel-ac3 },
+          target: { file: docs/spec.md, text: "AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ", occurrence: 1 },
+        }
+
+  - id: vague
+    chapter: မရှင်းတဲ့ စကားလုံးတွေ
+    narration: >
+      [[mark:v-title]] AC ရေးတဲ့အခါ ရှောင်ရမယ့် စကားလုံး အမျိုးအစား တစ်ခု ရှိပါတယ်။ အဆင်ပြေတယ်၊ လွယ်တယ်၊ ကောင်းတယ်
+      လို စကားလုံးတွေပါ။ ဖတ်ရတာ ရှင်းနေသလို ထင်ရပေမဲ့၊ လူတိုင်း နားလည်ပုံ မတူလို့ စစ်လို့ မရပါဘူး။
+      [[mark:v-phone]] ဥပမာ ဖုန်းမှာ အဆင်ပြေရမယ် လို့ ရေးရင်၊ ဘယ်လို ဖြစ်မှ အဆင်ပြေတာလဲ ဆိုတာ စစ်တဲ့သူ
+      တစ်ယောက်နဲ့ တစ်ယောက် ထင်တာ မတူပါဘူး။ ဖုန်း screen မှာ ဘေးတိုက် ဆွဲစရာ မလိုဘဲ form တစ်ခုလုံးကို မြင်ရမယ်
+      လို့ ရေးမှ ဖုန်းနဲ့ ဖွင့်ကြည့်ပြီး စစ်လို့ ရပါတယ်။
+      [[mark:v-easy]] သုံးရ လွယ်ရမယ် ဆိုတာလည်း ဒီအတိုင်း စစ်လို့ မရပါဘူး။ customer တစ်ယောက်က ဘယ်သူ့ကိုမှ
+      မမေးဘဲ တစ်မိနစ်အတွင်း မှာပြီးရမယ် ဆိုရင်တော့ ဘေးကနေ ကြည့်ပြီး စစ်လို့ ရပါတယ်။ [[mark:v-error]] အမှား ဖြစ်တဲ့အခါ ပြတဲ့ စာ၊
+      error ကို ကောင်းကောင်း ပြရမယ် ဆိုတာထက်၊ ၁ ကနေ ၂၀ အထိ ရွေးပါ ဆိုတဲ့ စာကို ပြရမယ် လို့ ရေးတာက ပိုရှင်းပါတယ်။
+      [[mark:v-rule]] ဒါကြောင့် မြန်တယ်၊ ကောင်းတယ် လို စကားလုံး တစ်လုံး ရေးမိတိုင်း၊ ဒါကို ဘာမြင်ရရင် ပြီးပြီလို့
+      ပြောမလဲ၊ ဘယ်လို တိုင်းမလဲ လို့ ကိုယ့်ကိုယ်ကိုယ် မေးပြီး အဖြေနဲ့ အစားထိုးပါ။ agent အတွက်လည်း ဒီလို
+      အတိအကျ ရေးထားမှ ခန့်မှန်းစရာ မကျန်တော့ဘဲ၊ ပစ်မှတ် တစ်ခုတည်း ရှိမှာပါ။
+    sources:
+      - { title: "Cucumber: Gherkin reference", url: "https://cucumber.io/docs/gherkin/reference/" }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (tests and evals before generating)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-v,
+          type: whiteboard.apply,
+          at: { mark: v-title },
+          open: true,
+          clear: true,
+          upsertIds: [v-title],
+          drawMs: 800,
+        }
+      - {
+          id: draw-v-phone,
+          type: whiteboard.apply,
+          at: { mark: v-phone },
+          upsertIds: [v-1a, v-1x, v-1b],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-v-easy,
+          type: whiteboard.apply,
+          at: { mark: v-easy },
+          upsertIds: [v-2a, v-2x, v-2b],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-v-error,
+          type: whiteboard.apply,
+          at: { mark: v-error },
+          upsertIds: [v-3a, v-3x, v-3b],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-v-rule,
+          type: whiteboard.apply,
+          at: { mark: v-rule },
+          upsertIds: [v-rule],
+          drawMs: 1000,
+        }
+
+  - id: counter
+    narration: >
+      [[mark:close-v]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-ac5]] နောက်ဆုံး AC ကတော့ customer ဘက် မဟုတ်ဘဲ ကောင်တာ
+      ဘက်ကပါ။ ဒီ AC ကို စစ်မယ့်သူက လှလှ ကိုယ်တိုင်ပါ။ [[mark:sel-ac5]] ဒီ Then က requirement ထဲက လှလှ
+      ဘက်က user story ကို စစ်လို့ရတဲ့ ပုံစံနဲ့ ပြန်ရေးထားတာပါ။ user story က ဘယ်သူက ဘာကို ဘာကြောင့် လိုချင်လဲ
+      ဆိုတာကို ပြောပြီး၊ AC ကတော့ အဲဒါ ပြီးပြီလား ဆိုတာ ဘယ်လို စစ်မလဲ ဆိုတာကို ပြောပါတယ်။ လှလှ က အော်ဒါ
+      နှစ်ခု သုံးခုကို လာယူချိန် မတူအောင် မှာကြည့်ပြီး၊ စာရင်းမှာ အစဉ်လိုက် ပေါ်လား ကြည့်ရုံနဲ့ စစ်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Agile Alliance glossary: Given - When - Then",
+          url: "https://www.agilealliance.org/glossary/gwt/",
+        }
+    actions:
+      - { id: close-v, type: whiteboard.apply, at: { mark: close-v }, open: false }
+      - id: type-ac5
+        type: editor.type
+        at: { mark: type-ac5 }
+        target: { file: docs/spec.md, after: "ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်\n", occurrence: 1 }
+        text: "AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်\n     When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်\n     Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-ac5,
+          type: editor.select,
+          at: { mark: sel-ac5 },
+          target: { file: docs/spec.md, text: "Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်", occurrence: 1 },
+        }
+
+  - id: contract
+    chapter: AC နဲ့ definition of done
+    narration: >
+      [[mark:a-reopen]] AC ငါးခု ရပြီ ဆိုတော့ ဒီ စာရင်းကို ဘယ်သူတွေ ဘယ်လို သုံးမလဲ ကြည့်ရအောင်။ [[mark:a-build]]
+      agent အတွက်ဆိုရင် ဒါက ဘာကို ဆောက်ရမလဲ ဆိုတဲ့ ပစ်မှတ်ပါ။ agent ကို ခိုင်းတဲ့ အလုပ် တစ်ခု၊ task တစ်ခု အပ်တဲ့အခါ
+      သက်ဆိုင်တဲ့ AC တွေကို တွဲပေးလိုက်ရင်၊ agent က အဲဒီ AC တွေ အောင်မြင်အောင် ဆောက်ရမှာပါ။ [[mark:a-test]] ကိုယ့်ဘက်က ကြည့်ရင်တော့
+      ဘယ်လို စစ်မလဲ ဆိုတဲ့ စာရင်းပါ။ နောက်ပိုင်း lesson မှာ ဒီ AC တွေကနေ စစ်ရမယ့် အဆင့်တွေကို test plan
+      အဖြစ် ရေးပြီး app ကို တကယ် စစ်ကြည့်ပါမယ်။ Given၊ When၊ Then ပုံစံနဲ့ ရေးထားတော့ စက်က အလိုလို
+      စစ်ပေးတဲ့ automated test အဖြစ်လည်း ပြောင်းလို့ ရပြီး၊ အဲဒီ အကြောင်းကို Testing course မှာ အသေးစိတ်
+      လေ့လာနိုင်ပါတယ်။ [[mark:a-agree]] ပြီးတော့ AC က ဆိုင်ပိုင်ရှင် မြမြ နဲ့ ကိုယ်ကြားက သဘောတူညီချက်လည်း
+      ဖြစ်ပါတယ်။ ဒါကြောင့် မဆောက်ခင် AC တွေကို မြမြ နဲ့ အတူ ဖတ်ပြီး သဘောတူထားပါ။ ဒါဆို ဆောက်ပြီးမှ ဘာကို
+      ပြီးတယ်လို့ ခေါ်မလဲ ဆိုတာ အငြင်းပွားစရာ မရှိတော့ပါဘူး။
+    sources:
+      - {
+          title: "Agile Alliance glossary: Acceptance Testing",
+          url: "https://www.agilealliance.org/glossary/acceptance/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (testing: tests and evals carry intent)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (tests and evals before generating)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: reopen-board-a, type: whiteboard.apply, at: { mark: a-reopen }, open: true }
+      - {
+          id: draw-a-build,
+          type: whiteboard.apply,
+          at: { mark: a-build },
+          upsertIds: [a-build],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-test,
+          type: whiteboard.apply,
+          at: { mark: a-test },
+          upsertIds: [a-test],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-agree,
+          type: whiteboard.apply,
+          at: { mark: a-agree },
+          upsertIds: [a-agree],
+          drawMs: 1000,
+        }
+
+  - id: dod
+    narration: >
+      [[mark:close-a2]] spec ဖိုင်ကို ပြန်ကြည့်ရအောင်။ [[mark:type-dod]] ဒီနေ့ ရေးမယ့် နောက်ဆုံး အပိုင်းကတော့ definition of
+      done ပါ။ AC တွေက app ရဲ့ လုပ်ဆောင်ချက်၊ feature တစ်ခုချင်းရဲ့ ပြီးပြီ ဆိုတဲ့ စည်းကမ်း ဖြစ်ပြီး၊ definition of done ကတော့ task
+      တိုင်း ပြီးတယ် မပြောခင် အမြဲ စစ်ရမယ့် စာရင်းပါ။ [[mark:sel-dod-phone]] ပထမ စာကြောင်းက AC တွေကို ဘယ် screen
+      ပေါ်မှာ စစ်ရမလဲ ဆိုတာကို သတ်မှတ်ထားတာပါ။ ကိုယ့် laptop ရဲ့ screen ကြီးမှာ မှန်နေတာက ကျောင်းသား မောင်မောင် ရဲ့
+      ဈေးပေါတဲ့ ဖုန်းမှာလည်း မှန်မယ်လို့ မပြောနိုင်လို့ပါ။ [[mark:sel-dod-secret]] ဒုတိယ စာကြောင်းက ဆိုင်ရဲ့
+      secret တွေကို ကာကွယ်တာပါ။ secret ဆိုတာ password၊ API key လို လျှို့ဝှက်ထားရမယ့် စာသား ဖြစ်ပြီး၊ code ထဲ
+      ရောက်သွားရင် code ကို မြင်ရတဲ့ သူတိုင်း သုံးနိုင်သွားပါတယ်။ အဲဒီ အကြောင်းကို
+      နောက်ပိုင်းမှာ သီးသန့် လေ့လာပါမယ်။ [[mark:sel-dod-docs]] တတိယ စာကြောင်းကတော့ စာတမ်းတွေကို app နဲ့
+      အမြဲ ကိုက်အောင် ထိန်းခိုင်းတာပါ။ စာတမ်းတွေက app နဲ့ မကိုက်တော့ရင်၊ နောက်တစ်ခါ
+      agent က စာတမ်း အဟောင်းကို ဖတ်ပြီး မှားတာကို ဆောက်သွားနိုင်လို့ပါ။ decisions ဖိုင်ကတော့ ဆုံးဖြတ်ချက်တွေ
+      မှတ်ဖို့ နောက်ပိုင်းမှာ စရေးမယ့် ဖိုင်ပါ။
+    sources:
+      - {
+          title: "Agile Alliance glossary: Definition of Done",
+          url: "https://www.agilealliance.org/glossary/definition-of-done/",
+        }
+      - {
+          title: "GitHub Docs: Secret scanning",
+          url: "https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning",
+        }
+    actions:
+      - { id: close-a2, type: whiteboard.apply, at: { mark: close-a2 }, open: false }
+      - id: type-dod
+        type: editor.type
+        at: { mark: type-dod }
+        target: { file: docs/spec.md, after: "စီပြီး မြင်ရမယ်\n\n", occurrence: 1 }
+        text: "## Definition of done\n- သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။\n- code ထဲမှာ secret မပါရဘူး။\n- spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။\n"
+        cadence: line-by-line
+      - {
+          id: expect-dod,
+          type: expect.file,
+          at: { afterAction: type-dod },
+          path: docs/spec.md,
+          contains: "- သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။",
+        }
+      - {
+          id: sel-dod-phone,
+          type: editor.select,
+          at: { mark: sel-dod-phone },
+          target:
+            {
+              file: docs/spec.md,
+              text: "- သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-dod-secret,
+          type: editor.select,
+          at: { mark: sel-dod-secret },
+          target: { file: docs/spec.md, text: "- code ထဲမှာ secret မပါရဘူး။", occurrence: 1 },
+        }
+      - {
+          id: sel-dod-docs,
+          type: editor.select,
+          at: { mark: sel-dod-docs },
+          target:
+            {
+              file: docs/spec.md,
+              text: "- spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ AC တစ်ခုရဲ့ Then မှာ အော်ဒါကို မှန်မှန်ကန်ကန် သိမ်းထားရမယ် လို့
+      ရေးထားတယ် ဆိုပါစို့။ ဒီ Then ကို ဆောက်တဲ့သူ မဟုတ်တဲ့ တခြားလူ တစ်ယောက်က စစ်လို့ ရလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ စစ်လို့ မရပါဘူး။ ဘာကြောင့်လဲဆိုတော့ သိမ်းတာက app
+      ရဲ့ အထဲမှာ ဖြစ်တာမို့ အပြင်ကနေ မမြင်ရသလို၊ မှန်မှန်ကန်ကန် ဆိုတာလည်း ဘာကို ပြောမှန်း မရှင်းလို့ပါ။
+      [[mark:quiz-fix]] အဲဒီအစား လူ တစ်ယောက်ချင်း မြင်ရမယ့် အရာကို ရေးရပါမယ်။ customer ဘက်မှာ အော်ဒါနံပါတ်၊
+      စုစုပေါင်းနဲ့ လာယူချိန်ကို မြင်ရရပါမယ်။ [[mark:quiz-fix2]] ကောင်တာက လှလှ ဘက်မှာတော့ အဲဒီ အော်ဒါကို
+      ကောင်တာစာရင်းထဲမှာ မြင်ရရပါမယ်။
+    sources:
+      - { title: "Cucumber: Gherkin reference", url: "https://cucumber.io/docs/gherkin/reference/" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-quiz-fix,
+          type: whiteboard.apply,
+          at: { mark: quiz-fix },
+          upsertIds: [z-fix1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-fix2,
+          type: whiteboard.apply,
+          at: { mark: quiz-fix2 },
+          upsertIds: [z-fix2],
+          drawMs: 1000,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent က ပြီးပါပြီ ဆိုတဲ့ အဖြေ ပြန်ပေးရုံနဲ့ မလုံလောက်ပါဘူး။ ကိုယ်တိုင် မဆောက်တဲ့သူကပါ
+      ကြည့်ပြီး ပြီးမပြီး ဆုံးဖြတ်နိုင်အောင် AC တွေကို ကြိုရေးထားရပါမယ်။
+      [[mark:sel-recap-ac]] AC တစ်ခုစီမှာ Given၊ When၊ Then နဲ့ behaviour တစ်ခုပဲ ထားပြီး၊ ငြင်းတာတွေကိုလည်း
+      ထည့်ရေးပါ။ Then မှာ မရှင်းတဲ့ စကားလုံး မသုံးဘဲ မြင်ရမယ့် ရလဒ်ကို ရေးပါ။ [[mark:sel-recap-dod]] task တိုင်း
+      အတွက် definition of done ကိုလည်း စစ်ပါ။ နောက် lesson မှာတော့ ဒီ AC တွေရဲ့ အပေါ်မှာ ပန်းတိုင်၊ စည်းကမ်းနဲ့
+      မလုပ်မယ့် အရာတွေကို ထည့်ပြီး၊ spec တစ်စောင်လုံးကို ဘယ်လို ရေးမလဲ ဆိုတာ လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Agile Alliance glossary: Definition of Done",
+          url: "https://www.agilealliance.org/glossary/definition-of-done/",
+        }
+      - { title: "Cucumber: Gherkin reference", url: "https://cucumber.io/docs/gherkin/reference/" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-recap-ac,
+          type: editor.select,
+          at: { mark: sel-recap-ac },
+          target: { file: docs/spec.md, text: "## Acceptance criteria", occurrence: 1 },
+        }
+      - {
+          id: sel-recap-dod,
+          type: editor.select,
+          at: { mark: sel-recap-dod },
+          target: { file: docs/spec.md, text: "## Definition of done", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
