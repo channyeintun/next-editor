@@ -1,0 +1,968 @@
+# AI Builder, lesson 13: breaking the work into slices (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md) + docs/spec.md as
+# COURSE-KIT §4.3 without AC-6 (for the AC ids the plan points at) + docs/plan.md pinned with only
+# its title line. Nothing runs. The lesson types all of COURSE-KIT §4.7 into plan.md: the header,
+# the separator and row 1 in one action, then rows 2, 3–4 and 5–6 as their own inserts.
+#
+# Boards: (B) the v1 as one big task handed over at once (blue → violet → red), then split into
+# slices left to right (orange, arrows right) with their AC ids (green) and the rule; (L) layers vs
+# vertical slices: three horizontal layers (blue), the red note, then three green slices cut down
+# through them and the green note; (Z) the quiz on a new case (the counter list's first version).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-13-decomposition.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-13-decomposition
+  title: "AI Builder 13: အလုပ်ကြီးကို အပိုင်းလေးတွေ ခွဲခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/spec.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/plan.md: |+
+        # Plan · v1
+
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board B: one big task (blue v1 → violet agent → red result), then the split into slices.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "v1 ကို agent ဆီ ဘယ်လို အပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-big-box,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 320,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-big,
+        kind: text,
+        x: 320,
+        y: 247,
+        width: 280,
+        height: 40,
+        text: "v1 တစ်ခုလုံး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 630,
+        y: 245,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-agent-box,
+        kind: rectangle,
+        x: 690,
+        y: 225,
+        width: 400,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-agent,
+        kind: text,
+        x: 710,
+        y: 247,
+        width: 370,
+        height: 40,
+        text: "agent ကို တစ်ခါတည်း ခိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 870,
+        y: 310,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: b-bad,
+        kind: text,
+        x: 690,
+        y: 355,
+        width: 400,
+        height: 40,
+        text: "ဘယ်နေရာ မှားလဲ မသိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-dec,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 360,
+        height: 40,
+        text: "decomposition · ခွဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s1-box,
+        kind: rectangle,
+        x: 300,
+        y: 425,
+        width: 235,
+        height: 75,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s1,
+        kind: text,
+        x: 315,
+        y: 445,
+        width: 210,
+        height: 40,
+        text: "အော်ဒါ တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 443,
+        width: 35,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: s2-box,
+        kind: rectangle,
+        x: 580,
+        y: 425,
+        width: 235,
+        height: 75,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s2,
+        kind: text,
+        x: 595,
+        y: 445,
+        width: 210,
+        height: 40,
+        text: "မှားတာ ငြင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 820,
+        y: 443,
+        width: 35,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: s3-box,
+        kind: rectangle,
+        x: 860,
+        y: 425,
+        width: 235,
+        height: 75,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s3,
+        kind: text,
+        x: 868,
+        y: 445,
+        width: 210,
+        height: 40,
+        text: "ကောင်တာစာရင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c1,
+        kind: text,
+        x: 315,
+        y: 515,
+        width: 200,
+        height: 40,
+        text: "AC-1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c2,
+        kind: text,
+        x: 595,
+        y: 515,
+        width: 200,
+        height: 40,
+        text: "AC-2 · 3 · 4",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c3,
+        kind: text,
+        x: 875,
+        y: 515,
+        width: 200,
+        height: 40,
+        text: "AC-5",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: b-rule,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 640,
+        height: 40,
+        text: "အပိုင်း တစ်ခု = စစ်လို့ရတဲ့ ရလဒ် တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board L: layers (blue bars across) vs vertical slices (green, cut down through all three).
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "ဘယ်လို ဖြတ်ပြီး ခွဲမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: l-r1, kind: rectangle, x: 300, y: 235, width: 780, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: l-t1,
+        kind: text,
+        x: 315,
+        y: 247,
+        width: 300,
+        height: 40,
+        text: "ဖုန်း screen",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: l-r2, kind: rectangle, x: 300, y: 305, width: 780, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: l-t2,
+        kind: text,
+        x: 315,
+        y: 317,
+        width: 300,
+        height: 40,
+        text: "အော်ဒါကို စစ်တာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: l-r3, kind: rectangle, x: 300, y: 375, width: 780, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: l-t3,
+        kind: text,
+        x: 315,
+        y: 387,
+        width: 300,
+        height: 40,
+        text: "database · သိမ်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-late,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 640,
+        height: 40,
+        text: "layer လိုက် · အားလုံး ပြီးမှ စမ်းလို့ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - { id: l-s1, kind: rectangle, x: 650, y: 222, width: 110, height: 226, strokeColor: "#2f9e44" }
+    - {
+        id: l-n1,
+        kind: text,
+        x: 696,
+        y: 458,
+        width: 30,
+        height: 40,
+        text: "1",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - { id: l-s2, kind: rectangle, x: 790, y: 222, width: 110, height: 226, strokeColor: "#2f9e44" }
+    - {
+        id: l-n2,
+        kind: text,
+        x: 836,
+        y: 458,
+        width: 30,
+        height: 40,
+        text: "2",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - { id: l-s3, kind: rectangle, x: 930, y: 222, width: 110, height: 226, strokeColor: "#2f9e44" }
+    - {
+        id: l-n3,
+        kind: text,
+        x: 976,
+        y: 458,
+        width: 30,
+        height: 40,
+        text: "3",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l-good,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 640,
+        height: 40,
+        text: "slice လိုက် · တစ်ခု ပြီးတိုင်း စမ်းလို့ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 780,
+        height: 45,
+        text: "Task 3 ကောင်တာစာရင်း · ပထမဆုံး ဘာခိုင်းမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 700,
+        height: 40,
+        text: "က · ကောင်တာ screen ရဲ့ design တစ်ခုလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 700,
+        height: 40,
+        text: "ခ · form က အော်ဒါ တစ်ခု လှလှ ရဲ့ စာရင်းထဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2b,
+        kind: text,
+        x: 345,
+        y: 400,
+        width: 500,
+        height: 40,
+        text: "ပေါ်လာအောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 700,
+        height: 50,
+        text: "အဖြေ · ခ — လမ်း တစ်လမ်းလုံး စစ်လို့ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 700,
+        height: 40,
+        text: "design က layer တစ်ခုပဲ · AC-5 နဲ့ မစစ်နိုင်သေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6113
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: တစ်ခါတည်း အကုန် ခိုင်းရင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဆိုင်ပိုင်ရှင် မြမြ ရဲ့ delivery တောင်းဆိုချက်ကို မရဘူး လို့ မငြင်းဘဲ၊ ရွေးစရာ
+      နှစ်ခုကို ကုန်ကျမှုနဲ့ ပြခဲ့ပြီး၊ ဘာပြီးပြီ၊ ဘာဆက်လုပ်မယ် ဆိုတဲ့ status update ကိုလည်း ရေးခဲ့ပါတယ်။
+      ဒီနေ့တော့ ဆက်လုပ်မယ့် အလုပ်တွေကို စီစဉ်ပါမယ်။ [[mark:open-spec]] editor ထဲမှာ ဘာ ဆောက်မလဲ ဆိုတာကို
+      စုရေးထားတဲ့ spec ကို ဖွင့်ထားပါတယ်။ [[mark:sel-ac]] ဒီ AC ငါးခုက acceptance criteria တွေပါ။ ဆိုလိုတာက ပထမ
+      version ပြီးပြီ လို့ ပြောနိုင်ဖို့ pass ဖြစ်ရမယ့် စည်းကမ်းချက်တွေပါ။ ဘာ ဆောက်ရမလဲ ဆိုတာ ဒီမှာ ရှင်းနေပါပြီ။
+      ဒါပေမဲ့ ဒီ အလုပ်တွေကို agent ဆီ ဘယ်လို အပိုင်းလိုက် အပ်မလဲ ဆိုတဲ့ အစီအစဉ် မရှိသေးပါဘူး။ [[mark:b-big]]
+      ဒီအချိန်မှာ agent ကို spec တစ်စောင်လုံး ပေးပြီး၊ ပထမ version တစ်ခုလုံးကို တစ်ခါတည်း ဆောက်ခိုင်းချင်စရာ
+      ကောင်းပါတယ်။ စကား တစ်ကြောင်းတည်းနဲ့ app တစ်ခုလုံး ရမယ် ဆိုတော့ အချိန် ကုန်သက်သာမယ်လို့ ထင်ရပါတယ်။ ဒါပေမဲ့
+      အဲဒီလို အပ်ရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - {
+          id: sel-ac,
+          type: editor.select,
+          at: { mark: sel-ac },
+          target: { file: docs/spec.md, text: "## Acceptance criteria", occurrence: 1 },
+        }
+      - {
+          id: open-board-b,
+          type: whiteboard.apply,
+          at: { mark: b-big },
+          open: true,
+          clear: true,
+          upsertIds: [b-title, b-big-box, b-big],
+          drawMs: 1300,
+        }
+
+  - id: big-task
+    narration: >
+      [[mark:b-agent]] task ဆိုတာ agent ဆီ တစ်ခါ အပ်တဲ့ အလုပ်ကို ပြောတာပါ။ ဒီ task က အရမ်း ကြီးတော့ agent က ဖိုင်
+      အများကြီးကို တစ်ခါတည်း ထုတ်ပေးပါလိမ့်မယ်။ spec မှာ မရေးထားတဲ့ ကွက်လပ်တွေကိုလည်း ခန့်မှန်းပြီး
+      ဖြည့်သွားမှာပါ။ [[mark:b-bad]] ရလဒ် ပြန်ရောက်လာတဲ့အခါ ကိုယ့်မှာ စစ်စရာ တစ်ပုံကြီး ရှိနေပါပြီ။ AC
+      ငါးခုလုံးကို တစ်ပြိုင်နက် စမ်းရပြီး၊ တစ်ခုခု မှားနေရင် ဘယ် ပြောင်းလဲမှုကြောင့်လဲ ဆိုတာ ရှာရ ခက်ပါတယ်။
+      တစ်နေရာ ပြင်လိုက်တော့ တခြား တစ်နေရာ ပျက်သွားတာမျိုးလည်း ဖြစ်တတ်ပါတယ်။ ဆိုတော့ ကြီးပြီး ဝေဝါးတဲ့ task က
+      ကြီးပြီး ဝေဝါးတဲ့ ရလဒ်ကိုပဲ ပြန်ပေးတတ်ပါတယ်။ [[mark:b-dec]] အဲဒီအစား အလုပ်ကြီးကို အပိုင်းလေးတွေ ခွဲပြီး
+      တစ်ခုချင်း အပ်ရပါမယ်။ ဒီလို ခွဲတာကို decomposition လို့ ခေါ်ပါတယ်။ agent က code ကို မြန်မြန်
+      ထုတ်ပေးနိုင်လာလေ၊ အလုပ်ကို ဘယ်လို ခွဲမလဲ ဆိုတာက builder ရဲ့ အဓိက ကျွမ်းကျင်မှု တစ်ခု ဖြစ်လာလေပါပဲ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices for Claude Code",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - {
+          id: draw-b-agent,
+          type: whiteboard.apply,
+          at: { mark: b-agent },
+          upsertIds: [b-a1, b-agent-box, b-agent],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-b-bad,
+          type: whiteboard.apply,
+          at: { mark: b-bad },
+          upsertIds: [b-a2, b-bad],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-b-dec,
+          type: whiteboard.apply,
+          at: { mark: b-dec },
+          upsertIds: [b-dec],
+          drawMs: 900,
+        }
+
+  - id: split
+    narration: >
+      [[mark:s1]] ကိုယ်တို့ app ကို ခွဲကြည့်ရအောင်။ ပထမ အပိုင်းက customer တစ်ယောက် အော်ဒါ တစ်ခု မှာလို့ ရပြီး၊
+      အဲဒီ အော်ဒါကို သိမ်းထားနိုင်တာပါ။ [[mark:s2]] ဒုတိယ အပိုင်းက အရေအတွက် မှားနေတာ၊ ဆိုင်ပိတ်ချိန်မှာ လာယူမယ်
+      ဆိုတာ၊ ဖုန်းနံပါတ် မပါတာ လို အော်ဒါတွေကို ငြင်းတာပါ။ [[mark:s3]] တတိယ အပိုင်းကတော့ ကောင်တာက လှလှ ဝင်လာတဲ့
+      အော်ဒါတွေကို မြင်ရတာပါ။ [[mark:s-checks]] အပိုင်း တစ်ခုစီ အောက်မှာ AC နံပါတ်တွေ ရှိနေတာကို သတိထား ကြည့်ပါ။
+      အပိုင်း တစ်ခု ပြီးတိုင်း အဲဒီ AC နဲ့ ချက်ချင်း စစ်လို့ ရပါတယ်။ မှားနေရင်လည်း ပြောင်းလဲမှု သေးသေးလေးထဲမှာပဲ
+      ရှာရတော့ မြန်မြန် တွေ့ပါတယ်။ [[mark:s-rule]] ဆိုတော့ အပိုင်း တစ်ခုရဲ့ အဆုံးမှာ စစ်လို့ရတဲ့ ရလဒ် တစ်ခု အမြဲ
+      ရှိရပါမယ်။ ပြီးသွားတဲ့ အပိုင်းကို မြမြ ကိုယ်တိုင် ဖုန်းနဲ့ စမ်းကြည့်လို့ ရတော့၊ status update မှာလည်း
+      ခန့်မှန်းထားတဲ့ ရာခိုင်နှုန်း မပြောရတော့ဘဲ၊ ဘယ်အပိုင်း ပြီးပြီ ဆိုတာကို အတိအကျ ရေးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Humanizing Work: The Humanizing Work Guide to Splitting User Stories",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+    actions:
+      - {
+          id: draw-s1,
+          type: whiteboard.apply,
+          at: { mark: s1 },
+          upsertIds: [s1-box, s1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s2,
+          type: whiteboard.apply,
+          at: { mark: s2 },
+          upsertIds: [s-a1, s2-box, s2],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-s3,
+          type: whiteboard.apply,
+          at: { mark: s3 },
+          upsertIds: [s-a2, s3-box, s3],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-s-checks,
+          type: whiteboard.apply,
+          at: { mark: s-checks },
+          upsertIds: [c1, c2, c3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-rule,
+          type: whiteboard.apply,
+          at: { mark: s-rule },
+          upsertIds: [b-rule],
+          drawMs: 1000,
+        }
+
+  - id: layers
+    chapter: Layer လား၊ slice လား
+    narration: >
+      [[mark:l-title]] ဒါဆို app ကို ဘယ်နေရာကနေ ဖြတ်ပြီး ခွဲမလဲ။ ခွဲနည်း နှစ်မျိုး ရှိပါတယ်။ [[mark:l-layers]] ပထမ
+      နည်းက app ကို အလွှာ၊ layer လိုက် ခွဲတာပါ။ customer မြင်ရတဲ့ ဖုန်း screen တွေ အားလုံးကို အရင် ဆောက်၊ ပြီးမှ
+      အော်ဒါကို စစ်တဲ့ အပိုင်း အားလုံး၊ နောက်ဆုံးမှ data ကို စနစ်တကျ သိမ်းထားတဲ့ database ကို ဆောက်တာမျိုးပါ။
+      [[mark:l-late]] ကြည့်ရတာ စနစ်ကျပေမဲ့၊ layer သုံးခုလုံး မပြီးမချင်း customer တစ်ယောက်မှ အော်ဒါ
+      မမှာနိုင်သေးပါဘူး။ ပထမဆုံး စမ်းလို့ ရတဲ့နေ့က အဆုံးမှာမှ ရောက်လာတော့၊ ပြဿနာတွေကိုလည်း အဆုံးမှာမှ အကုန်
+      တွေ့ရပါတယ်။ [[mark:l-slice1]] ဒုတိယ နည်းကတော့ layer သုံးခုလုံးကို ဒေါင်လိုက် ပါးပါးလေး ဖြတ်ခွဲတာပါ။ ဒါကို
+      vertical slice လို့ ခေါ်ပါတယ်။ screen ကနေ database အထိ တစ်လမ်းလုံး အလုပ်လုပ်တဲ့ အပိုင်းလေးပါ။ ပထမ slice မှာ
+      ရိုးရိုး form တစ်ခု၊ စစ်တာ နည်းနည်းနဲ့ သိမ်းတာ နည်းနည်းပဲ ပါပေမဲ့၊ ပြီးတာနဲ့ တကယ့် အော်ဒါ တစ်ခု မှာကြည့်လို့
+      ရပါပြီ။ [[mark:l-slice23]] နောက် slice တွေကလည်း layer သုံးခုလုံးကို ဖြတ်သွားတော့၊ တစ်ခု ပြီးတိုင်း စမ်းလို့
+      ရပါတယ်။ [[mark:l-ugly]] ပထမ slice ရဲ့ form က ကြည့်လို့ မလှသေးလည်း ကိစ္စ မရှိပါဘူး။ ပုံစံကို နောက်မှ ပြင်လို့
+      ရပေမဲ့၊ အော်ဒါ တစ်ခု တစ်လမ်းလုံး ရောက်မရောက်ကိုတော့ စောစော သိထားဖို့ လိုပါတယ်။
+    sources:
+      - {
+          title: "Humanizing Work: The Humanizing Work Guide to Splitting User Stories",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-l-title,
+          type: whiteboard.apply,
+          at: { mark: l-title },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l-layers,
+          type: whiteboard.apply,
+          at: { mark: l-layers },
+          upsertIds: [l-r1, l-t1, l-r2, l-t2, l-r3, l-t3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-l-late,
+          type: whiteboard.apply,
+          at: { mark: l-late },
+          upsertIds: [l-late],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-l-slice1,
+          type: whiteboard.apply,
+          at: { mark: l-slice1 },
+          upsertIds: [l-s1, l-n1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-slice23,
+          type: whiteboard.apply,
+          at: { mark: l-slice23 },
+          upsertIds: [l-s2, l-n2, l-s3, l-n3, l-good],
+          drawMs: 2200,
+        }
+
+  - id: type-plan
+    chapter: Plan ကို ရေးရအောင်
+    narration: >
+      [[mark:close-l]] ဒီ slice တွေကို plan အဖြစ် ချရေးကြည့်ရအောင်။ [[mark:open-plan]] ဒီ plan ဖိုင်က agent
+      ပြန်ပေးတဲ့ plan မဟုတ်ပါဘူး။ ဘာကို ဘယ်အစဉ်နဲ့ ဆောက်မလဲ ဆိုတာ ကိုယ်ကိုယ်တိုင် ဆုံးဖြတ်ပြီး ရေးမယ့် စာရင်းပါ။
+      [[mark:type-head]] ဇယား တစ်ခုနဲ့ ရေးပါမယ်။ ဇယားရဲ့ အတန်း တစ်တန်း၊ row တစ်ခုက task တစ်ခုပါ။ ပထမ column မှာ
+      အစဉ်နံပါတ်၊ ဒုတိယ column မှာ task ကို ရေးပါတယ်။ [[mark:sel-done-col]] နောက်ဆုံး column မှာတော့ ဒီ task
+      ပြီးပြီလို့ ဘာနဲ့ စစ်မလဲ ဆိုတာ ရေးပါတယ်။ [[mark:sel-row1]] ပထမ row က ခုနက ပုံထဲက ပထမ slice ပါ။ သူ
+      ပြီးမပြီးကို spec ထဲက AC နဲ့ပဲ ဆုံးဖြတ်မယ် ဆိုပြီး၊ AC ကို ဒီမှာ ပြန်မကူးဘဲ နံပါတ်ကိုပဲ ညွှန်ထားပါတယ်။
+      ဒါကြောင့် AC တစ်ခု ပြောင်းရင် spec တစ်နေရာတည်းမှာ ပြင်ရုံပါပဲ။ စစ်မယ့် column ကို ဖြည့်လို့ မရတဲ့ task
+      ဆိုရင်တော့၊ ဝေဝါးနေသေးတယ် ဆိုတဲ့ လက္ခဏာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (specification, decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices for Claude Code",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - { id: close-l, type: whiteboard.apply, at: { mark: close-l }, open: false }
+      - { id: open-plan, type: workspace.openFile, at: { mark: open-plan }, path: docs/plan.md }
+      - id: type-head
+        type: editor.type
+        at: { mark: type-head }
+        target: { file: docs/plan.md, after: "# Plan · v1\n\n", occurrence: 1 }
+        text: "| # | Task | Done when |\n|---|---|---|\n| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |\n"
+        cadence: line-by-line
+      - {
+          id: sel-done-col,
+          type: editor.select,
+          at: { mark: sel-done-col },
+          target: { file: docs/plan.md, text: "Done when", occurrence: 1 },
+        }
+      - {
+          id: sel-row1,
+          type: editor.select,
+          at: { mark: sel-row1 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |",
+              occurrence: 1,
+            },
+        }
+
+  - id: size
+    narration: >
+      [[mark:type-row2]] ဒုတိယ task က ခုနက ပုံထဲက ဒုတိယ အပိုင်းပါ။ customer ရိုက်ထည့်တဲ့ အချက်တွေ၊ input တွေ
+      မှားနေရင် အော်ဒါ မဖြစ်အောင် တားပေးတာပါ။ ဒါကို ပထမ task ထဲ ပေါင်းမထည့်ဘဲ သီးသန့် ခွဲထားတာက ပထမ slice ကို
+      ပါးပါးလေးပဲ ထားချင်လို့ပါ။ [[mark:sel-row12]] lesson ၁၁ မှာ ရေးခဲ့တဲ့ order form brief က AC တစ်ကနေ AC လေး
+      အထိကို တစ်ခါတည်း အပ်ထားလို့၊ တကယ်တော့ slice နှစ်ခု ပေါင်းနေသေးတာပါ။ plan မှာ အဲဒီ အလုပ်ကို task တစ်နဲ့ task
+      နှစ် ခွဲလိုက်တော့၊ အော်ဒါ တစ်ခု သိမ်းလို့ရတာကို အရင် စစ်ပြီးမှ ငြင်းတာတွေကို စစ်လို့ ရပါတယ်။
+      [[mark:sel-row2]] task တစ်ခု ဘယ်လောက် ကြီးသင့်လဲ ဆိုရင်၊ agent က တစ်ကြိမ်တည်းနဲ့ ပြီးနိုင်ပြီး၊ ကိုယ်က
+      တစ်ထိုင်တည်း စစ်ပြီးနိုင်တဲ့ အရွယ်ပါ။ ဒီ task ဆိုရင် ဖုန်းပေါ်မှာ မှားတဲ့ အော်ဒါ သုံးခု မှာကြည့်ပြီး၊
+      ငြင်းတဲ့ စာ ပေါ်မပေါ် ကြည့်ရုံနဲ့ စစ်ပြီးပါပြီ။ စစ်ဖို့ တစ်နေကုန် ကြာမယ့် task ဆိုရင်တော့ ထပ်ခွဲရပါမယ်။
+      ပြောင်းပြန်အနေနဲ့ စစ်စရာ ရလဒ် မထွက်လာလောက်အောင် သေးလွန်းတဲ့ task တွေကလည်း အပ်ရတာ၊ စစ်ရတာ အကြိမ်ကြိမ်
+      ဖြစ်ပြီး အချိန် ပိုကုန်စေပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Humanizing Work: The Humanizing Work Guide to Splitting User Stories",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+    actions:
+      - id: type-row2
+        type: editor.type
+        at: { mark: type-row2 }
+        target: { file: docs/plan.md, after: "| AC-1 |\n", occurrence: 1 }
+        text: "| 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |\n"
+        cadence: line-by-line
+      - {
+          id: sel-row12,
+          type: editor.select,
+          at: { mark: sel-row12 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |\n| 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-row2,
+          type: editor.select,
+          at: { mark: sel-row2 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |",
+              occurrence: 1,
+            },
+        }
+
+  - id: order
+    chapter: ဘာကို အရင် လုပ်မလဲ
+    narration: >
+      [[mark:type-row34]] နောက် task နှစ်ခုကို ထည့်ပါမယ်။ ကောင်တာစာရင်းကို AC ငါး နဲ့ စစ်ပြီး၊ နေ့စဉ်
+      အော်ဒါနံပါတ်အတွက်တော့ AC မရှိလို့ spec ရဲ့ စည်းကမ်း အပိုင်းက နံပါတ် rule နဲ့ စစ်ပါမယ်။ [[mark:order-q]] row
+      တွေကို ဘယ်လို အစဉ်လိုက် စီလဲ ဆိုတော့၊ မေးခွန်း နှစ်ခု မေးပါတယ်။ [[mark:sel-row3]] ပထမ မေးခွန်းက ဘယ် task က
+      ဘယ် task ကို မှီနေလဲ ဆိုတာပါ။ ကောင်တာစာရင်းမှာ ပြစရာ ရှိဖို့ အော်ဒါတွေ သိမ်းထားပြီးသား ဖြစ်ရမှာ မို့၊ task
+      သုံးက task တစ်ကို မှီနေပါတယ်။ မှားတဲ့ အော်ဒါတွေ လှလှ ရဲ့ စာရင်းထဲ မရောက်စေချင်လို့ ငြင်းတဲ့ task ကိုလည်း
+      သူ့ရှေ့မှာ ထားပါတယ်။ [[mark:sel-row1b]] ဒုတိယ မေးခွန်းက ဘယ်အပိုင်းကို အနည်းဆုံး သိထားလဲ ဆိုတာပါ။ မသေချာတဲ့
+      အပိုင်းကို အရင် လုပ်ရင်၊ အဆင်မပြေရင် စောစော သိရပြီး၊ အပေါ်မှာ အများကြီး မဆောက်ရသေးခင် လမ်းပြောင်းလို့
+      ရပါတယ်။ ကိုယ်တို့အတွက်တော့ အော်ဒါ တစ်ခု screen ကနေ database အထိ တကယ် ရောက်မလား ဆိုတာကို အနည်းဆုံး သိထားလို့
+      task တစ်ကို ပထမဆုံး ထားတာပါ။
+    sources:
+      - {
+          title: "Humanizing Work: The Humanizing Work Guide to Splitting User Stories (core complexity first)",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+    actions:
+      - id: type-row34
+        type: editor.type
+        at: { mark: type-row34 }
+        target: { file: docs/plan.md, after: "| AC-2, AC-3, AC-4 |\n", occurrence: 1 }
+        text: "| 3 | ကောင်တာစာရင်း | AC-5 |\n| 4 | နေ့စဉ် အော်ဒါနံပါတ် | Rules |\n"
+        cadence: line-by-line
+      - {
+          id: sel-row3,
+          type: editor.select,
+          at: { mark: sel-row3 },
+          target: { file: docs/plan.md, text: "| 3 | ကောင်တာစာရင်း | AC-5 |", occurrence: 1 },
+        }
+      - {
+          id: sel-row1b,
+          type: editor.select,
+          at: { mark: sel-row1b },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |",
+              occurrence: 1,
+            },
+        }
+
+  - id: last-rows
+    narration: >
+      [[mark:type-row56]] နောက်ဆုံး row နှစ်ခုကိုလည်း ထည့်လိုက်ပါမယ်။ [[mark:sel-row5]] task ငါးကို ကြည့်ပါ။ menu
+      ကို ဆိုင်ဘက်က ပြင်ဖို့ လိုလာမယ် ထင်ပြီး ထည့်ထားတဲ့ task ဖြစ်ပေမဲ့၊ စစ်မယ့် column မှာ ဘာမှ မရှိပါဘူး။ AC
+      မရှိတော့ agent ဆီ အပ်ရင် ဘယ်အချိန် ပြီးပြီလဲ ဆိုတာ ဘယ်သူမှ မပြောနိုင်ပါဘူး။ ဒါကြောင့် AC ရေးမလား၊ တကယ်ကော
+      လိုရဲ့လား ဆိုတာကို မေးခွန်း အဖြစ် မှတ်ထားပြီး၊ နောက်ပိုင်း lesson တစ်ခုမှာ ပြန်ဆုံးဖြတ်ပါမယ်။
+      [[mark:sel-row6]] နောက်ဆုံး task က app ကို staging ပေါ် တင်တာပါ။ staging ဆိုတာ တကယ့် customer တွေ မသုံးခင်
+      ကိုယ်တို့ စမ်းဖို့ သီးသန့် ထားတဲ့ နေရာပါ။ သူ့ကိုတော့ customer တွေဆီ မဖွင့်ပေးခင် စစ်ရမယ့် စာရင်း၊ release
+      checklist နဲ့ စစ်မှာ ဖြစ်ပြီး၊ အဲဒီ စာရင်းကို နောက်ပိုင်းမှ ရေးပါမယ်။ [[mark:brief]] row တစ်ခုချင်းကို agent
+      ဆီ အပ်တဲ့အခါ၊ ရှေ့ lesson တစ်ခုမှာ ရေးခဲ့သလို task အပ်တဲ့ စာ၊ brief တစ်စောင်စီ ရေးပြီး၊ စစ်မယ့် column ထဲက
+      အချက်ကို ပြီးတယ်လို့ သတ်မှတ်တဲ့ အချက်အဖြစ် ထည့်ပေးပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (specification, decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-row56
+        type: editor.type
+        at: { mark: type-row56 }
+        target: { file: docs/plan.md, after: "| 4 | နေ့စဉ် အော်ဒါနံပါတ် | Rules |\n", occurrence: 1 }
+        text: "| 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |\n| 6 | staging ပေါ် တင်တာ | release checklist |\n"
+        cadence: line-by-line
+      - {
+          id: sel-row5,
+          type: editor.select,
+          at: { mark: sel-row5 },
+          target:
+            { file: docs/plan.md, text: "| 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |", occurrence: 1 },
+        }
+      - {
+          id: sel-row6,
+          type: editor.select,
+          at: { mark: sel-row6 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 6 | staging ပေါ် တင်တာ | release checklist |",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: expect-plan-1,
+          type: expect.file,
+          at: { mark: brief },
+          path: docs/plan.md,
+          contains: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |",
+        }
+      - {
+          id: expect-plan-6,
+          type: expect.file,
+          at: { afterAction: expect-plan-1 },
+          path: docs/plan.md,
+          contains: "| 6 | staging ပေါ် တင်တာ | release checklist |",
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ task သုံး ဖြစ်တဲ့ ကောင်တာစာရင်းကို agent ဆီ အပ်တော့မယ် ဆိုပါစို့။
+      ပထမဆုံး ဘာကို ခိုင်းမလဲ။ ကောင်တာ screen ရဲ့ design တစ်ခုလုံးကို အရောင်၊ အသံတွေနဲ့ အရင် ဆောက်ခိုင်းမလား။
+      ဒါမှမဟုတ် form က အော်ဒါ တစ်ခု လှလှ ရဲ့ စာရင်းထဲ ပေါ်လာအောင် အရင် လုပ်ခိုင်းမလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ ရွေးစရာပါ။ ဘာကြောင့်လဲဆိုတော့ customer ရဲ့ form ကနေ
+      လှလှ ရဲ့ screen အထိ တစ်လမ်းလုံး အလုပ်လုပ်တာကို ပြနိုင်ပြီး၊ AC ငါး နဲ့ ချက်ချင်း စစ်လို့ ရလို့ပါ။
+      [[mark:quiz-why]] design ကို အရင် ဆောက်ရင်တော့ screen ဆိုတဲ့ layer တစ်ခုပဲ ရှိနေပြီး၊ စာရင်းထဲမှာ အော်ဒါ
+      တစ်ခုမှ မပေါ်သေးတော့ ဘာကိုမှ မစစ်နိုင်သေးပါဘူး။ ပြီးတော့ လှလှ တကယ် သုံးကြည့်ပြီးမှ ဘာ အရောင်၊ ဘာ အသံ လိုလဲ
+      ဆိုတာ ပိုသိလာမှာပါ။
+    sources:
+      - {
+          title: "Humanizing Work: The Humanizing Work Guide to Splitting User Stories",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o2b],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-why,
+          type: whiteboard.apply,
+          at: { mark: quiz-why },
+          upsertIds: [z-a-note],
+          drawMs: 1000,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ ပထမ version တစ်ခုလုံးကို တစ်ခါတည်း မအပ်ဘဲ၊ agent က တစ်ကြိမ်နဲ့
+      ပြီးနိုင်ပြီး ကိုယ်က တစ်ထိုင်တည်း စစ်နိုင်တဲ့ task လေးတွေ ခွဲပါ။ [[mark:rc-row1]] layer လိုက် မခွဲဘဲ screen
+      ကနေ database အထိ ဖြတ်သွားတဲ့ vertical slice တွေနဲ့ ခွဲပြီး၊ ပထမ slice ကို ပါးပါးလေး ထားပြီး လမ်း
+      တစ်လမ်းလုံးကို စမ်းပါ။ [[mark:rc-done]] task တိုင်းမှာ ပြီးပြီလို့ ဘာနဲ့ စစ်မလဲ ဆိုတာ ရှိရပါမယ်။ မှီနေတာနဲ့
+      မသေချာတာကို ကြည့်ပြီး အစဉ်လိုက် စီပါ။ နောက် lesson မှာတော့ ဒီ slice တွေ ဖြတ်သွားတဲ့ screen၊ အော်ဒါကို စစ်တဲ့
+      server၊ database ဆိုတဲ့ အပိုင်းတွေက ဘာတွေလဲ၊ အော်ဒါ တစ်ခုက သူတို့ကြားမှာ ဘယ်လို သွားလဲ ဆိုတာကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (decomposition)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Humanizing Work: The Humanizing Work Guide to Splitting User Stories",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: rc-row1,
+          type: editor.select,
+          at: { mark: rc-row1 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: rc-done,
+          type: editor.select,
+          at: { mark: rc-done },
+          target: { file: docs/plan.md, text: "Done when", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
