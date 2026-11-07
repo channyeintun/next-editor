@@ -1323,7 +1323,7 @@ scenes:
       value ကို တွဲသိမ်းတဲ့ container ပါ။ စားပွဲ နံပါတ်ကနေ customer နာမည်ကို ရှာလို့ ရအောင် Map
       တစ်ခု ဆောက်ပါမယ်။ ဒီတစ်ခါ type argument နှစ်ခု ပေးရပြီး၊ ပထမ တစ်ခုက key ဖြစ်တဲ့ စားပွဲ
       နံပါတ်အတွက်၊ ဒုတိယ တစ်ခုက value ဖြစ်တဲ့ customer နာမည်အတွက်ပါ။ [[mark:read-map]] Output မှာ
-      စားပွဲ ၅ ကနေ မြမြ ကို ညွှန်ထားတဲ့ Map ပေါ်လာပါပြီ။ ဒီ Map ထဲကို စာသား key ဒါမှမဟုတ် ဂဏန်း
+      စားပွဲ ၅ ကနေ လှလှ ကို ညွှန်ထားတဲ့ Map ပေါ်လာပါပြီ။ ဒီ Map ထဲကို စာသား key ဒါမှမဟုတ် ဂဏန်း
       value ထည့်ရင်တော့ TypeScript က error ပြပါလိမ့်မယ်။
     sources:
       - {
@@ -1404,14 +1404,14 @@ scenes:
         type: editor.type
         at: { mark: type-map }
         target: { file: src/main.ts, after: "console.log(\"စားပွဲ\", tables);\n", occurrence: 1 }
-        text: "const seats = new Map<number, string>();\nseats.set(5, \"မြမြ\");\nconsole.log(seats);\n"
+        text: "const seats = new Map<number, string>();\nseats.set(5, \"လှလှ\");\nconsole.log(seats);\n"
         cadence: line-by-line
       - id: expect-map-output
         type: expect.preview
         at: { afterAction: type-map }
         timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
-        textContains: "Map(1) { 5 => 'မြမြ' }"
+        textContains: "Map(1) { 5 => 'လှလှ' }"
         retry: { maxAttempts: 3, delayMs: 600 }
       - id: expect-map-clean
         type: expect.preview
