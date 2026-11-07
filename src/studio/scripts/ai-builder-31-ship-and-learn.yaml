@@ -1,0 +1,1260 @@
+# AI Builder, lesson 31: ship and learn from users (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md unused),
+# docs/problem.md exactly as COURSE-KIT §4.1 (bun tools/binder.ts 1), and docs/next.md pinned with its
+# title line only. Nothing runs. The lesson selects problem.md's "How we'll know" lines and types all
+# of docs/next.md (COURSE-KIT §4.22 outline → full text), one section per action (line-by-line).
+#
+# Boards: (L) the course strip with module 8 orange + the build → measure → learn loop (↻);
+# (N) the example numbers after a month as bars against the problem.md goals (said to be an example);
+# (U) what users say vs what they do; (Z) the quiz (30 % not picked up: delivery or find out why);
+# (H) honest with customers: what we keep, they choose; no pre-ticked box, no fake time limit.
+# Typed: What we learned (+ one line on who the app left out) · Why not picked up · v2 shortlist ·
+# Next question for မြမြ. The quiz sits before "Why not picked up" so the evidence is its answer.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-31-ship-and-learn.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-31-ship-and-learn
+  title: "AI Builder 31: Ship လုပ်ပြီး user ဆီက သင်ယူခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/problem.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/next.md: |+
+        # Next · ကြိုမှာ app
+
+      docs/problem.md: |
+        # Problem · ကြိုမှာ app
+
+        ## Problem
+        မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊ အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတယ်။
+
+        ## Who
+        - အလုပ်မသွားခင် မနက်တိုင်း လာဝယ်တဲ့ member တွေ၊ ဥပမာ အောင်အောင်
+        - အချိန်ကျပ်တဲ့ ကျောင်းသားတွေ၊ ဥပမာ မောင်မောင်
+        - ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ
+
+        ## Today
+        - တန်းစီ၊ ကောင်တာမှာ မှာ၊ ပြီးမှ ထပ်စောင့်ရတယ်။
+        - တချို့က ဖုန်းဆက်ပြီး ကြိုမှာကြတယ်။ ဒါပေမဲ့ လှလှ က ဖုန်းကိုင်နေရင် ကောင်တာက လူတွေ ပိုစောင့်ရတယ်။
+
+        ## Why it matters
+        - လှလှ ရဲ့ မှတ်စုအရ မနက်တိုင်း customer 10 ယောက်လောက် မဝယ်ဘဲ ပြန်သွားတယ်။
+
+        ## How we'll know
+        - မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်
+        - ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်
+        - ဖုန်းနဲ့ ကြိုမှာတာ — တဖြည်းဖြည်း နည်းလာ
+
+        ## Not the problem
+        - ဈေးနှုန်းနဲ့ အရသာ — customer တွေ ကြိုက်ပြီးသား
+        - delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Course strip (COURSE-KIT §5; exact L01 definitions), module 8 orange.
+    - { id: m-b1, kind: rectangle, x: 300, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n1,
+        kind: text,
+        x: 328,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b2, kind: rectangle, x: 388, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n2,
+        kind: text,
+        x: 416,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b3, kind: rectangle, x: 476, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n3,
+        kind: text,
+        x: 504,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b4, kind: rectangle, x: 564, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n4,
+        kind: text,
+        x: 592,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b5, kind: rectangle, x: 652, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n5,
+        kind: text,
+        x: 680,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b6, kind: rectangle, x: 740, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n6,
+        kind: text,
+        x: 768,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "6",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b7, kind: rectangle, x: 828, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n7,
+        kind: text,
+        x: 856,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "7",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b8, kind: rectangle, x: 916, y: 160, width: 72, height: 44, strokeColor: "#f08c00" }
+    - {
+        id: m-n8,
+        kind: text,
+        x: 944,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "8",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board L: build (blue, the product) → measure → learn (orange, this lesson), the loop back (↻).
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 380,
+        height: 50,
+        text: "ship ပြီးမှ စ သင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-b-box,
+        kind: rectangle,
+        x: 300,
+        y: 292,
+        width: 400,
+        height: 62,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b,
+        kind: text,
+        x: 320,
+        y: 304,
+        width: 360,
+        height: 40,
+        text: "build · ဆောက်ပြီး ship",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 480,
+        y: 358,
+        width: 40,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-m-box,
+        kind: rectangle,
+        x: 300,
+        y: 398,
+        width: 400,
+        height: 62,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-m,
+        kind: text,
+        x: 320,
+        y: 410,
+        width: 360,
+        height: 40,
+        text: "measure · တိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-m-note,
+        kind: text,
+        x: 720,
+        y: 410,
+        width: 380,
+        height: 40,
+        text: "metric · လုပ်တာ · ပြောတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 480,
+        y: 464,
+        width: 40,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-l-box,
+        kind: rectangle,
+        x: 300,
+        y: 504,
+        width: 400,
+        height: 62,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-l,
+        kind: text,
+        x: 320,
+        y: 516,
+        width: 375,
+        height: 40,
+        text: "learn · ထား၊ ပြင်၊ ဖယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-loop,
+        kind: text,
+        x: 720,
+        y: 516,
+        width: 300,
+        height: 40,
+        text: "↻ build ကို ပြန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board N: the story's example numbers after a month, bars at one scale (20 px a unit) against the
+    # problem.md goals (green); the unplanned number in red.
+    - {
+        id: n-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 50,
+        text: "တစ်လ ပြီးနောက် · ဥပမာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: n-l1,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 420,
+        height: 40,
+        text: "မဝယ်ဘဲ ပြန်သွားတဲ့ customer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-g1,
+        kind: text,
+        x: 780,
+        y: 228,
+        width: 300,
+        height: 40,
+        text: "ပန်းတိုင် · 3 အောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - { id: n-b1a, kind: rectangle, x: 300, y: 276, width: 200, height: 28, strokeColor: "#e03131" }
+    - {
+        id: n-t1a,
+        kind: text,
+        x: 515,
+        y: 271,
+        width: 160,
+        height: 40,
+        text: "အရင် 10",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - { id: n-b1b, kind: rectangle, x: 300, y: 316, width: 80, height: 28, strokeColor: "#f08c00" }
+    - {
+        id: n-t1b,
+        kind: text,
+        x: 395,
+        y: 311,
+        width: 160,
+        height: 40,
+        text: "အခု 4",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: n-l2,
+        kind: text,
+        x: 300,
+        y: 378,
+        width: 360,
+        height: 40,
+        text: "ကြိုမှာတဲ့ အော်ဒါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-g2,
+        kind: text,
+        x: 780,
+        y: 378,
+        width: 300,
+        height: 40,
+        text: "ပန်းတိုင် · 20",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - { id: n-b2, kind: rectangle, x: 300, y: 426, width: 460, height: 28, strokeColor: "#2f9e44" }
+    - {
+        id: n-t2,
+        kind: text,
+        x: 775,
+        y: 421,
+        width: 120,
+        height: 40,
+        text: "အခု 23",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: n-l3,
+        kind: text,
+        x: 300,
+        y: 488,
+        width: 360,
+        height: 40,
+        text: "လာမယူတဲ့ အော်ဒါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-g3,
+        kind: text,
+        x: 780,
+        y: 488,
+        width: 300,
+        height: 40,
+        text: "ပန်းတိုင် မထားခဲ့",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: n-b3, kind: rectangle, x: 300, y: 536, width: 140, height: 28, strokeColor: "#e03131" }
+    - {
+        id: n-t3,
+        kind: text,
+        x: 455,
+        y: 531,
+        width: 300,
+        height: 40,
+        text: "30% · 7 ခုလောက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board U: where the evidence comes from; what users say (white) vs what they do (green); the rule (orange).
+    - {
+        id: u-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 50,
+        text: "ပြောတာ နဲ့ လုပ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: u-src,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 640,
+        height: 40,
+        text: "လှလှ ရဲ့ မှတ်စု · စကားပြော · app ရဲ့ data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-h-say,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 200,
+        height: 45,
+        text: "ပြောတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: u-s1,
+        kind: text,
+        x: 300,
+        y: 362,
+        width: 340,
+        height: 40,
+        text: "app ကောင်းပါတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-h-do,
+        kind: text,
+        x: 680,
+        y: 300,
+        width: 200,
+        height: 45,
+        text: "လုပ်တာ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: u-d1,
+        kind: text,
+        x: 680,
+        y: 362,
+        width: 410,
+        height: 40,
+        text: "တစ်ခါ မှာပြီး တန်းပြန်စီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-d2,
+        kind: text,
+        x: 680,
+        y: 417,
+        width: 410,
+        height: 40,
+        text: "လှလှ ကို မှာပေးခိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-rule,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 420,
+        height: 45,
+        text: "လုပ်တာက ပိုယုံရ",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 600,
+        height: 45,
+        text: "လာမယူတဲ့ အော်ဒါ 30%",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 600,
+        height: 45,
+        text: "ဘာ အရင် လုပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 460,
+        height: 40,
+        text: "က · delivery ထည့်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 600,
+        height: 40,
+        text: "ခ · ဘာကြောင့် မလာယူလဲ အရင် ရှာမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 300,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 640,
+        height: 40,
+        text: "အကြောင်းရင်း မသိခင် အလုပ်ကြီး မဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board H: honest with customers; do (green) vs don't (red); whose decision (orange).
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 460,
+        height: 50,
+        text: "customer ကို မလှည့်စား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-h-do,
+        kind: text,
+        x: 300,
+        y: 238,
+        width: 200,
+        height: 45,
+        text: "လုပ်မယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: h-d1,
+        kind: text,
+        x: 300,
+        y: 298,
+        width: 360,
+        height: 40,
+        text: "ဘာသိမ်းလဲ ရှင်းရှင်း ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-d2,
+        kind: text,
+        x: 300,
+        y: 353,
+        width: 360,
+        height: 40,
+        text: "SMS · ကိုယ်တိုင် ရွေးမှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-h-dont,
+        kind: text,
+        x: 680,
+        y: 238,
+        width: 200,
+        height: 45,
+        text: "မလုပ်ဘူး",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: h-t1,
+        kind: text,
+        x: 680,
+        y: 298,
+        width: 410,
+        height: 40,
+        text: "ကြိုခြစ်ထားတဲ့ အကွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-t2,
+        kind: text,
+        x: 680,
+        y: 353,
+        width: 410,
+        height: 40,
+        text: "မမှန်တဲ့ အချိန် ကန့်သတ်ချက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-me,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 460,
+        height: 45,
+        text: "ဆုံးဖြတ်တာ ကိုယ့်တာဝန်",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6131
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Ship ပြီးမှ စ သင်ရတာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ကိုယ့် တကယ့် ထွက်ကုန်က app တစ်ခုတည်း မဟုတ်ဘဲ app ကို ထုတ်ပေးတဲ့ စက်ရုံ၊ factory
+      ဖြစ်တယ် ဆိုတာနဲ့၊ app ကို ဆက်ပြင်၊ ဆက်ထိန်းရတဲ့ maintenance ကို ကြည့်ခဲ့ပါတယ်။ ဒီနေ့တော့ course ရဲ့
+      အပိုင်းကြီး ရှစ်ပိုင်းထဲက နောက်ဆုံး module၊ product နဲ့ ကြီးထွားခြင်း အပိုင်းကို ရောက်ပါပြီ။
+      [[mark:r-users]] ship လုပ်တယ် ဆိုတာ app ကို customer တွေ တကယ် သုံးလို့ရအောင် ထုတ်ပေးတာပါ။ ကြိုမှာ app လည်း
+      customer တွေ လက်ထဲ ရောက်နေပါပြီ။ ဒါဆို app အလုပ်ဖြစ်မဖြစ် ဘယ်သူ ဆုံးဖြတ်မလဲ။ ကိုယ်လည်း မဟုတ်၊ agent လည်း
+      မဟုတ်ဘဲ၊ နေ့တိုင်း သုံးနေတဲ့ user တွေပါ။ [[mark:open-problem]] ဒါကြောင့် ကိုယ်တို့ ပထမဆုံး ရေးခဲ့တဲ့ problem
+      ဖိုင်ကို ပြန်ဖွင့်ကြည့်ရအောင်။ [[mark:sel-know]] ဒီ အပိုင်းမှာ ပြဿနာ ပြေပြီလား ဆိုတာကို ကိန်းဂဏန်းနဲ့
+      ကြိုသတ်မှတ်ခဲ့ပါတယ်။ app ကို ship လုပ်ပြီးသွားတာက ပန်းတိုင် မဟုတ်ပါဘူး။ ဒီ ကိန်းဂဏန်းတွေ တကယ် ပြောင်းသွားမှ
+      ဆိုင်ပိုင်ရှင် မြမြ ရဲ့ ပြဿနာ ပြေတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "GOV.UK Service Manual: How to set performance metrics for your service",
+          url: "https://www.gov.uk/service-manual/measuring-success/how-to-set-performance-metrics-for-your-service",
+        }
+    actions:
+      - {
+          id: open-problem,
+          type: workspace.openFile,
+          at: { mark: open-problem },
+          path: docs/problem.md,
+        }
+      - {
+          id: sel-know,
+          type: editor.select,
+          at: { mark: sel-know },
+          target:
+            {
+              file: docs/problem.md,
+              text: "- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်\n- ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်\n- ဖုန်းနဲ့ ကြိုမှာတာ — တဖြည်းဖြည်း နည်းလာ\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: loop
+    narration: >
+      [[mark:l-title]] ship လုပ်တာက အလုပ်ရဲ့ အဆုံး မဟုတ်ဘဲ သင်ယူတာရဲ့ အစပါ။ customer တွေ တကယ် မသုံးခင်အထိ app က
+      ပြဿနာကို ဖြေရှင်းမယ် ဆိုတာ ခန့်မှန်းချက် တစ်ခုပဲ ဖြစ်နေလို့ပါ။ [[mark:l-build]] ပထမ အဆင့်က ပြဿနာ တကယ်
+      ပြေမပြေ စမ်းနိုင်တဲ့ အသေးဆုံး version ကို ဆောက်ပြီး ship လုပ်တာပါ။ [[mark:l-measure]] ဒုတိယ အဆင့်က
+      တိုင်းတာပါ။ ပြဿနာ ပြေမပြေ တိုင်းတဲ့ ကိန်းဂဏန်းကို metric လို့ ခေါ်ပါတယ်။ metric အပြင် user တွေ ဘာလုပ်လဲ၊
+      ဘာပြောလဲ ဆိုတာကိုလည်း စုရပါတယ်။ [[mark:l-learn]] တတိယ အဆင့်ကတော့ အဲဒီ အထောက်အထားကို ကြည့်ပြီး၊ app ရဲ့
+      လုပ်ဆောင်ချက် တစ်ခု၊ feature တစ်ခုကို ဆက်ထားမလား၊ ပြင်မလား၊ ဖယ်မလား ဆုံးဖြတ်တာပါ။ [[mark:l-loop]] ပြီးရင်
+      build ကို ပြန်သွားပါတယ်။ ဒီ ပတ်လမ်းကို build measure learn loop လို့ ခေါ်ပါတယ်။ တစ်ခေါက်ချင်းကို သေးသေး၊
+      မြန်မြန် ပတ်လေ၊ ခန့်မှန်းချက် မှားနေတာကို စောစော သိလေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-l,
+          type: whiteboard.apply,
+          at: { mark: l-title },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              m-b1,
+              m-n1,
+              m-b2,
+              m-n2,
+              m-b3,
+              m-n3,
+              m-b4,
+              m-n4,
+              m-b5,
+              m-n5,
+              m-b6,
+              m-n6,
+              m-b7,
+              m-n7,
+              m-b8,
+              m-n8,
+              l-title,
+            ],
+        }
+      - {
+          id: draw-l-build,
+          type: whiteboard.apply,
+          at: { mark: l-build },
+          upsertIds: [l-b-box, l-b],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-l-measure,
+          type: whiteboard.apply,
+          at: { mark: l-measure },
+          upsertIds: [l-a1, l-m-box, l-m, l-m-note],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-l-learn,
+          type: whiteboard.apply,
+          at: { mark: l-learn },
+          upsertIds: [l-a2, l-l-box, l-l],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-l-loop,
+          type: whiteboard.apply,
+          at: { mark: l-loop },
+          upsertIds: [l-loop],
+          drawMs: 900,
+        }
+
+  - id: numbers
+    chapter: ကိန်းဂဏန်းတွေ ဘာပြောလဲ
+    narration: >
+      [[mark:n-title]] ဒါဆို ကြိုမှာ app ရဲ့ loop ပထမ အခေါက်ကို တိုင်းကြည့်ရအောင်။ ဥပမာ အနေနဲ့ ship လုပ်ပြီး တစ်လ
+      ရှိပြီ၊ ဒီ ကိန်းဂဏန်းတွေ ရလာတယ် ဆိုပါစို့။ [[mark:n-leave]] မဝယ်ဘဲ ပြန်သွားတဲ့ customer က မနက်တိုင်း ၁၀
+      ယောက်လောက်ကနေ ၄ ယောက်လောက်ကို ကျသွားပါတယ်။ ကောင်းလာပေမယ့် ပန်းတိုင်က ၃ ယောက်အောက် ဖြစ်လို့ မရောက်သေးပါဘူး။
+      [[mark:n-pre]] ကြိုမှာတဲ့ အော်ဒါကတော့ တစ်မနက် ၂၃ ခုလောက် ရှိလို့ ပန်းတိုင်ကို ကျော်သွားပါပြီ။
+      [[mark:n-skip]] ဒါပေမဲ့ problem ဖိုင်မှာ ပန်းတိုင် မထားခဲ့တဲ့ ကိန်းဂဏန်း တစ်ခုလည်း ပေါ်လာပါတယ်။ ကြိုမှာပြီး
+      လာမယူတဲ့ အော်ဒါက ၃၀ ရာခိုင်နှုန်းလောက်၊ တစ်မနက် ခုနစ်ခုလောက် ရှိနေပါတယ်။ ကောင်တာက လှလှ က အသင့် ပြင်ထားတဲ့
+      အော်ဒါတွေကို ဘယ်သူမှ လာမယူတော့၊ ဆိုင်က ငွေရော အချိန်ရော ဆုံးရှုံးနေပါတယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How to set performance metrics for your service",
+          url: "https://www.gov.uk/service-manual/measuring-success/how-to-set-performance-metrics-for-your-service",
+        }
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+    actions:
+      - {
+          id: draw-n-title,
+          type: whiteboard.apply,
+          at: { mark: n-title },
+          clear: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-leave,
+          type: whiteboard.apply,
+          at: { mark: n-leave },
+          upsertIds: [n-l1, n-b1a, n-t1a, n-b1b, n-t1b, n-g1],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-n-pre,
+          type: whiteboard.apply,
+          at: { mark: n-pre },
+          upsertIds: [n-l2, n-b2, n-t2, n-g2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-n-skip,
+          type: whiteboard.apply,
+          at: { mark: n-skip },
+          upsertIds: [n-l3, n-g3, n-b3, n-t3],
+          drawMs: 1600,
+        }
+
+  - id: learned
+    narration: >
+      [[mark:close-n]] ဒီ ကိန်းဂဏန်းတွေကို စာမျက်နှာ အသစ်မှာ မှတ်ထားပါမယ်။ [[mark:open-next]] ဒီ ဖိုင်က ပထမ
+      version ကနေ ဘာသင်ခဲ့လဲ၊ နောက် version မှာ ဘာလုပ်မလဲ ရေးမယ့် နေရာပါ။ [[mark:type-learned]] ပထမ အပိုင်းမှာ
+      ကိန်းဂဏန်း တစ်ခုစီကို ကြိုသတ်မှတ်ခဲ့တဲ့ ပန်းတိုင်နဲ့ ဘေးချင်းယှဉ်ပြီး ရေးပါတယ်။ ပန်းတိုင် မရောက်သေးတာကိုလည်း
+      ရိုးရိုးသားသား ရေးထားတော့၊ မြမြ ဖတ်တဲ့အခါ ဘာ ရောက်ပြီ၊ ဘာ မရောက်သေးဘူး ဆိုတာ တန်းမြင်ရပါတယ်။
+      [[mark:sel-skip]] နောက်ဆုံး စာကြောင်းကို ကြည့်ပါ။ ငွေကို ကောင်တာမှာပဲ ချေမယ်လို့ ဆုံးဖြတ်ခဲ့တဲ့ decision
+      record ADR နံပါတ် တစ် ထဲမှာ၊ လာမယူတဲ့ အော်ဒါ တစ်မနက် ငါးခုထက် များရင် ပြန်စဉ်းစားမယ်လို့ ရေးခဲ့ပါတယ်။ အခု
+      ခုနစ်ခုလောက် ရှိနေတော့ ပြန်ကြည့်ရမယ့် အချိန် ရောက်ပါပြီ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How to set performance metrics for your service",
+          url: "https://www.gov.uk/service-manual/measuring-success/how-to-set-performance-metrics-for-your-service",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-n, type: whiteboard.apply, at: { mark: close-n }, open: false }
+      - { id: open-next, type: workspace.openFile, at: { mark: open-next }, path: docs/next.md }
+      - id: type-learned
+        type: editor.type
+        at: { mark: type-learned }
+        target: { file: docs/next.md, after: "# Next · ကြိုမှာ app\n\n", occurrence: 1 }
+        text: "## What we learned\n- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — 10 ကနေ 4 ယောက် (ပန်းတိုင် 3 အောက်၊ မရောက်သေး)\n- ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 23 (ပန်းတိုင် 20၊ ရောက်ပြီ)\n- ဖုန်းနဲ့ ကြိုမှာတာ — နည်းလာ (ပန်းတိုင်အတိုင်း)\n- လာမယူတဲ့ အော်ဒါ — 30%၊ တစ်မနက် 7 ခုလောက် (ADR-001 ရဲ့ 5 ခုကို ကျော်)\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-learned,
+          type: expect.file,
+          at: { afterAction: type-learned },
+          path: docs/next.md,
+          contains: "- လာမယူတဲ့ အော်ဒါ — 30%၊ တစ်မနက် 7 ခုလောက် (ADR-001 ရဲ့ 5 ခုကို ကျော်)",
+        }
+      - {
+          id: sel-skip,
+          type: editor.select,
+          at: { mark: sel-skip },
+          target:
+            {
+              file: docs/next.md,
+              text: "- လာမယူတဲ့ အော်ဒါ — 30%၊ တစ်မနက် 7 ခုလောက် (ADR-001 ရဲ့ 5 ခုကို ကျော်)",
+              occurrence: 1,
+            },
+        }
+
+  - id: listen
+    chapter: User တွေ လုပ်တာကို ကြည့်
+    narration: >
+      [[mark:u-title]] ကိန်းဂဏန်းက ဘာဖြစ်နေလဲ ပြပေမယ့်၊ ဘာကြောင့်လဲ ဆိုတာကိုတော့ မပြပါဘူး။ [[mark:u-src]] အဲဒါကို
+      သိဖို့ ကောင်တာက လှလှ ရဲ့ မှတ်စုကို ဖတ်တာ၊ member အောင်အောင် နဲ့ ကျောင်းသား မောင်မောင် လို customer တွေနဲ့
+      စကားပြောတာ၊ app ထဲက data ကို ကြည့်တာ စတာတွေ လုပ်ရပါတယ်။ [[mark:u-say]] ဒါပေမဲ့ user တွေ ပြောတာနဲ့ လုပ်တာ
+      မတူတတ်ပါဘူး။ app ဘယ်လိုလဲ လို့ မေးရင် အများစုက ကောင်းပါတယ်လို့ ယဉ်ယဉ်ကျေးကျေး ဖြေကြပါတယ်။ [[mark:u-do]] data
+      ကို ကြည့်တော့ customer အသစ် တချို့က တစ်ခါပဲ မှာပြီး ရပ်သွားကြပါတယ်။ အဲဒီ လူတွေကို လှလှ က တန်းထဲမှာ
+      ပြန်တွေ့နေရပါတယ်။ member အောင်အောင် ကတော့ မနက်တိုင်း app နဲ့ မှာနေပြီး ဖုန်း မဆက်တော့ပါဘူး။ လှလှ ရဲ့
+      မှတ်စုမှာလည်း တချို့က ဖုန်းကို သူ့ဆီ ပေးပြီး မှာပေးခိုင်းကြတယ်လို့ ပါပါတယ်။ သူတို့ တစ်ယောက်မှ app အကြောင်း
+      မကျေနပ်ကြောင်း မပြောခဲ့ပါဘူး။ [[mark:u-rule]] ဒါကြောင့် ပြောတာထက် လုပ်တာကို ပိုယုံပါ။ ship မလုပ်ခင်က user
+      တွေကို ပြီးခဲ့တဲ့ နေ့အကြောင်း မေးခဲ့သလိုပဲ၊ ship ပြီးနောက်မှာလည်း သူတို့ တကယ် ဘာလုပ်ခဲ့လဲ ဆိုတာက
+      အခိုင်မာဆုံး အထောက်အထားပါ။
+    sources:
+      - {
+          title: "Nielsen Norman Group: First Rule of Usability? Don't Listen to Users",
+          url: "https://www.nngroup.com/articles/first-rule-of-usability-dont-listen-to-users/",
+        }
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+    actions:
+      - {
+          id: draw-u-title,
+          type: whiteboard.apply,
+          at: { mark: u-title },
+          open: true,
+          clear: true,
+          upsertIds: [u-title],
+        }
+      - {
+          id: draw-u-src,
+          type: whiteboard.apply,
+          at: { mark: u-src },
+          upsertIds: [u-src],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-u-say,
+          type: whiteboard.apply,
+          at: { mark: u-say },
+          upsertIds: [u-h-say, u-s1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-u-do,
+          type: whiteboard.apply,
+          at: { mark: u-do },
+          upsertIds: [u-h-do, u-d1, u-d2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-u-rule,
+          type: whiteboard.apply,
+          at: { mark: u-rule },
+          upsertIds: [u-rule],
+          drawMs: 900,
+        }
+
+  - id: everyone
+    narration: >
+      [[mark:close-u]] ဖုန်းကို လှလှ ဆီ ပေးပြီး မှာခိုင်းခဲ့တဲ့ customer တွေက ဘာကြောင့် ဒီလို လုပ်ခဲ့လဲ။ သူတို့
+      ဖုန်းကို ကိုင်ပြီး မှာပေးခဲ့ရတဲ့ လှလှ က တန်းမြင်ခဲ့ပါတယ်။ ဖုန်းဟောင်း တချို့မှာ မြန်မာစာက ပုံပျက်ပြီး
+      ပေါ်ပါတယ်။ စာလုံးကို ကြီးကြီး ထားတဲ့ ဖုန်းမှာ မှာမယ် ခလုတ်ကို တခြား စာတွေက ဖုံးသွားလို့ မမြင်ရပါဘူး။ data
+      နှေးရင်တော့ app ပေါ်လာဖို့ အရမ်း ကြာပါတယ်။ [[mark:type-left-out]] ဒါကို ပထမ အပိုင်းရဲ့ အောက်ဆုံးမှာ
+      ထပ်ထည့်ပါမယ်။ ကိန်းဂဏန်းထဲမှာ မပေါ်တဲ့ user တွေကိုလည်း မှတ်ထားတာပါ။ [[mark:sel-left-out]] requirement ထဲမှာ
+      ဒါတွေ ရေးခဲ့ပြီး၊ ဈေးပေါတဲ့ ဖုန်း တစ်လုံးနဲ့လည်း စမ်းခဲ့ပါတယ်။ ဒါပေမဲ့ customer တွေရဲ့ ဖုန်းတွေက အများကြီး
+      ပိုကွဲပြားပါတယ်။ ချန်ထားခံရတဲ့ user တွေက ဘာမှ မပြောဘဲ ထွက်သွားတတ်လို့ တမင် ရှာမှ တွေ့ပါတယ်။ လူတိုင်း
+      သုံးနိုင်အောင် ဘယ်လို လုပ်မလဲ ဆိုတာကိုတော့ Accessibility course မှာ အသေးစိတ် လေ့လာနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "W3C WAI: Introduction to Web Accessibility (benefits for older people, small screens, slow connections)",
+          url: "https://www.w3.org/WAI/fundamentals/accessibility-intro/",
+        }
+      - {
+          title: "W3C: Understanding WCAG 2.2 Success Criterion 1.4.4 Resize Text",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html",
+        }
+      - {
+          title: "Wikipedia: Zawgyi font (garbled text between Zawgyi and Unicode devices)",
+          url: "https://en.wikipedia.org/wiki/Zawgyi_font",
+        }
+    actions:
+      - { id: close-u, type: whiteboard.apply, at: { mark: close-u }, open: false }
+      - id: type-left-out
+        type: editor.type
+        at: { mark: type-left-out }
+        target: { file: docs/next.md, after: "(ADR-001 ရဲ့ 5 ခုကို ကျော်)\n", occurrence: 1 }
+        text: "- မသုံးနိုင်ခဲ့တဲ့ customer — ဖုန်းဟောင်းမှာ မြန်မာစာ ပုံပျက်၊ စာလုံးကြီး setting မှာ ခလုတ် ပျောက်၊ data နှေးရင် ကြာလွန်း\n"
+        cadence: line-by-line
+      - {
+          id: sel-left-out,
+          type: editor.select,
+          at: { mark: sel-left-out },
+          target: { file: docs/next.md, text: "- မသုံးနိုင်ခဲ့တဲ့ customer", occurrence: 1 },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ပိုင်ရှင် မြမြ က လာမယူတဲ့ အော်ဒါ ၃၀ ရာခိုင်နှုန်းကို ကြည့်ပြီး၊
+      customer တချို့လည်း တောင်းနေလို့ အိမ်အရောက် ပို့ပေးတဲ့ delivery ကို အခု ထည့်ကြရအောင် လို့ ပြောတယ် ဆိုပါစို့။
+      delivery ကို ထည့်မလား၊ ဘာကြောင့် လာမယူလဲ ဆိုတာ အရင် ရှာမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဘာကြောင့် လာမယူလဲ အရင် ရှာတာပါ။ ဘာကြောင့်လဲဆိုတော့ အကြောင်းရင်းကို ဘယ်သူမှ
+      မသိသေးလို့ပါ။ delivery က ကုန်ကျစရိတ်ရော risk ရော များတဲ့ အလုပ်ကြီး ဖြစ်ပြီး၊ အကြောင်းရင်းကို မထိရင် ပြဿနာက
+      ဆက်ရှိနေနိုင်ပါတယ်။ delivery တောင်းတာက customer တွေ ပြောတာ ဖြစ်ပြီး၊ အော်ဒါ လာမယူတာကတော့ သူတို့ တကယ်
+      လုပ်တာပါ။
+    sources:
+      - {
+          title: "Nielsen Norman Group: First Rule of Usability? Don't Listen to Users",
+          url: "https://www.nngroup.com/articles/first-rule-of-usability-dont-listen-to-users/",
+        }
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-o1, z-o2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1400,
+        }
+
+  - id: why
+    chapter: နောက် version ကို အထောက်အထားနဲ့ ရွေး
+    narration: >
+      [[mark:close-quiz]] ဒါကြောင့် လှလှ က အော်ဒါ လာမယူခဲ့တဲ့ customer တွေ ဆိုင်ကို ပြန်ရောက်လာတဲ့အခါ ဘာဖြစ်ခဲ့လဲ
+      မေးကြည့်ခဲ့ပါတယ်။ [[mark:type-why]] နောက် အပိုင်းမှာ သူတို့ ပြောခဲ့တာနဲ့ data ထဲက တွေ့ခဲ့တာကို ရေးပါတယ်။ ပထမ
+      အချက် နှစ်ချက်က customer တွေ ကိုယ်တိုင် ပြောခဲ့တဲ့ အကြောင်းရင်းတွေ ဖြစ်ပြီး၊ နှစ်ခုလုံးက အော်ဒါ
+      မှာပြီးနောက်မှာ ဖြစ်ခဲ့တာတွေပါ။ [[mark:sel-data]] ဒီ စာကြောင်းကတော့ customer တွေ ဘာလုပ်ခဲ့လဲ ပြနေတာပါ။
+      အချိန် အကျပ်ဆုံးကို ရွေးပြီး မမီလိုက်ကြတာပါ။ ပြောတာရော လုပ်ခဲ့တာရော တစ်နေရာတည်းကို ညွှန်နေပါတယ်။ ပြဿနာက
+      ဆိုင်နဲ့ ဝေးလို့ မဟုတ်ဘဲ၊ လာယူချိန်ကို ရွေးပြီးရင် ပြင်ခွင့် မရှိတာနဲ့ သတိပေးမယ့် အရာ မရှိတာပါ။ ဒါကြောင့်
+      delivery ထည့်ရုံနဲ့ ဒီ ပြဿနာ မပြေပါဘူး။
+    sources:
+      - {
+          title: "Nielsen Norman Group: First Rule of Usability? Don't Listen to Users",
+          url: "https://www.nngroup.com/articles/first-rule-of-usability-dont-listen-to-users/",
+        }
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - id: type-why
+        type: editor.type
+        at: { mark: type-why }
+        target: { file: docs/next.md, after: "data နှေးရင် ကြာလွန်း\n\n", occurrence: 1 }
+        text: "## Why not picked up\nလှလှ က လာမယူခဲ့တဲ့ customer တွေကို ဆိုင်ပြန်ရောက်တော့ မေးခဲ့တယ်။\n- မှာပြီး အလုပ်ရှုပ်သွားလို့ မေ့သွားတယ်။\n- နောက်ကျမယ် သိပေမဲ့ လာယူချိန်ကို ပြင်လို့ မရဘူး။\n- data — လာမယူတဲ့ အော်ဒါ 10 ခုမှာ 7 ခုက အစောဆုံး ရွေးလို့ရတဲ့ အချိန် (မှာပြီး 15 မိနစ်) ကို ရွေးထားတယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-data,
+          type: editor.select,
+          at: { mark: sel-data },
+          target:
+            {
+              file: docs/next.md,
+              text: "- data — လာမယူတဲ့ အော်ဒါ 10 ခုမှာ 7 ခုက အစောဆုံး ရွေးလို့ရတဲ့ အချိန် (မှာပြီး 15 မိနစ်) ကို ရွေးထားတယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: v2
+    narration: >
+      [[mark:type-v2]] ဒီ အထောက်အထားတွေနဲ့ နောက် version မှာ လုပ်မယ့် စာရင်း တိုတို တစ်ခုကို ရေးပါမယ်။ ပထမ version
+      ရဲ့ scope ကို ခွဲခဲ့တဲ့ မဖြစ်မနေ၊ ဖြစ်ရင်ကောင်း၊ ဒီတစ်ခါ မလုပ်ဘူး ဆိုတဲ့ ပုံစံအတိုင်းပါပဲ။
+      [[mark:sel-change]] မဖြစ်မနေ စာရင်းရဲ့ ပထမ တစ်ခုက လာယူချိန်ကို ပြင်ခွင့် မရှိတဲ့ ပြဿနာအတွက်ပါ။ ဒုတိယ
+      တစ်ခုကတော့ app က ချန်ထားခဲ့တဲ့ customer တွေအတွက်ပါ။ မေ့သွားတဲ့ ပြဿနာအတွက် သတိပေး SMS ကိုတော့ SMS ပို့ခ
+      ကုန်လို့ ဖြစ်ရင်ကောင်း အောက်မှာ ထားပါတယ်။ [[mark:sel-wont]] delivery ကတော့ ဒီတစ်ခါ မလုပ်ဘူး ဆိုတဲ့ အောက်မှာ
+      ဆက်ရှိနေပါတယ်။ ဘေးမှာ အကြောင်းရင်းကိုပါ ရေးထားတော့၊ နောက်တစ်ခေါက် တောင်းလာရင် ဒီ တစ်လရဲ့ အထောက်အထားက
+      delivery ဘက်ကို မညွှန်ခဲ့ဘူး ဆိုတာ ပြလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-v2
+        type: editor.type
+        at: { mark: type-v2 }
+        target: { file: docs/next.md, after: "ကို ရွေးထားတယ်။\n\n", occurrence: 1 }
+        text: "## v2 shortlist\nMust\n- လာယူချိန်ကို ပြင်တာ၊ အော်ဒါ ဖျက်တာ\n- ဖုန်းဟောင်း၊ စာလုံးကြီး setting၊ data နှေးတဲ့ ဖုန်းမှာ ပြန်စစ်ပြီး ပြင်တာ\nShould\n- လာယူချိန် မတိုင်ခင် သတိပေး SMS — customer က ကိုယ်တိုင် ရွေးမှ ပို့\n- အော်ဒါ အသင့်ဖြစ်ရင် SMS (v1 ရဲ့ Should)\nWon't (for now)\n- delivery — အထောက်အထား မရှိသေးဘူး\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-wont,
+          type: expect.file,
+          at: { afterAction: type-v2 },
+          path: docs/next.md,
+          contains: "- delivery — အထောက်အထား မရှိသေးဘူး",
+        }
+      - {
+          id: sel-change,
+          type: editor.select,
+          at: { mark: sel-change },
+          target: { file: docs/next.md, text: "- လာယူချိန်ကို ပြင်တာ၊ အော်ဒါ ဖျက်တာ", occurrence: 1 },
+        }
+      - {
+          id: sel-wont,
+          type: editor.select,
+          at: { mark: sel-wont },
+          target: { file: docs/next.md, text: "- delivery — အထောက်အထား မရှိသေးဘူး", occurrence: 1 },
+        }
+
+  - id: honest
+    narration: >
+      [[mark:sel-opt-in]] သတိပေး SMS စာကြောင်းရဲ့ နောက်ဆုံး အပိုင်းကိုလည်း သတိထား ကြည့်ပါ။ SMS ပို့မပို့ကို ဆိုင်က
+      မဆုံးဖြတ်ဘဲ customer ကို ရွေးခိုင်းထားတာပါ။ [[mark:h-title]] customer က ဖုန်းနံပါတ်ကို အော်ဒါ အတွက်
+      ပေးခဲ့တာပါ။ [[mark:h-do]] အဲဒီ နံပါတ်ကို ရည်ရွယ်ချက် အသစ်အတွက် သုံးမယ်ဆိုရင်၊ ဘာသိမ်းလဲ၊ ဘာအတွက် သုံးမလဲ
+      ရှင်းရှင်း ပြောပြီး သူ ကိုယ်တိုင် ရွေးခွင့် ပေးရပါတယ်။ [[mark:h-dont]] ကိန်းဂဏန်း မြန်မြန် တက်ဖို့
+      လှည့်စားတဲ့ နည်းတွေလည်း ရှိပါတယ်။ SMS လက်ခံမယ် ဆိုတဲ့ အကွက်ကို အမှန်ခြစ် ကြိုထားပေးတာ၊ မမှန်တဲ့ အချိန်
+      ကန့်သတ်ချက်ကို ပြပြီး အလောတကြီး မှာခိုင်းတာ မျိုးပါ။ [[mark:h-me]] ဒီလို နည်းတွေကို agent က မိနစ်ပိုင်းနဲ့
+      ထုတ်ပေးနိုင်ပါတယ်။ ဒါပေမဲ့ ဒီ နည်းတွေက customer ရဲ့ ယုံကြည်မှုကို ဖျက်ဆီးပါတယ်။ ဒါကြောင့် ဘာကို မဆောက်ဘူးလဲ
+      ဆုံးဖြတ်တာက ကိုယ့်တာဝန်ပါ။
+    sources:
+      - {
+          title: "FTC: Report Shows Rise in Sophisticated Dark Patterns Designed to Trick and Trap Consumers (2022)",
+          url: "https://www.ftc.gov/news-events/news/press-releases/2022/09/ftc-report-shows-rise-sophisticated-dark-patterns-designed-trick-trap-consumers",
+        }
+      - {
+          title: "GDPR Recital 32: Conditions for consent (pre-ticked boxes are not consent)",
+          url: "https://gdpr-info.eu/recitals/no-32/",
+        }
+      - {
+          title: "GDPR Article 12: Transparent information (clear and plain language)",
+          url: "https://gdpr-info.eu/art-12-gdpr/",
+        }
+    actions:
+      - {
+          id: sel-opt-in,
+          type: editor.select,
+          at: { mark: sel-opt-in },
+          target: { file: docs/next.md, text: "customer က ကိုယ်တိုင် ရွေးမှ ပို့", occurrence: 1 },
+        }
+      - {
+          id: draw-h-title,
+          type: whiteboard.apply,
+          at: { mark: h-title },
+          open: true,
+          clear: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-h-do,
+          type: whiteboard.apply,
+          at: { mark: h-do },
+          upsertIds: [h-h-do, h-d1, h-d2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-h-dont,
+          type: whiteboard.apply,
+          at: { mark: h-dont },
+          upsertIds: [h-h-dont, h-t1, h-t2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-h-me,
+          type: whiteboard.apply,
+          at: { mark: h-me },
+          upsertIds: [h-me],
+          drawMs: 900,
+        }
+
+  - id: next-question
+    narration: >
+      [[mark:close-h]] ဒါဆို ဒီ ဖိုင်ရဲ့ နောက်ဆုံး အပိုင်းကို ရေးရအောင်။ [[mark:type-question]] ဒီ အပိုင်းမှာ
+      ဆိုင်ပိုင်ရှင် မြမြ ကို မေးမယ့် မေးခွန်း တစ်ခုပဲ ပါပါတယ်။ နောက် version တစ်ခုလုံးကို တစ်ခါတည်း မဆောက်ဘဲ၊
+      loop ကို နောက်တစ်ခေါက် ပိုသေးသေး၊ ပိုမြန်မြန် ပတ်ဖို့ သူ့ ဆုံးဖြတ်ချက်ကို တောင်းတာပါ။ [[mark:sel-question]]
+      ဘာကို ဘယ်လောက် ကြာကြာ စမ်းမလဲ၊ ဘယ် ကိန်းဂဏန်းနဲ့ ပြန်စစ်မလဲ ဆိုတာ ပါတော့၊ နောက်လ ဒီ ဖိုင်ကို ပြန်ဖွင့်တဲ့အခါ
+      ဆက်ဆုံးဖြတ်လို့ ရပါတယ်။ ကောင်တာမှာ ငွေချေတဲ့ ဆုံးဖြတ်ချက်ကို ပြန်စဉ်းစားတာကလည်း အဲဒီ ရလဒ်ကို မြင်ပြီးမှ
+      လုပ်ပါမယ်။
+    sources:
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+      - {
+          title: "GOV.UK Service Manual: How to set performance metrics for your service",
+          url: "https://www.gov.uk/service-manual/measuring-success/how-to-set-performance-metrics-for-your-service",
+        }
+    actions:
+      - { id: close-h, type: whiteboard.apply, at: { mark: close-h }, open: false }
+      - id: type-question
+        type: editor.type
+        at: { mark: type-question }
+        target: { file: docs/next.md, after: "- delivery — အထောက်အထား မရှိသေးဘူး\n\n", occurrence: 1 }
+        text: "## Next question for မြမြ\n- လာယူချိန် ပြင်ခွင့်နဲ့ သတိပေး SMS ကို တစ်လ စမ်းပြီး၊ လာမယူတဲ့ အော်ဒါ တစ်မနက် 5 ခု နဲ့ အောက် ကျမကျ ပြန်တိုင်းမလား။\n"
+        cadence: line-by-line
+      - {
+          id: expect-question,
+          type: expect.file,
+          at: { afterAction: type-question },
+          path: docs/next.md,
+          contains: "## Next question for မြမြ",
+        }
+      - {
+          id: sel-question,
+          type: editor.select,
+          at: { mark: sel-question },
+          target:
+            {
+              file: docs/next.md,
+              text: "တစ်လ စမ်းပြီး၊ လာမယူတဲ့ အော်ဒါ တစ်မနက် 5 ခု နဲ့ အောက် ကျမကျ ပြန်တိုင်းမလား။",
+              occurrence: 1,
+            },
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ship လုပ်တာက သင်ယူတာရဲ့ အစ ဖြစ်ပြီး၊ problem ဖိုင်မှာ ကြိုရေးခဲ့တဲ့ ကိန်းဂဏန်းတွေနဲ့
+      app ကို ပြန်စစ်ရပါတယ်။ [[mark:rc-learned]] ပန်းတိုင် မရောက်သေးတာကိုလည်း ရိုးရိုးသားသား ရေးပါ။
+      [[mark:rc-why]] user တွေ ပြောတာထက် လုပ်တာကို ပိုယုံပြီး၊ အလုပ်ကြီး မဆောက်ခင် အကြောင်းရင်းကို အရင် ရှာပါ။
+      [[mark:rc-left-out]] app က ချန်ထားခဲ့တဲ့ user တွေကို တမင် ရှာပြီး၊ customer ကိုလည်း မလှည့်စားပါနဲ့။
+      [[mark:rc-next]] ပြီးရင် loop ကို နောက်တစ်ခေါက် ပိုသေးသေး၊ ပိုမြန်မြန် ပတ်ပါ။ နောက်ဆုံး lesson မှာတော့
+      course တစ်ခုလုံးကို ပြန်ကြည့်ပြီး၊ ကိုယ်ပိုင် project ကို ဘယ်လို စမလဲ ဆိုတဲ့ plan ကို ရေးသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The Lean Startup: Principles (build–measure–learn, MVP, validated learning)",
+          url: "https://theleanstartup.com/principles",
+        }
+    actions:
+      - {
+          id: rc-learned,
+          type: editor.select,
+          at: { mark: rc-learned },
+          target:
+            { file: docs/next.md, text: "10 ကနေ 4 ယောက် (ပန်းတိုင် 3 အောက်၊ မရောက်သေး)", occurrence: 1 },
+        }
+      - {
+          id: rc-why,
+          type: editor.select,
+          at: { mark: rc-why },
+          target: { file: docs/next.md, text: "## Why not picked up", occurrence: 1 },
+        }
+      - {
+          id: rc-left-out,
+          type: editor.select,
+          at: { mark: rc-left-out },
+          target:
+            {
+              file: docs/next.md,
+              text: "- ဖုန်းဟောင်း၊ စာလုံးကြီး setting၊ data နှေးတဲ့ ဖုန်းမှာ ပြန်စစ်ပြီး ပြင်တာ",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: rc-next,
+          type: editor.select,
+          at: { mark: rc-next },
+          target: { file: docs/next.md, text: "## Next question for မြမြ", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
