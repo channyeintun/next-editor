@@ -1,0 +1,1334 @@
+# AI Builder, lesson 15: thinking about data (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused) and
+# docs/data.md pinned with only its title line (COURSE-KIT §4.9: L15 creates it). Nothing runs.
+#
+# Typed into data.md (COURSE-KIT §4.9, section by section, line-by-line): Menu item · Order ·
+# Order line (without its last field) · Status · Not stored; after the quiz, the Order line's last
+# field (price_each) is typed onto its line, so the final file equals §4.9 exactly (tools/sim-docs.ts).
+#
+# Boards: (R) recall: one order's journey screen → server → database (orange), the counter reading through
+# the server, and today's
+# question; (E) the things in one real order, top to bottom: Order → Order line → Menu item, with
+# fields on the right, links between, ids in orange and the customer decision; (S) one source of
+# truth: the price written in three places (red) vs once in Menu item (green); (P) the status path
+# new → ready → picked_up, cancelled below; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-15-data-thinking.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-15-data-thinking
+  title: "AI Builder 15: Data ကို စနစ်တကျ တွေးခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/data.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/data.md: |+
+        # Data · ကြိုမှာ app
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board R: the recall of L14, left to right; the counter reads through the server (below it). The database is today's step
+    # (orange); the question under it is today's problem.
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 400,
+        height: 50,
+        text: "အော်ဒါ တစ်ခုရဲ့ ခရီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: r-b1, kind: rectangle, x: 300, y: 250, width: 220, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: r-t1,
+        kind: text,
+        x: 318,
+        y: 267,
+        width: 195,
+        height: 40,
+        text: "ဖုန်း screen",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 526,
+        y: 265,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: r-b2, kind: rectangle, x: 572, y: 250, width: 220, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: r-t2,
+        kind: text,
+        x: 590,
+        y: 267,
+        width: 150,
+        height: 40,
+        text: "server",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 798,
+        y: 265,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: r-b3, kind: rectangle, x: 844, y: 250, width: 220, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: r-t3,
+        kind: text,
+        x: 862,
+        y: 267,
+        width: 170,
+        height: 40,
+        text: "database",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: r-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 662,
+        y: 326,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: r-b4, kind: rectangle, x: 572, y: 382, width: 220, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: r-t4,
+        kind: text,
+        x: 590,
+        y: 399,
+        width: 150,
+        height: 40,
+        text: "ကောင်တာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-q,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 640,
+        height: 45,
+        text: "database ထဲမှာ ဘာတွေ ဘယ်လို သိမ်းမလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board E: the things (entities) in one order, top to bottom (blue = the product's data). Fields on
+    # the right (white), links between the boxes (white), ids in orange inside each box, and the
+    # customer decision (orange) at the bottom.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 470,
+        height: 50,
+        text: "အော်ဒါ တစ်ခုထဲက အရာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-b-order,
+        kind: rectangle,
+        x: 300,
+        y: 235,
+        width: 290,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-t-order,
+        kind: text,
+        x: 318,
+        y: 249,
+        width: 228,
+        height: 36,
+        text: "Order · အော်ဒါ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-f-order,
+        kind: text,
+        x: 640,
+        y: 249,
+        width: 400,
+        height: 36,
+        text: "လာယူချိန် · ဖုန်း · status",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 425,
+        y: 303,
+        width: 40,
+        height: 54,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-l1,
+        kind: text,
+        x: 480,
+        y: 312,
+        width: 330,
+        height: 36,
+        text: "တစ်ခုမှာ line အများ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-b-line,
+        kind: rectangle,
+        x: 300,
+        y: 362,
+        width: 290,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-t-line,
+        kind: text,
+        x: 318,
+        y: 376,
+        width: 180,
+        height: 36,
+        text: "Order line",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-f-line,
+        kind: text,
+        x: 640,
+        y: 376,
+        width: 310,
+        height: 36,
+        text: "ဘယ် item · ဘယ်နှခွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 425,
+        y: 430,
+        width: 40,
+        height: 54,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-l2,
+        kind: text,
+        x: 480,
+        y: 439,
+        width: 470,
+        height: 36,
+        text: "line တစ်ကြောင်း → item တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-b-menu,
+        kind: rectangle,
+        x: 300,
+        y: 489,
+        width: 290,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-t-menu,
+        kind: text,
+        x: 318,
+        y: 503,
+        width: 180,
+        height: 36,
+        text: "Menu item",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-f-menu,
+        kind: text,
+        x: 640,
+        y: 503,
+        width: 220,
+        height: 36,
+        text: "နာမည် · ဈေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-id1,
+        kind: text,
+        x: 550,
+        y: 249,
+        width: 40,
+        height: 36,
+        text: "id",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-id2,
+        kind: text,
+        x: 550,
+        y: 376,
+        width: 40,
+        height: 36,
+        text: "id",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-id3,
+        kind: text,
+        x: 550,
+        y: 503,
+        width: 40,
+        height: 36,
+        text: "id",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-customer,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 560,
+        height: 36,
+        text: "customer → အော်ဒါထဲမှာ နာမည်၊ ဖုန်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board S: one source of truth. Left (red): the price written in three places → two prices.
+    # Right (green): once, in Menu item (blue box), everyone reads it from there; the term in orange.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 440,
+        height: 50,
+        text: "ဈေးနှုန်း ဘယ်မှာ ရှိရမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-h1,
+        kind: text,
+        x: 300,
+        y: 232,
+        width: 310,
+        height: 42,
+        text: "နေရာ သုံးခုမှာ ရေး",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        x: 300,
+        y: 292,
+        width: 260,
+        height: 36,
+        text: "screen · 1,500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-l2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 260,
+        height: 36,
+        text: "server · 1,500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        x: 300,
+        y: 388,
+        width: 260,
+        height: 36,
+        text: "ကောင်တာ · 1,500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-l4,
+        kind: text,
+        x: 300,
+        y: 452,
+        width: 420,
+        height: 36,
+        text: "တစ်နေရာ မေ့ရင် ဈေး နှစ်မျိုး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-l5,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 260,
+        height: 36,
+        text: "ဘယ်ဟာ မှန်လဲ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-h2,
+        kind: text,
+        x: 730,
+        y: 232,
+        width: 250,
+        height: 42,
+        text: "တစ်နေရာတည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: s-r-box,
+        kind: rectangle,
+        x: 730,
+        y: 286,
+        width: 330,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-r1,
+        kind: text,
+        x: 748,
+        y: 300,
+        width: 300,
+        height: 36,
+        text: "Menu item · price",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: s-ra,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 875,
+        y: 354,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: s-r2,
+        kind: text,
+        x: 730,
+        y: 412,
+        width: 280,
+        height: 36,
+        text: "အားလုံး ဒီကနေ ဖတ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: s-r3,
+        kind: text,
+        x: 730,
+        y: 460,
+        width: 300,
+        height: 36,
+        text: "ပြင်ရင် တစ်နေရာပဲ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: s-name,
+        kind: text,
+        x: 730,
+        y: 530,
+        width: 310,
+        height: 42,
+        text: "source of truth",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board P: the status path. Boxes left to right (blue, the last one green), cancelled (red) below
+    # with arrows down from new and ready; a Burmese word under each; the rule in orange.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 320,
+        height: 50,
+        text: "အော်ဒါရဲ့ status",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-b-new,
+        kind: rectangle,
+        x: 300,
+        y: 240,
+        width: 180,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-new,
+        kind: text,
+        x: 330,
+        y: 254,
+        width: 80,
+        height: 36,
+        text: "new",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-g-new,
+        kind: text,
+        x: 318,
+        y: 312,
+        width: 150,
+        height: 36,
+        text: "ဝင်လာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 488,
+        y: 252,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-b-ready,
+        kind: rectangle,
+        x: 540,
+        y: 240,
+        width: 180,
+        height: 64,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-ready,
+        kind: text,
+        x: 570,
+        y: 254,
+        width: 110,
+        height: 36,
+        text: "ready",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: p-g-ready,
+        kind: text,
+        x: 558,
+        y: 312,
+        width: 150,
+        height: 36,
+        text: "ပြင်ပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 728,
+        y: 252,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-b-picked,
+        kind: rectangle,
+        x: 780,
+        y: 240,
+        width: 260,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-picked,
+        kind: text,
+        x: 805,
+        y: 254,
+        width: 200,
+        height: 36,
+        text: "picked_up",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: p-g-picked,
+        kind: text,
+        x: 798,
+        y: 312,
+        width: 220,
+        height: 36,
+        text: "လာယူသွားပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 354,
+        width: 40,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 610,
+        y: 354,
+        width: 40,
+        height: 58,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-b-cancel,
+        kind: rectangle,
+        x: 300,
+        y: 420,
+        width: 420,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-cancel,
+        kind: text,
+        x: 330,
+        y: 434,
+        width: 300,
+        height: 36,
+        text: "cancelled · ပယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p-rule,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 560,
+        height: 36,
+        text: "ဒီ လေးခုထဲကပဲ ရွေး · နောက်ပြန် မသွား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 660,
+        height: 42,
+        text: "order line ထဲမှာ ဈေးကို ထပ်မှတ်ထားရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 276,
+        width: 380,
+        height: 42,
+        text: "အမှားလား၊ တမင်လား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 580,
+        height: 36,
+        text: "က · အမှား — အချက် တစ်ခု၊ နေရာ နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 300,
+        height: 36,
+        text: "ခ · တမင် လုပ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 380,
+        height: 50,
+        text: "အဖြေ · ခ — တမင်",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a1,
+        kind: text,
+        x: 300,
+        y: 528,
+        width: 480,
+        height: 36,
+        text: "menu ဈေး = ဒီနေ့ ရောင်းဈေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a2,
+        kind: text,
+        x: 300,
+        y: 574,
+        width: 540,
+        height: 36,
+        text: "line ဈေး = မှာတုန်းက ပေးရမယ့် ဈေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6115
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Database ထဲမှာ ဘာ သိမ်းမလဲ
+    narration: >
+      [[mark:r-journey]] ပြီးခဲ့တဲ့ lesson မှာ အော်ဒါ တစ်ခုရဲ့ ခရီးကို လိုက်ကြည့်ခဲ့ပါတယ်။ ဖုန်း screen ကနေ
+      ပို့လိုက်တဲ့ အော်ဒါကို server က စစ်ပြီး database ထဲမှာ သိမ်းပါတယ်။ ကောင်တာ screen ကတော့ server ကနေတစ်ဆင့်
+      ပြန်ဖတ်ပါတယ်။ [[mark:r-question]] ဒီနေ့တော့ database ထဲမှာ ဘာတွေကို ဘယ်လို ပုံစံနဲ့ သိမ်းမလဲ ဆိုတာ
+      ကြည့်ပါမယ်။ app က မှတ်ထားရမယ့် အချက်အလက်တွေကို data လို့ ခေါ်ပါတယ်။ data ပုံစံကို ကိုယ်က ရေးမထားရင် agent က
+      ခန့်မှန်းပြီး ရွေးသွားပါလိမ့်မယ်။ ဥပမာ ဈေးနှုန်းကို ကော်မာနဲ့ ကျပ် ပါတဲ့ စာသားအဖြစ် သိမ်းမိရင် ဂဏန်းလို
+      ပေါင်းလို့ မရတော့ပါဘူး။ customer ရဲ့ လိပ်စာလို မလိုအပ်တဲ့ အချက်ကိုလည်း form မှာ ထည့်လာနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - {
+          id: draw-r-journey,
+          type: whiteboard.apply,
+          at: { mark: r-journey },
+          open: true,
+          clear: true,
+          upsertIds: [r-title, r-b1, r-t1, r-a1, r-b2, r-t2, r-a2, r-b3, r-t3, r-a3, r-b4, r-t4],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-r-question,
+          type: whiteboard.apply,
+          at: { mark: r-question },
+          upsertIds: [r-q],
+          drawMs: 1000,
+        }
+
+  - id: entities
+    chapter: အရာ၊ field နဲ့ ချိတ်ဆက်မှု
+    narration: >
+      [[mark:e-title]] data ပုံစံ ဆွဲဖို့ တကယ့် အော်ဒါ တစ်ခုကနေ စတာ အကောင်းဆုံးပါ။ member အောင်အောင် က မနက်
+      ရှစ်နာရီခွဲမှာ လာယူဖို့ လက်ဖက်ရည် နှစ်ခွက် မှာတယ် ဆိုပါစို့။ [[mark:e-order]] ဒီထဲက ပထမ အရာက အော်ဒါ
+      ကိုယ်တိုင်ပါ။ data ထဲမှာ သီးသန့် မှတ်ရမယ့် အရာကို entity လို့ ခေါ်ပြီး၊ အဲဒီ အရာရဲ့ အချက် တစ်ခုချင်းကိုတော့
+      field လို့ ခေါ်ပါတယ်။ အော်ဒါ ရဲ့ field တွေက လာယူချိန်၊ ဖုန်းနံပါတ်နဲ့ ဘယ်အဆင့် ရောက်နေလဲ ဆိုတာ စတာတွေပါ။
+      [[mark:e-line]] ဒုတိယ အရာက order line ပါ။ ဘောက်ချာ ပေါ်က စာကြောင်း တစ်ကြောင်းလိုပဲ၊ ဘယ် item ကို ဘယ်နှခွက်
+      ဆိုတာ မှတ်ပါတယ်။ [[mark:e-menu]] တတိယ အရာကတော့ နာမည်နဲ့ ဈေး ပါတဲ့ menu item ပါ။ [[mark:e-links]] ဒီ
+      အရာတွေကြားက ချိတ်ဆက်မှုကိုလည်း ကြည့်ပါ။ အော်ဒါ တစ်ခုမှာ line တစ်ကြောင်း ဒါမှမဟုတ် အများကြီး ရှိနိုင်ပြီး၊
+      line တစ်ကြောင်းကတော့ menu item တစ်ခုကို ညွှန်ပါတယ်။ လက်ဖက်ရည်နဲ့ ပလာတာ ရောမှာရင် line နှစ်ကြောင်း ဖြစ်ပါမယ်။
+    sources:
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - {
+          id: draw-e-title,
+          type: whiteboard.apply,
+          at: { mark: e-title },
+          open: true,
+          clear: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-e-order,
+          type: whiteboard.apply,
+          at: { mark: e-order },
+          upsertIds: [e-b-order, e-t-order, e-f-order],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-line,
+          type: whiteboard.apply,
+          at: { mark: e-line },
+          upsertIds: [e-b-line, e-t-line, e-f-line],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-menu,
+          type: whiteboard.apply,
+          at: { mark: e-menu },
+          upsertIds: [e-b-menu, e-t-menu, e-f-menu],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-links,
+          type: whiteboard.apply,
+          at: { mark: e-links },
+          upsertIds: [e-a1, e-l1, e-a2, e-l2],
+          drawMs: 1800,
+        }
+
+  - id: ids
+    narration: >
+      [[mark:e-ids]] entity တိုင်းမှာ ID ဆိုတဲ့ field တစ်ခုလည်း ပါရပါမယ်။ ID ဆိုတာ အရာ တစ်ခုချင်းကို မရောအောင်
+      ခွဲသိနိုင်တဲ့ နံပါတ်ပါ။ line က item ကို လက်ဖက်ရည် ဆိုတဲ့ နာမည်နဲ့ မညွှန်ဘဲ ID နဲ့ ညွှန်ပါတယ်။ နာမည်က
+      ပြောင်းနိုင်သလို၊ နာမည်တူ နှစ်ခုလည်း ဖြစ်လာနိုင်လို့ပါ။ [[mark:e-customer]] ဒါဆို customer ကိုရော entity
+      လုပ်မလား။ ပထမ version မှာ customer account နဲ့ အကောင့်ဝင်တဲ့ login ကို မဆောက်ဘူးလို့ ဆုံးဖြတ်ထားလို့၊
+      customer ကို သီးသန့် မမှတ်ဘဲ အော်ဒါ တစ်ခုစီထဲမှာ နာမည်နဲ့ ဖုန်းနံပါတ်ကိုပဲ ထည့်ပါမယ်။
+    sources:
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - {
+          id: draw-e-ids,
+          type: whiteboard.apply,
+          at: { mark: e-ids },
+          upsertIds: [e-id1, e-id2, e-id3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-e-customer,
+          type: whiteboard.apply,
+          at: { mark: e-customer },
+          upsertIds: [e-customer],
+          drawMs: 1000,
+        }
+
+  - id: menu-item
+    chapter: Data ဖိုင်ကို ရေးရအောင်
+    narration: >
+      [[mark:close-e]] ကဲ၊ ဒီ ပုံစံကို editor ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:open-data]] docs ထဲက data ဖိုင်မှာ အခု
+      ခေါင်းစဉ်ပဲ ရှိပါသေးတယ်။ entity တစ်ခုကို အပိုင်း တစ်ပိုင်းနဲ့ ရေးပြီး၊ သူ့ field တွေကို တစ်ကြောင်းတည်းမှာ
+      အစက်လေးတွေနဲ့ ခြားပြီး ရေးပါမယ်။ [[mark:type-menu]] ပထမ အပိုင်းက menu item တစ်ခုစီအတွက် ဘာတွေ မှတ်မလဲ
+      ဆိုတာကို ဆုံးဖြတ်ပါတယ်။ [[mark:sel-price]] ဈေးနှုန်းရဲ့ ဘေးက မှတ်ချက်ကို ကြည့်ပါ။ ဈေးကို ဒသမ မပါတဲ့ ကျပ်
+      ကိန်းပြည့်နဲ့ပဲ သိမ်းမယ်လို့ ဆုံးဖြတ်ထားတာပါ။ ဆိုင်ရဲ့ ဈေးတွေ ကျပ် ကိန်းပြည့်ချည်း ဖြစ်တာ တစ်ကြောင်း၊
+      ကွန်ပျူတာက ဒသမ ဂဏန်း အများစုကို အနီးစပ်ဆုံးပဲ သိမ်းနိုင်လို့ ပေါင်းရင် အနည်းငယ် လွဲတတ်တာ တစ်ကြောင်းပါ။
+      ကော်မာနဲ့ ကျပ် ကိုတော့ screen ပေါ်မှာ ပြတဲ့အခါမှ ထည့်ပါတယ်။ [[mark:sel-available]] နောက်ဆုံး field ကြောင့်
+      ဆိုင်က item တစ်ခုကို ရောင်းတာ ရပ်လိုက်ရင်တောင် အဲဒီ item ကို ဖျက်စရာ မလိုပါဘူး။ ဖျက်လိုက်ရင် အော်ဒါ
+      အဟောင်းတွေ ညွှန်ထားတဲ့ ID ပျောက်သွားမှာမို့၊ မရောင်းတော့ဘူး လို့ပဲ ပြောင်းထားပါတယ်။
+    sources:
+      - {
+          title: "Python documentation: Floating-point arithmetic, issues and limitations",
+          url: "https://docs.python.org/3/tutorial/floatingpoint.html",
+        }
+      - {
+          title: "Stripe docs: Supported currencies (amounts in the smallest currency unit, without decimals)",
+          url: "https://docs.stripe.com/currencies",
+        }
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - { id: close-e, type: whiteboard.apply, at: { mark: close-e }, open: false }
+      - { id: open-data, type: workspace.openFile, at: { mark: open-data }, path: docs/data.md }
+      - id: type-menu
+        type: editor.type
+        at: { mark: type-menu }
+        target: { file: docs/data.md, after: "# Data · ကြိုမှာ app\n\n", occurrence: 1 }
+        text: "## Menu item\nid · name · price (ကျပ်၊ ကိန်းပြည့်) · available (yes / no)\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-price,
+          type: editor.select,
+          at: { mark: sel-price },
+          target: { file: docs/data.md, text: "price (ကျပ်၊ ကိန်းပြည့်)", occurrence: 1 },
+        }
+      - {
+          id: sel-available,
+          type: editor.select,
+          at: { mark: sel-available },
+          target: { file: docs/data.md, text: "available (yes / no)", occurrence: 1 },
+        }
+
+  - id: one-source
+    narration: >
+      [[mark:s-title]] ဒီ ဈေးနှုန်းနဲ့ပဲ data ရဲ့ အရေးကြီးတဲ့ စည်းကမ်း တစ်ခုကို ကြည့်ရအောင်။ [[mark:s-bad]]
+      လက်ဖက်ရည် ဈေးကို customer ရဲ့ screen၊ server နဲ့ ကောင်တာ ဆိုပြီး နေရာ သုံးခုမှာ သီးသန့်စီ ရေးထားတယ်
+      ဆိုပါစို့။ [[mark:s-bad-result]] ဈေး ပြောင်းတဲ့ နေ့မှာ တစ်နေရာမှာ ပြင်ဖို့ မေ့သွားရင်၊ customer က ဈေး
+      တစ်မျိုး မြင်ပြီး ကောင်တာက နောက်တစ်မျိုး တောင်းပါလိမ့်မယ်။ ဘယ်ဟာ မှန်လဲ ဘယ်သူမှ မသေချာတော့ပါဘူး။
+      [[mark:s-good]] ဒါကြောင့် အချက် တစ်ခုကို နေရာ တစ်ခုတည်းမှာပဲ မှတ်ပါတယ်။ ဈေးနှုန်းအတွက်ဆိုရင် အဲဒီ နေရာက menu
+      item ပါ။ [[mark:s-read]] ဈေး လိုတဲ့ အပိုင်းတိုင်းက ဒီကနေပဲ ဖတ်တော့၊ ဈေး ပြောင်းရင် တစ်နေရာတည်းမှာ
+      ပြင်ရုံပါပဲ။ [[mark:s-name]] ဒီလို အမှန်ကို ယူရမယ့် နေရာ တစ်ခုတည်းကို source of truth လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - {
+          id: draw-s-title,
+          type: whiteboard.apply,
+          at: { mark: s-title },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-bad,
+          type: whiteboard.apply,
+          at: { mark: s-bad },
+          upsertIds: [s-h1, s-l1, s-l2, s-l3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-bad-result,
+          type: whiteboard.apply,
+          at: { mark: s-bad-result },
+          upsertIds: [s-l4, s-l5],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-s-good,
+          type: whiteboard.apply,
+          at: { mark: s-good },
+          upsertIds: [s-h2, s-r-box, s-r1],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-s-read,
+          type: whiteboard.apply,
+          at: { mark: s-read },
+          upsertIds: [s-ra, s-r2, s-r3],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-s-name,
+          type: whiteboard.apply,
+          at: { mark: s-name },
+          upsertIds: [s-name],
+          drawMs: 800,
+        }
+
+  - id: order
+    narration: >
+      [[mark:close-s]] data ဖိုင်ကို ဆက်ရေးရအောင်။ [[mark:type-order]] နောက် အပိုင်းက အော်ဒါ ပါ။ field များပေမဲ့
+      တစ်ခုချင်းစီက app က တကယ် သုံးမယ့် အချက်တွေပဲ ဖြစ်ပါတယ်။ [[mark:sel-number]] ID နဲ့ အော်ဒါနံပါတ်ကို ခွဲထားတာ
+      သတိထား ကြည့်ပါ။ spec ရဲ့ စည်းကမ်းအရ အော်ဒါနံပါတ်က နေ့တိုင်း ၁၀၁ ကနေ ပြန်စတော့၊ ဒီနေ့ရဲ့ ၁၀၁ နဲ့ မနက်ဖြန်ရဲ့
+      ၁၀၁ က အော်ဒါ တစ်ခုတည်း မဟုတ်ပါဘူး။ နံပါတ်က ကောင်တာက လှလှ customer ကို လှမ်းခေါ်ဖို့ လူတွေ သုံးတာ ဖြစ်ပြီး၊
+      ID ကတော့ system သုံးဖို့ ဘယ်တော့မှ ထပ်မတူတဲ့ နံပါတ်ပါ။
+    sources:
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - { id: close-s, type: whiteboard.apply, at: { mark: close-s }, open: false }
+      - id: type-order
+        type: editor.type
+        at: { mark: type-order }
+        target: { file: docs/data.md, after: "available (yes / no)\n\n", occurrence: 1 }
+        text: "## Order\nid · number (#101 …) · created_at (Asia/Yangon) · pickup_at (Asia/Yangon) · customer_name · phone · status · total (ကျပ်)\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-number,
+          type: editor.select,
+          at: { mark: sel-number },
+          target: { file: docs/data.md, text: "id · number (#101 …)", occurrence: 1 },
+        }
+
+  - id: time
+    narration: >
+      [[mark:sel-pickup]] လာယူချိန်ရဲ့ ဘေးမှာ ရန်ကုန် ရဲ့ time zone ကို တွဲရေးထားတာလည်း ကြည့်ပါ။ time zone ဆိုတာ
+      ဒေသ တစ်ခုက သုံးတဲ့ စံတော်ချိန်ပါ။ ရှစ်နာရီခွဲ ဆိုတာ တစ်ခုတည်းနဲ့ ဘယ်နေ့၊ ဘယ်နေရာက နာရီလဲ ဆိုတာ မသိရပါဘူး။
+      [[mark:t-utc]] ရန်ကုန် ရဲ့ နာရီက ကမ္ဘာ့ စံတော်ချိန်၊ UTC ထက် ခြောက်နာရီခွဲ ရှေ့ရောက်နေပါတယ်။ database က
+      တခြား နိုင်ငံက ကွန်ပျူတာ ပေါ်မှာ ရှိနိုင်ပါတယ်။ အဲဒီမှာ time zone မပါတဲ့ ရှစ်နာရီခွဲကို UTC လို့ ယူလိုက်ရင်၊
+      ကောင်တာ screen မှာ နေ့လယ် သုံးနာရီ အော်ဒါ ဖြစ်သွားပါလိမ့်မယ်။ [[mark:sel-created]] ဒါကြောင့် အော်ဒါ ဝင်လာတဲ့
+      အချိန်ရော လာယူမယ့် အချိန်ရော၊ နေ့စွဲ၊ အချိန်နဲ့ time zone ကို အမြဲ တွဲသိမ်းပါတယ်။
+    sources:
+      - { title: "W3C: Working with Time and Timezones", url: "https://www.w3.org/TR/timezone/" }
+      - {
+          title: "Wikipedia: Myanmar Standard Time (UTC+06:30, Asia/Yangon)",
+          url: "https://en.wikipedia.org/wiki/Myanmar_Standard_Time",
+        }
+    actions:
+      - {
+          id: sel-pickup,
+          type: editor.select,
+          at: { mark: sel-pickup },
+          target: { file: docs/data.md, text: "pickup_at (Asia/Yangon)", occurrence: 1 },
+        }
+      - {
+          id: sel-created,
+          type: editor.select,
+          at: { mark: sel-created },
+          target:
+            {
+              file: docs/data.md,
+              text: "created_at (Asia/Yangon) · pickup_at (Asia/Yangon)",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: expect-order,
+          type: expect.file,
+          at: { afterAction: sel-created },
+          path: docs/data.md,
+          contains: "id · number (#101 …) · created_at (Asia/Yangon) · pickup_at (Asia/Yangon) · customer_name · phone · status · total (ကျပ်)",
+        }
+
+  - id: order-line
+    narration: >
+      [[mark:type-line]] နောက် အပိုင်းက order line ပါ။ ခုနက ပုံထဲက ချိတ်ဆက်မှု နှစ်ခုကို ဒီမှာ ID နဲ့ ရေးထားပါတယ်။
+      [[mark:sel-links]] line တစ်ကြောင်းက ဘယ် အော်ဒါ ထဲက လဲ ဆိုတာကို အော်ဒါ ရဲ့ ID နဲ့၊ ဘာ item လဲ ဆိုတာကို menu
+      item ရဲ့ ID နဲ့ ညွှန်ထားတာပါ။ အော်ဒါ တစ်ခုထဲမှာ item ရောမှာခွင့် ပေးမလား ဆိုတာကတော့ ဆိုင်ပိုင်ရှင် မြမြ
+      ဆုံးဖြတ်ရမှာပါ။ ဒါပေမဲ့ line တွေ ခွဲထားတော့ မြမြ ဘယ်လိုပဲ ဆုံးဖြတ်ဆုံးဖြတ်၊ ဒီ ပုံစံကို ပြင်စရာ မလိုပါဘူး။
+    sources:
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - id: type-line
+        type: editor.type
+        at: { mark: type-line }
+        target: { file: docs/data.md, after: "total (ကျပ်)\n\n", occurrence: 1 }
+        text: "## Order line\nid · order_id · menu_item_id · quantity (1–20)\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-links,
+          type: editor.select,
+          at: { mark: sel-links },
+          target: { file: docs/data.md, text: "order_id · menu_item_id", occurrence: 1 },
+        }
+
+  - id: status
+    chapter: Status ကို ပုံသေ စာရင်းနဲ့
+    narration: >
+      [[mark:p-title]] အော်ဒါ တစ်ခုက ဝင်လာကတည်းက customer လက်ထဲ ရောက်တဲ့အထိ အဆင့်တွေ ဖြတ်သွားပါတယ်။ အခု
+      ဘယ်အဆင့်မှာလဲ ဆိုတာကို status လို့ ခေါ်ပါတယ်။ [[mark:p-path]] ဝင်လာခါစ အော်ဒါက new၊ လှလှ ပြင်ပြီးရင် ready၊
+      customer လာယူသွားရင် picked up ဖြစ်ပါတယ်။ [[mark:p-cancel]] ကြားထဲမှာ ပယ်လိုက်ရတဲ့ အော်ဒါကတော့ cancelled ပါ။
+      လာမယူတဲ့ အော်ဒါကို ဘယ်လောက် ကြာရင် ပယ်မလဲ ဆိုတာကတော့ မြမြ ကို မေးထားဆဲပါ။ [[mark:p-rule]] status ကို
+      ကြိုက်တဲ့ စာလုံးနဲ့ ရေးခွင့်ပေးရင်၊ တစ်ယောက်က ready၊ နောက်တစ်ယောက်က ပြီးပြီ လို့ ရေးကြမှာပါ။ အဲဒီအခါ ကောင်တာ
+      screen က အသင့်ဖြစ်တဲ့ အော်ဒါတွေကို မှန်မှန် ခွဲမပြနိုင်သလို၊ မြမြ လည်း တစ်မနက် ဘယ်နှခု လာယူသွားလဲ
+      မရေတွက်နိုင်ပါဘူး။ ဒါကြောင့် status ကို ဒီ လေးခုပဲ ပါတဲ့ ပုံသေ စာရင်းထဲကပဲ ရွေးရပြီး၊ မြားအတိုင်းပဲ
+      ရှေ့ဆက်ခွင့် ပေးပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - {
+          id: draw-p-title,
+          type: whiteboard.apply,
+          at: { mark: p-title },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-path,
+          type: whiteboard.apply,
+          at: { mark: p-path },
+          upsertIds:
+            [
+              p-b-new,
+              p-new,
+              p-g-new,
+              p-a1,
+              p-b-ready,
+              p-ready,
+              p-g-ready,
+              p-a2,
+              p-b-picked,
+              p-picked,
+              p-g-picked,
+            ],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-p-cancel,
+          type: whiteboard.apply,
+          at: { mark: p-cancel },
+          upsertIds: [p-a3, p-a4, p-b-cancel, p-cancel],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-rule,
+          type: whiteboard.apply,
+          at: { mark: p-rule },
+          upsertIds: [p-rule],
+          drawMs: 1000,
+        }
+
+  - id: not-stored
+    narration: >
+      [[mark:close-p]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-status]] ဒီ စာရင်းကို data ဖိုင်ထဲ ထည့်ထားတော့၊ agent
+      ကို ဆောက်ခိုင်းတဲ့အခါ ဒီ status လေးခုကိုပဲ သုံးရမယ် ဆိုတာ ရှင်းသွားပါတယ်။ [[mark:type-not]] နောက်ဆုံး
+      အပိုင်းမှာ မသိမ်းဘူး လို့ ဆုံးဖြတ်ထားတာတွေကို ရေးပါတယ်။ နောက်တစ်ချိန် သုံးချင်ရင် ကောင်းမယ် ဆိုပြီး အချက်တွေ
+      ထပ်ထည့်ချင်တတ်လို့ပါ။ [[mark:sel-not]] အိမ်အရောက် ပို့ပေးတဲ့ delivery မလုပ်သေးလို့ လိပ်စာ မလိုသလို၊ မွေးနေ့
+      ဆိုတာကလည်း ကြိုမှာဖို့ မလိုပါဘူး။ ဖုန်းနံပါတ်ကတော့ အော်ဒါမှာ ပြဿနာ ရှိရင် ဆက်သွယ်ဖို့ လိုလို့ သိမ်းပါတယ်။
+      customer ရဲ့ ကိုယ်ရေး အချက်အလက်ကို သိမ်းထားသမျှ ကာကွယ်ရမယ့် တာဝန် ရှိပြီး၊ မသိမ်းထားတဲ့ အချက်ကတော့
+      ပေါက်ကြားစရာ မရှိပါဘူး။
+    sources:
+      - {
+          title: "European Commission: Principles of the GDPR (how much data can be collected)",
+          url: "https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/principles-gdpr_en",
+        }
+      - {
+          title: "GDPR Article 5: Principles relating to processing of personal data (data minimisation)",
+          url: "https://gdpr-info.eu/art-5-gdpr/",
+        }
+    actions:
+      - { id: close-p, type: whiteboard.apply, at: { mark: close-p }, open: false }
+      - id: type-status
+        type: editor.type
+        at: { mark: type-status }
+        target: { file: docs/data.md, after: "quantity (1–20)\n\n", occurrence: 1 }
+        text: "## Status\nnew → ready → picked_up၊ ဒါမှမဟုတ် cancelled\n\n"
+        cadence: line-by-line
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        target: { file: docs/data.md, after: "ဒါမှမဟုတ် cancelled\n\n", occurrence: 1 }
+        text: "## Not stored\nလိပ်စာ၊ မွေးနေ့ — မလိုလို့ မသိမ်းဘူး\n"
+        cadence: line-by-line
+      - {
+          id: sel-not,
+          type: editor.select,
+          at: { mark: sel-not },
+          target: { file: docs/data.md, text: "လိပ်စာ၊ မွေးနေ့ — မလိုလို့ မသိမ်းဘူး", occurrence: 1 },
+        }
+
+  - id: before-first-order
+    narration: >
+      [[mark:sel-shape]] data ပုံစံကို ကြိုရေးရတာက တကယ့် အော်ဒါတွေ သိမ်းပြီးမှ ပြင်ရတာ ခက်လို့ပါ။ ဥပမာ ပထမ လမှာ
+      status ကို မသိမ်းခဲ့မိရင်၊ အဲဒီ လက အော်ဒါတွေထဲက ဘယ်နှခုကို customer လာမယူခဲ့လဲ ဆိုတာ နောက်မှ ပြန်သိဖို့
+      နည်းလမ်း မရှိတော့ပါဘူး။ မသိမ်းခဲ့တဲ့ အချက်ကို နောက်မှ ဘယ်ကမှ ပြန်ရှာလို့ မရလို့ပါ။ [[mark:shape-migrate]]
+      ပုံစံ ပြောင်းတိုင်း သိမ်းပြီးသား အော်ဒါ အားလုံးကိုပါ ပုံစံ အသစ်နဲ့ ကိုက်အောင် ပြောင်းပေးရတာမို့ code
+      ပြင်တာထက် အလုပ် ပိုများပါတယ်။ [[mark:shape-check]] ဒါကြောင့် ပထမ အော်ဒါ မဝင်ခင် ဒီ စာမျက်နှာကို လှလှ နဲ့ အတူ
+      ဖတ်ကြည့်ပြီး၊ agent ကို ဆောက်ခိုင်းခင်မှာလည်း ကွက်လပ်တွေ ရှိရင် မေးခွန်းအဖြစ် အရင် ပြန်ပေးခိုင်းပါ။
+    sources:
+      - {
+          title: "Martin Fowler: Evolutionary Database Design",
+          url: "https://martinfowler.com/articles/evodb.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-shape,
+          type: editor.select,
+          at: { mark: sel-shape },
+          target:
+            {
+              file: docs/data.md,
+              text: "new → ready → picked_up၊ ဒါမှမဟုတ် cancelled",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-shape-all,
+          type: editor.select,
+          at: { mark: shape-check },
+          target: { file: docs/data.md, text: "# Data · ကြိုမှာ app", occurrence: 1 },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ order line တစ်ကြောင်းချင်းထဲမှာ item ရဲ့ ဈေးကိုပါ ထပ်မှတ်ထားမယ်
+      ဆိုပါစို့။ ဈေးနှုန်းက menu item ထဲမှာ ရှိပြီးသားပါ။ ဒါဆို ဒီလို ထပ်မှတ်တာက အချက် တစ်ခုကို နေရာ နှစ်ခုမှာ
+      ရေးမိတဲ့ အမှားလား၊ တမင် လုပ်တာလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      တမင် လုပ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ menu item ထဲက ဈေးက ဒီနေ့ ရောင်းတဲ့ ဈေး ဖြစ်ပြီး၊ line ထဲက ဈေးကတော့ အဲဒီ
+      အော်ဒါ မှာတုန်းက ပေးရမယ့် ဈေး ဖြစ်လို့ပါ။ ကြည့်ရတာ တူပေမဲ့ တကယ်တော့ မတူတဲ့ အချက် နှစ်ခုပါ။ နောက်လ လက်ဖက်ရည်
+      ဈေး တက်ရင်တောင် ဒီနေ့ အော်ဒါရဲ့ ဈေးက မပြောင်းရပါဘူး။ [[mark:close-quiz]] ဒီ field ကို order line ရဲ့
+      အဆုံးမှာ ထည့်လိုက်ပါမယ်။ [[mark:type-price-each]] အခုဆိုရင် အော်ဒါ တစ်ခုချင်းက မှာတဲ့နေ့က ဈေးကို ကိုယ်ပိုင်
+      မှတ်ထားလို့၊ menu ဈေး ပြောင်းလည်း လိုက်မပြောင်းတော့ပါဘူး။
+    sources:
+      - {
+          title: "Microsoft Learn: LineItem.PlacedPrice (the unit price of the line item at the time it was added to an order)",
+          url: "https://learn.microsoft.com/en-us/previous-versions/commerce-server/aa124630(v=cs.70)",
+        }
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-o1, z-o2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a1, z-a2],
+          drawMs: 1600,
+        }
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - id: type-price-each
+        type: editor.type
+        at: { mark: type-price-each }
+        target: { file: docs/data.md, after: "quantity (1–20)", occurrence: 1 }
+        text: " · price_each (မှာတဲ့အချိန်က ဈေး)"
+        cadence: line-by-line
+      - {
+          id: expect-line,
+          type: expect.file,
+          at: { afterAction: type-price-each },
+          path: docs/data.md,
+          contains: "id · order_id · menu_item_id · quantity (1–20) · price_each (မှာတဲ့အချိန်က ဈေး)",
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:sel-r-entities]] ဒါဆို ပြန်ချုပ်ရရင်၊ data ပုံစံကို တကယ့် အော်ဒါ တစ်ခုကနေ စဆွဲပြီး၊ entity တွေ၊ field
+      တွေနဲ့ ချိတ်ဆက်မှုတွေကို ရှာပါ။ entity တိုင်းကို ID ပေးပြီး၊ အချက် တစ်ခုကို နေရာ တစ်ခုတည်းမှာ မှတ်ပါ။
+      [[mark:sel-r-time]] ငွေကို ကျပ် ကိန်းပြည့်နဲ့၊ အချိန်ကို နေ့စွဲနဲ့ time zone အပြည့်နဲ့ သိမ်းပါ။
+      [[mark:sel-r-status]] status ကို ပုံသေ စာရင်းနဲ့ ထားပါ။ [[mark:sel-r-not]] လိုတာကိုပဲ သိမ်းပြီး၊ ဒါတွေကို
+      ပထမ အော်ဒါ မဝင်ခင် ဆုံးဖြတ်ပါ။ ဒီနေ့ ရွေးခဲ့တဲ့ အရာ တစ်ခုချင်းမှာ ရတာ ရှိသလို ပေးရတာလည်း ရှိပါတယ်။ နောက်
+      lesson မှာတော့ အဲဒီလို trade off တွေကို ဘယ်လို ချိန်ဆ ဆုံးဖြတ်ပြီး decision record အဖြစ် မှတ်ထားမလဲ ဆိုတာ
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Microsoft Support: Database design basics",
+          url: "https://support.microsoft.com/en-us/office/database-design-basics-eb2159cf-1e30-401a-8084-bd4f9c9ca1f5",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-r-entities,
+          type: editor.select,
+          at: { mark: sel-r-entities },
+          target: { file: docs/data.md, text: "## Order line", occurrence: 1 },
+        }
+      - {
+          id: sel-r-time,
+          type: editor.select,
+          at: { mark: sel-r-time },
+          target:
+            {
+              file: docs/data.md,
+              text: "created_at (Asia/Yangon) · pickup_at (Asia/Yangon)",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-r-status,
+          type: editor.select,
+          at: { mark: sel-r-status },
+          target:
+            {
+              file: docs/data.md,
+              text: "new → ready → picked_up၊ ဒါမှမဟုတ် cancelled",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-r-not,
+          type: editor.select,
+          at: { mark: sel-r-not },
+          target: { file: docs/data.md, text: "## Not stored", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
