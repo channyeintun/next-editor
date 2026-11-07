@@ -632,7 +632,7 @@ lesson:
         const receipt: Receipt = {
           id: 7,
           total: 3300,
-          customer: { name: "မြမြ", table: 5 },
+          customer: { name: "လှလှ", table: 5 },
         };
         receipt.customer.table = 9;
         receipt.total = 0;
@@ -1047,7 +1047,7 @@ scenes:
       ဖိုင်မှာတော့ ဒီ type တွေကို သုံးတဲ့ အပိုင်း လေးပိုင်း ရှိပါတယ်။ [[mark:select-sizes]] ပထမ အပိုင်းမှာ
       ဆိုင်ရဲ့ ပုံမှန် size နဲ့ customer ရွေးတဲ့ size ရှိပြီး၊ ရွေးတဲ့ size ကိုတော့ နောက်မှ large လို့
       ပြောင်းထားပါတယ်။ [[mark:select-tea-order]] ဒုတိယက လက်ဖက်ရည် ခွက်ကြီး အော်ဒါ object ပါ။
-      [[mark:select-receipt-lines]] တတိယက မြမြရဲ့ ဘောင်ချာ ဖြစ်ပြီး၊ စားပွဲ ပြောင်းတဲ့ line နဲ့ စုစုပေါင်း
+      [[mark:select-receipt-lines]] တတိယက လှလှရဲ့ ဘောင်ချာ ဖြစ်ပြီး၊ စားပွဲ ပြောင်းတဲ့ line နဲ့ စုစုပေါင်း
       ငွေကို သုည ပြောင်းတဲ့ line ပါပါတယ်။ [[mark:select-lists]] နောက်ဆုံး အပိုင်းမှာတော့ စာရင်း နှစ်ခု
       ရှိပြီး၊ ဒီနေ့ အထူး စာရင်းထဲကို ပလာတာ ထပ်ထည့်ထားပါတယ်။
     sources:
@@ -1135,7 +1135,7 @@ scenes:
   - id: panel
     narration: >
       [[mark:panel-ready]] ညာဘက် panel ကို ကြည့်ရအောင်။ ဒီတစ်ခါ Errors ရဲ့ အောက်မှာ Output ရှိပြီး၊ Types
-      ကတော့ အောက်ဆုံးမှာ ရှိပါတယ်။ [[mark:read-start-output]] Output မှာ မြမြရဲ့ ဘောင်ချာက သုည ကျပ် ဖြစ်နေပြီး၊
+      ကတော့ အောက်ဆုံးမှာ ရှိပါတယ်။ [[mark:read-start-output]] Output မှာ လှလှရဲ့ ဘောင်ချာက သုည ကျပ် ဖြစ်နေပြီး၊
       ဒီနေ့ အထူး စာရင်းက နှစ်မျိုး ဖြစ်နေပါတယ်။ ပြောင်းလို့ မရသင့်တဲ့ တန်ဖိုးတွေကို code က ပြောင်းလိုက်လို့ပါ။
       ဒါကို lesson ရဲ့ နောက်ပိုင်းမှာ ကာကွယ်ပါမယ်။ [[mark:read-start-errors]] Errors မှာတော့ error နှစ်ခုလုံးက
       string ကို CupSize ရှိရမယ့် နေရာမှာ ထည့်လို့ မရဘူးလို့ ပြောနေပါတယ်။ code ထဲမှာ ရေးထားတဲ့ size တွေက small
