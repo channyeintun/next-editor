@@ -1225,14 +1225,14 @@ lesson:
         import { addOrder, nextOrder, queueSize } from "./kitchen.js";
 
         test("adds an order to the queue", () => {
-          addOrder({ id: "tea", customer: "မြမြ" });
+          addOrder({ id: "tea", customer: "လှလှ" });
           expect(queueSize()).toBe(1);
         });
 
         test("serves orders in arrival order", () => {
-          addOrder({ id: "tea", customer: "မြမြ" });
+          addOrder({ id: "tea", customer: "လှလှ" });
           addOrder({ id: "coffee", customer: "အောင်အောင်" });
-          expect(nextOrder().customer).toBe("မြမြ");
+          expect(nextOrder().customer).toBe("လှလှ");
         });
 
         test("starts empty", () => {
@@ -1346,7 +1346,7 @@ lesson:
         y: 314,
         width: 230,
         height: 36,
-        text: "မြမြ အရင် ထွက်",
+        text: "လှလှ အရင် ထွက်",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -1482,7 +1482,7 @@ lesson:
         y: 558,
         width: 800,
         height: 36,
-        text: "test 2 ✓ = test 1 ထည့်ခဲ့တဲ့ မြမြ အော်ဒါ (ကံ)",
+        text: "test 2 ✓ = test 1 ထည့်ခဲ့တဲ့ လှလှ အော်ဒါ (ကံ)",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -1839,7 +1839,7 @@ scenes:
       အရင် ဝင်လာတဲ့ အော်ဒါကို အရင် ချက်ပေးပါတယ်။ code ထဲမှာလည်း ဒီ queue က ဖိုင်တစ်ခုလုံးမှာ
       တစ်ခုတည်းပဲ ရှိပါတယ်။ [[mark:draw-tests]] ဒီ queue အတွက် test သုံးခု ရေးထားပါတယ်။ ပထမ test က
       အော်ဒါ တစ်ခု ထည့်ပြီး queue မှာ တစ်ခု ရှိလားလို့ စစ်ပါတယ်။ ဒုတိယ test က အော်ဒါ နှစ်ခု ထည့်ပြီး၊
-      အရင် ဝင်တဲ့ မြမြရဲ့ အော်ဒါ အရင် ထွက်လာလားလို့ စစ်ပါတယ်။ တတိယ test ကတော့ ဘာမှ မထည့်ရသေးတဲ့
+      အရင် ဝင်တဲ့ လှလှရဲ့ အော်ဒါ အရင် ထွက်လာလားလို့ စစ်ပါတယ်။ တတိယ test ကတော့ ဘာမှ မထည့်ရသေးတဲ့
       queue က အလွတ် ဖြစ်ရမယ်လို့ စစ်ပါတယ်။ [[mark:draw-shared]] test သုံးခုလုံးက queue
       တစ်ခုတည်းကိုပဲ သုံးနေကြတာ သတိထားကြည့်ပါ။ ဒါဆို test တစ်ခု ထည့်ခဲ့တဲ့ အော်ဒါက နောက် test
       ထဲအထိ ကျန်နေမလား။
@@ -1902,9 +1902,9 @@ scenes:
       [[mark:select-functions]] အော်ဒါ ထည့်တာ၊ အရင် ဝင်တာကို ထုတ်ပေးတာနဲ့ ဘယ်နှခု ရှိလဲ ပြတာ ဆိုတဲ့
       function သုံးခုက အဲဒီ queue ကိုပဲ သုံးပါတယ်။ [[mark:select-reset]] အောက်ဆုံးက function ကတော့
       queue ကို ရှင်းပြီး အလွတ် ပြန်ဖြစ်စေပါတယ်။ ဒါပေမဲ့ ဘယ်နေရာကမှ မခေါ်ရသေးပါဘူး။ [[mark:open-test]]
-      test ဖိုင်ကို ဖွင့်ကြည့်ရအောင်။ [[mark:select-first]] ပထမ test က မြမြရဲ့ လက်ဖက်ရည် အော်ဒါ တစ်ခု
-      ထည့်ပြီး၊ queue မှာ တစ်ခု ရှိရမယ်လို့ စစ်ပါတယ်။ [[mark:select-second]] ဒုတိယ test က မြမြရဲ့
-      လက်ဖက်ရည်နဲ့ အောင်အောင်ရဲ့ ကော်ဖီကို ထည့်ပြီး၊ ပထမ ထွက်လာတဲ့ အော်ဒါက မြမြရဲ့ အော်ဒါ
+      test ဖိုင်ကို ဖွင့်ကြည့်ရအောင်။ [[mark:select-first]] ပထမ test က လှလှရဲ့ လက်ဖက်ရည် အော်ဒါ တစ်ခု
+      ထည့်ပြီး၊ queue မှာ တစ်ခု ရှိရမယ်လို့ စစ်ပါတယ်။ [[mark:select-second]] ဒုတိယ test က လှလှရဲ့
+      လက်ဖက်ရည်နဲ့ အောင်အောင်ရဲ့ ကော်ဖီကို ထည့်ပြီး၊ ပထမ ထွက်လာတဲ့ အော်ဒါက လှလှရဲ့ အော်ဒါ
       ဖြစ်ရမယ်လို့ စစ်ပါတယ်။ [[mark:select-third]] တတိယ test က queue အလွတ် ဖြစ်ရမယ်လို့ စစ်ထားပါတယ်။
       ဆိုင် စဖွင့်ချိန်မှာ အော်ဒါ တစ်ခုမှ မရှိသေးတဲ့အတွက် ဒီ test က မှန်ပါတယ်။
     sources:
@@ -1953,7 +1953,7 @@ scenes:
         target:
           {
             file: src/kitchen.test.js,
-            text: "addOrder({ id: \"tea\", customer: \"မြမြ\" });\n  expect(queueSize()).toBe(1);",
+            text: "addOrder({ id: \"tea\", customer: \"လှလှ\" });\n  expect(queueSize()).toBe(1);",
             occurrence: 1,
           }
       - id: select-second
@@ -1962,7 +1962,7 @@ scenes:
         target:
           {
             file: src/kitchen.test.js,
-            text: "addOrder({ id: \"tea\", customer: \"မြမြ\" });\n  addOrder({ id: \"coffee\", customer: \"အောင်အောင်\" });\n  expect(nextOrder().customer).toBe(\"မြမြ\");",
+            text: "addOrder({ id: \"tea\", customer: \"လှလှ\" });\n  addOrder({ id: \"coffee\", customer: \"အောင်အောင်\" });\n  expect(nextOrder().customer).toBe(\"လှလှ\");",
             occurrence: 1,
           }
       - id: select-third
@@ -2042,7 +2042,7 @@ scenes:
       [[mark:draw-left-3]] တတိယ test က သုည ဖြစ်ရမယ်လို့ စစ်တော့ ၂ ကို တွေ့ပြီး ကျသွားတာပါ။ ဒီ test
       တစ်ခုတည်းကိုပဲ run ရင်တော့ pass ဖြစ်မှာ ဖြစ်ပြီး၊ တခြား test တွေနဲ့ အတူ run မှ ကျတာပါ။
       [[mark:draw-luck]] ဒုတိယ test ကလည်း မှန်ကန်တဲ့ အကြောင်းကြောင့် pass ဖြစ်တာ မဟုတ်ပါဘူး။ သူ ထုတ်လိုက်တဲ့ အော်ဒါက ပထမ
-      test ထည့်ခဲ့တဲ့ မြမြရဲ့ လက်ဖက်ရည် ဖြစ်ပြီး၊ မှာတဲ့သူ နာမည် တူနေလို့ ကံကောင်းပြီး pass ဖြစ်နေတာပါ။
+      test ထည့်ခဲ့တဲ့ လှလှရဲ့ လက်ဖက်ရည် ဖြစ်ပြီး၊ မှာတဲ့သူ နာမည် တူနေလို့ ကံကောင်းပြီး pass ဖြစ်နေတာပါ။
       [[mark:draw-isolation]] ဆိုလိုတာက test တစ်ခုရဲ့ ရလဒ်က တခြား test တွေပေါ်၊ run တဲ့ အစဉ်ပေါ်
       မူတည်နေပါတယ်။ test ကောင်းတွေကတော့ တစ်ခုတည်း run တာဖြစ်ဖြစ်၊ ဘယ် အစဉ်နဲ့ run တာဖြစ်ဖြစ် ရလဒ်
       တူရပါမယ်။
