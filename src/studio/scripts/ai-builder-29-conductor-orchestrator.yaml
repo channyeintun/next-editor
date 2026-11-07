@@ -1,0 +1,1293 @@
+# AI Builder, lesson 29: conductor and orchestrator (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused) +
+# docs/plan.md exactly as L17 leaves it (COURSE-KIT §4.7 table + the Task 5 removal line;
+# lessons/ai-builder-17-simplicity/_final-plan.md, re-checked with tools/sim-docs.ts). Nothing runs.
+#
+# Typed (insert-only): a `## Mode` section under the Task 5 line — a small table (task number, mode,
+# why) with the binder's L29 modes (1 conductor, 2 orchestrator, 3 conductor, 4 orchestrator,
+# 6 conductor) — then two rule lines under it (parallel tasks must not touch the same files; review
+# every background result, hand out only what you can review). The old table is not edited: the
+# narration says why the modes get their own section (a reason column would make the old table too
+# wide to read). Final plan.md in DESIGN.md (L30 pins it).
+#
+# Boards: (A) conductor (me → one agent, close) vs orchestrator (me → three agents → my review), with
+# the orchestrator's skills and the three places (editor → terminal → background) along the bottom;
+# (B) which mode: the two questions, four shop tasks placed in two columns, newest-tool (red) vs the
+# task (green); (L) handing out two at once: same file → clash (red), one after the other (green);
+# review: more agents, more to check; check what you can (green); (Z) the quiz (labels vs refunds).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-29-conductor-orchestrator.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-29-conductor-orchestrator
+  title: "AI Builder 29: Conductor နဲ့ orchestrator"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/plan.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/plan.md: |
+        # Plan · v1
+
+        | # | Task | Done when |
+        |---|---|---|
+        | 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |
+        | 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |
+        | 3 | ကောင်တာစာရင်း | AC-5 |
+        | 4 | နေ့စဉ် အော်ဒါနံပါတ် | Rules |
+        | 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |
+        | 6 | staging ပေါ် တင်တာ | release checklist |
+
+        - Task 5 ကို ဖယ်လိုက်ပြီ — menu ကို တစ်နှစ် အနည်းငယ်ပဲ ပြင်လို့ file ထဲမှာ ပြင်တာနဲ့ လုံလောက်တယ် (decisions.md ADR-003)
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board A: left column conductor (orange heading; me → agent close together; how; when; the cost),
+    # right column orchestrator (orange heading; me fanning out down to three violet agents, down
+    # into my review box in orange; when; the skills); bottom: the three places, left to right.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 640,
+        height: 50,
+        text: "agent ကို ခိုင်းပုံ နှစ်မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-c-h,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 300,
+        height: 45,
+        text: "conductor",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-c-me-box,
+        kind: rectangle,
+        x: 300,
+        y: 280,
+        width: 120,
+        height: 56,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-c-me,
+        kind: text,
+        x: 328,
+        y: 288,
+        width: 80,
+        height: 40,
+        text: "ကိုယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-c-ar,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 428,
+        y: 288,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-c-ag-box,
+        kind: rectangle,
+        x: 484,
+        y: 280,
+        width: 130,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-c-ag,
+        kind: text,
+        x: 504,
+        y: 288,
+        width: 100,
+        height: 40,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-c-1,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 400,
+        height: 40,
+        text: "တစ်ဆင့်ချင်း ကြည့်ပြီး ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-c-2,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 360,
+        height: 40,
+        text: "မရှင်း · ခက် · မရင်းနှီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-c-cost,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 400,
+        height: 40,
+        text: "ကိုယ် ကြည့်နိုင်သလောက်ပဲ မြန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-h,
+        kind: text,
+        x: 690,
+        y: 225,
+        width: 300,
+        height: 45,
+        text: "orchestrator",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-o-me-box,
+        kind: rectangle,
+        x: 815,
+        y: 272,
+        width: 120,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-me,
+        kind: text,
+        x: 843,
+        y: 278,
+        width: 80,
+        height: 40,
+        text: "ကိုယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-d1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 730,
+        y: 326,
+        width: 30,
+        height: 38,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-d2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 860,
+        y: 326,
+        width: 30,
+        height: 38,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-d3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 990,
+        y: 326,
+        width: 30,
+        height: 38,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-ag1-box,
+        kind: rectangle,
+        x: 690,
+        y: 368,
+        width: 110,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-o-ag1,
+        kind: text,
+        x: 702,
+        y: 372,
+        width: 96,
+        height: 40,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-ag2-box,
+        kind: rectangle,
+        x: 820,
+        y: 368,
+        width: 110,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-o-ag2,
+        kind: text,
+        x: 832,
+        y: 372,
+        width: 96,
+        height: 40,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-ag3-box,
+        kind: rectangle,
+        x: 950,
+        y: 368,
+        width: 110,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-o-ag3,
+        kind: text,
+        x: 962,
+        y: 372,
+        width: 96,
+        height: 40,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-u1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 730,
+        y: 418,
+        width: 30,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-u2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 860,
+        y: 418,
+        width: 30,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-u3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 990,
+        y: 418,
+        width: 30,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-o-rv-box,
+        kind: rectangle,
+        x: 690,
+        y: 458,
+        width: 370,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-o-rv,
+        kind: text,
+        x: 780,
+        y: 464,
+        width: 230,
+        height: 40,
+        text: "ကိုယ် · review",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-when,
+        kind: text,
+        x: 690,
+        y: 518,
+        width: 390,
+        height: 40,
+        text: "ရှင်း · စစ်လို့ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-o-skill,
+        kind: text,
+        x: 600,
+        y: 556,
+        width: 490,
+        height: 40,
+        text: "spec · plan · review · checks",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-p-ed,
+        kind: text,
+        x: 300,
+        y: 602,
+        width: 120,
+        height: 40,
+        text: "editor",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p-ar1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 440,
+        y: 604,
+        width: 80,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-p-te,
+        kind: text,
+        x: 560,
+        y: 602,
+        width: 160,
+        height: 40,
+        text: "terminal",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-p-ar2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 740,
+        y: 604,
+        width: 80,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-p-bg,
+        kind: text,
+        x: 860,
+        y: 602,
+        width: 200,
+        height: 40,
+        text: "background",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: which mode? The two questions (orange), two columns of shop tasks under the mode
+    # names (orange), then the wrong reason (red) and the right one (green).
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 560,
+        height: 50,
+        text: "ဘယ် mode နဲ့ ခိုင်းမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 680,
+        height: 45,
+        text: "ရှင်းပြီလား? · စစ်လို့ရလား?",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b-c-h,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 300,
+        height: 45,
+        text: "conductor",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b-1,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 405,
+        height: 40,
+        text: "လာယူချိန် မှားပြ · ဘာလို့?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-2,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 405,
+        height: 40,
+        text: "SMS service ပထမဆုံး ချိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-o-h,
+        kind: text,
+        x: 710,
+        y: 290,
+        width: 300,
+        height: 45,
+        text: "orchestrator",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: b-3,
+        kind: text,
+        x: 710,
+        y: 345,
+        width: 360,
+        height: 40,
+        text: "AC တစ်ခုစီအတွက် test",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-4,
+        kind: text,
+        x: 710,
+        y: 395,
+        width: 360,
+        height: 40,
+        text: "ဖုန်းမှာ မြန်မာဂဏန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-new,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 620,
+        height: 40,
+        text: "tool အသစ်ဆုံး မို့ မရွေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: b-task,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 620,
+        height: 40,
+        text: "task ကို ကြည့်ပြီး ရွေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board L: two at once. Left: two violet agents with arrows down into one blue part (the product),
+    # the clash (red) and the order (green). Right: review — more agents, more to check (white), one
+    # person checks (orange), merging unchecked (red), the limit (green).
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 560,
+        height: 50,
+        text: "တစ်ပြိုင်နက် အပ်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-a2-box,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 170,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-a2,
+        kind: text,
+        x: 314,
+        y: 230,
+        width: 150,
+        height: 40,
+        text: "agent · 2",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-a4-box,
+        kind: rectangle,
+        x: 490,
+        y: 225,
+        width: 170,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-a4,
+        kind: text,
+        x: 504,
+        y: 230,
+        width: 150,
+        height: 40,
+        text: "agent · 4",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: l-d1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 360,
+        y: 280,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-d2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 560,
+        y: 280,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: l-file-box,
+        kind: rectangle,
+        x: 300,
+        y: 325,
+        width: 360,
+        height: 56,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-file,
+        kind: text,
+        x: 318,
+        y: 333,
+        width: 320,
+        height: 40,
+        text: "အော်ဒါ သိမ်းတဲ့ အပိုင်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: l-clash,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 340,
+        height: 40,
+        text: "ဖိုင် တူတူ → တိုက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l-seq,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 340,
+        height: 40,
+        text: "2 ပြီးမှ 4",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: l-r-h,
+        kind: text,
+        x: 690,
+        y: 225,
+        width: 300,
+        height: 45,
+        text: "review",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: l-r1,
+        kind: text,
+        x: 690,
+        y: 285,
+        width: 390,
+        height: 40,
+        text: "agent 1 → စစ်စရာ 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r3,
+        kind: text,
+        x: 690,
+        y: 335,
+        width: 390,
+        height: 40,
+        text: "agent 3 → စစ်စရာ 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r-me,
+        kind: text,
+        x: 690,
+        y: 400,
+        width: 400,
+        height: 40,
+        text: "စစ်တာ ကိုယ် တစ်ယောက်တည်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: l-r-x,
+        kind: text,
+        x: 690,
+        y: 465,
+        width: 400,
+        height: 40,
+        text: "မစစ်ဘဲ ထည့် → အမှား မြန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l-r-ok,
+        kind: text,
+        x: 690,
+        y: 525,
+        width: 400,
+        height: 40,
+        text: "စစ်နိုင်သလောက်ပဲ အပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, two options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 700,
+        height: 45,
+        text: "background agent ကို ဘယ်ဟာ အပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 700,
+        height: 40,
+        text: "က · ခလုတ်တိုင်းမှာ English ပါ တွဲပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 700,
+        height: 40,
+        text: "ခ · ငွေ ပြန်အမ်းပုံ ဆုံးဖြတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 300,
+        height: 50,
+        text: "အဖြေ · က",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 760,
+        height: 40,
+        text: "ရှင်း · စစ်လို့ရ · ခ ကို မြမြ အရင် ဆုံးဖြတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6129
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Agent တစ်ခုလား၊ အများကြီးလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ rule ဖိုင်၊ hook၊ sandbox လို model ပတ်လည်က အစိတ်အပိုင်းတွေ၊ harness ကို ကြည့်ခဲ့ပြီး၊
+      agent မှားရင် စကား ထပ်ပြောမယ့်အစား setup ကို အရင် ပြင်ဖို့ ပြောခဲ့ပါတယ်။ ဒီနေ့တော့ အဲဒီ harness ထဲမှာ agent
+      ကို ဘယ်လို ခိုင်းမလဲ ဆိုတာ ကြည့်ပါမယ်။ [[mark:open-plan]] ပထမ version ကို task လေးတွေ ခွဲထားတဲ့ plan ကို
+      ပြန်ကြည့်ရအောင်။ task ဆိုတာ agent ဆီ တစ်ခါ အပ်တဲ့ အလုပ် တစ်ခုပါ။ [[mark:sel-rows]] ဒီ ဇယားကို ကြည့်ရင်း
+      စိတ်ကူး တစ်ခု ဝင်လာနိုင်ပါတယ်။ agent တစ်ခုက task တစ်ခု လုပ်နိုင်တယ် ဆိုတော့၊ agent သုံးခုကို task သုံးခု
+      တစ်ပြိုင်နက် ပေးလိုက်ရင် သုံးဆ မြန်မလား ဆိုတာပါ။ အဖြေကတော့ task ပေါ်မှာ မူတည်ပါတယ်။ ဘာကြောင့်လဲဆိုတော့ agent
+      ကို ခိုင်းပုံ နှစ်မျိုး ရှိလို့ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Harness engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (conductors and orchestrators)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-plan, type: workspace.openFile, at: { mark: open-plan }, path: docs/plan.md }
+      - {
+          id: sel-rows,
+          type: editor.select,
+          at: { mark: sel-rows },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |\n| 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |\n| 3 | ကောင်တာစာရင်း | AC-5 |\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: conductor
+    chapter: Conductor နဲ့ orchestrator
+    narration: >
+      [[mark:a-title]] ပထမ ပုံစံကို conductor လို့ ခေါ်ပါတယ်။ [[mark:a-c]] ကိုယ်က agent တစ်ခုတည်းကို အနီးကပ်
+      ကြည့်ပြီး တစ်ဆင့်ချင်း ခိုင်းတဲ့ ပုံစံပါ။ agent က ဖိုင် တစ်ခု ပြင်လိုက်တိုင်း ကိုယ်က ကြည့်ပြီး၊ မှားနေရင်
+      ချက်ချင်း ပြန်ပြင်ခိုင်းတော့ ပြောင်းလဲမှု တိုင်းက ကိုယ့် မျက်စိအောက်မှာပဲ ရှိပါတယ်။ [[mark:a-c-when]] ဘယ်လို
+      အလုပ်မျိုးမှာ သုံးလဲ ဆိုတော့၊ ဘာလုပ်ရမလဲ မရှင်းသေးတဲ့ အလုပ်၊ ခက်တဲ့ အလုပ်၊ ကိုယ် မရင်းနှီးသေးတဲ့ အပိုင်းကို
+      ပြင်ရမယ့် အလုပ်တွေပါ။ ဥပမာ plan ရဲ့ ပထမ task က form ကနေ အော်ဒါ သိမ်းတဲ့အထိ တစ်လမ်းလုံးကို ပထမဆုံး ဆောက်တာ
+      ဖြစ်လို့ မသေချာတာတွေ အများဆုံးပါ။ [[mark:a-c-cost]] ဒီ ပုံစံမှာ ပေးရတာက ကိုယ့် အချိန်ပါ။ အဆင့်တိုင်း ကိုယ်
+      လိုက်ကြည့်နေရတော့၊ agent က ဘယ်လောက်ပဲ မြန်မြန်၊ အလုပ်က ကိုယ် ကြည့်နိုင်တဲ့ နှုန်းထက် မမြန်နိုင်ပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the conductor: hands-on, real-time)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-a-title,
+          type: whiteboard.apply,
+          at: { mark: a-title },
+          open: true,
+          clear: true,
+          upsertIds: [a-title, a-c-h],
+        }
+      - {
+          id: draw-a-c,
+          type: whiteboard.apply,
+          at: { mark: a-c },
+          upsertIds: [a-c-me-box, a-c-me, a-c-ar, a-c-ag-box, a-c-ag, a-c-1],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-a-c-when,
+          type: whiteboard.apply,
+          at: { mark: a-c-when },
+          upsertIds: [a-c-2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-c-cost,
+          type: whiteboard.apply,
+          at: { mark: a-c-cost },
+          upsertIds: [a-c-cost],
+          drawMs: 900,
+        }
+
+  - id: orchestrator
+    narration: >
+      [[mark:a-o]] ဒုတိယ ပုံစံကတော့ orchestrator ပါ။ ကိုယ်က အလုပ်ကို task တွေ ခွဲပြီး၊ agent အများကို တစ်ခုစီ
+      အပ်ပေးတဲ့ ပုံစံပါ။ [[mark:a-o-fan]] agent တွေက နောက်ကွယ်၊ background မှာ တစ်ခုစီ သီးသန့် အလုပ်လုပ်နေတုန်း၊
+      ကိုယ်က တစ်ကြောင်းချင်း ထိုင်မကြည့်ဘဲ တခြား အလုပ် လုပ်နေလို့ ရပါတယ်။ [[mark:a-o-review]] ကြားထဲမှာ တစ်ခါတလေ
+      ဝင်ကြည့်ပြီး လမ်းလွဲနေရင် ပြန်ပြင်ပေးပါတယ်။ ရလဒ်တွေ ပြီးလာတဲ့အခါ ကိုယ်က တစ်ခုချင်း စစ်ပြီး လက်ခံမလား၊
+      ပြန်ပြင်ခိုင်းမလား ဆုံးဖြတ်ပါတယ်။ ဒီလို စစ်တာက review ပါ။ [[mark:a-o-when]] ဒီ ပုံစံက ဘာလုပ်ရမလဲ ရှင်းပြီး၊
+      AC လို စစ်ချက်နဲ့ စစ်လို့ရတဲ့ task တွေအတွက်ပါ။ [[mark:a-o-skills]] ဒီလို အပ်နိုင်ဖို့ လိုတဲ့ ကျွမ်းကျင်မှုက
+      code ရေးတာ မဟုတ်ပါဘူး။ task ကို ရှင်းရှင်း ရေးတာ၊ အလုပ်ကို အပိုင်းလေးတွေ ခွဲတာ၊ ရလဒ်ကို မြန်မြန် စစ်တာ၊
+      agent အလုပ်လုပ်ရင်း သူ့ဘာသာ စစ်ကြည့်နိုင်မယ့် test နဲ့ rule တွေကို ကြိုထားပေးတာ တွေပါ။ ဒီ course မှာ spec၊
+      plan၊ review checklist နဲ့ harness အဖြစ် တစ်ခုချင်း လေ့ကျင့်ခဲ့ပြီးသား အလုပ်တွေပါပဲ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the orchestrator: async delegation; specification, decomposition, evaluation, system design)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-a-o,
+          type: whiteboard.apply,
+          at: { mark: a-o },
+          upsertIds: [a-o-h, a-o-me-box, a-o-me],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-o-fan,
+          type: whiteboard.apply,
+          at: { mark: a-o-fan },
+          upsertIds:
+            [
+              a-o-d1,
+              a-o-d2,
+              a-o-d3,
+              a-o-ag1-box,
+              a-o-ag1,
+              a-o-ag2-box,
+              a-o-ag2,
+              a-o-ag3-box,
+              a-o-ag3,
+            ],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-a-o-review,
+          type: whiteboard.apply,
+          at: { mark: a-o-review },
+          upsertIds: [a-o-u1, a-o-u2, a-o-u3, a-o-rv-box, a-o-rv],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-a-o-when,
+          type: whiteboard.apply,
+          at: { mark: a-o-when },
+          upsertIds: [a-o-when],
+          drawMs: 800,
+        }
+      - {
+          id: draw-a-o-skills,
+          type: whiteboard.apply,
+          at: { mark: a-o-skills },
+          upsertIds: [a-o-skill],
+          drawMs: 1000,
+        }
+
+  - id: places
+    narration: >
+      agent တွေကို နေရာ သုံးမျိုးမှာ တွေ့ရတယ် ဆိုတာ ရှေ့ lesson တစ်ခုမှာ ပြောခဲ့ပါတယ်။ အဲဒီ နေရာတွေကို ဒီ ပုံစံ
+      နှစ်မျိုးနဲ့ တွဲကြည့်ရအောင်။ [[mark:p-ed]] code ရေးတဲ့ program၊ editor ထဲက agent က ဖွင့်ထားတဲ့ ဖိုင်ထဲမှာတင်
+      code ကို အကြံပြုပေးတာ၊ ပြင်ပေးတာ လုပ်ပြီး၊ ကိုယ်က တစ်ခုချင်း လက်ခံမလား ရွေးရလို့ conductor ဘက် အစွန်ဆုံးမှာ
+      ရှိပါတယ်။ GitHub Copilot လို tool မျိုးပါ။ [[mark:p-te]] command ရိုက်တဲ့ window၊ terminal ထဲက agent ကိုတော့
+      ပန်းတိုင် တစ်ခု ပေးလိုက်ရင် ဖိုင် အများကြီးကို ဖတ်ပြီး ပြင်ပါတယ်။ Claude Code လို tool မျိုးပါ။ ဘေးက
+      လိုက်ကြည့်နေရင် conductor ဖြစ်ပြီး၊ ရှင်းတဲ့ task ပေးပြီး ထားခဲ့ရင်တော့ orchestrator ဘက် ရောက်သွားပါတယ်။
+      [[mark:p-bg]] background agent ကတော့ အင်တာနက်ပေါ်က သီးသန့် စက် တစ်လုံးမှာ အလုပ်လုပ်ပြီး၊ ကိုယ် တခြား
+      အလုပ်လုပ်နေတုန်း ရလဒ်ကို review အတွက် ပြန်ပေးလို့ orchestrator ဘက်ပါ။ Jules လို tool မျိုးပါ။ ဒီ နာမည်တွေက
+      ဥပမာ သက်သက်ပါ။ tool တစ်ခုမှာ နေရာ တစ်ခုထက် ပိုပါတတ်လို့ ရွေးရမှာက tool မဟုတ်ဘဲ၊ ဒီ task ကို ဘယ်လို ခိုင်းမလဲ
+      ဆိုတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Coding agents in practice (editor, terminal, background)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "GitHub Docs: About GitHub Copilot",
+          url: "https://docs.github.com/en/copilot/get-started/what-is-github-copilot",
+        }
+      - {
+          title: "Claude Code docs: Overview (terminal, IDE, desktop, browser; background agents)",
+          url: "https://code.claude.com/docs/en/overview",
+        }
+      - { title: "Jules docs: Getting started", url: "https://jules.google/docs/" }
+    actions:
+      - {
+          id: draw-p-ed,
+          type: whiteboard.apply,
+          at: { mark: p-ed },
+          upsertIds: [a-p-ed],
+          drawMs: 700,
+        }
+      - {
+          id: draw-p-te,
+          type: whiteboard.apply,
+          at: { mark: p-te },
+          upsertIds: [a-p-ar1, a-p-te],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-p-bg,
+          type: whiteboard.apply,
+          at: { mark: p-bg },
+          upsertIds: [a-p-ar2, a-p-bg],
+          drawMs: 1000,
+        }
+
+  - id: choose
+    chapter: Task ကို ကြည့်ပြီး ရွေး
+    narration: >
+      [[mark:b-title]] ဒါဆို task တစ်ခုကို ဘယ် ပုံစံနဲ့ ခိုင်းမလဲ ဆိုတာ ဘယ်လို ရွေးမလဲ။ ဒီ ခိုင်းပုံကို mode လို့
+      ခေါ်ပါမယ်။ [[mark:b-q]] မေးခွန်း နှစ်ခု မေးကြည့်ပါ။ ဘာလုပ်ရမလဲ ရှင်းနေပြီလား၊ ပြီးတဲ့အခါ မှန်မမှန် စစ်လို့
+      ရလား ဆိုတာပါ။ နှစ်ခုလုံး ဟုတ်ရင် background ကို အပ်လို့ ရပြီး၊ တစ်ခုခု မဟုတ်ရင်တော့ အနီးကပ် လုပ်ပါ။
+      [[mark:b-1]] ဥပမာ တချို့ မနက်တွေမှာ အော်ဒါ အနည်းငယ်က လာယူချိန်ကို မှားပြနေတယ် ဆိုပါစို့။ ဘာကြောင့်လဲ
+      မသိသေးတော့ အကြောင်းရင်းကို တစ်ဆင့်ချင်း လိုက်ရှာပြီး debug လုပ်ရမှာ ဖြစ်လို့ conductor ပါ။ [[mark:b-2]] SMS
+      ပို့ပေးတဲ့ ပြင်ပ service ကို ပထမဆုံး ချိတ်တာကလည်း ကိုယ် မရင်းနှီးသေးတဲ့ အလုပ် ဖြစ်လို့ အနီးကပ် လုပ်ပါမယ်။
+      [[mark:b-3]] AC တစ်ခုချင်းကို အလိုလို စစ်ပေးမယ့် test တွေ ရေးခိုင်းတာကတော့ ဘာလိုလဲ ရှင်းပြီး၊ test
+      တစ်ခုချင်းက သူ့ AC ကို တကယ် စစ်လား ကိုယ်က ပြန်ကြည့်လို့ ရလို့ background ကို အပ်လို့ ရပါတယ်။ [[mark:b-4]]
+      ဖုန်းနံပါတ်ကိုလည်း မြန်မာဂဏန်းနဲ့ လက်ခံအောင် လုပ်တာက AGENTS.md ထဲမှာ rule ရှိပြီးသား ဖြစ်လို့ ဒါလည်း
+      background ကို အပ်လို့ ရပါတယ်။ [[mark:b-new]] သတိထားရမှာက tool အသစ်ဆုံး ဖြစ်လို့၊ ဒါမှမဟုတ် agent များများ
+      သုံးချင်လို့ ရွေးတာ မဟုတ်ဘဲ၊ task ကို ကြည့်ပြီး ရွေးရတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Coding agents in practice (the task decides, not the autonomy ladder)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (well-defined tasks for background agents; tricky debugging and unfamiliar code for close work)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Overview (writing tests for untested code among the tasks to hand off)",
+          url: "https://code.claude.com/docs/en/overview",
+        }
+    actions:
+      - {
+          id: draw-b-title,
+          type: whiteboard.apply,
+          at: { mark: b-title },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-q,
+          type: whiteboard.apply,
+          at: { mark: b-q },
+          upsertIds: [b-q, b-c-h, b-o-h],
+          drawMs: 1300,
+        }
+      - { id: draw-b-1, type: whiteboard.apply, at: { mark: b-1 }, upsertIds: [b-1], drawMs: 900 }
+      - { id: draw-b-2, type: whiteboard.apply, at: { mark: b-2 }, upsertIds: [b-2], drawMs: 900 }
+      - { id: draw-b-3, type: whiteboard.apply, at: { mark: b-3 }, upsertIds: [b-3], drawMs: 900 }
+      - { id: draw-b-4, type: whiteboard.apply, at: { mark: b-4 }, upsertIds: [b-4], drawMs: 900 }
+      - {
+          id: draw-b-new,
+          type: whiteboard.apply,
+          at: { mark: b-new },
+          upsertIds: [b-new, b-task],
+          drawMs: 1200,
+        }
+
+  - id: type-mode
+    narration: >
+      [[mark:close-b]] ဒီ မေးခွန်းတွေနဲ့ ကိုယ်တို့ plan ကို ပြန်ကြည့်ရအောင်။ [[mark:type-mode]] ဇယား ဟောင်းကို
+      မပြင်ဘဲ၊ အောက်မှာ mode အပိုင်း အသစ် ထည့်ပါမယ်။ task နံပါတ် တစ်ခုစီအတွက် ဘယ် ပုံစံနဲ့ ခိုင်းမလဲ၊ ဘာကြောင့်လဲ
+      ဆိုတာပါ။ အကြောင်းရင်း column ကို ဇယား ဟောင်းထဲ ထည့်ရင် ဖတ်ရ ခက်လောက်အောင် ကျယ်သွားမှာ ဖြစ်လို့ သီးသန့် ဇယား
+      ခွဲထားတာပါ။ ဖယ်လိုက်တဲ့ task ငါး ကတော့ ဒီမှာ မပါတော့ပါဘူး။ [[mark:sel-m2]] task နှစ်က background agent ဆီ
+      အပ်လို့ ရတဲ့ task ပါ။ ဘာကို ငြင်းရမလဲ ဆိုတာ agent အတွက် ခန့်မှန်းစရာ မကျန်တော့သလို၊ ကိုယ်ကလည်း test plan နဲ့
+      ဖုန်းပေါ်မှာ ချက်ချင်း စစ်လို့ ရပါတယ်။ [[mark:sel-m3]] ကောင်တာစာရင်း ဖြစ်တဲ့ task သုံးမှာတော့ AC ငါး က
+      အော်ဒါတွေရဲ့ အစဉ်ကိုပဲ သတ်မှတ်ထားပါတယ်။ မနက် အလုပ်ရှုပ်ချိန်မှာ ဘာကို အရင် မြင်ရမလဲ၊ စာလုံး ဘယ်လောက်
+      ကြီးရမလဲ ဆိုတာကတော့ ကောင်တာက လှလှ ကိုယ်တိုင် သုံးကြည့်မှ သိမှာ ဖြစ်လို့၊ agent ပြင်လိုက်တိုင်း လှလှ ကို
+      ပြပြီးမှ ဆက်သွားရပါမယ်။ [[mark:sel-m6]] task ခြောက်ရဲ့ staging ကတော့ customer မသုံးခင် စမ်းဖို့ server ပါ။
+      အဲဒီမှာ ပထမဆုံး တင်တဲ့အခါ secret တွေ ဘယ်မှာ ထားမလဲ၊ ဘာ access ပေးမလဲ ဆုံးဖြတ်ရလို့ background ကို
+      လွှတ်ထားလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (choosing the mode per task)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-b, type: whiteboard.apply, at: { mark: close-b }, open: false }
+      - id: type-mode
+        type: editor.type
+        at: { mark: type-mode }
+        target: { file: docs/plan.md, after: "(decisions.md ADR-003)\n", occurrence: 1 }
+        text: "\n## Mode\n| # | Mode | ဘာကြောင့် |\n|---|---|---|\n| 1 | conductor | ပထမ slice၊ မသေချာတာ အများဆုံး |\n| 2 | orchestrator | rule သုံးခု ရှင်း၊ AC နဲ့ စစ်လို့ရ |\n| 3 | conductor | screen ကို လှလှ နဲ့ ကြည့်ပြီး ဆုံးဖြတ်ရ |\n| 4 | orchestrator | spec ရဲ့ Rules မှာ ရှင်းပြီးသား |\n| 6 | conductor | ပထမဆုံး server ပေါ်တင်၊ secret နဲ့ access ပါ |\n"
+        cadence: line-by-line
+      - {
+          id: expect-mode,
+          type: expect.file,
+          at: { afterAction: type-mode },
+          path: docs/plan.md,
+          contains: "| 2 | orchestrator | rule သုံးခု ရှင်း၊ AC နဲ့ စစ်လို့ရ |",
+        }
+      - {
+          id: sel-m2,
+          type: editor.select,
+          at: { mark: sel-m2 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 2 | orchestrator | rule သုံးခု ရှင်း၊ AC နဲ့ စစ်လို့ရ |",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-m3,
+          type: editor.select,
+          at: { mark: sel-m3 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 3 | conductor | screen ကို လှလှ နဲ့ ကြည့်ပြီး ဆုံးဖြတ်ရ |",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-m6,
+          type: editor.select,
+          at: { mark: sel-m6 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 6 | conductor | ပထမဆုံး server ပေါ်တင်၊ secret နဲ့ access ပါ |",
+              occurrence: 1,
+            },
+        }
+
+  - id: limits
+    chapter: တစ်ပြိုင်နက် အပ်ရင်
+    narration: >
+      [[mark:l-title]] plan ထဲမှာ background ကို အပ်လို့ ရတဲ့ task နှစ်ခု ရှိပါတယ်။ နှစ်ခုလုံးကို တစ်ပြိုင်နက်
+      အပ်လိုက်ရင်ကော။ [[mark:l-same]] ပထမ ကြည့်ရမှာက task နှစ်ခု ပြင်ရမယ့် ဖိုင်တွေပါ။ task နှစ်က မှားတဲ့ input
+      ကို ငြင်းဖို့၊ task လေးက နေ့စဉ် အော်ဒါနံပါတ် ပေးဖို့ ဖြစ်ပေမဲ့၊ နှစ်ခုလုံးက အော်ဒါကို စစ်ပြီး သိမ်းတဲ့
+      အပိုင်းကို ပြင်ရပါတယ်။ [[mark:l-clash]] agent နှစ်ခုက ဖိုင် တစ်ခုတည်းကို တစ်ချိန်တည်း ပြင်ရင်၊ တစ်ခုရဲ့
+      ပြောင်းလဲမှုက နောက်တစ်ခုရဲ့ ပြောင်းလဲမှုကို ဖျက်သွားတာ၊ ပြန်ပေါင်းတဲ့အခါ တိုက်နေတာမျိုး ဖြစ်တတ်ပါတယ်။
+      ဒါကြောင့် တစ်ပြိုင်နက် အပ်မယ့် task တွေက ဖိုင် တူတူ မထိရပါဘူး။ ထိမယ်ဆိုရင် တစ်ခု ပြီးမှ နောက်တစ်ခု အပ်ပါ။
+      [[mark:l-review]] ဒုတိယ ကြည့်ရမှာက review ပါ။ agent တွေက တစ်ပြိုင်နက် အလုပ်လုပ်နိုင်ပေမဲ့၊ ရလဒ် တိုင်းကို
+      စစ်မှာက ကိုယ် တစ်ယောက်တည်းပါ။ review လုပ်ခဲ့တဲ့ task နှစ်ရဲ့ ဥပမာ summary တစ်ခုတည်းမှာတောင် ပြင်ထားတဲ့ ဖိုင်
+      ကိုးခု၊ မခိုင်းတဲ့ package နဲ့ ပြောင်းထားတဲ့ AC ကို တွေ့ခဲ့ရပါတယ်။ [[mark:l-limit]] agent များလေ စစ်ရမယ့်
+      အလုပ် များလေ ဖြစ်လို့၊ ကိုယ် review လုပ်နိုင်တဲ့ နှုန်းက တကယ့် ကန့်သတ်ချက်ပါ။ မစစ်ဘဲ ထည့်လိုက်ရင်တော့
+      မြန်သလို ထင်ရပေမဲ့ အမှားတွေကို မြန်မြန် ထည့်နေတာပဲ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices (run sessions in parallel: give each piece of work its own checkout so the edits can't collide)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "Claude Code docs: Common workflows (run parallel sessions with worktrees so concurrent edits don't collide)",
+          url: "https://code.claude.com/docs/en/common-workflows",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (evaluation: checking agent output quickly)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-l-title,
+          type: whiteboard.apply,
+          at: { mark: l-title },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l-same,
+          type: whiteboard.apply,
+          at: { mark: l-same },
+          upsertIds: [l-a2-box, l-a2, l-a4-box, l-a4, l-d1, l-d2, l-file-box, l-file],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-l-clash,
+          type: whiteboard.apply,
+          at: { mark: l-clash },
+          upsertIds: [l-clash, l-seq],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-review,
+          type: whiteboard.apply,
+          at: { mark: l-review },
+          upsertIds: [l-r-h, l-r1, l-r3, l-r-me],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-l-limit,
+          type: whiteboard.apply,
+          at: { mark: l-limit },
+          upsertIds: [l-r-x, l-r-ok],
+          drawMs: 1200,
+        }
+
+  - id: type-rules
+    narration: >
+      [[mark:close-l]] ဒီ အချက် နှစ်ခုကို plan ထဲမှာ မှတ်ထားပါမယ်။ [[mark:type-rules]] ပထမ စာကြောင်းက ဖိုင် တူတူ
+      ထိမယ့် task နှစ်ခုကို ဘယ်အစဉ်နဲ့ အပ်မလဲ ဆုံးဖြတ်ထားတာပါ။ ဒုတိယ စာကြောင်းကတော့ background က ရလဒ်တွေကို ဘယ်လို
+      လက်ခံမလဲ ဆိုတာပါ။ [[mark:sel-rule2]] review checklist က ရလဒ် တိုင်းကို တူညီတဲ့ မေးခွန်းတွေနဲ့ မြန်မြန်
+      စစ်နိုင်အောင် ကူညီပေမဲ့၊ checklist ရှိလို့ ကိုယ့် အချိန် တိုးလာတာ မဟုတ်ပါဘူး။ ဒါကြောင့် agent ထပ်တိုးချင်ရင်
+      ကိုယ့်မှာ စစ်ဖို့ အချိန် ရှိလား အရင် မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (evaluation as the orchestrator's skill)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices (separate pieces of work at once; an independent reviewer)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - { id: close-l, type: whiteboard.apply, at: { mark: close-l }, open: false }
+      - id: type-rules
+        type: editor.type
+        at: { mark: type-rules }
+        target:
+          {
+            file: docs/plan.md,
+            after: "| 6 | conductor | ပထမဆုံး server ပေါ်တင်၊ secret နဲ့ access ပါ |\n",
+            occurrence: 1,
+          }
+        text: "\n- တစ်ပြိုင်နက် အပ်တဲ့ task တွေ ဖိုင် တူတူ မထိရ — 2 နဲ့ 4 က အော်ဒါ သိမ်းတဲ့ အပိုင်းကို ထိလို့ 2 ပြီးမှ 4\n- background ရလဒ် တိုင်းကို review-checklist.md နဲ့ စစ်ပြီးမှ ထည့် — ကိုယ် စစ်နိုင်သလောက်ပဲ အပ်\n"
+        cadence: line-by-line
+      - {
+          id: expect-rules,
+          type: expect.file,
+          at: { afterAction: type-rules },
+          path: docs/plan.md,
+          contains: "- တစ်ပြိုင်နက် အပ်တဲ့ task တွေ ဖိုင် တူတူ မထိရ",
+        }
+      - {
+          id: sel-rule2,
+          type: editor.select,
+          at: { mark: sel-rule2 },
+          target:
+            {
+              file: docs/plan.md,
+              text: "- background ရလဒ် တိုင်းကို review-checklist.md နဲ့ စစ်ပြီးမှ ထည့် — ကိုယ် စစ်နိုင်သလောက်ပဲ အပ်",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ task နှစ်ခု ရှိတယ် ဆိုပါစို့။ ပထမက ခလုတ် တိုင်းမှာ မြန်မာစာရဲ့
+      အောက်မှာ English စာလုံးပါ တွဲပြဖို့ပါ။ ဒါကို ဆိုင်ပိုင်ရှင် မြမြ က ဆုံးဖြတ်ပြီးသားပါ။ ဒုတိယက customer ကို
+      ငွေ ပြန်အမ်းရမယ့် အခါတွေမှာ ဘယ်လို လုပ်မလဲ ဆုံးဖြတ်ဖို့ပါ။ ဘယ် task ကို background agent ဆီ အပ်လို့ ရလဲ။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခလုတ်တွေမှာ English တွဲပြတဲ့ ပထမ
+      task ပါ။ ဘာကြောင့်လဲဆိုတော့ ဘာလုပ်ရမလဲ ရှင်းနေပြီး၊ ခလုတ် တစ်ခုချင်းကို ဖုန်းပေါ်မှာ ကြည့်ရုံနဲ့ စစ်လို့
+      ရလို့ပါ။ ဒုတိယကတော့ code အလုပ် မဟုတ်သေးပါဘူး။ ဘယ်အခါ ပြန်အမ်းမလဲ၊ ဘယ်လောက် ပြန်အမ်းမလဲ ဆိုတာ မြမြ အရင်
+      ဆုံးဖြတ်ရမှာ ဖြစ်ပြီး၊ background ကို အပ်လိုက်ရင် agent က business rule တွေကို ခန့်မှန်းပြီး
+      ထုတ်ပေးသွားမှာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (orchestrator tasks are well-defined; ambiguous requirements need people)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1200,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ မရှင်းသေးတဲ့၊ ခက်တဲ့ အလုပ်မှာ agent တစ်ခုတည်းကို အနီးကပ် ကြည့်ပြီး
+      တစ်ဆင့်ချင်း ခိုင်းတာက conductor ဖြစ်ပြီး၊ ရှင်းပြီး စစ်လို့ရတဲ့ task တွေကို agent အများဆီ ခွဲအပ်ပြီး
+      ရလဒ်ကို စစ်တာက orchestrator ပါ။ [[mark:rc-mode]] task တိုင်းအတွက် mode ကို tool အသစ်ကြောင့် မဟုတ်ဘဲ task ကို
+      ကြည့်ပြီး ရွေးပါ။ [[mark:rc-files]] တစ်ပြိုင်နက် အပ်တဲ့ task တွေကို ဖိုင် တူတူ မထိစေပါနဲ့။
+      [[mark:rc-review]] agent တစ်ခု တိုးတိုင်း review လုပ်ရမယ့် အလုပ်လည်း တိုးလာလို့၊ ကိုယ် စစ်နိုင်တဲ့ နှုန်းက
+      အမြန်နှုန်းရဲ့ ကန့်သတ်ချက်ပါ။ နောက် lesson မှာတော့ spec၊ agent၊ test နဲ့ rule တွေ အားလုံးကို product
+      ထုတ်ပေးတဲ့ စက်ရုံ တစ်ခုလို တစ်ပုံတည်း မြင်ကြည့်ပြီး၊ customer တွေဆီ ထုတ်ပေးပြီးနောက် app ကို ဆက်ထိန်းရတဲ့
+      maintenance ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The factory model",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: rc-mode,
+          type: editor.select,
+          at: { mark: rc-mode },
+          target: { file: docs/plan.md, text: "## Mode", occurrence: 1 },
+        }
+      - {
+          id: rc-files,
+          type: editor.select,
+          at: { mark: rc-files },
+          target: { file: docs/plan.md, text: "- တစ်ပြိုင်နက် အပ်တဲ့ task တွေ ဖိုင် တူတူ မထိရ", occurrence: 1 },
+        }
+      - {
+          id: rc-review,
+          type: editor.select,
+          at: { mark: rc-review },
+          target:
+            {
+              file: docs/plan.md,
+              text: "- background ရလဒ် တိုင်းကို review-checklist.md နဲ့ စစ်ပြီးမှ ထည့်",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
