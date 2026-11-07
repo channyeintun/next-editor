@@ -1,0 +1,951 @@
+# AI Builder, lesson 17: keeping it simple (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused) +
+# docs/plan.md (COURSE-KIT §4.7, as L13 leaves it), docs/decisions.md (§4.10: ADR-001, ADR-002, as
+# L16 leaves it) and AGENTS.md (§4.4 base, as L10 leaves it). All three from tools/binder.ts. Nothing runs.
+#
+# Typed (insert-only, all from the binder): ADR-003 appended to decisions.md (block, then the
+# Consequences line selected); the line under plan.md's table that removes Task 5; AGENTS.md's
+# `## Simplicity` section (line-by-line). Final files == binder (tools/sim-docs.ts; DESIGN.md).
+#
+# Boards: (A) the same feature, changing the menu, as five parts vs two, reopened later with the
+# agent's pull towards the five-part design (violet); (Q) four questions before adding anything,
+# applied to Task 5 (green); (Z) the quiz (a message queue for 40 orders a morning).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-17-simplicity.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-17-simplicity
+  title: "AI Builder 17: ရိုးရှင်းအောင် ထိန်းခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/plan.md
+    sidebarStartsCollapsed: true
+    files:
+      AGENTS.md: |
+        # AGENTS.md · Shwe Tea House pre-order app
+
+        ## Project
+        A pre-order web app for a tea shop in Yangon. Customers order ahead and pick up at the counter.
+        Read docs/spec.md before any change. If the spec does not answer a question, stop and ask.
+
+        ## Stack
+        Plain HTML, CSS and JavaScript. No framework.
+
+        ## Rules
+        - Prices are whole kyat (integers). Never use decimals.
+        - Customer-facing text is Burmese (Unicode).
+        - Times are Asia/Yangon.
+        - Ask before adding any package.
+        - One task at a time. Keep each change small.
+
+        ## Done means
+        - The acceptance criteria named in the task pass.
+        - Summarise what you changed and what you did not do.
+      docs/decisions.md: |
+        # Decisions
+
+        ## ADR-001 · v1 မှာ ငွေကို ကောင်တာမှာပဲ ချေမယ် (2026-11-08)
+        Context — online ငွေပေးချေမှုက risk အများဆုံး၊ ကုန်ကျစရိတ် အများဆုံး။ ကောင်တာမှာ ချေတာ အခုလည်း အလုပ်ဖြစ်နေတယ်။
+        Options — online ငွေပေးချေမှု ထည့်မယ် / ကောင်တာမှာပဲ ချေမယ်
+        Decision — ကောင်တာမှာပဲ ချေမယ်။
+        Consequences — လာမယူတဲ့ အော်ဒါ ရှိနိုင်တယ်။ တစ်မနက် 5 ခုထက် များရင် ပြန်စဉ်းစားမယ်။
+
+        ## ADR-002 · database ကို ကိုယ်တိုင် မ run ဘဲ managed service သုံးမယ် (2026-11-08)
+        Context — ကိုယ်တစ်ယောက်တည်း၊ server ထိန်းဖို့ အချိန် မရှိဘူး။
+        Options — ကိုယ်ပိုင် server ပေါ်မှာ run မယ် / managed database service သုံးမယ်
+        Decision — managed service ရဲ့ free tier ကို သုံးမယ်။
+        Consequences — service ကို မှီခိုရမယ်။ backup နဲ့ export လုပ်လို့ရတာ စစ်ထားရမယ်။
+      docs/plan.md: |
+        # Plan · v1
+
+        | # | Task | Done when |
+        |---|---|---|
+        | 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |
+        | 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |
+        | 3 | ကောင်တာစာရင်း | AC-5 |
+        | 4 | နေ့စဉ် အော်ဒါနံပါတ် | Rules |
+        | 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |
+        | 6 | staging ပေါ် တင်တာ | release checklist |
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board A: changing the menu, two designs. Left (heading red): five product parts (blue boxes).
+    # Right (heading green): two parts. Orange: what every box costs. Violet (on reopen): the agent's
+    # drafts lean to the left design (a thin circle round it + three labels).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 660,
+        height: 45,
+        text: "menu ပြင်တာ · ဒီဇိုင်း နှစ်မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-l-h,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 380,
+        height: 35,
+        text: "က · admin စာမျက်နှာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-l1-box,
+        kind: rectangle,
+        x: 300,
+        y: 268,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-l1,
+        kind: text,
+        x: 318,
+        y: 275,
+        width: 320,
+        height: 36,
+        text: "admin login",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l2-box,
+        kind: rectangle,
+        x: 300,
+        y: 328,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-l2,
+        kind: text,
+        x: 318,
+        y: 335,
+        width: 320,
+        height: 36,
+        text: "menu ပြင်တဲ့ screen",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l3-box,
+        kind: rectangle,
+        x: 300,
+        y: 388,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-l3,
+        kind: text,
+        x: 318,
+        y: 395,
+        width: 320,
+        height: 36,
+        text: "server API",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l4-box,
+        kind: rectangle,
+        x: 300,
+        y: 448,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-l4,
+        kind: text,
+        x: 318,
+        y: 455,
+        width: 320,
+        height: 36,
+        text: "menu database",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-l5-box,
+        kind: rectangle,
+        x: 300,
+        y: 508,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-l5,
+        kind: text,
+        x: 318,
+        y: 515,
+        width: 320,
+        height: 36,
+        text: "ပုံ upload",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-r-h,
+        kind: text,
+        x: 720,
+        y: 222,
+        width: 370,
+        height: 35,
+        text: "ခ · menu file",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: a-r1-box,
+        kind: rectangle,
+        x: 720,
+        y: 268,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-r1,
+        kind: text,
+        x: 738,
+        y: 275,
+        width: 320,
+        height: 36,
+        text: "menu file ကို ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-r2-box,
+        kind: rectangle,
+        x: 720,
+        y: 328,
+        width: 360,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-r2,
+        kind: text,
+        x: 738,
+        y: 335,
+        width: 320,
+        height: 36,
+        text: "server ပေါ် ပြန်တင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-cost,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 780,
+        height: 35,
+        text: "box တိုင်း · ဆောက် · စစ် · ထိန်း · ပျက်နိုင်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 282,
+        y: 212,
+        width: 400,
+        height: 360,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-ag1,
+        kind: text,
+        x: 720,
+        y: 420,
+        width: 370,
+        height: 35,
+        text: "agent ရဲ့ draft တွေ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-ag2,
+        kind: text,
+        x: 720,
+        y: 465,
+        width: 370,
+        height: 35,
+        text: "က ဒီဇိုင်းဘက် ယိမ်းတတ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-ag3,
+        kind: text,
+        x: 720,
+        y: 510,
+        width: 370,
+        height: 35,
+        text: "file · အလွှာ · package",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board Q: four questions before adding anything (white), the English name of the first two ideas
+    # (orange), applied to Task 5 (green).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 660,
+        height: 45,
+        text: "တစ်ခုခု မထည့်ခင် မေးပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 560,
+        height: 40,
+        text: "1 · ဒီနေ့ တကယ် လိုလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q1-tag,
+        kind: text,
+        x: 900,
+        y: 230,
+        width: 180,
+        height: 40,
+        text: "YAGNI",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: q2,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 560,
+        height: 40,
+        text: "2 · လူသုံးများပြီးသား နည်းနဲ့ ရလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q2-tag,
+        kind: text,
+        x: 900,
+        y: 290,
+        width: 180,
+        height: 40,
+        text: "boring",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: q3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 560,
+        height: 40,
+        text: "3 · ပျက်ရင် ဘယ်သူ ပြင်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q4,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 560,
+        height: 40,
+        text: "4 · နှစ်ကြောင်းနဲ့ ရှင်းပြနိုင်လား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-apply1,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 780,
+        height: 40,
+        text: "Task 5 · menu admin → ဒီနေ့ မလို",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: q-apply2,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 780,
+        height: 40,
+        text: "တစ်နှစ် အနည်းငယ် · file ပြင်ရင် လုံလောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white, when to revisit orange).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 760,
+        height: 40,
+        text: "အော်ဒါ တစ်မနက် 40 · message queue ထည့်မလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 700,
+        height: 40,
+        text: "က · လက်ခံမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 700,
+        height: 40,
+        text: "ခ · မလက်ခံဘူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 760,
+        height: 45,
+        text: "အဖြေ · ခ — database table နဲ့ လုံလောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 472,
+        width: 760,
+        height: 40,
+        text: "box တစ်ခု တိုး · ဒီနေ့ ပြဿနာ မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-later,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 760,
+        height: 40,
+        text: "အော်ဒါ အဆ 100 များလာမှ ပြန်စဉ်းစား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6117
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Task 5 တကယ် လိုလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ option တွေကို ချိန်ပြီး၊ ငွေကို ကောင်တာမှာပဲ ချေမယ်၊ database ကို managed service နဲ့
+      သုံးမယ် ဆိုတဲ့ ဆုံးဖြတ်ချက်တွေကို decision record အဖြစ် ရေးခဲ့ပါတယ်။ ဒီနေ့ ဆုံးဖြတ်ချက် တစ်မျိုးကို
+      ထပ်ကြည့်ပါမယ်။ ဘာ ထပ်ထည့်မလဲ ဆိုတာထက်၊ ဘာကို မထည့်ဘဲ ထားခဲ့မလဲ ဆိုတဲ့ ဆုံးဖြတ်ချက်ပါ။ [[mark:sel-task5]]
+      ကိုယ်တို့ရဲ့ plan မှာ task ခြောက်ခု ရှိပြီး၊ ပဉ္စမ task က menu ပြင်ဖို့ admin စာမျက်နှာပါ။ admin စာမျက်နှာ
+      ဆိုတာ customer တွေ မမြင်ရဘဲ ဆိုင်ဘက်က လူတွေပဲ ဝင်သုံးတဲ့ စာမျက်နှာပါ။ plan ထဲ ရောက်နေပြီ ဆိုတော့
+      ဆောက်ရမယ်လို့ ထင်စရာ ရှိပါတယ်။ ဒါပေမဲ့ agent ဆီ မအပ်ခင် ဒါ တကယ် လိုလား လို့ အရင် မေးကြည့်ရပါမယ်။
+      [[mark:complexity]] ဘာကြောင့်လဲဆိုတော့ software ရဲ့ အကြီးဆုံး ကုန်ကျစရိတ် တစ်ခုက ဆောက်တဲ့ နေ့မှာ မပေါ်ဘဲ
+      နောက်မှ ပေါ်လာလို့ပါ။ အစိတ်အပိုင်း တစ်ခု ထပ်ထည့်တိုင်း app ကို နားလည်ရ၊ ပြင်ရ ပိုခက်လာပါတယ်။ ရွေ့လျားနေတဲ့
+      အစိတ်အပိုင်း များလေ နားလည်ရ ခက်လေ ဖြစ်တာကို complexity လို့ ခေါ်ပါတယ်။ app တစ်ခုကို နှစ်ရှည် ထိန်းတဲ့အခါ
+      အဓိက ကုန်ကျစရိတ်က ဒီ complexity ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development (the maintenance tax)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Martin Fowler: Yagni (the cost of carry: added complexity makes software harder to modify and debug)",
+          url: "https://martinfowler.com/bliki/Yagni.html",
+        }
+      - {
+          title: "Google SRE book: Simplicity (accidental complexity; every new line of code is a liability)",
+          url: "https://sre.google/sre-book/simplicity/",
+        }
+    actions:
+      - {
+          id: sel-task5,
+          type: editor.select,
+          at: { mark: sel-task5 },
+          target:
+            { file: docs/plan.md, text: "| 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |", occurrence: 1 },
+        }
+
+  - id: two-designs
+    chapter: ငါးခုလား၊ နှစ်ခုလား
+    narration: >
+      [[mark:a-open]] menu ပြင်တဲ့ အလုပ် တစ်ခုတည်းကို ဒီဇိုင်း နှစ်မျိုးနဲ့ ဆွဲကြည့်ရအောင်။ [[mark:a-left]] ပထမ
+      ဒီဇိုင်းမှာ ဆိုင်ပိုင်ရှင် မြမြ ဝင်ဖို့ login၊ menu ပြင်တဲ့ screen၊ ပြင်လိုက်တာကို server ဆီ ပို့ပေးမယ့်
+      API၊ menu ကို သိမ်းမယ့် database နဲ့ ပုံတင်ဖို့ upload ဆိုပြီး အစိတ်အပိုင်း ငါးခု ပါပါတယ်။ ပြည့်စုံပြီး
+      ကြည့်ကောင်းပါတယ်။ [[mark:a-right]] ဒုတိယ ဒီဇိုင်းမှာတော့ ဈေးနှုန်း တစ်ခု ပြောင်းချင်ရင် menu ရေးထားတဲ့ file
+      ကို ပြင်ပြီး app ကို server ပေါ် ပြန်တင်လိုက်ရုံပါပဲ။ အစိတ်အပိုင်း နှစ်ခုပဲ ရှိပါတယ်။ [[mark:a-cost]] box
+      တစ်ခုချင်းစီက ဆောက်ရ၊ စစ်ရ၊ နှစ်တိုင်း ထိန်းရပြီး၊ တစ်နေ့နေ့ ပျက်နိုင်တဲ့ နေရာ တစ်ခုပါ။ login ပါလာရင်
+      password ကို လုံခြုံအောင် ထားရတဲ့ အလုပ်ပါ ထပ်ပါလာပါတယ်။ ဒါကြောင့် ရွေ့လျားနေတဲ့ အစိတ်အပိုင်း နည်းလေ၊ ပျက်စရာ
+      နည်းလေ ဖြစ်ပါတယ်။ ဒုတိယ ဒီဇိုင်းက ညံ့လို့ ရိုးနေတာ မဟုတ်ပါဘူး။ ဒီနေ့ လိုတာနဲ့ ကိုက်အောင် ရွေးထားတာပါ။
+    sources:
+      - {
+          title: "Google SRE book: Simplicity (every line of code changed or added creates the potential for new defects)",
+          url: "https://sre.google/sre-book/simplicity/",
+        }
+      - {
+          title: "Dan McKinley: Choose Boring Technology (every added technology brings operations and cognitive overhead)",
+          url: "https://mcfunley.com/choose-boring-technology",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { mark: a-open },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - {
+          id: draw-a-left,
+          type: whiteboard.apply,
+          at: { mark: a-left },
+          upsertIds:
+            [a-l-h, a-l1-box, a-l1, a-l2-box, a-l2, a-l3-box, a-l3, a-l4-box, a-l4, a-l5-box, a-l5],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-a-right,
+          type: whiteboard.apply,
+          at: { mark: a-right },
+          upsertIds: [a-r-h, a-r1-box, a-r1, a-r2-box, a-r2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-a-cost,
+          type: whiteboard.apply,
+          at: { mark: a-cost },
+          upsertIds: [a-cost],
+          drawMs: 1000,
+        }
+
+  - id: questions
+    chapter: မထည့်ခင် မေးစရာ လေးခု
+    narration: >
+      [[mark:q-open]] ဒါဆို တစ်ခုခု ထပ်ထည့်ခါနီးတိုင်း မေးရမယ့် မေးခွန်း လေးခုကို ကြည့်ရအောင်။ [[mark:q-1]] ပထမက
+      ဒီနေ့ တကယ် လိုနေတာလား၊ တစ်နေ့ လိုလာနိုင်တာလား ဆိုတာပါ။ developer တွေက ဒီ အယူအဆကို YAGNI လို့ ခေါ်ကြပါတယ်။
+      နောက်မှ လိုမယ် ထင်တာကို ကြိုမဆောက်နဲ့ ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ကြိုဆောက်ထားတာက တကယ် မလိုဘဲ ဖြစ်သွားနိုင်သလို၊
+      လိုလာတဲ့ အချိန်အထိလည်း ထိန်းထားရတဲ့ ဝန် ဖြစ်နေလို့ပါ။ [[mark:q-2]] ဒုတိယက လူအများ သုံးနေပြီးသား နည်းနဲ့
+      ရနိုင်လား ဆိုတာပါ။ ဒီလို နည်းတွေကို boring technology လို့ ခေါ်ကြပါတယ်။ ဆန်းသစ်မှု မရှိပေမဲ့၊ ဘယ်လို
+      ပျက်တတ်လဲ၊ ပျက်ရင် ဘယ်လို ပြင်ရလဲ ဆိုတာ လူအများ သိပြီးသား ဖြစ်နေပါတယ်။ [[mark:q-3]] တတိယက ဒါ ပျက်သွားရင်
+      ဘယ်သူ ပြင်မလဲ ဆိုတာပါ။ ကိုယ်တို့ project မှာ ပြင်ရမယ့်သူက ကိုယ် တစ်ယောက်တည်းပါ။ [[mark:q-4]] နောက်ဆုံးက
+      ဒါကို ကိုယ် နှစ်ကြောင်းနဲ့ ရှင်းပြနိုင်လား ဆိုတာပါ။ ကိုယ် ရှင်းမပြနိုင်တဲ့ system ကို ပျက်တဲ့နေ့မှာ ကိုယ်
+      ပြင်လို့ မရပါဘူး။ agent ကို ပြင်ခိုင်းရင်တောင် agent ပြင်လိုက်တာ မှန်မမှန် ကိုယ် စစ်နိုင်ရပါမယ်။
+      [[mark:q-apply]] admin စာမျက်နှာကို ဒီ မေးခွန်းတွေနဲ့ စစ်ကြည့်ရအောင်။ မြမြ ရဲ့ အပြောအရ menu ကို တစ်နှစ်မှာ
+      အနည်းငယ်ပဲ ပြင်ပါတယ်။ ဒါကြောင့် ဒီနေ့ မလိုပါဘူး။ file ပြင်တာကတော့ လူတိုင်း သိတဲ့ နည်း ဖြစ်ပြီး၊ ကိုယ်
+      တစ်ယောက်တည်း ပြင်နိုင်သလို၊ နှစ်ကြောင်းနဲ့လည်း ရှင်းပြလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Martin Fowler: Yagni (presumptive features; cost of build and cost of carry)",
+          url: "https://martinfowler.com/bliki/Yagni.html",
+        }
+      - {
+          title: "Dan McKinley: Choose Boring Technology (failure modes are well understood)",
+          url: "https://mcfunley.com/choose-boring-technology",
+        }
+      - {
+          title: "Google Engineering Practices: What to look for in a code review (complexity; over-engineering)",
+          url: "https://google.github.io/eng-practices/review/reviewer/looking-for.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (code nobody understands becomes a debugging cost)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-q,
+          type: whiteboard.apply,
+          at: { mark: q-open },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+        }
+      - {
+          id: draw-q1,
+          type: whiteboard.apply,
+          at: { mark: q-1 },
+          upsertIds: [q1, q1-tag],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q2,
+          type: whiteboard.apply,
+          at: { mark: q-2 },
+          upsertIds: [q2, q2-tag],
+          drawMs: 1200,
+        }
+      - { id: draw-q3, type: whiteboard.apply, at: { mark: q-3 }, upsertIds: [q3], drawMs: 900 }
+      - { id: draw-q4, type: whiteboard.apply, at: { mark: q-4 }, upsertIds: [q4], drawMs: 900 }
+      - {
+          id: draw-q-apply,
+          type: whiteboard.apply,
+          at: { mark: q-apply },
+          upsertIds: [q-apply1, q-apply2],
+          drawMs: 1600,
+        }
+
+  - id: adr
+    narration: >
+      [[mark:close-q]] ဒီ ဆုံးဖြတ်ချက်ကလည်း trade off တစ်ခုပါပဲ။ ဒါကြောင့် ပြီးခဲ့တဲ့ lesson ကလို decision record
+      အဖြစ် မှတ်ထားပါမယ်။ [[mark:open-dec]] decisions ဖိုင်မှာ record နှစ်ခု ရှိပြီးသားပါ။ [[mark:type-adr3]] တတိယ
+      record က Task ငါး ကို ဘာကြောင့် မဆောက်တော့လဲ ဆိုတာကို ရက်စွဲနဲ့ တကွ မှတ်ထားတာပါ။ ဒီ record မှာ Options
+      အပိုင်း သီးသန့် မပါပါဘူး။ ခေါင်းစဉ်က မဆောက်တော့တဲ့ admin စာမျက်နှာကို ပြောပြီး၊ Decision က ရွေးလိုက်တဲ့
+      လမ်းကို ပြောထားလို့ လမ်း နှစ်ခုလုံး ပါပြီးသားပါ။ [[mark:sel-cons]] အရေးကြီးဆုံးက နောက်ဆုံး စာကြောင်းပါ။
+      ရိုးရှင်းတဲ့ ရွေးချယ်မှုမှာလည်း ပေးရတဲ့ အရာ ရှိပါတယ်။ menu ပြောင်းချင်တိုင်း မြမြ က ကိုယ့်ကို ပြောရပါမယ်။
+      ပြီးတော့ ပြင်ရတာ ခဏခဏ ဖြစ်လာတဲ့ နေ့မှာ ဒီ ဆုံးဖြတ်ချက်ကို ပြန်ဖွင့်ဖို့ အမှတ်အသားကိုလည်း ကြိုရေးထားပါတယ်။
+      ဆိုလိုတာက YAGNI က ဘယ်တော့မှ မဆောက်ဘူး လို့ ပြောတာ မဟုတ်ဘဲ၊ တကယ် လိုတဲ့ နေ့ကျမှ ဆောက်မယ် လို့ ပြောတာပါ။
+    sources:
+      - {
+          title: "Martin Fowler: Yagni (build the capability when the need is real)",
+          url: "https://martinfowler.com/bliki/Yagni.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture are trade-offs)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-q, type: whiteboard.apply, at: { mark: close-q }, open: false }
+      - { id: open-dec, type: workspace.openFile, at: { mark: open-dec }, path: docs/decisions.md }
+      - id: type-adr3
+        type: editor.type
+        at: { mark: type-adr3 }
+        target: { file: docs/decisions.md, after: "export လုပ်လို့ရတာ စစ်ထားရမယ်။\n", occurrence: 1 }
+        text: "\n## ADR-003 · menu ပြင်ဖို့ admin စာမျက်နှာ မဆောက်ဘူး (2026-11-08)\nContext — menu ကို တစ်နှစ်မှာ အနည်းငယ်ပဲ ပြင်တယ်။\nDecision — menu file ကို ပြင်ပြီး ပြန်တင်မယ်။\nConsequences — မြမြ ကိုယ်တိုင် မပြင်နိုင်ဘူး။ တစ်လ တစ်ခါထက် ပိုပြင်ရရင် ပြန်စဉ်းစားမယ်။\n"
+        cadence: block
+      - {
+          id: expect-adr3,
+          type: expect.file,
+          at: { afterAction: type-adr3 },
+          path: docs/decisions.md,
+          contains: "## ADR-003 · menu ပြင်ဖို့ admin စာမျက်နှာ မဆောက်ဘူး (2026-11-08)",
+        }
+      - {
+          id: sel-cons,
+          type: editor.select,
+          at: { mark: sel-cons },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "Consequences — မြမြ ကိုယ်တိုင် မပြင်နိုင်ဘူး။ တစ်လ တစ်ခါထက် ပိုပြင်ရရင် ပြန်စဉ်းစားမယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: plan-line
+    narration: >
+      [[mark:open-plan]] plan ဆီ ပြန်သွားရအောင်။ [[mark:type-plan-line]] table ထဲက Task ငါး ရဲ့ အတန်းကို
+      တိတ်တိတ်လေး ဖျက်မပစ်ဘဲ၊ table အောက်မှာ ဘာကြောင့် ဖယ်လဲ ဆိုတဲ့ မှတ်ချက် တစ်ကြောင်းနဲ့ ခုနက record ကို
+      ညွှန်ထားပါမယ်။ ဒါမှ နောက်မှ ဒီ plan ကို ဖတ်တဲ့ agent ပဲ ဖြစ်ဖြစ်၊ ကိုယ်ကိုယ်တိုင်ပဲ ဖြစ်ဖြစ်၊ Task ငါး ကို
+      ဘာကြောင့် ကျော်လဲ ဆိုတာ ရှာတွေ့ပါမယ်။ [[mark:remove]] ဖယ်တာကလည်း engineer ရဲ့ အလုပ် တစ်ခုပါ။ ဆောက်ပြီးမှ
+      ဖယ်တာထက် မဆောက်ခင် ဖယ်တာက အသက်သာဆုံးပါ။ app ထဲမှာလည်း မသုံးတော့တဲ့ file တွေ၊ feature တွေနဲ့၊ ကိုယ် မရေးဘဲ
+      ယူသုံးထားတဲ့ တခြားသူ့ code ဖြစ်တဲ့ package တွေကို တွေ့ရင် agent ကို ဖယ်ခိုင်းပါ။ code တစ်ကြောင်းတိုင်းက
+      ပျက်နိုင်တဲ့ နေရာ ဖြစ်ပြီး ထိန်းရမယ့် ဝန်လည်း ဖြစ်လို့ပါ။
+    sources:
+      - {
+          title: "Google SRE book: Simplicity (remove dead code; negative lines of code)",
+          url: "https://sre.google/sre-book/simplicity/",
+        }
+      - { title: "Martin Fowler: Yagni", url: "https://martinfowler.com/bliki/Yagni.html" }
+    actions:
+      - { id: open-plan, type: workspace.openFile, at: { mark: open-plan }, path: docs/plan.md }
+      - id: type-plan-line
+        type: editor.type
+        at: { mark: type-plan-line }
+        target:
+          {
+            file: docs/plan.md,
+            after: "| 6 | staging ပေါ် တင်တာ | release checklist |\n",
+            occurrence: 1,
+          }
+        text: "\n- Task 5 ကို ဖယ်လိုက်ပြီ — menu ကို တစ်နှစ် အနည်းငယ်ပဲ ပြင်လို့ file ထဲမှာ ပြင်တာနဲ့ လုံလောက်တယ် (decisions.md ADR-003)\n"
+        cadence: line-by-line
+      - {
+          id: expect-plan-line,
+          type: expect.file,
+          at: { afterAction: type-plan-line },
+          path: docs/plan.md,
+          contains: "- Task 5 ကို ဖယ်လိုက်ပြီ — menu ကို တစ်နှစ် အနည်းငယ်ပဲ ပြင်လို့",
+        }
+
+  - id: agents-add
+    chapter: AGENTS.md မှာ စည်း ထည့်ရအောင်
+    narration: >
+      [[mark:a-reopen]] ဒီဇိုင်း နှစ်မျိုးကို ပြန်ကြည့်ရအောင်။ Task ငါး ကို plan ထဲ ထည့်ခဲ့တာ ကိုယ်တို့
+      ကိုယ်တိုင်ပါ။ [[mark:a-agent]] agent တွေ ဘက်ကလည်း ဒီလိုပဲ ထပ်ထည့်တတ်ပါတယ်။ menu ပြင်တဲ့ စာမျက်နှာ လုပ်ပေးပါ
+      လို့ ပြောလိုက်ရင်၊ ပထမ ဒီဇိုင်းလို ပြည့်စုံပုံ ပေါ်တဲ့ ဟာမျိုးကို ထုတ်ပေးတတ်ပါတယ်။ မခိုင်းထားတဲ့ file
+      အသစ်တွေ၊ မလိုတဲ့ အလွှာတွေ၊ နောက်မှ သုံးချင်သုံးမယ့် option တွေ၊ package အသစ်တွေ ပါလာတတ်ပါတယ်။ agent အတွက်
+      ထပ်ထည့်ရတာ မြန်ပေမဲ့၊ ထည့်ထားတဲ့ အရာ တိုင်းကို နောက် နှစ်တွေမှာ ထိန်းရမှာက ကိုယ်ပါ။ [[mark:close-a]]
+      ဒါကြောင့် ရိုးရှင်းအောင် ထိန်းတဲ့ စည်းကို agent ရှေ့မှာ အမြဲ ရှိနေအောင် AGENTS.md ထဲ ထည့်ပါမယ်။
+      [[mark:open-agents]] ဒါက agent နဲ့ အလုပ် စတိုင်း agent အရင် ဖတ်တဲ့ rule file ပါ။ [[mark:type-simple]]
+      အပိုင်း အသစ် တစ်ခု ထည့်ပါမယ်။ ဒီ ဖိုင်ထဲမှာ ရိုးရှင်းအောင် ထိန်းဖို့ သီးသန့် နေရာပါ။ [[mark:sel-simplest]]
+      ပထမ စာကြောင်းက agent ရဲ့ ရွေးချယ်မှုကို spec အတွက် လိုတာလောက်နဲ့ နယ်သတ်ပေးပြီး၊ အသစ် ထည့်တဲ့ file နဲ့ အလွှာ
+      တိုင်းအတွက် အကြောင်းပြချက် တောင်းထားတာပါ။ ဒါမှ ဘာကြောင့် ထည့်လဲ ဆိုတာ ကိုယ် ဖတ်ပြီး ဆုံးဖြတ်နိုင်ပါမယ်။
+    sources:
+      - {
+          title: "Claude docs: Prompting best practices, Overeagerness (extra files, unnecessary abstractions, flexibility that wasn't requested)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80 % problem: decisions that add maintenance burden)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: reopen-a,
+          type: whiteboard.apply,
+          at: { mark: a-reopen },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              a-title,
+              a-l-h,
+              a-l1-box,
+              a-l1,
+              a-l2-box,
+              a-l2,
+              a-l3-box,
+              a-l3,
+              a-l4-box,
+              a-l4,
+              a-l5-box,
+              a-l5,
+              a-r-h,
+              a-r1-box,
+              a-r1,
+              a-r2-box,
+              a-r2,
+              a-cost,
+            ],
+        }
+      - {
+          id: draw-a-agent,
+          type: whiteboard.apply,
+          at: { mark: a-agent },
+          upsertIds: [a-circle, a-ag1, a-ag2, a-ag3],
+          drawMs: 2200,
+        }
+      - { id: close-a, type: whiteboard.apply, at: { mark: close-a }, open: false }
+      - { id: open-agents, type: workspace.openFile, at: { mark: open-agents }, path: AGENTS.md }
+      - id: type-simple
+        type: editor.type
+        at: { mark: type-simple }
+        target:
+          {
+            file: AGENTS.md,
+            after: "- Summarise what you changed and what you did not do.\n",
+            occurrence: 1,
+          }
+        text: "\n## Simplicity\n- Choose the simplest approach that meets the spec. Explain any new file or layer.\n- No new dependency, service or abstraction without asking first.\n"
+        cadence: line-by-line
+      - {
+          id: expect-simple,
+          type: expect.file,
+          at: { afterAction: type-simple },
+          path: AGENTS.md,
+          contains: "- No new dependency, service or abstraction without asking first.",
+        }
+      - {
+          id: sel-simplest,
+          type: editor.select,
+          at: { mark: sel-simplest },
+          target:
+            {
+              file: AGENTS.md,
+              text: "- Choose the simplest approach that meets the spec. Explain any new file or layer.",
+              occurrence: 1,
+            },
+        }
+
+  - id: dependency
+    narration: >
+      [[mark:sel-dep]] ဒုတိယ စာကြောင်းကို ကြည့်ပါ။ dependency ဆိုတာ project က မှီခိုသုံးနေတဲ့ တခြားသူ့ code ပါ။
+      package အတွက် အရင် မေးဖို့ rule ရှိပြီးသား ဖြစ်ပေမဲ့၊ ဒီ စာကြောင်းက အဲဒီ စည်းကို အပြင်က service တွေ၊ code
+      ထဲက အလွှာ အသစ်တွေ အထိ ချဲ့ထားတာပါ။ ဒီတော့ project ကို ကြီးစေမယ့် ဆုံးဖြတ်ချက် တိုင်းက ကိုယ့်ဆီ
+      ပြန်ရောက်လာပါတယ်။ agent ဆီ task တစ်ခု အပ်တဲ့အခါမှာလည်း plan ကို လက်မခံခင်၊ အရိုးဆုံး နည်းက ဘာလဲ၊ ဘာကြောင့်
+      ဒီထက် ရှုပ်တဲ့ နည်းကို ရွေးလဲ လို့ မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Claude docs: Prompting best practices, Overeagerness (add guidance to keep solutions minimal)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+      - {
+          title: "Google Engineering Practices: What to look for in a code review (solve the problem known now)",
+          url: "https://google.github.io/eng-practices/review/reviewer/looking-for.html",
+        }
+    actions:
+      - {
+          id: sel-dep,
+          type: editor.select,
+          at: { mark: sel-dep },
+          target:
+            {
+              file: AGENTS.md,
+              text: "- No new dependency, service or abstraction without asking first.",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နောက်တစ်ပတ်မှာ agent က plan တစ်ခု ပြန်ပေးတယ် ဆိုပါစို့။ အော်ဒါ
+      မပျောက်အောင် message queue တစ်ခု ထည့်မယ် လို့ ပါလာပါတယ်။ message queue ဆိုတာ အော်ဒါ လို စာတွေကို တန်းစီ
+      သိမ်းထားပြီး တစ်ခုချင်း ထုတ်ပေးတဲ့ သီးသန့် system တစ်ခုပါ။ ကိုယ်တို့ ဆိုင်မှာ ကြိုမှာမယ့် အော်ဒါက တစ်မနက်
+      လေးဆယ်လောက် ရှိမယ်လို့ ခန့်မှန်းထားပါတယ်။ ဒီ plan ကို လက်ခံမလား၊ မလက်ခံဘူးလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ မလက်ခံပါဘူး။ ဘာကြောင့်လဲဆိုတော့ တစ်မနက် အော်ဒါ လေးဆယ်ဆိုတာ
+      ရှိပြီးသား database ထဲက ဇယား တစ်ခု၊ table တစ်ခုက ဘာမှ ထပ်မထည့်ဘဲ သိမ်းနိုင်တဲ့ အရေအတွက် ဖြစ်လို့ပါ။
+      requirements ထဲက assumption မှာလည်း တစ်မနက် ငါးဆယ်ထက် မများဘူး လို့ ရေးထားပါတယ်။ queue ထည့်လိုက်ရင် ဆောက်ရ၊
+      ထိန်းရ၊ ပျက်နိုင်တဲ့ box တစ်ခု တိုးလာပေမဲ့၊ ဒီနေ့ ဖြေရှင်းပေးမယ့် ပြဿနာ မရှိပါဘူး။ [[mark:quiz-later]]
+      ဒါပေမဲ့ ဘယ်တော့မှ မလိုဘူး လို့ ပြောတာ မဟုတ်ပါဘူး။ အော်ဒါတွေ အဆ တစ်ရာလောက် များလာတဲ့ နေ့ကျမှ ပြန်စဉ်းစားပါ။
+      အခုတော့ agent ကို အရိုးဆုံး နည်းနဲ့ plan ကို ပြန်ပေးခိုင်းပါ။
+    sources:
+      - {
+          title: "AWS: What is a message queue? (asynchronous service-to-service communication)",
+          url: "https://aws.amazon.com/message-queue/",
+        }
+      - { title: "Martin Fowler: Yagni", url: "https://martinfowler.com/bliki/Yagni.html" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-quiz-later,
+          type: whiteboard.apply,
+          at: { mark: quiz-later },
+          upsertIds: [z-later],
+          drawMs: 1000,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ ထည့်လိုက်တဲ့ အစိတ်အပိုင်း တိုင်းက ဆောက်တဲ့ နေ့ထက် ထိန်းရတဲ့
+      နှစ်တွေမှာ ပိုကုန်ပါတယ်။ [[mark:r-simple]] agent တွေက ထပ်ထည့်တတ်လို့ AGENTS.md ထဲမှာ အရိုးဆုံး နည်းကို
+      ရွေးခိုင်းပြီး၊ အသစ် တစ်ခုခု ထည့်ခါနီးတိုင်း ကိုယ့်ကို မေးခိုင်းထားပါ။ [[mark:r-adr]] မထည့်ဘူး ဆိုတဲ့
+      ဆုံးဖြတ်ချက်ကိုလည်း ပြန်စဉ်းစားမယ့် အချိန်နဲ့ တွဲပြီး မှတ်ထားပါ။ [[mark:r-plan]] မလိုတာကို မဆောက်ခင် ဖယ်ပါ။
+      ကိုယ် ရှင်းမပြနိုင်တဲ့ အရာကို project ထဲ မထည့်ပါနဲ့။ နောက် lesson မှာတော့ app ရဲ့ ပထမ version ကို တကယ်
+      စမ်းကြည့်ပြီး၊ အလုပ်လုပ်နေတာနဲ့ မှန်နေတာ ဘာကွာလဲ ဆိုတာ လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: r-simple,
+          type: editor.select,
+          at: { mark: r-simple },
+          target: { file: AGENTS.md, text: "## Simplicity", occurrence: 1 },
+        }
+      - { id: r-adr, type: workspace.openFile, at: { mark: r-adr }, path: docs/decisions.md }
+      - {
+          id: r-adr-sel,
+          type: editor.select,
+          at: { afterAction: r-adr },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "## ADR-003 · menu ပြင်ဖို့ admin စာမျက်နှာ မဆောက်ဘူး (2026-11-08)",
+              occurrence: 1,
+            },
+        }
+      - { id: r-plan, type: workspace.openFile, at: { mark: r-plan }, path: docs/plan.md }
+      - {
+          id: r-plan-sel,
+          type: editor.select,
+          at: { afterAction: r-plan },
+          target: { file: docs/plan.md, text: "- Task 5 ကို ဖယ်လိုက်ပြီ", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
