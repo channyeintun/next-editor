@@ -1,0 +1,1069 @@
+# AI Builder, lesson 12: working with people (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md) and docs/updates.md
+# pinned with only its title line. Nothing runs. The lesson writes docs/updates.md (lesson-local,
+# COURSE-KIT §4.6 outline; full text in _updates-final.md): a weekly status update to မြမြ (Done ·
+# Next · Blocked / need from you · Decision needed · delivery) and one question for လှလှ.
+#
+# Boards: (T) the people around the app — မြမြ (business), လှလှ (the counter), the customers — with the
+# builder (orange) in the middle translating, and the agent (violet) that only gets what the builder
+# writes; then the rule "ask instead of guessing"; (O) မြမြ asks for delivery by Friday: red "no" and
+# red "yes" vs green "two options with costs" + a question back; (F) feedback on the person (red) vs on
+# the work (green); (Z) the quiz (which bad-news message to send on Wednesday).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-12-working-with-people.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-12-working-with-people
+  title: "AI Builder 12: လူတွေနဲ့ ဆက်သွယ် ပြောဆိုခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/updates.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/updates.md: |+
+        # Updates · 2026-11-08
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board T: three groups of people at the corners (white), the builder in the middle (orange, this
+    # lesson's step), the agent to the right of the builder (violet), the ask rule at the bottom (orange).
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 640,
+        height: 50,
+        text: "ဘယ်သူ့အတွက်၊ ဘယ်သူနဲ့ ဆောက်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-mm-box,
+        kind: rectangle,
+        x: 400,
+        y: 222,
+        width: 600,
+        height: 92,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-mm,
+        kind: text,
+        x: 420,
+        y: 230,
+        width: 560,
+        height: 40,
+        text: "မြမြ · ဆိုင်ပိုင်ရှင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-mm-w,
+        kind: text,
+        x: 420,
+        y: 270,
+        width: 560,
+        height: 40,
+        text: "customer မပြန်သွား · ကုန်ကျစရိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-hla-box,
+        kind: rectangle,
+        x: 270,
+        y: 470,
+        width: 400,
+        height: 92,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-hla,
+        kind: text,
+        x: 290,
+        y: 478,
+        width: 360,
+        height: 40,
+        text: "လှလှ · ကောင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-hla-w,
+        kind: text,
+        x: 290,
+        y: 518,
+        width: 360,
+        height: 40,
+        text: "ရှုပ်ချိန် ဖုန်း မကြည့်အား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-cust-box,
+        kind: rectangle,
+        x: 700,
+        y: 470,
+        width: 390,
+        height: 92,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-cust,
+        kind: text,
+        x: 720,
+        y: 478,
+        width: 350,
+        height: 40,
+        text: "အောင်အောင်၊ မောင်မောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-cust-w,
+        kind: text,
+        x: 720,
+        y: 518,
+        width: 350,
+        height: 40,
+        text: "အလုပ်၊ ကျောင်း မနောက်ကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-me-box,
+        kind: rectangle,
+        x: 520,
+        y: 350,
+        width: 240,
+        height: 64,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-me,
+        kind: text,
+        x: 538,
+        y: 362,
+        width: 215,
+        height: 40,
+        text: "ကိုယ် · builder",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-ar,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 766,
+        y: 362,
+        width: 44,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-agent-box,
+        kind: rectangle,
+        x: 816,
+        y: 350,
+        width: 150,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-agent,
+        kind: text,
+        x: 850,
+        y: 362,
+        width: 100,
+        height: 40,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: t-hla-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 255,
+        y: 458,
+        width: 430,
+        height: 116,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-ask,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 620,
+        height: 40,
+        text: "ခန့်မှန်းမယ့်အစား သိတဲ့သူကို မေး",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board O: မြမြ's request; left (red): two bad replies; right (green): two options with their
+    # costs in boxes, the question back (orange) and who decides (white).
+    - {
+        id: o-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 640,
+        height: 45,
+        text: "မြမြ · သောကြာနေ့ delivery ရမလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: o-no-h,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 330,
+        height: 45,
+        text: "မဖြစ်နိုင်ဘူး",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: o-no-1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 340,
+        height: 40,
+        text: "ဘာကြောင့်လဲ မပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-no-2,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 340,
+        height: 40,
+        text: "ရွေးစရာ မကျန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-yes-h,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 330,
+        height: 45,
+        text: "ရပါတယ် (ကတိ)",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: o-yes-1,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 340,
+        height: 40,
+        text: "သောကြာနေ့ မပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-yes-2,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 340,
+        height: 40,
+        text: "သတင်းဆိုး ပိုဆိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-opt-h,
+        kind: text,
+        x: 640,
+        y: 230,
+        width: 440,
+        height: 45,
+        text: "ရွေးစရာ နှစ်ခု",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: o-a-box,
+        kind: rectangle,
+        x: 640,
+        y: 282,
+        width: 450,
+        height: 92,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-a1,
+        kind: text,
+        x: 658,
+        y: 290,
+        width: 420,
+        height: 40,
+        text: "A · delivery အခု ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-a2,
+        kind: text,
+        x: 658,
+        y: 330,
+        width: 420,
+        height: 40,
+        text: "v1 +2 ပတ် · rider လို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-b-box,
+        kind: rectangle,
+        x: 640,
+        y: 390,
+        width: 450,
+        height: 92,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-b1,
+        kind: text,
+        x: 658,
+        y: 398,
+        width: 420,
+        height: 40,
+        text: "B · pickup အရင် · ရက်မရွှေ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-b2,
+        kind: text,
+        x: 658,
+        y: 438,
+        width: 420,
+        height: 40,
+        text: "delivery ကို v1 နောက်မှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-ask,
+        kind: text,
+        x: 640,
+        y: 505,
+        width: 450,
+        height: 40,
+        text: "ဘာက ပိုအရေးကြီးလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: o-who,
+        kind: text,
+        x: 640,
+        y: 560,
+        width: 450,
+        height: 40,
+        text: "ဆုံးဖြတ်တာ မြမြ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board F: feedback. Red column: words about the person; green column: what happened and what it
+    # caused; orange: the question to ask; green bottom line: praise the work precisely.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 640,
+        height: 50,
+        text: "feedback · လူကို မဟုတ် အလုပ်ကို",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-h1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 340,
+        height: 45,
+        text: "လူကို ပြော",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: f-p1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 340,
+        height: 40,
+        text: "လှလှ ဂရုမစိုက်ဘူး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-h2,
+        kind: text,
+        x: 640,
+        y: 230,
+        width: 450,
+        height: 45,
+        text: "အလုပ်ကို ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: f-w1,
+        kind: text,
+        x: 640,
+        y: 290,
+        width: 450,
+        height: 40,
+        text: "8:00 အော်ဒါ လွတ်သွား",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-w2,
+        kind: text,
+        x: 640,
+        y: 335,
+        width: 450,
+        height: 40,
+        text: "customer 10 မိနစ် စောင့်ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-why,
+        kind: text,
+        x: 640,
+        y: 395,
+        width: 450,
+        height: 40,
+        text: "ဘာက ခက်ခဲခဲ့လဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-p2,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 340,
+        height: 40,
+        text: "ကြိုက်လား?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-w3,
+        kind: text,
+        x: 640,
+        y: 465,
+        width: 450,
+        height: 40,
+        text: "ဘယ်အဆင့်မှာ ရှုပ်သွားလဲ?",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: f-praise,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 640,
+        height: 40,
+        text: "ကောင်းတာကိုလည်း တိတိကျကျ ပြော",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, two options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 680,
+        height: 45,
+        text: "ဗုဒ္ဓဟူး · order form နောက်ကျမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 680,
+        height: 40,
+        text: "မြမြ ဆီ ဘယ် message ပို့မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 680,
+        height: 40,
+        text: "က · နောက်ကျမယ်၊ တောင်းပန်ပါတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 680,
+        height: 40,
+        text: "ခ · တနင်္လာနေ့ ရမယ် + အကြောင်းရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 680,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 760,
+        height: 40,
+        text: "ရက်သစ် · အကြောင်းရင်း → မြမြ ဆုံးဖြတ်နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6112
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: ဘယ်သူတွေနဲ့ ဆောက်လဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ agent ကို order form task အပ်ဖို့ brief ရေးပြီး၊ မသေချာရင် ရပ်ပြီး မေးဖို့
+      ပြောခဲ့ပါတယ်။ ဒါပေမဲ့ အဲဒီ မေးခွန်းတွေရဲ့ အဖြေက agent ဆီမှာ မရှိသလို၊ ကိုယ့်ဆီမှာလည်း အမြဲ မရှိပါဘူး။
+      ဆိုင်ပိုင်ရှင် မြမြ၊ ကောင်တာက လှလှ နဲ့ customer တွေ ဆီမှာ ရှိပါတယ်။ agent က code ကို မြန်မြန်
+      ထုတ်ပေးနိုင်ပေမဲ့ ဘာ ဆောက်ရမလဲ ဆိုတာက လူတွေဆီက လာတာ ဖြစ်လို့၊ လူတွေနဲ့ ပြောဆိုတာက app ကို ဆောက်ပေးတဲ့
+      builder ရဲ့ အဓိက အလုပ် တစ်ခုပါ။ [[mark:sel-title]] editor ထဲက updates ဖိုင်မှာ ဒီနေ့ ကိုယ် ပို့မယ့် စာကို
+      ရေးပါမယ်။ အခု ခေါင်းစဉ်နဲ့ ရက်စွဲပဲ ရှိပါသေးတယ်။ ဒီနေ့ မနက် မြမြ ဆီက message တစ်စောင် ရောက်လာပါတယ်။ app
+      ဘယ်အဆင့် ရောက်ပြီလဲ၊ ပြီးတော့ သောကြာနေ့ကျရင် အိမ်အရောက် ပို့ပေးတဲ့ delivery ပါ ထည့်လို့ ရမလား တဲ့။ ဒီ
+      message ကို ဘယ်လို ပြန်ဖြေမလဲ ဆိုတာနဲ့ ဒီနေ့ lesson ကို စပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (organisations: humans give direction)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-title,
+          type: editor.select,
+          at: { mark: sel-title },
+          target: { file: docs/updates.md, text: "# Updates · 2026-11-08", occurrence: 1 },
+        }
+
+  - id: people
+    narration: >
+      [[mark:t-title]] software ကို လူတွေအတွက် ဆောက်တာ ဖြစ်သလို၊ လူတွေနဲ့ အတူ ဆောက်ရတာလည်း ဖြစ်ပါတယ်။ ကိုယ်တို့
+      app ပတ်လည်မှာ လူ သုံးဖွဲ့ ရှိပါတယ်။ [[mark:t-mm]] မြမြ က ဆိုင်ပိုင်ရှင် ဖြစ်လို့ စီးပွားရေး ဘက်က ကြည့်ပါတယ်။
+      မနက်တိုင်း customer တွေ ပြန်မထွက်သွားဖို့နဲ့ ကုန်ကျစရိတ် မများဖို့ ဂရုစိုက်ပါတယ်။ [[mark:t-hla]] လှလှ ကတော့
+      မနက် အလုပ်ရှုပ်ချိန်မှာ ကောင်တာမှာ တကယ် ဘာဖြစ်လဲ ဆိုတာ အသိဆုံးပါ။ လက်ဖက်ရည် ဖျော်ရင်း ဖုန်းကို ခဏခဏ
+      ကြည့်ဖို့ အချိန် မရှိပါဘူး။ [[mark:t-cust]] member အောင်အောင် နဲ့ ကျောင်းသား မောင်မောင် လို customer
+      တွေကတော့ အလုပ်၊ ကျောင်း မနောက်ကျဖို့ကို ဂရုစိုက်ပါတယ်။ ဒီလို product ရဲ့ ရလဒ်ကို ဂရုစိုက်တဲ့ သူတွေကို
+      stakeholder လို့ ခေါ်ပါတယ်။ [[mark:t-me]] ကိုယ်က သူတို့ ကြားမှာ ရပ်ပြီး ဘာသာပြန်ပေးရတဲ့ သူပါ။ သူတို့ ပြောတဲ့
+      စကားကို agent ဖတ်မယ့် စာတွေ အဖြစ် ရေးပေးရပါတယ်။ [[mark:t-agent]] agent ဆီ ရောက်တာက ကိုယ် ရေးပေးတဲ့ စာတွေပဲ
+      ဖြစ်ပါတယ်။ နည်းပညာ ဘက်က အကြောင်းတွေကိုလည်း မြမြ နဲ့ လှလှ ပြောနေကျ စကားနဲ့ ပြန်ပြောပြရပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (organisations: hybrid teams, direction and judgment)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-t-title,
+          type: whiteboard.apply,
+          at: { mark: t-title },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-t-mm,
+          type: whiteboard.apply,
+          at: { mark: t-mm },
+          upsertIds: [t-mm-box, t-mm, t-mm-w],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-t-hla,
+          type: whiteboard.apply,
+          at: { mark: t-hla },
+          upsertIds: [t-hla-box, t-hla, t-hla-w],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-t-cust,
+          type: whiteboard.apply,
+          at: { mark: t-cust },
+          upsertIds: [t-cust-box, t-cust, t-cust-w],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-t-me,
+          type: whiteboard.apply,
+          at: { mark: t-me },
+          upsertIds: [t-me-box, t-me],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-agent,
+          type: whiteboard.apply,
+          at: { mark: t-agent },
+          upsertIds: [t-ar, t-agent-box, t-agent],
+          drawMs: 1200,
+        }
+
+  - id: ask
+    narration: >
+      [[mark:t-ask]] ဘာသာပြန်တဲ့ အလုပ်ရဲ့ ပထမ စည်းကမ်းက မသိတာကို ခန့်မှန်းမယ့်အစား သိတဲ့သူကို မေးဖို့ပါ။ ဥပမာ
+      အော်ဒါ အသင့်ဖြစ်ပြီး customer မရောက်လာရင်၊ ကောင်တာမှာ မိနစ် ၃၀ ထားမယ်လို့ ကိုယ်က ယူဆပြီး spec ထဲ ရေးလိုက်တယ်
+      ဆိုပါစို့။ agent က အဲဒီ ဂဏန်းနဲ့ပဲ ဆောက်သွားမှာပါ။ [[mark:t-hla-knows]] ဒါပေမဲ့ ဖျော်ပြီးသား လက်ဖက်ရည်
+      ဘယ်လောက်ကြာရင် အေးသွားလဲ၊ ကောင်တာမှာ ခွက် ဘယ်နှခွက် ထားလို့ ရလဲ ဆိုတာ လှလှ က အသိဆုံးပါ။ brief ထဲမှာ agent
+      ကို ခန့်မှန်းခွင့် မပေးထားပြီး ကိုယ်က ခန့်မှန်းပြီး spec ထဲ ရေးလိုက်ရင်၊ အဲဒီ ခန့်မှန်းချက်က agent ဆီ
+      ရောက်သွားတာပဲ ဖြစ်ပါတယ်။ ဒါကြောင့် မေးခွန်းကို တိုတို ရှင်းရှင်း ရေးပြီး လှလှ ကိုယ်တိုင်ကို မေးပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80% problem: assumptions)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-t-ask,
+          type: whiteboard.apply,
+          at: { mark: t-ask },
+          upsertIds: [t-ask],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-hla-ring,
+          type: whiteboard.apply,
+          at: { mark: t-hla-knows },
+          upsertIds: [t-hla-ring],
+          drawMs: 900,
+        }
+
+  - id: options
+    chapter: မရဘူး အစား ရွေးစရာ
+    narration: >
+      [[mark:o-title]] အခု မြမြ ရဲ့ ဒုတိယ မေးခွန်းကို ကြည့်ရအောင်။ သောကြာနေ့ကျရင် delivery ပါ ရမလား ဆိုတာပါ။
+      delivery ကို ပထမ version မှာ မထည့်ဘူးလို့ မြမြ နဲ့ သဘောတူထားခဲ့ပေမဲ့၊ ဆိုင်ရဲ့ ဆုံးဖြတ်ချက်ကို
+      ပြန်စဉ်းစားခွင့် သူ့မှာ ရှိပါတယ်။ [[mark:o-no]] အမြန်ဆုံး အဖြေက မဖြစ်နိုင်ပါဘူး လို့ ပြောလိုက်တာပါ။ ဒါပေမဲ့
+      ဘာကြောင့်လဲ ဆိုတာ မပါတဲ့အပြင်၊ မြမြ မှာ ရွေးစရာလည်း မကျန်တော့ပါဘူး။ [[mark:o-yes]] ရပါတယ် လို့ ချက်ချင်း
+      ကတိပေးလိုက်ရင်လည်း၊ သောကြာနေ့ကျမှ မပြီးသေးတဲ့ app နဲ့ ပိုဆိုးတဲ့ သတင်းကို ပေးရမှာပါ။ [[mark:o-a]] အဲဒီအစား
+      ရွေးစရာ နှစ်ခုကို ကုန်ကျမှုနဲ့ တွဲပြပါ။ delivery ကို အခု ထည့်ရင် ပထမ version က နှစ်ပတ် နောက်ကျပြီး၊
+      ပို့ပေးမယ့် rider တစ်ယောက်လည်း လိုပါမယ်။ [[mark:o-b]] ဆိုင်မှာ လာယူတဲ့ pickup နဲ့ပဲ ပထမ version ကို အရင်
+      ထုတ်ရင်တော့ ရက်ချိန်း မပြောင်းဘဲ၊ delivery ကို အဲဒီ version သုံးကြည့်ပြီးမှ ပြန်စဉ်းစားလို့ ရပါတယ်။
+      [[mark:o-ask]] ပြီးတော့ မြမြ အတွက် ဘာက ပိုအရေးကြီးလဲ လို့ ပြန်မေးပါ။ delivery ကို ဘာကြောင့် လိုချင်တာလဲ
+      သိရင်၊ ပိုကောင်းတဲ့ ရွေးစရာ တစ်ခု ပေါ်လာနိုင်ပါတယ်။ ဒါက မလုပ်ဘူး လို့ ငြင်းတာ မဟုတ်ဘဲ၊ အခု မလုပ်သေးဘူး
+      ဆိုတာကို အကြောင်းပြချက်နဲ့ အစားထိုးနည်းနဲ့ ပြောတာပါ။ နောက်ဆုံး ဆုံးဖြတ်မှာကတော့ မြမြ ပါ။
+    sources:
+      - {
+          title: "Shape Up (Basecamp): Set Boundaries (too early to say yes or no; no single best solution)",
+          url: "https://basecamp.com/shapeup/1.2-chapter-03",
+        }
+    actions:
+      - {
+          id: draw-o-title,
+          type: whiteboard.apply,
+          at: { mark: o-title },
+          open: true,
+          clear: true,
+          upsertIds: [o-title],
+        }
+      - {
+          id: draw-o-no,
+          type: whiteboard.apply,
+          at: { mark: o-no },
+          upsertIds: [o-no-h, o-no-1, o-no-2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-o-yes,
+          type: whiteboard.apply,
+          at: { mark: o-yes },
+          upsertIds: [o-yes-h, o-yes-1, o-yes-2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-o-a,
+          type: whiteboard.apply,
+          at: { mark: o-a },
+          upsertIds: [o-opt-h, o-a-box, o-a1, o-a2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-o-b,
+          type: whiteboard.apply,
+          at: { mark: o-b },
+          upsertIds: [o-b-box, o-b1, o-b2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-o-ask,
+          type: whiteboard.apply,
+          at: { mark: o-ask },
+          upsertIds: [o-ask, o-who],
+          drawMs: 1000,
+        }
+
+  - id: update-done
+    chapter: Status update ရေးရအောင်
+    narration: >
+      [[mark:close-o]] ဒီ ရွေးစရာတွေကို စကားနဲ့ ပြောရုံနဲ့ မပြီးဘဲ၊ မြမြ ရဲ့ ပထမ မေးခွန်းနဲ့ အတူ စာနဲ့
+      ရေးပို့ပါမယ်။ [[mark:type-done]] ဘာပြီးပြီ၊ နောက် ဘာလုပ်မယ်၊ ဘာက ရပ်နေလဲ၊ ဘာ ဆုံးဖြတ်ဖို့ လိုလဲ ဆိုတာကို
+      တိုတို စုရေးထားတဲ့ စာကို status update လို့ ခေါ်ပါတယ်။ စာနဲ့ ရေးထားတော့ မြမြ က ဆိုင်ပိတ်ပြီး ညဘက်မှ
+      ဖတ်ဖြစ်ရင်တောင် အစည်းအဝေး မလိုဘဲ အကုန် သိနိုင်ပြီး၊ နောက်မှ ပြန်ကြည့်လို့လည်း ရပါတယ်။ ပထမ အပိုင်းက
+      ပြီးသွားတဲ့ အလုပ်တွေပါ။ [[mark:sel-done-words]] ဒီ နှစ်ကြောင်းမှာ ဖိုင် နာမည် တစ်ခုမှ မပါတာကို သတိထား
+      ကြည့်ပါ။ AGENTS.md လို နာမည်တွေက မြမြ အတွက် ဘာ အဓိပ္ပာယ်မှ မရှိလို့၊ သူ ပြောနေကျ စကားတွေနဲ့ ရေးထားတာပါ။
+      ဖတ်မယ့်သူရဲ့ စကားနဲ့ ရေးပေးတာကလည်း ဘာသာပြန်တဲ့ အလုပ်ပါပဲ။
+    sources:
+      - {
+          title: "37signals: The 37signals Guide to Internal Communication (write it up; asynchronous most of the time)",
+          url: "https://basecamp.com/guides/how-we-communicate",
+        }
+    actions:
+      - { id: close-o, type: whiteboard.apply, at: { mark: close-o }, open: false }
+      - id: type-done
+        type: editor.type
+        at: { mark: type-done }
+        target: { file: docs/updates.md, after: "# Updates · 2026-11-08\n\n", occurrence: 1 }
+        text: "မြမြ ရေ၊ ဒီအပတ် update ပါ။\n\n## Done\n- ပြဿနာ၊ app က လုပ်ရမယ့်အရာ၊ ပြီးပြီလို့ စစ်မယ့် စည်းကမ်းတွေ — ရေးပြီးပြီ။\n- agent အတွက် လမ်းညွှန်ချက်နဲ့ ပထမ အလုပ် — အပ်ပြီးပြီ။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-done-words,
+          type: editor.select,
+          at: { mark: sel-done-words },
+          target:
+            {
+              file: docs/updates.md,
+              text: "- ပြဿနာ၊ app က လုပ်ရမယ့်အရာ၊ ပြီးပြီလို့ စစ်မယ့် စည်းကမ်းတွေ — ရေးပြီးပြီ။\n- agent အတွက် လမ်းညွှန်ချက်နဲ့ ပထမ အလုပ် — အပ်ပြီးပြီ။\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: next
+    narration: >
+      [[mark:type-next]] နောက် အပိုင်းက နောက်ထပ် ဘာ လုပ်မလဲ ဆိုတာပါ။ ဒီ အပိုင်းကိုလည်း မြမြ ဘက်က ကြည့်ပြီး
+      ရေးပါတယ်။ [[mark:sel-next]] ကိုယ် ဘာ လုပ်နေမလဲ ဆိုတဲ့ အသေးစိတ်ထက်၊ မြမြ ကိုယ်တိုင် ဘာကို ဘယ်နေ့
+      စမ်းကြည့်လို့ ရမလဲ ဆိုတာကို ပြထားပါတယ်။ ဒါမှ သူ ဘာကို မျှော်လင့်ရမလဲ ရှင်းရှင်း သိပြီး၊ အဲဒီနေ့ ရောက်ရင်လည်း
+      ကတိနဲ့ တကယ် ဖြစ်တာကို တိုက်ကြည့်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "37signals: The 37signals Guide to Internal Communication (be clear; ask if things are clear)",
+          url: "https://basecamp.com/guides/how-we-communicate",
+        }
+    actions:
+      - id: type-next
+        type: editor.type
+        at: { mark: type-next }
+        target: { file: docs/updates.md, after: "အပ်ပြီးပြီ။\n\n", occurrence: 1 }
+        text: "## Next\n- order form — သောကြာနေ့ ဖုန်းနဲ့ စမ်းကြည့်လို့ရမယ်။\n- ကျန်တဲ့ အလုပ်တွေကို အပိုင်းလေးတွေ ခွဲမယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-next,
+          type: editor.select,
+          at: { mark: sel-next },
+          target: { file: docs/updates.md, text: "သောကြာနေ့ ဖုန်းနဲ့ စမ်းကြည့်လို့ရမယ်။", occurrence: 1 },
+        }
+
+  - id: blocked
+    narration: >
+      [[mark:type-blocked]] နောက် အပိုင်းက ကိုယ့်အလုပ်ကို ရပ်ထားတဲ့ အရာတွေ၊ မြမြ ဆီက လိုအပ်တဲ့ အဖြေတွေပါ။
+      requirements ထဲမှာ မြမြ အတွက် ချန်ထားခဲ့တဲ့ မေးခွန်း နှစ်ခုပဲ ဖြစ်ပြီး၊ တစ်ခုက ပြီးခဲ့တဲ့ lesson မှာ agent
+      ကို ခန့်မှန်းပြီး မဆုံးဖြတ်ခိုင်းခဲ့တဲ့ မေးခွန်းပါ။ [[mark:sel-blocked-when]] မေးခွန်း တစ်ခုချင်းရဲ့
+      နောက်မှာ အဖြေကို ဘယ်တော့ လိုလဲ၊ ဘာ အလုပ်ကို ရပ်ထားလဲ ဆိုတာ ထည့်ထားပါတယ်။ ဒါမှ မြမြ က ဘယ်ဟာကို အရင် ဖြေရမလဲ
+      သိပါတယ်။ နောက်ကျနိုင်တယ် ဆိုတာကို တကယ် နောက်ကျမှ မပြောဘဲ ကြိုပြောထားတော့၊ မြမြ မှာ ဖြေဖို့ အချိန် ရှိပါတယ်။
+    sources:
+      - {
+          title: "37signals: The 37signals Guide to Internal Communication (writing helps everyone)",
+          url: "https://basecamp.com/guides/how-we-communicate",
+        }
+    actions:
+      - id: type-blocked
+        type: editor.type
+        at: { mark: type-blocked }
+        target: { file: docs/updates.md, after: "အပိုင်းလေးတွေ ခွဲမယ်။\n\n", occurrence: 1 }
+        text: "## Blocked / need from you\n- ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ — order form အတွက် ဗုဒ္ဓဟူးနေ့ မတိုင်ခင် လိုတယ်။\n- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ — ကောင်တာစာရင်း မစခင် လိုတယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-blocked-when,
+          type: editor.select,
+          at: { mark: sel-blocked-when },
+          target:
+            { file: docs/updates.md, text: "order form အတွက် ဗုဒ္ဓဟူးနေ့ မတိုင်ခင် လိုတယ်။", occurrence: 1 },
+        }
+
+  - id: decision
+    narration: >
+      [[mark:type-decision]] နောက် အပိုင်းမှာ ခုနက ပြောခဲ့တဲ့ ရွေးစရာ နှစ်ခုကို ကိုယ်စီရဲ့ ကုန်ကျမှုနဲ့အတူ
+      ရေးပါတယ်။ ကုန်ကျမှုဆိုတာ ပိုက်ဆံ တင် မကဘဲ အချိန်နဲ့ လူပါ ပါပါတယ်။ [[mark:sel-recommend]] ကိုယ့်အမြင်ကိုလည်း
+      ဖုံးမထားဘဲ အကြံပြုချက် တစ်ခုအဖြစ် ထည့်ထားပေမဲ့၊ စာကြောင်းရဲ့ အဆုံးမှာ မြမြ ကို ပြန်မေးထားပါတယ်။ ကိုယ့်အလုပ်က
+      မြမြ အစား ဆုံးဖြတ်ပေးတာ မဟုတ်ဘဲ၊ သူ ကောင်းကောင်း ဆုံးဖြတ်နိုင်အောင် ရွေးစရာနဲ့ ကုန်ကျမှုကို ရှင်းရှင်း
+      ပြပေးတာပါ။
+    sources:
+      - {
+          title: "Shape Up (Basecamp): Set Boundaries (appetite and trade-offs)",
+          url: "https://basecamp.com/shapeup/1.2-chapter-03",
+        }
+    actions:
+      - id: type-decision
+        type: editor.type
+        at: { mark: type-decision }
+        target: { file: docs/updates.md, after: "မစခင် လိုတယ်။\n\n", occurrence: 1 }
+        text: "## Decision needed · delivery\n- A · delivery ပါ ထည့် — v1 က 2 ပတ် နောက်ကျမယ်၊ rider တစ်ယောက် လိုမယ်။\n- B · pickup အရင် — ရက်ချိန်း မပြောင်းဘူး၊ delivery ကို v1 သုံးပြီးမှ ပြန်စဉ်းစားမယ်။\n- အကြံပြုချက် — B။ မြမြ အတွက် ဘာက ပိုအရေးကြီးလဲ ပြောပေးပါ။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-decision,
+          type: expect.file,
+          at: { afterAction: type-decision },
+          path: docs/updates.md,
+          contains: "- အကြံပြုချက် — B။ မြမြ အတွက် ဘာက ပိုအရေးကြီးလဲ ပြောပေးပါ။",
+        }
+      - {
+          id: sel-recommend,
+          type: editor.select,
+          at: { mark: sel-recommend },
+          target:
+            {
+              file: docs/updates.md,
+              text: "- အကြံပြုချက် — B။ မြမြ အတွက် ဘာက ပိုအရေးကြီးလဲ ပြောပေးပါ။",
+              occurrence: 1,
+            },
+        }
+
+  - id: feedback
+    chapter: Feedback ပေးတာ၊ တောင်းတာ
+    narration: >
+      [[mark:f-title]] လူတွေနဲ့ အလုပ်လုပ်ရင် feedback ပေးတာ၊ တောင်းတာလည်း ပါပါတယ်။ feedback ဆိုတာ လုပ်ထားတဲ့
+      အလုပ်အပေါ် ပြန်ပြောတဲ့ အမြင်ပါ။ [[mark:f-person]] ဥပမာ နောက်ပိုင်း ကောင်တာစာရင်း ဆောက်ပြီးနောက်၊ မနက်
+      တစ်မနက် အော်ဒါ တစ်ခု လွတ်သွားတယ် ဆိုပါစို့။ လှလှ ဂရုမစိုက်ဘူး လို့ လူကို ပြောရင်၊ သူ့ကိုယ်သူ ကာကွယ်ဖို့ပဲ
+      ကြိုးစားမိပါလိမ့်မယ်။ [[mark:f-work]] အဲဒီအစား ရှစ်နာရီ အော်ဒါ လွတ်သွားလို့ customer တစ်ယောက် ဆယ်မိနစ်
+      စောင့်ခဲ့ရတယ် ဆိုပြီး၊ ဖြစ်ခဲ့တာနဲ့ သူ့ အကျိုးဆက်ကို ပြောပါ။ [[mark:f-why]] ပြီးရင် ဘာက ခက်ခဲခဲ့လဲ လို့
+      မေးပါ။ screen က လက်ဖက်ရည်အိုး နောက်မှာ ရောက်နေလို့ မမြင်ရတာ ဖြစ်နိုင်ပြီး၊ အဲဒီလိုဆို ပြင်ရမှာက လူ မဟုတ်ဘဲ
+      နေရာချထားပုံပါ။ [[mark:f-ask]] ကိုယ့်အလုပ်အတွက် feedback တောင်းတဲ့အခါမှာလည်း ကြိုက်လား လို့ မမေးဘဲ၊
+      ဘယ်အဆင့်မှာ ရှုပ်သွားလဲ လို့ အလုပ်အကြောင်း တိုက်ရိုက် မေးပါ။ [[mark:f-praise]] ကောင်းတာကိုလည်း တိတိကျကျ
+      ပြောပါ။ လှလှ ရေတွက်ထားတဲ့ ကိန်းဂဏန်းကြောင့် ပြဿနာ ရှင်းသွားတယ် ဆိုတဲ့ စကားက ကျေးဇူးပါ တစ်ခွန်းထက်
+      ပိုအဓိပ္ပာယ် ရှိပါတယ်။
+    sources:
+      - {
+          title: "Center for Creative Leadership: Use Situation-Behavior-Impact (SBI) to understand intent",
+          url: "https://www.ccl.org/articles/leading-effectively-articles/closing-the-gap-between-intent-vs-impact-sbii/",
+        }
+    actions:
+      - {
+          id: draw-f-title,
+          type: whiteboard.apply,
+          at: { mark: f-title },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f-person,
+          type: whiteboard.apply,
+          at: { mark: f-person },
+          upsertIds: [f-h1, f-p1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-f-work,
+          type: whiteboard.apply,
+          at: { mark: f-work },
+          upsertIds: [f-h2, f-w1, f-w2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-f-why,
+          type: whiteboard.apply,
+          at: { mark: f-why },
+          upsertIds: [f-why],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-ask,
+          type: whiteboard.apply,
+          at: { mark: f-ask },
+          upsertIds: [f-p2, f-w3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-praise,
+          type: whiteboard.apply,
+          at: { mark: f-praise },
+          upsertIds: [f-praise],
+          drawMs: 1000,
+        }
+
+  - id: hla
+    narration: >
+      [[mark:close-f]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-hla]] နောက်ဆုံး အပိုင်းက မြမြ အတွက် မဟုတ်ဘဲ လှလှ ဆီ
+      သီးသန့် ပို့မယ့် မေးခွန်းပါ။ ခုနက ဥပမာထဲက မိနစ် ၃၀ လို ခန့်မှန်းချက် နေရာမှာ လှလှ ရဲ့ တကယ့် အဖြေ
+      ဝင်လာဖို့ပါ။ [[mark:sel-hla]] မေးခွန်း တစ်ခုတည်း ဖြစ်ပြီး အချိန် တစ်ခုနဲ့ ဖြေလို့ရလို့၊ လှလှ
+      အလုပ်ရှုပ်နေရင်တောင် တစ်ကြောင်းတည်းနဲ့ ဖြေနိုင်ပါတယ်။ သူ့ အဖြေက လာမယူတဲ့ အော်ဒါကို ဘယ်တော့ ပယ်မလဲ ဆိုတဲ့
+      မြမြ ရဲ့ ဆုံးဖြတ်ချက်အတွက်လည်း အထောက်အကူ ဖြစ်ပါလိမ့်မယ်။ ပို့တဲ့ အချိန်ကိုလည်း စဉ်းစားပါ။ မနက် ခုနစ်နာရီကနေ
+      ကိုးနာရီကြား အလုပ်အရှုပ်ဆုံး အချိန်မှာ မပို့ဘဲ၊ ဆယ်နာရီ နောက်ပိုင်းမှ ပို့ပါမယ်။
+    sources:
+      - {
+          title: "37signals: The 37signals Guide to Internal Communication (never expect an immediate response; communication shouldn't need everyone free at once)",
+          url: "https://basecamp.com/guides/how-we-communicate",
+        }
+    actions:
+      - { id: close-f, type: whiteboard.apply, at: { mark: close-f }, open: false }
+      - id: type-hla
+        type: editor.type
+        at: { mark: type-hla }
+        target: { file: docs/updates.md, after: "ပြောပေးပါ။\n\n", occurrence: 1 }
+        text: "## Question for လှလှ\nလှလှ ရေ၊ အော်ဒါ အသင့်ဖြစ်ပြီး customer မရောက်သေးရင် ကောင်တာမှာ ဘယ်လောက်ကြာ ထားပေးနိုင်လဲ။\n"
+        cadence: line-by-line
+      - {
+          id: expect-hla,
+          type: expect.file,
+          at: { afterAction: type-hla },
+          path: docs/updates.md,
+          contains: "ကောင်တာမှာ ဘယ်လောက်ကြာ ထားပေးနိုင်လဲ။",
+        }
+      - {
+          id: sel-hla,
+          type: editor.select,
+          at: { mark: sel-hla },
+          target:
+            {
+              file: docs/updates.md,
+              text: "လှလှ ရေ၊ အော်ဒါ အသင့်ဖြစ်ပြီး customer မရောက်သေးရင် ကောင်တာမှာ ဘယ်လောက်ကြာ ထားပေးနိုင်လဲ။",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဗုဒ္ဓဟူးနေ့ ညနေမှာ order form က သောကြာနေ့ အမီ မပြီးနိုင်တော့ဘူး ဆိုတာ
+      ကိုယ် သိသွားတယ် ဆိုပါစို့။ မြမြ ဆီ ပို့မယ့် message နှစ်ခုထဲက ဘယ်ဟာ ပိုကောင်းလဲ။ ပထမက နောက်ကျမယ်၊
+      တောင်းပန်ပါတယ် ဆိုတာ တစ်ခုတည်း ပါတဲ့ message ပါ။ ဒုတိယက order form ကို တနင်္လာနေ့မှ စမ်းလို့ရမယ်၊
+      ဆိုင်ပိတ်ချိန်မှာ မှာလို့ မရအောင် လုပ်တဲ့ အပိုင်း မပြီးသေးလို့ပါ ဆိုတဲ့ message ပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ message ပါ။ ဘာကြောင့်လဲဆိုတော့ ပထမ message က
+      သတင်းဆိုးကိုပဲ ပေးပြီး၊ မြမြ ဘာ ဆက်လုပ်ရမလဲ မသိနိုင်လို့ပါ။ ဒုတိယကတော့ ရက်သစ်နဲ့ အကြောင်းရင်း ပါလို့၊ member
+      တွေကို ကြိုပြောထားတာ ရှိရင် ပြင်ပြောဖို့၊ ဦးစားပေး ပြောင်းဖို့ မြမြ ဆုံးဖြတ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "37signals: The 37signals Guide to Internal Communication (difficult news; be clear)",
+          url: "https://basecamp.com/guides/how-we-communicate",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-q2, z-o1, z-o2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1200,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ software ကို လူတွေအတွက်၊ လူတွေနဲ့ အတူ ဆောက်ရတာ ဖြစ်လို့ ကိုယ်က
+      မြမြ၊ လှလှ နဲ့ customer တွေကြားမှာ ဘာသာပြန်ပေးရပါတယ်။ မသိတာကို ခန့်မှန်းမယ့်အစား သိတဲ့သူကို မေးပါ။
+      [[mark:rc-decision]] မရဘူး လို့ ငြင်းမယ့်အစား ရွေးစရာတွေကို ကုန်ကျမှုနဲ့ ပြပြီး၊ ဆုံးဖြတ်ခွင့်ကို
+      ပိုင်ရှင်ဆီ ပြန်ပေးပါ။ [[mark:rc-blocked]] ဘာပြီးပြီ၊ ဘာလုပ်မယ်၊ ဘာက ရပ်နေလဲ ဆိုတာကို ဖတ်မယ့်သူရဲ့ စကားနဲ့
+      ပုံမှန် ရေးပြီး၊ ပြဿနာ ဖြစ်လာနိုင်တာကို စောစော ပြောပါ။ feedback ကိုလည်း လူအကြောင်း မဟုတ်ဘဲ အလုပ်အကြောင်း
+      ပေးပါ။ နောက် lesson မှာတော့ ပထမ version တစ်ခုလုံးကို၊ agent ကို တစ်ခါ အပ်ရုံနဲ့ ပြီးနိုင်ပြီး ကိုယ်က
+      တစ်ထိုင်တည်း စစ်နိုင်တဲ့ အပိုင်းလေးတွေအဖြစ် ခွဲတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (organisations: judgment over implementation)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "37signals: The 37signals Guide to Internal Communication",
+          url: "https://basecamp.com/guides/how-we-communicate",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: rc-decision,
+          type: editor.select,
+          at: { mark: rc-decision },
+          target: { file: docs/updates.md, text: "## Decision needed · delivery", occurrence: 1 },
+        }
+      - {
+          id: rc-blocked,
+          type: editor.select,
+          at: { mark: rc-blocked },
+          target: { file: docs/updates.md, text: "## Blocked / need from you", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
