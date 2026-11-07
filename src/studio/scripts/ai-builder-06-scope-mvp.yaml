@@ -1,0 +1,1017 @@
+# AI Builder, lesson 06: scope and the MVP (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md), docs/problem.md pinned
+# in full (COURSE-KIT §4.1) and docs/requirements.md pinned as L05 leaves it (COURSE-KIT §4.2 from the
+# title through ## Constraints, ending with one \n). Nothing runs. The lesson types ## Scope (v1):
+# Must (3) and Should (1) after the MoSCoW board, Won't (for now) with delivery and login before the
+# quiz, and the online-payment line under Won't after the quiz answer, so the file ends exactly as the
+# binder (and L07's pinned start, `login\n\n`).
+#
+# Boards: (W) the wish list, items white, re-opened later and sorted by coloured labels (Must green,
+# Should blue, Could white, Won't red, ? orange); (C) one feature's four costs (build violet, the rest
+# boxed orange as our time); (L) layers vs a thin slice (red thick layer, green slice); (Z) quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-06-scope-mvp.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-06-scope-mvp
+  title: "AI Builder 06: Scope နဲ့ MVP"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/requirements.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/problem.md: |
+        # Problem · ကြိုမှာ app
+
+        ## Problem
+        မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊ အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတယ်။
+
+        ## Who
+        - အလုပ်မသွားခင် မနက်တိုင်း လာဝယ်တဲ့ member တွေ၊ ဥပမာ အောင်အောင်
+        - အချိန်ကျပ်တဲ့ ကျောင်းသားတွေ၊ ဥပမာ မောင်မောင်
+        - ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ
+
+        ## Today
+        - တန်းစီ၊ ကောင်တာမှာ မှာ၊ ပြီးမှ ထပ်စောင့်ရတယ်။
+        - တချို့က ဖုန်းဆက်ပြီး ကြိုမှာကြတယ်။ ဒါပေမဲ့ လှလှ က ဖုန်းကိုင်နေရင် ကောင်တာက လူတွေ ပိုစောင့်ရတယ်။
+
+        ## Why it matters
+        - လှလှ ရဲ့ မှတ်စုအရ မနက်တိုင်း customer 10 ယောက်လောက် မဝယ်ဘဲ ပြန်သွားတယ်။
+
+        ## How we'll know
+        - မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်
+        - ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်
+        - ဖုန်းနဲ့ ကြိုမှာတာ — တဖြည်းဖြည်း နည်းလာ
+
+        ## Not the problem
+        - ဈေးနှုန်းနဲ့ အရသာ — customer တွေ ကြိုက်ပြီးသား
+        - delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး
+      docs/requirements.md: |
+        # Requirements · ကြိုမှာ app
+
+        ## User stories
+        - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
+        - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
+        - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
+        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+
+        ## Non-functional
+        - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
+        - မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။
+        - customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။
+        - စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။
+        - run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။
+
+        ## Constraints
+        - app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။
+        - ငွေကို ကောင်တာမှာပဲ ချေမယ်။
+        - ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board W: the wish list. Items (white) drawn as people ask for them, already in their rows; the
+    # MoSCoW labels arrive later in the scene that sorts them.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 400,
+        height: 50,
+        text: "လိုချင်တာ စာရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-1,
+        kind: text,
+        x: 480,
+        y: 232,
+        width: 450,
+        height: 40,
+        text: "ကြိုမှာ · လာယူချိန် ရွေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-2,
+        kind: text,
+        x: 480,
+        y: 277,
+        width: 500,
+        height: 40,
+        text: "အော်ဒါနံပါတ် · ကောင်တာစာရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-3,
+        kind: text,
+        x: 480,
+        y: 342,
+        width: 450,
+        height: 40,
+        text: "အသင့်ဖြစ်ရင် SMS ပို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-4,
+        kind: text,
+        x: 480,
+        y: 407,
+        width: 600,
+        height: 40,
+        text: "menu ပုံ · ပစ္စည်း အမျိုးမျိုး တစ်ခါတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-5,
+        kind: text,
+        x: 480,
+        y: 472,
+        width: 500,
+        height: 40,
+        text: "delivery · account နဲ့ login",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-6,
+        kind: text,
+        x: 480,
+        y: 537,
+        width: 400,
+        height: 40,
+        text: "online ငွေချေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-must,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 150,
+        height: 45,
+        text: "Must",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: k-should,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 150,
+        height: 45,
+        text: "Should",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: k-could,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 150,
+        height: 45,
+        text: "Could",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: k-wont,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 150,
+        height: 45,
+        text: "Won't",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: k-q,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 150,
+        height: 45,
+        text: "?",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board C: one feature's costs. Building (violet: the agent's part, fast); checking, running and
+    # explaining boxed in orange as the builder's own time; the moral in orange.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "feature တစ်ခုရဲ့ ကုန်ကျစရိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 300,
+        height: 40,
+        text: "၁ · ဆောက်တာ",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-1b,
+        kind: text,
+        x: 620,
+        y: 240,
+        width: 380,
+        height: 40,
+        text: "agent နဲ့ မိနစ်ပိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 285,
+        y: 293,
+        width: 560,
+        height: 195,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-2,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 420,
+        height: 40,
+        text: "၂ · မှန်မမှန် စစ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-3,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 420,
+        height: 40,
+        text: "၃ · run ထားပြီး ပြင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-4,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 420,
+        height: 40,
+        text: "၄ · လူတွေကို ရှင်းပြတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-mine,
+        kind: text,
+        x: 870,
+        y: 370,
+        width: 220,
+        height: 40,
+        text: "ကိုယ့် အချိန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-note,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 700,
+        height: 45,
+        text: "ကုန်ကျစရိတ်က ရွှေ့သွားတာ၊ မပျောက်ဘူး",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    # Board L: three layers of the app; a thick unfinished layer (red) vs a thin slice through all
+    # three (green, an arrow down for one order's path).
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 420,
+        height: 50,
+        text: "ဘယ်လို ခွဲ ဆောက်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-a1,
+        kind: text,
+        x: 300,
+        y: 252,
+        width: 200,
+        height: 40,
+        text: "ဖုန်း screen",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-a2,
+        kind: text,
+        x: 300,
+        y: 352,
+        width: 200,
+        height: 40,
+        text: "အော်ဒါ သိမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-a3,
+        kind: text,
+        x: 300,
+        y: 452,
+        width: 200,
+        height: 40,
+        text: "ကောင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: l-f1, kind: rectangle, x: 520, y: 235, width: 540, height: 70, strokeColor: "#1e1e1e" }
+    - { id: l-f2, kind: rectangle, x: 520, y: 335, width: 540, height: 70, strokeColor: "#1e1e1e" }
+    - { id: l-f3, kind: rectangle, x: 520, y: 435, width: 540, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: l-thick-box,
+        kind: rectangle,
+        x: 530,
+        y: 243,
+        width: 300,
+        height: 54,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-thick,
+        kind: text,
+        x: 548,
+        y: 252,
+        width: 260,
+        height: 40,
+        text: "screen အကုန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l-thin-box,
+        kind: rectangle,
+        x: 900,
+        y: 226,
+        width: 110,
+        height: 288,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-thin-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 935,
+        y: 250,
+        width: 40,
+        height: 240,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-n1,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 620,
+        height: 40,
+        text: "ထူထူ အလွှာ — ကောင်တာ မရောက်သေး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: l-n2,
+        kind: text,
+        x: 300,
+        y: 592,
+        width: 680,
+        height: 40,
+        text: "ပါးပါး အချပ် — အော်ဒါ အစအဆုံး ရောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reasons white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 700,
+        height: 45,
+        text: "online ငွေချေတာ — ပထမ version မှာ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 293,
+        width: 300,
+        height: 40,
+        text: "က · Must",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 343,
+        width: 400,
+        height: 40,
+        text: "ခ · Won't (for now)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 418,
+        width: 600,
+        height: 50,
+        text: "အဖြေ · ခ — Won't (for now)",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-r1,
+        kind: text,
+        x: 300,
+        y: 488,
+        width: 620,
+        height: 40,
+        text: "risk နဲ့ ကုန်ကျစရိတ် အများဆုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-r2,
+        kind: text,
+        x: 300,
+        y: 538,
+        width: 660,
+        height: 40,
+        text: "ကောင်တာမှာ ချေတာ အလုပ်ဖြစ်ပြီးသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-r3,
+        kind: text,
+        x: 300,
+        y: 588,
+        width: 600,
+        height: 40,
+        text: "တကယ် သုံးပြီးမှ ပြန်စဉ်းစား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6106
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: စာရင်းက ရှည်လာပြီ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ app ကို သုံးမယ့် လူတွေဆီကနေ requirement တွေကို ရှာပြီး ဒီ ဖိုင်ထဲမှာ ရေးခဲ့ပါတယ်။
+      [[mark:sel-stories]] customer၊ ကောင်တာနဲ့ ဆိုင်ပိုင်ရှင် ဘက်က story တွေ၊ app ဘယ်လောက် ကောင်းရမလဲ ဆိုတာနဲ့
+      ရွေးလို့ မရတဲ့ ကန့်သတ်ချက်တွေ ပါပါတယ်။ [[mark:w-open]] ဒါပေမဲ့ requirement တွေကို စုနေတုန်းမှာ လူတွေက
+      လိုချင်တာ အသစ်တွေကိုလည်း ထပ်ပြောခဲ့ကြပါတယ်။ အားလုံးကို စာရင်း တစ်ခုထဲ စုကြည့်ရအောင်။ [[mark:w-must]]
+      ပထမ နှစ်ကြောင်းကတော့ story တွေ အလုပ်ဖြစ်ဖို့ လိုတဲ့ အချက်တွေပါ။ ကြိုမှာတာ၊ လာယူချိန် ရွေးတာ၊ ကောင်တာမှာ
+      ပြောပြီး ယူလို့ရမယ့် အော်ဒါနံပါတ်နဲ့ ကောင်တာစာရင်း ဖြစ်ပါတယ်။ [[mark:w-sms]] ကောင်တာက လှလှ က အော်ဒါ အသင့်ဖြစ်ရင် customer ဆီ SMS ပို့ချင်တယ်လို့
+      ပြောခဲ့ပါတယ်။ [[mark:w-could]] member အောင်အောင် က menu မှာ ပုံလေးတွေ ပါစေချင်ပြီး၊ ကျောင်းသား မောင်မောင်
+      က ပစ္စည်း အမျိုးမျိုးကို တစ်ခါတည်း မှာချင်ပါတယ်။ [[mark:w-wont]] ဆိုင်ပိုင်ရှင် မြမြ ကတော့ delivery ကို ထည့်နိုင်မလား ထပ်မေးခဲ့ပါတယ်။
+      agent ကို ဒီ ဖိုင် ပေးပြီး ထပ်ထည့်သင့်တာတွေ စာရင်းလုပ်ခိုင်းကြည့်တော့၊ customer account နဲ့ login စာမျက်နှာ ပါလာတယ် ဆိုပါစို့။
+      [[mark:w-pay]] online နဲ့ ငွေချေလို့ ရရင်ကော ဆိုတဲ့ မေးခွန်းလည်း မြမြ ဆီက ပါလာပါတယ်။ စာရင်းက ရှည်လာပါပြီ။ ဒါတွေ
+      အားလုံးကို ပထမ version မှာ ထည့်မလား။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-stories,
+          type: editor.select,
+          at: { mark: sel-stories },
+          target: { file: docs/requirements.md, text: "## User stories", occurrence: 1 },
+        }
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-w-must,
+          type: whiteboard.apply,
+          at: { mark: w-must },
+          upsertIds: [w-1, w-2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-w-sms,
+          type: whiteboard.apply,
+          at: { mark: w-sms },
+          upsertIds: [w-3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-could,
+          type: whiteboard.apply,
+          at: { mark: w-could },
+          upsertIds: [w-4],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-w-wont,
+          type: whiteboard.apply,
+          at: { mark: w-wont },
+          upsertIds: [w-5],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-w-pay,
+          type: whiteboard.apply,
+          at: { mark: w-pay },
+          upsertIds: [w-6],
+          drawMs: 800,
+        }
+
+  - id: cost
+    chapter: Feature တိုင်းမှာ ကုန်ကျစရိတ် ရှိတယ်
+    narration: >
+      [[mark:c-title]] agent ရှိတော့ feature တစ်ခု၊ ဆိုလိုတာက app ရဲ့ လုပ်ဆောင်ချက် တစ်ခုကို ထပ်ထည့်တာ အလကားလို
+      ထင်ရပါတယ်။ ခိုင်းလိုက်ရုံနဲ့ code ကို မိနစ်ပိုင်းအတွင်း ထုတ်ပေးနိုင်လို့ပါ။ [[mark:c-build]] ဒါပေမဲ့ ဆောက်တာက
+      feature တစ်ခုရဲ့ ကုန်ကျစရိတ်ထဲက တစ်ပိုင်းပဲ ဖြစ်ပါတယ်။ agent က မြန်အောင် လုပ်ပေးနိုင်တာလည်း ဒီ အပိုင်းပါ။
+      [[mark:c-check]] ဆောက်ပြီးရင် မှန်မမှန် စစ်ရပါတယ်။ ပုံမှန် အော်ဒါ တစ်ခုတင် မဟုတ်ဘဲ မှားနိုင်တဲ့ နေရာတွေကိုပါ
+      စစ်ရပါတယ်။ [[mark:c-run]] ပြီးတော့ customer တွေ သုံးနေသရွေ့ app ကို အမြဲ အလုပ်လုပ်နေအောင် run ထားရပြီး၊
+      ပျက်ရင် ပြင်ရပါတယ်။ SMS ပို့ဖို့ဆိုရင် အပြင်က service ကို ငွေပေးပြီး သုံးရလေ့ ရှိလို့ လစဉ် ကုန်ကျစရိတ်လည်း
+      တိုးပါတယ်။ [[mark:c-explain]] နောက်ဆုံး ကောင်တာက လှလှ နဲ့ customer တွေကို feature အသစ် ဘယ်လို သုံးရလဲ
+      ရှင်းပြရပါတယ်။ [[mark:c-note]] ဆိုလိုတာက ကုန်ကျစရိတ်က ပျောက်သွားတာ မဟုတ်ဘဲ၊ code ရိုက်တာကနေ စစ်တာ၊ run
+      ထားတာ၊ ရှင်းပြတာဆီကို ရွှေ့သွားတာပါ။ ဒီ အလုပ်တွေကို ကိုယ် တစ်ယောက်တည်း လုပ်ရမှာမို့၊ feature တစ်ခု
+      ထပ်ထည့်တိုင်း ကိုယ့် အချိန် ကုန်ပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-c-title,
+          type: whiteboard.apply,
+          at: { mark: c-title },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-build,
+          type: whiteboard.apply,
+          at: { mark: c-build },
+          upsertIds: [c-1, c-1b],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-check,
+          type: whiteboard.apply,
+          at: { mark: c-check },
+          upsertIds: [c-2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-run,
+          type: whiteboard.apply,
+          at: { mark: c-run },
+          upsertIds: [c-3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-explain,
+          type: whiteboard.apply,
+          at: { mark: c-explain },
+          upsertIds: [c-4],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-note,
+          type: whiteboard.apply,
+          at: { mark: c-note },
+          upsertIds: [c-box, c-mine, c-note],
+          drawMs: 1600,
+        }
+
+  - id: mvp
+    chapter: MVP ဆိုတာ ဘာလဲ
+    narration: >
+      [[mark:close-c]] ဒါဆို ပထမ version မှာ ဘာတွေ ပါသင့်လဲ။ [[mark:open-problem]] ဖြေဖို့ problem ဖိုင်ကို ပြန်ကြည့်ရအောင်။
+      [[mark:sel-know]] ဒီ အပိုင်းမှာ ပြဿနာ ပြေပြီလား ဆိုတာကို ဘယ် ကိန်းဂဏန်းတွေနဲ့ တိုင်းမလဲ ဆုံးဖြတ်ထားခဲ့ပါတယ်။
+      [[mark:mvp]] ပထမ version ရဲ့ အဓိက အလုပ်က ဒီ ကိန်းဂဏန်းတွေ တကယ် ပြောင်းမပြောင်း စမ်းကြည့်နိုင်ဖို့ပါ။ ပြဿနာ
+      ပြေမပြေကို တကယ့် လူတွေနဲ့ စမ်းနိုင်တဲ့ အသေးဆုံး version ကို MVP၊ minimum viable product လို့
+      ခေါ်ပါတယ်။ [[mark:mvp-not]] MVP ဆိုတာ အရာအားလုံးကို နည်းနည်းစီ ညံ့ညံ့ ဆောက်ထားတာ မဟုတ်ပါဘူး။ customer က
+      ကြိုမှာတာကနေ ကောင်တာက လှလှ အော်ဒါကို မြင်တာ၊ customer လာယူသွားတာ အထိ လမ်း တစ်လမ်းလုံး တကယ် အလုပ်လုပ်ရပါမယ်။
+      အဲဒီ လမ်း တစ်လမ်း ရှိရင်ပဲ customer တွေ တန်းထဲကနေ ပြန်ထွက်သွားတာ နည်းလာလား ဆိုတာကို တိုင်းလို့ ရပါပြီ။
+    sources:
+      - {
+          title: "Agile Alliance: What is a Minimum Viable Product (MVP)?",
+          url: "https://www.agilealliance.org/glossary/mvp/",
+        }
+      - {
+          title: "GOV.UK Service Manual: How the alpha phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-alpha-phase-works",
+        }
+    actions:
+      - { id: close-c, type: whiteboard.apply, at: { mark: close-c }, open: false }
+      - {
+          id: open-problem,
+          type: workspace.openFile,
+          at: { mark: open-problem },
+          path: docs/problem.md,
+        }
+      - {
+          id: sel-know,
+          type: editor.select,
+          at: { mark: sel-know },
+          target:
+            {
+              file: docs/problem.md,
+              text: "- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်\n- ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: slice
+    narration: >
+      [[mark:l-open]] ဒါကို ပုံနဲ့ ကြည့်ရအောင်။ app မှာ အလွှာ သုံးလွှာ ရှိတယ်လို့ မြင်ကြည့်ပါ။ customer ရဲ့ ဖုန်း
+      screen၊ အော်ဒါကို သိမ်းတဲ့ အပိုင်းနဲ့ ကောင်တာက စာရင်းပါ။ [[mark:l-thick]] တစ်နည်းက ဖုန်း screen အလွှာကို
+      အရင် အကုန် ပြီးအောင် ဆောက်တာပါ။ menu ပုံတွေ၊ login၊ ရောင်စုံ ဒီဇိုင်း အကုန် ပါလာပေမယ့်၊ အော်ဒါတွေက
+      ကောင်တာကို မရောက်သေးပါဘူး။ အပတ်တွေ ကြာသွားပေမယ့် customer တစ်ယောက်မှ တကယ် မှာလို့ မရသေးပါဘူး။
+      [[mark:l-thin]] နောက်တစ်နည်းကတော့ အလွှာ သုံးလွှာလုံးကို ဖြတ်သွားတဲ့ ပါးပါး အချပ်လေး တစ်ချပ်ကို အရင်
+      ဆောက်တာပါ။ ရိုးရိုး form တစ်ခု၊ အော်ဒါ သိမ်းတာနဲ့ ကောင်တာမှာ စာရင်း ပြတာ ပါပါတယ်။ ရောင်စုံ ဒီဇိုင်းနဲ့ ပုံတွေ မပါသေးပါဘူး။
+      ဒါပေမဲ့ အော်ဒါ တစ်ခုက အစကနေ အဆုံးထိ တကယ် ရောက်ပါတယ်။ [[mark:l-win]] ဒီ ပါးပါး အချပ်ကို ဆိုင်မှာ
+      စမ်းသုံးပြီး ခုနက ကိန်းဂဏန်းတွေကို တိုင်းလို့ ရပါတယ်။ ဒါကြောင့် အရာ အားလုံးကို တစ်ဝက်စီ ဆောက်ထားတာထက်၊
+      အစအဆုံး အလုပ်လုပ်တဲ့ အသေးလေးက ပိုတန်ဖိုး ရှိပါတယ်။
+    sources:
+      - {
+          title: "The Humanizing Work Guide to Splitting User Stories",
+          url: "https://www.humanizingwork.com/the-humanizing-work-guide-to-splitting-user-stories/",
+        }
+      - {
+          title: "Agile Alliance: What is a Minimum Viable Product (MVP)?",
+          url: "https://www.agilealliance.org/glossary/mvp/",
+        }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-open },
+          open: true,
+          clear: true,
+          upsertIds: [l-title, l-a1, l-f1, l-a2, l-f2, l-a3, l-f3],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-l-thick,
+          type: whiteboard.apply,
+          at: { mark: l-thick },
+          upsertIds: [l-thick-box, l-thick, l-n1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-thin,
+          type: whiteboard.apply,
+          at: { mark: l-thin },
+          upsertIds: [l-thin-box, l-thin-arrow, l-n2],
+          drawMs: 1800,
+        }
+
+  - id: moscow
+    chapter: Must၊ Should၊ Could၊ Won't
+    narration: >
+      [[mark:w-reopen]] ခုနက လိုချင်တာ စာရင်းကို ပြန်ကြည့်ရအောင်။ ဒီ စာရင်းကို အုပ်စု လေးစု ခွဲပါမယ်။ ဒီလို ခွဲတဲ့
+      နည်းကို MoSCoW လို့ ခေါ်ပါတယ်။ [[mark:k-must]] ပထမ အုပ်စု Must ကတော့ မဖြစ်မနေ ပါရမယ့် အရာတွေပါ။ မပါရင်
+      ပထမ version နဲ့ ပြဿနာကို စမ်းလို့ မရတော့ပါဘူး။ ပထမ နှစ်ကြောင်းက ဒီ အုပ်စုထဲ ရောက်ပါတယ်။
+      [[mark:k-should]] ဒုတိယ Should ကတော့ အရေးကြီးပေမယ့် မပါလည်း app အလုပ်ဖြစ်နေဆဲ အရာတွေပါ။ SMS မပါရင်လည်း
+      customer က သူ ရွေးထားတဲ့ အချိန်မှာ လာယူလို့ ရပါတယ်။ [[mark:k-could]] တတိယ Could ကတော့ အချိန် ပိုမှ လုပ်မယ့်
+      အရာတွေပါ။ အချိန် မလောက်ရင် အရင်ဆုံး ဖြုတ်ရမယ့် အုပ်စုလည်း ဖြစ်ပါတယ်။ [[mark:k-wont]] နောက်ဆုံး Won't
+      ကတော့ ဒီ version မှာ မလုပ်ဘူးလို့ သဘောတူ ဆုံးဖြတ်ထားတဲ့ အရာတွေပါ။ delivery နဲ့ login ကို ဒီထဲ ထည့်ပါတယ်။
+      [[mark:k-q]] online ငွေချေတာကိုတော့ ချန်ထားပြီး၊ နောက်မှ အတူတူ ဆုံးဖြတ်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Agile Business Consortium: What is MoSCoW Prioritization?",
+          url: "https://www.agilebusiness.org/resource/what-is-moscow-prioritization/",
+        }
+    actions:
+      - {
+          id: draw-w-reopen,
+          type: whiteboard.apply,
+          at: { mark: w-reopen },
+          open: true,
+          clear: true,
+          upsertIds: [w-title, w-1, w-2, w-3, w-4, w-5, w-6],
+        }
+      - {
+          id: draw-k-must,
+          type: whiteboard.apply,
+          at: { mark: k-must },
+          upsertIds: [k-must],
+          drawMs: 600,
+        }
+      - {
+          id: draw-k-should,
+          type: whiteboard.apply,
+          at: { mark: k-should },
+          upsertIds: [k-should],
+          drawMs: 600,
+        }
+      - {
+          id: draw-k-could,
+          type: whiteboard.apply,
+          at: { mark: k-could },
+          upsertIds: [k-could],
+          drawMs: 600,
+        }
+      - {
+          id: draw-k-wont,
+          type: whiteboard.apply,
+          at: { mark: k-wont },
+          upsertIds: [k-wont],
+          drawMs: 600,
+        }
+      - { id: draw-k-q, type: whiteboard.apply, at: { mark: k-q }, upsertIds: [k-q], drawMs: 500 }
+
+  - id: scope-must
+    narration: >
+      [[mark:close-w]] ဒီ ဆုံးဖြတ်ချက်တွေကို ဖိုင်ထဲမှာ ရေးထားရအောင်။ [[mark:open-req]] requirements ဖိုင်ကို
+      ပြန်ဖွင့်ပါမယ်။ [[mark:type-must]] အောက်ဆုံးမှာ ပထမ version ရဲ့ scope ဆိုတဲ့ အပိုင်း အသစ် ထည့်ပါတယ်။ scope
+      ဆိုတာ ဒီတစ်ခါ လုပ်မယ့် အရာနဲ့ မလုပ်မယ့် အရာကြားက မျဉ်းပါ။ Must အောက်က သုံးခု ပေါင်းလိုက်တာ ကိုယ်တို့ရဲ့ MVP
+      ပါ။ [[mark:sel-counter]] ဒီ ကောင်တာစာရင်းက ခုနက ပါးပါး အချပ်ရဲ့ အောက်ဆုံး အလွှာပါ။ ဒါ မပါရင် အော်ဒါတွေက
+      လှလှ ဆီ မရောက်ဘဲ လမ်းတစ်ဝက်မှာ ပြတ်နေပြီး၊ ပြဿနာ ပြေမပြေကို စမ်းလို့ မရတော့ပါဘူး။ [[mark:type-should]]
+      Should အောက်မှာတော့ SMS ကို ထည့်ပါတယ်။ အချိန် ရရင် လုပ်မယ်၊ မရရင်လည်း ပထမ version ကို ထုတ်လို့ ရတယ် ဆိုတဲ့
+      သဘောပါ။ [[mark:could-note]] Could အုပ်စုကိုတော့ ဒီ စာမျက်နှာမှာ မရေးပါဘူး။ ကိုယ် တစ်ယောက်တည်း ဆောက်တာမို့
+      ပထမ version မှာ အချိန် ပိုမယ် မထင်လို့ပါ။ menu ပုံနဲ့ ပစ္စည်း အမျိုးမျိုး မှာတာကို app ကို တကယ် သုံးပြီးမှ
+      ပြန်ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Agile Business Consortium: What is MoSCoW Prioritization?",
+          url: "https://www.agilebusiness.org/resource/what-is-moscow-prioritization/",
+        }
+      - {
+          title: "Agile Alliance: What is a Minimum Viable Product (MVP)?",
+          url: "https://www.agilealliance.org/glossary/mvp/",
+        }
+    actions:
+      - { id: close-w, type: whiteboard.apply, at: { mark: close-w }, open: false }
+      - {
+          id: open-req,
+          type: workspace.openFile,
+          at: { mark: open-req },
+          path: docs/requirements.md,
+        }
+      - id: type-must
+        type: editor.type
+        at: { mark: type-must }
+        target: { file: docs/requirements.md, after: "စနေ–တနင်္ဂနွေ 7:00–21:00\n", occurrence: 1 }
+        text: "\n## Scope (v1)\nMust\n- လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ\n- အော်ဒါနံပါတ်\n- ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ\n"
+        cadence: line-by-line
+      - {
+          id: expect-must,
+          type: expect.file,
+          at: { afterAction: type-must },
+          path: docs/requirements.md,
+          contains: "## Scope (v1)\nMust\n- လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ",
+        }
+      - {
+          id: sel-counter,
+          type: editor.select,
+          at: { mark: sel-counter },
+          target:
+            { file: docs/requirements.md, text: "- ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ", occurrence: 1 },
+        }
+      - id: type-should
+        type: editor.type
+        at: { mark: type-should }
+        target:
+          { file: docs/requirements.md, after: "- ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ\n", occurrence: 1 }
+        text: "Should\n- အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ\n"
+        cadence: line-by-line
+
+  - id: wont
+    narration: >
+      [[mark:type-wont]] နောက်ဆုံး Won't အောက်မှာ delivery နဲ့ login ကို ရေးပါမယ်။ ဒီ အကြံတွေကို ပယ်လိုက်တာ
+      မဟုတ်ပါဘူး။ ပထမ version ကို အချိန်မီ ထုတ်နိုင်ဖို့ မြမြ နဲ့ အတူ ချထားတဲ့ ဆုံးဖြတ်ချက်ပါ။ [[mark:sel-delivery-w]]
+      ရေးထားရင် ဘာအကျိုး ရှိလဲ ဆိုတော့၊ နောက်တစ်ပတ်မှာ delivery လေးလည်း ထည့်ရင် ကောင်းမယ် ဆိုတဲ့ စကား ပြန်ပေါ်လာရင်၊
+      မြမြ နဲ့ သဘောတူထားတဲ့ ဒီ စာကြောင်းကို ပြန်ပြလို့ ရပါတယ်။ ဒါမှ customer တွေဆီ app ရောက်မယ့် ရက်ကို
+      ထိန်းထားနိုင်မှာပါ။ [[mark:sel-login]] agent ဆီကလည်း ခိုင်းထားတာထက် ပိုတာတွေ ထွက်လာနိုင်ပါတယ်။ ဥပမာ order
+      form တစ်ခု ခိုင်းရင်တောင် login စာမျက်နှာ ပါလာနိုင်ပါတယ်။ agent ကို ဒီ ဖိုင် ဖတ်ခိုင်းထားရင်၊ login က ဒီ
+      version ထဲ မပါဘူး ဆိုတာ စာထဲမှာ ရှိနေပါပြီ။ ဒါပေမဲ့ ထွက်လာတာကို ဒီ စာရင်းနဲ့ တိုက်စစ်ပြီး scope ကို
+      ထိန်းတာကတော့ ကိုယ့် တာဝန်ပါ။
+    sources:
+      - {
+          title: "Agile Business Consortium: What is MoSCoW Prioritization?",
+          url: "https://www.agilebusiness.org/resource/what-is-moscow-prioritization/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-wont
+        type: editor.type
+        at: { mark: type-wont }
+        target: { file: docs/requirements.md, after: "- အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ\n", occurrence: 1 }
+        text: "Won't (for now)\n- delivery\n- customer account နဲ့ login\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-delivery-w,
+          type: editor.select,
+          at: { mark: sel-delivery-w },
+          target: { file: docs/requirements.md, text: "- delivery\n", occurrence: 1 },
+        }
+      - {
+          id: sel-login,
+          type: editor.select,
+          at: { mark: sel-login },
+          target: { file: docs/requirements.md, text: "- customer account နဲ့ login", occurrence: 1 },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခုနက ချန်ထားခဲ့တဲ့ online ငွေချေတာကို ပထမ version မှာ Must ထဲ
+      ထည့်မလား၊ Won't ထဲ ထည့်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      Won't ပါ။ ဘာကြောင့်လဲဆိုတော့ ငွေနဲ့ ဆိုင်တဲ့ အပိုင်းက risk အများဆုံး ဖြစ်လို့ပါ။ ဆိုလိုတာက မှားသွားရင်
+      အနစ်နာဆုံးဖြစ်ပြီး၊ ကုန်ကျစရိတ်လည်း အများဆုံးပါ။ အပြင်က ငွေပေးချေမှု service နဲ့ ချိတ်ရမှာ ဖြစ်ပြီး၊ မှားရင်
+      customer ရဲ့ ငွေကို ထိခိုက်နိုင်ပါတယ်။ [[mark:quiz-why2]] ပြီးတော့ ကောင်တာမှာ ငွေချေတာက အခုလည်း အလုပ်ဖြစ်နေပြီး၊ constraint ထဲမှာလည်း
+      ရေးထားပြီးသားပါ။ online ငွေချေတာ မပါလည်း ကြိုမှာတာ အလုပ်ဖြစ်မဖြစ်ကို စမ်းလို့ ရပါတယ်။ app ကို တကယ်
+      သုံးကြည့်ပြီးမှ၊ ဥပမာ လာမယူတဲ့ အော်ဒါတွေ များလာရင် ပြန်စဉ်းစားပါမယ်။
+    sources:
+      - {
+          title: "Agile Business Consortium: What is MoSCoW Prioritization?",
+          url: "https://www.agilebusiness.org/resource/what-is-moscow-prioritization/",
+        }
+      - {
+          title: "Agile Alliance: What is a Minimum Viable Product (MVP)?",
+          url: "https://www.agilealliance.org/glossary/mvp/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-r1],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-quiz-why2,
+          type: whiteboard.apply,
+          at: { mark: quiz-why2 },
+          upsertIds: [z-r2, z-r3],
+          drawMs: 1300,
+        }
+
+  - id: pay-line
+    narration: >
+      [[mark:close-quiz]] ဒီ ဆုံးဖြတ်ချက်ကိုလည်း ဖိုင်ထဲမှာ ချက်ချင်း ရေးထားရအောင်။ [[mark:type-pay]] Won't ထဲမှာ
+      delivery ရဲ့ အောက်က တစ်ကြောင်းအဖြစ် ထည့်လိုက်ပါတယ်။ ဆုံးဖြတ်ပြီးသား ကိစ္စကို နောက်မှ ပြန်ငြင်းခုံနေစရာ
+      မလိုအောင်၊ ဆုံးဖြတ်တဲ့ နေ့မှာပဲ ရေးထားတာပါ။
+    sources:
+      - {
+          title: "Agile Business Consortium: What is MoSCoW Prioritization?",
+          url: "https://www.agilebusiness.org/resource/what-is-moscow-prioritization/",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - id: type-pay
+        type: editor.type
+        at: { mark: type-pay }
+        target: { file: docs/requirements.md, after: "- delivery\n", occurrence: 1 }
+        text: "- online ငွေပေးချေမှု\n"
+        cadence: line-by-line
+      - {
+          id: expect-pay,
+          type: expect.file,
+          at: { afterAction: type-pay },
+          path: docs/requirements.md,
+          contains: "Won't (for now)\n- delivery\n- online ငွေပေးချေမှု\n- customer account နဲ့ login",
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ agent က code ကို မြန်မြန် ထုတ်ပေးနိုင်ပေမယ့် feature တိုင်းမှာ စစ်ဖို့၊ run ထားဖို့၊
+      ရှင်းပြဖို့ ကုန်ကျစရိတ် ရှိနေဆဲပါ။ [[mark:sel-must-r]] ပထမ version ဟာ ပြဿနာ ပြေမပြေကို စမ်းနိုင်တဲ့
+      အသေးဆုံး MVP ပါ။ အစကနေ အဆုံးထိ အလုပ်လုပ်တဲ့ ပါးပါး အချပ် ဖြစ်ရပါမယ်။ [[mark:sel-wont-r]] မလုပ်မယ့်
+      အရာတွေကိုလည်း Won't အောက်မှာ ရေးထားပြီး၊ scope ကို ကိုယ်ကိုယ်တိုင် ထိန်းပါ။ နောက် lesson မှာတော့ ဒီ scope
+      သေးသေးလေးထဲမှာတောင် ဘယ်သူမှ မပြောခဲ့တဲ့ အနားသတ်က အခြေအနေတွေ၊ edge case တွေနဲ့ assumption တွေကို
+      ရှာသွားပါမယ်။
+    sources:
+      - {
+          title: "Agile Alliance: What is a Minimum Viable Product (MVP)?",
+          url: "https://www.agilealliance.org/glossary/mvp/",
+        }
+      - {
+          title: "Agile Business Consortium: What is MoSCoW Prioritization?",
+          url: "https://www.agilebusiness.org/resource/what-is-moscow-prioritization/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-must-r,
+          type: editor.select,
+          at: { mark: sel-must-r },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "Must\n- လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ\n- အော်ဒါနံပါတ်\n- ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-wont-r,
+          type: editor.select,
+          at: { mark: sel-wont-r },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "Won't (for now)\n- delivery\n- online ငွေပေးချေမှု\n- customer account နဲ့ login\n",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
