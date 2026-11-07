@@ -42,12 +42,12 @@ no lesson has been rendered in /studio yet.
 | 4   | `ai-builder-04-problem-first`          | Solution မတိုင်ခင် problem                | docs    | 8.8   |
 | 5   | `ai-builder-05-requirements`           | Requirement တွေကို ရှာဖွေ ရေးသားခြင်း       | docs    | 9.8   |
 | 6   | `ai-builder-06-scope-mvp`              | Scope နဲ့ MVP                           | docs    | 8.7   |
-| 7   | `ai-builder-07-edge-cases`             | Edge case နဲ့ assumption                | docs    | 8.7   |
+| 7   | `ai-builder-07-edge-cases`             | Edge case နဲ့ assumption                | docs    | 8.8   |
 | 8   | `ai-builder-08-acceptance-criteria`    | Acceptance criteria နဲ့ ပြီးတယ် ဆိုတာ ဘာလဲ   | docs    | 9.4   |
 | 9   | `ai-builder-09-writing-a-spec`         | Spec တစ်စောင် ရေးခြင်း                   | docs    | 9.9   |
 | 10  | `ai-builder-10-context-engineering`    | Context engineering နဲ့ AGENTS.md       | docs    | 9.8   |
 | 11  | `ai-builder-11-briefing-an-agent`      | Agent ကို task တစ်ခု အပ်ခြင်း               | docs    | 9.7   |
-| 12  | `ai-builder-12-working-with-people`    | လူတွေနဲ့ ဆက်သွယ် ပြောဆိုခြင်း                   | docs    | 9.5   |
+| 12  | `ai-builder-12-working-with-people`    | လူတွေနဲ့ ဆက်သွယ် ပြောဆိုခြင်း                   | docs    | 9.7   |
 | 13  | `ai-builder-13-decomposition`          | အလုပ်ကြီးကို အပိုင်းလေးတွေ ခွဲခြင်း               | docs    | 9.7   |
 | 14  | `ai-builder-14-how-software-fits`      | Software ရဲ့ အစိတ်အပိုင်းတွေ                  | docs    | 9.2   |
 | 15  | `ai-builder-15-data-thinking`          | Data ကို စနစ်တကျ တွေးခြင်း                 | docs    | 9.6   |
@@ -55,7 +55,7 @@ no lesson has been rendered in /studio yet.
 | 17  | `ai-builder-17-simplicity`             | ရိုးရှင်းအောင် ထိန်းခြင်း                     | docs    | 8.7   |
 | 18  | `ai-builder-18-the-80-percent-problem` | 80% problem                           | preview | 9.5   |
 | 19  | `ai-builder-19-testing-without-code`   | Code မရေးဘဲ test လုပ်ခြင်း                | preview | 9.7   |
-| 20  | `ai-builder-20-reviewing-agent-work`   | Agent ရဲ့ အလုပ်ကို review လုပ်ခြင်း            | docs    | 8.9   |
+| 20  | `ai-builder-20-reviewing-agent-work`   | Agent ရဲ့ အလုပ်ကို review လုပ်ခြင်း            | docs    | 8.8   |
 | 21  | `ai-builder-21-debugging`              | Scientist လို debug လုပ်ခြင်း              | preview | 9.9   |
 | 22  | `ai-builder-22-evals`                  | AI feature တွေအတွက် eval                 | docs    | 8.9   |
 | 23  | `ai-builder-23-version-control`        | Version control နဲ့ save point          | docs    | 9.3   |
