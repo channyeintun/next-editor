@@ -3,7 +3,7 @@
 # Start state (ws/): base-docs (package.json with a no-op dev script, notes.md) and
 # docs/requirements.md pinned exactly as COURSE-KIT §4.2 stands after L06 (through `## Scope (v1)`,
 # followed by a blank line). Nothing runs. The lesson types the binder's last three sections:
-# Edge cases · Assumptions · Questions for မြမြ (one line-by-line action each).
+# Edge cases · Assumptions · Questions for the owner (one line-by-line action each).
 # Deliberate gap (binder note): the Burmese-digit requirement is NOT made an edge case here.
 #
 # Boards: (C) the happy path, then the what-if checklist drawn item by item (3 × 3 orange boxes);
@@ -29,7 +29,7 @@ lesson:
         - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
         - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
         - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
-        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+        - ဆိုင်ပိုင်ရှင် အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
 
         ## Non-functional
         - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
@@ -243,7 +243,7 @@ lesson:
         fontSize: 28,
       }
     # Board E: one story (blue box) and four ways to decide an edge, as a 2 × 2 grid under it:
-    # green handle, red refuse clearly, white ignore on purpose (written down), orange ask မြမြ.
+    # green handle, red refuse clearly, white ignore on purpose (written down), orange ask the owner.
     # The violet rule: what isn't written, the agent guesses.
     - {
         id: e-story-box,
@@ -395,7 +395,7 @@ lesson:
         y: 463,
         width: 340,
         height: 40,
-        text: "လာမယူရင် → မြမြ",
+        text: "လာမယူရင် → ဆိုင်ပိုင်ရှင်",
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -410,7 +410,7 @@ lesson:
         strokeColor: "#6741d9",
         fontSize: 32,
       }
-    # Board Z: the quiz (white question, green answer, white reason, orange: ask မြမြ).
+    # Board Z: the quiz (white question, green answer, white reason, orange: ask the owner).
     - {
         id: z-title,
         kind: text,
@@ -484,7 +484,7 @@ lesson:
         y: 545,
         width: 640,
         height: 40,
-        text: "ပိတ်ခါနီး မှာခွင့် → မြမြ ကို မေး",
+        text: "ပိတ်ခါနီး မှာခွင့် → ဆိုင်ပိုင်ရှင် ကို မေး",
         strokeColor: "#f08c00",
         fontSize: 28,
       }
@@ -656,7 +656,7 @@ scenes:
       တတိယက တမင် ချန်ထားတာပါ။ တစ်မနက် အော်ဒါ ရာချီ ဝင်လာရင် ဘာလုပ်မလဲ ဆိုတာကို ပထမ version
       မှာ မဖြေရှင်းဘဲ ချန်ထားနိုင်ပါတယ်။ ဒါပေမဲ့ ဘာကြောင့် ချန်လဲ ဆိုတာကို ရေးထားရပါမယ်။ [[mark:e-ask]]
       နောက်ဆုံး တစ်မျိုးကတော့ ဘယ်လို လုပ်ရမလဲ မသိသေးရင် မေးတာပါ။ လာမယူတဲ့ အော်ဒါကို ဘာလုပ်မလဲ ဆိုတာက ဆိုင်ရဲ့
-      စည်းကမ်း ဖြစ်လို့၊ ဆိုင်ပိုင်ရှင် မြမြ ကပဲ ဆုံးဖြတ်လို့ ရပါတယ်။ [[mark:e-rule]] ဒီ လေးမျိုးထဲက ဘယ်ဟာကို
+      စည်းကမ်း ဖြစ်လို့၊ ဆိုင်ပိုင်ရှင် ကပဲ ဆုံးဖြတ်လို့ ရပါတယ်။ [[mark:e-rule]] ဒီ လေးမျိုးထဲက ဘယ်ဟာကို
       ရွေးရွေး၊ ရွေးတဲ့ အဖြေကို စာနဲ့ ရေးထားရပါမယ်။ မရေးထားတဲ့ ကိစ္စကိုတော့ agent က ခန့်မှန်းပြီး
       သူ့ဘာသာ ရွေးသွားမှာပါ။
     sources:
@@ -827,14 +827,14 @@ scenes:
 
   - id: questions
     narration: >
-      [[mark:type-questions]] နောက်ဆုံး အပိုင်းကတော့ မြမြ ကို မေးရမယ့် မေးခွန်းတွေပါ။ ကိုယ် မသိတာကို
+      [[mark:type-questions]] နောက်ဆုံး အပိုင်းကတော့ ဆိုင်ပိုင်ရှင် ကို မေးရမယ့် မေးခွန်းတွေပါ။ ကိုယ် မသိတာကို
       ခန့်မှန်းပြီး ရေးမယ့်အစား မေးခွန်း အဖြစ် ချန်ထားတာပါ။ [[mark:sel-cancel]] ပထမ မေးခွန်းက ခုနက နှစ်နာရီ
       ဆိုတဲ့ assumption နဲ့ ဆက်စပ်နေပါတယ်။ customer မလာရင် ပြင်ထားတဲ့ အော်ဒါကို ဘယ်လောက်ထိ ထားပေးမလဲ
-      ဆိုတာက ဆိုင်ရဲ့ ငွေနဲ့ ပစ္စည်းကို ထိခိုက်လို့၊ မြမြ ကပဲ ဆုံးဖြတ်ရပါမယ်။ ဒုတိယ မေးခွန်းကတော့ ဆိုင်ပိတ်ခါနီးမှာ
-      ကြိုမှာတာ အကြောင်းပါ။ [[mark:sel-q-head]] ဒီ အပိုင်းက မြမြ အတွက် ဖြစ်ပေမဲ့၊
+      ဆိုတာက ဆိုင်ရဲ့ ငွေနဲ့ ပစ္စည်းကို ထိခိုက်လို့၊ ဆိုင်ပိုင်ရှင် ကပဲ ဆုံးဖြတ်ရပါမယ်။ ဒုတိယ မေးခွန်းကတော့ ဆိုင်ပိတ်ခါနီးမှာ
+      ကြိုမှာတာ အကြောင်းပါ။ [[mark:sel-q-head]] ဒီ အပိုင်းက ဆိုင်ပိုင်ရှင် အတွက် ဖြစ်ပေမဲ့၊
       မနက်ခင်း ကောင်တာ အလုပ်နဲ့ ဆိုင်တဲ့ မေးခွန်း ဆိုရင်တော့ လှလှ ကို မေးရပါမယ်။ ဥပမာ ကြိုမှာတဲ့ အော်ဒါ
       တစ်ခုကို ပြင်ဖို့ ဘယ်လောက် ကြာလဲ ဆိုတာမျိုးပါ။ မေးခွန်းတွေကို ဒီလို စာရင်းလုပ်ထားတော့
-      မြမြ နဲ့ တွေ့တဲ့အခါ တစ်ခါတည်း မေးလို့ ရပါတယ်။ ဖြေပြီးရင် အဖြေကို ဒီ ဖိုင်ထဲ ပြန်ထည့်ရပြီး၊ အဖြေ မရသေးခင်
+      ဆိုင်ပိုင်ရှင် နဲ့ တွေ့တဲ့အခါ တစ်ခါတည်း မေးလို့ ရပါတယ်။ ဖြေပြီးရင် အဖြေကို ဒီ ဖိုင်ထဲ ပြန်ထည့်ရပြီး၊ အဖြေ မရသေးခင်
       ဒီ ကိစ္စတွေကို မဆောက်ဖို့ agent ကိုလည်း ပြောထားလို့ ရပါတယ်။
     sources:
       - {
@@ -846,7 +846,7 @@ scenes:
         type: editor.type
         at: { mark: type-questions }
         target: { file: docs/requirements.md, after: "50 ထက် မများဘူး။\n\n", occurrence: 1 }
-        text: "## Questions for မြမြ\n- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။\n- ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။\n"
+        text: "## Questions for the owner\n- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။\n- ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။\n"
         cadence: line-by-line
       - {
           id: expect-questions,
@@ -866,7 +866,7 @@ scenes:
           id: sel-q-head,
           type: editor.select,
           at: { mark: sel-q-head },
-          target: { file: docs/requirements.md, text: "## Questions for မြမြ", occurrence: 1 },
+          target: { file: docs/requirements.md, text: "## Questions for the owner", occurrence: 1 },
         }
 
   - id: quiz
@@ -877,7 +877,7 @@ scenes:
       [[mark:quiz-answer]] အဖြေကတော့ ရှင်းရှင်းလင်းလင်း ငြင်းတာပါ။ ဘာကြောင့်လဲဆိုတော့ လာယူချိန်က ဆိုင်ပိတ်ပြီးမှ
       ဖြစ်နေလို့ပါ။ ငြင်းတဲ့အခါမှာလည်း ဒီနေ့ ဖွင့်ချိန်ကို customer မြင်အောင် ပြပေးရပါမယ်။ [[mark:quiz-ask]]
       ဒါပေမဲ့ ပိတ်ခါနီး ငါးမိနစ်မှာ ကြိုမှာတာကို လက်ခံမလား ဆိုတာကတော့ ကိုယ် ဆုံးဖြတ်ရမယ့် ကိစ္စ
-      မဟုတ်ပါဘူး။ ဒါကြောင့် မြမြ ကို မေးမယ့် ဒုတိယ မေးခွန်းအဖြစ် ရေးထားခဲ့တာပါ။
+      မဟုတ်ပါဘူး။ ဒါကြောင့် ဆိုင်ပိုင်ရှင် ကို မေးမယ့် ဒုတိယ မေးခွန်းအဖြစ် ရေးထားခဲ့တာပါ။
     sources:
       - { title: "Wikipedia: Edge case", url: "https://en.wikipedia.org/wiki/Edge_case" }
       - {
@@ -945,7 +945,7 @@ scenes:
           id: sel-questions2,
           type: editor.select,
           at: { mark: sel-questions2 },
-          target: { file: docs/requirements.md, text: "## Questions for မြမြ", occurrence: 1 },
+          target: { file: docs/requirements.md, text: "## Questions for the owner", occurrence: 1 },
         }
 checks:
   - { type: timing.p95Ms, max: 300 }
