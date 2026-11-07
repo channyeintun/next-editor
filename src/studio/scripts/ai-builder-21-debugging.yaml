@@ -1,0 +1,1845 @@
+# AI Builder, lesson 21: debugging like a scientist (Burmese, preview kind).
+#
+# Start state (ws/): the tea-shop pre-order app exactly as base-app/ ("the first version an agent
+# built", prepared for the lesson; never edited, never typed into); docs/requirements.md (COURSE-KIT
+# §4.2, final), docs/spec.md (§4.3 without AC-6), docs/test-plan.md (L19's final), AGENTS.md (§4.4
+# base + L17's Simplicity) and docs/bugs.md with only its title line. The runtime starts at the first mark; board P (the
+# paste-the-error loop vs the scientist's loop) carries ~1,800 narration characters before
+# runtime.waitForReady.
+#
+# Boards: (P) two columns flowing down: red = paste the message to the agent ↻, orange = the
+# scientist's five steps ↻; (C) change one thing: order #101 (3) vs #102 (၃), the guess and its
+# prediction; (T) requirement → edge case → AC → test case, the gap in red; (H) what to give the agent
+# (BUG-3 + AC-6 → a failing test first → fix → pass) and what we check ourselves; (Z) the quiz.
+# Preview: 3 → #101, 4,500 ကျပ်; ၃ → #102, NaN; ၁၀ → #103, NaN (the guess holds).
+# Typed: docs/bugs.md (a pointer to BUG-1/2 + BUG-3, COURSE-KIT §4.13), the Burmese-digit edge case in
+# docs/requirements.md, AC-6 in docs/spec.md, TC-6 in docs/test-plan.md, the digits rule in AGENTS.md.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-21-debugging.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-21-debugging
+  title: "AI Builder 21: Scientist လို debug လုပ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/bugs.md
+    sidebarStartsCollapsed: true
+    files:
+      AGENTS.md: |
+        # AGENTS.md · Shwe Tea House pre-order app
+
+        ## Project
+        A pre-order web app for a tea shop in Yangon. Customers order ahead and pick up at the counter.
+        Read docs/spec.md before any change. If the spec does not answer a question, stop and ask.
+
+        ## Stack
+        Plain HTML, CSS and JavaScript. No framework.
+
+        ## Rules
+        - Prices are whole kyat (integers). Never use decimals.
+        - Customer-facing text is Burmese (Unicode).
+        - Times are Asia/Yangon.
+        - Ask before adding any package.
+        - One task at a time. Keep each change small.
+
+        ## Done means
+        - The acceptance criteria named in the task pass.
+        - Summarise what you changed and what you did not do.
+
+        ## Simplicity
+        - Choose the simplest approach that meets the spec. Explain any new file or layer.
+        - No new dependency, service or abstraction without asking first.
+      docs/bugs.md: |+
+        # Bugs
+
+      docs/requirements.md: |
+        # Requirements · ကြိုမှာ app
+
+        ## User stories
+        - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
+        - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
+        - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
+        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+
+        ## Non-functional
+        - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
+        - မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။
+        - customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။
+        - စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။
+        - run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။
+
+        ## Constraints
+        - app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။
+        - ငွေကို ကောင်တာမှာပဲ ချေမယ်။
+        - ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00
+
+        ## Scope (v1)
+        Must
+        - လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ
+        - အော်ဒါနံပါတ်
+        - ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ
+        Should
+        - အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ
+        Won't (for now)
+        - delivery
+        - online ငွေပေးချေမှု
+        - customer account နဲ့ login
+
+        ## Edge cases
+        - အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ
+        - ဆိုင်ပိတ်ချိန် လာယူချိန် → လက်မခံ၊ ဖွင့်ချိန်ကို ပြ
+        - ဖုန်းနံပါတ် မပါ → လက်မခံ
+        - မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ
+
+        ## Assumptions
+        - customer တွေ မှာပြီး 2 နာရီအတွင်း လာယူမယ်။
+        - တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ 50 ထက် မများဘူး။
+
+        ## Questions for မြမြ
+        - လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။
+        - ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      docs/test-plan.md: |
+        # Test plan · v1
+
+        ## TC-1 · ပုံမှန် အော်ဒါ (AC-1)
+        - လုပ်ရမှာ — လက်ဖက်ရည် 2၊ 08:30၊ အောင်အောင်၊ 09 000 111 222 ထည့်ပြီး မှာမယ် ကို နှိပ်
+        - မျှော်လင့်ချက် — အော်ဒါနံပါတ်၊ 3,000 ကျပ်၊ 08:30
+        - ရလဒ် — ✅ #101၊ လက်ဖက်ရည် × 2၊ 3,000 ကျပ်၊ 08:30
+
+        ## TC-2 · အရေအတွက် 0 (AC-2)
+        - လုပ်ရမှာ — TC-1 အတိုင်း၊ အရေအတွက်ကိုပဲ 0
+        - မျှော်လင့်ချက် — အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြ
+        - ရလဒ် — ❌ 0 ကျပ်နဲ့ လက်ခံသွားတယ် (#102)
+
+        ## TC-3 · ဆိုင်ပိတ်ချိန် (AC-3)
+        - လုပ်ရမှာ — TC-1 အတိုင်း၊ လာယူချိန်ကိုပဲ 02:00
+        - မျှော်လင့်ချက် — အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြ
+        - ရလဒ် — ❌ 02:00 နဲ့ လက်ခံသွားတယ် (#103)
+
+        ## TC-4 · ဖုန်းနံပါတ် မပါ (AC-4)
+        - လုပ်ရမှာ — TC-1 အတိုင်း၊ ဖုန်းကိုပဲ အလွတ်
+        - မျှော်လင့်ချက် — အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်း
+        - ရလဒ် — ❌ ဖုန်း မပါဘဲ လက်ခံသွားတယ် (#104)
+
+        ## TC-5 · ကောင်တာစာရင်း (AC-5)
+        - လုပ်ရမှာ — လာယူချိန် မတူတဲ့ အော်ဒါ 2 ခု မှာပြီး ကောင်တာစာရင်းကို ကြည့်
+        - မျှော်လင့်ချက် — လာယူချိန်အလိုက် စီပြီး ပြ
+        - ရလဒ် — ⏸ မဆောက်ရသေးဘူး (Task 03)
+
+        ## Exploratory
+        - ရှာမယ့်အရာ — မှာမယ် ကို နှစ်ခါ နှိပ်ရင် ဘာဖြစ်လဲ
+        - တွေ့တာ — #105၊ #106၊ အော်ဒါ 2 ခု ဖြစ်တယ်။ requirements မှာ တစ်ခုပဲ လို့ ရေးထားပေမဲ့ AC မရှိသေးဘူး။
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင် · ကြိုမှာ</title>
+            <link rel="stylesheet" href="/src/style.css" />
+          </head>
+          <body>
+            <main class="app">
+              <header class="top">
+                <p class="shop">ရွှေလက်ဖက်ရည်ဆိုင်</p>
+                <h1>ကြိုမှာပြီး လာယူပါ</h1>
+              </header>
+
+              <form id="order-form" class="card" novalidate>
+                <label>
+                  ဘာမှာမလဲ
+                  <select id="item" name="item" data-testid="item"></select>
+                </label>
+                <label>
+                  အရေအတွက်
+                  <input id="quantity" name="quantity" type="text" inputmode="numeric" data-testid="qty" />
+                </label>
+                <label>
+                  လာယူမယ့် အချိန်
+                  <input id="pickup" name="pickup" type="time" data-testid="pickup" />
+                </label>
+                <label>
+                  နာမည်
+                  <input id="name" name="name" type="text" autocomplete="name" data-testid="name" />
+                </label>
+                <label>
+                  ဖုန်း
+                  <input id="phone" name="phone" type="tel" autocomplete="tel" data-testid="phone" />
+                </label>
+                <button type="submit" data-testid="order">မှာမယ်</button>
+              </form>
+
+              <section id="result" class="card result" data-testid="result" hidden>
+                <p class="ok" data-testid="result-number"></p>
+                <p data-testid="result-line"></p>
+                <p class="total" data-testid="result-total"></p>
+                <p data-testid="result-pickup"></p>
+                <p class="hint">ငွေကို ကောင်တာမှာ ချေပါ</p>
+              </section>
+            </main>
+            <script type="module" src="/src/main.js"></script>
+          </body>
+        </html>
+      package.json: |
+        {
+          "name": "shwe-tea-preorder",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      src/main.js: |
+        // Shwe Tea House pre-order: the order form.
+        const MENU = [
+          { id: "laphet-yay", name: "လက်ဖက်ရည်", price: 1500 },
+          { id: "coffee", name: "ကော်ဖီ", price: 1800 },
+          { id: "lime-juice", name: "သံပုရာရည်", price: 1200 },
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500 },
+          { id: "palata", name: "ပလာတာ", price: 1200 },
+          { id: "e-kya-kwe", name: "အီကြာကွေး", price: 500 },
+        ];
+
+        let nextNumber = 101;
+
+        const form = document.querySelector("#order-form");
+        const itemSelect = document.querySelector("#item");
+        const result = document.querySelector("#result");
+
+        function formatKyat(amount) {
+          return `${amount.toLocaleString("en-US")} ကျပ်`;
+        }
+
+        for (const item of MENU) {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = `${item.name} · ${formatKyat(item.price)}`;
+          itemSelect.append(option);
+        }
+
+        function showOrder(order) {
+          const field = (id) => result.querySelector(`[data-testid="${id}"]`);
+          field("result-number").textContent = `အော်ဒါ #${order.number} ရပါပြီ`;
+          field("result-line").textContent = `${order.item.name} × ${order.quantity}`;
+          field("result-total").textContent = `စုစုပေါင်း ${formatKyat(order.total)}`;
+          field("result-pickup").textContent = `လာယူချိန် ${order.pickup || "-"}`;
+          result.hidden = false;
+        }
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const item = MENU.find((entry) => entry.id === data.get("item"));
+          const quantity = parseInt(data.get("quantity"), 10);
+          showOrder({
+            number: nextNumber++,
+            item,
+            quantity,
+            total: item.price * quantity,
+            pickup: data.get("pickup"),
+            name: data.get("name"),
+            phone: data.get("phone"),
+          });
+        });
+      src/style.css: |
+        :root {
+          color-scheme: light;
+          --ink: #1e1e1e;
+          --muted: #5f6368;
+          --line: #d7d4c8;
+          --accent: #b5651d;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          background: #f6f1e7;
+          color: var(--ink);
+          font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif;
+        }
+
+        .app {
+          max-width: 420px;
+          margin: 0 auto;
+          padding: 16px;
+        }
+
+        .top .shop {
+          margin: 0;
+          color: var(--accent);
+          font-weight: 700;
+        }
+
+        .top h1 {
+          margin: 0 0 8px;
+          font-size: 20px;
+          line-height: 1.5;
+        }
+
+        .card {
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          padding: 12px;
+          margin-bottom: 10px;
+        }
+
+        label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+        }
+
+        input,
+        select {
+          display: block;
+          width: 100%;
+          margin-top: 2px;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          font: inherit;
+          font-weight: 400;
+        }
+
+        button {
+          width: 100%;
+          padding: 8px;
+          border: 0;
+          border-radius: 8px;
+          background: var(--accent);
+          color: #fff;
+          font: inherit;
+          font-weight: 700;
+        }
+
+        .result p {
+          margin: 0 0 2px;
+        }
+
+        .result .ok {
+          font-weight: 700;
+          color: #2f7d32;
+        }
+
+        .result .total {
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .result .hint {
+          color: var(--muted);
+          font-size: 14px;
+        }
+  whiteboardAssets:
+    # Board P: two columns flowing down. Left (red heading): paste the message to the agent → the
+    # agent guesses (violet) → a new problem (red) ↻. Right (orange heading, this lesson's way): the
+    # scientist's five steps; step 3 orange (the key step), the loop orange, the gain green.
+    - {
+        id: p-h,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 340,
+        height: 45,
+        text: "error ကို ကူးထည့်ရင်",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: p-1-box,
+        kind: rectangle,
+        x: 290,
+        y: 225,
+        width: 390,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-1,
+        kind: text,
+        x: 305,
+        y: 240,
+        width: 360,
+        height: 40,
+        text: "message ကို agent ဆီ ပို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 465,
+        y: 300,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-2-box,
+        kind: rectangle,
+        x: 290,
+        y: 340,
+        width: 390,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-2,
+        kind: text,
+        x: 305,
+        y: 355,
+        width: 360,
+        height: 40,
+        text: "agent ခန့်မှန်းပြီး ပြင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 465,
+        y: 415,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-3-box,
+        kind: rectangle,
+        x: 290,
+        y: 455,
+        width: 390,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-3,
+        kind: text,
+        x: 305,
+        y: 470,
+        width: 360,
+        height: 40,
+        text: "ပြဿနာ အသစ် · ↻ ထပ်ပို့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: p-cost,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 370,
+        height: 40,
+        text: "အချိန် · ပိုက်ဆံ · bug အသစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-h,
+        kind: text,
+        x: 700,
+        y: 160,
+        width: 390,
+        height: 45,
+        text: "scientist လို",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: s-1,
+        kind: text,
+        x: 700,
+        y: 230,
+        width: 390,
+        height: 40,
+        text: "1 · reproduce",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-2,
+        kind: text,
+        x: 700,
+        y: 290,
+        width: 390,
+        height: 40,
+        text: "2 · ဖြစ်သင့်တာ နဲ့ ဖြစ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-3,
+        kind: text,
+        x: 700,
+        y: 350,
+        width: 390,
+        height: 40,
+        text: "3 · တစ်ကြိမ် တစ်ခုပဲ ပြောင်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-4,
+        kind: text,
+        x: 700,
+        y: 410,
+        width: 390,
+        height: 40,
+        text: "4 · ခန့်မှန်းချက် ထုတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-5,
+        kind: text,
+        x: 700,
+        y: 470,
+        width: 390,
+        height: 40,
+        text: "5 · ခန့်မှန်းချက်ကို စမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-loop,
+        kind: text,
+        x: 700,
+        y: 535,
+        width: 390,
+        height: 40,
+        text: "↻ 3 ကို ပြန်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-gain,
+        kind: text,
+        x: 700,
+        y: 590,
+        width: 390,
+        height: 40,
+        text: "တစ်ပတ်တိုင်း ပိုသိလာ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board C: change one thing. The two orders side by side (white = the same, orange = the one
+    # change, green / red = the results), the guess (orange) and its prediction (white).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 50,
+        text: "တစ်ကြိမ် တစ်ခုပဲ ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-same,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 640,
+        height: 40,
+        text: "ပစ္စည်း · အချိန် · နာမည် · ဖုန်း — တူတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-h1,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 300,
+        height: 40,
+        text: "အော်ဒါ #101",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-h2,
+        kind: text,
+        x: 680,
+        y: 300,
+        width: 300,
+        height: 40,
+        text: "အော်ဒါ #102",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-l1,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 330,
+        height: 40,
+        text: "အရေအတွက် 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1,
+        kind: text,
+        x: 680,
+        y: 355,
+        width: 330,
+        height: 40,
+        text: "အရေအတွက် ၃",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-l2,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 330,
+        height: 40,
+        text: "4,500 ကျပ် ✓",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2,
+        kind: text,
+        x: 680,
+        y: 410,
+        width: 330,
+        height: 40,
+        text: "NaN ကျပ် ✗",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-guess,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 780,
+        height: 40,
+        text: "ခန့်မှန်းချက် — မြန်မာဂဏန်းကို ဂဏန်း ပြောင်းလို့ မရ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-predict,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 700,
+        height: 40,
+        text: "စမ်းမယ် — ၁၀ နဲ့လည်း ဂဏန်း မပေါ်ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: from a requirement to a test, flowing down. The requirement exists (blue, green tick);
+    # no edge case, no AC, so no test case (red); today's fix in orange.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "requirement ကနေ test အထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 460,
+        height: 40,
+        text: "requirement · မြန်မာဂဏန်း",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: t-1s,
+        kind: text,
+        x: 820,
+        y: 235,
+        width: 200,
+        height: 40,
+        text: "✓ ရှိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 380,
+        y: 280,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-2,
+        kind: text,
+        x: 300,
+        y: 320,
+        width: 460,
+        height: 40,
+        text: "edge case",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-2s,
+        kind: text,
+        x: 820,
+        y: 320,
+        width: 200,
+        height: 40,
+        text: "✗ မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 380,
+        y: 365,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-3,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 460,
+        height: 40,
+        text: "AC · spec.md",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-3s,
+        kind: text,
+        x: 820,
+        y: 405,
+        width: 200,
+        height: 40,
+        text: "✗ မရှိ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 380,
+        y: 450,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-4,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 460,
+        height: 40,
+        text: "test case",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-4s,
+        kind: text,
+        x: 820,
+        y: 490,
+        width: 260,
+        height: 40,
+        text: "✗ မစစ်ခဲ့",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-fix,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 620,
+        height: 40,
+        text: "ဒီနေ့ — edge case နဲ့ AC-6 ထည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board H: handing the bug to the agent. What we give (blue documents) → the agent's three steps
+    # (violet) → what we check ourselves (orange).
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 560,
+        height: 50,
+        text: "agent ကို ပြင်ခိုင်းတဲ့အခါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-g1,
+        kind: text,
+        x: 300,
+        y: 260,
+        width: 280,
+        height: 40,
+        text: "bugs.md · BUG-3",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-g2,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 280,
+        height: 40,
+        text: "spec.md · AC-6",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: h-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 600,
+        y: 280,
+        width: 50,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-box,
+        kind: rectangle,
+        x: 670,
+        y: 225,
+        width: 410,
+        height: 200,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-1,
+        kind: text,
+        x: 690,
+        y: 245,
+        width: 370,
+        height: 40,
+        text: "1 · fail ဖြစ်တဲ့ test",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-2,
+        kind: text,
+        x: 690,
+        y: 305,
+        width: 370,
+        height: 40,
+        text: "2 · ပြင်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-3,
+        kind: text,
+        x: 690,
+        y: 365,
+        width: 370,
+        height: 40,
+        text: "3 · test pass",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: h-me,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 620,
+        height: 40,
+        text: "ကိုယ် · app မှာ ၃ နဲ့ ပြန်မှာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: h-me2,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 620,
+        height: 40,
+        text: "ကိုယ် · test plan တစ်ခုလုံး ပြန်စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 640,
+        height: 45,
+        text: "bug report မှာ တစ်ခုပဲ ထည့်ရရင်?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 620,
+        height: 40,
+        text: "က · စုစုပေါင်း မှားနေတဲ့ screenshot",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 620,
+        height: 40,
+        text: "ခ · မြန်မာဂဏန်း ၃ ပါတဲ့ အဆင့်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · ခ — အဆင့်တွေ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-note,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 720,
+        height: 40,
+        text: "screenshot က ရလဒ် · အဆင့်က ပြန်ဖြစ်စေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6121
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Bug report တစ်ခု ရောက်လာပြီ
+    narration: >
+      [[mark:start]] ပြီးခဲ့တဲ့ lesson မှာ agent ရဲ့ ပြောင်းလဲမှု အကျဉ်းချုပ်ကို checklist နဲ့ review
+      လုပ်ခဲ့ပါတယ်။ ဒီနေ့တော့ app မှာ တစ်ခုခု မှားနေတဲ့အခါ အကြောင်းရင်းကို ဘယ်လို ရှာမလဲ ဆိုတာ ကြည့်ပါမယ်။
+      [[mark:story]] app ကို စမ်းသုံးနေတဲ့ ကျောင်းသား မောင်မောင် က၊ လက်ဖက်ရည် မှာတော့ စုစုပေါင်း နေရာမှာ ဈေးနှုန်း
+      မပေါ်ဘဲ နားမလည်တဲ့ စာလုံး သုံးလုံး ပေါ်နေတယ်လို့ message ပို့လာပါတယ်။ ဒီလို app ရဲ့ မှားနေတဲ့ အပြုအမူကို bug
+      လို့ ခေါ်ပါတယ်။ [[mark:p-title]] အမြန်ဆုံး လမ်းကတော့ ဒီ message ကို agent ဆီ ကူးထည့်ပြီး ပြင်ခိုင်းတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: start-runtime,
+          type: runtime.start,
+          at: { mark: start },
+          timeoutMs: 60000,
+          retry: { maxAttempts: 2, delayMs: 500 },
+        }
+      - {
+          id: open-board-p,
+          type: whiteboard.apply,
+          at: { mark: p-title },
+          open: true,
+          clear: true,
+          upsertIds: [p-h, p-1-box, p-1],
+          drawMs: 1300,
+        }
+
+  - id: paste-loop
+    narration: >
+      [[mark:p-guess]] agent က အကြောင်းရင်းကို တကယ် မသိဘဲ၊ ဖြစ်နိုင်လောက်တာ တစ်ခုကို ခန့်မှန်းပြီး code ကို
+      ပြင်ပေးပါလိမ့်မယ်။ [[mark:p-again]] ပြဿနာ မပျောက်ရင်၊ ဒါမှမဟုတ် အသစ် တစ်ခု ပေါ်လာရင် အဲဒါကို ထပ်ကူး၊
+      ထပ်ခိုင်းရင်း loop ထဲမှာ ပတ်နေတတ်ပါတယ်။ [[mark:p-cost]] ခိုင်းတိုင်း အချိန်ရော ပိုက်ဆံပါ ကုန်ပါတယ်။
+      ခန့်မှန်းပြီး ပြင်တိုင်း မှန်နေတဲ့ နေရာတွေကိုပါ ပြောင်းသွားနိုင်လို့၊ bug တစ်ခုက နှစ်ခု ဖြစ်လာတတ်ပါသေးတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development (prompting loops)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum (error handling)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Andreas Zeller, The Debugging Book: Introduction to Debugging",
+          url: "https://www.debuggingbook.org/html/Intro_Debugging.html",
+        }
+    actions:
+      - {
+          id: draw-p-guess,
+          type: whiteboard.apply,
+          at: { mark: p-guess },
+          upsertIds: [p-a1, p-2-box, p-2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-p-again,
+          type: whiteboard.apply,
+          at: { mark: p-again },
+          upsertIds: [p-a2, p-3-box, p-3],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-p-cost,
+          type: whiteboard.apply,
+          at: { mark: p-cost },
+          upsertIds: [p-cost],
+          drawMs: 900,
+        }
+
+  - id: method
+    chapter: Scientist လို debug လုပ်ရအောင်
+    narration: >
+      [[mark:m-h]] နောက်တစ်လမ်းကတော့ scientist တစ်ယောက်လို ကြည့်၊ ခန့်မှန်း၊ စမ်းတဲ့ နည်းပါ။ bug ရဲ့
+      အကြောင်းရင်းကို ရှာပြီး ပြင်တာကို debug လုပ်တယ်လို့ ခေါ်ပါတယ်။ [[mark:m1]] ပထမ အဆင့်က reproduce လုပ်တာ၊
+      ဆိုလိုတာက user လုပ်ခဲ့တဲ့ အဆင့်၊ ထည့်ခဲ့တဲ့ data၊ သုံးခဲ့တဲ့ ဖုန်းအတိုင်း လိုက်လုပ်ပြီး bug ကို တမင်
+      ပြန်ဖြစ်အောင် လုပ်တာပါ။ [[mark:m2]] ပြီးရင် ဘာဖြစ်သင့်လဲ၊ တကယ် ဘာဖြစ်လဲ နှိုင်းယှဉ်ပါတယ်။ [[mark:m3]] တတိယ
+      အဆင့်က အရေးအကြီးဆုံးပါ။ မှန်တဲ့ အခြေအနေနဲ့ မှားတဲ့ အခြေအနေကြားမှာ တစ်ကြိမ်ကို တစ်ခုပဲ ပြောင်းကြည့်ပါတယ်။
+      နှစ်ခု တစ်ပြိုင်နက် ပြောင်းရင် ဘယ်ဟာကြောင့်လဲ မသိနိုင်တော့လို့ပါ။ [[mark:m4]] ကွာခြားချက်ကို တွေ့ရင်
+      ဒါကြောင့် ဖြစ်မယ် ဆိုတဲ့ ခန့်မှန်းချက် ထုတ်ပါတယ်။ [[mark:m5]] ပြီးတော့ ခန့်မှန်းချက် မှန်ရင် ဘာဖြစ်ရမလဲ
+      ကြိုပြောပြီး စမ်းပါတယ်။ မကိုက်ရင် တတိယ အဆင့်ကို ပြန်သွားပါတယ်။ [[mark:m-gain]] ခုနက loop နဲ့ မတူတာက၊ တစ်ပတ်
+      ပတ်တိုင်း ကိုယ် တစ်ခုခု ပိုသိလာတာပါ။
+    sources:
+      - {
+          title: "Andreas Zeller, The Debugging Book: Introduction to Debugging (the scientific method)",
+          url: "https://www.debuggingbook.org/html/Intro_Debugging.html",
+        }
+      - {
+          title: "David A. Wheeler, review of David J. Agans' Debugging: the nine rules (make it fail; change one thing at a time)",
+          url: "https://dwheeler.com/essays/debugging-agans.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (keep foundational debugging sharp)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: draw-s-h, type: whiteboard.apply, at: { mark: m-h }, upsertIds: [s-h], drawMs: 700 }
+      - { id: draw-s1, type: whiteboard.apply, at: { mark: m1 }, upsertIds: [s-1], drawMs: 800 }
+      - { id: draw-s2, type: whiteboard.apply, at: { mark: m2 }, upsertIds: [s-2], drawMs: 800 }
+      - { id: draw-s3, type: whiteboard.apply, at: { mark: m3 }, upsertIds: [s-3], drawMs: 800 }
+      - { id: draw-s4, type: whiteboard.apply, at: { mark: m4 }, upsertIds: [s-4], drawMs: 800 }
+      - {
+          id: draw-s5,
+          type: whiteboard.apply,
+          at: { mark: m5 },
+          upsertIds: [s-5, s-loop],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-gain,
+          type: whiteboard.apply,
+          at: { mark: m-gain },
+          upsertIds: [s-gain],
+          drawMs: 800,
+        }
+
+  - id: reproduce
+    narration: >
+      [[mark:close-p]] ကဲ၊ app မှာ ကိုယ်တိုင် စမ်းကြည့်ရအောင်။ [[mark:ready]] ညာဘက်မှာ ဆိုင်ရဲ့ ကြိုမှာ app
+      ရှိပါတယ်။ ဒီ app က agent တစ်ခု ထုတ်ပေးတဲ့ order form ရဲ့ ပထမ version လို့ သဘောထားပြီး lesson အတွက်
+      ပြင်ဆင်ထားတာပါ။ [[mark:menu]] ကိုယ် အမြဲ စမ်းနေကျ ပုံစံနဲ့ မောင်မောင် ရဲ့ အော်ဒါကို အရင် ထည့်ကြည့်ပါမယ်။
+      လက်ဖက်ရည် က ရွေးပြီးသားပါ။ [[mark:qty]] အရေအတွက်မှာ English ဂဏန်း သုံး ကို ရိုက်ထည့်ပါမယ်။ [[mark:time]]
+      လာယူမယ့် အချိန်ကို မနက် ရှစ်နာရီ လို့ ရွေးပါမယ်။ [[mark:name]] နာမည်နေရာမှာ မောင်မောင် လို့ ရိုက်ပါမယ်။
+      [[mark:phone]] ဖုန်းကတော့ lesson အတွက် နမူနာ နံပါတ် ထည့်ပါမယ်။ [[mark:order]] ပြီးရင် မှာမယ် ကို
+      နှိပ်လိုက်ပါမယ်။ [[mark:card]] အော်ဒါနံပါတ် ၁၀၁၊ လက်ဖက်ရည် သုံးခွက်၊ စုစုပေါင်း ၄၅၀၀ ကျပ် လို့ မှန်မှန်
+      ပြပါတယ်။ ကိုယ့်စက်မှာတော့ မမှားပါဘူး။ ဒါပေမဲ့ ဒီ အော်ဒါက မောင်မောင် လုပ်ခဲ့တာနဲ့ တကယ် တူရဲ့လား။
+    sources:
+      - {
+          title: "Mozilla: Bug Writing Guidelines (steps to reproduce)",
+          url: "https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html",
+        }
+    actions:
+      - { id: close-board-p, type: whiteboard.apply, at: { mark: close-p }, open: false }
+      - {
+          id: wait-ready,
+          type: runtime.waitForReady,
+          at: { mark: ready },
+          timeoutMs: 30000,
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: open-preview,
+          type: preview.open,
+          at: { afterAction: wait-ready },
+          timeoutMs: 10000,
+          mode: docked,
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: expect-menu,
+          type: expect.preview,
+          at: { mark: menu },
+          timeoutMs: 5000,
+          target: { by: testId, value: item },
+          textContains: "လက်ဖက်ရည်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: in-qty,
+          type: preview.input,
+          at: { mark: qty },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "3",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-time,
+          type: preview.input,
+          at: { mark: time },
+          timeoutMs: 5000,
+          target: { by: testId, value: pickup },
+          value: "08:00",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-name,
+          type: preview.input,
+          at: { mark: name },
+          timeoutMs: 5000,
+          target: { by: testId, value: name },
+          value: "မောင်မောင်",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-phone,
+          type: preview.input,
+          at: { mark: phone },
+          timeoutMs: 5000,
+          target: { by: testId, value: phone },
+          value: "09 000 333 444",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-order,
+          type: preview.click,
+          at: { mark: order },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-number,
+          type: expect.preview,
+          at: { mark: card },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#101",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-line,
+          type: expect.preview,
+          at: { afterAction: expect-number },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-line },
+          textContains: "လက်ဖက်ရည် × 3",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-total,
+          type: expect.preview,
+          at: { afterAction: expect-line },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "4,500 ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-pickup,
+          type: expect.preview,
+          at: { afterAction: expect-total },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-pickup },
+          textContains: "08:00",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: burmese-digit
+    narration: >
+      မောင်မောင် ကို ပြန်မေးကြည့်တော့၊ ဖုန်းရဲ့ မြန်မာ keyboard နဲ့ မြန်မာဂဏန်း ရိုက်ခဲ့တယ်လို့ ဖြေပါတယ်။ ဒါဆို
+      သူ့လိုပဲ လုပ်ကြည့်ရအောင်။ [[mark:qty-mm]] အရေအတွက်ကို မြန်မာဂဏန်း သုံး လို့ ပြောင်းရိုက်ပါမယ်။
+      [[mark:order-mm]] ပြီးရင် မှာမယ် ကို ထပ်နှိပ်ပါမယ်။ [[mark:card-mm]] အော်ဒါနံပါတ် ၁၀၂ ရပေမယ့်၊ ခွက်ရေနဲ့
+      စုစုပေါင်း နေရာမှာ NaN လို့ ပေါ်နေပါတယ်။ ဒါက not a number၊ ဂဏန်း မဟုတ်ဘူး ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ ဖြစ်သင့်တာက
+      ၄၅၀၀ ကျပ်ပါ။ bug ကို ကိုယ့်စက်မှာ ပြန်ဖြစ်အောင် လုပ်နိုင်သွားပါပြီ။
+    sources:
+      - {
+          title: "MDN: NaN (Not-A-Number; a failed number conversion returns NaN)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/NaN",
+        }
+      - {
+          title: "Mozilla: Bug Writing Guidelines (expected and actual results)",
+          url: "https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html",
+        }
+    actions:
+      - {
+          id: in-qty-mm,
+          type: preview.input,
+          at: { mark: qty-mm },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "၃",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-mm,
+          type: preview.click,
+          at: { mark: order-mm },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-nan,
+          type: expect.preview,
+          at: { mark: card-mm },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "NaN ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-line-nan,
+          type: expect.preview,
+          at: { afterAction: expect-nan },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-line },
+          textContains: "× NaN",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-number-2,
+          type: expect.preview,
+          at: { afterAction: expect-line-nan },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#102",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: one-thing
+    narration: >
+      [[mark:c-open]] အော်ဒါ နှစ်ခုကို နှိုင်းယှဉ်ကြည့်ရအောင်။ [[mark:c-same]] ပစ္စည်း၊ အချိန်၊ နာမည်၊ ဖုန်း
+      အားလုံး တူပါတယ်။ [[mark:c-diff]] ကွာတာ တစ်ခုပဲ ရှိပါတယ်၊ ဂဏန်းရဲ့ အမျိုးအစားပါ။ ကွန်ပျူတာ အတွက်တော့ မြန်မာ
+      သုံးနဲ့ English သုံးက အဓိပ္ပာယ် တူပေမယ့် သီးခြား စာလုံး နှစ်လုံးပါ။ [[mark:c-guess]] ဒါကြောင့် app က
+      မြန်မာဂဏန်းကို ဂဏန်းအဖြစ် ပြောင်းလို့ မရဘူး ဆိုတဲ့ ခန့်မှန်းချက်ကို ထုတ်ပါမယ်။ ဂဏန်း မဟုတ်တာနဲ့ ဈေးနှုန်းကို
+      မြှောက်တော့ စုစုပေါင်းပါ ပျက်သွားတာနဲ့လည်း ကိုက်ပါတယ်။ [[mark:c-predict]] ဒီ ခန့်မှန်းချက် မှန်ရင်၊ တခြား
+      မြန်မာဂဏန်း၊ ဥပမာ ဆယ် နဲ့လည်း ဒီလိုပဲ ဖြစ်ရပါမယ်။ ဆယ် နဲ့ မှန်နေရင်တော့ ခန့်မှန်းချက် မှားပါတယ်။
+    sources:
+      - {
+          title: "The Unicode Standard 18.0, code chart Myanmar U+1000–U+109F (Digits: MYANMAR DIGIT ZERO–NINE, U+1040–U+1049)",
+          url: "https://www.unicode.org/charts/PDF/U1000.pdf",
+        }
+      - {
+          title: "MDN: NaN (a value that is or becomes NaN makes the result NaN)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/NaN",
+        }
+      - {
+          title: "David A. Wheeler, review of David J. Agans' Debugging (change one thing at a time, compare it with a good one)",
+          url: "https://dwheeler.com/essays/debugging-agans.html",
+        }
+      - {
+          title: "Andreas Zeller, The Debugging Book: Introduction to Debugging (hypothesis and prediction)",
+          url: "https://www.debuggingbook.org/html/Intro_Debugging.html",
+        }
+    actions:
+      - {
+          id: open-board-c,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-title, c-h1, c-h2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-c-same,
+          type: whiteboard.apply,
+          at: { mark: c-same },
+          upsertIds: [c-same],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-diff,
+          type: whiteboard.apply,
+          at: { mark: c-diff },
+          upsertIds: [c-l1, c-r1, c-l2, c-r2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-guess,
+          type: whiteboard.apply,
+          at: { mark: c-guess },
+          upsertIds: [c-guess],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-c-predict,
+          type: whiteboard.apply,
+          at: { mark: c-predict },
+          upsertIds: [c-predict],
+          drawMs: 1000,
+        }
+
+  - id: test-guess
+    narration: >
+      [[mark:close-c]] app မှာ စမ်းကြည့်ရအောင်။ [[mark:qty-ten]] အရေအတွက်ကို မြန်မာဂဏန်း ဆယ် လို့
+      ပြောင်းရိုက်ပါမယ်။ [[mark:order-ten]] ပြီးရင် မှာမယ် ကို နှိပ်ပါမယ်။ [[mark:card-ten]] အော်ဒါနံပါတ် ၁၀၃
+      မှာလည်း စုစုပေါင်းက ဂဏန်း မဟုတ်ပါဘူး။ ကြိုပြောထားတဲ့ အတိုင်း ဖြစ်လို့ ခန့်မှန်းချက်ကို ပိုယုံလို့ ရလာပါပြီ။
+      code တစ်ကြောင်းမှ မဖတ်ဘဲ bug ဖြစ်တဲ့ နယ်နိမိတ်ကို တိတိကျကျ သိသွားပါပြီ။
+    sources:
+      - {
+          title: "Andreas Zeller, The Debugging Book: Introduction to Debugging (testing the hypothesis)",
+          url: "https://www.debuggingbook.org/html/Intro_Debugging.html",
+        }
+    actions:
+      - { id: close-board-c, type: whiteboard.apply, at: { mark: close-c }, open: false }
+      - {
+          id: in-qty-ten,
+          type: preview.input,
+          at: { mark: qty-ten },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "၁၀",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-ten,
+          type: preview.click,
+          at: { mark: order-ten },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-ten,
+          type: expect.preview,
+          at: { mark: card-ten },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "NaN ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-number-3,
+          type: expect.preview,
+          at: { afterAction: expect-ten },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#103",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: report
+    chapter: Bug report ရေးရအောင်
+    narration: >
+      [[mark:open-bugs]] ကဲ၊ တွေ့ခဲ့တာတွေကို bug report အဖြစ် ရေးရအောင်။ bug report ဆိုတာ ကိုယ် မရှိလည်း တခြားသူ
+      ဒါမှမဟုတ် agent က bug ကို ပြန်ဖြစ်အောင် လုပ်နိုင်လောက်တဲ့ အစီရင်ခံစာပါ။ [[mark:type-bug]] ထိပ်ဆုံးက
+      စာကြောင်းက test လုပ်တုန်းက တွေ့ခဲ့တဲ့ bug နှစ်ခုကို test plan ဆီ ညွှန်ထားလို့၊ ဒီ bug က နံပါတ် သုံးပါ။
+      ခေါင်းစဉ်ကို တစ်ချက်ကြည့်ရုံနဲ့ ဘာလုပ်ရင် ဘာဖြစ်လဲ သိရပြီး၊ ပြင်နည်းကိုတော့ မထည့်ပါဘူး။
+      [[mark:type-steps]] နောက်တစ်ပိုင်းက bug ကို ပြန်ဖြစ်စေတဲ့ အဆင့် သုံးဆင့်ပါ။ ခုနက နှိုင်းယှဉ်ချက်အရ မဆိုင်တဲ့
+      အချိန်၊ နာမည်၊ ဖုန်းကို ချန်ထားပါတယ်။ [[mark:sel-step2]] ဒီ အဆင့်မှာ ဂဏန်း တစ်ခု လို့ မရေးဘဲ မြန်မာဂဏန်း
+      သုံး လို့ အတိအကျ ရေးထားတာ သတိထား ကြည့်ပါ။ English ဂဏန်းနဲ့ လိုက်လုပ်ရင် bug မပေါ်လို့ပါ။
+    sources:
+      - {
+          title: "Mozilla: Bug Writing Guidelines (summary, steps to reproduce)",
+          url: "https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html",
+        }
+    actions:
+      - { id: open-bugs, type: workspace.openFile, at: { mark: open-bugs }, path: docs/bugs.md }
+      - id: type-bug
+        type: editor.type
+        at: { mark: type-bug }
+        target: { file: docs/bugs.md, after: "# Bugs\n\n", occurrence: 1 }
+        text: "BUG-1 (အရေအတွက် 0) နဲ့ BUG-2 (ဆိုင်ပိတ်ချိန်) — test-plan.md ရဲ့ TC-2 နဲ့ TC-3 မှာ ရေးပြီးသား။\n\n## BUG-3 · မြန်မာဂဏန်းနဲ့ ရိုက်ရင် စုစုပေါင်း NaN ပေါ်တယ်\nReported by — ကျောင်းသား မောင်မောင်\n"
+        cadence: line-by-line
+      - id: type-steps
+        type: editor.type
+        at: { mark: type-steps }
+        target: { file: docs/bugs.md, after: "Reported by — ကျောင်းသား မောင်မောင်\n", occurrence: 1 }
+        text: "Steps\n1. လက်ဖက်ရည် ကို ရွေး\n2. အရေအတွက်မှာ မြန်မာဂဏန်း ၃ ရိုက်\n3. မှာမယ် ကို နှိပ်\n"
+        cadence: line-by-line
+      - {
+          id: sel-step2,
+          type: editor.select,
+          at: { mark: sel-step2 },
+          target: { file: docs/bugs.md, text: "2. အရေအတွက်မှာ မြန်မာဂဏန်း ၃ ရိုက်", occurrence: 1 },
+        }
+
+  - id: report-2
+    narration: >
+      [[mark:type-expect]] ပြီးတော့ ဖြစ်သင့်တာနဲ့ တကယ် ဖြစ်တာကို ခွဲရေးပါတယ်။ ဒါမှ ဖတ်တဲ့သူက ဘာက မှန်လဲ
+      ခန့်မှန်းစရာ မလိုဘဲ၊ ပြင်ပြီးရင် ဘာကို စစ်ရမလဲ ဆိုတာပါ ရှင်းပါတယ်။ [[mark:type-env]] နောက်ဆုံး အပိုင်းမှာ
+      ဘယ်လောက် ခဏခဏ ဖြစ်လဲ၊ ဘယ်လို ပတ်ဝန်းကျင်မှာ ဖြစ်လဲ၊ ဘယ် requirement ကို ချိုးဖောက်လဲ ဆိုတာ ပါပါတယ်။
+      [[mark:sel-always]] ဒီ စာကြောင်းက ခုနက စမ်းသပ်ချက် သုံးခုရဲ့ ရလဒ်ပါ။ တစ်ခါတလေမှ ဖြစ်တဲ့ bug ကို ရှာရတာ
+      အများကြီး ပိုခက်လို့ အမြဲ ဖြစ်တယ် ဆိုတာ သိထားရတာ အရေးကြီးပါတယ်။ [[mark:sel-env]] မြန်မာ keyboard ဆိုတဲ့
+      ပတ်ဝန်းကျင်ကလည်း ကိုယ့်စက်မှာ ဘာကြောင့် မတွေ့ခဲ့လဲ ဆိုတာကို ရှင်းပြပါတယ်။
+    sources:
+      - {
+          title: "Mozilla: Bug Writing Guidelines (expected and actual results, reproducibility, platform)",
+          url: "https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html",
+        }
+    actions:
+      - id: type-expect
+        type: editor.type
+        at: { mark: type-expect }
+        target: { file: docs/bugs.md, after: "3. မှာမယ် ကို နှိပ်\n", occurrence: 1 }
+        text: "Expected — လက်ဖက်ရည် × 3၊ စုစုပေါင်း 4,500 ကျပ်\nActual — လက်ဖက်ရည် × NaN၊ စုစုပေါင်း NaN ကျပ်\n"
+        cadence: line-by-line
+      - id: type-env
+        type: editor.type
+        at: { mark: type-env }
+        target:
+          { file: docs/bugs.md, after: "Actual — လက်ဖက်ရည် × NaN၊ စုစုပေါင်း NaN ကျပ်\n", occurrence: 1 }
+        text: "Always? — ဟုတ်တယ်၊ မြန်မာဂဏန်း တိုင်းမှာ (၃၊ ၁၀)။ English ဂဏန်း 3 နဲ့ဆို မှန်တယ်။\nEnvironment — ဖုန်းရဲ့ မြန်မာ keyboard\nBreaks — requirements.md Non-functional (မြန်မာဂဏန်း)၊ AC မရှိသေးလို့ AC-6 ထည့်မယ်\n"
+        cadence: line-by-line
+      - {
+          id: expect-bugs,
+          type: expect.file,
+          at: { afterAction: type-env },
+          path: docs/bugs.md,
+          contains: "2. အရေအတွက်မှာ မြန်မာဂဏန်း ၃ ရိုက်",
+        }
+      - {
+          id: sel-always,
+          type: editor.select,
+          at: { mark: sel-always },
+          target:
+            {
+              file: docs/bugs.md,
+              text: "Always? — ဟုတ်တယ်၊ မြန်မာဂဏန်း တိုင်းမှာ (၃၊ ၁၀)။ English ဂဏန်း 3 နဲ့ဆို မှန်တယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-env,
+          type: editor.select,
+          at: { mark: sel-env },
+          target: { file: docs/bugs.md, text: "Environment — ဖုန်းရဲ့ မြန်မာ keyboard", occurrence: 1 },
+        }
+
+  - id: trace
+    chapter: ဘာကြောင့် ဘယ်သူမှ မမိခဲ့တာလဲ
+    narration: >
+      [[mark:t-open]] ဒါပေမဲ့ test plan နဲ့လည်း စစ်ခဲ့၊ review လည်း လုပ်ခဲ့ရဲ့သားနဲ့ ဒီ bug ကို ဘာကြောင့် ဘယ်သူမှ
+      မမိခဲ့တာလဲ။ [[mark:t-req]] requirement စာမျက်နှာမှာ မြန်မာဂဏန်း အကြောင်း ရေးထားပြီးသားပါ။ [[mark:t-gap]]
+      ဒါပေမဲ့ edge case စာရင်းမှာ မပါသလို၊ သူ့အတွက် AC လည်း တစ်ခုမှ မရှိခဲ့ပါဘူး။ [[mark:t-test]] test case တွေကို
+      AC ကနေ ရေးခဲ့ပြီး၊ agent ကိုလည်း AC တွေ pass ရင် ပြီးပြီလို့ သတ်မှတ်ထားလို့၊ AC မရှိတဲ့ requirement ကို
+      ဘယ်သူမှ မစစ်ခဲ့ပါဘူး။ [[mark:t-link]] requirement တစ်ခုက စစ်လို့ရတဲ့ AC နဲ့ ချိတ်ထားမှ test အထိ ရောက်ပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements; testing and quality assurance)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-t,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-t-req,
+          type: whiteboard.apply,
+          at: { mark: t-req },
+          upsertIds: [t-1, t-1s],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-gap,
+          type: whiteboard.apply,
+          at: { mark: t-gap },
+          upsertIds: [t-a1, t-2, t-2s, t-a2, t-3, t-3s],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-t-test,
+          type: whiteboard.apply,
+          at: { mark: t-test },
+          upsertIds: [t-a3, t-4, t-4s],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-t-fix,
+          type: whiteboard.apply,
+          at: { mark: t-link },
+          upsertIds: [t-fix],
+          drawMs: 1000,
+        }
+
+  - id: fill-gap
+    narration: >
+      [[mark:close-t]] အဲဒီ ကွက်လပ်ကို ဖြည့်ရအောင်။ [[mark:sel-req]] requirement ဖိုင်ထဲက ဒီ စာကြောင်းက ခုနက
+      ပြောတဲ့ မြန်မာဂဏန်း requirement ပါ။ [[mark:type-edge]] edge case စာရင်းထဲမှာ အရေအတွက်ကို မြန်မာဂဏန်းနဲ့
+      ရိုက်တဲ့ အခြေအနေကို ထည့်ပါမယ်။ [[mark:open-spec]] spec ဖိုင်မှာတော့ AC တွေရဲ့ အောက်ဆုံးမှာ AC အသစ်
+      ထည့်ပါမယ်။ [[mark:type-ac6]] AC ခြောက် က bug report ထဲက အော်ဒါကိုပဲ ပြီးပြီ ဆိုတဲ့ စံ အဖြစ်
+      ပြောင်းရေးထားတာပါ။ AC ရှိမှ test plan ရော agent ရဲ့ test ပါ ဒါကို စစ်ပါလိမ့်မယ်။ [[mark:open-plan]] test
+      plan မှာလည်း AC ခြောက် အတွက် case အသစ် တစ်ခု ထည့်ပါမယ်။ [[mark:type-tc6]] ရလဒ်ကတော့ အခုလောလောဆယ်
+      မအောင်သေးလို့ BUG သုံး ကို ညွှန်ထားပါတယ်။ bug ပြင်ပြီးမှ ဒီ case ကို ပြန်စမ်းပြီး ရလဒ် အသစ်ကို ရေးရမှာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (testing and quality assurance)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (tests before generating code)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-board-t, type: whiteboard.apply, at: { mark: close-t }, open: false }
+      - {
+          id: open-req,
+          type: workspace.openFile,
+          at: { afterAction: close-board-t },
+          path: docs/requirements.md,
+        }
+      - {
+          id: sel-req,
+          type: editor.select,
+          at: { mark: sel-req },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - id: type-edge
+        type: editor.type
+        at: { mark: type-edge }
+        target:
+          { file: docs/requirements.md, after: "- မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ\n", occurrence: 1 }
+        text: "- အရေအတွက်ကို မြန်မာဂဏန်းနဲ့ ရိုက် (၃) → 3 လိုပဲ တွက်\n"
+        cadence: line-by-line
+      - {
+          id: expect-req,
+          type: expect.file,
+          at: { afterAction: type-edge },
+          path: docs/requirements.md,
+          contains: "- အရေအတွက်ကို မြန်မာဂဏန်းနဲ့ ရိုက် (၃) → 3 လိုပဲ တွက်",
+        }
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - id: type-ac6
+        type: editor.type
+        at: { mark: type-ac6 }
+        target:
+          { file: docs/spec.md, after: "     Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်\n", occurrence: 1 }
+        text: "AC-6 Given အရေအတွက်ကို မြန်မာဂဏန်း ၃ နဲ့ ရိုက်ထားတယ်\n     When မှာမယ် ကို နှိပ်တယ်\n     Then 3 လို့ တွက်ပြီး စုစုပေါင်း 4,500 ကျပ်ကို မြင်ရမယ်\n"
+        cadence: line-by-line
+      - {
+          id: expect-spec,
+          type: expect.file,
+          at: { afterAction: type-ac6 },
+          path: docs/spec.md,
+          contains: "AC-6 Given အရေအတွက်ကို မြန်မာဂဏန်း ၃ နဲ့ ရိုက်ထားတယ်",
+        }
+      - {
+          id: open-plan,
+          type: workspace.openFile,
+          at: { mark: open-plan },
+          path: docs/test-plan.md,
+        }
+      - id: type-tc6
+        type: editor.type
+        at: { mark: type-tc6 }
+        target:
+          { file: docs/test-plan.md, after: "- ရလဒ် — ⏸ မဆောက်ရသေးဘူး (Task 03)\n", occurrence: 1 }
+        text: "\n## TC-6 · မြန်မာဂဏန်း (AC-6)\n- လုပ်ရမှာ — TC-1 အတိုင်း၊ အရေအတွက်ကိုပဲ မြန်မာဂဏန်း ၃\n- မျှော်လင့်ချက် — လက်ဖက်ရည် × 3၊ 4,500 ကျပ်\n- ရလဒ် — ❌ NaN ကျပ်နဲ့ လက်ခံသွားတယ် (BUG-3)\n"
+        cadence: line-by-line
+      - {
+          id: expect-plan,
+          type: expect.file,
+          at: { afterAction: type-tc6 },
+          path: docs/test-plan.md,
+          contains: "## TC-6 · မြန်မာဂဏန်း (AC-6)",
+        }
+
+  - id: rule
+    narration: >
+      [[mark:open-agents]] ဒါပေမဲ့ AC ခြောက် က အရေအတွက် နေရာကိုပဲ စစ်ပါတယ်။ ဖုန်းနံပါတ်လို တခြား ဂဏန်း နေရာတွေမှာ
+      ဒီ အမှားမျိုး ထပ်ဖြစ်နိုင်ပါသေးတယ်။ [[mark:type-rule]] ဒါကြောင့် AGENTS.md ရဲ့ rule စာရင်း အဆုံးမှာ၊ ဂဏန်း
+      ရိုက်ရတဲ့ နေရာတိုင်းအတွက် rule တစ်ကြောင်း ထည့်ပါမယ်။ agent က အလုပ် စတိုင်း ဒီ ဖိုင်ကို ဖတ်လို့၊ နောက် form
+      တွေမှာပါ ဒီ အမှား ထပ်မဖြစ်ဖို့ ညွှန်ထားတာပါ။ bug တစ်ခု ပြင်တိုင်း AC တစ်ခု၊ rule တစ်ခု ကျန်ခဲ့ရင် project က
+      တဖြည်းဖြည်း ပိုခိုင်လာပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (add a rule each time the agent does something it should not)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-agents, type: workspace.openFile, at: { mark: open-agents }, path: AGENTS.md }
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        target:
+          {
+            file: AGENTS.md,
+            after: "- One task at a time. Keep each change small.\n",
+            occurrence: 1,
+          }
+        text: "- Accept Burmese digits (၀–၉) wherever a number is typed.\n"
+        cadence: line-by-line
+      - {
+          id: expect-agents,
+          type: expect.file,
+          at: { afterAction: type-rule },
+          path: AGENTS.md,
+          contains: "- Accept Burmese digits (၀–၉) wherever a number is typed.",
+        }
+
+  - id: handoff
+    narration: >
+      [[mark:h-open]] အခုမှ agent ကို ပြင်ခိုင်းပါမယ်။ [[mark:h-give]] message ကို ကူးထည့်မယ့် အစား၊ bug report
+      နဲ့ အဲဒီ bug ချိုးဖောက်နေတဲ့ AC ခြောက် ကို ပေးပါမယ်။ [[mark:h-test]] ပြီးတော့ မပြင်ခင် AC ခြောက် ကို အလိုလို
+      စစ်ပေးမယ့် test တစ်ခု အရင် ရေးပြီး၊ အခု app မှာ မအောင်ဘဲ fail ဖြစ်တာကို ပြခိုင်းပါမယ်။ fail မဖြစ်ဖူးတဲ့ test
+      က bug ကို တကယ် ဖမ်းနိုင်လား မသေချာလို့ပါ။ [[mark:h-fix]] ပြင်ပြီးရင် အဲဒီ test pass ဖြစ်ရပါမယ်။
+      [[mark:h-me]] နောက်ဆုံး ကိုယ်တိုင် app မှာ မြန်မာဂဏန်းနဲ့ ပြန်မှာကြည့်ပြီး၊ တခြား နေရာ မပျက်ဘူးလား သိအောင်
+      test plan တစ်ခုလုံးကို ပြန်စစ်ပါမယ်။ အကြောင်းရင်း သိပြီးမှ ခိုင်းတော့ တစ်ခါတည်းနဲ့ မှန်ဖို့ အခွင့်အလမ်း
+      ပိုများပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (write tests before generating code)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The economics of AI development (first-pass success vs prompting loops)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-h,
+          type: whiteboard.apply,
+          at: { mark: h-open },
+          open: true,
+          clear: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-h-give,
+          type: whiteboard.apply,
+          at: { mark: h-give },
+          upsertIds: [h-g1, h-g2, h-arrow],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-h-test,
+          type: whiteboard.apply,
+          at: { mark: h-test },
+          upsertIds: [h-box, h-1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-h-fix,
+          type: whiteboard.apply,
+          at: { mark: h-fix },
+          upsertIds: [h-2, h-3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-h-me,
+          type: whiteboard.apply,
+          at: { mark: h-me },
+          upsertIds: [h-me, h-me2],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မောင်မောင် က စုစုပေါင်း မှားနေတဲ့ screen ကို screenshot ရိုက်ပြီး
+      ပို့ထားတယ် ဆိုပါစို့။ bug report မှာ တစ်ခုပဲ ထည့်ခွင့် ရှိရင်၊ screenshot ကို ထည့်မလား၊ မြန်မာဂဏန်း သုံး
+      ပါတဲ့ အဆင့်တွေကို ထည့်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      အဆင့်တွေပါ။ ဘာကြောင့်လဲဆိုတော့ screenshot က မှားနေတဲ့ ရလဒ်ကို ပြပေမယ့်၊ အဲဒီ ရလဒ်ဆီ ဘယ်လို ရောက်လာလဲ
+      မပြလို့ပါ။ အဆင့်တွေ ရှိမှ ဘယ်သူမဆို bug ကို ပြန်ဖြစ်အောင် လုပ်ပြီး၊ ပြင်ပြီးရင် ပြန်စစ်လို့ ရပါတယ်။
+      screenshot ကိုတော့ အထောက်အထား အဖြစ် ထပ်တွဲလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Mozilla: Bug Writing Guidelines (steps to reproduce are the most important part)",
+          url: "https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-note],
+          drawMs: 1400,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ bug တစ်ခု ကြားရင် agent ဆီ ချက်ချင်း မပို့ဘဲ၊ အရင်ဆုံး ကိုယ်တိုင်
+      reproduce လုပ်ပါ။ [[mark:sel-r-step]] ပြန်လုပ်လို့ရတဲ့ အဆင့်တွေက bug report ရဲ့ အဓိကပါ။
+      [[mark:sel-r-always]] တစ်ကြိမ်ကို တစ်ခုပဲ ပြောင်းပြီး နယ်နိမိတ်ကို ရှာပါ၊ ခန့်မှန်းချက်ကိုလည်း စမ်းကြည့်ပါ။
+      [[mark:sel-r-breaks]] AC မရှိတဲ့ requirement ကို တွေ့ရင် AC ထည့်ပါ။ agent ကိုတော့ report နဲ့ AC ကို ပေးပြီး
+      fail ဖြစ်တဲ့ test ကနေ စခိုင်းပါ။ နောက် lesson မှာတော့ feature ကိုယ်တိုင်က AI ဖြစ်နေရင်၊ အဖြေ တစ်ခုတည်းကို
+      စစ်တဲ့ test တွေ ဘာကြောင့် မလုံလောက်တော့လဲ ဆိုတာနဲ့ eval ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Andreas Zeller, The Debugging Book: Introduction to Debugging",
+          url: "https://www.debuggingbook.org/html/Intro_Debugging.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum (tests and evals)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: open-bugs-2,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: docs/bugs.md,
+        }
+      - {
+          id: sel-r-step,
+          type: editor.select,
+          at: { mark: sel-r-step },
+          target: { file: docs/bugs.md, text: "2. အရေအတွက်မှာ မြန်မာဂဏန်း ၃ ရိုက်", occurrence: 1 },
+        }
+      - {
+          id: sel-r-always,
+          type: editor.select,
+          at: { mark: sel-r-always },
+          target:
+            {
+              file: docs/bugs.md,
+              text: "ဟုတ်တယ်၊ မြန်မာဂဏန်း တိုင်းမှာ (၃၊ ၁၀)။ English ဂဏန်း 3 နဲ့ဆို မှန်တယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-r-breaks,
+          type: editor.select,
+          at: { mark: sel-r-breaks },
+          target:
+            {
+              file: docs/bugs.md,
+              text: "Breaks — requirements.md Non-functional (မြန်မာဂဏန်း)၊ AC မရှိသေးလို့ AC-6 ထည့်မယ်",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
