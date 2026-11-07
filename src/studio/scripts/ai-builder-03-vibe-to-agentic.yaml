@@ -1,0 +1,832 @@
+# AI Builder, lesson 03: from vibe coding to agentic engineering (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md = "# Notes\n"). No
+# binder document exists before L04. Nothing runs. The lesson types the shop's prototype / production
+# rule (heading + 3 lines) into notes.md.
+#
+# Boards: (S) a horizontal spectrum (arrow right) with three violet marks (vibe coding · structured ·
+# agentic) and three rows drawn as each is named (how intent is given, how it is checked, who reads),
+# then the risk row (green low / red high) and the orange key line; (T) the same axis with the four
+# tea-shop tasks placed by risk (green, green, orange, red) and the red drift arrow (a prototype that
+# quietly becomes production); (Z) the two-option quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-03-vibe-to-agentic.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-03-vibe-to-agentic
+  title: "AI Builder 03: Vibe coding ကနေ agentic engineering ဆီ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board S: the spectrum. Axis (white arrow right), marks (violet), row heads (white), cells (white),
+    # risk row (green low · short life / red high · long life), key line (orange).
+    - {
+        id: s-axis,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 160,
+        width: 780,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: s-m1,
+        kind: text,
+        x: 410,
+        y: 210,
+        width: 220,
+        height: 40,
+        text: "vibe coding",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: s-m2,
+        kind: text,
+        x: 640,
+        y: 210,
+        width: 220,
+        height: 40,
+        text: "structured",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: s-m3,
+        kind: text,
+        x: 870,
+        y: 210,
+        width: 210,
+        height: 40,
+        text: "agentic",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: s-h1,
+        kind: text,
+        x: 270,
+        y: 285,
+        width: 125,
+        height: 40,
+        text: "ပြောပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-h2,
+        kind: text,
+        x: 270,
+        y: 345,
+        width: 125,
+        height: 40,
+        text: "စစ်ပုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-h3,
+        kind: text,
+        x: 270,
+        y: 405,
+        width: 125,
+        height: 40,
+        text: "ဖတ်သူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-v1,
+        kind: text,
+        x: 410,
+        y: 285,
+        width: 220,
+        height: 40,
+        text: "chat မှာ ပြော",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-v2,
+        kind: text,
+        x: 410,
+        y: 345,
+        width: 220,
+        height: 40,
+        text: "run ကြည့်ရုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-v3,
+        kind: text,
+        x: 410,
+        y: 405,
+        width: 220,
+        height: 40,
+        text: "ဘယ်သူမှ မဖတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-s1,
+        kind: text,
+        x: 640,
+        y: 285,
+        width: 220,
+        height: 40,
+        text: "ဥပမာ + rule",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-s2,
+        kind: text,
+        x: 640,
+        y: 345,
+        width: 220,
+        height: 40,
+        text: "လက်နဲ့ စမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-s3,
+        kind: text,
+        x: 640,
+        y: 405,
+        width: 220,
+        height: 40,
+        text: "အဓိကကို ဖတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: text,
+        x: 870,
+        y: 285,
+        width: 210,
+        height: 40,
+        text: "spec ကြိုရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-a2,
+        kind: text,
+        x: 870,
+        y: 345,
+        width: 210,
+        height: 40,
+        text: "test နဲ့ စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-a3,
+        kind: text,
+        x: 870,
+        y: 405,
+        width: 210,
+        height: 40,
+        text: "လူ review အမြဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-r1,
+        kind: text,
+        x: 410,
+        y: 470,
+        width: 220,
+        height: 40,
+        text: "risk နည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        x: 410,
+        y: 515,
+        width: 220,
+        height: 40,
+        text: "ခဏ သုံး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: s-r3,
+        kind: text,
+        x: 870,
+        y: 470,
+        width: 210,
+        height: 40,
+        text: "risk များ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        x: 870,
+        y: 515,
+        width: 210,
+        height: 40,
+        text: "ကြာကြာ သုံး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-key,
+        kind: text,
+        x: 270,
+        y: 585,
+        width: 800,
+        height: 40,
+        text: "ကွာတာ AI သုံးလား မဟုတ် · ပတ်လည်က structure နဲ့ စစ်ဆေးမှု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board T: the same axis and marks; the four tasks placed by risk (green, green, orange, red); the
+    # red drift arrow and its label (a prototype that quietly becomes production).
+    - {
+        id: t-1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 330,
+        height: 40,
+        text: "မွေးနေ့ poster page",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-2,
+        kind: text,
+        x: 430,
+        y: 350,
+        width: 330,
+        height: 40,
+        text: "မနေ့က အော်ဒါ ရေတွက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-3,
+        kind: text,
+        x: 690,
+        y: 415,
+        width: 330,
+        height: 40,
+        text: "ကြိုမှာ app · တကယ့် အော်ဒါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-4,
+        kind: text,
+        x: 830,
+        y: 480,
+        width: 250,
+        height: 40,
+        text: "online ငွေချေ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-drift,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 545,
+        width: 620,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: t-drift-l,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 640,
+        height: 40,
+        text: "prototype → မသိမသာ production",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    # Board Z: the two-option quiz (question and options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 700,
+        height: 40,
+        text: "ဒီနေ့ menu နဲ့ ဈေးနှုန်း ပြတဲ့ page",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 700,
+        height: 40,
+        text: "customer data မပါ · ဘယ်လို ဆောက်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 760,
+        height: 40,
+        text: "က · vibe coding နဲ့ ဆောက်၊ ချက်ချင်း တင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 410,
+        width: 760,
+        height: 40,
+        text: "ခ · vibe coding နဲ့ ဆောက်၊ ဈေးနှုန်း စစ်ပြီးမှ တင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-why,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 700,
+        height: 40,
+        text: "customer အားလုံး မြင်ရတဲ့ page မို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6103
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Vibe coding ဆိုတာ ဘာလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ agent တစ်ခုက ပန်းတိုင် တစ်ခုအတွက် loop ပတ်ပြီး အလုပ်လုပ်တယ် ဆိုတာနဲ့၊ ထွက်လာတဲ့ အဖြေက
+      သေချာသလို ပုံပေါ်ပေမယ့် မှားနိုင်တယ် ဆိုတာကို မြင်ခဲ့ပါတယ်။ ဒါဆို agent ကို ခိုင်းတဲ့ အလုပ်တိုင်းမှာ
+      စစ်ဆေးမှုတွေ အများကြီး ထားရမလား။ [[mark:r-tasks]] ကိုယ့်ရှေ့မှာ agent နဲ့ လုပ်စရာ အလုပ် လေးခု ရှိပါတယ်။
+      ဆိုင်ရဲ့ မွေးနေ့ပွဲအတွက် poster ထုတ်ပေးမယ့် page၊ မနေ့က အော်ဒါတွေကို ရေတွက်ပေးမယ့် script၊ တကယ့် customer
+      တွေ မှာမယ့် ကြိုမှာ app၊ နောက်ပိုင်း တစ်နေ့ ထည့်ချင်တဲ့ online ငွေချေတဲ့ အဆင့် ဆိုပြီး ဖြစ်ပါတယ်။ script
+      ဆိုတာ အလုပ် တစ်ခုတည်းကို လုပ်ပေးတဲ့ program သေးသေးလေးပါ။ [[mark:open-notes]] ဒီ လေးခုကို ပုံစံ
+      တစ်မျိုးတည်းနဲ့ ဆောက်သင့်လား ဆိုတာကို ဒီနေ့ ဆုံးဖြတ်ပြီး၊ ဆုံးဖြတ်ချက်ကို editor ထဲက notes ဖိုင်မှာ
+      ရေးသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-notes, type: workspace.openFile, at: { mark: open-notes }, path: notes.md }
+
+  - id: vibe
+    narration: >
+      [[mark:v-axis]] ဒီ မျဉ်းကို ကြည့်ပါ။ AI နဲ့ software ဆောက်တဲ့ ပုံစံတွေကို ဘယ်ကနေ ညာကို စီထားတာပါ။ ဘယ်ဘက်မှာ
+      vibe coding ရှိပါတယ်။ ၂၀၂၅ အစောပိုင်းမှာ ပေါ်လာပြီး လူသိများသွားတဲ့ စကားလုံးပါ။ [[mark:v-say]] vibe coding
+      မှာ လိုချင်တာကို chat ထဲမှာ ပြောပြီး ထွက်လာတာကို လက်ခံပါတယ်။ error ဆိုတဲ့ အမှားပြစာ တက်ရင်၊ အဲဒီ စာကို AI ဆီ
+      ပြန်ကူးထည့်ပြီး ပြင်ခိုင်းပါတယ်။ [[mark:v-check]] စစ်တာကတော့ run ကြည့်ရုံပါ။ run ကြည့်တယ် ဆိုတာ program ကို
+      တကယ် ဖွင့်ပြီး အလုပ်လုပ်ကြည့်တာပါ။ အလုပ်လုပ်သလို ပုံပေါ်ရင် ရပြီလို့ ယူဆပါတယ်။ [[mark:v-read]] ထွက်လာတဲ့
+      code ကိုလည်း ဘယ်သူမှ မဖတ်ပါဘူး။ ဆိုလိုတာက ပြော၊ လက်ခံ၊ code မဖတ်ဘဲ ဆက်သွားတဲ့ ပုံစံပါ။ ဒါက မကောင်းဘူးလို့
+      ပြောတာ မဟုတ်ပါဘူး။ တစ်ညတည်း သုံးပြီး ပစ်မယ့် အရာ၊ ကိုယ်တစ်ယောက်တည်း သုံးမယ့် အရာ၊ မှားရင်လည်း ဘယ်သူမှ
+      မနစ်နာတဲ့ အရာအတွက်ဆိုရင် vibe coding က အမြန်ဆုံး နည်းပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent (vibe coding)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - { title: "Wikipedia: Vibe coding", url: "https://en.wikipedia.org/wiki/Vibe_coding" }
+      - {
+          title: "Simon Willison: Not all AI-assisted programming is vibe coding (but vibe coding rocks)",
+          url: "https://simonwillison.net/2025/Mar/19/vibe-coding/",
+        }
+    actions:
+      - {
+          id: open-board-s,
+          type: whiteboard.apply,
+          at: { mark: v-axis },
+          open: true,
+          clear: true,
+          upsertIds: [s-axis, s-m1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-v-say,
+          type: whiteboard.apply,
+          at: { mark: v-say },
+          upsertIds: [s-h1, s-v1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-v-check,
+          type: whiteboard.apply,
+          at: { mark: v-check },
+          upsertIds: [s-h2, s-v2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-v-read,
+          type: whiteboard.apply,
+          at: { mark: v-read },
+          upsertIds: [s-h3, s-v3],
+          drawMs: 900,
+        }
+
+  - id: agentic
+    chapter: Agentic engineering ဆိုတာ
+    narration: >
+      [[mark:a-m3]] မျဉ်းရဲ့ ညာဘက်အစွန်မှာတော့ agentic engineering ရှိပါတယ်။ AI ကို spec၊ test၊ rule၊ လူ့ review
+      တွေ ကြားထဲမှာ ထားပြီး သုံးတဲ့ ပုံစံပါ။ [[mark:a-say]] ဒီမှာ ဘာလိုချင်လဲ ဆိုတာကို chat ထဲမှာ ပြောရုံ မဟုတ်ဘဲ၊
+      spec လို့ ခေါ်တဲ့ စာတမ်း တစ်ခုထဲမှာ ကြိုရေးထားပါတယ်။ agent ဖတ်ရမယ့် rule file လည်း ရှိပါတယ်။
+      [[mark:a-check]] ထွက်လာတာကို test တွေနဲ့ စစ်ပါတယ်။ test ဆိုတာ ဒါလုပ်ရင် ဒါဖြစ်ရမယ် ဆိုတာကို တစ်ခုချင်း
+      စစ်တဲ့ အဆင့်တွေပါ။ [[mark:a-read]] ပြောင်းလဲမှု တိုင်းကိုလည်း လူ တစ်ယောက်က review လုပ်ပြီးမှ လက်ခံပါတယ်။
+      review ဆိုတာ ပြောင်းလဲမှုကို မထည့်ခင် နောက်ထပ် လူ တစ်ယောက်က ပြန်စစ်တာပါ။ [[mark:a-m2]] ဒီ နှစ်ဖက်ကြားမှာ
+      structured လို့ ခေါ်နိုင်တဲ့ အလယ်ပိုင်း ရှိပါတယ်။ ဥပမာနဲ့ rule တွေကို ထည့်ပြောတာ၊ လက်နဲ့ စမ်းကြည့်တာ၊ အဓိက
+      အပိုင်းတွေကို ဖတ်တာ မျိုးပါ။ လက်တွေ့ အလုပ် အများစုက ဒီ ကြားထဲမှာ ရှိပါတယ်။ [[mark:a-key]] သတိထားရမှာက မျဉ်း
+      တစ်လျှောက်လုံးမှာ AI ကို သုံးနေတာပါပဲ။ ကွာတာက AI သုံးလား မသုံးလား မဟုတ်ဘဲ၊ AI ထုတ်ပေးတာရဲ့ ပတ်လည်မှာ
+      structure နဲ့ စစ်ဆေးမှု ဘယ်လောက် ရှိလဲ ဆိုတာပါ။ structure ဆိုတာ ကြိုရေးထားတဲ့ စာတမ်း၊ rule နဲ့ စစ်တဲ့
+      အဆင့်တွေကို ပြောတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Simon Willison: Not all AI-assisted programming is vibe coding (but vibe coding rocks)",
+          url: "https://simonwillison.net/2025/Mar/19/vibe-coding/",
+        }
+    actions:
+      - {
+          id: draw-a-m3,
+          type: whiteboard.apply,
+          at: { mark: a-m3 },
+          upsertIds: [s-m3],
+          drawMs: 700,
+        }
+      - {
+          id: draw-a-say,
+          type: whiteboard.apply,
+          at: { mark: a-say },
+          upsertIds: [s-a1],
+          drawMs: 700,
+        }
+      - {
+          id: draw-a-check,
+          type: whiteboard.apply,
+          at: { mark: a-check },
+          upsertIds: [s-a2],
+          drawMs: 700,
+        }
+      - {
+          id: draw-a-read,
+          type: whiteboard.apply,
+          at: { mark: a-read },
+          upsertIds: [s-a3],
+          drawMs: 700,
+        }
+      - {
+          id: draw-a-m2,
+          type: whiteboard.apply,
+          at: { mark: a-m2 },
+          upsertIds: [s-m2, s-s1, s-s2, s-s3],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-a-key,
+          type: whiteboard.apply,
+          at: { mark: a-key },
+          upsertIds: [s-key],
+          drawMs: 1300,
+        }
+
+  - id: choose
+    chapter: Risk ပေါ်မူတည်ပြီး ရွေးရအောင်
+    narration: >
+      [[mark:c-risk]] ဒါဆို အလုပ် တစ်ခုကို မျဉ်းရဲ့ ဘယ်နေရာမှာ ထားမလဲ။ မေးခွန်း နှစ်ခု မေးကြည့်ရပါမယ်။ ပထမ
+      မေးခွန်းက risk ပါ။ risk ဆိုတာ မှားသွားရင် ဘယ်လောက် နစ်နာမလဲ ဆိုတာပါ။ ဘယ်သူ နစ်နာမလဲ၊ ငွေ ဆုံးမလား၊ customer
+      ရဲ့ ဖုန်းနံပါတ်လို data ပေါက်ကြားမလား ဆိုတာတွေ ပါပါတယ်။ [[mark:c-life]] ဒုတိယ မေးခွန်းက ဘယ်လောက် ကြာကြာ
+      သုံးမလဲ ဆိုတာပါ။ တစ်ညတည်း သုံးပြီး ပစ်မယ့် အရာနဲ့၊ နေ့တိုင်း နှစ်ပေါင်းများစွာ ပြင်ရင်း သုံးနေမယ့် အရာ
+      မတူပါဘူး။ ကြာကြာ သုံးလေ၊ နောက်ပိုင်း ပြင်ရ ထိန်းရ လွယ်အောင် စနစ်တကျ ဆောက်ထားဖို့ လိုလေပါပဲ။ [[mark:c-ends]]
+      ဒါကြောင့် risk နည်းပြီး ခဏပဲ သုံးမယ့် အလုပ်ကို ဘယ်ဘက်မှာ၊ risk များပြီး ကြာကြာ သုံးမယ့် အလုပ်ကို ညာဘက်မှာ
+      ထားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion (structure scales)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-c-risk,
+          type: whiteboard.apply,
+          at: { mark: c-risk },
+          upsertIds: [s-r1, s-r3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-life,
+          type: whiteboard.apply,
+          at: { mark: c-life },
+          upsertIds: [s-l1, s-l3],
+          drawMs: 900,
+        }
+
+  - id: tasks
+    narration: >
+      [[mark:t-open]] ခုနက ဆိုင်ရဲ့ အလုပ် လေးခုကို ဒီ မျဉ်းပေါ်မှာ နေရာချကြည့်ရအောင်။ [[mark:t-poster]] မွေးနေ့ပွဲ
+      poster page က တစ်ညတည်း သုံးမှာ ဖြစ်ပြီး customer data လည်း မပါပါဘူး။ မှားရင် poster ကို ပြန်ထုတ်ရုံပါပဲ။
+      ဒါကြောင့် vibe coding နဲ့ လုပ်လို့ ရပါတယ်။ [[mark:t-count]] ကိုယ်ပဲ သုံးမယ့် အော်ဒါ ရေတွက်တဲ့ script ကတော့
+      ကောင်တာက လှလှ မှတ်ထားတဲ့ အော်ဒါ စာရင်းကို ဖတ်ရုံပဲ ဖတ်ပြီး ဘာမှ မပြင်ပါဘူး။ ဒါပေမဲ့ ရလာတဲ့ ကိန်းဂဏန်းကို
+      ကြည့်ပြီး ဆုံးဖြတ်ချက် ချမှာမို့၊ ပထမ တစ်ခါမှာ လက်နဲ့ ရေတွက်ထားတာနဲ့ ကိုက်လား တိုက်စစ်ရပါမယ်။ ဒါကြောင့် vibe
+      coding နဲ့ structured ကြားမှာ ထားပါမယ်။ [[mark:t-app]] ကြိုမှာ app ကတော့ တကယ့် customer တွေရဲ့ နာမည်နဲ့
+      ဖုန်းနံပါတ်ကို လက်ခံပြီး၊ နေ့တိုင်း နှစ်ပေါင်းများစွာ သုံးမှာပါ။ မှားရင် member အောင်အောင် လို customer တွေ
+      မနက်ခင်း လက်ဖက်ရည် မရဘဲ ပြန်သွားရနိုင်လို့ ညာဘက်မှာ ထားရပါမယ်။ [[mark:t-pay]] ငွေချေတဲ့ အဆင့်က risk
+      အများဆုံးပါ။ ငွေ မှားရင် customer ရော ဆိုင်ပါ တိုက်ရိုက် နစ်နာလို့၊ ညာဘက် အစွန်ဆုံးမှာ ထားပြီး စစ်ဆေးမှု
+      အများဆုံး လိုပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Simon Willison: Not all AI-assisted programming is vibe coding (but vibe coding rocks)",
+          url: "https://simonwillison.net/2025/Mar/19/vibe-coding/",
+        }
+    actions:
+      - {
+          id: open-board-t,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          clear: true,
+          upsertIds: [s-axis, s-m1, s-m2, s-m3],
+        }
+      - {
+          id: draw-t-poster,
+          type: whiteboard.apply,
+          at: { mark: t-poster },
+          upsertIds: [t-1],
+          drawMs: 800,
+        }
+      - {
+          id: draw-t-count,
+          type: whiteboard.apply,
+          at: { mark: t-count },
+          upsertIds: [t-2],
+          drawMs: 800,
+        }
+      - {
+          id: draw-t-app,
+          type: whiteboard.apply,
+          at: { mark: t-app },
+          upsertIds: [t-3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-pay,
+          type: whiteboard.apply,
+          at: { mark: t-pay },
+          upsertIds: [t-4],
+          drawMs: 800,
+        }
+
+  - id: danger
+    chapter: Prototype က production ဖြစ်သွားရင်
+    narration: >
+      [[mark:d-proto]] ဒီ မျဉ်းပေါ်မှာ အန္တရာယ် အများဆုံးက ဘယ်ဘက်မှာ ဆောက်ခဲ့တဲ့ အရာ တစ်ခုက ညာဘက်ကို မသိမသာ
+      ရွေ့သွားတာပါ။ စမ်းဖို့ ဆောက်ထားတဲ့ အကြမ်းကို prototype လို့ ခေါ်ပြီး၊ တကယ့် customer တွေ သုံးနေတဲ့ ဟာကို
+      production လို့ ခေါ်ပါတယ်။ [[mark:d-story]] ဥပမာ ကြိုမှာ app ကို မဆောက်ခင် ပုံစံ ကြည့်ဖို့၊ ညတစ်ည vibe
+      coding နဲ့ form လေး တစ်ခု ဆောက်ထားတယ် ဆိုပါစို့။ ဆိုင်ပိုင်ရှင် မြမြ က သဘောကျလို့ ဆိုင်ရဲ့ page မှာ link
+      တင်လိုက်ပါတယ်။ နောက်နေ့ မနက်ကစပြီး တကယ့် customer တွေက နာမည်နဲ့ ဖုန်းနံပါတ် ထည့်ပြီး မှာလာကြပါတယ်။
+      [[mark:d-drift]] ဒါပေမဲ့ အဲဒီ form ရဲ့ code ကို ဘယ်သူမှ မဖတ်ရသေးသလို၊ ဖုန်းနံပါတ်တွေ ဘယ်ရောက်သွားလဲ၊
+      အရေအတွက် သုည ထည့်ရင် ဘာဖြစ်လဲ ဆိုတာကိုလည်း ဘယ်သူမှ မစစ်ရသေးပါဘူး။ ဘယ်သူမှ မဆုံးဖြတ်ဘဲ prototype က production
+      ဖြစ်သွားတာပါ။ ဒါကြောင့် prototype ဆိုတာ စမ်းပြီးရင် ပစ်မယ့် အရာ ဖြစ်တယ် ဆိုတာကို အစကတည်းက ရှင်းထားရပါမယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the alpha phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-alpha-phase-works",
+        }
+      - {
+          title: "Simon Willison: Not all AI-assisted programming is vibe coding (but vibe coding rocks)",
+          url: "https://simonwillison.net/2025/Mar/19/vibe-coding/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion (structure scales)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-d-proto,
+          type: whiteboard.apply,
+          at: { mark: d-proto },
+          upsertIds: [t-drift],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d-drift,
+          type: whiteboard.apply,
+          at: { mark: d-drift },
+          upsertIds: [t-drift-l],
+          drawMs: 1200,
+        }
+
+  - id: rule
+    narration: >
+      [[mark:close-t]] အဲဒီအတွက် prototype နဲ့ production ကြားမှာ စည်း တစ်ခုကို တမင် ဆွဲထားဖို့၊ ဆိုင်ရဲ့ rule
+      တစ်ခုကို notes ထဲမှာ ရေးထားရအောင်။ [[mark:type-rule]] prototype မှာ ဘာလုပ်ခွင့် ရှိလဲ၊ production ဖြစ်ဖို့
+      ဘာတွေ ပါရမလဲ၊ စည်းကို ကျော်ချင်ရင် ဘယ်လို ကျော်မလဲ ဆိုတာကို တစ်ကြောင်းစီ ဆုံးဖြတ်ထားတာပါ။ [[mark:sel-proto]]
+      ပထမ စာကြောင်းက customer တွေရဲ့ နာမည်နဲ့ ဖုန်းနံပါတ်ကို ကာကွယ်ပေးတဲ့ စာကြောင်းပါ။ ဒီ rule ရှိရင် ခုနက form
+      လို ဖြစ်ရပ်မှာ link မတင်ခင်ကတည်းက ရပ်ပြီး စဉ်းစားဖို့ အကြောင်း ရှိလာပါတယ်။ [[mark:sel-cross]] တတိယ
+      စာကြောင်းကတော့ စည်းကို ကျော်တဲ့ ဆုံးဖြတ်ချက်ကို ဘယ်သူနဲ့ ချမလဲ၊ ကျော်ရင် ဘာတွေ ထပ်လုပ်ရမလဲ ဆိုတာကို
+      ကြိုသတ်မှတ်ထားတာပါ။ စည်းကို ကျော်တာ မမှားပါဘူး။ မသိဘဲ ကျော်မိတာကသာ ပြဿနာပါ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the alpha phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-alpha-phase-works",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-t, type: whiteboard.apply, at: { mark: close-t }, open: false }
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        target: { file: notes.md, after: "# Notes\n", occurrence: 1 }
+        text: "\n## Lesson 03 · Prototype နဲ့ production\n- prototype — စမ်းဖို့ပဲ။ တကယ့် customer data မထည့်ဘူး။\n- production — customer data ဒါမှမဟုတ် ငွေချေတာ ပါရင် spec၊ test၊ လူ့ review ပါမှ တင်မယ်။\n- prototype ကို တကယ် သုံးချင်ရင် — မြမြ နဲ့ တိုင်ပင်ပြီး risk နဲ့ ကိုက်တဲ့ စစ်ဆေးမှု ထည့်မယ်။\n"
+        cadence: line-by-line
+      - {
+          id: expect-rule,
+          type: expect.file,
+          at: { afterAction: type-rule },
+          path: notes.md,
+          contains: "- prototype — စမ်းဖို့ပဲ။ တကယ့် customer data မထည့်ဘူး။",
+        }
+      - {
+          id: sel-proto,
+          type: editor.select,
+          at: { mark: sel-proto },
+          target:
+            {
+              file: notes.md,
+              text: "- prototype — စမ်းဖို့ပဲ။ တကယ့် customer data မထည့်ဘူး။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-cross,
+          type: editor.select,
+          at: { mark: sel-cross },
+          target:
+            {
+              file: notes.md,
+              text: "- prototype ကို တကယ် သုံးချင်ရင် — မြမြ နဲ့ တိုင်ပင်ပြီး risk နဲ့ ကိုက်တဲ့ စစ်ဆေးမှု ထည့်မယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီနေ့ ဆိုင်မှာ ရနိုင်တဲ့ menu နဲ့ ဈေးနှုန်းကို ပြတဲ့ page တစ်ခု
+      ဆောက်မယ် ဆိုပါစို့။ customer data လုံးဝ မပါပါဘူး။ ဘယ်လို ဆောက်မလဲ။ ပထမ အဖြေက data မပါလို့ vibe coding နဲ့
+      ဆောက်ပြီး ချက်ချင်း တင်မယ် ဆိုတာပါ။ ဒုတိယ အဖြေက vibe coding နဲ့ မြန်မြန် ဆောက်ပေမယ့်၊ မတင်ခင်
+      ဈေးနှုန်းတွေကို စစ်မယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      ဒုတိယ အဖြေ ပါ။ မျဉ်းပေါ်မှာဆိုရင် ဘယ်ဘက်နား၊ ဒါပေမဲ့ အစွန်ဆုံး မဟုတ်တဲ့ နေရာပါ။ ဘာကြောင့်လဲဆိုတော့ customer
+      data မပါလို့ risk နည်းပေမယ့်၊ customer အားလုံး မြင်ရမယ့် page ဖြစ်လို့ပါ။ ဈေးနှုန်း တစ်ခု မှားနေရင်
+      ကောင်တာမှာ အငြင်းပွားရနိုင်တာမို့၊ code မဖတ်ရင်တောင် ဈေးနှုန်း တစ်ခုချင်းကို ဆိုင်ရဲ့ menu နဲ့
+      တိုက်စစ်ရပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-o1, z-o2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-why],
+          drawMs: 1400,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ vibe coding ကနေ agentic engineering အထိ မျဉ်းတစ်လျှောက်လုံးမှာ AI
+      ပါပါတယ်။ ပြောင်းသွားတာက AI ပတ်လည်က စာတမ်း၊ rule နဲ့ စစ်ဆေးမှုတွေပါ။ ဘယ်နေရာကို ရွေးမလဲ ဆိုတာကိုတော့ risk နဲ့
+      ဘယ်လောက် ကြာကြာ သုံးမလဲ ဆိုတာက ဆုံးဖြတ်ပါတယ်။ [[mark:sel-prod]] ဒီ ဆိုင်မှာတော့ customer တွေ သုံးမယ့်
+      အရာထဲမှာ သူတို့ရဲ့ data ဒါမှမဟုတ် ငွေချေတာ ပါလာရင်၊ မျဉ်းရဲ့ ညာဘက် ပုံစံနဲ့ ဆောက်ပါမယ်။ [[mark:sel-proto2]]
+      prototype က မသိမသာ production ဖြစ်မသွားအောင် စည်းကိုလည်း တမင် ဆွဲထားရပါမယ်။ နောက် lesson မှာတော့ ဘယ်လို
+      ဆောက်မလဲ မရွေးခင်၊ ဘာကို ဘာကြောင့် ဆောက်မလဲ ဆိုတဲ့ ပြဿနာကို အရင် ရေးတာကနေ စလေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion (structure scales)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-prod,
+          type: editor.select,
+          at: { mark: sel-prod },
+          target:
+            {
+              file: notes.md,
+              text: "- production — customer data ဒါမှမဟုတ် ငွေချေတာ ပါရင် spec၊ test၊ လူ့ review ပါမှ တင်မယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-proto2,
+          type: editor.select,
+          at: { mark: sel-proto2 },
+          target:
+            {
+              file: notes.md,
+              text: "- prototype — စမ်းဖို့ပဲ။ တကယ့် customer data မထည့်ဘူး။",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
