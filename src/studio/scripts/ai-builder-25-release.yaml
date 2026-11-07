@@ -1,0 +1,957 @@
+# AI Builder, lesson 25: environments and release (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused),
+# docs/plan.md as lesson 17 leaves it (row 6: staging, done when the release checklist passes) and
+# docs/release-checklist.md pinned with only its title line. Nothing runs. The lesson writes
+# docs/release-checklist.md (lesson-local, COURSE-KIT §4.17 outline; full text in DESIGN.md and
+# _release-checklist-final.md): Before (test plan on staging, a cheap phone, backup, rollback written),
+# During (after 10:00, never in the 7–9 rush; one person there), After (one real order, errors for
+# 30 minutes, tell လှလှ).
+#
+# Boards: (E) local → staging → [checklist gate] → production, deploy glossed; (S) one big release vs
+# small and often, feature flag; (Z) the quiz (6:45 a.m.: release now or after 10:00?). The During
+# section is typed after the quiz, so no board or sentence before it carries the answer.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-25-release.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-25-release
+  title: "AI Builder 25: Environment နဲ့ release"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/plan.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/plan.md: |
+        # Plan · v1
+
+        | # | Task | Done when |
+        |---|---|---|
+        | 1 | form ကနေ အော်ဒါ တစ်ခု သိမ်းနိုင်တာ | AC-1 |
+        | 2 | မှားတဲ့ input ကို ငြင်းတာ (အရေအတွက်၊ အချိန်၊ ဖုန်း) | AC-2, AC-3, AC-4 |
+        | 3 | ကောင်တာစာရင်း | AC-5 |
+        | 4 | နေ့စဉ် အော်ဒါနံပါတ် | Rules |
+        | 5 | menu ပြင်ဖို့ admin စာမျက်နှာ | — |
+        | 6 | staging ပေါ် တင်တာ | release checklist |
+
+        - Task 5 ကို ဖယ်လိုက်ပြီ — menu ကို တစ်နှစ် အနည်းငယ်ပဲ ပြင်လို့ file ထဲမှာ ပြင်တာနဲ့ လုံလောက်တယ် (decisions.md ADR-003)
+      docs/release-checklist.md: |+
+        # Release checklist · ကြိုမှာ app
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board E: three environments left to right (blue boxes: the product in three places), arrows right,
+    # an orange gate (the checklist) before production, deploy glossed underneath.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 50,
+        text: "environment သုံးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-local-box,
+        kind: rectangle,
+        x: 262,
+        y: 250,
+        width: 220,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-local,
+        kind: text,
+        x: 280,
+        y: 262,
+        width: 190,
+        height: 40,
+        text: "local",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-local-1,
+        kind: text,
+        x: 280,
+        y: 305,
+        width: 190,
+        height: 40,
+        text: "ကိုယ့်စက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-local-2,
+        kind: text,
+        x: 280,
+        y: 348,
+        width: 190,
+        height: 40,
+        text: "test data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-ar1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 305,
+        width: 52,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-stag-box,
+        kind: rectangle,
+        x: 550,
+        y: 250,
+        width: 222,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-stag,
+        kind: text,
+        x: 566,
+        y: 262,
+        width: 200,
+        height: 40,
+        text: "staging",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-stag-1,
+        kind: text,
+        x: 566,
+        y: 305,
+        width: 200,
+        height: 40,
+        text: "စမ်းဖို့ မိတ္တူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-stag-2,
+        kind: text,
+        x: 566,
+        y: 348,
+        width: 200,
+        height: 40,
+        text: "test data",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-gate,
+        kind: rectangle,
+        x: 784,
+        y: 236,
+        width: 18,
+        height: 178,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-gate-l,
+        kind: text,
+        x: 718,
+        y: 424,
+        width: 170,
+        height: 40,
+        text: "checklist",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: e-ar2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 808,
+        y: 305,
+        width: 48,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: e-prod-box,
+        kind: rectangle,
+        x: 862,
+        y: 250,
+        width: 230,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-prod,
+        kind: text,
+        x: 876,
+        y: 262,
+        width: 210,
+        height: 40,
+        text: "production",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: e-prod-1,
+        kind: text,
+        x: 876,
+        y: 305,
+        width: 210,
+        height: 40,
+        text: "customer တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-prod-2,
+        kind: text,
+        x: 876,
+        y: 348,
+        width: 210,
+        height: 40,
+        text: "data အစစ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: e-deploy,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 780,
+        height: 40,
+        text: "deploy · version တစ်ခုကို server ပေါ် တင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-gate-note,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 780,
+        height: 40,
+        text: "checklist မပြည့် → production မဖြတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board S: one big release (red, left) vs small and often (green, right); feature flag (orange box).
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 620,
+        height: 50,
+        text: "release တစ်ခါမှာ ဘယ်လောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-big-h,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 360,
+        height: 45,
+        text: "အကုန် တစ်ခါတည်း",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: s-big-1,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 360,
+        height: 40,
+        text: "ပြောင်းလဲမှု 10 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-big-2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 360,
+        height: 40,
+        text: "ပျက်ရင် ဘယ်ဟာလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-big-3,
+        kind: text,
+        x: 300,
+        y: 385,
+        width: 360,
+        height: 40,
+        text: "rollback · 10 ခုလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-small-h,
+        kind: text,
+        x: 680,
+        y: 235,
+        width: 410,
+        height: 45,
+        text: "သေးသေး၊ ခဏခဏ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: s-small-1,
+        kind: text,
+        x: 680,
+        y: 295,
+        width: 410,
+        height: 40,
+        text: "ပြောင်းလဲမှု 1 ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-small-2,
+        kind: text,
+        x: 680,
+        y: 340,
+        width: 410,
+        height: 40,
+        text: "ပျက်ရင် ချက်ချင်း သိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-small-3,
+        kind: text,
+        x: 680,
+        y: 385,
+        width: 410,
+        height: 40,
+        text: "အဲဒီ တစ်ခုပဲ ပြန်ဖြုတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-flag-box,
+        kind: rectangle,
+        x: 290,
+        y: 460,
+        width: 800,
+        height: 110,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-flag,
+        kind: text,
+        x: 310,
+        y: 470,
+        width: 760,
+        height: 40,
+        text: "feature flag · deploy လုပ်ထားပြီး ပိတ်ထား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-flag-2,
+        kind: text,
+        x: 310,
+        y: 515,
+        width: 760,
+        height: 40,
+        text: "လူနည်းနည်းကို အရင် ဖွင့် → ပြီးမှ အားလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, two options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 770,
+        height: 45,
+        text: "တနင်္လာ မနက် 6:45 · version အသစ် အသင့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 280,
+        width: 680,
+        height: 40,
+        text: "ဘယ်အချိန် release လုပ်မလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 680,
+        height: 40,
+        text: "က · အခုပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 680,
+        height: 40,
+        text: "ခ · 10:00 နောက်မှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 680,
+        height: 50,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 780,
+        height: 40,
+        text: "7:00–9:00 အလုပ်ရှုပ် · ပျက်ရင် လူအများဆုံး ထိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6125
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Customer ဆီ ဘေးကင်းကင်း ရောက်ဖို့
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ secret တွေကို code နဲ့ chat ထဲ မထည့်ဖို့၊ agent ကို လိုတာထက် ပိုတဲ့ access
+      မပေးဖို့နဲ့၊ customer ရေးတဲ့ စာကို ညွှန်ကြားချက် အဖြစ် မဟုတ်ဘဲ data အဖြစ်ပဲ ဆက်ဆံဖို့ လေ့လာခဲ့ပါတယ်။
+      ဒီနေ့တော့ စစ်ပြီးသား version တစ်ခုကို customer တွေဆီ ဘေးကင်းကင်း ဘယ်လို ရောက်အောင် လုပ်မလဲ ဆိုတာ ကြည့်ပါမယ်။
+      [[mark:sel-row6]] ကိုယ်တို့ plan ရဲ့ နောက်ဆုံး task မှာ app ကို staging ဆိုတဲ့ နေရာပေါ် တင်ပြီး၊ release
+      checklist နဲ့ စစ်မယ်လို့ ရေးခဲ့ပါတယ်။ [[mark:why-check]] ဒါပေမဲ့ ဘာကြောင့် checklist လိုတာလဲ။ app ကို
+      customer တွေ သုံးနေပြီ ဖြစ်တဲ့ နောက်ပိုင်းမှာ၊ agent နဲ့ ပြင်ထားတဲ့ version အသစ်က ကိုယ့် laptop ပေါ်မှာ
+      ကောင်းကောင်း အလုပ်လုပ်လို့ တကယ့် app ပေါ်ကို တန်းတင်လိုက်တယ် ဆိုပါစို့။ ကျောင်းသား မောင်မောင် ရဲ့ ဈေးပေါတဲ့
+      ဖုန်းမှာ form က ပေါ်မလာတော့ရင်၊ အဲဒါကို အရင်ဆုံး သိမှာက customer တွေပါ။ ကောင်တာက လှလှ ကလည်း ဘာဖြစ်နေလဲ မသိဘဲ
+      customer တွေရဲ့ မေးခွန်းကို ဖြေရပါလိမ့်မယ်။ [[mark:open-check]] ဒီလို customer တွေရော လှလှ ပါ ကြိုမသိဘဲ
+      ဒုက္ခ မရောက်ရအောင်၊ ဒီနေ့ အဲဒီ release checklist ကို ရေးပါမယ်။ checklist ဆိုတာ မမေ့ရအောင် တစ်ခုချင်း
+      စစ်ရမယ့် စာရင်းပါ။ release ဆိုတာ version အသစ်ကို customer တွေ သုံးလို့ရအောင် ထုတ်ပေးတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (code review and deployment)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google SRE book: Release Engineering",
+          url: "https://sre.google/sre-book/release-engineering/",
+        }
+    actions:
+      - { id: open-plan, type: workspace.openFile, at: { mark: sel-row6 }, path: docs/plan.md }
+      - {
+          id: sel-row6,
+          type: editor.select,
+          at: { afterAction: open-plan },
+          target:
+            {
+              file: docs/plan.md,
+              text: "| 6 | staging ပေါ် တင်တာ | release checklist |",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: open-check,
+          type: workspace.openFile,
+          at: { mark: open-check },
+          path: docs/release-checklist.md,
+        }
+
+  - id: envs
+    chapter: Environment သုံးခု
+    narration: >
+      [[mark:e-title]] customer တွေ မမြင်ခင် စစ်လို့ရဖို့ app ကို နေရာ သုံးခုမှာ ထားပါတယ်။ app ကို run ထားပြီး
+      အလုပ်လုပ်နေတဲ့ နေရာ တစ်ခုစီကို environment လို့ ခေါ်ပါတယ်။ [[mark:e-local]] ပထမက local ပါ။ ကိုယ့်စက်ပေါ်မှာ
+      agent နဲ့ ပြင်ပြီး၊ စမ်းဖို့ လုပ်ထားတဲ့ test data နဲ့ စမ်းတဲ့ နေရာပါ။ [[mark:e-stag]] ဒုတိယက staging ပါ။
+      customer တွေ သုံးမယ့် app နဲ့ ပုံစံတူ မိတ္တူ တစ်ခု ဖြစ်ပေမဲ့ ကိုယ်တို့ပဲ ဝင်သုံးပါတယ်။ ဒီမှာလည်း test data
+      ပဲ ထည့်ပြီး၊ customer တွေရဲ့ ဖုန်းနံပါတ် အစစ်တွေကို ဒီ မိတ္တူထဲ မကူးပါဘူး။ [[mark:e-prod]] တတိယကတော့
+      production ပါ။ တကယ့် customer တွေက တကယ့် အော်ဒါတွေ မှာနေတဲ့ နေရာပါ။ agent ကို local မှာပဲ
+      အလုပ်လုပ်ခိုင်းပြီး production ကို တိုက်ရိုက် ပြင်ခွင့် မပေးတာက၊ ပြီးခဲ့တဲ့ lesson က access ကို လိုသလောက်ပဲ
+      ပေးဖို့ စည်းကမ်းနဲ့ အတူတူပါပဲ။ [[mark:e-deploy]] version တစ်ခုကို environment တစ်ခုရဲ့ server ပေါ် တင်တာကို
+      deploy လုပ်တယ် လို့ ခေါ်ပါတယ်။ staging ပေါ် deploy လုပ်တာ မှားသွားရင် ကိုယ်တို့ပဲ မြင်ရပေမဲ့၊ production
+      ပေါ်မှာ မှားရင်တော့ customer တွေ ချက်ချင်း မြင်ရပါတယ်။ [[mark:e-gate]] ဒါကြောင့် staging နဲ့ production
+      ကြားမှာ တံခါး တစ်ခု ထားပါတယ်။ အဲဒီ တံခါးက ဒီနေ့ ရေးမယ့် checklist ပါ။ checklist ထဲက အချက်တွေ မပြည့်သေးရင်
+      production ဆီ မဖြတ်ပါဘူး။
+    sources:
+      - {
+          title: "Wikipedia: Deployment environment (local, staging, production)",
+          url: "https://en.wikipedia.org/wiki/Deployment_environment",
+        }
+      - {
+          title: "Google SRE book: Release Engineering (tests before deployment)",
+          url: "https://sre.google/sre-book/release-engineering/",
+        }
+    actions:
+      - {
+          id: draw-e-title,
+          type: whiteboard.apply,
+          at: { mark: e-title },
+          open: true,
+          clear: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-e-local,
+          type: whiteboard.apply,
+          at: { mark: e-local },
+          upsertIds: [e-local-box, e-local, e-local-1, e-local-2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-e-stag,
+          type: whiteboard.apply,
+          at: { mark: e-stag },
+          upsertIds: [e-ar1, e-stag-box, e-stag, e-stag-1, e-stag-2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-e-prod,
+          type: whiteboard.apply,
+          at: { mark: e-prod },
+          upsertIds: [e-ar2, e-prod-box, e-prod, e-prod-1, e-prod-2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-e-deploy,
+          type: whiteboard.apply,
+          at: { mark: e-deploy },
+          upsertIds: [e-deploy],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-e-gate,
+          type: whiteboard.apply,
+          at: { mark: e-gate },
+          upsertIds: [e-gate, e-gate-l, e-gate-note],
+          drawMs: 1300,
+        }
+
+  - id: before-test
+    chapter: Release မလုပ်ခင်
+    narration: >
+      [[mark:close-e]] ဒီ တံခါးမှာ ဘာတွေ စစ်မလဲ ရေးကြည့်ရအောင်။ [[mark:type-before1]] ပထမ အပိုင်းက release
+      မလုပ်ခင် ပြည့်ရမယ့် အချက်တွေပါ။ တစ်ခုခု မပြည့်ရင် ဒီနေ့ release မလုပ်ဘဲ နောက်တစ်ရက် ရွှေ့ပါတယ်။ ပထမ
+      နှစ်ကြောင်းက version အသစ်ကို customer မမြင်ခင် staging မှာ အရင် စစ်ခိုင်းတာပါ။ [[mark:sel-testplan]] ဒီ test
+      plan က code မရေးဘဲ test လုပ်ခဲ့တုန်းက ရေးခဲ့တဲ့ test case တွေပါပဲ။ အဲဒီတုန်းကလို case တစ်ခုချင်းကို လက်နဲ့
+      ပြန်စမ်းမှာ ဖြစ်ပေမဲ့၊ ဒီတစ်ခါတော့ ကိုယ့်စက်မှာ မဟုတ်ဘဲ staging မှာ စမ်းပါမယ်။ ကိုယ့်စက်ပေါ်မှာ
+      အလုပ်လုပ်တာနဲ့ server ပေါ်မှာ အလုပ်လုပ်တာ အမြဲ တူမယ်လို့ ယူဆလို့ မရလို့ပါ။ test plan ထဲမှာ အရင်က တွေ့ခဲ့တဲ့
+      bug အတွက် case လည်း ပါလို့၊ ပြင်ပြီးသား bug ပြန်ပေါ်လာရင်လည်း ဒီမှာ မိပါတယ်။ [[mark:sel-phone]] ဒုတိယ
+      စာကြောင်းကတော့ customer တွေ တကယ် ကိုင်တဲ့ ဖုန်းမျိုးနဲ့ စမ်းခိုင်းတာပါ။ ဈေးပေါတဲ့ ဖုန်း၊ နှေးတဲ့ mobile data
+      နဲ့ သုံးစက္ကန့်အတွင်း ပေါ်ရမယ် ဆိုတဲ့ requirement ကို ကိုယ့် laptop ပေါ်မှာ စစ်လို့ မရလို့ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (testing and QA; code review and deployment)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Wikipedia: Deployment environment (staging resembles production; tests before release)",
+          url: "https://en.wikipedia.org/wiki/Deployment_environment",
+        }
+    actions:
+      - { id: close-e, type: whiteboard.apply, at: { mark: close-e }, open: false }
+      - id: type-before1
+        type: editor.type
+        at: { mark: type-before1 }
+        target:
+          {
+            file: docs/release-checklist.md,
+            after: "# Release checklist · ကြိုမှာ app\n\n",
+            occurrence: 1,
+          }
+        text: "## Before\n- staging မှာ test plan ကို အစအဆုံး စစ်ပြီး အားလုံး pass ဖြစ်ပြီ။\n- ဈေးပေါတဲ့ Android ဖုန်းနဲ့ staging မှာ အော်ဒါ တစ်ခု မှာကြည့်ပြီ။\n"
+        cadence: line-by-line
+      - {
+          id: sel-testplan,
+          type: editor.select,
+          at: { mark: sel-testplan },
+          target:
+            { file: docs/release-checklist.md, text: "test plan ကို အစအဆုံး စစ်ပြီး", occurrence: 1 },
+        }
+      - {
+          id: sel-phone,
+          type: editor.select,
+          at: { mark: sel-phone },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- ဈေးပေါတဲ့ Android ဖုန်းနဲ့ staging မှာ အော်ဒါ တစ်ခု မှာကြည့်ပြီ။\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: before-rollback
+    narration: >
+      [[mark:type-before2]] နောက် နှစ်ကြောင်းကတော့ တစ်ခုခု မှားသွားခဲ့ရင် ပြန်ကယ်လို့ရအောင် ကြိုပြင်ထားခိုင်းတာပါ။
+      [[mark:sel-backup]] backup ဆိုတာ data ရဲ့ မိတ္တူပါ။ version အသစ်က သိမ်းထားတဲ့ အော်ဒါတွေကို ပျက်စီးစေခဲ့ရင်၊
+      code ကို ပြန်ပြောင်းရုံနဲ့ အဲဒီ data တွေ ပြန်မကောင်းလာပါဘူး။ database service ကို ရွေးတုန်းက backup ရလား
+      စစ်ထားဖို့ decision record ထဲ ရေးခဲ့တာ ဒီနေရာမှာ အသုံးဝင်ပါတယ်။ [[mark:sel-rollback]] rollback ဆိုတာ
+      နောက်ဆုံး ကောင်းခဲ့တဲ့ version ဆီ ပြန်သွားတာပါ။ version control ထဲက save point တွေ ရှိလို့ ပြန်သွားလို့
+      ရတာပါ။ ဒီ စာကြောင်းက rollback လုပ်နည်းကို မလိုခင်ကတည်းက ရေးထားခိုင်းပါတယ်။ ဘာကြောင့်လဲဆိုတော့ app ပျက်နေလို့
+      customer တွေ မှာလို့ မရတဲ့ အချိန်က ပြန်သွားနည်းကို စရှာရမယ့် အချိန် မဟုတ်လို့ပါ။
+    sources:
+      - {
+          title: "Google SRE book: Launch Coordination Checklist (data backup and restore)",
+          url: "https://sre.google/sre-book/launch-checklist/",
+        }
+      - {
+          title: "Google SRE workbook: Canarying Releases (roll back; a team with no rollback had to patch under pressure)",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      - id: type-before2
+        type: editor.type
+        at: { mark: type-before2 }
+        target: { file: docs/release-checklist.md, after: "အော်ဒါ တစ်ခု မှာကြည့်ပြီ။\n", occurrence: 1 }
+        text: "- production data ကို backup လုပ်ပြီ။\n- rollback လုပ်နည်းကို ရေးထားပြီ — နောက်ဆုံး ကောင်းခဲ့တဲ့ version ကို ပြန်တင်မယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-before,
+          type: expect.file,
+          at: { afterAction: type-before2 },
+          path: docs/release-checklist.md,
+          contains: "- rollback လုပ်နည်းကို ရေးထားပြီ — နောက်ဆုံး ကောင်းခဲ့တဲ့ version ကို ပြန်တင်မယ်။",
+        }
+      - {
+          id: sel-backup,
+          type: editor.select,
+          at: { mark: sel-backup },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- production data ကို backup လုပ်ပြီ။\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-rollback,
+          type: editor.select,
+          at: { mark: sel-rollback },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- rollback လုပ်နည်းကို ရေးထားပြီ — နောက်ဆုံး ကောင်းခဲ့တဲ့ version ကို ပြန်တင်မယ်။\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: small
+    narration: >
+      [[mark:s-title]] release တစ်ခါမှာ ဘယ်လောက် ထည့်မလဲ ဆိုတာလည်း အရေးကြီးပါတယ်။ [[mark:s-big]] ပြောင်းလဲမှု
+      ဆယ်ခုကို စုပြီး တစ်ခါတည်း release လုပ်ရင်၊ တစ်ခုခု ပျက်တဲ့အခါ ဆယ်ခုထဲက ဘယ်ဟာကြောင့်လဲ လိုက်ရှာရပါတယ်။
+      rollback လုပ်ရင်လည်း ကောင်းနေတဲ့ ကိုးခုပါ ပြန်ပျောက်သွားပါတယ်။ [[mark:s-small]] task တစ်ခု ပြီးတိုင်း
+      သေးသေးလေး ခဏခဏ release လုပ်ရင်တော့ ပျက်တဲ့အခါ ဘာကြောင့်လဲ ချက်ချင်း သိပြီး၊ အဲဒီ တစ်ခုတည်းကိုပဲ
+      ပြန်ဖြုတ်လို့ ရပါတယ်။ agent က တစ်ခါတည်း ဖိုင် အများကြီး ပြောင်းပေးနိုင်လို့၊ release ကို သေးအောင် ထိန်းတာက
+      ကိုယ့် တာဝန်ပါ။ commit တွေကို သေးသေးလေး ခွဲတာနဲ့ အကြောင်းရင်း တူတူပါပဲ။ [[mark:s-flag]] feature အသစ်
+      ကြီးကြီး တစ်ခုအတွက်တော့ feature flag ကို သုံးလို့ ရပါတယ်။ feature flag ဆိုတာ feature ကို production ပေါ်
+      deploy လုပ်ထားပေမဲ့ ခလုတ် တစ်ခုနဲ့ ပိတ်ထားပြီး၊ ဆိုင်က လူတွေနဲ့ customer နည်းနည်းအတွက် အရင် ဖွင့်ကြည့်ပြီးမှ
+      အားလုံးကို ဖွင့်ပေးတဲ့ နည်းပါ။ ဒီလိုဆိုရင် deploy လုပ်တာနဲ့ customer တွေဆီ release လုပ်တာ တစ်ချိန်တည်း
+      ဖြစ်စရာ မလိုတော့ပါဘူး။
+    sources:
+      - {
+          title: "Google SRE workbook: Canarying Releases (smaller releases are easier to evaluate and roll back)",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+      - {
+          title: "Google SRE book: Release Engineering (frequent releases, fewer changes between versions)",
+          url: "https://sre.google/sre-book/release-engineering/",
+        }
+      - {
+          title: "Martin Fowler (Pete Hodgson): Feature Toggles (separating release from deployment)",
+          url: "https://martinfowler.com/articles/feature-toggles.html",
+        }
+    actions:
+      - {
+          id: draw-s-title,
+          type: whiteboard.apply,
+          at: { mark: s-title },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-big,
+          type: whiteboard.apply,
+          at: { mark: s-big },
+          upsertIds: [s-big-h, s-big-1, s-big-2, s-big-3],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-s-small,
+          type: whiteboard.apply,
+          at: { mark: s-small },
+          upsertIds: [s-small-h, s-small-1, s-small-2, s-small-3],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-s-flag,
+          type: whiteboard.apply,
+          at: { mark: s-flag },
+          upsertIds: [s-flag-box, s-flag, s-flag-2],
+          drawMs: 1500,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ တနင်္လာနေ့ မနက် ၆ နာရီ ၄၅ မိနစ်မှာ version အသစ်က staging မှာ
+      စစ်ပြီးလို့ အသင့် ဖြစ်နေတယ် ဆိုပါစို့။ အခုပဲ release လုပ်မလား၊ ဆယ်နာရီ နောက်မှ လုပ်မလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ဆယ်နာရီ နောက်မှ ပါ။ ဘာကြောင့်လဲဆိုတော့ နောက် ၁၅
+      မိနစ်ဆိုရင် ခုနစ်နာရီကနေ ကိုးနာရီအထိ ဆိုင် အလုပ်အရှုပ်ဆုံး အချိန် စလို့ပါ။ အဲဒီအချိန်မှာ ပျက်သွားရင်
+      customer အများဆုံးကို ထိခိုက်ပြီး၊ လှလှ ကလည်း ဘာပြောင်းလဲ နားထောင်ဖို့ အချိန် မရှိပါဘူး။ ဆယ်နာရီ
+      နောက်ဆိုရင်တော့ ပျက်ခဲ့ရင်တောင် ထိခိုက်တဲ့ customer နည်းပြီး၊ rollback ကိုလည်း အေးအေးဆေးဆေး လုပ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Google SRE workbook: Canarying Releases (limit how many users a bad change reaches)",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-q2, z-o1, z-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1200,
+        }
+
+  - id: during
+    chapter: Release လုပ်ချိန်နဲ့ ပြီးနောက်
+    narration: >
+      [[mark:close-quiz]] ဒီ အဖြေကို checklist ထဲမှာ ရေးထားရအောင်။ [[mark:type-during]] ဒုတိယ အပိုင်းက release
+      လုပ်နေတဲ့ အချိန်အတွက်ပါ။ ဘယ်အချိန် လုပ်မလဲ၊ လုပ်နေတုန်း ဘယ်သူ ရှိနေမလဲ ဆိုတာကို ဆုံးဖြတ်ထားတာပါ။
+      [[mark:sel-time]] ပထမ စာကြောင်းက ခုနက အဖြေကို ဆိုင်ရဲ့ rule တစ်ခု ဖြစ်အောင် ပြောင်းထားတာပါ။ rule အဖြစ်
+      ရေးထားတော့ နောက်တစ်ခါ မနက်စောစော version အသင့်ဖြစ်နေရင်လည်း အဲဒီနေ့ကျမှ ပြန်ဆုံးဖြတ်နေစရာ မလိုတော့ပါဘူး။
+      [[mark:sel-watch]] ဒုတိယ စာကြောင်းကတော့ release လုပ်ပြီးတာနဲ့ ထွက်မသွားဖို့ပါ။ ပြဿနာ ပေါ်လာရင် ချက်ချင်း
+      မြင်ပြီး rollback လုပ်နိုင်မယ့်သူ တစ်ယောက်က အစအဆုံး ရှိနေရပါမယ်။ ဒီ ဆိုင်မှာတော့ အဲဒီလူက ကိုယ်ပါ။
+    sources:
+      - {
+          title: "Google SRE book: Release Engineering (release process)",
+          url: "https://sre.google/sre-book/release-engineering/",
+        }
+      - {
+          title: "Google SRE workbook: Canarying Releases (pause and roll back when a release looks bad)",
+          url: "https://sre.google/workbook/canarying-releases/",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - id: type-during
+        type: editor.type
+        at: { mark: type-during }
+        target: { file: docs/release-checklist.md, after: "ပြန်တင်မယ်။\n\n", occurrence: 1 }
+        text: "## During\n- 10:00 နောက်မှ release လုပ်မယ်။ မနက် 7:00–9:00 အလုပ်ရှုပ်ချိန်မှာ မလုပ်ဘူး။\n- release လုပ်တဲ့သူ တစ်ယောက် အစအဆုံး ရှိနေပြီး စောင့်ကြည့်မယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-time,
+          type: editor.select,
+          at: { mark: sel-time },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- 10:00 နောက်မှ release လုပ်မယ်။ မနက် 7:00–9:00 အလုပ်ရှုပ်ချိန်မှာ မလုပ်ဘူး။\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-watch,
+          type: editor.select,
+          at: { mark: sel-watch },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "release လုပ်တဲ့သူ တစ်ယောက် အစအဆုံး ရှိနေပြီး",
+              occurrence: 1,
+            },
+        }
+
+  - id: after
+    narration: >
+      [[mark:type-after]] နောက်ဆုံး အပိုင်းက release ပြီးနောက် လုပ်ရမယ့် အရာတွေပါ။ release လုပ်ပြီးရုံနဲ့ အလုပ်
+      မပြီးသေးပါဘူး။ customer တွေ တကယ် သုံးလာတဲ့ ပထမ မိနစ်တွေက အရေးကြီးဆုံးပါ။ [[mark:sel-order]] staging မှာ
+      စစ်ပြီးပြီ ဆိုပေမဲ့ production မှာလည်း တကယ် အလုပ်လုပ်လား ဆိုတာကို အော်ဒါ တစ်ခုနဲ့ ကိုယ်တိုင် ပြန်စစ်ပါတယ်။
+      [[mark:sel-errors]] ပြီးတော့ app ထဲမှာ တစ်ခုခု ပျက်တဲ့အခါ ပေါ်လာတဲ့ error တွေကို release လုပ်ပြီး မိနစ်
+      သုံးဆယ်လောက် စောင့်ကြည့်ပါတယ်။ error တွေ ပုံမှန်ထက် များလာရင်၊ ကြိုရေးထားတဲ့ rollback ကို ချက်ချင်း
+      သုံးပါတယ်။ ဘာကို ဘယ်လို ကြည့်ရမလဲ ဆိုတာကိုတော့ နောက် lesson မှာ အသေးစိတ် ပြောပါမယ်။ [[mark:sel-hla]]
+      နောက်ဆုံး စာကြောင်းက လှလှ အတွက်ပါ။ ဥပမာ အရေအတွက် သုည ထည့်ရင် ငြင်းတဲ့ version ထွက်သွားတယ် ဆိုပါစို့။
+      customer တစ်ယောက်က ဒီ message ဘာလဲ လို့ ကောင်တာမှာ မေးရင်၊ ကြိုသိထားတဲ့ လှလှ က ချက်ချင်း ဖြေနိုင်ပါတယ်။
+      ထူးဆန်းတာ တစ်ခုခု တွေ့ရင်လည်း ကိုယ့်ကို အရင်ဆုံး ပြောနိုင်ပါတယ်။ [[mark:sel-title]] ဒါတွေ အများကြီးလို့
+      ထင်ရပေမဲ့၊ ဒီ checklist အပြည့်က customer ရဲ့ နာမည်၊ ဖုန်းနံပါတ်နဲ့ အော်ဒါတွေ ပါတဲ့ ကြိုမှာ app အတွက်ပါ။ vibe
+      coding lesson မှာ ဆွဲခဲ့တဲ့ စည်းအတိုင်း၊ ဆိုင်ရဲ့ မွေးနေ့ပွဲ poster page လို customer data မပါ၊ ငွေချေတာ
+      မပါတဲ့ အရာဆိုရင် ဒီလောက် အဆင့်တွေ မလိုပါဘူး။
+    sources:
+      - {
+          title: "Google SRE book: Monitoring Distributed Systems (watch errors; test externally visible behaviour)",
+          url: "https://sre.google/sre-book/monitoring-distributed-systems/",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The vibe coding to agentic engineering spectrum (structure by risk)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-after
+        type: editor.type
+        at: { mark: type-after }
+        target: { file: docs/release-checklist.md, after: "ရှိနေပြီး စောင့်ကြည့်မယ်။\n\n", occurrence: 1 }
+        text: "## After\n- production မှာ အော်ဒါ တစ်ခု ကိုယ်တိုင် မှာကြည့်မယ်။\n- error တွေကို 30 မိနစ် စောင့်ကြည့်မယ်။\n- ဘာပြောင်းသွားလဲ လှလှ ကို ပြောမယ်။\n"
+        cadence: line-by-line
+      - {
+          id: expect-after,
+          type: expect.file,
+          at: { afterAction: type-after },
+          path: docs/release-checklist.md,
+          contains: "- ဘာပြောင်းသွားလဲ လှလှ ကို ပြောမယ်။",
+        }
+      - {
+          id: sel-order,
+          type: editor.select,
+          at: { mark: sel-order },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- production မှာ အော်ဒါ တစ်ခု ကိုယ်တိုင် မှာကြည့်မယ်။\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-errors,
+          type: editor.select,
+          at: { mark: sel-errors },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- error တွေကို 30 မိနစ် စောင့်ကြည့်မယ်။\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-hla,
+          type: editor.select,
+          at: { mark: sel-hla },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "- ဘာပြောင်းသွားလဲ လှလှ ကို ပြောမယ်။\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-title,
+          type: editor.select,
+          at: { mark: sel-title },
+          target:
+            {
+              file: docs/release-checklist.md,
+              text: "# Release checklist · ကြိုမှာ app",
+              occurrence: 1,
+            },
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:rc-before]] ဒါဆို ပြန်ချုပ်ရရင်၊ app ကို local၊ staging၊ production ဆိုတဲ့ environment သုံးခုမှာ
+      ထားပြီး၊ staging မှာ စစ်ပြီးမှ checklist ဆိုတဲ့ တံခါးကို ဖြတ်ပါတယ်။ [[mark:rc-rollback]] backup နဲ့ rollback
+      လုပ်နည်းကို မလိုခင်ကတည်းက ပြင်ထားပါ။ [[mark:rc-during]] release ကို သေးသေး ခဏခဏ လုပ်ပြီး၊ ဆိုင်မှာ လူနည်းတဲ့
+      အချိန်ကို ရွေးပါ။ ပြီးရင် ကိုယ်တိုင် စစ်ကြည့်၊ error တွေကို စောင့်ကြည့်ပြီး လှလှ ကို ဘာပြောင်းလဲ ပြောပါ။
+      နောက် lesson မှာတော့ app က production ပေါ် ရောက်နေပြီ ဖြစ်လို့၊ customer တွေအတွက် အခု အလုပ်လုပ်နေလား ဘယ်လို
+      သိမလဲ၊ မလုပ်ရင် ဘာလုပ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (deployment; rollback)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google SRE book: Release Engineering",
+          url: "https://sre.google/sre-book/release-engineering/",
+        }
+    actions:
+      - {
+          id: rc-before,
+          type: editor.select,
+          at: { mark: rc-before },
+          target: { file: docs/release-checklist.md, text: "## Before", occurrence: 1 },
+        }
+      - {
+          id: rc-rollback,
+          type: editor.select,
+          at: { mark: rc-rollback },
+          target:
+            { file: docs/release-checklist.md, text: "rollback လုပ်နည်းကို ရေးထားပြီ", occurrence: 1 },
+        }
+      - {
+          id: rc-during,
+          type: editor.select,
+          at: { mark: rc-during },
+          target: { file: docs/release-checklist.md, text: "## During", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
