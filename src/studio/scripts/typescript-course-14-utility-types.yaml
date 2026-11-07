@@ -2,7 +2,7 @@
 #
 # Start state (ws/): src/order.ts has an Order type (with a nested customer object whose table is
 # optional) and createOrder / updateOrder, both typed with the whole Order; src/main.ts creates
-# မြမြ's order without an id and updates only its sugar, so the panel shows two TS2345 errors
+# လှလှ's order without an id and updates only its sugar, so the panel shows two TS2345 errors
 # (id missing; four properties missing) while Output prints "1 လက်ဖက်ရည် normal" and
 # "1 လက်ဖက်ရည် less". src/bill.ts (named so the checker lists it first) has a Payment union
 # (cash | kpay) and `NewPayment = Omit<Payment, "id">`, unused at the start.
@@ -629,7 +629,7 @@ lesson:
           item: "လက်ဖက်ရည်",
           quantity: 2,
           sugar: "normal",
-          customer: { name: "မြမြ", table: 5 },
+          customer: { name: "လှလှ", table: 5 },
         });
         const changed = updateOrder(order, { sugar: "less" });
 
@@ -871,7 +871,7 @@ scenes:
       နံပါတ် ပါပြီး၊ စားပွဲ နံပါတ်ကတော့ မပါလည်း ရပါတယ်။ ဒီ အတွင်းက object ကို နောက်မှ ပြန်ကြည့်ပါမယ်။ [[mark:select-create]] ဖန်တီးတဲ့ function က
       အော်ဒါ data ကို ယူပြီး id အသစ် တပ်ပေးပါတယ်။ [[mark:select-update]] ပြင်တဲ့ function ကတော့ အော်ဒါ
       အဟောင်းပေါ်ကို ပြောင်းချင်တဲ့ property တွေ ထပ်ဖုံးပြီး အော်ဒါ အသစ် ပြန်ပေးပါတယ်။ [[mark:open-main]]
-      main ဖိုင်မှာတော့ မြမြ အတွက် လက်ဖက်ရည် နှစ်ခွက် အော်ဒါကို ဖန်တီးပါတယ်။ [[mark:select-update-call]]
+      main ဖိုင်မှာတော့ လှလှ အတွက် လက်ဖက်ရည် နှစ်ခွက် အော်ဒါကို ဖန်တီးပါတယ်။ [[mark:select-update-call]]
       ပြီးတော့ သကြား နည်းနည်းပဲ ထည့်ဖို့ ပြင်ပြီး၊ အော်ဒါ နှစ်ခုလုံးကို ထုတ်ပြပါတယ်။
     sources:
       - {
