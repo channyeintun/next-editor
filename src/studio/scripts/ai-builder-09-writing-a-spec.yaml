@@ -1,0 +1,1293 @@
+# AI Builder, lesson 09: writing a spec (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md), docs/problem.md
+# (COURSE-KIT §4.1, complete), docs/requirements.md (§4.2 as L07 leaves it) and docs/spec.md as L08
+# leaves it: the title line, a blank line, ## Acceptance criteria (AC-1…AC-5) and ## Definition of
+# done. Nothing runs.
+#
+# Typed into spec.md (COURSE-KIT §4.3, insert-only): Goal, Users, Rules, Example, Out of scope between
+# the title and the criteria (each anchored after the previous section), then ## Open questions at
+# the end. The final file equals §4.3 without AC-6 (tools/sim-docs.ts).
+#
+# Boards: (S) the spec as a stack of its sections, each with the question it answers (the criteria
+# already there, green); (C) three unclear sentences and their clear versions; (G) before building:
+# read it as a newcomer → ask the agent for gaps (questions, not code) → ask မြမြ; (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-09-writing-a-spec.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-09-writing-a-spec
+  title: "AI Builder 09: Spec တစ်စောင် ရေးခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/spec.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/problem.md: |
+        # Problem · ကြိုမှာ app
+
+        ## Problem
+        မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊ အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတယ်။
+
+        ## Who
+        - အလုပ်မသွားခင် မနက်တိုင်း လာဝယ်တဲ့ member တွေ၊ ဥပမာ အောင်အောင်
+        - အချိန်ကျပ်တဲ့ ကျောင်းသားတွေ၊ ဥပမာ မောင်မောင်
+        - ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ
+
+        ## Today
+        - တန်းစီ၊ ကောင်တာမှာ မှာ၊ ပြီးမှ ထပ်စောင့်ရတယ်။
+        - တချို့က ဖုန်းဆက်ပြီး ကြိုမှာကြတယ်။ ဒါပေမဲ့ လှလှ က ဖုန်းကိုင်နေရင် ကောင်တာက လူတွေ ပိုစောင့်ရတယ်။
+
+        ## Why it matters
+        - လှလှ ရဲ့ မှတ်စုအရ မနက်တိုင်း customer 10 ယောက်လောက် မဝယ်ဘဲ ပြန်သွားတယ်။
+
+        ## How we'll know
+        - မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်
+        - ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်
+        - ဖုန်းနဲ့ ကြိုမှာတာ — တဖြည်းဖြည်း နည်းလာ
+
+        ## Not the problem
+        - ဈေးနှုန်းနဲ့ အရသာ — customer တွေ ကြိုက်ပြီးသား
+        - delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး
+      docs/requirements.md: |
+        # Requirements · ကြိုမှာ app
+
+        ## User stories
+        - Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။
+        - Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။
+        - ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။
+        - ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။
+
+        ## Non-functional
+        - ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။
+        - မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။
+        - customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။
+        - စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။
+        - run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။
+
+        ## Constraints
+        - app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။
+        - ငွေကို ကောင်တာမှာပဲ ချေမယ်။
+        - ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00
+
+        ## Scope (v1)
+        Must
+        - လာယူမယ့် အချိန်နဲ့ ကြိုမှာလို့ရတာ
+        - အော်ဒါနံပါတ်
+        - ကောင်တာမှာ အော်ဒါစာရင်း မြင်ရတာ
+        Should
+        - အော်ဒါ အသင့်ဖြစ်ရင် SMS ပို့တာ
+        Won't (for now)
+        - delivery
+        - online ငွေပေးချေမှု
+        - customer account နဲ့ login
+
+        ## Edge cases
+        - အရေအတွက် 0 ဒါမှမဟုတ် အနုတ် → လက်မခံ၊ 1 ကနေ 20 အထိ
+        - ဆိုင်ပိတ်ချိန် လာယူချိန် → လက်မခံ၊ ဖွင့်ချိန်ကို ပြ
+        - ဖုန်းနံပါတ် မပါ → လက်မခံ
+        - မှာမယ် ကို နှစ်ခါ နှိပ် → အော်ဒါ တစ်ခုပဲ
+
+        ## Assumptions
+        - customer တွေ မှာပြီး 2 နာရီအတွင်း လာယူမယ်။
+        - တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ 50 ထက် မများဘူး။
+
+        ## Questions for မြမြ
+        - လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။
+        - ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board S: the spec as a stack, top to bottom in file order. Blue boxes = the sections this lesson
+    # adds; green boxes = the criteria and definition of done L08 wrote; orange = the question each
+    # section answers; violet = how to build is left to the agent.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 360,
+        height: 45,
+        text: "spec · တစ်မျက်နှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-how,
+        kind: text,
+        x: 690,
+        y: 165,
+        width: 400,
+        height: 40,
+        text: "ဆောက်နည်း → agent ဆီ ချန်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: s-goal-box,
+        kind: rectangle,
+        x: 300,
+        y: 215,
+        width: 360,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-goal,
+        kind: text,
+        x: 318,
+        y: 220,
+        width: 320,
+        height: 35,
+        text: "Goal",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-goal-q,
+        kind: text,
+        x: 690,
+        y: 220,
+        width: 400,
+        height: 35,
+        text: "ဘာကြောင့် ဆောက်လဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-users-box,
+        kind: rectangle,
+        x: 300,
+        y: 267,
+        width: 360,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-users,
+        kind: text,
+        x: 318,
+        y: 272,
+        width: 320,
+        height: 35,
+        text: "Users",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-users-q,
+        kind: text,
+        x: 690,
+        y: 272,
+        width: 400,
+        height: 35,
+        text: "ဘယ်သူ သုံးမလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-rules-box,
+        kind: rectangle,
+        x: 300,
+        y: 319,
+        width: 360,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-rules,
+        kind: text,
+        x: 318,
+        y: 324,
+        width: 320,
+        height: 35,
+        text: "Rules",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-rules-q,
+        kind: text,
+        x: 690,
+        y: 324,
+        width: 400,
+        height: 35,
+        text: "ဘာ ဆောက်မလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-ex-box,
+        kind: rectangle,
+        x: 300,
+        y: 371,
+        width: 360,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-ex,
+        kind: text,
+        x: 318,
+        y: 376,
+        width: 320,
+        height: 35,
+        text: "Example",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-ex-q,
+        kind: text,
+        x: 690,
+        y: 376,
+        width: 400,
+        height: 35,
+        text: "ဥပမာ တစ်ခုနဲ့ ပြ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-out-box,
+        kind: rectangle,
+        x: 300,
+        y: 423,
+        width: 360,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-out,
+        kind: text,
+        x: 318,
+        y: 428,
+        width: 320,
+        height: 35,
+        text: "Out of scope",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-out-q,
+        kind: text,
+        x: 690,
+        y: 428,
+        width: 400,
+        height: 35,
+        text: "ဘာ မဆောက်ဘူးလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-ac-box,
+        kind: rectangle,
+        x: 300,
+        y: 475,
+        width: 360,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-ac,
+        kind: text,
+        x: 318,
+        y: 480,
+        width: 330,
+        height: 35,
+        text: "Acceptance criteria",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: s-ac-q,
+        kind: text,
+        x: 690,
+        y: 480,
+        width: 400,
+        height: 35,
+        text: "ဘယ်လို စစ်မလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-dod-box,
+        kind: rectangle,
+        x: 300,
+        y: 527,
+        width: 360,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-dod,
+        kind: text,
+        x: 318,
+        y: 532,
+        width: 330,
+        height: 35,
+        text: "Definition of done",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: s-oq-box,
+        kind: rectangle,
+        x: 300,
+        y: 579,
+        width: 360,
+        height: 44,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-oq,
+        kind: text,
+        x: 318,
+        y: 584,
+        width: 320,
+        height: 35,
+        text: "Open questions",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-oq-q,
+        kind: text,
+        x: 690,
+        y: 584,
+        width: 400,
+        height: 35,
+        text: "မသိသေးတာ ဘာလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board C: three unclear sentences (red, left) and their clear versions (green, right), each pair
+    # with the writing rule under it (orange).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 45,
+        text: "ရှင်းရှင်း ရေးနည်း သုံးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-b1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 355,
+        height: 35,
+        text: "အော်ဒါ များများ မှာရမယ်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 662,
+        y: 238,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-g1,
+        kind: text,
+        x: 712,
+        y: 240,
+        width: 380,
+        height: 35,
+        text: "အရေအတွက် 1 ကနေ 20 အထိ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 500,
+        height: 35,
+        text: "1 · စကားလုံး အစား ကိန်းဂဏန်း",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-b2,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 355,
+        height: 35,
+        text: "ယူချိန် · ရောက်ချိန်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 662,
+        y: 368,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-g2,
+        kind: text,
+        x: 712,
+        y: 370,
+        width: 380,
+        height: 35,
+        text: "လာယူချိန် တစ်ခုတည်း",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r2,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 500,
+        height: 35,
+        text: "2 · အရာ တစ်ခု၊ နာမည် တစ်ခု",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: c-b3,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 355,
+        height: 35,
+        text: "စုစုပေါင်း မှန်မှန် တွက်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: c-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 662,
+        y: 498,
+        width: 40,
+        height: 35,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-g3,
+        kind: text,
+        x: 712,
+        y: 500,
+        width: 380,
+        height: 35,
+        text: "2 ခွက် → 3,000 ကျပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: c-r3,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 500,
+        height: 35,
+        text: "3 · ဖော်ပြတာထက် ဥပမာ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board G: before building, three steps flowing down (orange = this lesson's check, violet = the
+    # agent, green = the answer goes into the spec).
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 45,
+        text: "မဆောက်ခင် spec ကို စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g1-box,
+        kind: rectangle,
+        x: 300,
+        y: 225,
+        width: 640,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g1,
+        kind: text,
+        x: 320,
+        y: 235,
+        width: 600,
+        height: 35,
+        text: "1 · လူသစ် တစ်ယောက်လို ဖတ်ကြည့်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: g1-sub,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 600,
+        height: 35,
+        text: "ဒီ စာမျက်နှာ တစ်ခုတည်းနဲ့ ဆောက်နိုင်လား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 332,
+        width: 40,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g2-box,
+        kind: rectangle,
+        x: 300,
+        y: 375,
+        width: 640,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g2,
+        kind: text,
+        x: 320,
+        y: 385,
+        width: 600,
+        height: 35,
+        text: "2 · agent ကို ကွက်လပ် ရှာခိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: g2-sub,
+        kind: text,
+        x: 320,
+        y: 440,
+        width: 600,
+        height: 35,
+        text: "code မဟုတ်ဘဲ မေးခွန်းတွေပဲ ပြန်ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 482,
+        width: 40,
+        height: 36,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g3-box,
+        kind: rectangle,
+        x: 300,
+        y: 525,
+        width: 640,
+        height: 56,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g3,
+        kind: text,
+        x: 320,
+        y: 535,
+        width: 600,
+        height: 35,
+        text: "3 · မြမြ ကို မေး → spec ထဲ ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 560,
+        height: 45,
+        text: "spec ထဲမှာ ဘယ်ဟာ ပိုကောင်းလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 600,
+        height: 40,
+        text: "က · ည 8 နာရီမှာ အော်ဒါ ပိတ်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 600,
+        height: 40,
+        text: "ခ · ဆိုင်ပိတ်ချိန်မှာ အော်ဒါ ပိတ်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 600,
+        height: 45,
+        text: "အဖြေ · က — အချိန် တိကျတယ်",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 640,
+        height: 40,
+        text: "ဒါပေမဲ့ စနေ၊ တနင်္ဂနွေ 21:00 မှ ပိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a-fix,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 640,
+        height: 40,
+        text: "ရက် နှစ်မျိုးလုံးကို တစ်နေရာမှာ ရေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6109
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Spec ဆိုတာ ဘာလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အလုပ် တစ်ခု ပြီးပြီ ဆိုတာကို တခြားလူ စစ်လို့ရအောင် acceptance criteria ငါးခုနဲ့
+      definition of done ကို spec ဖိုင်ထဲမှာ ရေးခဲ့ပါတယ်။ [[mark:sel-ac]] အခု ဒီ ဖိုင်ထဲမှာ အဲဒီ နှစ်ပိုင်းပဲ
+      ရှိပါသေးတယ်။ agent ကို ဒီ ဖိုင် ပေးလိုက်ရင် ဘာကို စစ်ရမလဲ ဆိုတာ ပါပေမဲ့၊ ဘာကြောင့် ဆောက်တာလဲ၊ ဘယ်သူတွေ
+      သုံးမှာလဲ၊ ဈေးနှုန်းနဲ့ အချိန်မှာ ဘာ စည်းကမ်းတွေ ရှိလဲ၊ ဘာကို မဆောက်ရဘူးလဲ ဆိုတာတွေ မပါပါဘူး။ အဲဒီ အချက်တွေက
+      problem ဖိုင်နဲ့ requirements ဖိုင်ထဲမှာ ပြန့်ကျဲနေပြီး၊ တချို့ကတော့ ဆိုင်ပိုင်ရှင် မြမြ ရဲ့ ခေါင်းထဲမှာပဲ
+      ရှိပါသေးတယ်။ [[mark:today]] ဒီနေ့ lesson မှာ အဲဒါတွေကို spec တစ်စောင်ထဲ စုရေးပါမယ်။ spec ဆိုတာ specification
+      ရဲ့ အတိုပါ။ ဘာကြောင့် ဆောက်လဲ၊ ဘာ ဆောက်မလဲ၊ ဘာ မဆောက်ဘူးလဲ၊ ပြီးရင် ဘယ်လို စစ်မလဲ ဆိုတာကို စုရေးထားတဲ့
+      စာတမ်းပါ။ ရည်ရွယ်ချက်က လူ ဖြစ်ဖြစ်၊ agent ဖြစ်ဖြစ် ဒီ စာမျက်နှာ တစ်မျက်နှာတည်းကနေ အလုပ် စလို့ ရဖို့ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google Technical Writing One: Documents (scope and audience)",
+          url: "https://developers.google.com/tech-writing/one/documents",
+        }
+    actions:
+      - {
+          id: sel-ac,
+          type: editor.select,
+          at: { mark: sel-ac },
+          target: { file: docs/spec.md, text: "## Acceptance criteria", occurrence: 1 },
+        }
+
+  - id: sections
+    narration: >
+      [[mark:s-open]] spec တစ်စောင်မှာ ဘာ အပိုင်းတွေ ပါသင့်လဲ ကြည့်ရအောင်။ အစိမ်းရောင် နှစ်ပိုင်းကတော့ ပြီးခဲ့တဲ့
+      lesson မှာ ရေးပြီးသားပါ။ ဆောက်ပြီးရင် ဘယ်လို စစ်မလဲ ဆိုတဲ့ မေးခွန်းကို သူတို့က ဖြေပေးပါတယ်။ [[mark:s-why]]
+      အပေါ်ဆုံးမှာ ဘာကြောင့် ဆောက်တာလဲ ဆိုတဲ့ ရည်မှန်းချက်နဲ့၊ ဘယ်သူတွေ သုံးမှာလဲ ဆိုတာကို ထားပါမယ်။
+      [[mark:s-what]] နောက်မှာ ဘာ ဆောက်မလဲ ဆိုတာကို business rule တွေနဲ့ ဥပမာ တစ်ခုနဲ့ ပြပါမယ်။ business rule
+      ဆိုတာ ဈေးနှုန်း၊ ဖွင့်ချိန်၊ အော်ဒါနံပါတ် လို ဆိုင်က ဆုံးဖြတ်ထားတဲ့ စည်းကမ်းတွေပါ။ app က ဘာ လုပ်ပေးရမလဲ
+      ဆိုတဲ့ user story တွေကတော့ requirements ဖိုင်ထဲမှာ ရှိပြီးသားမို့ ဒီမှာ ထပ် မကူးပါဘူး။ [[mark:s-not]]
+      ပြီးတော့ ဘာ မဆောက်ဘူးလဲ ဆိုတာကိုလည်း သီးသန့် အပိုင်း တစ်ခုနဲ့ ရေးပါမယ်။ [[mark:s-oq]] အောက်ဆုံးမှာတော့
+      မဖြေရသေးတဲ့ မေးခွန်းတွေကို ထားပါမယ်။ မသိသေးတာကို ဖုံးမထားဘဲ ရေးထားတော့၊ ဒါက မဆုံးဖြတ်ရသေးဘူး ဆိုတာ ဖတ်တဲ့သူ
+      အားလုံး သိပါတယ်။ [[mark:s-how]] သတိထားရမှာက spec ထဲမှာ ဘယ်လို ဆောက်မလဲ ဆိုတာ သိပ် မပါတာပါ။ code ကို ဘယ်လို
+      ရေးမလဲ ဆိုတာကို ဆောက်မယ့် agent ဘက်ကို ချန်ထားပါတယ်။ ဒါပေမဲ့ ဈေးနှုန်းကို ကျပ် ကိန်းပြည့်နဲ့ပဲ တွက်ရမယ်
+      ဆိုတာလို ဆိုင်အတွက် အရေးကြီးတဲ့ rule ဆိုရင်တော့ spec ထဲမှာ ရေးရပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning; design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google Technical Writing One: Documents (scope and non-scope)",
+          url: "https://developers.google.com/tech-writing/one/documents",
+        }
+    actions:
+      - {
+          id: open-board-s,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          clear: true,
+          upsertIds: [s-title, s-ac-box, s-ac, s-ac-q, s-dod-box, s-dod],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-s-why,
+          type: whiteboard.apply,
+          at: { mark: s-why },
+          upsertIds: [s-goal-box, s-goal, s-goal-q, s-users-box, s-users, s-users-q],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-what,
+          type: whiteboard.apply,
+          at: { mark: s-what },
+          upsertIds: [s-rules-box, s-rules, s-rules-q, s-ex-box, s-ex, s-ex-q],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-not,
+          type: whiteboard.apply,
+          at: { mark: s-not },
+          upsertIds: [s-out-box, s-out, s-out-q],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-s-oq,
+          type: whiteboard.apply,
+          at: { mark: s-oq },
+          upsertIds: [s-oq-box, s-oq, s-oq-q],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-s-how,
+          type: whiteboard.apply,
+          at: { mark: s-how },
+          upsertIds: [s-how],
+          drawMs: 900,
+        }
+
+  - id: goal-users
+    chapter: Spec ကို ရေးရအောင်
+    narration: >
+      [[mark:close-s]] ကဲ၊ spec ဖိုင်ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:type-goal]] ခေါင်းစဉ်အောက်မှာ ရည်မှန်းချက်
+      အပိုင်းကို အရင် ထည့်ပါမယ်။ ဘာကြောင့် ဒီ app ကို ဆောက်တာလဲ ဆိုတာကို စာကြောင်း တစ်ကြောင်းတည်းနဲ့ ရေးထားပါတယ်။
+      [[mark:sel-problem]] အဆုံးမှာ problem ဖိုင်ကို ညွှန်ထားတာ သတိထား ကြည့်ပါ။ ပြဿနာ အပြည့်အစုံကို ဒီမှာ ထပ်
+      မကူးဘဲ၊ ရေးပြီးသား နေရာကို ညွှန်လိုက်တာပါ။ ကူးရေးထားရင် တစ်နေရာမှာ ပြင်ပြီး၊ နောက်တစ်နေရာမှာ ပြင်ဖို့
+      မေ့တတ်လို့ပါ။ [[mark:type-users]] နောက်တစ်ပိုင်းက ဒီ app ကို ဘယ်သူတွေ သုံးမှာလဲ ဆိုတာကို ဆုံးဖြတ်ထားတာပါ။
+      [[mark:sel-users]] မှာမယ့် member အောင်အောင်နဲ့ ကျောင်းသား မောင်မောင် တင် မကဘဲ၊ အော်ဒါ လက်ခံမယ့် ကောင်တာက
+      လှလှ နဲ့၊ တစ်မနက် အော်ဒါ ဘယ်လောက် ဝင်လဲ ကြည့်မယ့် ဆိုင်ပိုင်ရှင် မြမြ ကိုပါ ထည့်ထားပါတယ်။ ဒါကြောင့် customer
+      ဘက် screen တင် မကဘဲ ကောင်တာ ဘက်လည်း လိုမယ် ဆိုတာ စာမျက်နှာရဲ့ အစမှာတင် ရှင်းသွားပါတယ်။
+    sources:
+      - {
+          title: "Google Technical Writing One: Documents (key points at the start; audience)",
+          url: "https://developers.google.com/tech-writing/one/documents",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-s, type: whiteboard.apply, at: { mark: close-s }, open: false }
+      - id: type-goal
+        type: editor.type
+        at: { mark: type-goal }
+        target: { file: docs/spec.md, after: "# Spec · ကြိုမှာ app (v1)\n\n", occurrence: 1 }
+        text: "## Goal\nမနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-problem,
+          type: editor.select,
+          at: { mark: sel-problem },
+          target: { file: docs/spec.md, text: "(problem.md)", occurrence: 1 },
+        }
+      - id: type-users
+        type: editor.type
+        at: { mark: type-users }
+        target: { file: docs/spec.md, after: "(problem.md)။\n\n", occurrence: 1 }
+        text: "## Users\ncustomer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-users,
+          type: editor.select,
+          at: { mark: sel-users },
+          target:
+            {
+              file: docs/spec.md,
+              text: "customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)",
+              occurrence: 1,
+            },
+        }
+
+  - id: rules
+    narration: >
+      [[mark:type-rules]] အခု ဆိုင်ရဲ့ business rule တွေကို ထည့်ပါမယ်။ ဆိုင်က ဆုံးဖြတ်ထားတဲ့ စည်းကမ်း ငါးခုကို
+      rule တစ်ခု စာကြောင်း တစ်ကြောင်းစီ ခွဲရေးထားပါတယ်။ [[mark:sel-kyat]] ပထမ rule က app ထဲမှာ ဈေးနှုန်း ပေါ်တဲ့
+      နေရာတိုင်းကို ကာကွယ်ပေးတာပါ။ ဒါကို မရေးထားရင် agent က အများဆုံး တွေ့ရတဲ့ ပုံစံအတိုင်း ဒသမ နှစ်နေရာနဲ့
+      ထုတ်ပေးနိုင်ပါတယ်။ [[mark:sel-pickup]] လာယူချိန် rule မှာ စောစော လို စကားလုံး မသုံးဘဲ မိနစ် အရေအတွက်နဲ့
+      ရေးထားလို့၊ ကောင်တာမှာ ပြင်ဆင်ချိန် ဘယ်လောက် ရမလဲ ဆိုတာ ရှင်းပါတယ်။ စာကြောင်း တစ်ကြောင်းမှာ အချက် တစ်ခုပဲ
+      ထားတော့၊ မြမြ က တစ်ခုကို ပြောင်းချင်ရင် အဲဒီ စာကြောင်းကိုပဲ ပြင်ရုံပါ။ [[mark:sel-number]] အော်ဒါနံပါတ် rule
+      ကတော့ မြမြ ဆုံးဖြတ်ထားပေမဲ့ အခုထိ ဘယ်ဖိုင်မှာမှ မရေးရသေးတဲ့ rule ပါ။ ခေါင်းထဲမှာပဲ ရှိနေတဲ့ rule က agent ဆီ
+      ဘယ်တော့မှ ရောက်မလာပါဘူး။
+    sources:
+      - {
+          title: "Google Technical Writing One: Short sentences (one idea per sentence)",
+          url: "https://developers.google.com/tech-writing/one/short-sentences",
+        }
+      - {
+          title: "Claude Code docs: Best practices (tell Claude what it can't see)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-rules
+        type: editor.type
+        at: { mark: type-rules }
+        target: { file: docs/spec.md, after: "ဆိုင်ပိုင်ရှင် (မြမြ)\n\n", occurrence: 1 }
+        text: "## Rules\n- ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။\n- အရေအတွက် — 1 ကနေ 20 အထိ။\n- လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။\n- အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။\n- ငွေ — ကောင်တာမှာ ချေမယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-rules,
+          type: expect.file,
+          at: { afterAction: type-rules },
+          path: docs/spec.md,
+          contains: "- ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။",
+        }
+      - {
+          id: sel-kyat,
+          type: editor.select,
+          at: { mark: sel-kyat },
+          target: { file: docs/spec.md, text: "- ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။", occurrence: 1 },
+        }
+      - {
+          id: sel-pickup,
+          type: editor.select,
+          at: { mark: sel-pickup },
+          target: { file: docs/spec.md, text: "အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-number,
+          type: editor.select,
+          at: { mark: sel-number },
+          target: { file: docs/spec.md, text: "- အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။", occurrence: 1 },
+        }
+
+  - id: clear-writing
+    chapter: ရှင်းရှင်း ရေးနည်း
+    narration: >
+      [[mark:c-open]] ဒီလို ရေးတဲ့နည်းကို ခွဲကြည့်ရအောင်။ spec ကို ဖတ်မယ့်သူက ကိုယ့်ကို ပြန်မေးလို့ မရဘူး လို့
+      သဘောထားပြီး ရေးရပါတယ်။ [[mark:c-1]] ပထမ အချက်က ပြီးခဲ့တဲ့ lesson မှာ AC တွေအတွက် လုပ်ခဲ့သလိုပဲ၊ spec
+      တစ်စောင်လုံးမှာလည်း စကားလုံး အစား ကိန်းဂဏန်း အတိအကျနဲ့ ရေးတာပါ။ အော်ဒါ များများ မှာလို့ ရမယ် ဆိုရင်
+      ဘယ်နှခွက်လဲ ဆိုတာကို ဖတ်တဲ့သူ တစ်ယောက် တစ်မျိုး နားလည်ပါလိမ့်မယ်။ ၁ ကနေ ၂၀ အထိ ဆိုရင်တော့ ငြင်းစရာ
+      မရှိပါဘူး။ [[mark:c-2]] ဒုတိယက အရာ တစ်ခုကို နာမည် တစ်ခုတည်းနဲ့ ခေါ်တာပါ။ တစ်နေရာမှာ ယူချိန်၊ နောက်တစ်နေရာမှာ
+      ရောက်ချိန် လို့ ရေးမိရင်၊ agent က အချိန် နှစ်မျိုးအဖြစ် ခွဲပြီး ထည့်ရမယ့် အကွက် နှစ်ခု ထုတ်ပေးနိုင်ပါတယ်။
+      ကိုယ်တို့ spec မှာတော့ လာယူချိန် ဆိုတဲ့ နာမည် တစ်ခုတည်းကိုပဲ သုံးထားပြီး၊ app ရဲ့ screen ပေါ်ကလည်း အဲဒီ
+      နာမည်ပါပဲ။ [[mark:c-3]] တတိယက ဖော်ပြချက်ထက် ဥပမာ ပိုရှင်းတာပါ။ စုစုပေါင်းကို မှန်မှန် တွက်ပါ လို့ ရေးတာထက်၊
+      လက်ဖက်ရည် နှစ်ခွက်ဆိုရင် ၃၀၀၀ ကျပ် လို့ ပြလိုက်တာက ဖတ်တဲ့သူ အားလုံးကို အဖြေ တစ်ခုတည်း ရစေပါတယ်။
+    sources:
+      - {
+          title: "Google Technical Writing One: Words (use terms consistently)",
+          url: "https://developers.google.com/tech-writing/one/words",
+        }
+      - {
+          title: "Google Technical Writing One: Audience (the curse of knowledge)",
+          url: "https://developers.google.com/tech-writing/one/audience",
+        }
+    actions:
+      - {
+          id: open-board-c,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-1,
+          type: whiteboard.apply,
+          at: { mark: c-1 },
+          upsertIds: [c-b1, c-a1, c-g1, c-r1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-c-2,
+          type: whiteboard.apply,
+          at: { mark: c-2 },
+          upsertIds: [c-b2, c-a2, c-g2, c-r2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-c-3,
+          type: whiteboard.apply,
+          at: { mark: c-3 },
+          upsertIds: [c-b3, c-a3, c-g3, c-r3],
+          drawMs: 1800,
+        }
+
+  - id: example
+    narration: >
+      [[mark:close-c]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-example]] rule တွေအောက်မှာ အောင်အောင် မနက်တိုင်း
+      မှာနေကျ အော်ဒါကို ဥပမာ အဖြစ် ထည့်ပါမယ်။ ဘာ မှာလဲ၊ app က ဘာ ပြန်ပြရမလဲ ဆိုတာ တစ်ကြောင်းတည်းမှာ ပါပါတယ်။
+      [[mark:sel-example]] ဒီ ဥပမာ တစ်ကြောင်းထဲမှာ rule လေးခု တစ်ပြိုင်နက် ပါနေတာ သတိထား ကြည့်ပါ။ ဈေးနှုန်းက
+      ကိန်းပြည့်၊ အရေအတွက်က ၁ နဲ့ ၂၀ ကြား၊ လာယူချိန်က ဖွင့်ချိန်ထဲ၊ နံပါတ်က ၁၀၁ ကနေ စတာပါ။ ပြီးတော့ ဒီ အော်ဒါက
+      အောက်က acceptance criteria ထဲက AC တစ် နဲ့ တူတူပဲ ဖြစ်လို့၊ ဥပမာနဲ့ စစ်ဆေးချက်က တစ်ခုနဲ့ တစ်ခု
+      ကိုက်ညီနေပါတယ်။
+    sources:
+      - {
+          title: "Anthropic: Effective context engineering for AI agents (examples)",
+          url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering (examples)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-c, type: whiteboard.apply, at: { mark: close-c }, open: false }
+      - id: type-example
+        type: editor.type
+        at: { mark: type-example }
+        target: { file: docs/spec.md, after: "ကောင်တာမှာ ချေမယ်။\n\n", occurrence: 1 }
+        text: "## Example\nအောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-example,
+          type: editor.select,
+          at: { mark: sel-example },
+          target:
+            {
+              file: docs/spec.md,
+              text: "အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်",
+              occurrence: 1,
+            },
+        }
+
+  - id: out-of-scope
+    narration: >
+      [[mark:type-out]] နောက် အပိုင်းကတော့ ဒီ ပထမ version မှာ ဘာတွေ မဆောက်ဘူးလဲ ဆိုတာပါ။ ဘာ လုပ်မလဲ၊ ဘာ
+      မလုပ်သေးဘူးလဲ ဆုံးဖြတ်တုန်းက ချန်ထားခဲ့တဲ့ အရာ သုံးခုပါ။ [[mark:sel-out]] ဒီ စာကြောင်းကလည်း requirements
+      ဖိုင်ထဲက မလုပ်သေးဘူး စာရင်းကို ညွှန်ထားတာမို့၊ ဆုံးဖြတ်ချက်က တစ်နေရာတည်းမှာပဲ ရှိပါတယ်။
+      [[mark:sel-out-head]] ဒီ အပိုင်း အရေးကြီးတာက agent က တစ်ခါတလေ မမေးဘဲ feature လို့ ခေါ်တဲ့ လုပ်ဆောင်ချက်
+      အသစ်တွေ ထပ်ထည့်လာနိုင်လို့ပါ။ ဥပမာ customer တွေ ဖုန်းကနေ တစ်ခါတည်း ငွေချေနိုင်အောင် online ငွေပေးချေတဲ့
+      စာမျက်နှာ ထည့်ပေးမယ် ဆိုတာမျိုးပါ။ ဒီ အပိုင်း ရှိရင် အဲဒီ အကြံကို spec နဲ့ တိုက်ကြည့်ပြီး ချက်ချင်း
+      ငြင်းလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Google Technical Writing One: Documents (scope and non-scope)",
+          url: "https://developers.google.com/tech-writing/one/documents",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-out
+        type: editor.type
+        at: { mark: type-out }
+        target: { file: docs/spec.md, after: "#101၊ 3,000 ကျပ်\n\n", occurrence: 1 }
+        text: "## Out of scope\nrequirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-out,
+          type: editor.select,
+          at: { mark: sel-out },
+          target: { file: docs/spec.md, text: "requirements.md ရဲ့ Won't (for now)", occurrence: 1 },
+        }
+      - {
+          id: sel-out-head,
+          type: editor.select,
+          at: { mark: sel-out-head },
+          target: { file: docs/spec.md, text: "## Out of scope", occurrence: 1 },
+        }
+
+  - id: gaps
+    chapter: မဆောက်ခင် စစ်ရအောင်
+    narration: >
+      [[mark:g-open]] spec တစ်မျက်နှာ ရပြီ ဆိုရင်၊ agent ကို ဆောက်ခိုင်းဖို့ မပေးခင် စစ်စရာ ရှိပါသေးတယ်။
+      [[mark:g-1]] ပထမက လူစိမ်း တစ်ယောက်လို ပြန်ဖတ်ကြည့်တာပါ။ ဆိုင်ကို တစ်ခါမှ မရောက်ဖူးဘဲ team ထဲ ဝင်လာတဲ့ လူသစ်
+      တစ်ယောက်က ဒီ စာမျက်နှာ တစ်ခုတည်းကို ဖတ်ပြီး ဆောက်နိုင်မလား၊ ဘယ်နေရာမှာ ကိုယ့်ကို ပြန်မေးရမလဲ လို့
+      မေးကြည့်ပါ။ ကိုယ်က ဆိုင်ကို ကောင်းကောင်း သိနေတော့၊ ကိုယ့်အတွက် ရှင်းနေတဲ့ စာကြောင်းက လူသစ်အတွက် မရှင်းတာ
+      ဖြစ်တတ်ပါတယ်။ agent ဆီမှာလည်း ကိုယ်ပေးထားတဲ့ စာတွေကလွဲရင် ဆိုင်အကြောင်း ဘာမှ မရှိပါဘူး။ [[mark:g-2]] ဒုတိယက
+      agent ကို code မရေးခိုင်းခင်၊ spec ထဲက ကွက်လပ်တွေကို ရှာခိုင်းတာပါ။ code မရေးပါနဲ့၊ မေးခွန်းတွေပဲ ပြန်ပေးပါ
+      လို့ ပြောရပါမယ်။ ဥပမာ အော်ဒါ တစ်ခုထဲမှာ လက်ဖက်ရည်နဲ့ ပလာတာ ရောမှာလို့ ရလား ဆိုတဲ့ မေးခွန်းမျိုး
+      ပြန်လာနိုင်ပါတယ်။ ဒီ spec မှာ အဲဒီ အချက် တကယ်ပဲ မပါသေးပါဘူး။ [[mark:g-3]] အဲဒီလို မေးခွန်းကို agent
+      ကိုယ်တိုင် ဖြေခွင့် မပေးဘဲ မြမြ ကို မေးပြီး၊ အဖြေကို spec ထဲ ပြန်ရေးပါ။
+    sources:
+      - {
+          title: "Google Technical Writing One: Audience (the curse of knowledge)",
+          url: "https://developers.google.com/tech-writing/one/audience",
+        }
+      - {
+          title: "Claude Code docs: Best practices (ask Claude to interview you before writing a spec)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering (what a new team member needs)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-g,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          open: true,
+          clear: true,
+          upsertIds: [g-title],
+        }
+      - {
+          id: draw-g-1,
+          type: whiteboard.apply,
+          at: { mark: g-1 },
+          upsertIds: [g1-box, g1, g1-sub],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-2,
+          type: whiteboard.apply,
+          at: { mark: g-2 },
+          upsertIds: [g-a1, g2-box, g2, g2-sub],
+          drawMs: 1700,
+        }
+      - {
+          id: draw-g-3,
+          type: whiteboard.apply,
+          at: { mark: g-3 },
+          upsertIds: [g-a2, g3-box, g3],
+          drawMs: 1400,
+        }
+
+  - id: open-questions
+    narration: >
+      [[mark:close-g]] spec ဖိုင်ကို ဆက်ရေးရအောင်။ [[mark:type-oq]] spec ရဲ့ အဆုံးမှာ မဖြေရသေးတဲ့ မေးခွန်း
+      အပိုင်းကို ထည့်ပါမယ်။ အခုလောလောဆယ် requirements ဖိုင်ထဲက မြမြ ကို မေးရမယ့် မေးခွန်းတွေကို ညွှန်ထားပါတယ်။
+      [[mark:open-req]] requirements ဖိုင်ကို ဖွင့်ကြည့်ရအောင်။ [[mark:sel-wont]] ခုနက spec က ညွှန်ခဲ့တဲ့
+      မလုပ်သေးဘူး စာရင်းက ဒီမှာပါ။ [[mark:sel-q]] မြမြ ကို မေးရမယ့် မေးခွန်း နှစ်ခုကလည်း ဒီမှာ ရှိပါတယ်။ တစ်ခုက
+      လာမယူတဲ့ အော်ဒါ အကြောင်း၊ နောက်တစ်ခုက ဆိုင်ပိတ်ခါနီး ဝင်လာတဲ့ အော်ဒါ အကြောင်းပါ။ နှစ်ခုလုံးက ဆိုင်ရဲ့
+      ဆုံးဖြတ်ချက် ဖြစ်လို့ မြမြ ပဲ ဖြေနိုင်ပါတယ်။ မြမြ ဖြေပြီးရင် အဖြေတွေကို spec ရဲ့ rule တွေထဲ ရေးရမှာ
+      ဖြစ်ပြီး၊ မဖြေခင်မှာတော့ agent က သူ့ဘာသာ မဆုံးဖြတ်ဘဲ ရပ်ပြီး မေးရပါမယ်။
+    sources:
+      - {
+          title: "Google Technical Writing One: Words (use terms consistently)",
+          url: "https://developers.google.com/tech-writing/one/words",
+        }
+      - {
+          title: "Claude Code docs: Best practices (a written spec as the definition of done)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - { id: close-g, type: whiteboard.apply, at: { mark: close-g }, open: false }
+      - id: type-oq
+        type: editor.type
+        at: { mark: type-oq }
+        target: { file: docs/spec.md, after: "update လုပ်ပြီးပြီ။\n", occurrence: 1 }
+        text: "\n## Open questions\nrequirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။\n"
+        cadence: line-by-line
+      - {
+          id: expect-oq,
+          type: expect.file,
+          at: { afterAction: type-oq },
+          path: docs/spec.md,
+          contains: "requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။",
+        }
+      - {
+          id: open-req,
+          type: workspace.openFile,
+          at: { mark: open-req },
+          path: docs/requirements.md,
+        }
+      - {
+          id: sel-wont,
+          type: editor.select,
+          at: { mark: sel-wont },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "Won't (for now)\n- delivery\n- online ငွေပေးချေမှု\n- customer account နဲ့ login\n",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-q,
+          type: editor.select,
+          at: { mark: sel-q },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "## Questions for မြမြ\n- လာမယူတဲ့ အော်ဒါကို ဘယ်လောက်ကြာရင် ပယ်မလဲ။\n- ပိတ်ခါနီး ဘယ်နှမိနစ်အထိ ကြိုမှာခွင့်ပေးမလဲ။\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ spec ထဲမှာ ည ၈ နာရီမှာ အော်ဒါ ပိတ်မယ် လို့ ရေးတာနဲ့၊
+      ဆိုင်ပိတ်ချိန်မှာ အော်ဒါ ပိတ်မယ် လို့ ရေးတာ၊ ဘယ်ဟာက ပိုကောင်းလဲ။ ဘာကြောင့်လဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ပထမ စာကြောင်းပါ။ ဘာကြောင့်လဲဆိုတော့ ဆိုင်ပိတ်ချိန်က
+      ဘယ်နှနာရီလဲ ဆိုတာ ဒီ စာကြောင်းထဲမှာ မပါလို့ ဖတ်တဲ့သူက ရှာရ၊ ခန့်မှန်းရပေမဲ့၊ ည ၈ နာရီ ကိုတော့ ဘယ်သူ ဖတ်ဖတ်
+      အဓိပ္ပာယ် တစ်ခုတည်း ရလို့ပါ။ [[mark:quiz-fix]] ဒါပေမဲ့ ကိုယ်တို့ ဆိုင်က စနေ၊ တနင်္ဂနွေမှာ ည ၉ နာရီမှ
+      ပိတ်တော့၊ ပထမ စာကြောင်းအတိုင်း ဆောက်ရင် စနေ၊ တနင်္ဂနွေ အော်ဒါတွေကို တစ်နာရီ စောပြီး ပိတ်မိပါလိမ့်မယ်။
+      ဒါကြောင့် ရက် နှစ်မျိုးလုံးရဲ့ ဖွင့်ချိန်ကို တစ်နေရာတည်းမှာ အတိအကျ ရေးပြီး၊ ကျန်တဲ့ နေရာတွေကနေ အဲဒီ နေရာကို
+      ညွှန်ပါ။ ကိုယ်တို့ ဆိုင်မှာတော့ အဲဒီ နေရာက requirements ဖိုင်ထဲက ဆိုင်ဖွင့်ချိန် စာကြောင်းပါ။
+    sources:
+      - {
+          title: "Google Technical Writing One: Words (use terms consistently)",
+          url: "https://developers.google.com/tech-writing/one/words",
+        }
+      - {
+          title: "Google Technical Writing One: Short sentences",
+          url: "https://developers.google.com/tech-writing/one/short-sentences",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-fix,
+          type: whiteboard.apply,
+          at: { mark: quiz-fix },
+          upsertIds: [z-a-note, z-a-fix],
+          drawMs: 1400,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ spec တစ်စောင်က ဘာကြောင့် ဆောက်လဲ၊ ဘယ်သူ သုံးမလဲ ဆိုတာနဲ့ စပါတယ်။
+      [[mark:r-rules]] ဆိုင်ရဲ့ rule တွေကို တစ်ကြောင်း တစ်ချက်၊ ကိန်းဂဏန်း အတိအကျနဲ့ ရေးပြီး၊ ဥပမာ တစ်ခု
+      ထည့်ပါတယ်။ [[mark:r-out]] ဘာ မဆောက်ဘူးလဲ ဆိုတာကိုလည်း ရေးထားပါတယ်။ [[mark:r-oq]] ဆောက်ပြီးရင် ဘယ်လို စစ်မလဲ
+      ဆိုတဲ့ acceptance criteria နဲ့၊ မဖြေရသေးတဲ့ မေးခွန်းတွေနဲ့ အဆုံးသတ်ပါတယ်။ ဆောက်ခိုင်းခင်မှာ လူသစ်
+      တစ်ယောက်လို ပြန်ဖတ်ပြီး၊ agent ကိုလည်း code မရေးခင် spec ထဲက ကွက်လပ်တွေကို မေးခွန်းအဖြစ် ရှာပေးခိုင်းပါ။
+      နောက် lesson မှာတော့ spec အပြင် agent နဲ့ အလုပ် စလုပ်တိုင်း ပေးထားရမယ့် အချက်တွေကို ဘယ်မှာ၊ ဘယ်လို ထားမလဲ
+      ဆိုတဲ့ context engineering နဲ့ AGENTS.md ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Context engineering",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Google Technical Writing One",
+          url: "https://developers.google.com/tech-writing/one",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: open-spec,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: docs/spec.md,
+        }
+      - {
+          id: r-goal,
+          type: editor.select,
+          at: { afterAction: open-spec },
+          target: { file: docs/spec.md, text: "## Goal", occurrence: 1 },
+        }
+      - {
+          id: r-rules,
+          type: editor.select,
+          at: { mark: r-rules },
+          target: { file: docs/spec.md, text: "## Rules", occurrence: 1 },
+        }
+      - {
+          id: r-out,
+          type: editor.select,
+          at: { mark: r-out },
+          target: { file: docs/spec.md, text: "## Out of scope", occurrence: 1 },
+        }
+      - {
+          id: r-oq,
+          type: editor.select,
+          at: { mark: r-oq },
+          target: { file: docs/spec.md, text: "## Open questions", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
