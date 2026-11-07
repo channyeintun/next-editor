@@ -1,0 +1,876 @@
+# AI Builder, lesson 04: the problem before the solution (Burmese, the course pilot, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md) and docs/problem.md
+# pinned with only its title line. Nothing runs. The lesson types all of COURSE-KIT §4.1 into
+# problem.md, one section per action (line-by-line), interleaved with three boards.
+#
+# Boards: (A) solution first vs problem first, two columns flowing down (red ends in the wrong
+# thing, orange/blue/green ends in what is needed); (I) weak vs good questions for users (red
+# predictions, green past events, orange: what people did is the evidence); (Z) the quiz.
+# Typed: Problem · Who · Today · Why it matters · How we'll know · Not the problem.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-04-problem-first.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-04-problem-first
+  title: "AI Builder 04: Solution မတိုင်ခင် problem"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/problem.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/problem.md: |+
+        # Problem · ကြိုမှာ app
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board A: two paths flowing down. Left (red heading): start from a solution → the agent builds it
+    # fast (violet) → the wrong thing (red). Right (orange heading, this lesson's step): who has what
+    # problem → problem.md (blue, the product's document) → build what is needed (green).
+    - {
+        id: a-h1,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 45,
+        text: "solution အရင်",
+        strokeColor: "#e03131",
+        fontSize: 32,
+      }
+    - {
+        id: a-l1-box,
+        kind: rectangle,
+        x: 300,
+        y: 220,
+        width: 380,
+        height: 80,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-l1,
+        kind: text,
+        x: 320,
+        y: 242,
+        width: 340,
+        height: 40,
+        text: "menu · cart ပါတဲ့ app",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-la1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 470,
+        y: 305,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-l2-box,
+        kind: rectangle,
+        x: 300,
+        y: 350,
+        width: 380,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-l2,
+        kind: text,
+        x: 320,
+        y: 372,
+        width: 350,
+        height: 40,
+        text: "agent က မြန်မြန် ဆောက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: a-la2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 470,
+        y: 435,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-l3-box,
+        kind: rectangle,
+        x: 300,
+        y: 480,
+        width: 380,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-l3,
+        kind: text,
+        x: 320,
+        y: 502,
+        width: 340,
+        height: 40,
+        text: "လိုတာ မဟုတ်တဲ့ app",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: a-h2,
+        kind: text,
+        x: 720,
+        y: 160,
+        width: 300,
+        height: 45,
+        text: "problem အရင်",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: a-r1-box,
+        kind: rectangle,
+        x: 720,
+        y: 220,
+        width: 370,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-r1,
+        kind: text,
+        x: 740,
+        y: 242,
+        width: 330,
+        height: 40,
+        text: "ဘယ်သူ့မှာ ဘာ ပြဿနာ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-ra1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 305,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-r2-box,
+        kind: rectangle,
+        x: 720,
+        y: 350,
+        width: 370,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-r2,
+        kind: text,
+        x: 740,
+        y: 372,
+        width: 330,
+        height: 40,
+        text: "problem.md ကို ရေး",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-ra2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 435,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-r3-box,
+        kind: rectangle,
+        x: 720,
+        y: 480,
+        width: 370,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-r3,
+        kind: text,
+        x: 740,
+        y: 502,
+        width: 330,
+        height: 40,
+        text: "လိုတာကို ဆောက်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board I: how to ask users. Red = questions that ask people to predict; green = questions about a
+    # real past day; orange = the rule; white = how the shop gets the evidence.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 440,
+        height: 50,
+        text: "user ကို ဘယ်လို မေးမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-h-weak,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 380,
+        height: 40,
+        text: "အနာဂတ်ကို ခန့်မှန်းခိုင်း",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-w1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 380,
+        height: 40,
+        text: "SMS ပို့ပေးရင် ကြိုက်မလား?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-w2,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 380,
+        height: 40,
+        text: "ဘာ feature လိုချင်လဲ?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-w3,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 380,
+        height: 40,
+        text: "ဈေး ပိုပေးမလား?",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: i-h-good,
+        kind: text,
+        x: 680,
+        y: 230,
+        width: 400,
+        height: 40,
+        text: "ပြီးခဲ့တာကို မေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-g1,
+        kind: text,
+        x: 680,
+        y: 290,
+        width: 410,
+        height: 40,
+        text: "မနေ့က ဘယ်အချိန် ရောက်ခဲ့လဲ?",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-g2,
+        kind: text,
+        x: 680,
+        y: 345,
+        width: 410,
+        height: 40,
+        text: "ဘယ်လောက် စောင့်ခဲ့ရလဲ?",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-g3,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 410,
+        height: 40,
+        text: "ဖုန်းနဲ့ ဘယ်နှခါ မှာခဲ့လဲ?",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: i-rule,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 600,
+        height: 45,
+        text: "ပြောတာထက် လုပ်ခဲ့တာက အထောက်အထား",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: i-watch,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 560,
+        height: 40,
+        text: "လှလှ ရဲ့ မှတ်စု · တန်းကို ကိုယ်တိုင် ကြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 660,
+        height: 45,
+        text: "ဘယ်မေးခွန်းက user အကြောင်း ပိုသိစေလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 460,
+        height: 40,
+        text: "က · ကြိုမှာ app ရှိရင် သုံးမလား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 540,
+        height: 40,
+        text: "ခ · နောက်ဆုံး တန်းကနေ ပြန်ထွက်ခဲ့တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2b,
+        kind: text,
+        x: 345,
+        y: 405,
+        width: 400,
+        height: 40,
+        text: "ဘယ်တုန်းကလဲ? ဘာဖြစ်ခဲ့လဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · ခ — ပြီးခဲ့တဲ့ နေ့ကို မေး",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 620,
+        height: 40,
+        text: "ခန့်မှန်းချက်ထက် ဖြစ်ခဲ့တာက အထောက်အထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6104
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Solution အရင် ပြောရင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ agent ရဲ့ အလုပ်ပတ်လည်မှာ စည်းကမ်းနဲ့ စစ်ဆေးမှု ဘယ်လောက် ထားမလဲ ဆိုတာကို၊ မှားရင်
+      ဘယ်လောက် နစ်နာမလဲ ဆိုတဲ့ risk ပေါ်မူတည်ပြီး ရွေးခဲ့ပါတယ်။ ဒါပေမဲ့ ဘယ်လို ဆောက်မလဲ မရွေးခင်၊ ဘာကို ဘာကြောင့် ဆောက်မလဲ ဆိုတာ အရင် သိဖို့ လိုပါတယ်။
+      editor ထဲက problem ဖိုင်မှာ အခု ခေါင်းစဉ်ပဲ ရှိပါသေးတယ်၊ ဒီနေ့ lesson အဆုံးမှာ ဒီ စာမျက်နှာ ပြည့်သွားပါလိမ့်မယ်။
+      [[mark:story]] ဒီနေ့ ဆိုင်ပိုင်ရှင် မြမြ က ကိုယ့်ဆီ လာပြီး၊ menu နဲ့ cart ပါတဲ့ ကြိုမှာ app တစ်ခု လုပ်ပေးပါ
+      လို့ ပြောပါတယ်။ cart ဆိုတာ online ဈေးဝယ်တဲ့အခါ ဝယ်မယ့် ပစ္စည်းတွေကို စုထားတဲ့ ခြင်းပါ။ မြမြ ပြောတာက
+      ပြဿနာ မဟုတ်ဘဲ၊ ဖြေရှင်းနည်း၊ solution ကို ပြောတာပါ။ ဒီ စကားကို agent ဆီ ဒီအတိုင်း ပို့လိုက်ရင်၊ ဒီနေ့
+      ညနေလောက်မှာ app တစ်ခု ရနိုင်ပါတယ်။ ဒါပေမဲ့ အဲဒီလို လုပ်ရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-a,
+          type: whiteboard.apply,
+          at: { mark: story },
+          open: true,
+          clear: true,
+          upsertIds: [a-h1, a-l1-box, a-l1],
+          drawMs: 1400,
+        }
+
+  - id: solution-first
+    narration: >
+      [[mark:a-build]] agent က မြမြ ပြောတဲ့ စကားလုံးတွေနဲ့ ကိုက်မယ့် app ကို မြန်မြန်
+      ထုတ်ပေးပါလိမ့်မယ်။ menu စာမျက်နှာ၊ cart၊ ငွေချေတဲ့ စာမျက်နှာတောင် ပါလာနိုင်ပါတယ်။ ဒါပေမဲ့ customer တွေ
+      ဘာကြောင့် ပြန်ထွက်သွားလဲ ဆိုတာကို ဘယ်သူမှ မစစ်ရသေးပါဘူး။ [[mark:a-wrong]] ဆိုတော့ မြမြ ရဲ့ ခန့်မှန်းချက်၊
+      ကိုယ့်ရဲ့ ခန့်မှန်းချက်တွေက app ထဲကို တိုက်ရိုက် ရောက်သွားပြီး၊ တကယ် လိုတာ မဟုတ်တဲ့ app ကို ဆောက်မိနိုင်ပါတယ်။
+      agent က မြန်လေ၊ မှားတဲ့ app ကို မြန်မြန် ရလေ ဖြစ်ပါတယ်။ [[mark:a-prob]] နောက်တစ်လမ်းကတော့
+      ဖြေရှင်းနည်းကို ခဏ မစဉ်းစားသေးဘဲ၊ ဘယ်သူ့မှာ ဘာပြဿနာ ရှိလဲ ဆိုတာကနေ စတာပါ။ [[mark:a-doc]] အဲဒါကို
+      စာမျက်နှာ တစ်မျက်နှာထဲမှာ ရေးထားတာကို problem statement လို့ ခေါ်ပါတယ်။ ဘယ်သူ့မှာ ဘာပြဿနာ ရှိလဲ၊
+      ဖြေရှင်းပြီးပြီ ဆိုတာ ဘယ်လို သိမလဲ ဆိုတာတွေကို ရေးထားတဲ့ စာမျက်နှာပါ။ [[mark:a-right]] ပြဿနာကို ရှင်းရှင်းလင်းလင်း
+      သိမှ ဘာ လိုလဲ၊ ဘာ မလိုဘူးလဲ ဆုံးဖြတ်လို့ ရပြီး၊ agent ကိုလည်း မှန်တဲ့ ဘက်ကို ညွှန်ပြလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+    actions:
+      - {
+          id: draw-a-build,
+          type: whiteboard.apply,
+          at: { mark: a-build },
+          upsertIds: [a-la1, a-l2-box, a-l2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-a-wrong,
+          type: whiteboard.apply,
+          at: { mark: a-wrong },
+          upsertIds: [a-la2, a-l3-box, a-l3],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-a-prob,
+          type: whiteboard.apply,
+          at: { mark: a-prob },
+          upsertIds: [a-h2, a-r1-box, a-r1],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-a-doc,
+          type: whiteboard.apply,
+          at: { mark: a-doc },
+          upsertIds: [a-ra1, a-r2-box, a-r2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-a-right,
+          type: whiteboard.apply,
+          at: { mark: a-right },
+          upsertIds: [a-ra2, a-r3-box, a-r3],
+          drawMs: 1300,
+        }
+
+  - id: problem-line
+    chapter: Problem statement ရေးရအောင်
+    narration: >
+      [[mark:close-a]] ကဲ၊ ကိုယ်တို့ ဆိုင်ရဲ့ problem statement ကို editor ထဲမှာ ရေးကြည့်ရအောင်။
+      [[mark:open-problem]] ဒီ ဖိုင်မှာ အပိုင်း ခေါင်းစဉ်တွေကို English လို
+      တိုတိုပဲ ထားပြီး၊ အကြောင်းအရာကိုတော့ မြန်မာလို ရေးသွားပါမယ်။ [[mark:type-problem]] ပထမ အပိုင်းမှာ ပြဿနာကို
+      စာကြောင်း တစ်ကြောင်းတည်းနဲ့ ရေးပါတယ်။ ဘယ်အချိန်မှာ ဘာဖြစ်လဲ၊ ဘယ်သူတွေ နစ်နာလဲ ဆိုတာ ပါပါတယ်။
+      [[mark:sel-no-app]] ဒီ စာကြောင်းထဲမှာ app ဆိုတဲ့ စကားလုံး တစ်လုံးမှ မပါတာကို သတိထား ကြည့်ပါ။ ဥပမာ app
+      မရှိလို့ customer တွေ ပြန်သွားတယ် လို့ ရေးမိရင်၊ ဖြေရှင်းနည်းကို ပြဿနာထဲမှာ ဝှက်ထည့်လိုက်သလို ဖြစ်သွားပါတယ်။
+      ပြဿနာကို ဖြေရှင်းနည်း မပါဘဲ ရေးနိုင်မှ၊ ဖြေရှင်းနည်း အမျိုးမျိုးကို နှိုင်းယှဉ်ကြည့်လို့ ရမှာပါ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+    actions:
+      - { id: close-a, type: whiteboard.apply, at: { mark: close-a }, open: false }
+      - {
+          id: open-problem,
+          type: workspace.openFile,
+          at: { mark: open-problem },
+          path: docs/problem.md,
+        }
+      - id: type-problem
+        type: editor.type
+        at: { mark: type-problem }
+        target: { file: docs/problem.md, after: "# Problem · ကြိုမှာ app\n\n", occurrence: 1 }
+        text: "## Problem\nမနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊ အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-no-app,
+          type: editor.select,
+          at: { mark: sel-no-app },
+          target:
+            {
+              file: docs/problem.md,
+              text: "မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊ အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: who
+    narration: >
+      [[mark:type-who]] နောက် အပိုင်းက ဘယ်သူ့ ပြဿနာလဲ ဆိုတာပါ။ customer လို့ ယေဘုယျ မရေးဘဲ၊ အလုပ်မသွားခင်
+      မနက်တိုင်း လာတဲ့ member တွေ၊ အချိန်ကျပ်တဲ့ ကျောင်းသားတွေ လို လူ အုပ်စု အတိအကျကို ရေးပါတယ်။ အုပ်စု တစ်ခုစီမှာ
+      member အောင်အောင်၊ ကျောင်းသား မောင်မောင် လို တကယ့် လူ တစ်ယောက်စီကိုလည်း ထည့်ထားတော့၊ ဆုံးဖြတ်ချက် တစ်ခု ချတိုင်း သူတို့ကို
+      မြင်ယောင်ပြီး စဉ်းစားလို့ ရပါတယ်။ [[mark:sel-hla]] ကောင်တာက လှလှ ကိုလည်း ထည့်ထားတာ သတိထား ကြည့်ပါ။ app ကို
+      တကယ် သုံးမယ့်သူ၊ user ဆိုတာ မှာတဲ့ customer တင် မဟုတ်ပါဘူး။ အော်ဒါ လက်ခံမယ့် လှလှ ရဲ့ မနက်ခင်း အလုပ်လည်း
+      ပြောင်းသွားမှာ ဖြစ်လို့၊ သူကလည်း user ပါပဲ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+    actions:
+      - id: type-who
+        type: editor.type
+        at: { mark: type-who }
+        target: { file: docs/problem.md, after: "ပြန်ထွက်သွားကြတယ်။\n\n", occurrence: 1 }
+        text: "## Who\n- အလုပ်မသွားခင် မနက်တိုင်း လာဝယ်တဲ့ member တွေ၊ ဥပမာ အောင်အောင်\n- အချိန်ကျပ်တဲ့ ကျောင်းသားတွေ၊ ဥပမာ မောင်မောင်\n- ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-hla,
+          type: editor.select,
+          at: { mark: sel-hla },
+          target: { file: docs/problem.md, text: "- ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ", occurrence: 1 },
+        }
+
+  - id: interview
+    chapter: User ကို ဘယ်လို မေးမလဲ
+    narration: >
+      [[mark:i-title]] ဒီ အချက်တွေကို ကိုယ့်ခေါင်းထဲကနေ ခန့်မှန်းပြီး ရေးလို့ မရပါဘူး။ တကယ့် user တွေနဲ့
+      စကားပြောပြီးမှ ရေးရပါမယ်။ ဒါပေမဲ့ ဘယ်လို မေးမလဲ ဆိုတာ အရမ်း အရေးကြီးပါတယ်။ [[mark:i-weak]] ဥပမာ အော်ဒါ
+      အသင့်ဖြစ်တာကို SMS နဲ့ ပြောပေးရင် ကြိုက်မလား၊ ဘာ feature လိုချင်လဲ၊ ဈေး ပိုပေးမလား လို့ မေးရင်၊ လူတွေက
+      အနာဂတ်မှာ သူတို့ ဘာလုပ်မလဲ ဆိုတာကို ခန့်မှန်းပြီး ဖြေရပါတယ်။ မေးတဲ့သူ ကြားချင်မယ့် အဖြေကိုလည်း
+      ယဉ်ယဉ်ကျေးကျေး ပေးတတ်ကြလို့၊ အဲဒီ ခန့်မှန်းချက်တွေကို ယုံလို့ မရပါဘူး။ [[mark:i-good]] အဲဒီအစား ပြီးခဲ့တာကို
+      တိတိကျကျ မေးပါ။ မနေ့က ဘယ်အချိန် ရောက်ခဲ့လဲ၊ ဘယ်လောက် စောင့်ခဲ့ရလဲ၊ ဒီအပတ် ဖုန်းနဲ့ ဘယ်နှခါ
+      မှာခဲ့လဲ ဆိုတာမျိုးပါ။ တကယ် ဖြစ်ခဲ့တဲ့
+      နေ့ တစ်နေ့ကို ပြန်ပြောခိုင်းရင် အသေးစိတ်တွေ ပါလာပါတယ်။ [[mark:i-rule]] လူတွေ ပြောတာထက် တကယ် လုပ်ခဲ့တာက
+      ပိုယုံရတဲ့ အထောက်အထားပါ။ [[mark:i-watch]] ဒါကြောင့် ကိုယ်တို့ ဆိုင်မှာဆိုရင်၊ ကောင်တာက လှလှ ကို
+      မဝယ်ဘဲ ပြန်သွားတဲ့ customer တွေကို မနက်တိုင်း ရေတွက်ပြီး မှတ်ထားခိုင်းပါတယ်။ တန်းထဲမှာ ရပ်နေတဲ့
+      အောင်အောင် ကိုလည်း မနေ့က ဘယ်လောက် စောင့်ခဲ့ရလဲ မေးပါတယ်။ မနက် ခုနစ်နာရီမှာ ဆိုင်ကို ကိုယ်တိုင် သွားကြည့်တာကလည်း အကောင်းဆုံး
+      နည်းလမ်း တစ်ခုပါ။
+    sources:
+      - {
+          title: "Nielsen Norman Group: User Interviews 101",
+          url: "https://www.nngroup.com/articles/user-interviews/",
+        }
+      - {
+          title: "Nielsen Norman Group: First Rule of Usability? Don't Listen to Users",
+          url: "https://www.nngroup.com/articles/first-rule-of-usability-dont-listen-to-users/",
+        }
+    actions:
+      - {
+          id: draw-i-title,
+          type: whiteboard.apply,
+          at: { mark: i-title },
+          open: true,
+          clear: true,
+          upsertIds: [i-title],
+        }
+      - {
+          id: draw-i-weak,
+          type: whiteboard.apply,
+          at: { mark: i-weak },
+          upsertIds: [i-h-weak, i-w1, i-w2, i-w3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-i-good,
+          type: whiteboard.apply,
+          at: { mark: i-good },
+          upsertIds: [i-h-good, i-g1, i-g2, i-g3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-i-rule,
+          type: whiteboard.apply,
+          at: { mark: i-rule },
+          upsertIds: [i-rule],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-i-watch,
+          type: whiteboard.apply,
+          at: { mark: i-watch },
+          upsertIds: [i-watch],
+          drawMs: 1000,
+        }
+
+  - id: today
+    narration: >
+      [[mark:close-i]] editor ထဲ ပြန်သွားရအောင်။ [[mark:type-today]] ဒီလို မေးပြီး ရလာတဲ့ အချက်တွေနဲ့ နောက်
+      အပိုင်းကို ရေးပါတယ်။ အခု လက်ရှိ ဘယ်လို လုပ်နေကြလဲ ဆိုတာပါ။ ပထမ စာကြောင်းက customer တစ်ယောက်
+      တန်းထဲမှာ တစ်ခါ၊ မှာပြီးမှ နောက်တစ်ခါ၊ နှစ်ခါ စောင့်ရတာကို ပြထားတာပါ။ [[mark:sel-phone]] ဒုတိယ စာကြောင်းကို
+      ကြည့်ပါ။ customer တချို့က ဖုန်းနဲ့ ကြိုမှာနေကြပြီ ဆိုတော့၊ ကြိုမှာချင်တဲ့ လိုအပ်ချက်က တကယ် ရှိနေပါပြီ။
+      ပြဿနာက လှလှ တစ်ယောက်တည်း ဖုန်းရော ကောင်တာရော ကိုင်ရတာပါ။ ဒါဆို မနက်ပိုင်း ဖုန်းကိုင်ပေးမယ့်သူ တစ်ယောက် ထပ်ထားရုံနဲ့ ပြေမလား။
+      ပြေတယ်ဆိုရင် software မဆောက်ဘဲ နေတာကလည်း မှန်ကန်တဲ့ အဖြေ တစ်ခုပါ။ ပြဿနာကို အရင် ရေးထားလို့သာ
+      ဒီလို ရွေးစရာကို မြင်ရတာပါ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+    actions:
+      - { id: close-i, type: whiteboard.apply, at: { mark: close-i }, open: false }
+      - id: type-today
+        type: editor.type
+        at: { mark: type-today }
+        target: { file: docs/problem.md, after: "- ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ\n\n", occurrence: 1 }
+        text: "## Today\n- တန်းစီ၊ ကောင်တာမှာ မှာ၊ ပြီးမှ ထပ်စောင့်ရတယ်။\n- တချို့က ဖုန်းဆက်ပြီး ကြိုမှာကြတယ်။ ဒါပေမဲ့ လှလှ က ဖုန်းကိုင်နေရင် ကောင်တာက လူတွေ ပိုစောင့်ရတယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-phone,
+          type: editor.select,
+          at: { mark: sel-phone },
+          target: { file: docs/problem.md, text: "တချို့က ဖုန်းဆက်ပြီး ကြိုမှာကြတယ်။", occurrence: 1 },
+        }
+
+  - id: why
+    narration: >
+      [[mark:type-why]] နောက် အပိုင်းကတော့ ဒီ ပြဿနာကို မဖြေရှင်းရင် ဆိုင်က ဘာ ဆုံးရှုံးလဲ ဆိုတာပါ။ ဒီမှာ
+      လှလှ ရေတွက်ထားတဲ့ ကိန်းဂဏန်းကို ထည့်ပါတယ်။ [[mark:sel-ten]] မနက်တိုင်း ၁၀ ယောက်လောက် ဆိုတာ ခန့်မှန်းချက်
+      မဟုတ်ဘဲ၊ တကယ် ရေတွက်ပြီး မှတ်ထားတဲ့ ကိန်းဂဏန်း ဖြစ်တာကို သတိထား ကြည့်ပါ။ တစ်ယောက်ကို လက်ဖက်ရည် တစ်ခွက်လို့ပဲ
+      တွက်ရင်တောင်၊ တစ်မနက် ၁၅၀၀၀ ကျပ်လောက် လက်လွတ်နေတာပါ။ ဒီ ကိန်းဂဏန်း ရှိမှ ဒီ ပြဿနာကို အချိန်နဲ့ ငွေ
+      ပေးပြီး ဖြေရှင်းထိုက်လား ဆိုတာ မြမြ ဆုံးဖြတ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+    actions:
+      - id: type-why
+        type: editor.type
+        at: { mark: type-why }
+        target: { file: docs/problem.md, after: "ပိုစောင့်ရတယ်။\n\n", occurrence: 1 }
+        text: "## Why it matters\n- လှလှ ရဲ့ မှတ်စုအရ မနက်တိုင်း customer 10 ယောက်လောက် မဝယ်ဘဲ ပြန်သွားတယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-ten,
+          type: editor.select,
+          at: { mark: sel-ten },
+          target: { file: docs/problem.md, text: "customer 10 ယောက်လောက်", occurrence: 1 },
+        }
+
+  - id: know
+    chapter: ပြေပြီလား ဘယ်လို သိမလဲ
+    narration: >
+      [[mark:type-know]] နောက် အပိုင်းက ပြဿနာ ပြေပြီလား ဆိုတာ ဘယ်လို သိမလဲ ဆိုတာပါ။ ပြေသွားပြီလို့
+      ခံစားရရုံနဲ့ မလုံလောက်လို့၊ တိုင်းလို့ရတဲ့ လက္ခဏာတွေကို အခုကတည်းက ရေးထားပါတယ်။ [[mark:sel-know]] ဒီ
+      စာကြောင်းက မဝယ်ဘဲ ပြန်သွားတဲ့ customer ကို ၁၀ ယောက်ကနေ တစ်မနက် ၃ ယောက်အောက် ရောက်ရမယ်လို့
+      ဆုံးဖြတ်ထားတာပါ။ ဒီ ကိန်းဂဏန်းကို ကိုယ့်ဘာသာ မရွေးဘဲ၊ မြမြ နဲ့ တိုင်ပင်ပြီး ရွေးထားတာပါ။ ကျန်တဲ့ နှစ်ကြောင်းကတော့ ကြိုမှာတဲ့ အော်ဒါ များလာလား၊ လှလှ ဖုန်းကိုင်ရတာ နည်းလာလား ဆိုတာကို
+      ကြည့်ဖို့ပါ။ [[mark:know-any]] ဒီ လက္ခဏာတွေထဲမှာလည်း app ဆိုတဲ့ စကားလုံး မပါပါဘူး။ ဒါကြောင့် အဓိက ကိန်းဂဏန်း
+      ဖြစ်တဲ့ ပြန်သွားတဲ့ customer အရေအတွက်နဲ့၊ app ဖြစ်ဖြစ်၊ ဖုန်းကိုင်ပေးမယ့်သူ ဖြစ်ဖြစ်၊ ဘယ် ဖြေရှင်းနည်းကိုမဆို
+      စစ်လို့ ရပါတယ်။ ဒီ course မှာတော့ app ကို ဆက်ဆောက်သွားမှာ ဖြစ်ပေမယ့်၊ customer တွေ တကယ် သုံးလာတဲ့အခါ
+      ဒီ စာမျက်နှာကို ပြန်ဖွင့်ပြီး
+      ကိန်းဂဏန်းတွေ တကယ် ပြောင်းသွားလား စစ်ရမှာပါ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How to set performance metrics for your service",
+          url: "https://www.gov.uk/service-manual/measuring-success/how-to-set-performance-metrics-for-your-service",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-know
+        type: editor.type
+        at: { mark: type-know }
+        target: { file: docs/problem.md, after: "မဝယ်ဘဲ ပြန်သွားတယ်။\n\n", occurrence: 1 }
+        text: "## How we'll know\n- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်\n- ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်\n- ဖုန်းနဲ့ ကြိုမှာတာ — တဖြည်းဖြည်း နည်းလာ\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-know,
+          type: expect.file,
+          at: { afterAction: type-know },
+          path: docs/problem.md,
+          contains: "- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်",
+        }
+      - {
+          id: sel-know,
+          type: editor.select,
+          at: { mark: sel-know },
+          target:
+            {
+              file: docs/problem.md,
+              text: "- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်",
+              occurrence: 1,
+            },
+        }
+
+  - id: not-the-problem
+    narration: >
+      [[mark:type-not]] နောက်ဆုံး အပိုင်းမှာ ပြဿနာ မဟုတ်တာတွေကို ရေးပါတယ်။ ဈေးနှုန်းနဲ့ အရသာကို customer တွေ
+      ကြိုက်ပြီးသား ဖြစ်လို့ ပြင်စရာ မလိုပါဘူး။ [[mark:sel-delivery]] delivery ကိုလည်း ဒီ အပိုင်းမှာ
+      ထည့်ထားတော့၊ ဒီတစ်ခါ မလုပ်ဘူး ဆိုတာ ရှင်းသွားပါတယ်။ ဒါကို ရေးမထားရင်၊ ဒါလည်း ထည့်ရင် ကောင်းမယ် ဆိုတဲ့ အကြံတွေနဲ့ အလုပ်က တဖြည်းဖြည်း ကြီးလာတတ်ပါတယ်။ ဒီ
+      စာမျက်နှာ တစ်မျက်နှာက မြမြ၊ လှလှ နဲ့ ကိုယ် အားလုံး ပြဿနာ တစ်ခုတည်းကို တူတူ မြင်အောင် လုပ်ပေးပြီး၊
+      နောက်ပိုင်း agent ကို အလုပ်အပ်တဲ့အခါမှာလည်း ဒီ စာမျက်နှာကို တွဲပေးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        target: { file: docs/problem.md, after: "တဖြည်းဖြည်း နည်းလာ\n\n", occurrence: 1 }
+        text: "## Not the problem\n- ဈေးနှုန်းနဲ့ အရသာ — customer တွေ ကြိုက်ပြီးသား\n- delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး\n"
+        cadence: line-by-line
+      - {
+          id: expect-not,
+          type: expect.file,
+          at: { afterAction: type-not },
+          path: docs/problem.md,
+          contains: "- delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး",
+        }
+      - {
+          id: sel-delivery,
+          type: editor.select,
+          at: { mark: sel-delivery },
+          target: { file: docs/problem.md, text: "- delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး", occurrence: 1 },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ အောင်အောင် ကို မေးခွန်း နှစ်ခုထဲက တစ်ခုပဲ မေးခွင့် ရှိတယ် ဆိုပါစို့။
+      ပထမက ကြိုမှာ app ရှိရင် သုံးမလား ဆိုတဲ့ မေးခွန်းပါ။ ဒုတိယက တန်းကနေ မဝယ်ဘဲ နောက်ဆုံး ပြန်ထွက်ခဲ့တာ
+      ဘယ်တုန်းကလဲ၊ အဲဒီနေ့က ဘာဖြစ်ခဲ့လဲ ဆိုတဲ့ မေးခွန်းပါ။ ဘယ် မေးခွန်းက အောင်အောင် အကြောင်း ပိုသိစေမလဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ မေးခွန်းပါ။ ဘာကြောင့်လဲဆိုတော့ ပထမ မေးခွန်းက
+      အနာဂတ်ကို ခန့်မှန်းခိုင်းတာ ဖြစ်ပြီး၊ ဒုတိယ မေးခွန်းကတော့ တကယ် ဖြစ်ခဲ့တဲ့ နေ့ တစ်နေ့ကို ပြန်ပြောခိုင်းလို့ပါ။
+      အဲဒီ နေ့က ဘယ်အချိန်လဲ၊ တန်း ဘယ်လောက် ရှည်ခဲ့လဲ၊ ဘာကြောင့် မစောင့်နိုင်ခဲ့လဲ ဆိုတဲ့ အထောက်အထားတွေ ပါလာပါတယ်။
+    sources:
+      - {
+          title: "Nielsen Norman Group: User Interviews 101",
+          url: "https://www.nngroup.com/articles/user-interviews/",
+        }
+      - {
+          title: "Nielsen Norman Group: First Rule of Usability? Don't Listen to Users",
+          url: "https://www.nngroup.com/articles/first-rule-of-usability-dont-listen-to-users/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o2b],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a-note],
+          drawMs: 1400,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ agent ကို ဖြေရှင်းနည်း မပြောခင် ပြဿနာကို အရင် ရေးရပါမယ်။
+      [[mark:sel-problem]] ပြဿနာကို app ဆိုတဲ့ စကားလုံး မပါဘဲ၊ ဘယ်အချိန်မှာ ဘယ်သူ ဘာ နစ်နာလဲ ဆိုတာနဲ့ ရေးပါ။
+      [[mark:sel-know2]] ပြေပြီလား ဆိုတာကို ကိန်းဂဏန်းနဲ့ ကြိုသတ်မှတ်ထားပါ။ [[mark:sel-not]] ပြဿနာ မဟုတ်တာကိုလည်း
+      ရေးထားပါ။ user တွေကို မေးတဲ့အခါမှာတော့ ဘာလိုချင်လဲ မမေးဘဲ၊ ပြီးခဲ့တဲ့ တကယ့် နေ့ တစ်နေ့ကို မေးပါ။ software
+      မလိုဘဲ ပြေနိုင်တဲ့ ပြဿနာ ဆိုရင်လည်း အဲဒါက ကောင်းတဲ့ အဖြေပါ။ နောက် lesson မှာတော့ ဒီ ပြဿနာကနေ app က
+      ဘာလုပ်ပေးရမလဲ ဆိုတဲ့ requirement တွေကို ဘယ်လို ရှာပြီး ရေးမလဲ ဆိုတာ လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: How the discovery phase works",
+          url: "https://www.gov.uk/service-manual/agile-delivery/how-the-discovery-phase-works",
+        }
+      - {
+          title: "Nielsen Norman Group: User Interviews 101",
+          url: "https://www.nngroup.com/articles/user-interviews/",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-problem,
+          type: editor.select,
+          at: { mark: sel-problem },
+          target:
+            {
+              file: docs/problem.md,
+              text: "မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-know2,
+          type: editor.select,
+          at: { mark: sel-know2 },
+          target:
+            {
+              file: docs/problem.md,
+              text: "- မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-not,
+          type: editor.select,
+          at: { mark: sel-not },
+          target: { file: docs/problem.md, text: "## Not the problem", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
