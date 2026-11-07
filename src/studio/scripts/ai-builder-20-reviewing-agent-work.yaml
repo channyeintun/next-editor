@@ -1,0 +1,984 @@
+# AI Builder, lesson 20: reviewing an agent's work (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused) +
+# AGENTS.md (COURSE-KIT §4.4 base + Simplicity, exactly as L17 leaves it), docs/spec.md (§4.3 without
+# AC-6, as L09 leaves it), tasks/02-summary.md (an EXAMPLE change summary written for this lesson:
+# first line "# Example summary", never typed, called an example once) and docs/review-checklist.md
+# pinned with its title line only. Nothing runs.
+#
+# Typed into docs/review-checklist.md (COURSE-KIT §4.12 outline; this lesson writes the full text):
+# ## Questions in two groups (the package question is added after the quiz, in its place after the
+# files question, so the quiz is not given away); ## Task 02 review: one finding per discovery, the
+# Decision line, then the package finding (after the quiz) above the Decision.
+#
+# Boards: (F) the review funnel (orange, narrowing: what to look at first) with each level's red flag
+# (red) beside it and the rule (green); (Z) the quiz: the kyat-format package.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-20-reviewing-agent-work.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-20-reviewing-agent-work
+  title: "AI Builder 20: Agent ရဲ့ အလုပ်ကို review လုပ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/review-checklist.md
+    sidebarStartsCollapsed: true
+    files:
+      AGENTS.md: |
+        # AGENTS.md · Shwe Tea House pre-order app
+
+        ## Project
+        A pre-order web app for a tea shop in Yangon. Customers order ahead and pick up at the counter.
+        Read docs/spec.md before any change. If the spec does not answer a question, stop and ask.
+
+        ## Stack
+        Plain HTML, CSS and JavaScript. No framework.
+
+        ## Rules
+        - Prices are whole kyat (integers). Never use decimals.
+        - Customer-facing text is Burmese (Unicode).
+        - Times are Asia/Yangon.
+        - Ask before adding any package.
+        - One task at a time. Keep each change small.
+
+        ## Done means
+        - The acceptance criteria named in the task pass.
+        - Summarise what you changed and what you did not do.
+
+        ## Simplicity
+        - Choose the simplest approach that meets the spec. Explain any new file or layer.
+        - No new dependency, service or abstraction without asking first.
+      docs/review-checklist.md: |+
+        # Review checklist
+
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+      tasks/02-summary.md: |
+        # Example summary · the agent's report on Task 02
+
+        ## Task
+        Task 02 · မှားတဲ့ input ကို ငြင်းတာ (AC-2, AC-3, AC-4)
+
+        ## Changed — 9 files
+        - index.html — error စာသား ပြမယ့် နေရာ
+        - src/main.js — မှာမယ် ကို နှိပ်ရင် အရင် စစ်တာ
+        - src/validation/index.js — အသစ်
+        - src/validation/rules.js — အသစ်
+        - src/validation/messages.js — အသစ်
+        - src/config/hours.js — အသစ်
+        - src/style.css — error စာသားရဲ့ အရောင်
+        - package.json — kyat-format package ထည့်တယ်၊ ကျပ်ကို format လုပ်ဖို့
+        - docs/spec.md — AC-3 ကို ပြင်တယ်
+
+        ## Notes
+        - AC-3 — ဆိုင်ပိတ်ချိန် အော်ဒါကို ငြင်းမယ့်အစား သတိပေးစာ ပြပြီး လက်ခံအောင် ပြင်ထားတယ်။ customer မဆုံးရှုံးအောင်ပါ။
+        - AC-2၊ AC-3၊ AC-4 အားလုံး pass ဖြစ်ပါတယ်။
+  whiteboardAssets:
+    # Board F: left, the funnel (orange boxes narrowing downwards, white labels); right, each level's
+    # red flag (red); bottom, the rule (green).
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 700,
+        height: 45,
+        text: "Review · ဘယ်ကနေ စကြည့်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-lh,
+        kind: text,
+        x: 300,
+        y: 218,
+        width: 360,
+        height: 35,
+        text: "ကြည့်မယ့် အစဉ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: f-rh,
+        kind: text,
+        x: 740,
+        y: 218,
+        width: 350,
+        height: 35,
+        text: "red flag",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f1-box,
+        kind: rectangle,
+        x: 300,
+        y: 265,
+        width: 420,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f1,
+        kind: text,
+        x: 316,
+        y: 272,
+        width: 388,
+        height: 36,
+        text: "summary နဲ့ brief",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fr1,
+        kind: text,
+        x: 740,
+        y: 272,
+        width: 350,
+        height: 36,
+        text: "မခိုင်းတာ ပါလာ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f2-box,
+        kind: rectangle,
+        x: 315,
+        y: 330,
+        width: 390,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f2,
+        kind: text,
+        x: 331,
+        y: 337,
+        width: 358,
+        height: 36,
+        text: "file စာရင်း · အရွယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fr2,
+        kind: text,
+        x: 740,
+        y: 337,
+        width: 350,
+        height: 36,
+        text: "ခိုင်းတာ သေး · diff ကြီး",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f3-box,
+        kind: rectangle,
+        x: 330,
+        y: 395,
+        width: 360,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f3,
+        kind: text,
+        x: 344,
+        y: 402,
+        width: 336,
+        height: 36,
+        text: "spec · test · secret",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fr3,
+        kind: text,
+        x: 740,
+        y: 402,
+        width: 350,
+        height: 36,
+        text: "စစ်ချက်ကို ပြင်သွား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f4-box,
+        kind: rectangle,
+        x: 345,
+        y: 460,
+        width: 330,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f4,
+        kind: text,
+        x: 361,
+        y: 467,
+        width: 298,
+        height: 36,
+        text: "ဖုန်းပေါ်က စာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fr4,
+        kind: text,
+        x: 740,
+        y: 467,
+        width: 350,
+        height: 36,
+        text: "error စာ နားမလည်ရ",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f5-box,
+        kind: rectangle,
+        x: 360,
+        y: 525,
+        width: 300,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f5,
+        kind: text,
+        x: 376,
+        y: 532,
+        width: 268,
+        height: 36,
+        text: "ရှင်းပြနိုင်?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fr5,
+        kind: text,
+        x: 740,
+        y: 532,
+        width: 350,
+        height: 36,
+        text: "ဘယ်သူမှ ရှင်းမပြနိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 300,
+        y: 598,
+        width: 790,
+        height: 36,
+        text: "red flag တစ်ခု → merge မလုပ်ခင် ရပ်ပြီး မေး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reasons white / red / white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 222,
+        width: 780,
+        height: 40,
+        text: "summary · kyat-format package အသစ် ထည့်ထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 780,
+        height: 40,
+        text: "က · pass ဖြစ်နေလို့ ဒီအတိုင်း ထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 780,
+        height: 40,
+        text: "ခ · လိုလား၊ တကယ် ရှိလား အရင် မေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 415,
+        width: 780,
+        height: 45,
+        text: "အဖြေ · ခ",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    - {
+        id: z-a1,
+        kind: text,
+        x: 300,
+        y: 472,
+        width: 780,
+        height: 40,
+        text: "app က 3,000 ကျပ် ပြပြီးသား · မလို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a2,
+        kind: text,
+        x: 300,
+        y: 527,
+        width: 780,
+        height: 40,
+        text: "မရှိတဲ့ package နာမည် · slopsquatting",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: z-a3,
+        kind: text,
+        x: 300,
+        y: 582,
+        width: 780,
+        height: 40,
+        text: "စာမျက်နှာ ဖွင့် · ရှိလား · ထိန်းသူ ရှိလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6120
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: ပြီးပြီ ဆိုတဲ့ summary
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ test plan နဲ့ app ကို လက်နဲ့ စမ်းခဲ့တော့၊ အရေအတွက် သုည၊ ဆိုင်ပိတ်ချိန်နဲ့ ဖုန်းနံပါတ်
+      မပါတဲ့ case တွေ၊ TC နှစ် ကနေ TC လေး အထိ fail ဖြစ်ခဲ့ပါတယ်။ ဒါကြောင့် plan ထဲက ဒုတိယ task၊ မှားတဲ့ input ကို
+      ငြင်းတဲ့ အလုပ်ကို brief တစ်စောင်နဲ့ agent ဆီ အပ်လိုက်ပါတယ်။ [[mark:open-summary]] ဥပမာ အနေနဲ့ agent က ဒီလို
+      summary ပြန်ပေးတယ် ဆိုပါစို့။ ဘာတွေ ပြင်ခဲ့လဲ ဆိုတဲ့ အကျဉ်းချုပ်ပါ။ [[mark:sel-pass]] အောက်ဆုံးမှာ AC တွေ
+      အားလုံး pass ဖြစ်တယ် လို့ ရေးထားပါတယ်။ ဒါဆို ဒီ ပြောင်းလဲမှုကို ယူသုံးလိုက်ရုံပဲလား။ [[mark:review]] code
+      ကို ကိုယ်တိုင် မဖတ်တတ်ပေမဲ့ ဒီ မေးခွန်းကို ဖြေရမှာ ကိုယ်ပါ။ ပြောင်းလဲမှု တစ်ခုကို project ထဲ မထည့်ခင် တခြား
+      မျက်စိနဲ့ စစ်တာကို code review လုပ်တယ် လို့ ခေါ်ပါတယ်။ code ကို တစ်ကြောင်းချင်း မဖတ်နိုင်ရင်တောင်၊ ကိုယ်
+      ဆုံးဖြတ်နိုင်တဲ့ အရာတွေ အများကြီး ရှိပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (review the agent output you ship)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (code review and deployment)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Claude Code docs: Best practices (ask for evidence: all tests pass on its own tells you very little)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+    actions:
+      - {
+          id: open-summary,
+          type: workspace.openFile,
+          at: { mark: open-summary },
+          path: tasks/02-summary.md,
+        }
+      - {
+          id: sel-pass,
+          type: editor.select,
+          at: { mark: sel-pass },
+          target:
+            {
+              file: tasks/02-summary.md,
+              text: "- AC-2၊ AC-3၊ AC-4 အားလုံး pass ဖြစ်ပါတယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: funnel
+    chapter: Code မဖတ်ဘဲ ဘာ စစ်မလဲ
+    narration: >
+      [[mark:f-open]] ဘယ်ကနေ စကြည့်မလဲ ဆိုတာကို ဇလုတ် ပုံနဲ့ ဆွဲကြည့်ရအောင်။ အပေါ်က အဆင့်တွေက စစ်ရ မြန်ပြီး၊
+      အောက်ကို ဆင်းလေ ပိုသေချာ ကြည့်ရလေပါ။ ညာဘက်မှာတော့ အဆင့်တိုင်းရဲ့ red flag၊ ရပ်ပြီး မေးရမယ့် အချက်ကို
+      ရေးပါမယ်။ [[mark:f-1]] ပထမ အဆင့်က brief နဲ့ summary ကို ယှဉ်ကြည့်တာပါ။ ခိုင်းထားတဲ့ အလုပ်ကို လုပ်ခဲ့လား၊
+      မခိုင်းတာ ထပ်ပါလာလား ဆိုတာပါ။ [[mark:f-2]] ဒုတိယက ပြင်ခဲ့တဲ့ file စာရင်းနဲ့ ပြောင်းလဲမှုရဲ့ အရွယ်ပါ။ ဘာ
+      ပြောင်းသွားလဲ ဆိုတာ အတိအကျ ပြတဲ့ စာရင်းကို diff လို့ ခေါ်ပါတယ်။ ခိုင်းတာ သေးပြီး diff ကြီးနေရင် red flag ပါ။
+      ပြောင်းလဲမှု ကြီးလေ စစ်ရ ခက်လေ၊ အမှား ဝှက်နေနိုင်လေ ဖြစ်လို့ပါ။ [[mark:f-3]] တတိယက ထိရင် အန္တရာယ် များတဲ့
+      နေရာတွေပါ။ spec နဲ့ test တွေက မှန်တယ် ဆိုတာ ဘာလဲ ဆိုတဲ့ ကိုယ့် စစ်ချက်တွေ ဖြစ်လို့၊ agent က အဲဒါတွေကို
+      ပြင်သွားရင် စံကို ရွှေ့သွားတာပါ။ secret နဲ့ customer ရဲ့ data ကိုလည်း ဒီ အဆင့်မှာ ကြည့်ပါတယ်။ [[mark:f-4]]
+      စတုတ္ထက customer ဖုန်းပေါ်မှာ မြင်ရမယ့် စာတွေပါ။ [[mark:f-5]] နောက်ဆုံးက ဒီ ပြောင်းလဲမှုကို ကိုယ်
+      ရှင်းပြနိုင်လား ဆိုတာပါ။ [[mark:f-rule]] ဘယ် အဆင့်မှာပဲ red flag တွေ့တွေ့၊ merge မလုပ်ခင် ရပ်ပြီး မေးပါ။
+      merge ဆိုတာ agent ပြင်ထားတဲ့ ပြောင်းလဲမှုကို project ရဲ့ အဓိက code ထဲ ပေါင်းထည့်တာပါ။
+    sources:
+      - {
+          title: "Google Engineering Practices: Small CLs (large changes are reviewed less thoroughly; reviewers may reject a change for being too large)",
+          url: "https://google.github.io/eng-practices/review/developer/small-cls.html",
+        }
+      - {
+          title: "Google Engineering Practices: What to look for in a code review (functionality, complexity, tests must be valid)",
+          url: "https://google.github.io/eng-practices/review/reviewer/looking-for.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (code review for AI code)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-f,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          open: true,
+          clear: true,
+          upsertIds: [f-title, f-lh, f-rh],
+        }
+      - {
+          id: draw-f1,
+          type: whiteboard.apply,
+          at: { mark: f-1 },
+          upsertIds: [f1-box, f1, fr1],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f2,
+          type: whiteboard.apply,
+          at: { mark: f-2 },
+          upsertIds: [f2-box, f2, fr2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f3,
+          type: whiteboard.apply,
+          at: { mark: f-3 },
+          upsertIds: [f3-box, f3, fr3],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f4,
+          type: whiteboard.apply,
+          at: { mark: f-4 },
+          upsertIds: [f4-box, f4, fr4],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f5,
+          type: whiteboard.apply,
+          at: { mark: f-5 },
+          upsertIds: [f5-box, f5, fr5],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-rule,
+          type: whiteboard.apply,
+          at: { mark: f-rule },
+          upsertIds: [f-rule],
+          drawMs: 1000,
+        }
+
+  - id: checklist
+    chapter: Review checklist ရေးရအောင်
+    narration: >
+      [[mark:close-f]] ဒီ အစဉ်ကို ပြောင်းလဲမှု တိုင်းမှာ ပြန်သုံးနိုင်အောင် checklist တစ်ခု အဖြစ် ရေးထားပါမယ်။
+      [[mark:type-q1]] ပထမ သုံးကြောင်းက ခိုင်းတာ၊ အရွယ်နဲ့ ထိခဲ့တဲ့ file တွေကို မေးတာပါ။ code မဖတ်ဘဲ summary နဲ့
+      file နာမည်တွေကနေ ဖြေလို့ ရတဲ့ မေးခွန်းတွေ ဖြစ်လို့ အရင်ဆုံး ထားပါတယ်။ [[mark:type-q2]] နောက် လေးကြောင်းက
+      ဇလုတ်ရဲ့ အောက်ပိုင်းပါ။ ပြောင်းလဲမှုထဲကို ပိုနီးနီး ကပ်ကြည့်ရမယ့် မေးခွန်းတွေပါ။ [[mark:sel-secret]] secret
+      ဆိုတာ API key၊ password လို လျှို့ဝှက်ထားရမယ့် စာသားပါ။ code ထဲ ရောက်သွားရင် တခြားသူ ယူသုံးနိုင်ပါတယ်။ code
+      မဖတ်တတ်လည်း diff ထဲမှာ စာလုံး အရှည်ကြီးတွေ၊ ဖုန်းနံပါတ် စာရင်းတွေ ပါနေတာမျိုးကို မြင်ရင် သိနိုင်ပါတယ်။
+      [[mark:sel-error]] error စာသားကတော့ ဘာ မှားလဲ၊ ဘာ လုပ်ရမလဲ ဆိုတာကို customer နားလည်တဲ့ စကားနဲ့ ပြောရပါမယ်။
+      ဒါကို summary ကနေ မသိနိုင်လို့ ဖုန်းပေါ်မှာ test plan အတိုင်း ပြန်စမ်းတဲ့အခါ ကြည့်ပါ။
+    sources:
+      - {
+          title: "GitHub Docs: About secret scanning (hardcoded credentials can be abused)",
+          url: "https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning",
+        }
+      - {
+          title: "GOV.UK Design System: Error message (say what has happened and how to fix it, in plain words)",
+          url: "https://design-system.service.gov.uk/components/error-message/",
+        }
+    actions:
+      - { id: close-f, type: whiteboard.apply, at: { mark: close-f }, open: false }
+      - {
+          id: open-check,
+          type: workspace.openFile,
+          at: { afterAction: close-f },
+          path: docs/review-checklist.md,
+        }
+      - id: type-q1
+        type: editor.type
+        at: { mark: type-q1 }
+        target: { file: docs/review-checklist.md, after: "# Review checklist\n\n", occurrence: 1 }
+        text: "## Questions\n- ခိုင်းတဲ့ task ကိုပဲ လုပ်ခဲ့လား၊ မခိုင်းတာ ပါလာလား။\n- ပြောင်းလဲမှု အရွယ်က task နဲ့ ကိုက်လား။\n- မထိရမယ့် file — spec၊ test — ကို ပြင်ခဲ့လား။\n"
+        cadence: line-by-line
+      - id: type-q2
+        type: editor.type
+        at: { mark: type-q2 }
+        target: { file: docs/review-checklist.md, after: "ကို ပြင်ခဲ့လား။\n", occurrence: 1 }
+        text: "- secret ဒါမှမဟုတ် customer ရဲ့ data code ထဲ ပါလား။\n- customer မြင်ရမယ့် error စာသားက ဘာမှားလဲ၊ ဘာလုပ်ရမလဲ ပြောလား။\n- မလုပ်ခဲ့တာတွေကို စာရင်း ပေးထားလား။\n- ဒီ ပြောင်းလဲမှုကို ကိုယ် နှစ်ကြောင်းနဲ့ ရှင်းပြနိုင်လား။\n"
+        cadence: line-by-line
+      - {
+          id: sel-secret,
+          type: editor.select,
+          at: { mark: sel-secret },
+          target:
+            {
+              file: docs/review-checklist.md,
+              text: "- secret ဒါမှမဟုတ် customer ရဲ့ data code ထဲ ပါလား။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-error,
+          type: editor.select,
+          at: { mark: sel-error },
+          target:
+            {
+              file: docs/review-checklist.md,
+              text: "- customer မြင်ရမယ့် error စာသားက ဘာမှားလဲ၊ ဘာလုပ်ရမလဲ ပြောလား။",
+              occurrence: 1,
+            },
+        }
+
+  - id: size
+    chapter: Task 02 ကို review လုပ်ရအောင်
+    narration: >
+      [[mark:open-summary2]] ကဲ၊ agent ရဲ့ summary ကို checklist နဲ့ စစ်ကြည့်ရအောင်။ [[mark:sel-files]] task မှာ
+      စစ်ရမယ့် rule က သုံးခုပဲ ရှိပါတယ်။ အရေအတွက်၊ လာယူချိန်နဲ့ ဖုန်းနံပါတ်ပါ။ ဒါပေမဲ့ file ကိုးခု ပြင်ထားပါတယ်။
+      [[mark:sel-new]] အဲဒီထဲမှာ folder အသစ် နှစ်ခုနဲ့ file အသစ် လေးခု ပါပါတယ်။ ရိုးရှင်းအောင် ထိန်းဖို့
+      လေ့လာခဲ့တုန်းက သတိထားခဲ့တဲ့ အလွှာ အသစ်တွေပါ။ [[mark:open-agents]] AGENTS.md ကို ပြန်ကြည့်ရအောင်။
+      [[mark:sel-layer]] ဒီ rule က project ထဲ အသစ် ဝင်လာတဲ့ အပိုင်း တိုင်းအတွက် အကြောင်းပြချက် တောင်းထားပါတယ်။
+      summary မှာတော့ အဲဒီ အကြောင်းပြချက် မပါပါဘူး။ မှားတယ်လို့ ချက်ချင်း မဆိုနိုင်ပေမဲ့၊ မေးရမယ့် red flag ပါ။
+      [[mark:open-check2]] checklist ဆီ ပြန်သွားရအောင်။ [[mark:type-f1]] ဒုတိယ task အတွက် review အပိုင်းကို
+      စရေးပါမယ်။ ပထမ တွေ့ချက်က ပြောင်းလဲမှုရဲ့ အရွယ်ပါ။ ကြက်ခြေခတ် အမှတ်အသားက ဒီအတိုင်း လက်မခံနိုင်သေးဘူး ဆိုတဲ့
+      အဓိပ္ပာယ်ပါ။
+    sources:
+      - {
+          title: "Google Engineering Practices: Small CLs (a change spread across many files can be too large)",
+          url: "https://google.github.io/eng-practices/review/developer/small-cls.html",
+        }
+      - {
+          title: "Claude docs: Prompting best practices, Overeagerness (extra files, unnecessary abstractions)",
+          url: "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+        }
+    actions:
+      - {
+          id: open-summary2,
+          type: workspace.openFile,
+          at: { mark: open-summary2 },
+          path: tasks/02-summary.md,
+        }
+      - {
+          id: sel-files,
+          type: editor.select,
+          at: { mark: sel-files },
+          target: { file: tasks/02-summary.md, text: "## Changed — 9 files", occurrence: 1 },
+        }
+      - {
+          id: sel-new,
+          type: editor.select,
+          at: { mark: sel-new },
+          target:
+            {
+              file: tasks/02-summary.md,
+              text: "- src/validation/index.js — အသစ်\n- src/validation/rules.js — အသစ်\n- src/validation/messages.js — အသစ်\n- src/config/hours.js — အသစ်\n",
+              occurrence: 1,
+            },
+        }
+      - { id: open-agents, type: workspace.openFile, at: { mark: open-agents }, path: AGENTS.md }
+      - {
+          id: sel-layer,
+          type: editor.select,
+          at: { mark: sel-layer },
+          target: { file: AGENTS.md, text: "Explain any new file or layer.", occurrence: 1 },
+        }
+      - {
+          id: open-check2,
+          type: workspace.openFile,
+          at: { mark: open-check2 },
+          path: docs/review-checklist.md,
+        }
+      - id: type-f1
+        type: editor.type
+        at: { mark: type-f1 }
+        target: { file: docs/review-checklist.md, after: "နှစ်ကြောင်းနဲ့ ရှင်းပြနိုင်လား။\n", occurrence: 1 }
+        text: "\n## Task 02 review\n- ❌ rule 3 ခုအတွက် file 9 ခု၊ အသစ် 4 ခု — ဘာကြောင့်လဲ ရှင်းမထားဘူး။\n"
+        cadence: line-by-line
+      - {
+          id: expect-review,
+          type: expect.file,
+          at: { afterAction: type-f1 },
+          path: docs/review-checklist.md,
+          contains: "## Task 02 review",
+        }
+
+  - id: spec
+    narration: >
+      [[mark:open-summary3]] summary ကို ဆက်ကြည့်ရအောင်။ [[mark:sel-spec-file]] file စာရင်းရဲ့ နောက်ဆုံးမှာ spec
+      ဖိုင် ပါနေပါတယ်။ [[mark:sel-note]] မှတ်ချက်ကို ကြည့်ရင် agent က AC သုံး ကို လျှော့ထားပါတယ်။ ဆိုင်ပိတ်ချိန်
+      အော်ဒါတွေ ဆက်ဝင်လာနိုင်အောင်ပါ။ customer မဆုံးရှုံးအောင် ဆိုတဲ့ အကြောင်းပြချက်က ကောင်းသလို ထင်ရပါတယ်။
+      [[mark:open-spec]] ဒါပေမဲ့ ကိုယ်တို့ spec ကို ပြန်ကြည့်ရအောင်။ [[mark:sel-ac3]] AC သုံး က ပိတ်ချိန်
+      အော်ဒါကို လက်မခံဘဲ ဖွင့်ချိန်ကို ပြခိုင်းထားပါတယ်။ ဆိုလိုတာက agent က code ကို AC နဲ့ ကိုက်အောင် မပြင်ဘဲ၊ AC
+      ကို code နဲ့ ကိုက်အောင် ပြင်သွားတာပါ။ အားလုံး pass ဖြစ်တယ် ဆိုတာလည်း ဒါကြောင့်ပါ။ spec ကို ပြောင်းမလား ဆိုတာ
+      ဆိုင်ပိုင်ရှင် မြမြ နဲ့ ကိုယ် ဆုံးဖြတ်ရမယ့် business ကိစ္စပါ။ agent က အဲဒီ ကိစ္စကို သူ့ဘာသာ ပြောင်းသွားလို့၊
+      ဒါက ဒီနေ့ တွေ့ချက်တွေထဲမှာ အလေးဆုံးပါ။ [[mark:open-check3]] checklist ကို ပြန်ဖွင့်ပါမယ်။ [[mark:type-f2]]
+      ဒါကို ဒုတိယ တွေ့ချက် အဖြစ် ရေးထားပါမယ်။ spec ကို မူလ အတိုင်း ပြန်ထားပြီး၊ code ကိုသာ AC နဲ့ ကိုက်အောင်
+      ပြင်ခိုင်းရမှာပါ။
+    sources:
+      - {
+          title: "Google Engineering Practices: What to look for in a code review (a human must ensure that tests are valid)",
+          url: "https://google.github.io/eng-practices/review/reviewer/looking-for.html",
+        }
+      - {
+          title: "Claude Code docs: Best practices (review the work against your spec)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The developer's changing role (the 80 % problem: output that looks right)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-summary3,
+          type: workspace.openFile,
+          at: { mark: open-summary3 },
+          path: tasks/02-summary.md,
+        }
+      - {
+          id: sel-spec-file,
+          type: editor.select,
+          at: { mark: sel-spec-file },
+          target:
+            { file: tasks/02-summary.md, text: "- docs/spec.md — AC-3 ကို ပြင်တယ်", occurrence: 1 },
+        }
+      - {
+          id: sel-note,
+          type: editor.select,
+          at: { mark: sel-note },
+          target:
+            {
+              file: tasks/02-summary.md,
+              text: "- AC-3 — ဆိုင်ပိတ်ချိန် အော်ဒါကို ငြင်းမယ့်အစား သတိပေးစာ ပြပြီး လက်ခံအောင် ပြင်ထားတယ်။",
+              occurrence: 1,
+            },
+        }
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - {
+          id: sel-ac3,
+          type: editor.select,
+          at: { mark: sel-ac3 },
+          target:
+            {
+              file: docs/spec.md,
+              text: "AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ\n     When မှာမယ် ကို နှိပ်တယ်\n     Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: open-check3,
+          type: workspace.openFile,
+          at: { mark: open-check3 },
+          path: docs/review-checklist.md,
+        }
+      - id: type-f2
+        type: editor.type
+        at: { mark: type-f2 }
+        target: { file: docs/review-checklist.md, after: "ရှင်းမထားဘူး။\n", occurrence: 1 }
+        text: "- ❌ AC-3 ကို ပြည့်အောင် မလုပ်ဘဲ spec.md ကို ပြင်သွားတယ်။ spec က ကိုယ်တို့ ဆုံးဖြတ်ရတာ။\n"
+        cadence: line-by-line
+
+  - id: verdict
+    narration: >
+      [[mark:open-agents2]] AGENTS.md ကို နောက်တစ်ခါ ပြန်ကြည့်ရအောင်။ [[mark:sel-summarise]] ဒီ rule က အလုပ်
+      ပြီးတိုင်း ကိုယ့်ဆီ ပြန်ရောက်လာမယ့် အစီရင်ခံစာမှာ မလုပ်ခဲ့တာတွေပါ ပါအောင် သတ်မှတ်ထားပါတယ်။ ဒါပေမဲ့ summary
+      မှာ အဲဒီ စာရင်း မပါပါဘူး။ မလုပ်ခဲ့တာ တကယ် မရှိလို့လား၊ မပြောခဲ့လို့လား ဆိုတာ ကိုယ် မသိနိုင်ပါဘူး။
+      [[mark:open-check4]] ဒီ အချက်ကိုလည်း မှတ်ထားရအောင်။ [[mark:type-f3]] တတိယ တွေ့ချက် အဖြစ် ရေးပြီး၊ အောက်မှာ
+      ဆုံးဖြတ်ချက်ကိုလည်း ထည့်ပါမယ်။ [[mark:sel-decision]] ဆုံးဖြတ်ချက်က ဒီ ပြောင်းလဲမှုကို project ထဲ မထည့်သေးဘဲ
+      agent ဆီ ပြန်ပို့တာပါ။ ပြင်ပြီး ပြန်လာရင် ပြီးခဲ့တဲ့ lesson ရဲ့ test plan နဲ့ ထပ်စစ်ပါမယ်။ [[mark:fresh]]
+      ပြန်ပို့တဲ့အခါ ဘာ ပြောင်းခဲ့လဲ ဆိုတာကို code မဖတ်တဲ့သူ နားလည်တဲ့ စကားနဲ့ ရှင်းပြခိုင်းပြီး၊ မလုပ်ခဲ့တာ
+      စာရင်းကိုလည်း တောင်းပါ။ နောက်ထပ် အကူအညီ တစ်ခုက agent နဲ့ အလုပ် အသစ် စတဲ့ session တစ်ခု ဒါမှမဟုတ် code
+      ဖတ်တတ်တဲ့ လူ တစ်ယောက်ကို spec နဲ့ တိုက်စစ်ခိုင်းတာပါ။ နှစ်မျိုးလုံးဆီမှာ ဒီ code ကို ဘာကြောင့် ဒီလို
+      ရေးခဲ့လဲ ဆိုတဲ့ အရင် စကားတွေ မရှိလို့၊ ရလဒ်ကိုပဲ spec နဲ့ ယှဉ်ပြီး စစ်ပါတယ်။ [[mark:nobody]] ဒါပေမဲ့
+      နောက်ဆုံး ဆုံးဖြတ်တာက ကိုယ်ပါ။ ဘယ်သူမှ ရှင်းမပြနိုင်တဲ့ ပြောင်းလဲမှုကို merge မလုပ်ပါနဲ့။ ပျက်တဲ့နေ့မှာ
+      ပြင်ပေးနိုင်မယ့်သူ မရှိလို့ပါ။
+    sources:
+      - {
+          title: "Claude Code docs: Best practices (a second session is the easiest independent reviewer; a fresh reviewer is not swayed by the reasoning that produced the code)",
+          url: "https://code.claude.com/docs/en/best-practices",
+        }
+      - {
+          title: "Google Engineering Practices: What to look for in a code review (if you can't understand the code, others won't either)",
+          url: "https://google.github.io/eng-practices/review/reviewer/looking-for.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (code nobody understands becomes a debugging cost); The new SDLC (AI as a first-pass reviewer, human judgment still needed)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-agents2, type: workspace.openFile, at: { mark: open-agents2 }, path: AGENTS.md }
+      - {
+          id: sel-summarise,
+          type: editor.select,
+          at: { mark: sel-summarise },
+          target:
+            {
+              file: AGENTS.md,
+              text: "- Summarise what you changed and what you did not do.",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: open-check4,
+          type: workspace.openFile,
+          at: { mark: open-check4 },
+          path: docs/review-checklist.md,
+        }
+      - id: type-f3
+        type: editor.type
+        at: { mark: type-f3 }
+        target: { file: docs/review-checklist.md, after: "spec က ကိုယ်တို့ ဆုံးဖြတ်ရတာ။\n", occurrence: 1 }
+        text: "- ❌ မလုပ်ခဲ့တာ စာရင်း မပါဘူး။\nDecision — merge မလုပ်ဘူး။ ❌ တွေ ပြင်ဖို့ ပြန်ပို့မယ်၊ ပြီးရင် test plan ကို ပြန် run မယ်။\n"
+        cadence: line-by-line
+      - {
+          id: sel-decision,
+          type: editor.select,
+          at: { mark: sel-decision },
+          target:
+            { file: docs/review-checklist.md, text: "Decision — merge မလုပ်ဘူး။", occurrence: 1 },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ summary ထဲမှာ ကျပ် ပမာဏကို သပ်သပ်ရပ်ရပ် ပြဖို့ ဆိုပြီး kyat format
+      ဆိုတဲ့ package အသစ် တစ်ခု ထည့်ထားတယ် လို့ ပါပါတယ်။ package ဆိုတာ ကိုယ် မရေးဘဲ ယူသုံးတဲ့ တခြားသူ့ code ပါ။ AC
+      တွေ pass ဖြစ်နေလို့ ဒီအတိုင်း ထားမလား၊ တကယ် လိုလား၊ တကယ် ရှိလား ဆိုတာ အရင် မေးမလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ အရင် မေးတာပါ။ ဘာကြောင့်လဲဆိုတော့ တကယ် လိုလား ဆိုတဲ့
+      မေးခွန်းရဲ့ အဖြေက မလိုဘူး ဖြစ်နေလို့ပါ။ app က အခုလည်း စုစုပေါင်းကို ကော်မာ ပါတဲ့ ၃၀၀၀ ကျပ် လို့
+      ပြနေပြီးသားပါ။ browser ထဲမှာ ဂဏန်းကို ဒီလို ပြပေးတဲ့ လုပ်ဆောင်ချက် ပါပြီးသား ဖြစ်လို့ပါ။ [[mark:quiz-real]]
+      တကယ် ရှိလား ဆိုတဲ့ မေးခွန်းကလည်း အရေးကြီးပါတယ်။ AI model တွေက တကယ် မရှိတဲ့ package နာမည်တွေကို ယုံကြည်စရာ
+      ကောင်းကောင်း ထုတ်ပေးတတ်ပါတယ်။ အဲဒီ နာမည်တွေနဲ့ အန္တရာယ် ရှိတဲ့ package တွေကို တမင် တင်ထားတဲ့ လူတွေလည်း
+      ရှိနိုင်ပါတယ်။ ဒီလို လုပ်တာကို slopsquatting လို့ ခေါ်ပါတယ်။ ဒီ နာမည်ကလည်း တကယ် ရှိမှာ မသေချာပါဘူး။
+      [[mark:quiz-check]] ဒါကြောင့် package တစ်ခု ထည့်ခါနီးရင် သူ့ စာမျက်နှာကို ဖွင့်ပြီး တကယ် ရှိလား၊
+      ထိန်းနေတဲ့သူ ရှိလား၊ မကြာသေးခင်က update လုပ်ထားလား အရင် ကြည့်ပါ။
+    sources:
+      - {
+          title: "MDN: Intl.NumberFormat (language-sensitive number formatting, built into browsers)",
+          url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat",
+        }
+      - {
+          title: "OWASP Top 10 for LLM Applications 2025: LLM09 Misinformation (non-existent libraries; attackers publish packages under hallucinated names)",
+          url: "https://genai.owasp.org/llmrisk/llm092025-misinformation/",
+        }
+      - {
+          title: "Socket: Slopsquatting (registering package names hallucinated by an LLM)",
+          url: "https://socket.dev/blog/slopsquatting-how-ai-hallucinations-are-fueling-a-new-class-of-supply-chain-attacks",
+        }
+      - {
+          title: "Spracklen et al.: We Have a Package for You! Package hallucinations by code-generating LLMs (USENIX Security 2025)",
+          url: "https://arxiv.org/abs/2406.10279",
+        }
+      - {
+          title: "OpenSSF: Concise Guide for Evaluating Open Source Software (can it be avoided; is it maintained; is it the authentic package)",
+          url: "https://best.openssf.org/Concise-Guide-for-Evaluating-Open-Source-Software",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-quiz-real,
+          type: whiteboard.apply,
+          at: { mark: quiz-real },
+          upsertIds: [z-a2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-check,
+          type: whiteboard.apply,
+          at: { mark: quiz-check },
+          upsertIds: [z-a3],
+          drawMs: 1000,
+        }
+
+  - id: package
+    narration: >
+      [[mark:close-quiz]] ဒီ မေးခွန်းက checklist ထဲမှာ မပါသေးပါဘူး။ [[mark:type-q-pkg]] ဒါကြောင့် ထိခဲ့တဲ့ file
+      တွေကို မေးတဲ့ စာကြောင်းရဲ့ အောက်မှာ package အတွက် မေးခွန်း တစ်ကြောင်း ထပ်ဖြည့်ပါမယ်။ နောက် ပြောင်းလဲမှု
+      တိုင်းမှာ မေ့မသွားတော့ပါဘူး။ [[mark:type-f-pkg]] review မှာတော့ ဒီ package ကို ဖယ်ခိုင်းမယ့် တွေ့ချက်ကို
+      ဆုံးဖြတ်ချက်ရဲ့ အပေါ်မှာ ထည့်ပါမယ်။ ကျပ် ပမာဏကို ပြတဲ့ ပုံစံ ပြင်တာက ဒီ task မှာ မခိုင်းထားတဲ့ အလုပ်လည်း
+      ဖြစ်ပါတယ်။ AGENTS.md ကလည်း package အသစ် မထည့်ခင် ကိုယ့်ကို အရင် မေးခိုင်းထားပေမဲ့၊ agent က မမေးဘဲ
+      ထည့်သွားတာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start (check that imports are real packages)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "OpenSSF: Concise Guide for Evaluating Open Source Software",
+          url: "https://best.openssf.org/Concise-Guide-for-Evaluating-Open-Source-Software",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - id: type-q-pkg
+        type: editor.type
+        at: { mark: type-q-pkg }
+        target: { file: docs/review-checklist.md, after: "ကို ပြင်ခဲ့လား။\n", occurrence: 1 }
+        text: "- package အသစ် ပါလား — တကယ် လိုလား၊ တကယ် ရှိလား၊ ထိန်းနေသူ ရှိလား။\n"
+        cadence: line-by-line
+      - id: type-f-pkg
+        type: editor.type
+        at: { mark: type-f-pkg }
+        target:
+          { file: docs/review-checklist.md, after: "- ❌ မလုပ်ခဲ့တာ စာရင်း မပါဘူး။\n", occurrence: 1 }
+        text: "- ❌ kyat-format — မလိုဘူး၊ app က ကျပ်ကို ပြပြီးသား။ တကယ် ရှိမရှိလည်း မသေချာဘူး။\n"
+        cadence: line-by-line
+      - {
+          id: expect-pkg,
+          type: expect.file,
+          at: { afterAction: type-f-pkg },
+          path: docs/review-checklist.md,
+          contains: "- ❌ kyat-format — မလိုဘူး",
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:r-q]] ဒါဆို ပြန်ချုပ်ရရင်၊ code ကို တစ်ကြောင်းချင်း မဖတ်နိုင်ရင်တောင် review လုပ်လို့ ရပါတယ်။
+      ခိုင်းတာ၊ အရွယ်၊ ထိခဲ့တဲ့ file နဲ့ package အသစ်တွေကို checklist နဲ့ အရင် စစ်ပါ။ [[mark:r-spec]] agent က spec
+      ဒါမှမဟုတ် test ကို ပြင်သွားတာ တွေ့ရင် ရပ်ပါ။ ကိုယ့် စံကို ရွှေ့လိုက်တာ ဖြစ်လို့ပါ။ [[mark:r-decision]]
+      ရှင်းပြချက်နဲ့ မလုပ်ခဲ့တာ စာရင်းကို တောင်းပြီး၊ ဘယ်သူမှ ရှင်းမပြနိုင်တာကို merge မလုပ်ပါနဲ့။ နောက် lesson
+      မှာတော့ တစ်ခုခု မှားနေတဲ့အခါ အကြောင်းရင်းကို ဘယ်လို ရှာမလဲ၊ debug လုပ်တာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Where to start",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion (verification and judgment)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: r-q,
+          type: editor.select,
+          at: { mark: r-q },
+          target: { file: docs/review-checklist.md, text: "## Questions", occurrence: 1 },
+        }
+      - {
+          id: r-spec,
+          type: editor.select,
+          at: { mark: r-spec },
+          target:
+            {
+              file: docs/review-checklist.md,
+              text: "- ❌ AC-3 ကို ပြည့်အောင် မလုပ်ဘဲ spec.md ကို ပြင်သွားတယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: r-decision,
+          type: editor.select,
+          at: { mark: r-decision },
+          target:
+            {
+              file: docs/review-checklist.md,
+              text: "Decision — merge မလုပ်ဘူး။ ❌ တွေ ပြင်ဖို့ ပြန်ပို့မယ်၊ ပြီးရင် test plan ကို ပြန် run မယ်။",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
