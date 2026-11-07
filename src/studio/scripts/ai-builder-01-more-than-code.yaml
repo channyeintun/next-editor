@@ -1,0 +1,1676 @@
+# AI Builder, lesson 01: code is one part of the job (Burmese, the course pilot, preview kind).
+#
+# Start state (ws/): the tea-shop pre-order app exactly as base-app/ ("the first version an agent
+# built", prepared for the lesson; never edited, never typed into) and notes.md with only "# Notes".
+# The runtime starts at the first mark; three boards (welcome, the story, the steps of building
+# software) carry ~2,600 narration characters before runtime.waitForReady.
+#
+# Boards: (W) who the course is for, ကိုယ် (builder) + the agent; (S) the shop, the four people and
+# the app; (T) the steps of building software, build small and violet, reopened later for intent and
+# verification; (M) the course map: the 8-box strip (m-b*, m-n*, reusable by later lessons as the
+# course strip) and the module names (m-t*); (B) the documents the course will write; (Z) the quiz.
+# Preview: အောင်အောင်'s order (2 milk teas, 08:30) → #101, 3,000 ကျပ်; then quantity 0 → #102,
+# 0 ကျပ် (a teaser, not solved). notes.md gets the doubt and the three key lines; the recap selects them.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-01-more-than-code.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-01-more-than-code
+  title: "AI Builder 01: Code ရေးတာက အလုပ်ရဲ့ တစ်စိတ်တစ်ပိုင်းပဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: notes.md
+    sidebarStartsCollapsed: true
+    files:
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>ရွှေလက်ဖက်ရည်ဆိုင် · ကြိုမှာ</title>
+            <link rel="stylesheet" href="/src/style.css" />
+          </head>
+          <body>
+            <main class="app">
+              <header class="top">
+                <p class="shop">ရွှေလက်ဖက်ရည်ဆိုင်</p>
+                <h1>ကြိုမှာပြီး လာယူပါ</h1>
+              </header>
+
+              <form id="order-form" class="card" novalidate>
+                <label>
+                  ဘာမှာမလဲ
+                  <select id="item" name="item" data-testid="item"></select>
+                </label>
+                <label>
+                  အရေအတွက်
+                  <input id="quantity" name="quantity" type="text" inputmode="numeric" data-testid="qty" />
+                </label>
+                <label>
+                  လာယူမယ့် အချိန်
+                  <input id="pickup" name="pickup" type="time" data-testid="pickup" />
+                </label>
+                <label>
+                  နာမည်
+                  <input id="name" name="name" type="text" autocomplete="name" data-testid="name" />
+                </label>
+                <label>
+                  ဖုန်း
+                  <input id="phone" name="phone" type="tel" autocomplete="tel" data-testid="phone" />
+                </label>
+                <button type="submit" data-testid="order">မှာမယ်</button>
+              </form>
+
+              <section id="result" class="card result" data-testid="result" hidden>
+                <p class="ok" data-testid="result-number"></p>
+                <p data-testid="result-line"></p>
+                <p class="total" data-testid="result-total"></p>
+                <p data-testid="result-pickup"></p>
+                <p class="hint">ငွေကို ကောင်တာမှာ ချေပါ</p>
+              </section>
+            </main>
+            <script type="module" src="/src/main.js"></script>
+          </body>
+        </html>
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "shwe-tea-preorder",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      src/main.js: |
+        // Shwe Tea House pre-order: the order form.
+        const MENU = [
+          { id: "laphet-yay", name: "လက်ဖက်ရည်", price: 1500 },
+          { id: "coffee", name: "ကော်ဖီ", price: 1800 },
+          { id: "lime-juice", name: "သံပုရာရည်", price: 1200 },
+          { id: "mohinga", name: "မုန့်ဟင်းခါး", price: 2500 },
+          { id: "palata", name: "ပလာတာ", price: 1200 },
+          { id: "e-kya-kwe", name: "အီကြာကွေး", price: 500 },
+        ];
+
+        let nextNumber = 101;
+
+        const form = document.querySelector("#order-form");
+        const itemSelect = document.querySelector("#item");
+        const result = document.querySelector("#result");
+
+        function formatKyat(amount) {
+          return `${amount.toLocaleString("en-US")} ကျပ်`;
+        }
+
+        for (const item of MENU) {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = `${item.name} · ${formatKyat(item.price)}`;
+          itemSelect.append(option);
+        }
+
+        function showOrder(order) {
+          const field = (id) => result.querySelector(`[data-testid="${id}"]`);
+          field("result-number").textContent = `အော်ဒါ #${order.number} ရပါပြီ`;
+          field("result-line").textContent = `${order.item.name} × ${order.quantity}`;
+          field("result-total").textContent = `စုစုပေါင်း ${formatKyat(order.total)}`;
+          field("result-pickup").textContent = `လာယူချိန် ${order.pickup || "-"}`;
+          result.hidden = false;
+        }
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const item = MENU.find((entry) => entry.id === data.get("item"));
+          const quantity = parseInt(data.get("quantity"), 10);
+          showOrder({
+            number: nextNumber++,
+            item,
+            quantity,
+            total: item.price * quantity,
+            pickup: data.get("pickup"),
+            name: data.get("name"),
+            phone: data.get("phone"),
+          });
+        });
+      src/style.css: |
+        :root {
+          color-scheme: light;
+          --ink: #1e1e1e;
+          --muted: #5f6368;
+          --line: #d7d4c8;
+          --accent: #b5651d;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          background: #f6f1e7;
+          color: var(--ink);
+          font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Myanmar Sangam MN", "Myanmar Text", sans-serif;
+        }
+
+        .app {
+          max-width: 420px;
+          margin: 0 auto;
+          padding: 16px;
+        }
+
+        .top .shop {
+          margin: 0;
+          color: var(--accent);
+          font-weight: 700;
+        }
+
+        .top h1 {
+          margin: 0 0 8px;
+          font-size: 20px;
+          line-height: 1.5;
+        }
+
+        .card {
+          background: #fff;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          padding: 12px;
+          margin-bottom: 10px;
+        }
+
+        label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 600;
+        }
+
+        input,
+        select {
+          display: block;
+          width: 100%;
+          margin-top: 2px;
+          padding: 6px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          font: inherit;
+          font-weight: 400;
+        }
+
+        button {
+          width: 100%;
+          padding: 8px;
+          border: 0;
+          border-radius: 8px;
+          background: var(--accent);
+          color: #fff;
+          font: inherit;
+          font-weight: 700;
+        }
+
+        .result p {
+          margin: 0 0 2px;
+        }
+
+        .result .ok {
+          font-weight: 700;
+          color: #2f7d32;
+        }
+
+        .result .total {
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .result .hint {
+          color: var(--muted);
+          font-size: 14px;
+        }
+  whiteboardAssets:
+    # Board W: who the course is for; ကိုယ် directs the agent (white = us, violet = the agent,
+    # orange = the builder's job, the point of this lesson).
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 320,
+        height: 50,
+        text: "AI Builder",
+        strokeColor: "#1e1e1e",
+        fontSize: 40,
+      }
+    - {
+        id: w-for,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 660,
+        height: 40,
+        text: "code မရေးဘဲ product ဆောက်ချင်သူတွေအတွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-me-box,
+        kind: rectangle,
+        x: 290,
+        y: 300,
+        width: 360,
+        height: 100,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: w-me,
+        kind: text,
+        x: 315,
+        y: 330,
+        width: 300,
+        height: 45,
+        text: "ကိုယ် · builder",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: w-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 660,
+        y: 330,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: w-agent-box,
+        kind: rectangle,
+        x: 730,
+        y: 300,
+        width: 340,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: w-agent,
+        kind: text,
+        x: 760,
+        y: 330,
+        width: 280,
+        height: 45,
+        text: "AI agent",
+        strokeColor: "#6741d9",
+        fontSize: 32,
+      }
+    - {
+        id: w-me-job,
+        kind: text,
+        x: 290,
+        y: 425,
+        width: 380,
+        height: 40,
+        text: "ဘာဆောက်မလဲ · မှန်ရဲ့လား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: w-agent-job,
+        kind: text,
+        x: 730,
+        y: 425,
+        width: 300,
+        height: 40,
+        text: "code ရေးပေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board S: the shop, the four people (white), the app (blue = the product), why (red), who builds (violet).
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 520,
+        height: 50,
+        text: "ရွှေလက်ဖက်ရည်ဆိုင် · ဗဟန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-p1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 360,
+        height: 40,
+        text: "မြမြ · ဆိုင်ပိုင်ရှင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-p2,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 360,
+        height: 40,
+        text: "လှလှ · ကောင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-p3,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 360,
+        height: 40,
+        text: "အောင်အောင် · member",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-p4,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 380,
+        height: 40,
+        text: "မောင်မောင် · ကျောင်းသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-app-box,
+        kind: rectangle,
+        x: 720,
+        y: 240,
+        width: 340,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-app,
+        kind: text,
+        x: 750,
+        y: 272,
+        width: 260,
+        height: 45,
+        text: "ကြိုမှာ app",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: s-why,
+        kind: text,
+        x: 720,
+        y: 360,
+        width: 370,
+        height: 40,
+        text: "မနက် တန်းရှည်လို့ ပြန်သွား",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: s-me,
+        kind: text,
+        x: 720,
+        y: 470,
+        width: 300,
+        height: 40,
+        text: "ကိုယ် + AI agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board T: the steps of building software. Before code and after code are the big boxes; build is
+    # small and violet (the part the agent now does fast). Reopened in `bottleneck` for the orange
+    # intent / verification labels.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 155,
+        width: 520,
+        height: 50,
+        text: "App တစ်ခု ဆောက်တဲ့ အဆင့်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-h-before,
+        kind: text,
+        x: 300,
+        y: 215,
+        width: 260,
+        height: 40,
+        text: "code မရေးခင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-box-before,
+        kind: rectangle,
+        x: 300,
+        y: 260,
+        width: 300,
+        height: 200,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-1,
+        kind: text,
+        x: 325,
+        y: 285,
+        width: 250,
+        height: 40,
+        text: "ပြဿနာ နားလည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-2,
+        kind: text,
+        x: 325,
+        y: 345,
+        width: 250,
+        height: 40,
+        text: "ဘာ ဆောက်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-3,
+        kind: text,
+        x: 325,
+        y: 405,
+        width: 250,
+        height: 40,
+        text: "design",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 605,
+        y: 340,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-box-build,
+        kind: rectangle,
+        x: 650,
+        y: 320,
+        width: 130,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-4,
+        kind: text,
+        x: 673,
+        y: 343,
+        width: 100,
+        height: 40,
+        text: "build",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: t-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 785,
+        y: 340,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-h-after,
+        kind: text,
+        x: 830,
+        y: 215,
+        width: 260,
+        height: 40,
+        text: "code ရပြီးနောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-box-after,
+        kind: rectangle,
+        x: 830,
+        y: 260,
+        width: 260,
+        height: 200,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-5,
+        kind: text,
+        x: 855,
+        y: 285,
+        width: 200,
+        height: 40,
+        text: "စစ်ဆေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-6,
+        kind: text,
+        x: 855,
+        y: 345,
+        width: 200,
+        height: 40,
+        text: "ship",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-7,
+        kind: text,
+        x: 855,
+        y: 405,
+        width: 200,
+        height: 40,
+        text: "ဆက် run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-agent1,
+        kind: text,
+        x: 673,
+        y: 270,
+        width: 100,
+        height: 40,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: t-agent2,
+        kind: text,
+        x: 650,
+        y: 415,
+        width: 170,
+        height: 40,
+        text: "မိနစ်ပိုင်း",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: t-intent,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 200,
+        height: 45,
+        text: "intent",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: t-intent2,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 300,
+        height: 40,
+        text: "ဘာမှန်လဲ ဆုံးဖြတ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-verify,
+        kind: text,
+        x: 830,
+        y: 490,
+        width: 260,
+        height: 45,
+        text: "verification",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: t-verify2,
+        kind: text,
+        x: 830,
+        y: 540,
+        width: 250,
+        height: 40,
+        text: "မှန်မမှန် စစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board M: the course map. The strip (m-b1..m-b8 boxes, m-n1..m-n8 numbers) is the reusable
+    # course strip: later lessons copy these 16 assets and colour their own module orange. The module
+    # names (m-t1..m-t8) are L01's full map. Module 1 is orange here (the current module).
+    - { id: m-b1, kind: rectangle, x: 300, y: 160, width: 72, height: 44, strokeColor: "#f08c00" }
+    - {
+        id: m-n1,
+        kind: text,
+        x: 328,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "1",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - { id: m-b2, kind: rectangle, x: 388, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n2,
+        kind: text,
+        x: 416,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b3, kind: rectangle, x: 476, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n3,
+        kind: text,
+        x: 504,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b4, kind: rectangle, x: 564, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n4,
+        kind: text,
+        x: 592,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b5, kind: rectangle, x: 652, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n5,
+        kind: text,
+        x: 680,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b6, kind: rectangle, x: 740, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n6,
+        kind: text,
+        x: 768,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "6",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b7, kind: rectangle, x: 828, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n7,
+        kind: text,
+        x: 856,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "7",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-b8, kind: rectangle, x: 916, y: 160, width: 72, height: 44, strokeColor: "#1e1e1e" }
+    - {
+        id: m-n8,
+        kind: text,
+        x: 944,
+        y: 165,
+        width: 30,
+        height: 36,
+        text: "8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 380,
+        height: 40,
+        text: "1 · AI နဲ့ အလုပ်သစ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: m-t2,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 380,
+        height: 40,
+        text: "2 · ပြဿနာကို နားလည်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t3,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 380,
+        height: 40,
+        text: "3 · ဆက်သွယ် ပြောဆို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t4,
+        kind: text,
+        x: 300,
+        y: 445,
+        width: 380,
+        height: 40,
+        text: "4 · engineer လို တွေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t5,
+        kind: text,
+        x: 700,
+        y: 250,
+        width: 380,
+        height: 40,
+        text: "5 · စစ်ဆေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t6,
+        kind: text,
+        x: 700,
+        y: 315,
+        width: 380,
+        height: 40,
+        text: "6 · ဘေးကင်းကင်း ship",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t7,
+        kind: text,
+        x: 700,
+        y: 380,
+        width: 380,
+        height: 40,
+        text: "7 · factory ကို ဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-t8,
+        kind: text,
+        x: 700,
+        y: 445,
+        width: 380,
+        height: 40,
+        text: "8 · product နဲ့ ကြီးထွား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: the documents the course writes (blue = the product), who reads them (violet = the
+    # agent builds from them, green = people check against them).
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 500,
+        height: 50,
+        text: "ကိုယ် ရေးမယ့် document တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-box,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 490,
+        height: 420,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-1,
+        kind: text,
+        x: 295,
+        y: 245,
+        width: 420,
+        height: 40,
+        text: "docs/problem.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-2,
+        kind: text,
+        x: 295,
+        y: 290,
+        width: 420,
+        height: 40,
+        text: "docs/requirements.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-3,
+        kind: text,
+        x: 295,
+        y: 355,
+        width: 420,
+        height: 40,
+        text: "docs/spec.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-4,
+        kind: text,
+        x: 295,
+        y: 400,
+        width: 420,
+        height: 40,
+        text: "AGENTS.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-5,
+        kind: text,
+        x: 295,
+        y: 445,
+        width: 420,
+        height: 40,
+        text: "tasks/",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-6,
+        kind: text,
+        x: 295,
+        y: 510,
+        width: 420,
+        height: 40,
+        text: "docs/test-plan.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-7,
+        kind: text,
+        x: 295,
+        y: 555,
+        width: 440,
+        height: 40,
+        text: "docs/release-checklist.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-8,
+        kind: text,
+        x: 295,
+        y: 600,
+        width: 420,
+        height: 40,
+        text: "docs/runbook.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: b-agent,
+        kind: text,
+        x: 800,
+        y: 330,
+        width: 290,
+        height: 40,
+        text: "agent ဖတ်ပြီး ဆောက်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: b-people,
+        kind: text,
+        x: 800,
+        y: 430,
+        width: 290,
+        height: 40,
+        text: "လူတွေ ဖတ်ပြီး စစ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 700,
+        height: 45,
+        text: "agent က app ကို မိနစ်ပိုင်းနဲ့ ထုတ်ပေးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 700,
+        height: 45,
+        text: "builder ရဲ့ အချိန်ကို ဘာက ယူနေဦးမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 390,
+        width: 520,
+        height: 50,
+        text: "ဘာမှန်လဲ သိအောင် လုပ်တာ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a2,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 420,
+        height: 50,
+        text: "+ မှန်မမှန် စစ်တာ",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-note,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 520,
+        height: 40,
+        text: "ဆိုင်ရဲ့ စည်းကမ်း · သုည ခွက် အော်ဒါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6101
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+scenes:
+  - id: welcome
+    chapter: Course ကို ကြိုဆိုပါတယ်
+    narration: >
+      [[mark:start]] မင်္ဂလာပါ ခင်ဗျာ။ AI Builder course ကို ကြိုဆိုပါတယ်။ [[mark:w-for]] ဒီ course က AI
+      နဲ့ တကယ် သုံးလို့ရတဲ့ product တစ်ခု တည်ဆောက်ချင်ပေမယ့်၊ programming မလုပ်ဖူးသေးတဲ့ သူတွေအတွက် ဖြစ်ပါတယ်။
+      ဆိုင်ပိုင်ရှင် ဖြစ်ဖြစ်၊ designer ဖြစ်ဖြစ်၊ ကျောင်းသား ဖြစ်ဖြစ်၊ code ရေးတတ်ဖို့ မလိုပါဘူး။ code စရေးနေတဲ့
+      developer အသစ်တွေအတွက်လည်း code အပြင်က engineering အပိုင်းကို ဖြည့်ပေးပါမယ်။
+      [[mark:w-team]] ဒီ course မှာ ကိုယ်တို့က code မရေးဘဲ AI agent နဲ့ app ကို တည်ဆောက်ပေးမယ့်သူ၊ builder ပါ။
+      AI agent ဆိုတာ ပန်းတိုင် တစ်ခု ပေးလိုက်ရင်၊ file တွေ ဖတ်၊ code ပြင်၊ စမ်း run ရင်း အလုပ်ပြီးတဲ့အထိ
+      ဆက်လုပ်သွားတဲ့ AI tool ပါ။ [[mark:w-jobs]] code ကို agent က ရေးပေးပေမယ့်၊ ဘာကို ဆောက်မလဲ၊ ဆောက်ပြီးတာ
+      မှန်ရဲ့လား ဆိုတာကတော့ ကိုယ်က ဆုံးဖြတ်ရမှာပါ။ ဒီ course တစ်ခုလုံးက အဲဒီ ကိုယ့်အလုပ်အကြောင်းပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Introduction",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-w,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -450 },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: start-runtime,
+          type: runtime.start,
+          at: { mark: start },
+          timeoutMs: 60000,
+          retry: { maxAttempts: 2, delayMs: 500 },
+        }
+      - {
+          id: draw-w-for,
+          type: whiteboard.apply,
+          at: { mark: w-for },
+          upsertIds: [w-for],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-team,
+          type: whiteboard.apply,
+          at: { mark: w-team },
+          upsertIds: [w-me-box, w-me, w-arrow, w-agent-box, w-agent],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-w-jobs,
+          type: whiteboard.apply,
+          at: { mark: w-jobs },
+          upsertIds: [w-agent-job, w-me-job],
+          drawMs: 1400,
+        }
+
+  - id: story
+    narration: >
+      [[mark:s-shop]] course တစ်လျှောက်လုံး ရန်ကုန်၊ ဗဟန်းက ရွှေလက်ဖက်ရည်ဆိုင်ရဲ့ ပြဿနာ တစ်ခုကို ဖြေရှင်းသွားမှာပါ။
+      [[mark:s-owner]] ဆိုင်ပိုင်ရှင်က မြမြ ပါ။ သူက programmer မဟုတ်ပါဘူး။ [[mark:s-app]] မနက်ပိုင်းမှာ တန်းရှည်လွန်းလို့၊
+      အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတာကို မြမြ စိတ်ပူနေပါတယ်။ ဒါကြောင့် customer တွေ ဖုန်းကနေ
+      ကြိုမှာထားပြီး လာယူလို့ရမယ့် ကြိုမှာ app တစ်ခု လိုချင်ပါတယ်။ [[mark:s-people]] ကောင်တာက လှလှ က
+      ဝင်လာတဲ့ အော်ဒါတွေကို လက်ခံပြီး၊ customer ရောက်လာချိန်မှာ အသင့် ဖြစ်နေအောင် လုပ်ပေးမှာပါ။ member အောင်အောင်
+      ကတော့ အလုပ်မသွားခင် မနက်တိုင်း လက်ဖက်ရည် လာဝယ်ပြီး၊ တန်းရှည်ရင် မဝယ်ဘဲ ပြန်သွားတတ်တဲ့သူပါ။ [[mark:s-maung]] ကျောင်းသား မောင်မောင် က customer အသစ်ပါ။ ဈေးပေါတဲ့ Android
+      ဖုန်း၊ နှေးတဲ့ mobile data နဲ့ မြန်မာ keyboard ကို သုံးပါတယ်။ [[mark:s-me]] app ကိုတော့ ကိုယ်က
+      AI agent နဲ့ ဆောက်ပေးမှာပါ။ ဒီ လူ လေးယောက်ကို course တစ်လျှောက်လုံး ခဏခဏ ပြန်တွေ့ရမှာ ဖြစ်လို့၊ ကိုယ်
+      ဆုံးဖြတ်တဲ့ အရာတိုင်းက သူတို့ရဲ့ မနက်ခင်းကို ဘယ်လို ပြောင်းစေမလဲ ဆိုတာ အမြဲ မေးကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Introduction",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-s-shop,
+          type: whiteboard.apply,
+          at: { mark: s-shop },
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-owner,
+          type: whiteboard.apply,
+          at: { mark: s-owner },
+          upsertIds: [s-p1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-app,
+          type: whiteboard.apply,
+          at: { mark: s-app },
+          upsertIds: [s-why, s-app-box, s-app],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-people,
+          type: whiteboard.apply,
+          at: { mark: s-people },
+          upsertIds: [s-p2, s-p3],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-s-maung,
+          type: whiteboard.apply,
+          at: { mark: s-maung },
+          upsertIds: [s-p4],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-me,
+          type: whiteboard.apply,
+          at: { mark: s-me },
+          upsertIds: [s-me],
+          drawMs: 900,
+        }
+
+  - id: steps
+    chapter: Code က အဆင့် တစ်ဆင့်ပဲ
+    narration: >
+      [[mark:t-title]] ဒါဆို app တစ်ခု ဆောက်တယ် ဆိုတာ code ရေးတာလား။ တကယ်တော့ code ရေးတာက အဆင့်တွေ
+      အများကြီးထဲက တစ်ဆင့်ပဲ ဖြစ်ပါတယ်။ [[mark:t-before]] code မရေးခင်မှာ ပြဿနာကို အရင် နားလည်အောင် လုပ်ရပါတယ်။
+      ပြီးတော့ ဘာဆောက်မလဲ၊ ဘာ မဆောက်ဘူးလဲ ဆုံးဖြတ်ပြီး၊ အပိုင်းတွေ ဘယ်လို ချိတ်မလဲ ဆိုတဲ့ design ကို
+      ဆွဲရပါတယ်။ အဲဒီ ဆုံးဖြတ်ချက်တွေကို လူတွေအတွက်ရော agent အတွက်ပါ ရှင်းရှင်းလင်းလင်း ရေးပြီး ပြောပြရပါတယ်။ [[mark:t-build]] အဲဒီနောက်မှ code ရေးပြီး တည်ဆောက်တဲ့ build အဆင့်ကို ရောက်ပါတယ်။
+      [[mark:t-after]] build ပြီးရုံနဲ့ အလုပ် မပြီးသေးပါဘူး။ ထွက်လာတာ မှန်မမှန် စစ်ရပါတယ်။ ပြီးရင် customer တွေ
+      တကယ် သုံးလို့ရအောင် ထုတ်ပေးရပါတယ်၊ ဒါကို ship လုပ်တယ်လို့ ခေါ်ပါတယ်။ ship လုပ်ပြီးနောက်လည်း app က ဆက်
+      အလုပ်လုပ်နေအောင် run ထားပြီး စောင့်ကြည့်ရပါတယ်။
+      [[mark:t-se]] ဒီ အလုပ် တစ်ခုလုံးကို software engineering လို့ ခေါ်ပါတယ်။ ဆိုလိုတာက ပြဿနာကို
+      နားလည်တာကနေ app က user လက်ထဲ ရောက်ပြီး ဆက် run နေတဲ့အထိ software ကို တည်ဆောက်တဲ့ အလုပ်ပါ။ software
+      engineer တစ်ယောက် ဘာတွေ သိထားရမလဲ ဆိုတာကို ပညာရှင်တွေ စုရေးထားတဲ့ စာတမ်း တစ်ခုမှာ နယ်ပယ် ၁၈ ခု
+      ပါပြီး၊ code ရေးတာက အဲဒီထဲက နယ်ပယ် တစ်ခုပဲ ဖြစ်ပါတယ်။ ကျန်တဲ့ နယ်ပယ်တွေက requirement၊ design၊ test၊ security၊ ကုန်ကျစရိတ် စတာတွေပါ။
+    sources:
+      - {
+          title: "Software Engineering Body of Knowledge (SWEBOK), IEEE Computer Society",
+          url: "https://www.computer.org/education/bodies-of-knowledge/software-engineering",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Introduction",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-t-title,
+          type: whiteboard.apply,
+          at: { mark: t-title },
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-t-before,
+          type: whiteboard.apply,
+          at: { mark: t-before },
+          upsertIds: [t-h-before, t-box-before, t-1, t-2, t-3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-t-build,
+          type: whiteboard.apply,
+          at: { mark: t-build },
+          upsertIds: [t-a1, t-box-build, t-4],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-t-after,
+          type: whiteboard.apply,
+          at: { mark: t-after },
+          upsertIds: [t-a2, t-h-after, t-box-after, t-5, t-6, t-7],
+          drawMs: 2600,
+        }
+
+  - id: app
+    chapter: App ကို စမ်းကြည့်ရအောင်
+    narration: >
+      [[mark:ready]] ကဲ၊ app ကို ကြည့်ရအောင်။ ညာဘက်မှာ ကြိုမှာ app ကို မြင်ရပါပြီ။ ဒီ app က agent တစ်ခု
+      ထုတ်ပေးတဲ့ ပထမ version လို့ သဘောထားပြီး lesson အတွက် ပြင်ဆင်ထားတာပါ။ [[mark:menu]] form မှာ ဘာမှာမလဲ၊
+      ဘယ်နှခု မှာမလဲ၊ ဘယ်အချိန် လာယူမလဲ ရွေးပြီး၊ နာမည်နဲ့ ဖုန်းနံပါတ် ထည့်ရပါတယ်။ အောင်အောင် မနက်တိုင်း
+      မှာနေကျ အော်ဒါအတိုင်း မှာကြည့်ရအောင်။ လက်ဖက်ရည် က ရွေးပြီးသား ဖြစ်နေပါတယ်။ [[mark:qty]] အရေအတွက်မှာ နှစ်ခွက်လို့ ထည့်ပါမယ်။
+      [[mark:time]] လာယူမယ့် အချိန်ကို မနက် ရှစ်နာရီခွဲ လို့ ရွေးပါမယ်။ [[mark:name]] နာမည်နေရာမှာ အောင်အောင် လို့ ရိုက်ပါမယ်။
+      [[mark:phone]] ဖုန်းနံပါတ်ကတော့ lesson အတွက် နမူနာ နံပါတ် တစ်ခု ထည့်ပါမယ်။ [[mark:order]] ပြီးရင် မှာမယ် ကို
+      နှိပ်လိုက်ပါမယ်။ [[mark:card]] အော်ဒါနံပါတ် ၁၀၁ ရပါပြီ။ လက်ဖက်ရည် နှစ်ခွက်၊ စုစုပေါင်း ၃၀၀၀ ကျပ်၊ လာယူချိန်
+      ရှစ်နာရီခွဲ ဆိုပြီး မှန်မှန် ပြနေပါတယ်။ ဒီလို app သေးသေးလေး မျိုးကို agent တစ်ခုက မိနစ်ပိုင်းအတွင်း
+      ထုတ်ပေးနိုင်တာ တကယ် အသုံးဝင်ပါတယ်။ ဒါပေမဲ့ ဒီ app ပြီးပြီလို့ ပြောလို့ ရပြီလား။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: close-board-t,
+          type: whiteboard.apply,
+          at: { scene: start, offsetMs: -400 },
+          open: false,
+        }
+      - {
+          id: wait-ready,
+          type: runtime.waitForReady,
+          at: { mark: ready },
+          timeoutMs: 30000,
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: open-preview,
+          type: preview.open,
+          at: { afterAction: wait-ready },
+          timeoutMs: 10000,
+          mode: docked,
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: expect-menu,
+          type: expect.preview,
+          at: { mark: menu },
+          timeoutMs: 5000,
+          target: { by: testId, value: item },
+          textContains: "လက်ဖက်ရည်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: in-qty,
+          type: preview.input,
+          at: { mark: qty },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "2",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-time,
+          type: preview.input,
+          at: { mark: time },
+          timeoutMs: 5000,
+          target: { by: testId, value: pickup },
+          value: "08:30",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-name,
+          type: preview.input,
+          at: { mark: name },
+          timeoutMs: 5000,
+          target: { by: testId, value: name },
+          value: "အောင်အောင်",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: in-phone,
+          type: preview.input,
+          at: { mark: phone },
+          timeoutMs: 5000,
+          target: { by: testId, value: phone },
+          value: "09 000 111 222",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-order,
+          type: preview.click,
+          at: { mark: order },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-number,
+          type: expect.preview,
+          at: { mark: card },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#101",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-line,
+          type: expect.preview,
+          at: { afterAction: expect-number },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-line },
+          textContains: "လက်ဖက်ရည် × 2",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-total,
+          type: expect.preview,
+          at: { afterAction: expect-line },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "3,000 ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-pickup,
+          type: expect.preview,
+          at: { afterAction: expect-total },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-pickup },
+          textContains: "08:30",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+
+  - id: doubt
+    narration: >
+      ပုံမှန် အော်ဒါ တစ်ခု မှန်တာနဲ့ app ပြီးပြီလို့ ပြောလို့ မရသေးပါဘူး။ တကယ့် customer တွေက
+      ကိုယ် မမျှော်လင့်တာတွေကို ရိုက်ထည့်တတ်လို့ပါ။ ဥပမာ တစ်ခု စမ်းကြည့်ရအောင်။ [[mark:zero]] အရေအတွက်ကို
+      သုည လို့ ပြောင်းလိုက်ပါမယ်။ [[mark:order-zero]] ပြီးတော့ မှာမယ် ကို ထပ်နှိပ်ပါမယ်။ [[mark:card-zero]] app
+      က အော်ဒါနံပါတ် ၁၀၂ နဲ့ လက်ခံသွားပြီး၊ စုစုပေါင်း သုည ကျပ် လို့ ပြနေပါတယ်။ လက်ဖက်ရည် သုည ခွက်ကို ကြိုမှာလို့
+      ရနေတာပါ။ ဒါ မှန်ရဲ့လား။ ဒီလို အော်ဒါ ရောက်လာရင် ကောင်တာက လှလှ ဘာလုပ်ရမလဲ။ ဒီမေးခွန်းကို app ကို
+      ကြည့်ရုံနဲ့ ဖြေလို့ မရပါဘူး။ ဆိုင်ရဲ့ စည်းကမ်းကို မြမြ နဲ့ တိုင်ပင်ပြီးမှ ဆုံးဖြတ်ရမှာပါ။ [[mark:open-notes]]
+      ဒါကြောင့် အခု မပြင်သေးဘဲ၊ ဒီ သံသယကို notes ဖိုင်ထဲမှာ မှတ်ထားပါမယ်။ [[mark:type-doubt]] အလုပ်လုပ်သလို
+      ပုံပေါ်တဲ့ app နဲ့ တကယ့် customer တွေအတွက် တကယ် အလုပ်ဖြစ်တဲ့ app က မတူပါဘူး။ အဲဒီ ကွာခြားချက်ကို
+      ရှာတွေ့အောင် စမ်းပြီး၊ ဘယ်ဟာ မှန်လဲ ဆုံးဖြတ်ပေးတာက builder ရဲ့ အလုပ်ပါ။ ဒီ သံသယကိုတော့ နောက်ပိုင်း
+      lesson တွေမှာ ဆက်ဖြေရှင်းသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: in-qty-0,
+          type: preview.input,
+          at: { mark: zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: qty },
+          value: "0",
+          retry: { maxAttempts: 2, delayMs: 250 },
+        }
+      - {
+          id: click-zero,
+          type: preview.click,
+          at: { mark: order-zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: order },
+          retry: { maxAttempts: 1, delayMs: 0 },
+        }
+      - {
+          id: expect-zero,
+          type: expect.preview,
+          at: { mark: card-zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-total },
+          textContains: "စုစုပေါင်း 0 ကျပ်",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - {
+          id: expect-number-2,
+          type: expect.preview,
+          at: { afterAction: expect-zero },
+          timeoutMs: 5000,
+          target: { by: testId, value: result-number },
+          textContains: "#102",
+          retry: { maxAttempts: 3, delayMs: 300 },
+        }
+      - { id: open-notes, type: workspace.openFile, at: { mark: open-notes }, path: notes.md }
+      - id: type-doubt
+        type: editor.type
+        at: { mark: type-doubt }
+        target: { file: notes.md, after: "# Notes\n", occurrence: 1 }
+        text: "\n## Lesson 01 · code က အဆင့် တစ်ဆင့်ပဲ\n- သံသယ — အရေအတွက် 0 နဲ့ မှာတော့ 0 ကျပ်နဲ့ လက်ခံသွားတယ်။ ဒါ မှန်ရဲ့လား။\n"
+        cadence: line-by-line
+
+  - id: bottleneck
+    narration: >
+      [[mark:t-reopen]] ခုနက အဆင့်တွေကို ပြန်ကြည့်ရအောင်။ [[mark:t-agent]] အရင်က code ရေးတဲ့ build အဆင့်က
+      အချိန် အများကြီး ယူခဲ့ပါတယ်။ အခုတော့ အဲဒီ အဆင့်ကို agent က အများကြီး ပိုမြန်မြန် လုပ်ပေးနိုင်ပါပြီ။
+      [[mark:t-intent]] ဒါပေမဲ့ ဘာကို ဆောက်ရမလဲ ဆိုတာ ကိုယ်က ရှင်းရှင်းလင်းလင်း မပြောနိုင်ရင်၊ agent က
+      ကိုယ်ပြောတဲ့ စကားလုံးတွေကနေ ဖြစ်နိုင်လောက်တာကို ခန့်မှန်းပြီး ဆောက်ပေးမှာပါ။ ဒီလို ဘာလိုချင်လဲ၊ ဘာက
+      မှန်လဲ ဆိုတဲ့ ရည်ရွယ်ချက်ကို intent လို့ ခေါ်ပါတယ်။ [[mark:t-verify]] ထွက်လာတာ မှန်မမှန် စစ်တာကိုတော့
+      verification လို့ ခေါ်ပါတယ်။ ခုနက သုည ခွက် အော်ဒါလို ပြဿနာကို ကိုယ်တိုင် စမ်းမကြည့်ရင်၊ customer
+      တွေ မသုံးခင် ဘယ်သူမှ သိမှာ မဟုတ်ပါဘူး။ ဆိုတော့ အရင်က အချိန် အကုန်ဆုံးက code ရေးတာ ဖြစ်ပေမယ့်၊ အခု
+      အချိန်ယူရတဲ့ နေရာက intent နဲ့ verification ဘက်ကို ရွှေ့သွားပါပြီ။ [[mark:t-close]] ဒါကို notes ဖိုင်ထဲမှာ
+      မှတ်ထားရအောင်။ [[mark:type-thesis]] build က agent ရဲ့ အလုပ် ဖြစ်လာပေမယ့်၊ intent နဲ့ verification
+      ကတော့ ကိုယ့်တာဝန်ပဲ ဖြစ်ပါတယ်။ agent က ဘယ်လောက် ကောင်းတဲ့ tool ဖြစ်ဖြစ်၊ ဆိုင်ရဲ့ စည်းကမ်းကို သိတာ၊
+      customer တွေရဲ့ မနက်ခင်းကို သိတာ၊ ပြီးတော့ ထွက်လာတာကို တာဝန်ယူတာက ကိုယ်ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: reopen-t, type: whiteboard.apply, at: { mark: t-reopen }, open: true }
+      - {
+          id: draw-t-agent,
+          type: whiteboard.apply,
+          at: { mark: t-agent },
+          upsertIds: [t-agent1, t-agent2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-intent,
+          type: whiteboard.apply,
+          at: { mark: t-intent },
+          upsertIds: [t-intent, t-intent2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-t-verify,
+          type: whiteboard.apply,
+          at: { mark: t-verify },
+          upsertIds: [t-verify, t-verify2],
+          drawMs: 1200,
+        }
+      - { id: close-t, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - id: type-thesis
+        type: editor.type
+        at: { mark: type-thesis }
+        target: { file: notes.md, after: "ဒါ မှန်ရဲ့လား။\n", occurrence: 1 }
+        text: "- build — agent က မြန်မြန် ထုတ်ပေး\n- intent — ဘာမှန်လဲ ကိုယ်က ဆုံးဖြတ်\n- verification — မှန်မမှန် ကိုယ်က စစ်\n"
+        cadence: line-by-line
+      - {
+          id: expect-notes,
+          type: expect.file,
+          at: { afterAction: type-thesis },
+          path: notes.md,
+          contains: "- intent — ဘာမှန်လဲ ကိုယ်က ဆုံးဖြတ်",
+        }
+
+  - id: map
+    chapter: Course ရဲ့ လမ်းကြောင်း
+    narration: >
+      [[mark:m-intro]] ဒါဆို ဒီ course မှာ ဘာတွေ လေ့လာမလဲ ကြည့်ရအောင်။ lesson ၃၂ ခုကို module လို့ ခေါ်တဲ့
+      အပိုင်းကြီး ရှစ်ပိုင်း ခွဲထားပါတယ်။ [[mark:m1]] module တစ်မှာ agent တွေ ဘယ်လို အလုပ်လုပ်လဲ၊ task တစ်ခုကို ဘယ်လောက်
+      စနစ်တကျ လုပ်ရမလဲ ဆိုတာနဲ့ builder ရဲ့ အလုပ်သစ်ကို နားလည်အောင် လုပ်ပါမယ်။ [[mark:m2]] module နှစ်မှာ
+      ဘာမှ မဆောက်ခင် ပြဿနာ၊ requirement၊ scope နဲ့ ပုံမှန် မဟုတ်တဲ့ အခြေအနေတွေကို စဉ်းစားပါမယ်။ [[mark:m3]] module
+      သုံးက ဆက်သွယ်ပြောဆိုတာပါ။ ပြီးပြီ ဆိုတာ ဘာလဲ ရေးတာ၊ agent ကို task အပ်တာ၊ မြမြ နဲ့ လှလှ ကို အခြေအနေ
+      ပြောပြတာတွေ ပါပါတယ်။ [[mark:m4]] module လေးမှာ အလုပ်ကို အပိုင်းလေးတွေ ခွဲတာ၊ app ရဲ့ အစိတ်အပိုင်းတွေ၊
+      data နဲ့ ဆုံးဖြတ်ချက်တွေကို engineer လို တွေးတတ်အောင် လေ့ကျင့်ပါမယ်။ [[mark:m5]] module ငါးက code မဖတ်ဘဲ
+      agent ရဲ့ အလုပ်ကို စစ်တာ၊ test လုပ်တာ၊ bug ရှာတာပါ။ [[mark:m6]] module ခြောက်မှာ app ကို ဘေးကင်းကင်း
+      ship လုပ်တာ၊ run နေတဲ့ app ကို စောင့်ကြည့်တာနဲ့ ကုန်ကျစရိတ်ကို ကြည့်ပါမယ်။ [[mark:m7]] module ခုနစ်မှာ
+      agent ပတ်လည်က rule တွေ၊ tool တွေကို product ထုတ်တဲ့ စက်ရုံ တစ်ခုလို စနစ်တကျ ဆောက်တာကို လေ့လာပါမယ်။
+      [[mark:m8]] နောက်ဆုံး module မှာတော့ တကယ့် customer တွေ သုံးပြီးနောက် သူတို့ဆီက သင်ယူတာနဲ့၊ ကိုယ့်
+      project ကို ဘယ်လို စမလဲ ဆိုတာနဲ့ အဆုံးသတ်ပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Introduction",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The factory model",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: open-board-m,
+          type: whiteboard.apply,
+          at: { mark: m-intro },
+          open: true,
+          clear: true,
+          upsertIds:
+            [
+              m-b1,
+              m-n1,
+              m-b2,
+              m-n2,
+              m-b3,
+              m-n3,
+              m-b4,
+              m-n4,
+              m-b5,
+              m-n5,
+              m-b6,
+              m-n6,
+              m-b7,
+              m-n7,
+              m-b8,
+              m-n8,
+            ],
+          drawMs: 1600,
+        }
+      - { id: draw-m1, type: whiteboard.apply, at: { mark: m1 }, upsertIds: [m-t1], drawMs: 800 }
+      - { id: draw-m2, type: whiteboard.apply, at: { mark: m2 }, upsertIds: [m-t2], drawMs: 800 }
+      - { id: draw-m3, type: whiteboard.apply, at: { mark: m3 }, upsertIds: [m-t3], drawMs: 800 }
+      - { id: draw-m4, type: whiteboard.apply, at: { mark: m4 }, upsertIds: [m-t4], drawMs: 800 }
+      - { id: draw-m5, type: whiteboard.apply, at: { mark: m5 }, upsertIds: [m-t5], drawMs: 800 }
+      - { id: draw-m6, type: whiteboard.apply, at: { mark: m6 }, upsertIds: [m-t6], drawMs: 800 }
+      - { id: draw-m7, type: whiteboard.apply, at: { mark: m7 }, upsertIds: [m-t7], drawMs: 800 }
+      - { id: draw-m8, type: whiteboard.apply, at: { mark: m8 }, upsertIds: [m-t8], drawMs: 800 }
+
+  - id: binder
+    narration: >
+      [[mark:b-intro]] ဒီ course မှာ code တစ်ကြောင်းမှ မရေးပါဘူး။ အဲဒီအစား၊ course တစ်လျှောက်လုံး app ရဲ့
+      document တွေကို editor ထဲမှာ တကယ် ရေးသွားမှာပါ။ [[mark:b-g1]] ပြဿနာကို ရေးတဲ့ စာမျက်နှာနဲ့၊ app က
+      ဘာလုပ်ပေးရမလဲ ဆိုတဲ့ requirement စာမျက်နှာကနေ စပါမယ်။ [[mark:b-g2]] ပြီးတော့ ပြီးပြီ ဆိုတာကို
+      စစ်လို့ရအောင် ရေးတဲ့ spec၊ agent က အမြဲ အရင်ဖတ်တဲ့ rule file နဲ့ task တစ်ခုချင်း အပ်တဲ့ စာတွေကို ရေးပါမယ်။
+      [[mark:b-g3]] နောက်ပိုင်းမှာ test plan၊ release checklist နဲ့ ပြဿနာ ဖြစ်ရင် လုပ်ရမယ့် အဆင့်တွေကို ရေးထားတဲ့
+      runbook တို့ ပါလာပါမယ်။ [[mark:b-why]] ဒီ document တွေကို ရေးပြီး ထားရုံ မဟုတ်ပါဘူး။ agent ကို
+      ဘာဆောက်ရမလဲ ပြောတာရော၊ ထွက်လာတာကို လူတွေ စစ်တာရော၊ ဒီ document တွေနဲ့ပဲ လုပ်မှာပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-b-intro,
+          type: whiteboard.apply,
+          at: { mark: b-intro },
+          clear: true,
+          upsertIds: [b-title, b-box],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-g1,
+          type: whiteboard.apply,
+          at: { mark: b-g1 },
+          upsertIds: [b-1, b-2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-g2,
+          type: whiteboard.apply,
+          at: { mark: b-g2 },
+          upsertIds: [b-3, b-4, b-5],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-g3,
+          type: whiteboard.apply,
+          at: { mark: b-g3 },
+          upsertIds: [b-6, b-7, b-8],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-why,
+          type: whiteboard.apply,
+          at: { mark: b-why },
+          upsertIds: [b-agent, b-people],
+          drawMs: 1400,
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခုနက app ကို agent က မိနစ်ပိုင်းအတွင်း ထုတ်ပေးနိုင်တယ် ဆိုပါစို့။
+      ဒါဆို builder ရဲ့ အချိန်ကို ဘာက ဆက်ယူနေဦးမလဲ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဘာက မှန်လဲ ဆိုတာ သိအောင် လုပ်တာနဲ့၊ ထွက်လာတာ မှန်မမှန် စစ်တာပါ။
+      ဘာကြောင့်လဲဆိုတော့ app ကို ဆိုင်ရဲ့ စည်းကမ်းနဲ့ customer တွေရဲ့ မနက်ခင်းကို သိမှ မှန်မှန် ဆောက်လို့ ရပြီး၊
+      သုည ခွက် အော်ဒါလို ပြဿနာကိုလည်း စမ်းကြည့်မှ တွေ့ရလို့ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a2, z-note],
+          drawMs: 1800,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ code ရေးတာက software engineering ရဲ့ အဆင့် တစ်ဆင့်ပဲ ဖြစ်ပြီး၊
+      အဲဒီ အဆင့်ကို agent က မြန်မြန် လုပ်ပေးနိုင်ပါပြီ။ [[mark:sel-intent]] ဒါကြောင့် ကိုယ့်အလုပ်ရဲ့ အဓိကက ဘာဆောက်မလဲ၊
+      ဘာက မှန်လဲ ဆုံးဖြတ်တဲ့ intent ဖြစ်လာပါတယ်။ [[mark:sel-verify]] ထွက်လာတာ မှန်မမှန် စစ်တဲ့
+      verification ကလည်း ကိုယ့်အလုပ်ပါ။ [[mark:sel-doubt]] ပုံမှန် အော်ဒါ တစ်ခု မှန်တာနဲ့ app ပြီးပြီလို့
+      မယူဆဘဲ၊ သုည ခွက်လို သံသယတွေကို မှတ်ထားပြီး ပြန်မေးရပါမယ်။ နောက် lesson မှာတော့ coding agent တစ်ခုရဲ့
+      အထဲမှာ တကယ် ဘာတွေ ဖြစ်နေလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): Conclusion",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): From syntax to intent",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-intent,
+          type: editor.select,
+          at: { mark: sel-intent },
+          target: { file: notes.md, text: "intent — ဘာမှန်လဲ ကိုယ်က ဆုံးဖြတ်", occurrence: 1 },
+        }
+      - {
+          id: sel-verify,
+          type: editor.select,
+          at: { mark: sel-verify },
+          target: { file: notes.md, text: "verification — မှန်မမှန် ကိုယ်က စစ်", occurrence: 1 },
+        }
+      - {
+          id: sel-doubt,
+          type: editor.select,
+          at: { mark: sel-doubt },
+          target:
+            { file: notes.md, text: "သံသယ — အရေအတွက် 0 နဲ့ မှာတော့ 0 ကျပ်နဲ့ လက်ခံသွားတယ်။", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
