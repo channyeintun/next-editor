@@ -1432,7 +1432,7 @@ scenes:
         type: editor.type
         at: { mark: type-is-listed }
         target: { file: src/main.ts, after: "cupExtra.large, \"ကျပ်\");\n", occurrence: 1 }
-        text: "\nconst tables = { 5: \"မြမြ\", 7: \"အောင်အောင်\" };\n\nfunction isListed(list: object, key: PropertyKey) {\n  return key in list;\n}\nconsole.log(isListed(cupExtra, \"medium\"), isListed(tables, 5));\n"
+        text: "\nconst tables = { 5: \"လှလှ\", 7: \"အောင်အောင်\" };\n\nfunction isListed(list: object, key: PropertyKey) {\n  return key in list;\n}\nconsole.log(isListed(cupExtra, \"medium\"), isListed(tables, 5));\n"
         cadence: line-by-line
       - id: expect-true-true
         type: expect.preview
