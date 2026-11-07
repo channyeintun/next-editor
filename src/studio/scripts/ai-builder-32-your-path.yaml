@@ -1312,8 +1312,8 @@ scenes:
     narration: >
       [[mark:type-p3]] ဒီနောက်မှ agent အတွက် အပိုင်းတွေ လာပါတယ်။ AGENTS.md ကို ဆယ်ကြောင်းလောက်နဲ့ပဲ
       စခိုင်းထားပါတယ်။ ဆိုင်ရဲ့ AGENTS.md ကို စခဲ့တုန်းကလို အပိုင်း လေးခုလောက်နဲ့ စရင် လုံလောက်ပါတယ်။
-      [[mark:sel-rule]] အရေးကြီးတာက ဒီ စာကြောင်းပါ။ agent က တစ်ခုခု မှားတိုင်း chat ထဲမှာ ထပ်ပြောနေမယ့်အစား rule
-      တစ်ကြောင်း ထည့်ရင်၊ ဖိုင်က ကိုယ့် project နဲ့အတူ တဖြည်းဖြည်း ကြီးလာပြီး အမှား တစ်ခုကို နှစ်ခါ ကြုံရတာ
+      [[mark:sel-rule]] အရေးကြီးတာက ဒီ စာကြောင်းပါ။ agent က အမှား တစ်ခုတည်းကို နှစ်ခါ ပြန်လုပ်ရင် chat ထဲမှာ ထပ်ပြောနေမယ့်အစား rule
+      တစ်ကြောင်း ထည့်ပါ။ ဒါဆို ဖိုင်က လိုတဲ့ rule တွေနဲ့ပဲ တဖြည်းဖြည်း ကြီးလာပြီး၊ အမှား တစ်ခုကို ထပ်ခါထပ်ခါ ကြုံရတာ
       နည်းသွားပါမယ်။ [[mark:sel-first]] ပထမ task ကိုလည်း သေးသေးလေးပဲ ရွေးပါ။ ကိုယ် ထပ်ခါထပ်ခါ လုပ်နေရတဲ့ အလုပ်
       တစ်ခု၊ ဒါမှမဟုတ် screen ကနေ data အထိ တစ်လမ်းလုံး အလုပ်လုပ်တဲ့ အပိုင်း အသေးဆုံး တစ်ခုပါ။ ဆိုင်ရဲ့ app မှာလည်း
       ပထမ task က form ကနေ အော်ဒါ တစ်ခု သိမ်းရုံပဲ ဖြစ်ခဲ့ပါတယ်။
@@ -1328,13 +1328,18 @@ scenes:
         type: editor.type
         at: { mark: type-p3 }
         target: { file: my-plan.md, after: "Given / When / Then တစ်ခု\n\n", occurrence: 1 }
-        text: "## AGENTS.md (10 lines)\n- Project · Stack · Rules · Done means\n- agent မှားတိုင်း rule တစ်ကြောင်း ထပ်ထည့်\n\n## First task\n- ထပ်ခါထပ်ခါ လုပ်နေရတဲ့ အလုပ် တစ်ခု၊ ဒါမှမဟုတ် screen ကနေ data အထိ အသေးဆုံး slice တစ်ခု\n\n"
+        text: "## AGENTS.md (10 lines)\n- Project · Stack · Rules · Done means\n- အမှား တစ်ခုတည်း နှစ်ခါ ဖြစ်ရင် rule တစ်ကြောင်း ထပ်ထည့်\n\n## First task\n- ထပ်ခါထပ်ခါ လုပ်နေရတဲ့ အလုပ် တစ်ခု၊ ဒါမှမဟုတ် screen ကနေ data အထိ အသေးဆုံး slice တစ်ခု\n\n"
         cadence: line-by-line
       - {
           id: sel-rule,
           type: editor.select,
           at: { mark: sel-rule },
-          target: { file: my-plan.md, text: "- agent မှားတိုင်း rule တစ်ကြောင်း ထပ်ထည့်", occurrence: 1 },
+          target:
+            {
+              file: my-plan.md,
+              text: "- အမှား တစ်ခုတည်း နှစ်ခါ ဖြစ်ရင် rule တစ်ကြောင်း ထပ်ထည့်",
+              occurrence: 1,
+            },
         }
       - {
           id: sel-first,
