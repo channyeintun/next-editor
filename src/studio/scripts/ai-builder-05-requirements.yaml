@@ -1,0 +1,1048 @@
+# AI Builder, lesson 05: finding and writing requirements (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md), docs/problem.md pinned
+# in full (COURSE-KIT §4.1, as L04 leaves it) and docs/requirements.md pinned with only its title line.
+# Nothing runs. The lesson types COURSE-KIT §4.2 from User stories through Constraints, one section per
+# action (the stories in two actions), interleaved with four boards.
+#
+# Boards: (R) where requirements come from: four people (white) → requirements.md (blue); the agent
+# suggests (violet) → people decide (orange); (S) one story taken apart: who / what (blue) / why
+# (orange); (F) functional (blue) vs non functional (orange), with the agent note in violet; (Z) quiz.
+# Typed: User stories (2 + 2) · Non-functional (5) · Constraints (3).
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-05-requirements.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-05-requirements
+  title: "AI Builder 05: Requirement တွေကို ရှာဖွေ ရေးသားခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/problem.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/problem.md: |
+        # Problem · ကြိုမှာ app
+
+        ## Problem
+        မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊ အလုပ်သွားမယ့် customer တွေ မဝယ်ဘဲ ပြန်ထွက်သွားကြတယ်။
+
+        ## Who
+        - အလုပ်မသွားခင် မနက်တိုင်း လာဝယ်တဲ့ member တွေ၊ ဥပမာ အောင်အောင်
+        - အချိန်ကျပ်တဲ့ ကျောင်းသားတွေ၊ ဥပမာ မောင်မောင်
+        - ကောင်တာမှာ အော်ဒါ လက်ခံတဲ့ လှလှ
+
+        ## Today
+        - တန်းစီ၊ ကောင်တာမှာ မှာ၊ ပြီးမှ ထပ်စောင့်ရတယ်။
+        - တချို့က ဖုန်းဆက်ပြီး ကြိုမှာကြတယ်။ ဒါပေမဲ့ လှလှ က ဖုန်းကိုင်နေရင် ကောင်တာက လူတွေ ပိုစောင့်ရတယ်။
+
+        ## Why it matters
+        - လှလှ ရဲ့ မှတ်စုအရ မနက်တိုင်း customer 10 ယောက်လောက် မဝယ်ဘဲ ပြန်သွားတယ်။
+
+        ## How we'll know
+        - မဝယ်ဘဲ ပြန်သွားတဲ့ customer — တစ်မနက် 3 ယောက်အောက်
+        - ကြိုမှာတဲ့ အော်ဒါ — တစ်မနက် 20 နဲ့ အထက်
+        - ဖုန်းနဲ့ ကြိုမှာတာ — တဖြည်းဖြည်း နည်းလာ
+
+        ## Not the problem
+        - ဈေးနှုန်းနဲ့ အရသာ — customer တွေ ကြိုက်ပြီးသား
+        - delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး
+      docs/requirements.md: |+
+        # Requirements · ကြိုမှာ app
+
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board R: where requirements come from. People column (white) → requirements.md (blue, the
+    # product's document); the agent's suggestions (violet) → people decide (orange).
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 500,
+        height: 50,
+        text: "requirement ဘယ်က လာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r-p1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 340,
+        height: 40,
+        text: "မြမြ · ဆိုင်ပိုင်ရှင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-p2,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 340,
+        height: 40,
+        text: "လှလှ · ကောင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-p3,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 340,
+        height: 40,
+        text: "အောင်အောင် · member",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-p4,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 380,
+        height: 40,
+        text: "မောင်မောင် · ကျောင်းသား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 670,
+        y: 305,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-doc-box,
+        kind: rectangle,
+        x: 750,
+        y: 285,
+        width: 320,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-doc,
+        kind: text,
+        x: 772,
+        y: 306,
+        width: 280,
+        height: 40,
+        text: "requirements.md",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: r-agent-box,
+        kind: rectangle,
+        x: 300,
+        y: 480,
+        width: 330,
+        height: 75,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-agent,
+        kind: text,
+        x: 320,
+        y: 498,
+        width: 290,
+        height: 40,
+        text: "agent · အကြံ ပေး",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 650,
+        y: 498,
+        width: 60,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-decide,
+        kind: text,
+        x: 730,
+        y: 498,
+        width: 330,
+        height: 40,
+        text: "ဆုံးဖြတ်တာ လူတွေ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    # Board S: one story taken apart. Who (white), what (blue: what the product does), why (orange:
+    # the part this lesson stresses); the English pattern as a subtitle; the rule under it.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 470,
+        height: 50,
+        text: "user story တစ်ကြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-en,
+        kind: text,
+        x: 300,
+        y: 218,
+        width: 520,
+        height: 40,
+        text: "As a … · I want … · so that …",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-b1, kind: rectangle, x: 300, y: 275, width: 760, height: 70, strokeColor: "#1e1e1e" }
+    - {
+        id: s-who,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 560,
+        height: 40,
+        text: "ဘယ်သူ — Customer အနေနဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-b2, kind: rectangle, x: 300, y: 362, width: 760, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: s-what,
+        kind: text,
+        x: 320,
+        y: 377,
+        width: 600,
+        height: 40,
+        text: "ဘာ — ဖုန်းကနေ ကြိုမှာချင်တယ်",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - { id: s-b3, kind: rectangle, x: 300, y: 449, width: 760, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: s-why,
+        kind: text,
+        x: 320,
+        y: 464,
+        width: 700,
+        height: 40,
+        text: "ဘာကြောင့် — ဒါမှ တန်းမစီရဘဲ ယူသွားမယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: s-note,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 700,
+        height: 40,
+        text: "ဘာကြောင့် မရေးနိုင်ရင် → တကယ် လိုရဲ့လား?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board F: functional (blue heading and items: what the product does) vs non functional (orange
+    # heading: today's new idea; white items); the agent note in violet under both columns.
+    - {
+        id: f-h1,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 300,
+        height: 45,
+        text: "functional",
+        strokeColor: "#1971c2",
+        fontSize: 32,
+      }
+    - {
+        id: f-h1b,
+        kind: text,
+        x: 300,
+        y: 207,
+        width: 330,
+        height: 40,
+        text: "ဘာ လုပ်ပေးရမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-l1,
+        kind: text,
+        x: 300,
+        y: 270,
+        width: 340,
+        height: 40,
+        text: "ကြိုမှာလို့ ရတာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-l2,
+        kind: text,
+        x: 300,
+        y: 325,
+        width: 360,
+        height: 40,
+        text: "လာယူချိန် ရွေးလို့ ရတာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-l3,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 390,
+        height: 40,
+        text: "ကောင်တာ စာရင်း မြင်ရတာ",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: f-h2,
+        kind: text,
+        x: 720,
+        y: 160,
+        width: 330,
+        height: 45,
+        text: "non functional",
+        strokeColor: "#f08c00",
+        fontSize: 32,
+      }
+    - {
+        id: f-h2b,
+        kind: text,
+        x: 720,
+        y: 207,
+        width: 360,
+        height: 40,
+        text: "ဘယ်လောက် ကောင်းရမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-r1,
+        kind: text,
+        x: 720,
+        y: 270,
+        width: 370,
+        height: 40,
+        text: "ဈေးပေါ ဖုန်း · data နှေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-r2,
+        kind: text,
+        x: 720,
+        y: 325,
+        width: 370,
+        height: 40,
+        text: "မြန်မာစာ မှန်မှန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-r3,
+        kind: text,
+        x: 720,
+        y: 380,
+        width: 370,
+        height: 40,
+        text: "ဖုန်းနံပါတ် လုံခြုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-r4,
+        kind: text,
+        x: 720,
+        y: 435,
+        width: 370,
+        height: 40,
+        text: "စာလုံးကြီးနဲ့ ဖတ်သူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-r5,
+        kind: text,
+        x: 720,
+        y: 490,
+        width: 370,
+        height: 40,
+        text: "တစ်လ ကုန်ကျစရိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-agent,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 700,
+        height: 40,
+        text: "မရေးထားရင် agent က သူ့ဘာသာ ရွေးမယ်",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, the vague requirement boxed, answer green, reasons white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q,
+        kind: text,
+        x: 300,
+        y: 230,
+        width: 600,
+        height: 45,
+        text: "ဘယ် တစ်ကြောင်းကို ပြန်ရေးရမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 560,
+        height: 40,
+        text: "က · စာမျက်နှာ မြန်မြန် ပွင့်ရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 500,
+        height: 40,
+        text: "ခ · အော်ဒါ အသစ်ကို ကောင်တာက",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2b,
+        kind: text,
+        x: 345,
+        y: 400,
+        width: 420,
+        height: 40,
+        text: "၁ မိနစ်အတွင်း မြင်ရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 560,
+        height: 50,
+        text: "အဖြေ · က — စစ်လို့ မရဘူး",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-r1,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 680,
+        height: 40,
+        text: "ဘယ်လောက် မြန်? · ဘယ်ဖုန်း? · ဘယ် network?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6105
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: Problem ကနေ requirement ဆီ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဖြေရှင်းနည်း မပြောခင် ပြဿနာကို အရင် ရေးခဲ့ပါတယ်။ editor ထဲက problem ဖိုင်မှာ
+      ဘယ်သူ့မှာ ဘာပြဿနာ ရှိလဲ၊ ပြေပြီလား ဘယ်လို သိမလဲ ဆိုတာတွေ ရှိနေပါပြီ။ [[mark:sel-problem]] ဒီ
+      စာမျက်နှာက ဘာကြောင့် ဆောက်မလဲ ဆိုတာကို ပြောပါတယ်။ ဒါပေမဲ့ app က ဘာတွေ လုပ်ပေးရမလဲ ဆိုတာကိုတော့ မပြောသေးပါဘူး။
+      ဒီ စာမျက်နှာ တစ်ခုတည်းကို agent ဆီ ပေးလိုက်ရင်၊ ကျန်နေတဲ့ ကွက်လပ်တွေကို agent က ခန့်မှန်းပြီး ဖြည့်ပါလိမ့်မယ်။
+      [[mark:req-gloss]] ဒါကြောင့် ဒီနေ့ requirement တွေကို ရှာပြီး ရေးကြည့်ပါမယ်။ requirement ဆိုတာ product က
+      ဘာတွေ လုပ်ပေးရမလဲ၊ ဘယ်လောက် ကောင်းကောင်း လုပ်ပေးရမလဲ ဆိုတာကို ရေးထားတာပါ။ ဥပမာ လာယူမယ့် အချိန်ကို
+      ရွေးလို့ ရရမယ် ဆိုတာက app ဘာလုပ်ရမလဲ ဆိုတဲ့ requirement ပါ။ customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကပဲ မြင်ရမယ်
+      ဆိုတာကတော့ ဘယ်လောက် လုံခြုံရမလဲ ဆိုတဲ့ ဘက်က requirement ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "ISO/IEC 25010 (product quality model), iso25000.com",
+          url: "https://iso25000.com/index.php/en/iso-25000-standards/iso-25010",
+        }
+    actions:
+      - {
+          id: sel-problem,
+          type: editor.select,
+          at: { mark: sel-problem },
+          target:
+            {
+              file: docs/problem.md,
+              text: "မနက် 7 နာရီကနေ 9 နာရီကြား ဆိုင်မှာ တန်းစီရတာ ကြာလို့၊",
+              occurrence: 1,
+            },
+        }
+
+  - id: sources
+    chapter: Requirement ဘယ်က လာလဲ
+    narration: >
+      [[mark:r-title]] requirement တွေကို ကိုယ့်ခေါင်းထဲကနေ ထုတ်ရေးတာ မဟုတ်ပါဘူး။ app ကို တကယ် သုံးမယ့်သူ၊
+      ဂရုစိုက်မယ့်သူတွေဆီကနေ ရှာရပါတယ်။ [[mark:r-people]] ကိုယ်တို့ ဆိုင်မှာဆိုရင် ဘာကို အရင်လုပ်မလဲ ဆုံးဖြတ်မယ့်
+      ဆိုင်ပိုင်ရှင် မြမြ၊ အော်ဒါ လက်ခံမယ့် ကောင်တာက လှလှ၊ မနက်တိုင်း လာဝယ်တဲ့ member အောင်အောင်၊ ဈေးပေါတဲ့
+      ဖုန်း ကိုင်ထားတဲ့ ကျောင်းသား မောင်မောင် တို့ပါ။ ပြီးခဲ့တဲ့ lesson မှာ ပြောခဲ့သလို၊ သူတို့ကို တကယ် ဖြစ်ခဲ့တဲ့
+      မနက်တွေ အကြောင်း မေးခဲ့ပြီး၊ ဆိုင်မှာလည်း ကိုယ်တိုင် သွားကြည့်ခဲ့ပါတယ်။ [[mark:r-doc]] ကြားခဲ့၊ မြင်ခဲ့တာတွေကို requirements ဖိုင်
+      တစ်ခုထဲမှာ စုရေးပါမယ်။ [[mark:r-agent]] agent ကိုလည်း အကူအညီ အဖြစ် သုံးလို့ ရပါတယ်။ problem ဖိုင်ကို ပေးပြီး ဖြစ်နိုင်တဲ့
+      requirement တွေကို စာရင်း လုပ်ခိုင်းရင် ခဏလေးနဲ့ ထုတ်ပေးနိုင်ပြီး၊ ကိုယ် မေ့နေတာတွေကိုလည်း စာရင်းထဲမှာ ထည့်ပြပေးနိုင်ပါတယ်။
+      [[mark:r-decide]] ဒါပေမဲ့ အဲဒီ စာရင်းက အကြံပြုချက်ပဲ ဖြစ်ပါတယ်။ agent က ကိုယ်တို့ ဆိုင်ကို တကယ် မသိဘဲ
+      ထုတ်ပေးတာမို့၊ ဘယ်ဟာ မှန်လဲ၊ ဘယ်ဟာ လိုလဲ ဆိုတာကို လူတွေကို ပြန်မေးပြီး ကိုယ်တို့ပဲ ဆုံးဖြတ်ရပါမယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: Learning about users and their needs",
+          url: "https://www.gov.uk/service-manual/user-research/start-by-learning-user-needs",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-r-title,
+          type: whiteboard.apply,
+          at: { mark: r-title },
+          open: true,
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-people,
+          type: whiteboard.apply,
+          at: { mark: r-people },
+          upsertIds: [r-p1, r-p2, r-p3, r-p4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-r-doc,
+          type: whiteboard.apply,
+          at: { mark: r-doc },
+          upsertIds: [r-arrow, r-doc-box, r-doc],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-r-agent,
+          type: whiteboard.apply,
+          at: { mark: r-agent },
+          upsertIds: [r-agent-box, r-agent],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-r-decide,
+          type: whiteboard.apply,
+          at: { mark: r-decide },
+          upsertIds: [r-arrow2, r-decide],
+          drawMs: 1100,
+        }
+
+  - id: suggestion
+    narration: >
+      [[mark:close-r]] ဥပမာ agent ထုတ်ပေးတဲ့ စာရင်းထဲမှာ delivery ကို မြေပုံပေါ်မှာ လိုက်ကြည့်လို့ ရတဲ့ စာမျက်နှာ
+      တစ်ခု ပါလာတယ် ဆိုပါစို့။ [[mark:sel-delivery]] problem ဖိုင်ရဲ့ နောက်ဆုံး အပိုင်းမှာ delivery က ဒီတစ်ခါ
+      ဖြေရှင်းမယ့် ပြဿနာ မဟုတ်ဘူး ဆိုတာကို မြမြ နဲ့ သဘောတူပြီး ရေးထားခဲ့ပါတယ်။ ဒါကြောင့် အဲဒီ အကြံ ဘယ်လောက် ကောင်းနေပါစေ၊ ဒီတစ်ခါ
+      requirement ထဲကို မထည့်ပါဘူး။ ကိုယ်တို့ ရေးထားတဲ့ စာမျက်နှာတွေက agent ရဲ့ အကြံကို စစ်တဲ့ စံ ဖြစ်လာတာပါ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: Learning about users and their needs",
+          url: "https://www.gov.uk/service-manual/user-research/start-by-learning-user-needs",
+        }
+    actions:
+      - { id: close-r, type: whiteboard.apply, at: { mark: close-r }, open: false }
+      - {
+          id: sel-delivery,
+          type: editor.select,
+          at: { mark: sel-delivery },
+          target: { file: docs/problem.md, text: "- delivery — ဒီတစ်ခါ မဖြေရှင်းသေးဘူး", occurrence: 1 },
+        }
+
+  - id: stories
+    chapter: User story
+    narration: >
+      [[mark:open-req]] အခု requirements ဖိုင်ကို ကြည့်ရအောင်။ ခေါင်းစဉ်ပဲ ရှိပါသေးတယ်။ [[mark:type-stories]] ပထမ
+      အပိုင်းမှာ user story တွေကို ရေးပါတယ်။ user story ဆိုတာ requirement ကို user ဘက်ကနေ ရေးတာပါ။ ဘယ်သူက၊ ဘာကို
+      လိုချင်လဲ၊ ဘာကြောင့်လဲ ဆိုတာ စာကြောင်း တစ်ကြောင်းထဲမှာ ပါပါတယ်။ ဒီ နှစ်ကြောင်းကတော့ customer ဘက်ကနေ
+      ရေးထားတာပါ။ [[mark:sel-story1]] ပထမ story ကို အပိုင်းလိုက် ခွဲကြည့်ရအောင်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: Writing user stories",
+          url: "https://www.gov.uk/service-manual/agile-delivery/writing-user-stories",
+        }
+      - {
+          title: "Agile Alliance: What are User Stories?",
+          url: "https://www.agilealliance.org/glossary/user-stories/",
+        }
+    actions:
+      - {
+          id: open-req,
+          type: workspace.openFile,
+          at: { mark: open-req },
+          path: docs/requirements.md,
+        }
+      - id: type-stories
+        type: editor.type
+        at: { mark: type-stories }
+        target:
+          { file: docs/requirements.md, after: "# Requirements · ကြိုမှာ app\n\n", occurrence: 1 }
+        text: "## User stories\n- Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။\n- Customer အနေနဲ့ လာယူမယ့် အချိန်ကို ရွေးချင်တယ်၊ ဒါမှ ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။\n"
+        cadence: line-by-line
+      - {
+          id: expect-story,
+          type: expect.file,
+          at: { afterAction: type-stories },
+          path: docs/requirements.md,
+          contains: "- Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။",
+        }
+      - {
+          id: sel-story1,
+          type: editor.select,
+          at: { mark: sel-story1 },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- Customer အနေနဲ့ ဆိုင်မရောက်ခင် ဖုန်းကနေ ကြိုမှာချင်တယ်၊ ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။",
+              occurrence: 1,
+            },
+        }
+
+  - id: story-apart
+    narration: >
+      [[mark:s-open]] user story တစ်ကြောင်းမှာ အပိုင်း သုံးပိုင်း ပါပါတယ်။ English စာတွေမှာ ဒီ ပုံစံကို
+      အပေါ်က အတိုင်း တွေ့ရပါလိမ့်မယ်။ [[mark:s-who]] ပထမ အပိုင်းက ဘယ်သူ့ ဘက်ကနေ ရေးလဲ ဆိုတာပါ။
+      [[mark:s-what]] ဒုတိယ အပိုင်းက အဲဒီ လူ ဘာလုပ်နိုင်ချင်လဲ ဆိုတာပါ။ app က ဘာလုပ်ပေးရမလဲ ဆိုတာကို ဒီ အပိုင်းက
+      ပြပါတယ်။ [[mark:s-why]] တတိယ အပိုင်းကတော့ ဒါမှ ဆိုတဲ့ စကားလုံး နောက်က အကြောင်းရင်းပါ။ ဒီ story မှာဆိုရင်
+      customer က ဖုန်းနဲ့ မှာချင်တာ ဖုန်းကို သဘောကျလို့ မဟုတ်ဘဲ၊ တန်းမစီချင်လို့ပါ။ ဒီ အပိုင်းက အရေးအကြီးဆုံးပါ။ [[mark:s-why2]] ဘာကြောင့်လဲဆိုတော့ ကြိုမှာလို့ ရသွားပေမယ့်၊
+      ဆိုင်ရောက်တော့ အော်ဒါကို မပြင်ရသေးလို့ ထပ်စောင့်ရရင်၊ တန်းမစီရဘဲ ယူသွားဖို့ ဆိုတဲ့ ရည်ရွယ်ချက်ကတော့
+      မအောင်မြင်ပါဘူး။ ဒုတိယ story က လာယူမယ့် အချိန်ကို ရွေးချင်တာလည်း ဒီ ရည်ရွယ်ချက်ကြောင့်ပါ။
+      [[mark:s-note]] ဘာကြောင့်လဲ ဆိုတဲ့ အပိုင်းကို ရေးလို့ မရဘူး ဆိုရင်တော့၊ အဲဒီ story ကို တကယ် လိုရဲ့လား ပြန်မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: Writing user stories",
+          url: "https://www.gov.uk/service-manual/agile-delivery/writing-user-stories",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          clear: true,
+          upsertIds: [s-title, s-en],
+        }
+      - {
+          id: draw-s-who,
+          type: whiteboard.apply,
+          at: { mark: s-who },
+          upsertIds: [s-b1, s-who],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-what,
+          type: whiteboard.apply,
+          at: { mark: s-what },
+          upsertIds: [s-b2, s-what],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-s-why,
+          type: whiteboard.apply,
+          at: { mark: s-why },
+          upsertIds: [s-b3, s-why],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-s-note,
+          type: whiteboard.apply,
+          at: { mark: s-note },
+          upsertIds: [s-note],
+          drawMs: 1200,
+        }
+
+  - id: stories-more
+    narration: >
+      [[mark:close-s]] editor ကို ပြန်သွားရအောင်။ [[mark:type-stories-b]] ကျန်တဲ့ story နှစ်ကြောင်းကို ကောင်တာနဲ့
+      ဆိုင်ပိုင်ရှင် ဘက်ကနေ ရေးပါတယ်။ app ကို customer တွေတင် သုံးတာ မဟုတ်လို့၊ လူ တစ်ယောက်ချင်းရဲ့ ဘက်ကနေ ရေးမှ
+      လိုတာ မကျန်ခဲ့မှာပါ။ [[mark:sel-hla-story]] လှလှ ရဲ့ story က ကောင်တာမှာ အော်ဒါတွေ ဘယ်အစဉ်နဲ့ ပေါ်ရမလဲ ဆိုတာကို
+      ဆုံးဖြတ်ပေးပါတယ်။ အော်ဒါ ဝင်တဲ့ အစဉ်အတိုင်း မဟုတ်ဘဲ customer လာမယ့် အချိန်အလိုက်ပါ။ အဲဒါမှ ဘယ်အော်ဒါကို
+      အရင် ပြင်ရမလဲ လှလှ ချက်ချင်း မြင်ရမှာပါ။ ဒီလို အသေးစိတ်ကို မနက်တိုင်း ကောင်တာမှာ အလုပ်လုပ်နေတဲ့ လှလှ
+      ဆီကပဲ ရနိုင်ပါတယ်။ ကိုယ့်ခေါင်းထဲကနေ ခန့်မှန်းလို့ မရသလို၊ agent ထုတ်ပေးတဲ့ စာရင်းထဲမှာ ပါလာရင်တောင်
+      မှန်မမှန်ကို လှလှ ပဲ အတည်ပြုပေးနိုင်ပါတယ်။ [[mark:sel-mya-story]] မြမြ ရဲ့ story ကတော့ app အလုပ်ဖြစ်မဖြစ်ကို ဆိုင်ပိုင်ရှင် ဘက်ကနေ
+      တိုင်းဖို့ပါ။ ဒီ အရေအတွက်က problem ဖိုင်မှာ ရေးခဲ့တဲ့ ပြေပြီလား သိမယ့် ကိန်းဂဏန်းနဲ့ တိုက်ရိုက် ချိတ်နေပါတယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: Writing user stories",
+          url: "https://www.gov.uk/service-manual/agile-delivery/writing-user-stories",
+        }
+      - {
+          title: "GOV.UK Service Manual: Learning about users and their needs",
+          url: "https://www.gov.uk/service-manual/user-research/start-by-learning-user-needs",
+        }
+    actions:
+      - { id: close-s, type: whiteboard.apply, at: { mark: close-s }, open: false }
+      - id: type-stories-b
+        type: editor.type
+        at: { mark: type-stories-b }
+        target: { file: docs/requirements.md, after: "ရောက်တဲ့အချိန် အသင့်ဖြစ်နေမယ်။\n", occurrence: 1 }
+        text: "- ကောင်တာက လှလှ အနေနဲ့ ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊ ဒါမှ အချိန်မီ ပြင်ထားနိုင်မယ်။\n- ဆိုင်ပိုင်ရှင် မြမြ အနေနဲ့ တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊ ဒါမှ app က အလုပ်ဖြစ်မဖြစ် သိမယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: sel-hla-story,
+          type: editor.select,
+          at: { mark: sel-hla-story },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "ဝင်လာတဲ့ အော်ဒါတွေကို လာယူချိန်အလိုက် မြင်ချင်တယ်၊",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-mya-story,
+          type: editor.select,
+          at: { mark: sel-mya-story },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "တစ်မနက် ကြိုမှာတဲ့ အော်ဒါ အရေအတွက်ကို သိချင်တယ်၊",
+              occurrence: 1,
+            },
+        }
+
+  - id: functional
+    chapter: Functional နဲ့ non functional
+    narration: >
+      [[mark:f-open]] ခုထိ ရေးခဲ့တဲ့ story တွေက app က ဘာလုပ်ပေးရမလဲ ဆိုတာပါ။ ဒါမျိုးကို functional requirement
+      လို့ ခေါ်ပါတယ်။ [[mark:f-left]] ကြိုမှာလို့ ရတာ၊ လာယူချိန် ရွေးလို့ ရတာ၊ ကောင်တာမှာ စာရင်း မြင်ရတာ စတာတွေပါ။
+      [[mark:f-right]] requirement နောက်တစ်မျိုးကတော့ app ဘာလုပ်လဲ မဟုတ်ဘဲ၊ ဘယ်လောက် ကောင်းကောင်း လုပ်ရမလဲ
+      ဆိုတာပါ။ ဘယ်လောက် မြန်ရမလဲ၊ ဘယ်လောက် လုံခြုံရမလဲ၊ ဘယ်သူတွေ သုံးနိုင်ရမလဲ ဆိုတာမျိုးကို non functional
+      requirement လို့ ခေါ်ပါတယ်။ [[mark:f-items]] ကိုယ်တို့ ဆိုင်အတွက် ဒီဘက်မှာ ငါးခု ရှိပြီး၊ ဖိုင်ထဲမှာ ရေးတဲ့အခါ
+      တစ်ခုချင်း ကြည့်ပါမယ်။ [[mark:f-agent]] ဒီ အမျိုးအစားကို အထူး ဂရုစိုက်ရပါတယ်။ စာထဲမှာ မပါရင် agent က ဒါတွေကို
+      သူ့ဘာသာ ရွေးရလို့ပါ။ functional
+      requirement တစ်ခု ကျန်ခဲ့ရင် ခလုတ် တစ်ခု မရှိတာကို ချက်ချင်း မြင်ရပေမယ့်၊ non functional တစ်ခု ကျန်ခဲ့ရင်တော့
+      app က ကောင်းကောင်း အလုပ်လုပ်နေသလို ထင်ရပြီး၊ မောင်မောင် လို customer တကယ် သုံးတော့မှ ပေါ်လာတတ်ပါတယ်။
+    sources:
+      - {
+          title: "ISO/IEC 25010 (product quality model), iso25000.com",
+          url: "https://iso25000.com/index.php/en/iso-25000-standards/iso-25010",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-f-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          open: true,
+          clear: true,
+          upsertIds: [f-h1, f-h1b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-left,
+          type: whiteboard.apply,
+          at: { mark: f-left },
+          upsertIds: [f-l1, f-l2, f-l3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-f-right,
+          type: whiteboard.apply,
+          at: { mark: f-right },
+          upsertIds: [f-h2, f-h2b],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-f-items,
+          type: whiteboard.apply,
+          at: { mark: f-items },
+          upsertIds: [f-r1, f-r2, f-r3, f-r4, f-r5],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-f-agent,
+          type: whiteboard.apply,
+          at: { mark: f-agent },
+          upsertIds: [f-agent],
+          drawMs: 1200,
+        }
+
+  - id: non-functional
+    narration: >
+      [[mark:close-f]] ဖိုင်ထဲမှာ ရေးကြည့်ရအောင်။ [[mark:type-nfr]] ဒီ အပိုင်းမှာ app ဘယ်လောက် ကောင်းရမလဲ ဆိုတာကို
+      ဆိုင်ရဲ့ customer တွေ တကယ် သုံးမယ့် ပုံစံကို ကြည့်ပြီး ငါးကြောင်း ရေးပါတယ်။ တစ်ကြောင်းချင်းက ဘာကို
+      ဆုံးဖြတ်ထားလဲ ကြည့်ရအောင်။
+      [[mark:sel-nfr-speed]] ပထမ စာကြောင်းက app ဘယ်လောက် မြန်ရမလဲ ဆိုတာကို ဆုံးဖြတ်ထားတာပါ။ ကိုယ့်ရဲ့ မြန်တဲ့
+      ဖုန်းမှာ မဟုတ်ဘဲ၊ မောင်မောင် လို customer တွေ တကယ် ကိုင်တဲ့ ဖုန်း၊ တကယ် သုံးတဲ့ data နဲ့ စစ်ရမှာပါ။
+      [[mark:sel-nfr-burmese]] ဒုတိယ စာကြောင်းက မြန်မာ customer တွေအတွက်ပါ။ စာတွေ ဖုန်းတိုင်းမှာ Unicode
+      လို့ ခေါ်တဲ့ စံအတိုင်း မှန်မှန် ပေါ်ဖို့ တင်မကဘဲ၊ မြန်မာ keyboard နဲ့ ရိုက်တဲ့သူတွေက ဂဏန်းကိုလည်း မြန်မာဂဏန်းနဲ့
+      ရိုက်တတ်လို့ အဲဒါကိုပါ ထည့်တောင်းထားပါတယ်။ [[mark:sel-nfr-phone]] တတိယ စာကြောင်းက customer ရဲ့ ဖုန်းနံပါတ်ကို ကာကွယ်ပေးတာပါ။
+      ဖုန်းနံပါတ်ကို ဘယ်မှာ ပြမလဲ၊ ဘယ်သူ ကြည့်ခွင့် ရှိမလဲ ဆိုတာကို ဒီ စာကြောင်းက ဆုံးဖြတ်ပေးပါတယ်။
+      [[mark:sel-nfr-text]] စတုတ္ထ စာကြောင်းကတော့ မျက်စိ အားနည်းလို့ ဖုန်းမှာ စာလုံးကို ချဲ့ထားတဲ့ customer တွေကို
+      မမေ့ဖို့ပါ။ စာလုံး ကြီးသွားရင်လည်း စာတွေ၊ ခလုတ်တွေ မပျောက်ဘဲ သုံးလို့ ရရပါမယ်။ [[mark:sel-nfr-cost]]
+      နောက်ဆုံး စာကြောင်းက app ကို အမြဲ အလုပ်လုပ်နေအောင် run ထားဖို့ တစ်လ ကုန်ကျစရိတ်ကို ကန့်သတ်ထားတာပါ။ ဆိုင်က
+      တကယ် ပေးနိုင်တဲ့ ပမာဏကို မြမြ နဲ့ တိုင်ပင်ပြီး ရွေးထားလို့၊ agent က လစဉ် ငွေပေးရတဲ့ ဈေးကြီး service တစ်ခုကို
+      ရွေးလာရင် ဒီ စာကြောင်းနဲ့ တိုက်စစ်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Unicode code chart: Myanmar (U+1000–U+109F), digits U+1040–U+1049",
+          url: "https://www.unicode.org/charts/PDF/U1000.pdf",
+        }
+      - {
+          title: "W3C WAI: Understanding Success Criterion 1.4.4 Resize Text",
+          url: "https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html",
+        }
+      - {
+          title: "ISO/IEC 25010 (product quality model), iso25000.com",
+          url: "https://iso25000.com/index.php/en/iso-25000-standards/iso-25010",
+        }
+    actions:
+      - { id: close-f, type: whiteboard.apply, at: { mark: close-f }, open: false }
+      - id: type-nfr
+        type: editor.type
+        at: { mark: type-nfr }
+        target: { file: docs/requirements.md, after: "app က အလုပ်ဖြစ်မဖြစ် သိမယ်။\n\n", occurrence: 1 }
+        text: "## Non-functional\n- ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။\n- မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။\n- customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။\n- စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။\n- run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-nfr,
+          type: expect.file,
+          at: { afterAction: type-nfr },
+          path: docs/requirements.md,
+          contains: "- ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။",
+        }
+      - {
+          id: sel-nfr-speed,
+          type: editor.select,
+          at: { mark: sel-nfr-speed },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-nfr-burmese,
+          type: editor.select,
+          at: { mark: sel-nfr-burmese },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- မြန်မာစာ မှန်မှန် ပေါ်ရမယ်။ မြန်မာဂဏန်းနဲ့ ရိုက်ရင်လည်း လက်ခံရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-nfr-phone,
+          type: editor.select,
+          at: { mark: sel-nfr-phone },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- customer ရဲ့ ဖုန်းနံပါတ်ကို ဆိုင်ကလွဲရင် ဘယ်သူမှ မမြင်ရဘူး။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-nfr-text,
+          type: editor.select,
+          at: { mark: sel-nfr-text },
+          target:
+            { file: docs/requirements.md, text: "- စာလုံး ကြီးကြီးနဲ့ ဖတ်တဲ့သူလည်း သုံးလို့ရရမယ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-nfr-cost,
+          type: editor.select,
+          at: { mark: sel-nfr-cost },
+          target:
+            { file: docs/requirements.md, text: "- run ဖို့ တစ်လ 30,000 ကျပ်ထက် မကုန်ရဘူး။", occurrence: 1 },
+        }
+
+  - id: constraints
+    narration: >
+      [[mark:type-con]] နောက်ဆုံး အပိုင်းကတော့ constraint တွေပါ။ constraint ဆိုတာ ကိုယ်တို့ ရွေးလို့ မရတဲ့
+      ကန့်သတ်ချက်တွေပါ။ ဥပမာ လူ၊ အချိန်၊ ငွေ စတာတွေပါ။ ငွေ ဘယ်လောက် သုံးနိုင်လဲ ဆိုတဲ့ budget ကတော့ ခုနက နောက်ဆုံး
+      စာကြောင်းမှာ ပါပြီးသားပါ။ [[mark:sel-con-one]] ပထမ စာကြောင်းက လူအင်အားနဲ့ ပတ်သက်တဲ့ ကန့်သတ်ချက်ပါ။ ဆောက်ဖို့ရော၊
+      ပြီးရင် ဆက်ထိန်းဖို့ရော ကိုယ် တစ်ယောက်တည်းပဲ ရှိပါတယ်။ ဒါကြောင့် ဖြေရှင်းနည်း တစ်ခု ရွေးတိုင်း၊ ကိုယ် တစ်ယောက်တည်း ထိန်းနိုင်မလား
+      ဆိုတာကို မေးရပါမယ်။ [[mark:sel-con-rest]]
+      ကျန်တဲ့ နှစ်ကြောင်းက ငွေချေပုံနဲ့ ဆိုင်ဖွင့်ချိန်ပါ။ ဒါတွေက app ကြောင့် ပြောင်းမှာ မဟုတ်တဲ့ ဆိုင်ရဲ့ အလုပ်လုပ်ပုံ ဖြစ်ပြီး၊
+      agent က ခန့်မှန်းလို့ ရတဲ့ အရာတွေ မဟုတ်ပါဘူး။ ဥပမာ စနေ
+      တနင်္ဂနွေမှာ ဖွင့်ချိန် မတူတာကို ဒီမှာ မရေးထားရင်၊ agent ဆီ မရောက်သလို နောက်မှ ဝင်လာမယ့် လူ အသစ်လည်း
+      သိမှာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - id: type-con
+        type: editor.type
+        at: { mark: type-con }
+        target: { file: docs/requirements.md, after: "30,000 ကျပ်ထက် မကုန်ရဘူး။\n\n", occurrence: 1 }
+        text: "## Constraints\n- app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။\n- ငွေကို ကောင်တာမှာပဲ ချေမယ်။\n- ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00\n"
+        cadence: line-by-line
+      - {
+          id: expect-con,
+          type: expect.file,
+          at: { afterAction: type-con },
+          path: docs/requirements.md,
+          contains: "- ငွေကို ကောင်တာမှာပဲ ချေမယ်။",
+        }
+      - {
+          id: sel-con-one,
+          type: editor.select,
+          at: { mark: sel-con-one },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- app ကို ကိုယ်တစ်ယောက်တည်း AI agent နဲ့ တည်ဆောက်မယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-con-rest,
+          type: editor.select,
+          at: { mark: sel-con-rest },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- ငွေကို ကောင်တာမှာပဲ ချေမယ်။\n- ဆိုင်ဖွင့်ချိန် — တနင်္လာ–သောကြာ 6:00–20:00၊ စနေ–တနင်္ဂနွေ 7:00–21:00\n",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ တစ်ယောက်ယောက်က non functional requirement နှစ်ကြောင်း ရေးလာတယ်
+      ဆိုပါစို့။ ပထမ တစ်ကြောင်းက စာမျက်နှာ မြန်မြန် ပွင့်ရမယ် လို့ ရေးထားပြီး၊ ဒုတိယ တစ်ကြောင်းက အော်ဒါ အသစ်ကို
+      ကောင်တာက တစ်မိနစ်အတွင်း မြင်ရမယ် လို့ ရေးထားပါတယ်။ ဘယ် တစ်ကြောင်းကို ပြန်ရေးဖို့ လိုလဲ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ပထမ တစ်ကြောင်းပါ။ ဘာကြောင့်လဲဆိုတော့ အဲဒီ
+      စာကြောင်းကို စစ်လို့ မရလို့ပါ။ ဘယ်လောက် မြန်ရမလဲ၊ ဘယ်ဖုန်း၊ ဘယ် network ပေါ်မှာလဲ ဆိုတာ မပါပါဘူး။ ဒီအတိုင်း
+      ပေးလိုက်ရင် agent က သူ စမ်းတဲ့ ကွန်ပျူတာပေါ်မှာ မြန်နေရုံနဲ့ ပြီးပြီ ဆိုတဲ့ အဖြေ ပြန်ပေးနိုင်ပါတယ်။ ဒုတိယ
+      တစ်ကြောင်းမှာတော့ ဘယ်လောက် အချိန်အတွင်း၊ ဘယ်သူ မြင်ရမလဲ ဆိုတာ ပါလို့ တိုင်းကြည့်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Agile Alliance: What does INVEST Stand For?",
+          url: "https://www.agilealliance.org/glossary/invest/",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q, z-o1, z-o2, z-o2b],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-r1],
+          drawMs: 1300,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ requirement တွေကို app သုံးမယ့် လူတွေဆီကနေ ရှာပြီး၊ agent ရဲ့ အကြံတွေကို
+      လူတွေနဲ့ တိုက်စစ်ပြီးမှ ဆုံးဖြတ်ပါတယ်။ [[mark:sel-why-recap]] user story တိုင်းမှာ ဘယ်သူ၊ ဘာ၊ ဘာကြောင့် ပါရပြီး၊
+      ဘာကြောင့်လဲ ဆိုတဲ့ အပိုင်းကို မဖြုတ်ပါနဲ့။ [[mark:sel-nfr-recap]] ဘယ်လောက် ကောင်းရမလဲ ဆိုတဲ့ non functional
+      requirement တွေကို စစ်လို့ရအောင် အတိအကျ ရေးပါ။ [[mark:sel-con-recap]] ရွေးလို့ မရတဲ့ constraint တွေကိုလည်း
+      ရေးထားပါ။ နောက် lesson မှာတော့ ဒီ စာရင်းထဲက အရာ အားလုံးကို ပထမ version မှာ တစ်ခါတည်း မဆောက်နိုင်လို့၊ ဘာကို
+      အရင် ဆောက်မလဲ ဆိုတဲ့ scope နဲ့ MVP ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "GOV.UK Service Manual: Writing user stories",
+          url: "https://www.gov.uk/service-manual/agile-delivery/writing-user-stories",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (requirements and planning)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: sel-why-recap,
+          type: editor.select,
+          at: { mark: sel-why-recap },
+          target: { file: docs/requirements.md, text: "ဒါမှ တန်းမစီရဘဲ ယူသွားလို့ရမယ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-nfr-recap,
+          type: editor.select,
+          at: { mark: sel-nfr-recap },
+          target:
+            {
+              file: docs/requirements.md,
+              text: "- ဈေးပေါတဲ့ Android ဖုန်း၊ နှေးတဲ့ mobile data မှာ 3 စက္ကန့်အတွင်း ပွင့်ရမယ်။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-con-recap,
+          type: editor.select,
+          at: { mark: sel-con-recap },
+          target: { file: docs/requirements.md, text: "## Constraints", occurrence: 1 },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
