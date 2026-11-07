@@ -2682,7 +2682,7 @@ lesson:
           { "id": "p06", "test": "language", "lang": "en", "item": "palata", "channel": "app", "text": "The palata is too oily." },
           { "id": "p07", "test": "language", "lang": "my", "item": "palata", "channel": "app", "text": "ပလာတာ ဆီ များလွန်းတယ်။" },
           { "id": "p08", "test": "script", "lang": "my-latn", "item": "laphet-yay", "channel": "app", "text": "Laphet yay ka a yan kg tl." },
-          { "id": "p09", "test": "name", "lang": "my", "item": "mohinga", "channel": "website", "text": "မြမြ မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။" },
+          { "id": "p09", "test": "name", "lang": "my", "item": "mohinga", "channel": "website", "text": "လှလှ မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။" },
           { "id": "p10", "test": "name", "lang": "my", "item": "mohinga", "channel": "website", "text": "အောင်အောင် မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။" }
          ]
         }
@@ -3968,7 +3968,7 @@ scenes:
       [[mark:close-data]] ကိုယ်တို့ရဲ့ paired test တွေကို ကြည့်ရအောင်။ [[mark:open-pairs]] ဒါတွေက lesson အတွက်
       ရေးထားတဲ့ နမူနာ review တွေပါ။ test တစ်ခုချင်းမှာ pronoun၊ ဘာသာစကား၊ ရေးတဲ့ စာလုံး၊ နာမည် ဆိုပြီး
       တစ်ချက်ပဲ ပြောင်းထားပါတယ်။ ကျောင်းသား မောင်မောင် လို customer တွေ ရိုက်တတ်တဲ့ အင်္ဂလိပ် စာလုံးနဲ့ ရေးတဲ့
-      မြန်မာစကား review လည်း ပါပါတယ်။ [[mark:sel-meta]] row တိုင်းမှာ metadata ကိုလည်း ကပ်ထားပါတယ်။ [[mark:sel-names]] နောက်ဆုံး နှစ်ကြောင်းကတော့ ဆိုင်ပိုင်ရှင် မြမြ နဲ့ member အောင်အောင် ဆိုပြီး
+      မြန်မာစကား review လည်း ပါပါတယ်။ [[mark:sel-meta]] row တိုင်းမှာ metadata ကိုလည်း ကပ်ထားပါတယ်။ [[mark:sel-names]] နောက်ဆုံး နှစ်ကြောင်းကတော့ ဆိုင်ပိုင်ရှင် လှလှ နဲ့ member အောင်အောင် ဆိုပြီး
       အမျိုးသမီး နာမည်နဲ့ အမျိုးသား နာမည်ပဲ ကွာတဲ့ မြန်မာ review တွေပါ။
     sources:
       - {
@@ -3996,7 +3996,7 @@ scenes:
         type: editor.select
         at: { mark: sel-names }
         target:
-          { file: data/pairs.json, text: '"text": "မြမြ မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။"', occurrence: 1 }
+          { file: data/pairs.json, text: '"text": "လှလှ မှာထားတဲ့ မုန့်ဟင်းခါး အေးနေတယ်။"', occurrence: 1 }
 
   - id: results
     chapter: "Paired test ရလဒ်"
@@ -4006,7 +4006,7 @@ scenes:
       ဖြစ်ပါတယ်၊ ဒီ test မှာတော့ ကွာခြားမှု မတွေ့ရပါဘူး။ [[mark:read-lang]] အင်္ဂလိပ် review နှစ်ခုကိုလည်း
       မှန်မှန် ခွဲပါတယ်၊ လက်ဖက်ရည် ကောင်းတာက positive၊ ပလာတာ ဆီများတာက negative ပါ။ ဒါပေမဲ့ အဲဒီ နှစ်ခုနဲ့
       အဓိပ္ပာယ် တူတဲ့ မြန်မာ review တွေကတော့ ချီးကျူးတာရော တိုင်ကြားတာရော positive ဘက်ကို နည်းနည်းပဲ
-      ယိမ်းတဲ့ အမှတ် အတူတူ ရနေပါတယ်။ [[mark:read-name]] မြမြ နဲ့ အောင်အောင် review နှစ်ခုလည်း အမှတ် တစ်ထပ်တည်း
+      ယိမ်းတဲ့ အမှတ် အတူတူ ရနေပါတယ်။ [[mark:read-name]] လှလှ နဲ့ အောင်အောင် review နှစ်ခုလည်း အမှတ် တစ်ထပ်တည်း
       ဖြစ်ပြီး၊ မုန့်ဟင်းခါး အေးနေတယ် ဆိုတဲ့ တိုင်ကြားချက်ကို positive လို့ ခွဲထားပါတယ်။ နာမည် ပြောင်းတာနဲ့
       အဖြေ မပြောင်းတာက မျှတလို့ မဟုတ်ဘဲ၊ model က မြန်မာစာကို လုံးဝ မဖတ်နိုင်လို့ ဖြစ်နိုင်ပါတယ်။
     sources:
