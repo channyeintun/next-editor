@@ -31,7 +31,7 @@
 #   4. kitchen.test.js, one block: "prints one ticket per order" (toHaveBeenCalledTimes(2),
 #      mock.calls[1][0].table is 8) -> PASS, Tests 4 passed (4).
 #   5. booking.test.js, one block: "rejects a table that is taken", a stub store whose get
-#      resolves "မြမြ" -> PASS, Tests 5 passed (5).
+#      resolves "အောင်အောင်" -> PASS, Tests 5 passed (5).
 #   6. booking.test.js, one block: "rejects a second booking" with the fake memoryStore() ->
 #      PASS, Tests 6 passed (6).
 # Boards: (A) a real dependency in a test (the printer, the database, a missing service) and the
@@ -2141,11 +2141,11 @@ scenes:
       [[mark:select-dummy]] ရှိပြီးသား test က စားပွဲ နံပါတ် ၁၃ ကို ငြင်းရမယ်လို့ စစ်ပြီး၊ store နေရာမှာ
       null ကို ထည့်ထားပါတယ်။ ဆိုင်မှာ စားပွဲ ၁၂ လုံးပဲ ရှိလို့၊ code က store ကို မမေးခင်ကတည်းက
       ငြင်းပါတယ်။ ဒီလို ထည့်ပေးရပေမဲ့ ဘယ်တော့မှ မသုံးတဲ့ double ကို dummy လို့ ခေါ်ပါတယ်။
-      [[mark:type-stub]] တခြားလူ booking လုပ်ထားပြီးသား စားပွဲကို စစ်ဖို့အတွက်တော့၊ store ကို မေးတဲ့ function ကို mock function နဲ့ အစားထိုးပြီး၊ မြမြ booking လုပ်ထားတယ် ဆိုတဲ့ အဖြေကို ကြိုသတ်မှတ်ပါမယ်။
+      [[mark:type-stub]] တခြားလူ booking လုပ်ထားပြီးသား စားပွဲကို စစ်ဖို့အတွက်တော့၊ store ကို မေးတဲ့ function ကို mock function နဲ့ အစားထိုးပြီး၊ အောင်အောင် booking လုပ်ထားတယ် ဆိုတဲ့ အဖြေကို ကြိုသတ်မှတ်ပါမယ်။
       [[mark:select-resolved]] mock Resolved Value က ခေါ်တိုင်း ဒီ အဖြေနဲ့ resolve ဖြစ်တဲ့ Promise ကို
       ပြန်ပေးပါတယ်။ async မဟုတ်တဲ့ function ဆိုရင်တော့ mock Return Value ကို သုံးပါတယ်။ ဒီလို
       ကြိုသတ်မှတ်ထားတဲ့ အဖြေကို ပြန်ပေးတဲ့ double ကို stub လို့ ခေါ်ပါတယ်။ [[mark:read-stub]] test
-      ငါးခုလုံး pass ဖြစ်ပါပြီ။ stub က မြမြ ရှိတယ်လို့ ဖြေလို့၊ လှလှ ရဲ့ booking ကို code က
+      ငါးခုလုံး pass ဖြစ်ပါပြီ။ stub က အောင်အောင် ရှိတယ်လို့ ဖြေလို့၊ လှလှ ရဲ့ booking ကို code က
       ငြင်းလိုက်တာပါ။
     sources:
       - { title: "Vitest: mockResolvedValue", url: "https://vitest.dev/api/mock#mockresolvedvalue" }
@@ -2192,7 +2192,7 @@ scenes:
             after: "  await expect(booking).rejects.toThrow(\"does not exist\");\n});\n",
             occurrence: 1,
           }
-        text: "\ntest(\"rejects a table that is taken\", async () => {\n  const store = { get: vi.fn().mockResolvedValue(\"မြမြ\") };\n  const bookings = createBookings(store);\n\n  const booking = bookings.book(5, \"18:00\", \"လှလှ\");\n  await expect(booking).rejects.toThrow(\"is taken\");\n});\n"
+        text: "\ntest(\"rejects a table that is taken\", async () => {\n  const store = { get: vi.fn().mockResolvedValue(\"အောင်အောင်\") };\n  const bookings = createBookings(store);\n\n  const booking = bookings.book(5, \"18:00\", \"လှလှ\");\n  await expect(booking).rejects.toThrow(\"is taken\");\n});\n"
         cadence: block
       - id: expect-stub-passed
         type: expect.preview
@@ -2212,11 +2212,15 @@ scenes:
         type: editor.select
         at: { mark: select-resolved }
         target:
-          { file: src/booking.test.js, text: 'vi.fn().mockResolvedValue("မြမြ")', occurrence: 1 }
+          {
+            file: src/booking.test.js,
+            text: 'vi.fn().mockResolvedValue("အောင်အောင်")',
+            occurrence: 1,
+          }
 
   - id: fake
     narration: >
-      [[mark:type-fake]] ဒီတစ်ခါ memory store ကို ထည့်ပေးပြီး၊ မြမြ booking လုပ်ပြီးမှ လှလှ အဲဒီ
+      [[mark:type-fake]] ဒီတစ်ခါ memory store ကို ထည့်ပေးပြီး၊ အောင်အောင် booking လုပ်ပြီးမှ လှလှ အဲဒီ
       စားပွဲကို အဲဒီ အချိန်မှာ ထပ် booking လုပ်ကြည့်ပါမယ်။ [[mark:read-fake]] test ခြောက်ခုလုံး pass
       ဖြစ်ပါပြီ။ ဒီတစ်ခါ ဘယ် အဖြေကိုမှ ကြိုမသတ်မှတ်ထားဘဲ၊ ပထမ booking ကို store ထဲ တကယ် ရေးပြီး
       ဒုတိယ booking က အဲဒါကို တကယ် ပြန်တွေ့လို့ ငြင်းတာပါ။ ဒီလို အစစ်လို အလုပ်လုပ်တဲ့ ရိုးရှင်းတဲ့ အစားထိုးကို fake လို့ ခေါ်ပြီး၊ ကိုယ်တိုင် ရေးတဲ့ ရိုးရိုး code ပါ။
@@ -2239,7 +2243,7 @@ scenes:
             after: "  await expect(booking).rejects.toThrow(\"is taken\");\n});\n",
             occurrence: 1,
           }
-        text: "\ntest(\"rejects a second booking\", async () => {\n  const bookings = createBookings(memoryStore());\n\n  await bookings.book(5, \"18:00\", \"မြမြ\");\n  const second = bookings.book(5, \"18:00\", \"လှလှ\");\n  await expect(second).rejects.toThrow(\"is taken\");\n});\n"
+        text: "\ntest(\"rejects a second booking\", async () => {\n  const bookings = createBookings(memoryStore());\n\n  await bookings.book(5, \"18:00\", \"အောင်အောင်\");\n  const second = bookings.book(5, \"18:00\", \"လှလှ\");\n  await expect(second).rejects.toThrow(\"is taken\");\n});\n"
         cadence: block
       - id: expect-fake-passed
         type: expect.preview
@@ -2263,7 +2267,7 @@ scenes:
         type: expect.file
         at: { afterAction: select-fake }
         path: src/booking.test.js
-        contains: 'const store = { get: vi.fn().mockResolvedValue("မြမြ") };'
+        contains: 'const store = { get: vi.fn().mockResolvedValue("အောင်အောင်") };'
 
   - id: family
     narration: >
