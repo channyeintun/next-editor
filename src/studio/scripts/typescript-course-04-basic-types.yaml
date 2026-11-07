@@ -5,7 +5,7 @@
 # amount.toLocalString("en-US") — a real typo for toLocaleString that the implicit `any` hides.
 # The panel (data-modes "errors types output") shows:
 #   Errors   3 × TS7006 "Parameter '…' implicitly has an 'any' type." (price, count, amount)
-#   Output   မြမြ 2 ခွက် ပါဆယ် false / red "Uncaught TypeError: amount.toLocalString is not a function"
+#   Output   လှလှ 2 ခွက် ပါဆယ် false / red "Uncaught TypeError: amount.toLocalString is not a function"
 #
 # Edits, all insert-only:
 #   1. `: number` on price and count -> 1 error left (amount).
@@ -614,8 +614,8 @@ lesson:
           }
         }
       src/main.ts: |
-        // မြမြရဲ့ အော်ဒါ
-        let customer = "မြမြ";
+        // လှလှရဲ့ အော်ဒါ
+        let customer = "လှလှ";
         let cups = 2;
         let isTakeaway = false;
 
@@ -795,7 +795,7 @@ lesson:
         y: 235,
         width: 580,
         height: 36,
-        text: '"မြမြ"၊ "ကော်ဖီ" · စာသား',
+        text: '"လှလှ"၊ "ကော်ဖီ" · စာသား',
         strokeColor: "#1e1e1e",
         fontSize: 28,
       }
@@ -1012,7 +1012,7 @@ scenes:
 
   - id: starter
     narration: >
-      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-main]] ဒါက မြမြရဲ့ အော်ဒါကို တွက်ပေးတဲ့ program ပါ။
+      [[mark:close-board]] ဒီနေ့ code ကို ကြည့်ရအောင်။ [[mark:open-main]] ဒါက လှလှရဲ့ အော်ဒါကို တွက်ပေးတဲ့ program ပါ။
       [[mark:select-vars]] အပေါ်ဆုံးမှာ customer နာမည်၊ ခွက် အရေအတွက်နဲ့ ပါဆယ် ယူမလား ဆိုတာကို variable
       သုံးခုနဲ့ ထားပါတယ်။ ဘယ် variable မှာမှ type မရေးထားတာကို သတိထား ကြည့်ပါ။ [[mark:select-cup-total]] ဒီ
       function က တစ်ခွက်ဈေးကို ခွက် အရေအတွက်နဲ့ မြှောက်ပြီး ကျသင့်ငွေကို ပြန်ပေးပါတယ်။ [[mark:select-kyat]]
@@ -1044,7 +1044,7 @@ scenes:
         target:
           {
             file: src/main.ts,
-            text: "let customer = \"မြမြ\";\nlet cups = 2;\nlet isTakeaway = false;",
+            text: "let customer = \"လှလှ\";\nlet cups = 2;\nlet isTakeaway = false;",
             occurrence: 1,
           }
       - id: select-cup-total
@@ -1067,7 +1067,7 @@ scenes:
 
   - id: panel
     narration: >
-      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output ကို အရင် ကြည့်ရအောင်။ ပထမ line မှာ မြမြ၊ ခွက် အရေအတွက်နဲ့
+      [[mark:panel-ready]] ညာဘက် panel ရဲ့ Output ကို အရင် ကြည့်ရအောင်။ ပထမ line မှာ လှလှ၊ ခွက် အရေအတွက်နဲ့
       ပါဆယ် မဟုတ်ဘူး ဆိုတဲ့ false ထွက်လာပါတယ်။ [[mark:read-crash]] ဒုတိယ line မှာတော့ အနီရောင် error နဲ့
       program ရပ်သွားပါတယ်။ ငွေပမာဏ ပေါ်မှာ ခေါ်ထားတဲ့ method က function မဟုတ်ဘူး လို့ ပြောနေတာပါ။ ဘာ
       မှားနေလဲ ဆိုတာကို ခဏနေမှ ရှာကြည့်ပါမယ်။ [[mark:read-errors]] အပေါ်က Errors အပိုင်းမှာတော့ error သုံးခု
@@ -1111,7 +1111,7 @@ scenes:
         at: { afterAction: expect-start-three }
         timeoutMs: 5000
         target: { by: testId, value: ts-out-1 }
-        textContains: "မြမြ 2 ခွက် ပါဆယ် false"
+        textContains: "လှလှ 2 ခွက် ပါဆယ် false"
         retry: { maxAttempts: 3, delayMs: 300 }
       - id: expect-start-crash
         type: expect.preview
@@ -1369,7 +1369,7 @@ scenes:
       - id: type-query-customer
         type: editor.type
         at: { mark: type-queries }
-        target: { file: src/main.ts, after: "let customer = \"မြမြ\";\n", occurrence: 1 }
+        target: { file: src/main.ts, after: "let customer = \"လှလှ\";\n", occurrence: 1 }
         text: "//  ^?\n"
       - id: type-query-cups
         type: editor.type
@@ -1552,7 +1552,7 @@ scenes:
         type: expect.file
         at: { afterAction: expect-file-kyat }
         path: src/main.ts
-        contains: "let customer = \"မြမြ\";\n//  ^?\nlet cups = 2;\n//  ^?\nlet isTakeaway = false;\n//  ^?\n"
+        contains: "let customer = \"လှလှ\";\n//  ^?\nlet cups = 2;\n//  ^?\nlet isTakeaway = false;\n//  ^?\n"
       - id: expect-file-test
         type: expect.file
         at: { afterAction: expect-file-queries }
