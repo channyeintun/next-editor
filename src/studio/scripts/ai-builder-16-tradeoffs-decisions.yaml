@@ -1,0 +1,1150 @@
+# AI Builder, lesson 16: trade-offs and decision records (Burmese, docs kind).
+#
+# Start state (ws/): base-docs (package.json with a no-op dev script, notes.md, unused);
+# docs/data.md complete as L15 leaves it (COURSE-KIT §4.9); docs/spec.md as L09 leaves it (§4.3 without
+# AC-6); docs/decisions.md pinned with only its title line (§4.10: L16 creates it). Nothing runs.
+#
+# Typed into decisions.md (COURSE-KIT §4.10, ADR-001 and ADR-002 exactly; L17 appends ADR-003):
+# ADR-001 in two line-by-line actions (heading + Context + Options; Decision + Consequences), then
+# ADR-002 as one block walked through with selects. The final file equals §4.10's first block
+# (tools/sim-docs.ts).
+#
+# Boards: (K) who decides a trade-off (orange: us and မြမြ, the business; violet: the agent builds the
+# decided design) and three common kinds with the shop's question for each; (T) a balance scale for
+# where the database lives: own server vs managed service, gains green and costs red on each side,
+# costs today and later (orange), the question that would change our mind (orange) and the choice (green); (A) the ADR's four parts
+# (blue) with what each answers, short/numbered/dated (orange), never deleted (green); (Z) the quiz.
+#
+# Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-16-tradeoffs-decisions.yaml
+schemaVersion: 1
+lesson:
+  slug: ai-builder-16-tradeoffs-decisions
+  title: "AI Builder 16: Trade-off နဲ့ decision record"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: AI Builder
+    entryFilePath: docs/data.md
+    sidebarStartsCollapsed: true
+    files:
+      docs/data.md: |
+        # Data · ကြိုမှာ app
+
+        ## Menu item
+        id · name · price (ကျပ်၊ ကိန်းပြည့်) · available (yes / no)
+
+        ## Order
+        id · number (#101 …) · created_at (Asia/Yangon) · pickup_at (Asia/Yangon) · customer_name · phone · status · total (ကျပ်)
+
+        ## Order line
+        id · order_id · menu_item_id · quantity (1–20) · price_each (မှာတဲ့အချိန်က ဈေး)
+
+        ## Status
+        new → ready → picked_up၊ ဒါမှမဟုတ် cancelled
+
+        ## Not stored
+        လိပ်စာ၊ မွေးနေ့ — မလိုလို့ မသိမ်းဘူး
+      docs/decisions.md: |+
+        # Decisions
+
+      docs/spec.md: |
+        # Spec · ကြိုမှာ app (v1)
+
+        ## Goal
+        မနက်ပိုင်း customer တွေ တန်းမစီရဘဲ ကြိုမှာပြီး လာယူနိုင်ဖို့ (problem.md)။
+
+        ## Users
+        customer (အောင်အောင်၊ မောင်မောင်)၊ ကောင်တာ (လှလှ)၊ ဆိုင်ပိုင်ရှင် (မြမြ)
+
+        ## Rules
+        - ဈေးနှုန်း — ကျပ် ကိန်းပြည့်၊ ဒသမ မပါ။
+        - အရေအတွက် — 1 ကနေ 20 အထိ။
+        - လာယူချိန် — ဒီနေ့၊ ဆိုင်ဖွင့်ချိန်အတွင်း၊ အနည်းဆုံး 15 မိနစ် ကြိုမှာရမယ်။
+        - အော်ဒါနံပါတ် — နေ့တိုင်း #101 ကနေ စမယ်။
+        - ငွေ — ကောင်တာမှာ ချေမယ်။
+
+        ## Example
+        အောင်အောင် — လက်ဖက်ရည် 2 ခွက်၊ 8:30 မှာ လာယူမယ် → အော်ဒါ #101၊ 3,000 ကျပ်
+
+        ## Out of scope
+        requirements.md ရဲ့ Won't (for now) — delivery၊ online ငွေပေးချေမှု၊ login
+
+        ## Acceptance criteria
+        AC-1 Given လက်ဖက်ရည် 2၊ 8:30၊ နာမည်နဲ့ ဖုန်း ထည့်ထားတယ်
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါနံပါတ်၊ စုစုပေါင်း 3,000 ကျပ်နဲ့ 8:30 ကို မြင်ရမယ်
+        AC-2 Given အရေအတွက် 0
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ "1 ကနေ 20 အထိ ရွေးပါ" လို့ ပြမယ်
+        AC-3 Given လာယူချိန်က ဆိုင်ပိတ်ချိန်ထဲမှာ
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဆိုင်ဖွင့်ချိန်ကို ပြမယ်
+        AC-4 Given ဖုန်းနံပါတ် မထည့်ရသေးဘူး
+             When မှာမယ် ကို နှိပ်တယ်
+             Then အော်ဒါ မဖြစ်ဘဲ ဖုန်းနံပါတ် ထည့်ခိုင်းမယ်
+        AC-5 Given အော်ဒါ အသစ် ဝင်လာတယ်
+             When လှလှ က ကောင်တာစာရင်းကို ကြည့်တယ်
+             Then အော်ဒါကို လာယူချိန်အလိုက် စီပြီး မြင်ရမယ်
+
+        ## Definition of done
+        - သက်ဆိုင်တဲ့ AC တွေ ဖုန်း screen ပေါ်မှာ စစ်ပြီး pass ဖြစ်ရမယ်။
+        - code ထဲမှာ secret မပါရဘူး။
+        - spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။
+
+        ## Open questions
+        requirements.md ရဲ့ Questions for မြမြ ကို ကြည့်ပါ။
+      notes.md: |
+        # Notes
+      package.json: |
+        {
+          "name": "ai-builder-lesson",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board K: who decides (top row), then three common kinds of trade-off (orange) with the shop's
+    # question for each (white).
+    - {
+        id: k-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "trade off ကို ဘယ်သူ ဆုံးဖြတ်မလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: k-b1, kind: rectangle, x: 300, y: 235, width: 360, height: 100, strokeColor: "#f08c00" }
+    - {
+        id: k-t1,
+        kind: text,
+        x: 320,
+        y: 247,
+        width: 220,
+        height: 36,
+        text: "ကိုယ်နဲ့ မြမြ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k-t1b,
+        kind: text,
+        x: 320,
+        y: 290,
+        width: 320,
+        height: 36,
+        text: "budget · လူ · အချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 668,
+        y: 262,
+        width: 46,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: k-b2, kind: rectangle, x: 722, y: 235, width: 360, height: 100, strokeColor: "#6741d9" }
+    - {
+        id: k-t2,
+        kind: text,
+        x: 742,
+        y: 247,
+        width: 120,
+        height: 36,
+        text: "agent",
+        strokeColor: "#6741d9",
+        fontSize: 28,
+      }
+    - {
+        id: k-t2b,
+        kind: text,
+        x: 742,
+        y: 290,
+        width: 320,
+        height: 36,
+        text: "ရွေးပြီးသားကို ဆောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-sub,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 400,
+        height: 36,
+        text: "ခဏခဏ တွေ့ရတဲ့ အမျိုးအစား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-p1,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 200,
+        height: 36,
+        text: "ဆောက် ↔ ငှား",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k-e1,
+        kind: text,
+        x: 620,
+        y: 405,
+        width: 420,
+        height: 36,
+        text: "database ကို ဘယ်သူ ထိန်းမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-p2,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 320,
+        height: 36,
+        text: "ရိုးရှင်း ↔ ပြောင်းလွယ်",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k-e2,
+        kind: text,
+        x: 620,
+        y: 460,
+        width: 320,
+        height: 36,
+        text: "framework သုံးမလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-p3,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 220,
+        height: 36,
+        text: "အခု ↔ နောက်မှ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: k-e3,
+        kind: text,
+        x: 620,
+        y: 515,
+        width: 420,
+        height: 36,
+        text: "online ငွေချေတာ ဘယ်တော့လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: a balance scale (beam, post, base in white). Each side: the option (white), what it gives
+    # (green) and what it costs (red); under it the question that would change our mind (orange), the
+    # way out (white) and the choice (green).
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "database ကို ဘယ်သူ ထိန်းမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: t-beam, kind: rectangle, x: 320, y: 295, width: 740, height: 6, strokeColor: "#1e1e1e" }
+    - {
+        id: t-post,
+        kind: rectangle,
+        x: 684,
+        y: 301,
+        width: 12,
+        height: 120,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-base,
+        kind: rectangle,
+        x: 634,
+        y: 421,
+        width: 112,
+        height: 10,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-h-left,
+        kind: text,
+        x: 330,
+        y: 250,
+        width: 240,
+        height: 36,
+        text: "ကိုယ်ပိုင် server",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-l1,
+        kind: text,
+        x: 300,
+        y: 318,
+        width: 290,
+        height: 36,
+        text: "+ စိတ်ကြိုက် ပြင်လို့ရ",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-l2,
+        kind: text,
+        x: 300,
+        y: 363,
+        width: 260,
+        height: 36,
+        text: "− backup ကိုယ်တိုင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-l3,
+        kind: text,
+        x: 300,
+        y: 408,
+        width: 290,
+        height: 36,
+        text: "− ပျက်ရင် ကိုယ်ပြင်",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-h-right,
+        kind: text,
+        x: 780,
+        y: 250,
+        width: 280,
+        height: 36,
+        text: "managed service",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r1,
+        kind: text,
+        x: 760,
+        y: 318,
+        width: 280,
+        height: 36,
+        text: "+ backup သူတို့ လုပ်",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-r2,
+        kind: text,
+        x: 760,
+        y: 363,
+        width: 200,
+        height: 36,
+        text: "+ free tier",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    - {
+        id: t-r3,
+        kind: text,
+        x: 760,
+        y: 408,
+        width: 270,
+        height: 36,
+        text: "− service ကို မှီခို",
+        strokeColor: "#e03131",
+        fontSize: 28,
+      }
+    - {
+        id: t-cost,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 510,
+        height: 36,
+        text: "ကုန်ကျမှု · ဒီနေ့ ရော နောင်လတွေ ပါ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-change,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 440,
+        height: 36,
+        text: "ဘာဖြစ်ရင် ပြန်စဉ်းစားမလဲ?",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: t-change2,
+        kind: text,
+        x: 300,
+        y: 552,
+        width: 380,
+        height: 36,
+        text: "data ယူပြီး ထွက်လို့ ရရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-decide,
+        kind: text,
+        x: 300,
+        y: 596,
+        width: 660,
+        height: 42,
+        text: "ရွေး · managed service ရဲ့ free tier",
+        strokeColor: "#2f9e44",
+        fontSize: 32,
+      }
+    # Board A: the ADR's four parts (blue names, white questions), then how it is kept (orange) and the
+    # never-delete rule (green).
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 470,
+        height: 50,
+        text: "decision record · ADR",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-n1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 200,
+        height: 36,
+        text: "Context",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-d1,
+        kind: text,
+        x: 560,
+        y: 240,
+        width: 330,
+        height: 36,
+        text: "ဘာကြောင့် ဆုံးဖြတ်ရလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-n2,
+        kind: text,
+        x: 300,
+        y: 295,
+        width: 200,
+        height: 36,
+        text: "Options",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-d2,
+        kind: text,
+        x: 560,
+        y: 295,
+        width: 260,
+        height: 36,
+        text: "ဘာတွေ ရွေးလို့ရလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-n3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 200,
+        height: 36,
+        text: "Decision",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-d3,
+        kind: text,
+        x: 560,
+        y: 350,
+        width: 200,
+        height: 36,
+        text: "ဘာကို ရွေးလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-n4,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 230,
+        height: 36,
+        text: "Consequences",
+        strokeColor: "#1971c2",
+        fontSize: 28,
+      }
+    - {
+        id: a-d4,
+        kind: text,
+        x: 560,
+        y: 405,
+        width: 540,
+        height: 36,
+        text: "ဘာ ပေးရမလဲ · ဘယ်တော့ ပြန်စဉ်းစား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-short,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 320,
+        height: 36,
+        text: "တိုတို · နံပါတ် · ရက်စွဲ",
+        strokeColor: "#f08c00",
+        fontSize: 28,
+      }
+    - {
+        id: a-keep,
+        kind: text,
+        x: 300,
+        y: 535,
+        width: 600,
+        height: 36,
+        text: "အဟောင်းကို မဖျက် → ADR အသစ်က အစားထိုး",
+        strokeColor: "#2f9e44",
+        fontSize: 28,
+      }
+    # Board Z: the quiz (question white, options white, answer green, reason white).
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 200,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#f08c00",
+        fontSize: 36,
+      }
+    - {
+        id: z-q1,
+        kind: text,
+        x: 300,
+        y: 228,
+        width: 540,
+        height: 42,
+        text: "online နဲ့ ဘာလို့ ချေလို့ မရတာလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-q2,
+        kind: text,
+        x: 300,
+        y: 278,
+        width: 400,
+        height: 42,
+        text: "အဖြေကို ဘယ်မှာ ရှာမလဲ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 32,
+      }
+    - {
+        id: z-o1,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 620,
+        height: 36,
+        text: "က · requirements.md ရဲ့ Won't စာရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-o2,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 480,
+        height: 36,
+        text: "ခ · decisions.md ရဲ့ ADR-001",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 420,
+        height: 50,
+        text: "အဖြေ · ခ — ADR-001",
+        strokeColor: "#2f9e44",
+        fontSize: 36,
+      }
+    - {
+        id: z-a1,
+        kind: text,
+        x: 300,
+        y: 528,
+        width: 420,
+        height: 36,
+        text: "Won't · ဘာ မလုပ်ဘူး ဆိုတာပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-a2,
+        kind: text,
+        x: 300,
+        y: 574,
+        width: 590,
+        height: 36,
+        text: "ADR · ဘာကြောင့် · ဘယ်တော့ ပြန်စဉ်းစား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console: AthanLab with the signed-in
+  # user's own API key and voice, or VoxCPM2 when that private feature is
+  # enabled.
+  voiceProfile: pocket-alba-v1
+  seed: 6116
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+scenes:
+  - id: recall
+    chapter: ရွေးစရာ တိုင်းမှာ ပေးရတာ ရှိတယ်
+    narration: >
+      [[mark:sel-price-each]] ပြီးခဲ့တဲ့ lesson မှာ app ရဲ့ data ပုံစံကို ဒီ data ဖိုင်ထဲ ရေးခဲ့ပါတယ်။ order line
+      ထဲမှာ ဈေးကို ထပ်မှတ်လိုက်တော့ အော်ဒါ အဟောင်းတွေရဲ့ ဈေး မပြောင်းတော့ပေမဲ့၊ သိမ်းရမယ့် data နည်းနည်း
+      ပိုလာပါတယ်။ [[mark:tradeoff]] ဒီလို တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတာကို trade off လို့ ခေါ်ပါတယ်။
+      ဒီနေ့တော့ ပိုကြီးတဲ့ trade off နှစ်ခုကို ကြည့်ပါမယ်။ customer တွေ ငွေကို ဘယ်လို ချေမလဲ၊ database ကို ဘယ်သူ
+      ထိန်းမလဲ ဆိုတာပါ။ ဒီလို ရွေးချယ်မှုတွေက app တစ်ခုလုံးရဲ့ ပုံစံကို သတ်မှတ်လို့ architecture decision လို့
+      ခေါ်ပြီး၊ နောက်မှ ပြောင်းဖို့ ခက်ပါတယ်။ ဒါကြောင့် ဆုံးဖြတ်ရုံနဲ့ မပြီးဘဲ၊ ဘာကြောင့် ဒီလို ရွေးခဲ့လဲ
+      ဆိုတာကိုလည်း ရေးထားရပါမယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: sel-price-each,
+          type: editor.select,
+          at: { mark: sel-price-each },
+          target: { file: docs/data.md, text: "price_each (မှာတဲ့အချိန်က ဈေး)", occurrence: 1 },
+        }
+
+  - id: who-decides
+    chapter: ဘယ်သူ ဆုံးဖြတ်မလဲ
+    narration: >
+      [[mark:k-title]] ဒီလို မေးခွန်းကို agent ကို မေးကြည့်ရင်၊ ယုတ္တိရှိပုံရတဲ့ အဖြေ တစ်ခုကို ချက်ချင်း
+      ထုတ်ပေးနိုင်ပါတယ်။ ဒါပေမဲ့ ဘယ်အဖြေက မှန်လဲ ဆိုတာ နည်းပညာထက် ဆိုင်ရဲ့ ငွေ၊ လူ၊ အချိန် လို business
+      ကိစ္စတွေပေါ်မှာ ပိုမူတည်ပါတယ်။ [[mark:k-business]] ဥပမာ ဆိုင်ပိုင်ရှင် မြမြ က app ကို ဆက် အလုပ်လုပ်နေအောင်
+      ထားဖို့ တစ်လ ၃၀၀၀၀ ကျပ်ထက် မသုံးချင်ပါဘူး။ app ကို ကိုယ်တစ်ယောက်တည်း ထိန်းရမှာ ဖြစ်ပြီး၊ ဆိုင်
+      အလုပ်အများဆုံး အချိန်က မနက်ပိုင်းပါ။ ဒီလို အချက်တွေကို ကိုယ်က ရေးမပေးရင် agent ဆီမှာ မရှိပါဘူး။ ဒါကြောင့် ဒီ
+      အချက်တွေကို ချိန်ပြီး ဆုံးဖြတ်တာက ကိုယ်နဲ့ မြမြ ရဲ့ အလုပ်ပါ။ [[mark:k-agent]] ဆုံးဖြတ်ပြီးသား ပုံစံကို
+      ရှင်းရှင်း ရေးပေးထားရင်တော့၊ အဲဒီအတိုင်း ဆောက်တာမှာ agent က မြန်ပါတယ်။ ဆိုတော့ ဆုံးဖြတ်တာနဲ့ အဲဒီ
+      ဆုံးဖြတ်ချက်ကို ရေးထားတာက ကိုယ့်ဘက်က အလုပ် ဖြစ်ပြီး၊ ရေးထားတဲ့အတိုင်း ဆောက်တာက agent ဘက်က အလုပ်ပါ။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+      - {
+          title: "Architectural Decision Records (adr.github.io): an AD is a justified design choice",
+          url: "https://adr.github.io/",
+        }
+    actions:
+      - {
+          id: draw-k-title,
+          type: whiteboard.apply,
+          at: { mark: k-title },
+          open: true,
+          clear: true,
+          upsertIds: [k-title],
+        }
+      - {
+          id: draw-k-business,
+          type: whiteboard.apply,
+          at: { mark: k-business },
+          upsertIds: [k-b1, k-t1, k-t1b],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-k-agent,
+          type: whiteboard.apply,
+          at: { mark: k-agent },
+          upsertIds: [k-a1, k-b2, k-t2, k-t2b],
+          drawMs: 1600,
+        }
+
+  - id: kinds
+    narration: >
+      [[mark:k-p1]] trade off တွေထဲမှာ ခဏခဏ တွေ့ရတဲ့ အမျိုးအစား သုံးမျိုး ရှိပါတယ်။ ပထမက ကိုယ်တိုင် ဆောက်မလား၊
+      တခြားသူ ဆောက်ပြီး ထိန်းပေးနေတဲ့ service ကို ငှားသုံးမလား ဆိုတာပါ။ ကိုယ်တို့ ဆိုင်မှာတော့ database ကို ဘယ်သူ
+      ထိန်းမလဲ ဆိုတဲ့ မေးခွန်းပါ။ [[mark:k-p2]] ဒုတိယက ရိုးရှင်းတာနဲ့ ပြောင်းလွယ်တာကြား ရွေးတာပါ။ app ဆောက်ဖို့
+      တခြားသူတွေ အသင့် ရေးထားတဲ့ code အစု၊ framework ကို သုံးရင် နောက်မှ လုပ်ဆောင်ချက် အသစ်တွေ တိုးရ လွယ်ပေမဲ့၊
+      နားလည်ရမယ့် အပိုင်းတွေ များလာပါတယ်။ AGENTS.md မှာ framework မသုံးဘူး လို့ ရေးခဲ့တာက ဒီ trade off မှာ
+      ရိုးရှင်းတဲ့ဘက်ကို ရွေးခဲ့တာပါ။ [[mark:k-p3]] တတိယက အခု လုပ်မလား၊ နောက်မှ လုပ်မလား ဆိုတာပါ။ online
+      ငွေချေတာကို ပထမ version မှာ ထည့်မလား ဆိုတာ ဒီ အမျိုးအစားထဲ ပါပါတယ်။
+    sources:
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-k-p1,
+          type: whiteboard.apply,
+          at: { mark: k-p1 },
+          upsertIds: [k-sub, k-p1, k-e1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-k-p2,
+          type: whiteboard.apply,
+          at: { mark: k-p2 },
+          upsertIds: [k-p2, k-e2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k-p3,
+          type: whiteboard.apply,
+          at: { mark: k-p3 },
+          upsertIds: [k-p3, k-e3],
+          drawMs: 1200,
+        }
+
+  - id: scale
+    chapter: ချိန်ခွင်ပေါ် တင်ကြည့်ရအောင်
+    narration: >
+      [[mark:t-title]] database ကို ဘယ်သူ ထိန်းမလဲ ဆိုတာကို ချိန်ခွင် တစ်ခုပေါ် တင်ပြီး ချိန်ကြည့်ရအောင်။ ပထမ
+      အဆင့်က ရွေးစရာ၊ option တွေကို စာရင်းလုပ်တာပါ။ [[mark:t-left]] တစ်ခုက server တစ်လုံး ငှားပြီး database ကို
+      ကိုယ်တိုင် တင်ပြီး ထိန်းထားတာပါ။ စိတ်ကြိုက် ပြင်လို့ ရပေမဲ့၊ data ကို မိတ္တူကူးတဲ့ backup နဲ့ software
+      update တွေကို ကိုယ်တိုင် လုပ်ရပြီး၊ ညဘက် ပျက်ရင်လည်း ကိုယ်ပဲ ထပြင်ရပါမယ်။ [[mark:t-right]] နောက်တစ်ခုက
+      ကုမ္ပဏီ တစ်ခုက ထိန်းပေးတဲ့ managed database service ကို ငှားသုံးတာပါ။ backup နဲ့ update ကို service ဘက်က
+      လုပ်ပေးပြီး၊ app သေးသေးလေးတွေ အခမဲ့ သုံးလို့ရတဲ့ free tier လည်း ရှိတတ်ပါတယ်။ ဒါပေမဲ့ အဲဒီ service ကို
+      မှီခိုရပါတယ်။ [[mark:t-cost]] ဒုတိယ အဆင့်က option တစ်ခုစီရဲ့ ကုန်ကျမှုကို ဒီနေ့ရော နောင်လတွေမှာပါ ကြည့်တာပါ။
+      ကိုယ်ပိုင် server က ငှားခ အပြင် လတိုင်း ထိန်းရတဲ့ အချိန်ပါ ကုန်ပြီး၊ managed service ကတော့ app ကြီးလာလို့
+      free tier ကျော်ရင် ငွေ စကုန်ပါမယ်။ [[mark:t-change]] တတိယ အဆင့်က ဘာဖြစ်ရင် ပြန်စဉ်းစားမလဲ ဆိုတာ
+      ကြိုတွေးထားတာပါ။ service ကို စိတ်မချရတော့တဲ့ နေ့မှာ data တွေကို ယူပြီး ထွက်လို့ ရရပါမယ်။ [[mark:t-decide]]
+      ကိုယ်တစ်ယောက်တည်း ထိန်းရပြီး သုံးလို့ရတဲ့ ငွေ၊ budget လည်း နည်းတော့၊ ဒီ ဆိုင်အတွက်တော့ managed service ရဲ့
+      free tier ကို ရွေးပါတယ်။
+    sources:
+      - {
+          title: "AWS docs: What is Amazon RDS? (an example of a managed database service: backups, patching, free tier)",
+          url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - {
+          id: draw-t-title,
+          type: whiteboard.apply,
+          at: { mark: t-title },
+          open: true,
+          clear: true,
+          upsertIds: [t-title, t-beam, t-post, t-base],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-t-left,
+          type: whiteboard.apply,
+          at: { mark: t-left },
+          upsertIds: [t-h-left, t-l1, t-l2, t-l3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-t-right,
+          type: whiteboard.apply,
+          at: { mark: t-right },
+          upsertIds: [t-h-right, t-r1, t-r2, t-r3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-t-cost,
+          type: whiteboard.apply,
+          at: { mark: t-cost },
+          upsertIds: [t-cost],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-change,
+          type: whiteboard.apply,
+          at: { mark: t-change },
+          upsertIds: [t-change, t-change2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-t-decide,
+          type: whiteboard.apply,
+          at: { mark: t-decide },
+          upsertIds: [t-decide],
+          drawMs: 1000,
+        }
+
+  - id: adr-parts
+    chapter: Decision record ရေးနည်း
+    narration: >
+      [[mark:a-title]] ဆုံးဖြတ်ပြီးရင် ဘာကို ဘာကြောင့် ရွေးခဲ့လဲ ဆိုတာ ရေးထားရပါမယ်။ ဘာဆုံးဖြတ်လဲ၊ ဘာကြောင့်လဲ
+      ဆိုတာကို ရက်စွဲနဲ့ မှတ်ထားတဲ့ စာကို decision record လို့ ခေါ်ပြီး၊ architecture decision record ကို
+      အတိုကောက် ADR လို့ ခေါ်ပါတယ်။ [[mark:a-ctx]] ADR မှာ အများအားဖြင့် အပိုင်း လေးပိုင်း ပါပါတယ်။ ပထမ အပိုင်း
+      Context က ဘာကြောင့် ဆုံးဖြတ်ရလဲ၊ အဲဒီနေ့က အခြေအနေ ဘယ်လိုလဲ ဆိုတာပါ။ [[mark:a-opt]] Options မှာ ချိန်ခဲ့တဲ့
+      ရွေးစရာတွေကို ရေးပါတယ်။ [[mark:a-dec]] Decision မှာ ဘာကို ရွေးလိုက်လဲ ဆိုတာ ရေးပါတယ်။ [[mark:a-con]]
+      Consequences မှာတော့ ဒီ ရွေးချယ်မှုကြောင့် ဘာ ပေးရမလဲ၊ ဘာဖြစ်ရင် ပြန်စဉ်းစားမလဲ ဆိုတာ ရေးပါတယ်။ ကောင်းကျိုး
+      တင် မကဘဲ ဆိုးကျိုးကိုပါ ရေးရပါမယ်။ [[mark:a-short]] ADR ကို တိုတိုပဲ ရေးပြီး နံပါတ်နဲ့ ရက်စွဲ တပ်ပါတယ်။
+      [[mark:a-keep]] နောက်ပိုင်း ဆုံးဖြတ်ချက် ပြောင်းရင်တောင် ADR အဟောင်းကို မဖျက်ပါဘူး။ ADR အသစ် တစ်ခု ရေးပြီး
+      အဟောင်းကို အစားထိုးလိုက်ပြီ လို့ မှတ်ပါတယ်။ ဒါမှ အစက ဘာကြောင့် ရွေးခဲ့လဲ၊ နောက်မှ ဘာကြောင့် ပြောင်းခဲ့လဲ
+      ဆိုတာ နှစ်ခုလုံး မပျောက်မှာပါ။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+      - {
+          title: "MADR: Markdown Architectural Decision Records (Considered Options; date; superseded)",
+          url: "https://adr.github.io/madr/",
+        }
+    actions:
+      - {
+          id: draw-a-title,
+          type: whiteboard.apply,
+          at: { mark: a-title },
+          open: true,
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - {
+          id: draw-a-ctx,
+          type: whiteboard.apply,
+          at: { mark: a-ctx },
+          upsertIds: [a-n1, a-d1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-opt,
+          type: whiteboard.apply,
+          at: { mark: a-opt },
+          upsertIds: [a-n2, a-d2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-dec,
+          type: whiteboard.apply,
+          at: { mark: a-dec },
+          upsertIds: [a-n3, a-d3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-con,
+          type: whiteboard.apply,
+          at: { mark: a-con },
+          upsertIds: [a-n4, a-d4],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-a-short,
+          type: whiteboard.apply,
+          at: { mark: a-short },
+          upsertIds: [a-short],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-keep,
+          type: whiteboard.apply,
+          at: { mark: a-keep },
+          upsertIds: [a-keep],
+          drawMs: 1100,
+        }
+
+  - id: adr-1
+    narration: >
+      [[mark:close-a]] ကဲ၊ ကိုယ်တို့ ဆိုင်ရဲ့ ADR တွေကို ရေးကြည့်ရအောင်။ [[mark:open-dec]] docs ထဲက decisions
+      ဖိုင်မှာ project တစ်ခုလုံးရဲ့ ADR တွေကို အစဉ်လိုက် စုထားမှာ ဖြစ်ပြီး၊ အခု ခေါင်းစဉ်ပဲ ရှိပါသေးတယ်။
+      [[mark:type-adr1a]] ပထမ ADR က ဘာလုပ်မယ်၊ ဘာမလုပ်ဘူး ဆိုတဲ့ scope ကို ဆုံးဖြတ်တုန်းက မြမြ နဲ့ ရွေးခဲ့တဲ့
+      ငွေချေနည်းပါ။ ခေါင်းစဉ် တစ်ကြောင်းတည်း ဖတ်ရုံနဲ့ ဆုံးဖြတ်ချက်ကို သိနိုင်အောင် ရေးပြီး ရက်စွဲ တပ်ထားပါတယ်။
+      [[mark:sel-adr1-ctx]] Context ကို ကြည့်ပါ။ ဆုံးဖြတ်တဲ့ နေ့က အခြေအနေကို မှတ်ထားတာ ဖြစ်လို့၊ နောက်တစ်ချိန် ဒီ
+      အခြေအနေ ပြောင်းသွားရင် ဆုံးဖြတ်ချက်ကိုလည်း ပြန်စဉ်းစားလို့ ရပါတယ်။ [[mark:sel-adr1-opt]] Options မှာ
+      ချိန်ခဲ့တဲ့ နှစ်လမ်းလုံးကို ရေးထားလို့၊ မရွေးခဲ့တဲ့ လမ်းကိုလည်း မေ့မသွားပါဘူး။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+    actions:
+      - { id: close-a, type: whiteboard.apply, at: { mark: close-a }, open: false }
+      - { id: open-dec, type: workspace.openFile, at: { mark: open-dec }, path: docs/decisions.md }
+      - id: type-adr1a
+        type: editor.type
+        at: { mark: type-adr1a }
+        target: { file: docs/decisions.md, after: "# Decisions\n\n", occurrence: 1 }
+        text: "## ADR-001 · v1 မှာ ငွေကို ကောင်တာမှာပဲ ချေမယ် (2026-11-08)\nContext — online ငွေပေးချေမှုက risk အများဆုံး၊ ကုန်ကျစရိတ် အများဆုံး။ ကောင်တာမှာ ချေတာ အခုလည်း အလုပ်ဖြစ်နေတယ်။\nOptions — online ငွေပေးချေမှု ထည့်မယ် / ကောင်တာမှာပဲ ချေမယ်\n"
+        cadence: line-by-line
+      - {
+          id: sel-adr1-ctx,
+          type: editor.select,
+          at: { mark: sel-adr1-ctx },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "Context — online ငွေပေးချေမှုက risk အများဆုံး၊ ကုန်ကျစရိတ် အများဆုံး။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-adr1-opt,
+          type: editor.select,
+          at: { mark: sel-adr1-opt },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "Options — online ငွေပေးချေမှု ထည့်မယ် / ကောင်တာမှာပဲ ချေမယ်",
+              occurrence: 1,
+            },
+        }
+
+  - id: adr-1-decision
+    narration: >
+      [[mark:type-adr1b]] ပြီးတော့ ရွေးလိုက်တဲ့ လမ်းနဲ့ သူ့ နောက်ဆက်တွဲကို ထည့်ပါတယ်။ [[mark:sel-adr1-con]]
+      Consequences ကို သတိထား ကြည့်ပါ။ ဒီ ရွေးချယ်မှုမှာ ပေးရတဲ့ဘက်ကို ဖုံးမထားပါဘူး။ ငွေ ကြိုမချေရလို့ မှာပြီး
+      လာမယူတဲ့သူ ရှိနိုင်ပါတယ်။ ဘယ်လောက် များလာရင် ပြန်စဉ်းစားမလဲ ဆိုတာကိုလည်း ကိန်းဂဏန်းနဲ့ ကြိုရေးထားပါတယ်။
+      ပြီးခဲ့တဲ့ lesson မှာ status ကို ပုံသေ စာရင်းနဲ့ ထားခဲ့တော့၊ လာမယူတဲ့ အော်ဒါကို app ထဲမှာ ရေတွက်ပြီး
+      ငြင်းခုံစရာ မလိုဘဲ ဆုံးဖြတ်လို့ ရပါမယ်။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+    actions:
+      - id: type-adr1b
+        type: editor.type
+        at: { mark: type-adr1b }
+        target:
+          {
+            file: docs/decisions.md,
+            after: "Options — online ငွေပေးချေမှု ထည့်မယ် / ကောင်တာမှာပဲ ချေမယ်\n",
+            occurrence: 1,
+          }
+        text: "Decision — ကောင်တာမှာပဲ ချေမယ်။\nConsequences — လာမယူတဲ့ အော်ဒါ ရှိနိုင်တယ်။ တစ်မနက် 5 ခုထက် များရင် ပြန်စဉ်းစားမယ်။\n\n"
+        cadence: line-by-line
+      - {
+          id: expect-adr1,
+          type: expect.file,
+          at: { afterAction: type-adr1b },
+          path: docs/decisions.md,
+          contains: "Consequences — လာမယူတဲ့ အော်ဒါ ရှိနိုင်တယ်။ တစ်မနက် 5 ခုထက် များရင် ပြန်စဉ်းစားမယ်။",
+        }
+      - {
+          id: sel-adr1-con,
+          type: editor.select,
+          at: { mark: sel-adr1-con },
+          target:
+            { file: docs/decisions.md, text: "တစ်မနက် 5 ခုထက် များရင် ပြန်စဉ်းစားမယ်။", occurrence: 1 },
+        }
+
+  - id: adr-2
+    narration: >
+      [[mark:type-adr2]] ဒုတိယ ADR ကတော့ ခုနက ချိန်ခွင်ပေါ် တင်ခဲ့တဲ့ database ဆုံးဖြတ်ချက်ပါ။ ဒီတစ်ခါ
+      တစ်ခုလုံးကို တစ်ခါတည်း ထည့်ပြီး ပြန်ကြည့်ပါမယ်။ [[mark:sel-adr2-ctx]] Context မှာ ကိုယ်တို့ ဆိုင်ရဲ့
+      အခြေအနေကိုပဲ ရေးထားတာ သတိထား ကြည့်ပါ။ server ထိန်းပေးမယ့် လူ ရှိတဲ့ တခြား ဆိုင်တစ်ဆိုင်မှာဆိုရင် အဖြေ
+      ပြောင်းနိုင်ပါတယ်။ ADR ဆိုတာ အမြဲ မှန်တဲ့ စည်းကမ်း မဟုတ်ဘဲ၊ အဲဒီ အခြေအနေအတွက် ရွေးချယ်မှု ဖြစ်ပါတယ်။
+      [[mark:sel-adr2-con]] Consequences မှာတော့ service ကို မှီခိုရမယ် ဆိုတာကို ဝန်ခံထားပြီး၊ ထွက်ပေါက်ကိုပါ
+      ကြိုစစ်ခိုင်းထားပါတယ်။ backup ယူလို့ ရလား၊ data ကို အပြင် ထုတ်ယူတဲ့ export လုပ်လို့ ရလား ဆိုတာပါ။ ဒါက
+      ချိန်ခွင်ပေါ်က တတိယ အဆင့်ပါ။ တစ်နေ့ service ကို စိတ်မချရတော့လို့ ထွက်ချင်လာရင်၊ data ကို ယူသွားလို့ ရအောင်
+      ဒီနေ့ကတည်းက ကြိုတွေးထားတာပါ။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+      - {
+          title: "AWS docs: What is Amazon RDS? (an example of a managed database service)",
+          url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html",
+        }
+    actions:
+      - id: type-adr2
+        type: editor.type
+        at: { mark: type-adr2 }
+        target: { file: docs/decisions.md, after: "ပြန်စဉ်းစားမယ်။\n\n", occurrence: 1 }
+        text: "## ADR-002 · database ကို ကိုယ်တိုင် မ run ဘဲ managed service သုံးမယ် (2026-11-08)\nContext — ကိုယ်တစ်ယောက်တည်း၊ server ထိန်းဖို့ အချိန် မရှိဘူး။\nOptions — ကိုယ်ပိုင် server ပေါ်မှာ run မယ် / managed database service သုံးမယ်\nDecision — managed service ရဲ့ free tier ကို သုံးမယ်။\nConsequences — service ကို မှီခိုရမယ်။ backup နဲ့ export လုပ်လို့ရတာ စစ်ထားရမယ်။\n"
+        cadence: block
+      - {
+          id: expect-adr2,
+          type: expect.file,
+          at: { afterAction: type-adr2 },
+          path: docs/decisions.md,
+          contains: "Decision — managed service ရဲ့ free tier ကို သုံးမယ်။",
+        }
+      - {
+          id: sel-adr2-ctx,
+          type: editor.select,
+          at: { mark: sel-adr2-ctx },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "Context — ကိုယ်တစ်ယောက်တည်း၊ server ထိန်းဖို့ အချိန် မရှိဘူး။",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-adr2-con,
+          type: editor.select,
+          at: { mark: sel-adr2-con },
+          target:
+            { file: docs/decisions.md, text: "backup နဲ့ export လုပ်လို့ရတာ စစ်ထားရမယ်။", occurrence: 1 },
+        }
+
+  - id: who-reads
+    narration: >
+      [[mark:open-spec]] ဒီ ADR တွေကို ဘယ်သူတွေ ဖတ်မလဲ။ spec ဖိုင်ကို ပြန်ကြည့်ရအောင်။ [[mark:sel-dod]] definition
+      of done က task တိုင်းမှာ decisions ဖိုင်ကိုပါ update လုပ်ခိုင်းထားပြီးသားပါ။ ငွေချေတာ ဒါမှမဟုတ် database နဲ့
+      ဆိုင်တဲ့ task ကို agent ဆီ အပ်တဲ့အခါမှာလည်း decisions ဖိုင်ကို ဖတ်ခိုင်းပါ။ agent ထုတ်ပေးတဲ့ plan က
+      ဆုံးဖြတ်ပြီးသား ကိစ္စနဲ့ မကိုက်ရင်လည်း၊ ADR ကို ပြပြီး ပြန်ပြင်ခိုင်းလို့ ရပါတယ်။ [[mark:people]]
+      လူတွေအတွက်လည်း ဒီအတိုင်းပါပဲ။ အကြောင်းရင်း မရေးထားရင်၊ နောက်မှ ရောက်လာတဲ့ သူမှာ ဆုံးဖြတ်ချက်ကို အကြောင်းရင်း
+      မသိဘဲ လက်ခံမလား၊ မသိဘဲ ပြောင်းပစ်မလား ဆိုတဲ့ နှစ်လမ်းပဲ ကျန်ပါတယ်။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions (newcomers either blindly accept or blindly change a decision)",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: open-spec, type: workspace.openFile, at: { mark: open-spec }, path: docs/spec.md }
+      - {
+          id: sel-dod,
+          type: editor.select,
+          at: { mark: sel-dod },
+          target:
+            {
+              file: docs/spec.md,
+              text: "- spec.md နဲ့ decisions.md ကို update လုပ်ပြီးပြီ။",
+              occurrence: 1,
+            },
+        }
+
+  - id: quiz
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခြောက်လ ကြာတဲ့အခါ customer တွေက online နဲ့ ဘာလို့ ငွေချေလို့ မရတာလဲ
+      လို့ မေးလာကြလို့၊ ကောင်တာက လှလှ က ကိုယ့်ကို လာမေးတယ် ဆိုပါစို့။ အဖြေကို requirements ဖိုင်ရဲ့ Won't
+      စာရင်းမှာ ရှာမလား၊ decisions ဖိုင်ရဲ့ ADR နံပါတ် တစ်မှာ ရှာမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ADR နံပါတ် တစ်ပါ။ ဘာကြောင့်လဲဆိုတော့ Won't စာရင်းက ပထမ version မှာ မလုပ်ဘူး
+      ဆိုတာကိုပဲ ပြောပြီး၊ ADR နံပါတ် တစ်ကတော့ ဘာကြောင့် မလုပ်လဲ ဆိုတာရော၊ ဘယ်အချိန် ပြန်စဉ်းစားမလဲ ဆိုတာရော
+      ပြောလို့ပါ။ ဒါဆို လှလှ ကို အကြောင်းရင်း ပြောပြရုံ မကဘဲ၊ လာမယူတဲ့ အော်ဒါ အရေအတွက်ကို ကြည့်ပြီး
+      ပြန်စဉ်းစားရမယ့် အချိန် ရောက်ပြီလား ဆိုတာပါ ဆုံးဖြတ်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-q1, z-q2, z-o1, z-o2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a, z-a1, z-a2],
+          drawMs: 1600,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ app ရဲ့ အကြီးစား ဆုံးဖြတ်ချက်တွေက business ပေါ်မှာ မူတည်တဲ့ trade
+      off တွေ ဖြစ်လို့ ကိုယ်တို့ ကိုယ်တိုင် ချိန်ဆ ဆုံးဖြတ်ရပါတယ်။ [[mark:sel-r-opt]] option တွေကို
+      စာရင်းလုပ်ပြီး၊ တစ်ခုစီရဲ့ ကုန်ကျမှုကို ဒီနေ့ရော နောင်မှာပါ ကြည့်ပါ။ [[mark:sel-r-con]] ဘာဖြစ်ရင်
+      ပြန်စဉ်းစားမလဲ ဆိုတာကိုလည်း ကြိုရေးထားပါ။ [[mark:sel-r-head]] ဆုံးဖြတ်ပြီးတာနဲ့ ADR ကို တိုတို ရေးပြီး
+      နံပါတ်နဲ့ ရက်စွဲ တပ်ပါ။ ပြောင်းရင်လည်း မဖျက်ဘဲ ADR အသစ်နဲ့ အစားထိုးပါ။ နောက် lesson မှာတော့ ဒီလို
+      ရွေးချယ်မှုတွေထဲမှာ ပိုရိုးရှင်းတဲ့ လမ်းက ဘာကြောင့် အများအားဖြင့် ပိုကောင်းလဲ ဆိုတာ လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Michael Nygard: Documenting Architecture Decisions",
+          url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions",
+        }
+      - {
+          title: "The New SDLC (Burmese edition): The new SDLC (design and architecture)",
+          url: "https://github.com/channyeintun/The-New-SDLC",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: close-quiz }, open: false }
+      - {
+          id: open-dec-recap,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: docs/decisions.md,
+        }
+      - {
+          id: sel-r-opt,
+          type: editor.select,
+          at: { mark: sel-r-opt },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "Options — ကိုယ်ပိုင် server ပေါ်မှာ run မယ် / managed database service သုံးမယ်",
+              occurrence: 1,
+            },
+        }
+      - {
+          id: sel-r-con,
+          type: editor.select,
+          at: { mark: sel-r-con },
+          target:
+            { file: docs/decisions.md, text: "တစ်မနက် 5 ခုထက် များရင် ပြန်စဉ်းစားမယ်။", occurrence: 1 },
+        }
+      - {
+          id: sel-r-head,
+          type: editor.select,
+          at: { mark: sel-r-head },
+          target:
+            {
+              file: docs/decisions.md,
+              text: "## ADR-001 · v1 မှာ ငွေကို ကောင်တာမှာပဲ ချေမယ် (2026-11-08)",
+              occurrence: 1,
+            },
+        }
+checks:
+  - { type: timing.p95Ms, max: 300 }
