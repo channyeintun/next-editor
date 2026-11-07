@@ -10,7 +10,7 @@
 # (U) what users say vs what they do; (Z) the quiz (30 % not picked up: delivery or find out why);
 # (H) honest with customers: what we keep, they choose; no pre-ticked box, no fake time limit.
 # Typed: What we learned (+ one line on who the app left out) · Why not picked up · v2 shortlist ·
-# Next question for မြမြ. The quiz sits before "Why not picked up" so the evidence is its answer.
+# Next question for the owner. The quiz sits before "Why not picked up" so the evidence is its answer.
 #
 # Build: bun ~/Documents/ai-builder-course-work/tools/build-lesson.ts template.yaml ws ai-builder-31-ship-and-learn.yaml
 schemaVersion: 1
@@ -685,7 +685,7 @@ scenes:
       မဟုတ်ဘဲ၊ နေ့တိုင်း သုံးနေတဲ့ user တွေပါ။ [[mark:open-problem]] ဒါကြောင့် ကိုယ်တို့ ပထမဆုံး ရေးခဲ့တဲ့ problem
       ဖိုင်ကို ပြန်ဖွင့်ကြည့်ရအောင်။ [[mark:sel-know]] ဒီ အပိုင်းမှာ ပြဿနာ ပြေပြီလား ဆိုတာကို ကိန်းဂဏန်းနဲ့
       ကြိုသတ်မှတ်ခဲ့ပါတယ်။ app ကို ship လုပ်ပြီးသွားတာက ပန်းတိုင် မဟုတ်ပါဘူး။ ဒီ ကိန်းဂဏန်းတွေ တကယ် ပြောင်းသွားမှ
-      ဆိုင်ပိုင်ရှင် မြမြ ရဲ့ ပြဿနာ ပြေတာပါ။
+      ဆိုင်ပိုင်ရှင် ရဲ့ ပြဿနာ ပြေတာပါ။
     sources:
       - {
           title: "The New SDLC (Burmese edition): Conclusion",
@@ -844,7 +844,7 @@ scenes:
       [[mark:close-n]] ဒီ ကိန်းဂဏန်းတွေကို စာမျက်နှာ အသစ်မှာ မှတ်ထားပါမယ်။ [[mark:open-next]] ဒီ ဖိုင်က ပထမ
       version ကနေ ဘာသင်ခဲ့လဲ၊ နောက် version မှာ ဘာလုပ်မလဲ ရေးမယ့် နေရာပါ။ [[mark:type-learned]] ပထမ အပိုင်းမှာ
       ကိန်းဂဏန်း တစ်ခုစီကို ကြိုသတ်မှတ်ခဲ့တဲ့ ပန်းတိုင်နဲ့ ဘေးချင်းယှဉ်ပြီး ရေးပါတယ်။ ပန်းတိုင် မရောက်သေးတာကိုလည်း
-      ရိုးရိုးသားသား ရေးထားတော့၊ မြမြ ဖတ်တဲ့အခါ ဘာ ရောက်ပြီ၊ ဘာ မရောက်သေးဘူး ဆိုတာ တန်းမြင်ရပါတယ်။
+      ရိုးရိုးသားသား ရေးထားတော့၊ ဆိုင်ပိုင်ရှင် ဖတ်တဲ့အခါ ဘာ ရောက်ပြီ၊ ဘာ မရောက်သေးဘူး ဆိုတာ တန်းမြင်ရပါတယ်။
       [[mark:sel-skip]] နောက်ဆုံး စာကြောင်းကို ကြည့်ပါ။ ငွေကို ကောင်တာမှာပဲ ချေမယ်လို့ ဆုံးဖြတ်ခဲ့တဲ့ decision
       record ADR နံပါတ် တစ် ထဲမှာ၊ လာမယူတဲ့ အော်ဒါ တစ်မနက် ငါးခုထက် များရင် ပြန်စဉ်းစားမယ်လို့ ရေးခဲ့ပါတယ်။ အခု
       ခုနစ်ခုလောက် ရှိနေတော့ ပြန်ကြည့်ရမယ့် အချိန် ရောက်ပါပြီ။
@@ -985,7 +985,7 @@ scenes:
 
   - id: quiz
     narration: >
-      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ပိုင်ရှင် မြမြ က လာမယူတဲ့ အော်ဒါ ၃၀ ရာခိုင်နှုန်းကို ကြည့်ပြီး၊
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဆိုင်ပိုင်ရှင် က လာမယူတဲ့ အော်ဒါ ၃၀ ရာခိုင်နှုန်းကို ကြည့်ပြီး၊
       customer တချို့လည်း တောင်းနေလို့ အိမ်အရောက် ပို့ပေးတဲ့ delivery ကို အခု ထည့်ကြရအောင် လို့ ပြောတယ် ဆိုပါစို့။
       delivery ကို ထည့်မလား၊ ဘာကြောင့် လာမယူလဲ ဆိုတာ အရင် ရှာမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
       [[mark:quiz-answer]] အဖြေကတော့ ဘာကြောင့် လာမယူလဲ အရင် ရှာတာပါ။ ဘာကြောင့်လဲဆိုတော့ အကြောင်းရင်းကို ဘယ်သူမှ
@@ -1166,7 +1166,7 @@ scenes:
   - id: next-question
     narration: >
       [[mark:close-h]] ဒါဆို ဒီ ဖိုင်ရဲ့ နောက်ဆုံး အပိုင်းကို ရေးရအောင်။ [[mark:type-question]] ဒီ အပိုင်းမှာ
-      ဆိုင်ပိုင်ရှင် မြမြ ကို မေးမယ့် မေးခွန်း တစ်ခုပဲ ပါပါတယ်။ နောက် version တစ်ခုလုံးကို တစ်ခါတည်း မဆောက်ဘဲ၊
+      ဆိုင်ပိုင်ရှင် ကို မေးမယ့် မေးခွန်း တစ်ခုပဲ ပါပါတယ်။ နောက် version တစ်ခုလုံးကို တစ်ခါတည်း မဆောက်ဘဲ၊
       loop ကို နောက်တစ်ခေါက် ပိုသေးသေး၊ ပိုမြန်မြန် ပတ်ဖို့ သူ့ ဆုံးဖြတ်ချက်ကို တောင်းတာပါ။ [[mark:sel-question]]
       ဘာကို ဘယ်လောက် ကြာကြာ စမ်းမလဲ၊ ဘယ် ကိန်းဂဏန်းနဲ့ ပြန်စစ်မလဲ ဆိုတာ ပါတော့၊ နောက်လ ဒီ ဖိုင်ကို ပြန်ဖွင့်တဲ့အခါ
       ဆက်ဆုံးဖြတ်လို့ ရပါတယ်။ ကောင်တာမှာ ငွေချေတဲ့ ဆုံးဖြတ်ချက်ကို ပြန်စဉ်းစားတာကလည်း အဲဒီ ရလဒ်ကို မြင်ပြီးမှ
@@ -1186,14 +1186,14 @@ scenes:
         type: editor.type
         at: { mark: type-question }
         target: { file: docs/next.md, after: "- delivery — အထောက်အထား မရှိသေးဘူး\n\n", occurrence: 1 }
-        text: "## Next question for မြမြ\n- လာယူချိန် ပြင်ခွင့်နဲ့ သတိပေး SMS ကို တစ်လ စမ်းပြီး၊ လာမယူတဲ့ အော်ဒါ တစ်မနက် 5 ခု နဲ့ အောက် ကျမကျ ပြန်တိုင်းမလား။\n"
+        text: "## Next question for the owner\n- လာယူချိန် ပြင်ခွင့်နဲ့ သတိပေး SMS ကို တစ်လ စမ်းပြီး၊ လာမယူတဲ့ အော်ဒါ တစ်မနက် 5 ခု နဲ့ အောက် ကျမကျ ပြန်တိုင်းမလား။\n"
         cadence: line-by-line
       - {
           id: expect-question,
           type: expect.file,
           at: { afterAction: type-question },
           path: docs/next.md,
-          contains: "## Next question for မြမြ",
+          contains: "## Next question for the owner",
         }
       - {
           id: sel-question,
@@ -1254,7 +1254,7 @@ scenes:
           id: rc-next,
           type: editor.select,
           at: { mark: rc-next },
-          target: { file: docs/next.md, text: "## Next question for မြမြ", occurrence: 1 },
+          target: { file: docs/next.md, text: "## Next question for the owner", occurrence: 1 },
         }
 checks:
   - { type: timing.p95Ms, max: 300 }
