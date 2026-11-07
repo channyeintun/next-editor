@@ -750,7 +750,7 @@ lesson:
 
         // Patterns for personal data (PII) in free text.
         export const PHONE = /09[ 0-9]{7,12}[0-9]/g; // a Myanmar mobile number
-        export const KNOWN_NAMES = /မြမြ|လှလှ|အောင်အောင်|မောင်မောင်/g; // names in the shop's records
+        export const KNOWN_NAMES = /လှလှ|အောင်အောင်|မောင်မောင်/g; // names in the shop's records
 
         // Keep only the fields the feature needs.
         export const keepOnly = (sent, fields) =>
@@ -1800,7 +1800,7 @@ scenes:
     narration: >
       [[mark:close-expect]] ဒါဆို ဆိုင်ရဲ့ code ကို ကြည့်ရအောင်။ [[mark:panel-ready]] ကိုယ်တို့က customer
       ရေးတဲ့ review တွေကို အပြင် ကုမ္ပဏီ တစ်ခုရဲ့ server ပေါ်က model ဆီ ပို့ပြီး ဘာအကြောင်း ပြောလဲ ခွဲခိုင်းမယ့်
-      feature ကို ဆောက်နေပါတယ်။ ဆိုင်ပိုင်ရှင် မြမြ က ရလဒ်ကို dashboard မှာ ကြည့်ဖို့ပါ။ ညာဘက် AI panel မှာ ပို့မယ့် data
+      feature ကို ဆောက်နေပါတယ်။ ဆိုင်ပိုင်ရှင် က ရလဒ်ကို dashboard မှာ ကြည့်ဖို့ပါ။ ညာဘက် AI panel မှာ ပို့မယ့် data
       ကို ပြထားပါတယ်။ ဒီ data က lesson အတွက် ပြင်ဆင်ထားတဲ့ နမူနာ data ပါ။ [[mark:open-main]] program က member
       အောင်အောင် ရေးတဲ့ review နှစ်ခုကို၊ [[mark:sel-sent]] ဆိုင်ရဲ့ record ထဲက သူ့ profile နဲ့ ပေါင်းပြီး
       ပို့ဖို့ ပြင်ထားပါတယ်။ [[mark:read-sent]] Leaves the browser table မှာ နာမည်၊ ဖုန်းနံပါတ်၊ မြို့နယ်၊ မှာခဲ့တာ
@@ -2070,7 +2070,7 @@ scenes:
       ဆိုင်က ပို့တဲ့ data နဲ့ ပြန်ရတဲ့ အဖြေကို log အဖြစ် သိမ်းပြီး evaluation အတွက် သုံးပါတယ်။ ဒါပေမဲ့
       သုံးပြီးရင် ဖျက်ရပါမယ်၊ ကြာကြာ မသိမ်းလေ အန္တရာယ် နည်းလေပါပဲ။ [[mark:type-days]] ဒါကြောင့် အစက
       တန်ဖိုးရဲ့ အောက်မှာ ရက် ၃၀ ပြည့်ရင် ဖျက်မယ့် စာကြောင်း ထပ်ထည့်ပြီး အစားထိုးပါမယ်။ [[mark:read-days]] raw logs က အမြဲ ကနေ ရက် ၃၀
-      ဖြစ်သွားပါပြီ။ ဘာ data ယူလဲ၊ ဘာကြောင့် ယူလဲ၊ ဘယ်လောက်ကြာ သိမ်းလဲ ဆိုတာလည်း ရေးမှတ်ထားပါ။ မြမြ ကို
+      ဖြစ်သွားပါပြီ။ ဘာ data ယူလဲ၊ ဘာကြောင့် ယူလဲ၊ ဘယ်လောက်ကြာ သိမ်းလဲ ဆိုတာလည်း ရေးမှတ်ထားပါ။ ဆိုင်ပိုင်ရှင် ကို
       ရှင်းပြလို့ မရရင် အဲဒီ data flow က ရှုပ်လွန်းနေပြီ ဆိုတဲ့ သဘောပါ။
     sources:
       - {
