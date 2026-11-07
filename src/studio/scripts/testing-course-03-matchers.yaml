@@ -18,10 +18,10 @@
 # Then, insert-only:
 #   1. receipt.js, keystrokes: .toLocaleString("en-US") after ${amount -> PASS, 3 passed.
 #   2. order.test.js, one block: test "starts an empty order for a customer" with
-#      expect(order).toBe({ customer: "မြမြ", lines: [] }) -> FAIL, the deep-equality hint, "Received:
+#      expect(order).toBe({ customer: "အောင်အောင်", lines: [] }) -> FAIL, the deep-equality hint, "Received:
 #      serializes to the same string", "Compared values have no visual difference."
 #   3. keystrokes: .not after expect(order) -> PASS, 4 passed (they really are two objects).
-#   4. one block (the one-insert line replacement): expect(order).toEqual({ customer: "မြမြ", lines:
+#   4. one block (the one-insert line replacement): expect(order).toEqual({ customer: "အောင်အောင်", lines:
 #      [] }); above the not line, which becomes a comment -> still PASS.
 #   5. one block: test "keeps the customer's name" with toEqual({ customer: "လှလှ" }) -> FAIL,
 #      "expected { customer: 'လှလှ', lines: [] } to deeply equal { customer: 'လှလှ' }", the diff
@@ -1813,8 +1813,8 @@ scenes:
       ပြန်ပေးပါတယ်။ [[mark:open-order-test]] ဒါကတော့ order ဖိုင်ရဲ့ test ပါ။ [[mark:select-large-tea]]
       ဒီ test က လက်ဖက်ရည် ခွက်ကြီးကို ၂၀၀၀ ကျပ်လို့ to Be နဲ့ စစ်ထားပြီး၊ ဂဏန်းအတွက် to Be က
       သင့်တော်ပါတယ်။ [[mark:type-object-test]] ဒါဆို အော်ဒါ object ကိုလည်း to Be နဲ့ စစ်တဲ့ test အသစ်
-      တစ်ခု ထည့်ကြည့်ရအောင်။ [[mark:select-arrange]] မြမြ အတွက် အော်ဒါ ဖွင့်ပြီး၊
-      [[mark:select-tobe-object]] ရလာတဲ့ object က မြမြ ရဲ့ နာမည်နဲ့ line စာရင်း အလွတ် ပါတဲ့ object နဲ့
+      တစ်ခု ထည့်ကြည့်ရအောင်။ [[mark:select-arrange]] အောင်အောင် အတွက် အော်ဒါ ဖွင့်ပြီး၊
+      [[mark:select-tobe-object]] ရလာတဲ့ object က အောင်အောင် ရဲ့ နာမည်နဲ့ line စာရင်း အလွတ် ပါတဲ့ object နဲ့
       တူလား စစ်ထားပါတယ်။ [[mark:read-no-diff]] panel ကို ကြည့်ပါ။ test အသစ်က ကျသွားပါပြီ။ ထူးဆန်းတာက
       Received ဘက်မှာ Expected နဲ့ ထုတ်ကြည့်ရင် စာသား အတူတူပဲလို့ ပြထားပြီး၊ မြင်ရတဲ့ ကွာခြားချက်
       မရှိဘူးလို့လည်း Vitest ကိုယ်တိုင် ပြောနေတာပါ။ [[mark:read-identity]] ဘာကြောင့်လဲဆိုတော့၊ to Be က Object is နဲ့
@@ -1859,7 +1859,7 @@ scenes:
         type: editor.type
         at: { mark: type-object-test }
         target: { file: src/order.test.js, after: "toBe(2000);\n});\n", occurrence: 1 }
-        text: "\ntest(\"starts an empty order for a customer\", () => {\n  const order = newOrder(\"မြမြ\");\n  expect(order).toBe({ customer: \"မြမြ\", lines: [] });\n});\n"
+        text: "\ntest(\"starts an empty order for a customer\", () => {\n  const order = newOrder(\"အောင်အောင်\");\n  expect(order).toBe({ customer: \"အောင်အောင်\", lines: [] });\n});\n"
         # One block (pilot note 1): line by line, the newline and the blank line parse and a long
         # test( line can wait past the bridge's 1 s quiet window.
         cadence: block
@@ -1901,12 +1901,17 @@ scenes:
       - id: select-arrange
         type: editor.select
         at: { mark: select-arrange }
-        target: { file: src/order.test.js, text: 'const order = newOrder("မြမြ");', occurrence: 1 }
+        target:
+          { file: src/order.test.js, text: 'const order = newOrder("အောင်အောင်");', occurrence: 1 }
       - id: select-tobe-object
         type: editor.select
         at: { mark: select-tobe-object }
         target:
-          { file: src/order.test.js, text: 'toBe({ customer: "မြမြ", lines: [] })', occurrence: 1 }
+          {
+            file: src/order.test.js,
+            text: 'toBe({ customer: "အောင်အောင်", lines: [] })',
+            occurrence: 1,
+          }
 
   - id: not-equal
     narration: >
@@ -1946,8 +1951,12 @@ scenes:
         type: editor.type
         at: { mark: type-equal }
         target:
-          { file: src/order.test.js, after: "const order = newOrder(\"မြမြ\");\n  ", occurrence: 1 }
-        text: "expect(order).toEqual({ customer: \"မြမြ\", lines: [] });\n  // "
+          {
+            file: src/order.test.js,
+            after: "const order = newOrder(\"အောင်အောင်\");\n  ",
+            occurrence: 1,
+          }
+        text: "expect(order).toEqual({ customer: \"အောင်အောင်\", lines: [] });\n  // "
         # The one-insert line replacement (COURSE-KIT §5): the toEqual line goes above the not line,
         # which becomes a comment, so the test keeps no check that can never fail (audit).
         cadence: block
@@ -1964,14 +1973,14 @@ scenes:
         type: expect.file
         at: { afterAction: expect-equal-pass }
         path: src/order.test.js
-        contains: "  expect(order).toEqual({ customer: \"မြမြ\", lines: [] });\n  // expect(order).not.toBe({ customer: \"မြမြ\", lines: [] });\n"
+        contains: "  expect(order).toEqual({ customer: \"အောင်အောင်\", lines: [] });\n  // expect(order).not.toBe({ customer: \"အောင်အောင်\", lines: [] });\n"
       - id: select-equal
         type: editor.select
         at: { mark: select-equal }
         target:
           {
             file: src/order.test.js,
-            text: 'expect(order).toEqual({ customer: "မြမြ", lines: [] });',
+            text: 'expect(order).toEqual({ customer: "အောင်အောင်", lines: [] });',
             occurrence: 1,
           }
 
@@ -2055,7 +2064,7 @@ scenes:
         target:
           {
             file: src/order.test.js,
-            after: "// expect(order).not.toBe({ customer: \"မြမြ\", lines: [] });\n});\n",
+            after: "// expect(order).not.toBe({ customer: \"အောင်အောင်\", lines: [] });\n});\n",
             occurrence: 1,
           }
         text: "\ntest(\"keeps the customer's name\", () => {\n  const order = newOrder(\"လှလှ\");\n  expect(order).toEqual({ customer: \"လှလှ\" });\n});\n"
