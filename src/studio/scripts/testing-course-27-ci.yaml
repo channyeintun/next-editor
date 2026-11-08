@@ -1749,7 +1749,7 @@ scenes:
       - id: start-runtime
         type: runtime.start
         at: { mark: start }
-        timeoutMs: 60000
+        timeoutMs: 300000
         retry: { maxAttempts: 2, delayMs: 500 }
       - id: draw-local
         type: whiteboard.apply
