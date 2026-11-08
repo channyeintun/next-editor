@@ -228,6 +228,13 @@ and the WebContainer's built-in pnpm is older than current pnpm, so a `pnpm-lock
 newer pnpm fails with `ERR_PNPM_LOCKFILE_BREAKING_CHANGE`. Pin exact versions in `package.json`
 (`"vite": "5.4.21"`, not `"^5.4.21"`) so the install stays repeatable.
 
+`runtime.start`'s `timeoutMs` covers the whole cold start: booting the WebContainer, the
+install and spawning the dev server. Size it from the slowest cold start the dependency set has
+shown, not from a copied value. A first lesson in a fresh studio tab boots and installs from
+nothing, and the deadline stops the render even while the install is still making progress. A
+Vite-only workspace starts in well under 45 s; Vitest 5 + Vite 7 (33 packages) took up to 166 s
+on a cold browser (56 s boot, 110 s install), so its lessons give `runtime.start` 300000.
+
 `lockfilePath` is optional; when a lesson declares one, it must name a file in
 `lesson.workspace.files`. The preflight
 replaces the editor's ambient run configuration with these commands, disables
