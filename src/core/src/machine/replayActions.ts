@@ -131,12 +131,22 @@ export const setRecording = (
   const recordedWorkspaceSnapshot = initialWorkspaceEvent?.snapshot ?? recording.workspaceSnapshot;
   const initialWorkspaceSnapshot =
     recordedWorkspaceSnapshot && withReplayedSidebarPreference(recordedWorkspaceSnapshot, true);
+  // A load that opens a different file is a file switch, like a replayed one in
+  // applyWorkspaceEventsAtTime: the frame the playback entry applies must wait for the
+  // editor to bind that file's model. Applied at once, it landed in the model the editor
+  // still showed, the previous file's, without its workspace accepting it. A next
+  // lesson that starts with that file exactly as the previous one left it then kept the
+  // stray text, since its model already held that content as accepted.
+  let opensOtherFile = false;
   if (
     initialWorkspaceSnapshot &&
     context.applyWorkspaceSnapshot &&
     (!currentWorkspaceSnapshot ||
       !areWorkspaceSnapshotsEqual(currentWorkspaceSnapshot, initialWorkspaceSnapshot))
   ) {
+    opensOtherFile =
+      currentWorkspaceSnapshot !== null &&
+      currentWorkspaceSnapshot.activeFilePath !== initialWorkspaceSnapshot.activeFilePath;
     context.applyWorkspaceSnapshot(initialWorkspaceSnapshot);
   }
 
@@ -170,7 +180,7 @@ export const setRecording = (
     hasManualWorkspaceOverride: false,
     ...VIEWER_PANEL_HOLDS_RESET,
     learnerWorkspaceBaseline: null,
-    pendingPlaybackEditorSync: false,
+    pendingPlaybackEditorSync: opensOtherFile,
     playbackAudioSpawned: false,
     timeline: {
       currentTime: 0,

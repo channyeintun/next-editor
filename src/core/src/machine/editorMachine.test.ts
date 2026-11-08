@@ -2290,6 +2290,67 @@ describe("editorMachine actor lifecycle", () => {
     actor.stop();
   });
 
+  // A finished studio take loads for replay while the editor still shows the file the take
+  // ended on; its opening snapshot has another file open. The opening frame used to land in
+  // the shown file's model, which the next lesson then kept when it started with that file
+  // unchanged (ai-builder-06 after 05: "## User stories" not found in docs/requirements.md).
+  it("holds the opening frame until the editor binds the file a load opens", async () => {
+    const endedOnModel = new MockTextModel("b-live");
+    const editor = new MockEditor(endedOnModel);
+    const openingWorkspace = createTwoFileWorkspaceSnapshot("a.ts", "a-snapshot", "b-before");
+    let currentWorkspace = createTwoFileWorkspaceSnapshot("b.ts", "a-snapshot", "b-live");
+
+    const recording: Recording = {
+      ...createRecording(),
+      frames: [
+        {
+          timestamp: 0,
+          isKeyframe: true,
+          state: {
+            content: "a-frame",
+            selection,
+            position: { lineNumber: 1, column: 1 },
+            viewState: null,
+            mouseCursor: { x: 0, y: 0, visible: false },
+          },
+        },
+      ],
+      workspaceEvents: [{ timestamp: 0, snapshot: openingWorkspace }],
+    };
+
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: {
+          current: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+        },
+        getWorkspaceSnapshot: () => currentWorkspace,
+        applyWorkspaceSnapshot: (snapshot) => {
+          currentWorkspace = snapshot;
+        },
+      },
+    }).start();
+
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+
+    expect(currentWorkspace.activeFilePath).toBe("a.ts");
+    expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(true);
+    expect(endedOnModel.getValue()).toBe("b-live");
+
+    // React binds a.ts's model, then the editor re-sends its ref.
+    editor.setModel(new MockTextModel("a-snapshot") as unknown as monaco.editor.ITextModel);
+    actor.send({
+      type: "SET_EDITOR_REF",
+      editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
+    });
+
+    expect(actor.getSnapshot().context.pendingPlaybackEditorSync).toBe(false);
+    expect(editor.getValue()).toBe("a-frame");
+    expect(endedOnModel.getValue()).toBe("b-live");
+
+    actor.stop();
+  });
+
   // A paused SEEK reattaches the recorded workspace for that one transition and detaches
   // again, so no model swap (and no SET_EDITOR_REF) ever follows it. The pending editor
   // sync that reattaching sets used to make every paused scrub skip its target frame.
