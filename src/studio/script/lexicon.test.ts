@@ -54,6 +54,8 @@ describe("narrationLexiconFor", () => {
     // Particles attach straight onto the term in Burmese; they stay put.
     expect(spokenFormOf("Viteက", burmese)).toBe("veetက");
     expect(spokenFormOf("vite", burmese)).toBe("veet");
+    expect(spokenFormOf("Vitest", burmese)).toBe("Veet test");
+    expect(spokenFormOf("vitest", burmese)).toBe("veet test");
     expect(spokenFormOf("DOM။", burmese)).toBe("Dom။");
     expect(spokenFormOf("className", burmese)).toBe("class name");
     expect(spokenFormOf("Appက", burmese)).toBe("Upက");

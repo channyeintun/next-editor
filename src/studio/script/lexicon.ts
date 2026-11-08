@@ -96,6 +96,10 @@ const BURMESE_RESPELLINGS: PronunciationLexicon = {
     // Read as "vite"; the tool's name is French for "fast", said "veet".
     Vite: "veet",
     vite: "veet",
+    // Vite's test runner shares its "veet" (Chan, 2026-11-08); the lowercase
+    // form is the package and command name the narration says aloud.
+    Vitest: "Veet test",
+    vitest: "veet test",
     // Read as the Burmese syllable ဒွမ်; developers say it as the word "Dom".
     DOM: "Dom",
     // Read as one run-together word; it is the attribute "class name".

@@ -304,9 +304,10 @@ Notable lesson-level decisions:
 ## Pronunciation notes
 
 The words most likely to need a `BURMESE_RESPELLINGS` entry after the first Burmese render, from the
-32 DESIGN.md files (`dev`, `app`, `vite` and `DOM` are already in the lexicon):
+32 DESIGN.md files (`dev`, `app`, `vite`, `DOM` and `Vitest` are already in the lexicon; Vitest is
+said "Veet test"):
 
-- **Names:** `Vitest` (every lesson; candidate `veet test`), `Chai`, `istanbul`, `StrykerJS`, `METR`
+- **Names:** `Chai`, `istanbul`, `StrykerJS`, `METR`
   (it says "meter"), `DORA`, `jsdom`.
 - **Letters and capitals:** `TDD`, `CI` (and `ci` in `npm ci`), `AI`, `API`, `npm`, `URL`, `HTML`,
   `JSX`, `MSW`, `UI`, `VS Code`, the pill's `PASS` and `FAIL`, `AGENTS`, `DEV`, `RUN`.
