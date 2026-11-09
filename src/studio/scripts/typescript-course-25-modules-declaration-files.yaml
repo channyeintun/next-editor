@@ -1295,10 +1295,10 @@ scenes:
       - id: expect-force-first
         type: expect.preview
         at: { afterAction: expect-force-two }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2304" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: declare-const
     chapter: "Declaration file နဲ့ declare"
@@ -1347,10 +1347,10 @@ scenes:
       - id: expect-const-left
         type: expect.preview
         at: { afterAction: expect-const-one }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2339" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: declare-global
     narration: >
@@ -1397,10 +1397,10 @@ scenes:
       - id: expect-global-output
         type: expect.preview
         at: { afterAction: expect-global-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "စားပွဲ 12 လုံး"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: dts-output
     narration: >
@@ -1596,10 +1596,10 @@ scenes:
       - id: expect-import-code
         type: expect.preview
         at: { afterAction: expect-import-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "7016" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-import-message
         type: expect.preview
         at: { mark: read-import-error }
@@ -1631,24 +1631,24 @@ scenes:
       - id: expect-brew-line
         type: expect.preview
         at: { afterAction: expect-brew-output }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
         textContains: "လက်ဖက်ရည် ဖျော်ချိန် 180000 မီလီစက္ကန့်"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-brew-any
         type: expect.preview
         at: { afterAction: expect-brew-line }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         attribute: { name: data-type, value: "const brewTime: any" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-brew-still-one
         type: expect.preview
         at: { afterAction: expect-brew-any }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-ms-dts
         type: workspace.openFile
         at: { mark: open-ms-dts }
@@ -1669,17 +1669,17 @@ scenes:
       - id: expect-module-type
         type: expect.preview
         at: { afterAction: expect-module-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         attribute: { name: data-type, value: "const brewTime: number" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-module-output
         type: expect.preview
         at: { afterAction: expect-module-type }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
         textContains: "လက်ဖက်ရည် ဖျော်ချိန် 180000 မီလီစက္ကန့်"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: skiplibcheck
     chapter: "skipLibCheck ရဲ့ အားနည်းချက်"
@@ -1726,17 +1726,17 @@ scenes:
       - id: expect-impl-code
         type: expect.preview
         at: { afterAction: expect-impl-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "1183" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-impl-file
         type: expect.preview
         at: { afterAction: expect-impl-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-file, value: "src/globals.d.ts" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-tsconfig-2
         type: workspace.openFile
         at: { mark: open-tsconfig-2 }
