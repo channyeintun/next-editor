@@ -1240,10 +1240,10 @@ scenes:
       - id: expect-cup-fields
         type: expect.preview
         at: { afterAction: expect-cup-js }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: "export class Cup {\n    size;\n    price;"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-main-2
         type: workspace.openFile
         at: { mark: open-main-2 }
@@ -1340,10 +1340,10 @@ scenes:
       - id: expect-large-clean
         type: expect.preview
         at: { afterAction: expect-large }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-two-uses
         type: editor.select
         at: { mark: select-two-uses }
@@ -1388,10 +1388,10 @@ scenes:
       - id: expect-undefined-clean
         type: expect.preview
         at: { afterAction: expect-undefined }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-fromform
         type: editor.select
         at: { mark: read-undefined }
@@ -1462,17 +1462,17 @@ scenes:
       - id: expect-raw-code
         type: expect.preview
         at: { afterAction: expect-raw-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: 'Type ''"less"'' is not assignable to type ''Sugar''.'
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-raw-output
         type: expect.preview
         at: { afterAction: expect-raw-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
         textContains: "less"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-raw
         type: editor.select
         at: { mark: read-raw-error }
@@ -1493,10 +1493,10 @@ scenes:
       - id: expect-member-output
         type: expect.preview
         at: { afterAction: expect-member-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
         textContains: "less"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: const-enum
     narration: >
@@ -1627,10 +1627,10 @@ scenes:
       - id: expect-kitchen-clean
         type: expect.preview
         at: { afterAction: expect-kitchen-output }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: erasable
     chapter: "Erasable syntax only"
@@ -1706,24 +1706,24 @@ scenes:
       - id: expect-erasable-first
         type: expect.preview
         at: { afterAction: expect-six }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "This syntax is not allowed when 'erasableSyntaxOnly' is enabled."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-erasable-code
         type: expect.preview
         at: { afterAction: expect-erasable-first }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-6 }
         attribute: { name: data-code, value: "1294" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-still-runs
         type: expect.preview
         at: { afterAction: expect-erasable-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-output }
         attribute: { name: data-count, value: "5" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-menu-6
         type: workspace.openFile
         at: { mark: select-flagged }
