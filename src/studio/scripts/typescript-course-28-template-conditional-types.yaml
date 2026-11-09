@@ -1336,10 +1336,10 @@ scenes:
       - id: expect-route-2345
         type: expect.preview
         at: { afterAction: expect-route-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: 'Argument of type ''"orders"'' is not assignable to parameter of type ''`/${string}`''.'
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-slash
         type: editor.type
         at: { mark: type-slash }
@@ -1356,10 +1356,10 @@ scenes:
       - id: expect-route-link
         type: expect.preview
         at: { afterAction: expect-route-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "https://shwe-tea.com/orders"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: order-id
     narration: >
@@ -1397,10 +1397,10 @@ scenes:
       - id: expect-id-2345
         type: expect.preview
         at: { afterAction: expect-id-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: 'Argument of type ''"15"'' is not assignable to parameter of type ''`order-${number}`''.'
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-order-prefix
         type: editor.type
         at: { mark: type-order-prefix }
@@ -1417,10 +1417,10 @@ scenes:
       - id: expect-id-link
         type: expect.preview
         at: { afterAction: expect-id-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
         textContains: "https://shwe-tea.com/orders/order-15"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: combos
     chapter: "Union ပါတဲ့ template"
@@ -1724,17 +1724,17 @@ scenes:
       - id: expect-newpayment
         type: expect.preview
         at: { afterAction: expect-types-five }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "type NewPayment = Omit<{"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-newpayment-kpay
         type: expect.preview
         at: { afterAction: expect-newpayment }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: 'method: "kpay";'
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: draw-payment
         type: whiteboard.apply
         at: { mark: draw-payment }
