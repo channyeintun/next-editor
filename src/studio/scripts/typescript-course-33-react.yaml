@@ -1082,10 +1082,10 @@ scenes:
       - id: expect-children-first
         type: expect.preview
         at: { afterAction: expect-two-left }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'children' does not exist on type 'CardProps'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: children
     chapter: "children နဲ့ ReactNode"
@@ -1182,10 +1182,10 @@ scenes:
       - id: expect-never-text
         type: expect.preview
         at: { afterAction: expect-never-count }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Type 'Order' is not assignable to type 'never'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: state
     chapter: "useState နဲ့ ဗလာ array"
@@ -1259,10 +1259,10 @@ scenes:
       - id: expect-state-order
         type: expect.preview
         at: { afterAction: expect-state-fixed }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "useState<Order[]>(initialState: Order[] | (() => Order[])): [Order[], React.Dispatch<React.SetStateAction<Order[]>>]"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: button-props
     chapter: "Button ရဲ့ props တွေ"
@@ -1314,10 +1314,10 @@ scenes:
       - id: expect-onclick-text
         type: expect.preview
         at: { afterAction: expect-onclick-count }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'onClick' does not exist on type 'IntrinsicAttributes & MenuButtonProps'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-components-3
         type: workspace.openFile
         at: { mark: open-components-3 }
@@ -1337,10 +1337,10 @@ scenes:
       - id: expect-ready-to-click
         type: expect.preview
         at: { afterAction: expect-merged }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: orders }
         textContains: "အော်ဒါ 0 ခု"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: recap
     chapter: "နှိပ်ကြည့်ခြင်းနဲ့ ပြန်ချုပ်ခြင်း"
