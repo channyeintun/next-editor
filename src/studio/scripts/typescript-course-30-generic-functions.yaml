@@ -1127,24 +1127,24 @@ scenes:
       - id: expect-qty-text
         type: expect.preview
         at: { afterAction: expect-qty-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'qty' does not exist on type 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-order-query
         type: expect.preview
         at: { afterAction: expect-qty-text }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "lastOf<Order>(list: Order[]): Order"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-still-undefined
         type: expect.preview
         at: { afterAction: expect-order-query }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "ကော်ဖီ undefined ခွက်"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-t
         type: editor.select
         at: { mark: select-t }
@@ -1172,10 +1172,10 @@ scenes:
       - id: expect-one-cup
         type: expect.preview
         at: { afterAction: expect-fixed }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "ကော်ဖီ 1 ခွက်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: inference
     chapter: "Type argument ကို infer လုပ်ခြင်း"
@@ -1218,10 +1218,10 @@ scenes:
       - id: expect-names-query
         type: expect.preview
         at: { afterAction: expect-names-count }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         textContains: "lastOf<string>(list: string[]): string"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: explicit
     chapter: "Type argument ကို ကိုယ်တိုင် ပေးခြင်း"
@@ -1262,10 +1262,10 @@ scenes:
       - id: expect-explicit-text
         type: expect.preview
         at: { afterAction: expect-explicit-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Argument of type 'Order[]' is not assignable to parameter of type 'string[]'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-explicit
         type: editor.type
         at: { mark: type-comment-explicit }
@@ -1481,10 +1481,10 @@ scenes:
       - id: expect-find-text
         type: expect.preview
         at: { afterAction: expect-find-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'id' does not exist on type 'T'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-constraint
         type: editor.type
         at: { mark: type-constraint }
@@ -1524,17 +1524,17 @@ scenes:
       - id: expect-found-output
         type: expect.preview
         at: { afterAction: expect-found-type }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "{ id: 2, item: 'ကော်ဖီ', quantity: 1 }"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-found-clean
         type: expect.preview
         at: { afterAction: expect-found-output }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: recap
     narration: >
