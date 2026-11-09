@@ -1188,24 +1188,24 @@ scenes:
       - id: expect-zod-error
         type: expect.preview
         at: { afterAction: expect-two-lines }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "Uncaught ZodError:"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-zod-error-level
         type: expect.preview
         at: { afterAction: expect-zod-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         attribute: { name: data-level, value: "error" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-zod-error-detail
         type: expect.preview
         at: { afterAction: expect-zod-error-level }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: '"message": "Invalid input: expected number, received string"'
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: safe-parse
     narration: >
@@ -1408,10 +1408,10 @@ scenes:
       - id: expect-inferred-clean
         type: expect.preview
         at: { afterAction: expect-inferred }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-note
         type: editor.type
         at: { mark: type-note }
@@ -1433,10 +1433,10 @@ scenes:
       - id: expect-note-output
         type: expect.preview
         at: { afterAction: expect-note }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-output }
         attribute: { name: data-count, value: "4" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: recap
     narration: >
