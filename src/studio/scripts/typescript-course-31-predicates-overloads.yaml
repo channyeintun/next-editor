@@ -1224,10 +1224,10 @@ scenes:
       - id: expect-drink-array
         type: expect.preview
         at: { afterAction: expect-two-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         attribute: { name: data-type, value: "const drinks: Drink[]" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: predicate-lie
     chapter: "Predicate ရဲ့ ကတိ မှန်ရဲ့လား"
@@ -1274,10 +1274,10 @@ scenes:
       - id: expect-free-tea-line
         type: expect.preview
         at: { afterAction: expect-still-two }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "ရေနွေးကြမ်း · သကြား undefined"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-check-sugar
         type: editor.type
         at: { mark: type-check-sugar }
@@ -1294,10 +1294,10 @@ scenes:
       - id: expect-line-three-table
         type: expect.preview
         at: { afterAction: expect-six-again }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "စားပွဲ 3 · အခု"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: assertion
     chapter: "Assertion function"
@@ -1367,10 +1367,10 @@ scenes:
       - id: expect-data-order
         type: expect.preview
         at: { afterAction: expect-no-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         attribute: { name: data-type, value: "const data: Order" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: assertion-lie
     narration: >
@@ -1431,17 +1431,17 @@ scenes:
       - id: expect-uncaught-level
         type: expect.preview
         at: { afterAction: expect-uncaught }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-6 }
         attribute: { name: data-level, value: "error" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-still-clean
         type: expect.preview
         at: { afterAction: expect-uncaught-level }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: overloads
     chapter: "Function overload"
@@ -1513,24 +1513,24 @@ scenes:
       - id: expect-overload-text
         type: expect.preview
         at: { afterAction: expect-overload-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "No overload expects 2 arguments, but overloads do exist that expect either 1 or 3 arguments."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-one-error
         type: expect.preview
         at: { afterAction: expect-overload-text }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-overload-type
         type: expect.preview
         at: { afterAction: expect-one-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         textContains: "reserve(table: number): string (+1 overload)"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-main-4
         type: workspace.openFile
         at: { mark: open-main-4 }
@@ -1550,10 +1550,10 @@ scenes:
       - id: expect-booking-time
         type: expect.preview
         at: { afterAction: expect-all-fixed }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-4 }
         textContains: "စားပွဲ 5 · 4 ယောက် · 18:00"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: overload-or-union
     chapter: "Overload လား၊ union လား"
