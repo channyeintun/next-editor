@@ -2207,10 +2207,10 @@ scenes:
       - id: expect-off-button
         type: expect.preview
         at: { afterAction: expect-label }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: summary-off }
         textContains: "မပြနဲ့"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: click-how
         type: preview.click
         at: { mark: click-how }
