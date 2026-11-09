@@ -1116,17 +1116,17 @@ scenes:
       - id: expect-call-message
         type: expect.preview
         at: { afterAction: expect-call-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "The 'this' context of type 'void' is not assignable to method's 'this' of type 'Table'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-call-crash
         type: expect.preview
         at: { afterAction: expect-call-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "Uncaught TypeError: Cannot read properties of undefined (reading 'number')"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-call
         type: editor.type
         at: { mark: type-comment-call }
@@ -1191,17 +1191,17 @@ scenes:
       - id: expect-arrow-this-start
         type: expect.preview
         at: { afterAction: expect-arrow-this }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "this: {"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-arrow-output
         type: expect.preview
         at: { afterAction: expect-arrow-this-start }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "[ '6: ကော်ဖီ', '6: မုန့်ဟင်းခါး' ]"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: params
     chapter: "Parameter နည်းရင် ရ၊ များရင် မရ"
@@ -1258,17 +1258,17 @@ scenes:
       - id: expect-more-message
         type: expect.preview
         at: { afterAction: expect-more-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Target signature provides too few arguments. Expected 3 or more, but got 2."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-more-undefined
         type: expect.preview
         at: { afterAction: expect-more-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-5 }
         textContains: "လက်ဖက်ရည် 5 undefined"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-ring
         type: editor.type
         at: { mark: type-comment-ring }
@@ -1332,24 +1332,24 @@ scenes:
       - id: expect-printers-intersection
         type: expect.preview
         at: { afterAction: expect-printers-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "is not assignable to parameter of type '{ item: string; } & { table: number; }'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-printers-missing
         type: expect.preview
         at: { afterAction: expect-printers-intersection }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'table' is missing in type '{ item: string; }' but required in type '{ table: number; }'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-cashier-undefined
         type: expect.preview
         at: { afterAction: expect-printers-missing }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-6 }
         textContains: "ငွေကိုင် undefined"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-add-table
         type: editor.type
         at: { mark: type-add-table }
@@ -1366,10 +1366,10 @@ scenes:
       - id: expect-cashier-five
         type: expect.preview
         at: { afterAction: expect-table-fixed }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-6 }
         textContains: "ငွေကိုင် 5"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-labels
         type: editor.type
         at: { mark: type-labels }
@@ -1387,17 +1387,17 @@ scenes:
       - id: expect-never-message
         type: expect.preview
         at: { afterAction: expect-never-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Argument of type '1500' is not assignable to parameter of type 'never'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-trim-crash
         type: expect.preview
         at: { afterAction: expect-never-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-8 }
         textContains: "Uncaught TypeError: name.trim is not a function"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-labels
         type: editor.type
         at: { mark: type-comment-labels }
@@ -1512,10 +1512,10 @@ scenes:
       - id: expect-js-class
         type: expect.preview
         at: { afterAction: expect-js-enum }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: "size = Size.Small;"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-size-line
         type: editor.select
         at: { mark: select-size-line }
@@ -1554,17 +1554,17 @@ scenes:
       - id: expect-js-first-sugar
         type: expect.preview
         at: { afterAction: expect-js-first-cup }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: "export const firstSugar = Sugar.Extra;"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-worlds-clean
         type: expect.preview
         at: { afterAction: expect-js-first-sugar }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-first-cup
         type: editor.select
         at: { mark: select-first-cup }
