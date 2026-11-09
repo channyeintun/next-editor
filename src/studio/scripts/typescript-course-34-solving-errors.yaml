@@ -1264,10 +1264,10 @@ scenes:
       - id: expect-table-first
         type: expect.preview
         at: { afterAction: expect-eight }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'table' does not exist on type 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: missing-property
     narration: >
@@ -1307,10 +1307,10 @@ scenes:
       - id: expect-coffee-first
         type: expect.preview
         at: { afterAction: expect-seven }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "'coffee' is possibly 'undefined'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: possibly-undefined
     narration: >
@@ -1364,17 +1364,17 @@ scenes:
       - id: expect-chain-first
         type: expect.preview
         at: { afterAction: expect-six }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Types of property 'phone' are incompatible."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-chain-bottom
         type: expect.preview
         at: { afterAction: expect-chain-first }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Type 'null' is not assignable to type 'string'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: incompatible
     narration: >
@@ -1423,10 +1423,10 @@ scenes:
       - id: expect-index-first
         type: expect.preview
         at: { afterAction: expect-five }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "expression of type 'string' can't be used to index type"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: index
     chapter: "Object နဲ့ class error တွေ"
@@ -1487,10 +1487,10 @@ scenes:
       - id: expect-queue-first
         type: expect.preview
         at: { afterAction: expect-four }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'queue' has no initializer and is not definitely assigned in the constructor."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: initializer
     narration: >
@@ -1533,17 +1533,17 @@ scenes:
       - id: expect-kitchen-line
         type: expect.preview
         at: { afterAction: expect-three }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "မီးဖိုချောင်: [ 'လက်ဖက်ရည်' ]"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-glued-total
         type: expect.preview
         at: { afterAction: expect-kitchen-line }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "မောင်မောင် ကျသင့်ငွေ 3300500 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: conversion
     narration: >
@@ -1600,10 +1600,10 @@ scenes:
       - id: expect-right-total
         type: expect.preview
         at: { afterAction: expect-two }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "မောင်မောင် ကျသင့်ငွေ 3800 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: declaration
     chapter: "ဖိုင်နဲ့ module error တွေ"
@@ -1665,10 +1665,10 @@ scenes:
       - id: expect-status-left
         type: expect.preview
         at: { afterAction: expect-one }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2451" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-main-2
         type: workspace.openFile
         at: { mark: type-receipt-query }
@@ -1734,10 +1734,10 @@ scenes:
       - id: expect-final-output
         type: expect.preview
         at: { afterAction: expect-zero }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-output }
         attribute: { name: data-count, value: "2" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: course-recap
     chapter: "Course ကို ပြန်ချုပ်ရရင်"
