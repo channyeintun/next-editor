@@ -1161,23 +1161,25 @@ scenes:
         at: { mark: type-note }
         target: { file: src/order.ts, after: "  status = \"pending\";\n  // ^?\n", occurrence: 1 }
         text: "  note: string;\n"
-      - id: expect-note-count
+      # Typing "note: string" passes through other one-error states (TS7008 at "note",
+      # TS2304 at "note: s"), so the first check waits for the code only the last key gives.
+      - id: expect-note-error
         type: expect.preview
         at: { afterAction: type-note }
         timeoutMs: 8000
-        target: { by: testId, value: ts-status }
-        attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 3, delayMs: 600 }
-      - id: expect-note-error
-        type: expect.preview
-        at: { afterAction: expect-note-count }
-        timeoutMs: 5000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2564" }
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-note-count
+        type: expect.preview
+        at: { afterAction: expect-note-error }
+        timeoutMs: 5000
+        target: { by: testId, value: ts-status }
+        attribute: { name: data-count, value: "1" }
         retry: { maxAttempts: 2, delayMs: 300 }
       - id: expect-note-message
         type: expect.preview
-        at: { afterAction: expect-note-error }
+        at: { afterAction: expect-note-count }
         timeoutMs: 5000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'note' has no initializer and is not definitely assigned in the constructor."
@@ -1406,13 +1408,22 @@ scenes:
         target: { file: src/main.ts, after: "// order.price = 0;\n", occurrence: 1 }
         text: "order.discount = 800;\n"
         cadence: fast-explainer
-      - id: expect-private-count
+      # Typing "order.discount = 800;" passes through other one-error states (TS2304 at "o",
+      # TS2339 at "order.d"), so the first check waits for the total only "= 800" gives.
+      - id: expect-private-total
         type: expect.preview
         at: { afterAction: type-discount }
         timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 700 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-private-count
+        type: expect.preview
+        at: { afterAction: expect-private-total }
+        timeoutMs: 5000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 3, delayMs: 600 }
+        retry: { maxAttempts: 2, delayMs: 300 }
       - id: expect-private-error
         type: expect.preview
         at: { afterAction: expect-private-count }
@@ -1427,16 +1438,9 @@ scenes:
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'discount' is private and only accessible within class 'TeaOrder'."
         retry: { maxAttempts: 2, delayMs: 300 }
-      - id: expect-private-total
-        type: expect.preview
-        at: { afterAction: expect-private-message }
-        timeoutMs: 5000
-        target: { by: testId, value: ts-out-2 }
-        textContains: "1 ခွက် 700 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
       - id: expect-private-visible
         type: expect.preview
-        at: { afterAction: expect-private-total }
+        at: { afterAction: expect-private-message }
         timeoutMs: 5000
         target: { by: testId, value: ts-out-1 }
         textContains: "discount: 800"
@@ -1488,13 +1492,23 @@ scenes:
         target: { file: src/order.ts, after: "this.cups - this.", occurrence: 1 }
         text: "#"
         cadence: fast-explainer
-      - id: expect-hash-error
+      # Before these edits the panel already shows one error (TS2341, private), and between
+      # them ts-error-1 reads "… does not exist … Did you mean '#discount'?" (TS2551) while the
+      # receipt stays 700. Only the finished getter brings the receipt back to 1500, so wait for it.
+      - id: expect-hash-total
         type: expect.preview
         at: { afterAction: type-hash-getter }
         timeoutMs: 8000
+        target: { by: testId, value: ts-out-2 }
+        textContains: "1 ခွက် 1500 ကျပ်"
+        retry: { maxAttempts: 3, delayMs: 1200 }
+      - id: expect-hash-error
+        type: expect.preview
+        at: { afterAction: expect-hash-total }
+        timeoutMs: 5000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 3, delayMs: 600 }
+        retry: { maxAttempts: 2, delayMs: 300 }
       - id: expect-hash-message
         type: expect.preview
         at: { afterAction: expect-hash-error }
@@ -1502,16 +1516,9 @@ scenes:
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'discount' does not exist on type 'TeaOrder'."
         retry: { maxAttempts: 2, delayMs: 300 }
-      - id: expect-hash-total
-        type: expect.preview
-        at: { afterAction: expect-hash-message }
-        timeoutMs: 5000
-        target: { by: testId, value: ts-out-2 }
-        textContains: "1 ခွက် 1500 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
       - id: expect-hash-stray
         type: expect.preview
-        at: { afterAction: expect-hash-total }
+        at: { afterAction: expect-hash-message }
         timeoutMs: 5000
         target: { by: testId, value: ts-out-1 }
         textContains: "discount: 800"
