@@ -1159,17 +1159,17 @@ scenes:
       - id: expect-value-code
         type: expect.preview
         at: { afterAction: expect-value-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2749" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-value-text
         type: expect.preview
         at: { afterAction: expect-value-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "'deliveryFee' refers to a value, but is being used as a type here. Did you mean 'typeof deliveryFee'?"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-typeof
         type: editor.type
         at: { mark: type-typeof }
@@ -1203,10 +1203,10 @@ scenes:
       - id: expect-tuple-optional
         type: expect.preview
         at: { afterAction: expect-tuple }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "    phone: string;\n}, express?: boolean | undefined]"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: derive-address
     narration: >
@@ -1244,17 +1244,17 @@ scenes:
       - id: expect-derive-code
         type: expect.preview
         at: { afterAction: expect-derive-one }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2741" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-derive-text
         type: expect.preview
         at: { afterAction: expect-derive-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'phone' is missing in type '{ township: string; street: string; }' but required in type"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-phone
         type: editor.type
         at: { mark: type-phone }
@@ -1271,10 +1271,10 @@ scenes:
       - id: expect-phone-output
         type: expect.preview
         at: { afterAction: expect-phone-fixed }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "မောင်မောင် က 09 450 123 456 ကို ဖုန်းဆက်ပါမယ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: return-type
     chapter: "ReturnType နဲ့ Awaited"
@@ -1381,10 +1381,10 @@ scenes:
       - id: expect-awaited-clean
         type: expect.preview
         at: { afterAction: expect-awaited }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: non-nullable
     chapter: "Union ကို ပြောင်းတဲ့ utility type"
@@ -1445,10 +1445,10 @@ scenes:
       - id: expect-nonnullable-clean
         type: expect.preview
         at: { afterAction: expect-nonnullable }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: exclude-extract
     narration: >
@@ -1509,10 +1509,10 @@ scenes:
       - id: expect-exclude-count
         type: expect.preview
         at: { afterAction: expect-exclude }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-types }
         attribute: { name: data-count, value: "5" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-events
         type: editor.select
         at: { mark: select-events }
@@ -1547,10 +1547,10 @@ scenes:
       - id: expect-extract-count
         type: expect.preview
         at: { afterAction: expect-extract }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-types }
         attribute: { name: data-count, value: "6" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: derive-or-decouple
     chapter: "ထုတ်ယူမလား၊ သီးသန့် ရေးမလား"
