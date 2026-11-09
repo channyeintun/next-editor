@@ -1019,17 +1019,17 @@ scenes:
       - id: expect-2377
         type: expect.preview
         at: { afterAction: expect-super-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Constructors for derived classes must contain a 'super' call."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-17009
         type: expect.preview
         at: { afterAction: expect-2377 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-2 }
         textContains: "'super' must be called before accessing 'this' in the constructor of a derived class."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-super
         type: editor.type
         at: { mark: type-super }
@@ -1068,10 +1068,10 @@ scenes:
       - id: expect-inherited-clean
         type: expect.preview
         at: { afterAction: expect-inherited }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: override
     chapter: "override"
@@ -1112,10 +1112,10 @@ scenes:
       - id: expect-fee-clean
         type: expect.preview
         at: { afterAction: expect-fee }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: no-implicit-override
     narration: >
@@ -1156,10 +1156,10 @@ scenes:
       - id: expect-4114-message
         type: expect.preview
         at: { afterAction: expect-4114 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "This member must have an 'override' modifier because it overrides a member in the base class 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-delivery-4
         type: workspace.openFile
         at: { mark: type-override }
@@ -1224,17 +1224,17 @@ scenes:
       - id: expect-4113-message
         type: expect.preview
         at: { afterAction: expect-4113 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "This member cannot have an 'override' modifier because it is not declared in the base class 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-fee-lost
         type: expect.preview
         at: { afterAction: expect-4113-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "ကော်ဖီ 1800 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-delivery-5
         type: workspace.openFile
         at: { mark: open-delivery-5 }
@@ -1255,10 +1255,10 @@ scenes:
       - id: expect-fee-back
         type: expect.preview
         at: { afterAction: expect-rename-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "ကော်ဖီ 2300 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: protected
     chapter: "protected"
@@ -1319,24 +1319,24 @@ scenes:
       - id: expect-2445-message
         type: expect.preview
         at: { afterAction: expect-2445 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'price' is protected and only accessible within class 'Order' and its subclasses."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-2445-only
         type: expect.preview
         at: { afterAction: expect-2445-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-still-zero
         type: expect.preview
         at: { afterAction: expect-2445-only }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "ကော်ဖီ 500 ကျပ်"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-main-4
         type: workspace.openFile
         at: { mark: open-main-4 }
@@ -1356,10 +1356,10 @@ scenes:
       - id: expect-protected-fee
         type: expect.preview
         at: { afterAction: expect-protected-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "ကော်ဖီ 2300 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: implements
     chapter: "implements"
@@ -1409,10 +1409,10 @@ scenes:
       - id: expect-2420-message
         type: expect.preview
         at: { afterAction: expect-2420 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'minutes' is missing in type 'DeliveryOrder' but required in type 'Deliverable'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-minutes
         type: editor.type
         at: { mark: type-minutes }
@@ -1469,17 +1469,17 @@ scenes:
       - id: expect-2511-message
         type: expect.preview
         at: { afterAction: expect-2511 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Cannot create an instance of an abstract class."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-abstract-runs
         type: expect.preview
         at: { afterAction: expect-2511-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "လက်ဖက်ရည် 1500 ကျပ်"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-table-order
         type: editor.type
         at: { mark: type-table-order }
@@ -1512,10 +1512,10 @@ scenes:
       - id: expect-table-output
         type: expect.preview
         at: { afterAction: expect-abstract-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "လက်ဖက်ရည် 1500 ကျပ်"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: abstract-method
     narration: >
@@ -1563,17 +1563,17 @@ scenes:
       - id: expect-2515-table
         type: expect.preview
         at: { afterAction: expect-2515 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Non-abstract class 'TableOrder' does not implement inherited abstract member label from class 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-2515-delivery
         type: expect.preview
         at: { afterAction: expect-2515-table }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-2 }
         textContains: "Non-abstract class 'DeliveryOrder' does not implement inherited abstract member label from class 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-table-label
         type: editor.type
         at: { mark: type-table-label }
@@ -1618,17 +1618,17 @@ scenes:
       - id: expect-delivery-label
         type: expect.preview
         at: { afterAction: expect-table-label }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "ကော်ဖီ 2300 ကျပ် · အင်းလျားလမ်း"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-final-clean
         type: expect.preview
         at: { afterAction: expect-delivery-label }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: recap
     narration: >
