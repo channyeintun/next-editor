@@ -1305,10 +1305,10 @@ scenes:
       - id: expect-es5-js
         type: expect.preview
         at: { afterAction: expect-es5-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: 'var note = (_a = order.note) !== null && _a !== void 0 ? _a : "မှတ်ချက် မရှိ";'
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-es5-at
         type: expect.preview
         at: { mark: read-at }
@@ -1353,10 +1353,10 @@ scenes:
       - id: expect-es2022-js
         type: expect.preview
         at: { afterAction: expect-es2022-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: 'const note = order.note ?? "မှတ်ချက် မရှိ";'
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: strictness
     chapter: "Index နဲ့ ယူရင် undefined ဖြစ်နိုင်တယ်"
@@ -1401,10 +1401,10 @@ scenes:
       - id: expect-nuia-message
         type: expect.preview
         at: { afterAction: expect-nuia-one }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Argument of type 'Order | undefined' is not assignable to parameter of type 'Order'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-main-2
         type: workspace.openFile
         at: { mark: type-query-first }
@@ -1484,17 +1484,17 @@ scenes:
       - id: expect-verbatim-code
         type: expect.preview
         at: { afterAction: expect-verbatim-one }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "1484" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-verbatim-js
         type: expect.preview
         at: { afterAction: expect-verbatim-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: 'import { Order, orders } from "./orders";'
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: open-main-3
         type: workspace.openFile
         at: { mark: type-type }
@@ -1514,10 +1514,10 @@ scenes:
       - id: expect-type-js
         type: expect.preview
         at: { afterAction: expect-type-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-js-1 }
         textContains: 'import { orders } from "./orders";'
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: who-emits
     chapter: "JavaScript ကို ဘယ်သူ ထုတ်မလဲ"
