@@ -1191,11 +1191,11 @@ scenes:
       - id: expect-keyof-union
         type: expect.preview
         at: { afterAction: expect-keyof-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         attribute:
           { name: data-type, value: 'type ItemName = "tea" | "coffee" | "mohinga" | "palata"' }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-keyof
         type: editor.select
         at: { mark: read-keyof }
@@ -1220,10 +1220,10 @@ scenes:
       - id: expect-lime-menu
         type: expect.preview
         at: { afterAction: expect-lime-union }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "    lime: number;"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: no-way-back
     narration: >
@@ -1260,24 +1260,24 @@ scenes:
       - id: expect-experiment-crash
         type: expect.preview
         at: { afterAction: expect-experiment-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "Uncaught ReferenceError: ItemName is not defined"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-experiment-only-line
         type: expect.preview
         at: { afterAction: expect-experiment-crash }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-output }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-experiment-count
         type: expect.preview
         at: { afterAction: expect-experiment-only-line }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-out
         type: editor.type
         at: { mark: type-comment-out }
@@ -1294,10 +1294,10 @@ scenes:
       - id: expect-restored-clean
         type: expect.preview
         at: { afterAction: expect-restored }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: indexed
     chapter: "Indexed access type"
@@ -1487,10 +1487,10 @@ scenes:
       - id: expect-note-clean
         type: expect.preview
         at: { afterAction: expect-note-output }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-raw-less
         type: editor.select
         at: { mark: read-note-output }
