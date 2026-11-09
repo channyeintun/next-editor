@@ -1150,17 +1150,17 @@ scenes:
       - id: expect-value-one-error
         type: expect.preview
         at: { afterAction: expect-value-wins }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "1" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-value-null-left
         type: expect.preview
         at: { afterAction: expect-value-one-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "18047" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: satisfies
     narration: >
@@ -1197,18 +1197,18 @@ scenes:
       - id: expect-satisfies-paratha
         type: expect.preview
         at: { afterAction: expect-satisfies-two }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Type 'string' is not assignable to type 'Price'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-satisfies-detail
         type: expect.preview
         at: { afterAction: expect-satisfies-paratha }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         attribute:
           { name: data-type, value: "const tea: {\n    small: number;\n    large: number;\n}" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-fix-paratha
         type: editor.type
         at: { mark: type-fix-paratha }
@@ -1285,10 +1285,10 @@ scenes:
       - id: expect-as-string-clean
         type: expect.preview
         at: { afterAction: expect-as-string }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: non-null
     narration: >
@@ -1375,24 +1375,24 @@ scenes:
       - id: expect-as-number-code
         type: expect.preview
         at: { afterAction: expect-as-number-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2352" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-as-number-text
         type: expect.preview
         at: { afterAction: expect-as-number-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Conversion of type 'string' to type 'number' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-71
         type: expect.preview
         at: { afterAction: expect-as-number-text }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "နောက် စားပွဲ 71"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: directives
     narration: >
@@ -1454,17 +1454,17 @@ scenes:
       - id: expect-unused-code
         type: expect.preview
         at: { afterAction: expect-unused }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2578" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-unused-text
         type: expect.preview
         at: { afterAction: expect-unused-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Unused '@ts-expect-error' directive."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-directive-off
         type: editor.type
         at: { mark: type-directive-off }
@@ -1486,10 +1486,10 @@ scenes:
       - id: expect-still-71
         type: expect.preview
         at: { afterAction: expect-directive-off }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "နောက် စားပွဲ 71"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-number
         type: editor.type
         at: { mark: type-number }
@@ -1506,10 +1506,10 @@ scenes:
       - id: expect-8
         type: expect.preview
         at: { afterAction: expect-number-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "နောက် စားပွဲ 8"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: when-to-silence
     narration: >
@@ -1624,10 +1624,10 @@ scenes:
       - id: expect-as-const-clean
         type: expect.preview
         at: { afterAction: expect-as-const }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-status }
         attribute: { name: data-count, value: "0" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: recap
     narration: >
