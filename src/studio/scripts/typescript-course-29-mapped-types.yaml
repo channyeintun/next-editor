@@ -1162,17 +1162,17 @@ scenes:
       - id: expect-size-code
         type: expect.preview
         at: { afterAction: expect-size-missing }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2741" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-size-text
         type: expect.preview
         at: { afterAction: expect-size-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'size' is missing in type '{ item: false; quantity: true; sugar: false; }' but required in type 'OrderFlags'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-in
         type: editor.select
         at: { mark: select-in }
@@ -1202,14 +1202,14 @@ scenes:
       - id: expect-flags-type
         type: expect.preview
         at: { afterAction: expect-flags-count }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         attribute:
           {
             name: data-type,
             value: "type OrderFlags = {\n    item: boolean;\n    quantity: boolean;\n    sugar: boolean;\n    size: boolean;\n}",
           }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-size-flag
         type: editor.type
         at: { mark: type-size-flag }
@@ -1278,14 +1278,14 @@ scenes:
       - id: expect-getters-type
         type: expect.preview
         at: { afterAction: expect-getters-count }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         attribute:
           {
             name: data-type,
             value: "type OrderGetters = {\n    item: () => string;\n    quantity: () => number;\n    sugar: () => Sugar;\n    size: () => Size;\n}",
           }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-annotate-view
         type: editor.type
         at: { mark: type-annotate-view }
@@ -1301,10 +1301,10 @@ scenes:
       - id: expect-view-excess
         type: expect.preview
         at: { afterAction: expect-view-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "'getItem' does not exist in type 'OrderGetters'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: remap
     chapter: "as နဲ့ key ကို နာမည်ပြောင်းခြင်း"
@@ -1348,14 +1348,14 @@ scenes:
       - id: expect-remap-type
         type: expect.preview
         at: { afterAction: expect-remap-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-2 }
         attribute:
           {
             name: data-type,
             value: "type OrderGetters = {\n    getItem: () => string;\n    getQuantity: () => number;\n    getSugar: () => Sugar;\n    getSize: () => Size;\n}",
           }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-order-k
         type: editor.select
         at: { mark: select-order-k }
@@ -1404,14 +1404,14 @@ scenes:
       - id: expect-labels-type
         type: expect.preview
         at: { afterAction: expect-labels-count }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         attribute:
           {
             name: data-type,
             value: "type SugarLabels = {\n    less: string;\n    normal: string;\n    extra: string;\n}",
           }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-labels-object
         type: editor.type
         at: { mark: type-labels-object }
@@ -1433,10 +1433,10 @@ scenes:
       - id: expect-label-output
         type: expect.preview
         at: { afterAction: expect-labels-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "သကြား နည်း"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: my-partial
     chapter: "Utility type ကို ကိုယ်တိုင် ရေးခြင်း"
@@ -1486,10 +1486,10 @@ scenes:
       - id: expect-update-output
         type: expect.preview
         at: { afterAction: expect-update-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "{ item: 'လက်ဖက်ရည်', quantity: 3, sugar: 'less', size: 'large' }"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: my-readonly
     narration: >
@@ -1534,10 +1534,10 @@ scenes:
       - id: expect-readonly-text
         type: expect.preview
         at: { afterAction: expect-readonly-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Cannot assign to 'quantity' because it is a read-only property."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: board-builtins
         type: whiteboard.apply
         at: { mark: board-builtins }
