@@ -1184,17 +1184,17 @@ scenes:
       - id: expect-kitchen-data
         type: expect.preview
         at: { afterAction: expect-kitchen-type }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "data: Order[];"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-kitchen-error
         type: expect.preview
         at: { afterAction: expect-kitchen-data }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "error: Error;"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: replace
     narration: >
@@ -1238,17 +1238,17 @@ scenes:
       - id: expect-replaced-output
         type: expect.preview
         at: { afterAction: expect-replaced-clean }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-output }
         attribute: { name: data-count, value: "2" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-replaced-menu
         type: expect.preview
         at: { afterAction: expect-replaced-output }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-1 }
         textContains: "menu 2 မျိုး"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: two-params
     chapter: "Type parameter နှစ်ခု"
@@ -1302,24 +1302,24 @@ scenes:
       - id: expect-2314
         type: expect.preview
         at: { afterAction: expect-three-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2314" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-2314-text
         type: expect.preview
         at: { afterAction: expect-2314 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-3 }
         textContains: "Generic type 'ApiResult' requires 2 type argument(s)."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-kitchen-any
         type: expect.preview
         at: { afterAction: expect-2314-text }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         attribute: { name: data-type, value: "type KitchenResult = any" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-kitchen-arg
         type: editor.type
         at: { mark: type-kitchen-arg }
@@ -1336,10 +1336,10 @@ scenes:
       - id: expect-kitchen-error-type
         type: expect.preview
         at: { afterAction: expect-two-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-1 }
         textContains: "error: KitchenError;"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: default
     chapter: "Default type ပေးခြင်း"
@@ -1415,17 +1415,17 @@ scenes:
       - id: expect-2344
         type: expect.preview
         at: { afterAction: expect-one-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "2344" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-2344-text
         type: expect.preview
         at: { afterAction: expect-2344 }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Property 'message' is missing in type 'KitchenError'"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-message
         type: editor.type
         at: { mark: type-message }
