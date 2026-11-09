@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Learning roadmap poster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      The learning roadmap for the nine Burmese courses, 1080×1350 (4:5, the tallest
+      image a Facebook feed shows whole). Same brand as docs/css-course-poster.html:
+      cream page, ink, yellow/purple/teal, Google Sans + Google Sans Code, Burmese in
+      Noto Sans Myanmar.
+
+      The left rail is the web developer path, in the order to take it; the two dashed
+      notes on it are what the courses assume but do not teach (HTML, JavaScript). The
+      right column holds the three courses that need none of the others. Lesson counts
+      are the published playlists' (246 in all, about 35 hours).
+
+      Render it with `bun docs/learning-roadmap-poster-render.ts` (writes
+      docs/learning-roadmap-poster.png).
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --purple-lt: #c9c0ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --coral: #ff8f7e;
+        --gray: #5f6368;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", "Noto Sans Myanmar", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px;
+        background: #2b2b2e;
+      }
+
+      #poster {
+        position: relative;
+        width: 1080px;
+        height: 1350px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        font-family: var(--sans);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .latin {
+        font-family: var(--sans);
+      }
+
+      .series {
+        position: absolute;
+        left: 64px;
+        top: 52px;
+        font: 700 34px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 64px;
+        top: 40px;
+        padding: 8px 28px 12px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .headline {
+        position: absolute;
+        left: 64px;
+        top: 106px;
+        margin: 0;
+        font: 700 58px/1.4 var(--mm);
+        letter-spacing: 0;
+      }
+
+      .headline .latin {
+        letter-spacing: -0.02em;
+      }
+
+      .headline .mark {
+        background: linear-gradient(
+          transparent 62%,
+          rgb(77 229 214 / 0.55) 62% 92%,
+          transparent 92%
+        );
+      }
+
+      .free {
+        position: absolute;
+        right: 64px;
+        top: 122px;
+        width: 164px;
+        height: 164px;
+        border: 5px solid var(--ink);
+        border-radius: 50%;
+        background: var(--yellow);
+        box-shadow: 7px 7px 0 var(--ink);
+        transform: rotate(10deg);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+      }
+
+      .free .mm {
+        font: 700 36px/1.4 var(--mm);
+      }
+
+      .free .en {
+        font: 700 22px/1 var(--mono);
+        letter-spacing: 0.14em;
+      }
+
+      .stats {
+        position: absolute;
+        left: 64px;
+        top: 286px;
+        display: flex;
+        gap: 12px;
+      }
+
+      .stat {
+        padding: 8px 18px 10px;
+        border: 3px solid var(--ink);
+        border-radius: 999px;
+        background: var(--white);
+        box-shadow: 4px 4px 0 var(--ink);
+        font: 700 24px/1 var(--mono);
+        white-space: nowrap;
+      }
+
+      .stat b {
+        color: var(--purple);
+      }
+
+      /* ---- the map ---- */
+
+      .map {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 352px;
+        display: grid;
+        grid-template-columns: 548px 1fr;
+        column-gap: 30px;
+      }
+
+      .col-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 44px;
+        margin: 0 0 8px;
+        font: 700 25px/1.6 var(--mm);
+        white-space: nowrap;
+      }
+
+      .col-title .tag {
+        padding: 5px 13px 7px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 20px/1 var(--mono);
+      }
+
+      .rail {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+      }
+
+      /* The road itself: one ink line behind every stop. */
+      .rail::before {
+        content: "";
+        position: absolute;
+        left: 20px;
+        top: 20px;
+        bottom: 44px;
+        width: 10px;
+        border-radius: 5px;
+        background: var(--ink);
+      }
+
+      .stop,
+      .gate {
+        position: relative;
+        display: grid;
+        grid-template-columns: 50px 1fr;
+        column-gap: 14px;
+        align-items: center;
+      }
+
+      .num {
+        width: 50px;
+        height: 50px;
+        border: 4px solid var(--ink);
+        border-radius: 50%;
+        background: var(--yellow);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 26px/1 var(--sans);
+      }
+
+      .course {
+        border: 3px solid var(--ink);
+        border-radius: 18px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        padding: 9px 16px 8px 18px;
+      }
+
+      .course .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .course .name {
+        font: 700 27px/1.2 var(--sans);
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+
+      .count {
+        flex: none;
+        padding: 4px 10px 6px;
+        border: 2.5px solid var(--ink);
+        border-radius: 999px;
+        background: var(--yellow);
+        font: 700 18px/1 var(--mono);
+        white-space: nowrap;
+      }
+
+      .course .what {
+        margin-top: 1px;
+        font: 700 22px/1.62 var(--mm);
+        color: #3c3f43;
+        white-space: nowrap;
+      }
+
+      .gate .dot {
+        justify-self: center;
+        width: 26px;
+        height: 26px;
+        border: 4px solid var(--ink);
+        border-radius: 50%;
+        background: var(--white);
+      }
+
+      .gate .note {
+        justify-self: start;
+        padding: 3px 16px 5px;
+        border: 3px dashed var(--ink);
+        border-radius: 999px;
+        background: var(--bg);
+        font: 700 21px/1.62 var(--mm);
+        white-space: nowrap;
+      }
+
+      .gate .note b {
+        font-family: var(--sans);
+        color: var(--purple);
+      }
+
+      .side {
+        display: flex;
+        flex-direction: column;
+        gap: 34px;
+        padding-top: 14px;
+      }
+
+      .side .course {
+        position: relative;
+        padding: 26px 18px 12px;
+        box-shadow: 8px 8px 0 var(--ink);
+      }
+
+      .side .course .who {
+        position: absolute;
+        left: 16px;
+        top: -21px;
+        padding: 3px 14px 5px;
+        border: 3px solid var(--ink);
+        border-radius: 999px;
+        font: 700 19px/1.62 var(--mm);
+        white-space: nowrap;
+      }
+
+      .side .course .name {
+        white-space: normal;
+        font-size: 28px;
+      }
+
+      .side .course .what {
+        white-space: normal;
+        margin-top: 4px;
+        line-height: 1.66;
+      }
+
+      .side .course .count {
+        display: inline-block;
+        margin-top: 8px;
+      }
+
+      /* ---- link + footer ---- */
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .link {
+        left: 64px;
+        right: 64px;
+        top: 1176px;
+        height: 80px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 0 30px;
+        font: 700 33px/1 var(--mono);
+      }
+
+      .link .tab {
+        position: absolute;
+        left: 26px;
+        top: -22px;
+        padding: 6px 16px 8px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 22px/1 var(--mono);
+      }
+
+      .link .host {
+        color: var(--purple);
+      }
+
+      .link .path {
+        color: var(--teal-dk);
+      }
+
+      .link .go {
+        margin-left: auto;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: var(--yellow);
+        border: 3px solid var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 26px/1 var(--sans);
+      }
+
+      .footer {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        bottom: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      .brand svg {
+        width: 50px;
+        height: 50px;
+      }
+
+      .oss {
+        font: 700 24px/1 var(--mono);
+        color: var(--gray);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster">
+      <div class="series">
+        <span class="brace">{</span> Learning roadmap <span class="brace">}</span>
+      </div>
+      <div class="lang">မြန်မာလို</div>
+
+      <h1 class="headline">
+        ဘယ်ကနေ စလေ့လာရမလဲ<br />
+        ဒီ <span class="latin mark">Roadmap</span> အတိုင်း လိုက်ပါ
+      </h1>
+
+      <div class="free" aria-label="Free">
+        <span class="mm">အခမဲ့</span>
+        <span class="en">FREE</span>
+      </div>
+
+      <div class="stats">
+        <span class="stat"><b>9</b> courses</span>
+        <span class="stat"><b>246</b> lessons</span>
+        <span class="stat"><b>35+</b> hours</span>
+      </div>
+
+      <div class="map">
+        <section>
+          <h2 class="col-title"><span class="tag">1 → 6</span> Web developer လမ်းကြောင်း</h2>
+          <div class="rail">
+            <div class="gate">
+              <span class="dot"></span>
+              <span class="note"><b>HTML</b> အခြေခံ သိရင် စလို့ရပြီ</span>
+            </div>
+
+            <div class="stop">
+              <span class="num">1</span>
+              <div class="course">
+                <div class="top">
+                  <span class="name">CSS Course</span><span class="count">43 lessons</span>
+                </div>
+                <div class="what">Box model ကနေ Tailwind CSS အထိ</div>
+              </div>
+            </div>
+
+            <div class="stop">
+              <span class="num">2</span>
+              <div class="course">
+                <div class="top">
+                  <span class="name">Accessibility Course</span
+                  ><span class="count">20 lessons</span>
+                </div>
+                <div class="what">လူတိုင်း သုံးလို့ရတဲ့ web page ဆောက်မယ်</div>
+              </div>
+            </div>
+
+            <div class="gate">
+              <span class="dot"></span>
+              <span class="note">ဒီကစပြီး <b>JavaScript</b> အခြေခံ လိုမယ်</span>
+            </div>
+
+            <div class="stop">
+              <span class="num">3</span>
+              <div class="course">
+                <div class="top">
+                  <span class="name">React 19 Crash Course</span
+                  ><span class="count">13 lessons</span>
+                </div>
+                <div class="what">Component ကနေ Server Component အထိ</div>
+              </div>
+            </div>
+
+            <div class="stop">
+              <span class="num">4</span>
+              <div class="course">
+                <div class="top">
+                  <span class="name">TypeScript Course</span><span class="count">34 lessons</span>
+                </div>
+                <div class="what">Type တွေနဲ့ bug ကို စောစော ဖမ်းမယ်</div>
+              </div>
+            </div>
+
+            <div class="stop">
+              <span class="num">5</span>
+              <div class="course">
+                <div class="top">
+                  <span class="name">Testing Course</span><span class="count">32 lessons</span>
+                </div>
+                <div class="what">Vitest, TDD နဲ့ AI ခေတ်ရဲ့ testing</div>
+              </div>
+            </div>
+
+            <div class="stop">
+              <span class="num">6</span>
+              <div class="course">
+                <div class="top">
+                  <span class="name">Learn AI</span><span class="count">20 lessons</span>
+                </div>
+                <div class="what">Website ထဲ AI feature ထည့်မယ်</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 class="col-title">ကြိုက်တဲ့အချိန် စလို့ရ</h2>
+          <div class="side">
+            <div class="course">
+              <span class="who" style="background: var(--purple-lt)">Code မရေးတတ်လည်း ရ</span>
+              <div class="name">AI Builder Course</div>
+              <div class="what">AI agent နဲ့ product အစစ် တည်ဆောက်နည်း</div>
+              <span class="count">32 lessons</span>
+            </div>
+
+            <div class="course">
+              <span class="who" style="background: var(--teal)">Code မပါ</span>
+              <div class="name">Site Reliability Engineering</div>
+              <div class="what">Production ကို စိတ်ချရအောင် ထိန်းကျောင်းနည်း</div>
+              <span class="count">32 lessons</span>
+            </div>
+
+            <div class="course">
+              <span class="who" style="background: var(--coral)">Language တစ်ခု သိပြီးသူ</span>
+              <div class="name">Rust From Zero</div>
+              <div class="what">Ownership, borrowing ကို အခြေခံကနေ</div>
+              <span class="count">20 lessons</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="card link">
+        <span class="tab">all courses</span>
+        <span
+          ><span class="host">nexteditor.dev</span
+          ><span class="path">/learn/@channyeintun</span></span
+        >
+        <span class="go">→</span>
+      </div>
+
+      <div class="footer">
+        <div class="brand">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true">
+            <defs>
+              <linearGradient
+                id="g2c"
+                x1="300"
+                y1="312"
+                x2="724"
+                y2="712"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#4DE5D6" />
+                <stop offset="0.5" stop-color="#FFD255" />
+                <stop offset="1" stop-color="#6D57FF" />
+              </linearGradient>
+            </defs>
+            <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+            <polygon
+              points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+              fill="url(#g2c)"
+            />
+          </svg>
+          Next Editor
+        </div>
+        <div class="oss">github.com/channyeintun/next-editor</div>
+      </div>
+    </div>
+
+    <script>
+      window.posterReady = document.fonts.ready;
+    </script>
+  </body>
+</html>
