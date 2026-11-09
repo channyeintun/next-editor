@@ -403,6 +403,17 @@ on `scene` and `mark` anchors:
 - `{ afterAction: other-id }` — after that action completes (use for
   `expect.*` gates that follow `runtime.run` or Python's `runtime.start`).
 
+`expect.preview` inspects once per attempt: a missing target fails that attempt
+at once, so its `retry` is the only wait (`timeoutMs` only bounds the whole
+loop). After an edit, the preview needs time to rebuild, so the first check
+chained after the edit gets a retry window that covers the rebuild. A
+`line-by-line` or keystroke edit can rebuild after every line, so that first
+check must test something only the edit's **last** line produces. If it can
+pass on an earlier line's run, every later check in the chain gets the same
+wide window. AI course lesson 19 checked its label (line 1) first, then gave
+the opt-out button (line 3) two tries 300 ms apart, and a studio workflow
+missed it.
+
 Action catalog:
 
 | type                   | fields                                                                | notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
