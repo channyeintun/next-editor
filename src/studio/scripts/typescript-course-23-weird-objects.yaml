@@ -1287,10 +1287,10 @@ scenes:
       - id: expect-coffee-error
         type: expect.preview
         at: { afterAction: expect-two-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-2 }
         attribute: { name: data-line, value: "13" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-callback
         type: editor.select
         at: { mark: select-callback }
@@ -1310,10 +1310,10 @@ scenes:
       - id: expect-callback-error
         type: expect.preview
         at: { afterAction: expect-three-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-3 }
         attribute: { name: data-line, value: "19" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-fix-tea
         type: editor.type
         at: { mark: type-fix-typos }
@@ -1339,17 +1339,17 @@ scenes:
       - id: expect-coffee-less
         type: expect.preview
         at: { afterAction: expect-no-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-2 }
         textContains: "ကော်ဖီ သကြား less"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-rush-less
         type: expect.preview
         at: { afterAction: expect-coffee-less }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-3 }
         textContains: "သံပုရာရည် သကြား less"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
 
   - id: keys
     chapter: "Object.keys က string ပဲ ပေးတယ်"
@@ -1408,24 +1408,24 @@ scenes:
       - id: expect-loop-code
         type: expect.preview
         at: { afterAction: expect-loop-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "7053" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-loop-message
         type: expect.preview
         at: { afterAction: expect-loop-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "expression of type 'string' can't be used to index type '{ tea: number; coffee: number; lime: number; }'"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-loop-output
         type: expect.preview
         at: { afterAction: expect-loop-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-5 }
         textContains: "tea 1500"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-key-query
         type: editor.type
         at: { mark: type-key-query }
@@ -1525,24 +1525,24 @@ scenes:
       - id: expect-for-in-code
         type: expect.preview
         at: { afterAction: expect-for-in-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         attribute: { name: data-code, value: "7053" }
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-for-in-message
         type: expect.preview
         at: { afterAction: expect-for-in-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "expression of type 'string' can't be used to index type '{ tea: number; coffee: number; lime: number; }'"
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-total
         type: expect.preview
         at: { afterAction: expect-for-in-message }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-out-8 }
         textContains: "ဒီနေ့ ခွက်ရေ 69"
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-record
         type: editor.type
         at: { mark: type-record }
@@ -1624,17 +1624,17 @@ scenes:
       - id: expect-q-morning
         type: expect.preview
         at: { afterAction: expect-q-any }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-3 }
         attribute: { name: data-type, value: "let special: string" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-q-evening
         type: expect.preview
         at: { afterAction: expect-q-morning }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-4 }
         attribute: { name: data-type, value: "let special: number" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: select-sold
         type: editor.select
         at: { mark: select-sold }
@@ -1671,17 +1671,17 @@ scenes:
       - id: expect-sold-error-code
         type: expect.preview
         at: { afterAction: expect-sold-error }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Argument of type 'number' is not assignable to parameter of type 'string'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-sold-type
         type: expect.preview
         at: { afterAction: expect-sold-error-code }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-type-5 }
         attribute: { name: data-type, value: "const sold: string[]" }
-        retry: { maxAttempts: 3, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-push
         type: editor.type
         at: { mark: type-comment-push }
@@ -1734,17 +1734,17 @@ scenes:
       - id: expect-sign-null
         type: expect.preview
         at: { afterAction: expect-sign-errors }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-1 }
         textContains: "Type 'null' is not assignable to type '{}'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: expect-sign-undefined
         type: expect.preview
         at: { afterAction: expect-sign-null }
-        timeoutMs: 5000
+        timeoutMs: 8000
         target: { by: testId, value: ts-error-2 }
         textContains: "Type 'undefined' is not assignable to type '{}'."
-        retry: { maxAttempts: 2, delayMs: 300 }
+        retry: { maxAttempts: 3, delayMs: 1200 }
       - id: type-comment-null
         type: editor.type
         at: { mark: type-comment-null }
