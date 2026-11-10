@@ -432,6 +432,47 @@ describe("normalizeUpstreamRunResponse", () => {
       expect(stream?.length).toBe(256 * 1024 + "\n[output truncated]".length);
     }
   });
+
+  it("tests a code frame full of other line terminators in linear time", () => {
+    // A multiline ^ also matches after \r, U+2028 and U+2029. A learner line
+    // comment full of them, echoed in a warning's code frame on a run that
+    // exits non-zero, made every one of them start a scan to the end of the
+    // line: quadratic CPU over raw ghcout. The budget is generous: the test
+    // takes well under a millisecond now, and over a second before.
+    const terminators = 32_000;
+    for (const terminator of ["\r", "\u2028", "\u2029"]) {
+      const ghcout =
+        "Main.hs:2:18: warning: [GHC-63394] [-Wx-partial]\n" +
+        "  |\n" +
+        `2 | main = putStrLn (head []) -- ${terminator.repeat(terminators)}\n` +
+        "  |                  ^^^^\n" +
+        "\n";
+      const startedAt = performance.now();
+      const normalized = normalizeUpstreamRunResponse({ ec: 1, ghcout, sout: "", serr: "x" });
+      const elapsedMs = performance.now() - startedAt;
+      const result = normalized && "result" in normalized ? normalized.result : null;
+
+      expect({ terminator, status: result?.status }).toEqual({
+        terminator,
+        status: "runtime-error",
+      });
+      expect({ terminator, fast: elapsedMs < 250 }).toEqual({ terminator, fast: true });
+    }
+  });
+
+  it("still reads an error header that follows a carriage return", () => {
+    // \r is a line start for the multiline ^, so a header after one keeps
+    // matching even though the leading run may no longer cross it.
+    const normalized = normalizeUpstreamRunResponse({
+      ec: 1,
+      ghcout: "noise\rMain.hs:2:15: error: [GHC-39999]\r\n    oops\r\n",
+      sout: "",
+      serr: "",
+    });
+    const result = normalized && "result" in normalized ? normalized.result : null;
+
+    expect(result?.status).toBe("compile-error");
+  });
 });
 
 describe("haskellPlaygroundRoute", () => {

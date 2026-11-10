@@ -106,7 +106,17 @@ const REQUIRED_FILE_PATH = "Main.hs";
 // always do, so excluding it keeps a warning's echoed source out of the test.
 // The separator is spaces/tabs rather than \s for the same reason: \s would
 // let a match run past the newline onto the following line.
-const GHC_ERROR_DIAGNOSTIC = /^[^\n|]*:[ \t]*error:/m;
+//
+// The leading run excludes every line terminator the multiline ^ starts a
+// line after (\n, \r, U+2028, U+2029), not only \n. The test runs over raw
+// ghcout, and a code frame echoes the learner's line verbatim, so a line
+// comment full of carriage returns put thousands of line starts on one \n
+// line; a run that could cross them rescanned the rest of that line from
+// each one (quadratic CPU). Stopping at each terminator keeps the runs
+// disjoint, and matches nothing new or less: a header after a \r still
+// starts a line of its own. Same reasoning as CARGO_RUNNING_LINE in
+// routes/rustPlayground.ts.
+const GHC_ERROR_DIAGNOSTIC = /^[^\n\r\u2028\u2029|]*:[ \t]*error:/m;
 
 // No path scrubbing here, deliberately, and none should be added: the upstream
 // compiles the submitted source as "Main.hs", which is exactly the filename the
