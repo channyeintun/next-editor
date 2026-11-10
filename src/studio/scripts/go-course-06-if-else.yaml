@@ -1,0 +1,1397 @@
+# Go course, lesson 06: if and else (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. the two marks (myanmar, maths := 85, 72) and a Println of two comparisons, then the
+#      if / else if / else chain on the Myanmar mark -> run-1: true false / 85 ဂုဏ်ထူး;
+#   2. an && check of both subjects and an if with a short statement (total >= 150)
+#      -> run-2 adds ဘာသာ နှစ်ခုလုံး အောင် / 157 ဆုရ;
+#   3. an || check (either subject failed), then a second student's marks inserted as a new
+#      assignment under the first line (35, 60) -> run-3: false false / 35 ကျ / ဘာသာ တစ်ခုခု ကျ.
+# Boards: (F) if is a fork, questions asked top to bottom; (C) comparisons answer true/false;
+# (E) the = vs == trap (said, not run); (T) the and / or / not table; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-06-if-else
+  title: "Go course 06: if နဲ့ ဆုံးဖြတ်တာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board F: if is a fork in the road; the questions are asked top to bottom.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "if ဆိုတာ လမ်းခွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-q1-box,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 320,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-q1,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 280,
+        height: 40,
+        text: "myanmar >= 80 ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-t1,
+        kind: text,
+        x: 635,
+        y: 225,
+        width: 90,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 260,
+        width: 110,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-r1-box,
+        kind: rectangle,
+        x: 750,
+        y: 240,
+        width: 300,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-r1,
+        kind: text,
+        x: 770,
+        y: 255,
+        width: 250,
+        height: 40,
+        text: "ဂုဏ်ထူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-f1,
+        kind: text,
+        x: 470,
+        y: 330,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-d1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 318,
+        width: 30,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-q2-box,
+        kind: rectangle,
+        x: 290,
+        y: 400,
+        width: 320,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-q2,
+        kind: text,
+        x: 310,
+        y: 415,
+        width: 280,
+        height: 40,
+        text: "myanmar >= 40 ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-t2,
+        kind: text,
+        x: 635,
+        y: 385,
+        width: 90,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 420,
+        width: 110,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-r2-box,
+        kind: rectangle,
+        x: 750,
+        y: 400,
+        width: 300,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-r2,
+        kind: text,
+        x: 770,
+        y: 415,
+        width: 250,
+        height: 40,
+        text: "အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-f2,
+        kind: text,
+        x: 470,
+        y: 490,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-d2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 478,
+        width: 30,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: f-r3-box,
+        kind: rectangle,
+        x: 290,
+        y: 560,
+        width: 320,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-r3,
+        kind: text,
+        x: 310,
+        y: 575,
+        width: 250,
+        height: 40,
+        text: "ကျ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-one,
+        kind: text,
+        x: 680,
+        y: 575,
+        width: 400,
+        height: 40,
+        text: "အပေါ်ကနေ စစ် · တစ်လမ်းပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: a comparison answers true or false.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "နှိုင်းယှဉ်ရင် true / false",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 560,
+        height: 270,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-ge,
+        kind: text,
+        x: 310,
+        y: 250,
+        width: 500,
+        height: 40,
+        text: ">=   ကြီး ဒါမှမဟုတ် တူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-lt,
+        kind: text,
+        x: 310,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: "<    ငယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-eq,
+        kind: text,
+        x: 310,
+        y: 350,
+        width: 400,
+        height: 40,
+        text: "==   တူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ne,
+        kind: text,
+        x: 310,
+        y: 400,
+        width: 400,
+        height: 40,
+        text: "!=   မတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-more,
+        kind: text,
+        x: 310,
+        y: 450,
+        width: 500,
+        height: 40,
+        text: ">   <=   လည်း ရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ex1,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 500,
+        height: 40,
+        text: "85 >= 80   →   true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ex2,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 500,
+        height: 40,
+        text: "72 >= 80   →   false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board E: asking (==) is not putting a value in (=); said, not run.
+    - {
+        id: e-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "မေးတာ နဲ့ ထည့်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: e-bad-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 800,
+        height: 170,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-bad,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 400,
+        height: 40,
+        text: "if myanmar = 80 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-err1,
+        kind: text,
+        x: 310,
+        y: 310,
+        width: 720,
+        height: 40,
+        text: "syntax error: cannot use assignment",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-err2,
+        kind: text,
+        x: 310,
+        y: 355,
+        width: 500,
+        height: 40,
+        text: "myanmar = 80 as value",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-good-box,
+        kind: rectangle,
+        x: 285,
+        y: 440,
+        width: 800,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-good,
+        kind: text,
+        x: 310,
+        y: 460,
+        width: 400,
+        height: 40,
+        text: "if myanmar == 80 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: e-rule,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 700,
+        height: 40,
+        text: "=  box ထဲ ထည့်တာ   ·   ==  တူလား မေးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: and, or, not.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "&& and · || or · ! not",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-box,
+        kind: rectangle,
+        x: 285,
+        y: 225,
+        width: 790,
+        height: 265,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-col1,
+        kind: text,
+        x: 305,
+        y: 235,
+        width: 235,
+        height: 40,
+        text: "မြန်မာစာ အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-col2,
+        kind: text,
+        x: 545,
+        y: 235,
+        width: 200,
+        height: 40,
+        text: "သင်္ချာ အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-col3,
+        kind: text,
+        x: 770,
+        y: 235,
+        width: 100,
+        height: 40,
+        text: "&&",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-col4,
+        kind: text,
+        x: 930,
+        y: 235,
+        width: 100,
+        height: 40,
+        text: "||",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r1a,
+        kind: text,
+        x: 305,
+        y: 290,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r1b,
+        kind: text,
+        x: 545,
+        y: 290,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r2a,
+        kind: text,
+        x: 305,
+        y: 340,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r2b,
+        kind: text,
+        x: 545,
+        y: 340,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r3a,
+        kind: text,
+        x: 305,
+        y: 390,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r3b,
+        kind: text,
+        x: 545,
+        y: 390,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r4a,
+        kind: text,
+        x: 305,
+        y: 440,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r4b,
+        kind: text,
+        x: 545,
+        y: 440,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r1and,
+        kind: text,
+        x: 770,
+        y: 290,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r2and,
+        kind: text,
+        x: 770,
+        y: 340,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r3and,
+        kind: text,
+        x: 770,
+        y: 390,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r4and,
+        kind: text,
+        x: 770,
+        y: 440,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r1or,
+        kind: text,
+        x: 930,
+        y: 290,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r2or,
+        kind: text,
+        x: 930,
+        y: 340,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r3or,
+        kind: text,
+        x: 930,
+        y: 390,
+        width: 100,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r4or,
+        kind: text,
+        x: 930,
+        y: 440,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-and-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 750,
+        y: 280,
+        width: 110,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-or-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 910,
+        y: 430,
+        width: 120,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-not,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 760,
+        height: 40,
+        text: "not ·  !true → false  ·  !false → true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (the 40 test above the 80 test).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 230,
+        width: 560,
+        height: 290,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 245,
+        width: 300,
+        height: 40,
+        text: "mark := 85",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 290,
+        width: 400,
+        height: 40,
+        text: "if mark >= 40 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 310,
+        y: 335,
+        width: 480,
+        height: 40,
+        text: '    fmt.Println("အောင်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 310,
+        y: 380,
+        width: 480,
+        height: 40,
+        text: "} else if mark >= 80 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l5,
+        kind: text,
+        x: 310,
+        y: 425,
+        width: 480,
+        height: 40,
+        text: '    fmt.Println("ဂုဏ်ထူး")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l6,
+        kind: text,
+        x: 310,
+        y: 470,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 300,
+        y: 282,
+        width: 260,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 400,
+        height: 40,
+        text: "က · အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 400,
+        height: 40,
+        text: "ခ · ဂုဏ်ထူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 535,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7106
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "true false\n85 ဂုဏ်ထူး\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "true false\n85 ဂုဏ်ထူး\nဘာသာ နှစ်ခုလုံး အောင်\n157 ဆုရ\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "false false\n35 ကျ\nဘာသာ တစ်ခုခု ကျ\n"
+
+scenes:
+  - id: recall
+    chapter: if ဆိုတာ လမ်းခွဲ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ ဈေးဝယ် ပြေစာ စာကြောင်း တစ်ကြောင်းကို Printf နဲ့ ပုံစံချပြီး ထုတ်ခဲ့ပါတယ်။ ဒါပေမဲ့ အခုထိ
+      ရေးခဲ့တဲ့ program တွေက line တိုင်းကို အပေါ်ကနေ အောက်ကို အမြဲ run ပြီး၊ ဘာကိုမှ ကိုယ်တိုင် ဆုံးဖြတ်တာ
+      မရှိသေးပါဘူး။ တကယ့် program တွေမှာတော့ အခြေအနေကို ကြည့်ပြီး ဘာလုပ်မလဲ ဆုံးဖြတ်ရတာ အများကြီးပါ။
+      [[mark:example]] ဒီနေ့ ဥပမာကတော့ စာမေးပွဲ အမှတ်ပါ။ အမှတ် လေးဆယ် ပြည့်ရင် အောင်ပြီး၊ ရှစ်ဆယ် ပြည့်ရင် ဂုဏ်ထူး ထွက်ပါတယ်။
+      ကျောင်းသူ လှလှ ရဲ့ အမှတ်ကို ကြည့်ပြီး အောင်လား၊ ဂုဏ်ထူးလား၊ ကျလား ဆိုတာကို program က ဆုံးဖြတ်ပေးအောင်
+      ရေးကြည့်ပါမယ်။ [[mark:board-fork]] ဆုံးဖြတ်တာကို လမ်းခွဲ တစ်ခုလို မြင်ကြည့်ပါ။ [[mark:draw-q1]]
+      လမ်းဆုံမှာ မေးခွန်း တစ်ခု ရှိပါတယ်၊ မြန်မာစာ အမှတ်က ရှစ်ဆယ် ပြည့်လား ဆိုတာပါ။ ဒီလို true လား false လား
+      ဖြေရတဲ့ မေးခွန်းကို condition လို့ ခေါ်ပါတယ်။ အဖြေ true ဆိုရင် ညာဘက် လမ်းကို လိုက်ပြီး ဂုဏ်ထူး လို့
+      ပြပါတယ်။ [[mark:draw-q2]] false ဆိုရင်တော့ အောက်ကို ဆင်းပြီး၊ လေးဆယ် ပြည့်လား ဆိုတဲ့ နောက် မေးခွန်း
+      တစ်ခုကို ထပ်မေးပါတယ်။ true ဆိုရင် အောင်၊ false ဆိုရင် ကျ ပါ။ [[mark:draw-one]] သတိထားရမှာက
+      မေးခွန်းတွေကို အပေါ်ကနေ တစ်ခုချင်း မေးပြီး၊ လမ်း တစ်လမ်းကိုပဲ ရွေးတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-fork,
+          type: whiteboard.apply,
+          at: { mark: board-fork },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-q1,
+          type: whiteboard.apply,
+          at: { mark: draw-q1 },
+          upsertIds: [f-q1-box, f-q1, f-t1, f-a1, f-r1-box, f-r1],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-q2,
+          type: whiteboard.apply,
+          at: { mark: draw-q2 },
+          upsertIds:
+            [f-f1, f-d1, f-q2-box, f-q2, f-t2, f-a2, f-r2-box, f-r2, f-f2, f-d2, f-r3-box, f-r3],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-one,
+          type: whiteboard.apply,
+          at: { mark: draw-one },
+          upsertIds: [f-one],
+          drawMs: 1000,
+        }
+
+  - id: compare
+    chapter: နှိုင်းယှဉ်ရင် true ဒါမှမဟုတ် false
+    narration: >-
+      [[mark:close-fork]] အရင်ဆုံး မေးခွန်း မေးတဲ့ အပိုင်းကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-marks]] main
+      ထဲမှာ မြန်မာစာ အမှတ်နဲ့ သင်္ချာ အမှတ်ကို variable နှစ်ခုအဖြစ် တစ်ကြောင်းတည်းမှာ ကြေညာပါမယ်။ ဘယ်ဘက်က
+      နာမည် နှစ်ခုကို ညာဘက်က တန်ဖိုး နှစ်ခုနဲ့ အစဉ်လိုက် တွဲပေးတာပါ။ ပြီးတော့ မေးခွန်း နှစ်ခုရဲ့ အဖြေကို print
+      ထုတ်ကြည့်ပါမယ်။ [[mark:sel-compare]] ဒီ အပိုင်းက မြန်မာစာ အမှတ်က ရှစ်ဆယ် ဒါမှမဟုတ် ရှစ်ဆယ်ထက်
+      များလား လို့ မေးတာပါ။ ဒီလို နှိုင်းယှဉ်လိုက်ရင် အဖြေက ဂဏန်း မဟုတ်ဘဲ true ဒါမှမဟုတ် false ပဲ ထွက်ပါတယ်။
+      ဆိုလိုတာက နှိုင်းယှဉ်ချက် တိုင်းက ပြီးခဲ့တဲ့ lesson တွေမှာ တွေ့ခဲ့တဲ့ bool တန်ဖိုး တစ်ခုကို ပေးတာပါ။
+      [[mark:board-compare]] ဒီ lesson မှာ သုံးမယ့် နှိုင်းယှဉ် သင်္ကေတတွေကို ကြည့်ရအောင်။ [[mark:draw-ge]]
+      ပထမ တစ်ခုက ကြီးလား ဒါမှမဟုတ် တူလား လို့ မေးပြီး၊ ဒုတိယ တစ်ခုက ငယ်လား လို့ မေးတာပါ။
+      [[mark:draw-eq]] နောက် နှစ်ခုကတော့ တူလား၊ မတူဘူးလား လို့ မေးတာပါ။ ဒါတွေအပြင် ကြီးလား သက်သက် မေးတာနဲ့၊
+      ငယ်လား ဒါမှမဟုတ် တူလား မေးတာ ဆိုတဲ့ ပုံစံ နှစ်မျိုးလည်း ရှိပါသေးတယ်။ [[mark:draw-ex]] ဒါကြောင့် လှလှ ရဲ့ မြန်မာစာ ရှစ်ဆယ့်ငါး အတွက် အဖြေက true
+      ဖြစ်ပြီး၊ သင်္ချာ ခုနစ်ဆယ့်နှစ် အတွက်တော့ false ဖြစ်ရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Comparison operators",
+          url: "https://go.dev/ref/spec#Comparison_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Boolean types",
+          url: "https://go.dev/ref/spec#Boolean_types",
+        }
+    actions:
+      - {
+          id: close-fork,
+          type: whiteboard.apply,
+          at: { mark: close-fork },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-marks
+        type: editor.type
+        at: { mark: type-marks }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tmyanmar, maths := 85, 72\n\tfmt.Println(myanmar >= 80, maths >= 80)\n"
+        cadence: line-by-line
+      - id: sel-compare
+        type: editor.select
+        at: { mark: sel-compare }
+        target: { file: main.go, text: "myanmar >= 80", occurrence: 1 }
+      - {
+          id: board-compare,
+          type: whiteboard.apply,
+          at: { mark: board-compare },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-ge,
+          type: whiteboard.apply,
+          at: { mark: draw-ge },
+          upsertIds: [c-box, c-ge, c-lt],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-eq,
+          type: whiteboard.apply,
+          at: { mark: draw-eq },
+          upsertIds: [c-eq, c-ne, c-more],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-ex,
+          type: whiteboard.apply,
+          at: { mark: draw-ex },
+          upsertIds: [c-ex1, c-ex2],
+          drawMs: 1400,
+        }
+
+  - id: if-chain
+    chapter: if၊ else if နဲ့ else
+    narration: >-
+      [[mark:close-compare]] ဒါဆို ဒီ မေးခွန်းကို သုံးပြီး ဆုံးဖြတ်ကြည့်ရအောင်။ [[mark:type-if]] if ဆိုတဲ့ keyword
+      နောက်မှာ condition ကို ရေးပြီး၊ true ဖြစ်ခဲ့ရင် လုပ်မယ့် အလုပ်ကို တွန့်ကွင်း အဖွင့်နဲ့ အပိတ်ကြားမှာ ထည့်ပါတယ်။
+      ဒီမှာတော့ အမှတ်နဲ့ ဂုဏ်ထူး ဆိုတဲ့ စာကို print ထုတ်ပါမယ်။ Go မှာ အထဲက line တစ်ကြောင်းတည်း ရှိရင်တောင်
+      ဒီ တွန့်ကွင်းကို မဖြစ်မနေ ရေးရပြီး၊ မပါရင် compile error ရပါတယ်။ [[mark:type-else]] condition က false
+      ဖြစ်ခဲ့ရင် သွားမယ့် လမ်းတွေကို တွန့်ကွင်း အပိတ်ရဲ့ နောက်မှာ ဆက်ရေးပါမယ်။ else if က ပထမ မေးခွန်း false
+      ဖြစ်မှ မေးမယ့် ဒုတိယ မေးခွန်းပါ၊ လေးဆယ် ပြည့်ရင် အောင် လို့ ပြပါမယ်။ နောက်ဆုံးက else မှာတော့ condition
+      မပါပါဘူး။ အပေါ်က မေးခွန်း အားလုံး false ဖြစ်မှ ရောက်လာမယ့် လမ်းဖြစ်ပြီး ကျ လို့ ပြပါတယ်။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Blocks",
+          url: "https://go.dev/ref/spec#Blocks",
+        }
+    actions:
+      - {
+          id: close-compare,
+          type: whiteboard.apply,
+          at: { mark: close-compare },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-if
+        type: editor.type
+        at: { mark: type-if }
+        target: { file: main.go, after: "maths >= 80)\n", occurrence: 1 }
+        text: "\tif myanmar >= 80 {\n\t\tfmt.Println(myanmar, \"ဂုဏ်ထူး\")\n\t}\n"
+        cadence: line-by-line
+      - id: type-else
+        type: editor.type
+        at: { mark: type-else }
+        target: { file: main.go, after: "\"ဂုဏ်ထူး\")\n\t}", occurrence: 1 }
+        text: " else if myanmar >= 40 {\n\t\tfmt.Println(myanmar, \"အောင်\")\n\t} else {\n\t\tfmt.Println(myanmar, \"ကျ\")\n\t}"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "85 ဂုဏ်ထူး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-else,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\t} else if myanmar >= 40 {\n",
+        }
+
+  - id: one-branch
+    narration: >-
+      [[mark:point-bool]] ပထမ စာကြောင်းမှာ true နဲ့ false ကို တွေ့ရပါတယ်။ မြန်မာစာ ရှစ်ဆယ့်ငါးက ရှစ်ဆယ်ထက်
+      များလို့ true ဖြစ်ပြီး၊ သင်္ချာ ခုနစ်ဆယ့်နှစ်ကတော့ ရှစ်ဆယ် မပြည့်လို့ false ဖြစ်တာပါ။ [[mark:point-grade]]
+      ဒုတိယ စာကြောင်းမှာတော့ ရှစ်ဆယ့်ငါး ဂုဏ်ထူး လို့ ထွက်လာပါတယ်။ ဒီနေရာမှာ စဉ်းစားစရာ တစ်ခု ရှိပါတယ်။
+      ရှစ်ဆယ့်ငါးက လေးဆယ်ထက်လည်း များတာပဲ၊ ဒါပေမဲ့ အောင် ဆိုတဲ့ စာကြောင်း ထပ်မထွက်ပါဘူး။ [[mark:why-one]] ဘာကြောင့်လဲဆိုတော့
+      if တွေကို else နဲ့ ဆက်ထားတဲ့ အတွဲ တစ်ခုမှာ၊ Go က အပေါ်ကနေ စပြီး condition တွေကို တစ်ခုချင်း စစ်ပြီး
+      ပထမဆုံး true ဖြစ်တဲ့ လမ်း တစ်ခုကိုပဲ run လို့ပါ။ အဲဒီ လမ်း ပြီးသွားရင် ကျန်တဲ့ else if နဲ့ else တွေကို
+      မစစ်တော့ဘဲ အတွဲ တစ်ခုလုံးရဲ့ အောက်ကို ကျော်သွားပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+    actions:
+      - {
+          id: point-bool,
+          type: console.point,
+          at: { mark: point-bool },
+          target: { text: "true false" },
+        }
+      - {
+          id: point-grade,
+          type: console.point,
+          at: { mark: point-grade },
+          target: { text: "85 ဂုဏ်ထူး" },
+        }
+
+  - id: assign-trap
+    narration: >-
+      [[mark:board-assign]] if ကို စရေးတဲ့ အခါ မှားလေ့ရှိတာ တစ်ခုကို ကြည့်ရအောင်။ [[mark:draw-assign]] တူလား လို့
+      မေးရမယ့် နေရာမှာ၊ ပြီးခဲ့တဲ့ lesson တွေက box ထဲ တန်ဖိုး ထည့်တဲ့ သင်္ကေတကို မှားရေးမိရင် compiler က
+      လက်မခံပါဘူး။ error က if မှာ နှိုင်းယှဉ်ရမယ့် နေရာမှာ တန်ဖိုး ထည့်တာ ဖြစ်နေလို့ပါ လို့ ပြောပါတယ်။ compile
+      ကတည်းက ငြင်းတာ ဖြစ်လို့ program က တစ်ကြောင်းမှ run မသွားပါဘူး။ [[mark:draw-assign-ok]] တူလား လို့
+      မေးချင်ရင်တော့ အောက်က ပုံစံလို တူလား မေးတဲ့ သင်္ကေတကို သုံးရပါမယ်။ ထည့်တာနဲ့ မေးတာ မတူဘူး ဆိုတာကို
+      မှတ်ထားရင် ဒီ error ကို ရှောင်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Comparison operators",
+          url: "https://go.dev/ref/spec#Comparison_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-assign } }
+      - {
+          id: board-assign,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-assign,
+          type: whiteboard.apply,
+          at: { mark: draw-assign },
+          upsertIds: [e-bad-box, e-bad, e-err1, e-err2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-assign-ok,
+          type: whiteboard.apply,
+          at: { mark: draw-assign-ok },
+          upsertIds: [e-good-box, e-good, e-rule],
+          drawMs: 2000,
+        }
+
+  - id: and-total
+    chapter: and နဲ့ if ထဲက variable
+    narration: >-
+      [[mark:close-assign]] အခု ဘာသာ နှစ်ခုလုံး အောင်လား ဆိုတာကို စစ်ချင်ပါတယ်။ မေးခွန်း နှစ်ခုကို တွဲမေးဖို့
+      and ကို သုံးပါတယ်။ [[mark:type-and]] ဒီ if ရဲ့ condition မှာ မြန်မာစာ လေးဆယ် ပြည့်လား ဆိုတဲ့ မေးခွန်းနဲ့
+      သင်္ချာ လေးဆယ် ပြည့်လား ဆိုတဲ့ မေးခွန်းကို and နဲ့ ဆက်ထားပါတယ်။ and က နှစ်ခုလုံး true ဖြစ်မှ true
+      ပေးပါတယ်။ [[mark:type-total]] နောက်ထပ် ဥပမာ တစ်ခုအနေနဲ့၊ ဘာသာ နှစ်ခု ပေါင်း အမှတ် တစ်ရာ့ငါးဆယ် ရရင်
+      ဆု ရတယ် ဆိုပါစို့။ ဒီ if မှာ condition မတိုင်ခင်၊ ပေါင်းလဒ်ကို total ဆိုတဲ့ variable ထဲ အရင် ထည့်ပြီးမှ
+      စစ်ပါတယ်။ [[mark:sel-total]] ဒီလို if ရဲ့ ရှေ့ပိုင်းမှာ ကြေညာတဲ့ total က if ရဲ့ အထဲမှာပဲ ရှိပြီး၊ if
+      ပြီးသွားရင် မရှိတော့ပါဘူး။ ဒီ နေရာ တစ်ခုတည်းမှာပဲ လိုတဲ့ တန်ဖိုး အတွက် သုံးတဲ့ ပုံစံဖြစ်ပြီး၊ နောက်ပိုင်း
+      lesson တွေမှာ မကြာခဏ ပြန်တွေ့ရပါမယ်။ [[mark:run-2]] ကဲ၊ ထပ်ပြီး run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Logical operators",
+          url: "https://go.dev/ref/spec#Logical_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Blocks",
+          url: "https://go.dev/ref/spec#Blocks",
+        }
+    actions:
+      - {
+          id: close-assign,
+          type: whiteboard.apply,
+          at: { mark: close-assign },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-and
+        type: editor.type
+        at: { mark: type-and }
+        target: { file: main.go, after: "\"ကျ\")\n\t}\n", occurrence: 1 }
+        text: "\tif myanmar >= 40 && maths >= 40 {\n\t\tfmt.Println(\"ဘာသာ နှစ်ခုလုံး အောင်\")\n\t}\n"
+        cadence: line-by-line
+      - id: type-total
+        type: editor.type
+        at: { mark: type-total }
+        target: { file: main.go, after: "နှစ်ခုလုံး အောင်\")\n\t}\n", occurrence: 1 }
+        text: "\tif total := myanmar + maths; total >= 150 {\n\t\tfmt.Println(total, \"ဆုရ\")\n\t}\n"
+        cadence: line-by-line
+      - id: sel-total
+        type: editor.select
+        at: { mark: sel-total }
+        target: { file: main.go, text: "total := myanmar + maths", occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "157 ဆုရ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-and,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "if myanmar >= 40 && maths >= 40 {",
+        }
+
+  - id: truth
+    narration: >-
+      [[mark:point-both]] တတိယ စာကြောင်းမှာ ဘာသာ နှစ်ခုလုံး အောင် လို့ ထွက်လာပါတယ်။ ရှစ်ဆယ့်ငါးရော
+      ခုနစ်ဆယ့်နှစ်ရော လေးဆယ် ပြည့်လို့ and က true ပေးတာပါ။ [[mark:point-total]] နောက်ဆုံး စာကြောင်းကတော့
+      တစ်ရာ့ငါးဆယ့်ခုနစ် ဆုရ ပါ။ ဒီ if နှစ်ခုက else နဲ့ ဆက်မထားတဲ့ သီးခြား if တွေ ဖြစ်လို့၊ တစ်ခုချင်းစီကို
+      သူ့ဘာသာ စစ်ပါတယ်။ [[mark:board-truth]] and အပြင် or နဲ့ not ဆိုတာလည်း ရှိပါတယ်။ ဇယား တစ်ခုနဲ့
+      ကြည့်ရအောင်။ [[mark:draw-rows]] ဘယ်ဘက် နှစ်တိုင်က မြန်မာစာ အောင်လား၊ သင်္ချာ အောင်လား ဆိုတဲ့ အဖြေ
+      ဖြစ်နိုင်ချေ လေးမျိုးပါ။ [[mark:draw-and]] and ရဲ့ တိုင်မှာ နှစ်ခုလုံး true ဖြစ်တဲ့ ပထမ အတန်းမှာပဲ true
+      ရပါတယ်။ [[mark:draw-or]] or ကတော့ တစ်ခုခု true ဖြစ်ရင် true ပါ၊ နှစ်ခုလုံး false ဖြစ်တဲ့ နောက်ဆုံး
+      အတန်းမှာပဲ false ရပါတယ်။ [[mark:draw-not]] not ကတော့ တန်ဖိုး တစ်ခုရဲ့ ရှေ့မှာ ထည့်လိုက်ရင် true ကို
+      false၊ false ကို true လို့ ပြောင်းပြန် လုပ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Logical operators",
+          url: "https://go.dev/ref/spec#Logical_operators",
+        }
+    actions:
+      - {
+          id: point-both,
+          type: console.point,
+          at: { mark: point-both },
+          target: { text: "ဘာသာ နှစ်ခုလုံး အောင်" },
+        }
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "157 ဆုရ" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-truth } }
+      - {
+          id: board-truth,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [t-title, t-box],
+        }
+      - {
+          id: draw-rows,
+          type: whiteboard.apply,
+          at: { mark: draw-rows },
+          upsertIds: [t-col1, t-col2, t-r1a, t-r1b, t-r2a, t-r2b, t-r3a, t-r3b, t-r4a, t-r4b],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-and,
+          type: whiteboard.apply,
+          at: { mark: draw-and },
+          upsertIds: [t-col3, t-r1and, t-r2and, t-r3and, t-r4and, t-and-mark],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-or,
+          type: whiteboard.apply,
+          at: { mark: draw-or },
+          upsertIds: [t-col4, t-r1or, t-r2or, t-r3or, t-r4or, t-or-mark],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-not,
+          type: whiteboard.apply,
+          at: { mark: draw-not },
+          upsertIds: [t-not],
+          drawMs: 1200,
+        }
+
+  - id: second-student
+    chapter: အမှတ် ပြောင်းရင် လမ်း ပြောင်းတယ်
+    narration: >-
+      [[mark:close-truth]] ဒါဆို or ကို code ထဲမှာ သုံးကြည့်ရအောင်။ [[mark:type-or]] ဘာသာ တစ်ခုခုမှာ လေးဆယ်
+      မပြည့်ရင်၊ ဘာသာ တစ်ခုခု ကျ လို့ ပြမယ့် if ကို ထည့်ပါမယ်။ လှလှ ရဲ့ အမှတ်တွေနဲ့ဆိုရင် ဒီ condition က false
+      ဖြစ်လို့ ဒီ စာကြောင်း ထွက်မှာ မဟုတ်ပါဘူး။ [[mark:type-second]] အခု ကျောင်းသား မောင်မောင် ရဲ့ အမှတ်နဲ့
+      စမ်းကြည့်ပါမယ်။ if တွေကို ပြန်ရေးစရာ မလိုဘဲ၊ ပထမ line ရဲ့ အောက်မှာ variable နှစ်ခုထဲကို တန်ဖိုး အသစ်
+      ပြန်ထည့်လိုက်ရုံပါပဲ။ မြန်မာစာ သုံးဆယ့်ငါး၊ သင်္ချာ ခြောက်ဆယ် ပါ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Logical operators",
+          url: "https://go.dev/ref/spec#Logical_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - {
+          id: close-truth,
+          type: whiteboard.apply,
+          at: { mark: close-truth },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-or
+        type: editor.type
+        at: { mark: type-or }
+        target: { file: main.go, after: "\"ဆုရ\")\n\t}\n", occurrence: 1 }
+        text: "\tif myanmar < 40 || maths < 40 {\n\t\tfmt.Println(\"ဘာသာ တစ်ခုခု ကျ\")\n\t}\n"
+        cadence: line-by-line
+      - id: type-second
+        type: editor.type
+        at: { mark: type-second }
+        target: { file: main.go, after: "myanmar, maths := 85, 72\n", occurrence: 1 }
+        text: "\tmyanmar, maths = 35, 60\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "ဘာသာ တစ်ခုခု ကျ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-second,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tmyanmar, maths = 35, 60\n",
+        }
+
+  - id: other-branch
+    narration: >-
+      [[mark:point-false]] ပထမ စာကြောင်းမှာ false နှစ်ခု ဖြစ်သွားပါပြီ၊ မောင်မောင် ရဲ့ အမှတ် နှစ်ခုလုံး ရှစ်ဆယ်
+      မပြည့်လို့ပါ။ [[mark:point-fail]] ဒုတိယ စာကြောင်းမှာတော့ သုံးဆယ့်ငါး ကျ လို့ ထွက်ပါတယ်။ မေးခွန်း နှစ်ခုလုံး
+      false ဖြစ်လို့ နောက်ဆုံး else လမ်းကို ရောက်သွားတာပါ။ [[mark:point-or]] နောက်ဆုံး စာကြောင်းမှာ ဘာသာ
+      တစ်ခုခု ကျ လို့ ထွက်လာပါတယ်။ သင်္ချာက အောင်ပေမဲ့ မြန်မာစာ ကျလို့ or က true ပေးတာပါ။ မထွက်တော့တဲ့
+      စာကြောင်းတွေကိုလည်း သတိထားကြည့်ပါ။ ဘာသာ နှစ်ခုလုံး အောင် နဲ့ ဆုရ ဆိုတဲ့ စာကြောင်း နှစ်ကြောင်း
+      ပျောက်သွားပါပြီ။ if တွေကို မပြင်ဘဲ အမှတ် ပြောင်းလိုက်ရုံနဲ့ program က တခြား လမ်းတွေကို ရွေးသွားတာ၊
+      ဒါက program က ဆုံးဖြတ်တယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါပဲ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+    actions:
+      - {
+          id: point-false,
+          type: console.point,
+          at: { mark: point-false },
+          target: { text: "false false" },
+        }
+      - { id: point-fail, type: console.point, at: { mark: point-fail }, target: { text: "35 ကျ" } }
+      - {
+          id: point-or,
+          type: console.point,
+          at: { mark: point-or },
+          target: { text: "ဘာသာ တစ်ခုခု ကျ" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program မှာ အမှတ်က ရှစ်ဆယ့်ငါး ပါ။ [[mark:quiz-line]]
+      ဒီ တစ်ခါတော့ လေးဆယ် ပြည့်လား ဆိုတဲ့ မေးခွန်းကို အပေါ်ဆုံးမှာ ထားပြီး၊ ရှစ်ဆယ် ပြည့်လား ဆိုတဲ့
+      မေးခွန်းကို else if နဲ့ အောက်မှာ ထားထားပါတယ်။ run ရင် အောင် ထွက်မလား၊ ဂုဏ်ထူး ထွက်မလား။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ အောင် ပဲ ထွက်ပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့ အပေါ်ဆုံးက လေးဆယ် မေးခွန်းက ရှစ်ဆယ့်ငါး အတွက် true ဖြစ်ပြီးသားမို့၊ Go က အဲဒီ
+      လမ်းကို run ပြီး အောက်က else if ကို လုံးဝ မစစ်တော့လို့ပါ။ ဒါကြောင့် if အတွဲမှာ အမြင့်ဆုံး အဆင့်ကို
+      အပေါ်ဆုံးမှာ အရင် စစ်ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-l5, q-l6, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-compare]] နှိုင်းယှဉ်ချက် တိုင်းက true ဒါမှမဟုတ် false
+      ကို ပေးပြီး၊ if က အဲဒီ အဖြေကို ကြည့်ပြီး လမ်း ရွေးပါတယ်။ [[mark:recap-chain]] if၊ else if၊ else အတွဲမှာ
+      အပေါ်ကနေ စစ်ပြီး၊ ပထမဆုံး true ဖြစ်တဲ့ လမ်း တစ်ခုကိုပဲ run ပါတယ်။ [[mark:recap-and]] မေးခွန်း နှစ်ခုကို
+      and နဲ့ ဆက်ရင် နှစ်ခုလုံး true မှ true ဖြစ်ပြီး၊ or နဲ့ ဆက်ရင်တော့ တစ်ခုခု true ဆိုတာနဲ့ true ပါ။ နောက်
+      lesson မှာတော့ အလုပ် တစ်ခုကို ထပ်ခါထပ်ခါ လုပ်ပေးတဲ့ for loop အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Logical operators",
+          url: "https://go.dev/ref/spec#Logical_operators",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-compare
+        type: editor.select
+        at: { mark: recap-compare }
+        target: { file: main.go, text: "myanmar >= 80, maths >= 80", occurrence: 1 }
+      - id: recap-chain
+        type: editor.select
+        at: { mark: recap-chain }
+        target: { file: main.go, text: "} else if myanmar >= 40 {", occurrence: 1 }
+      - id: recap-and
+        type: editor.select
+        at: { mark: recap-and }
+        target: { file: main.go, text: "myanmar >= 40 && maths >= 40", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
