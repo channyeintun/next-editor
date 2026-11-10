@@ -1,0 +1,1405 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Go course thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
+    />
+    <!--
+      Go course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Same template as docs/typescript-course-thumbnail.html.
+      Click any text to edit it; click a progress square to load that lesson from LESSONS.
+      Screenshot the frame only (DevTools → right-click the #thumb node → Capture node
+      screenshot for an exact 1280×720 PNG), or render the whole set with
+      `bun docs/go-course-thumbnails/render.ts`.
+      Brand: Next Editor lesson template (cream page, ink, yellow/purple/teal,
+      Google Sans + Google Sans Code); Burmese runs are set in Noto Sans Myanmar.
+      Mascot: the Go gopher, designed by Renée French and licensed under Creative Commons
+      Attribution 4.0 (https://go.dev/blog/gopher), redrawn as a flat sticker in the course's
+      style and carrying the course's parcels. CC BY requires credit wherever it is used, so
+      every thumbnail prints the credit line (#credit). The Go logo itself is not used (its
+      brand rules restrict changes).
+      Pose, mirror, tilt and the speech bubble are set from the toolbar under the
+      frame, or all at once with window.setThumb({...}) from the console.
+    -->
+    <style>
+      :root {
+        --bg: #f0efe9;
+        --ink: #1e1e1e;
+        --yellow: #ffd255;
+        --yellow-dk: #f2b705;
+        --purple: #6d57ff;
+        --teal: #4de5d6;
+        --teal-dk: #08877a;
+        --gray: #80868b;
+        --dot: #cfccc2;
+        --white: #ffffff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* max-content keeps the whole frame reachable by scrolling in a narrow window.
+         The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      [contenteditable] {
+        outline: none;
+        cursor: text;
+      }
+
+      [contenteditable]:hover {
+        box-shadow: inset 0 -3px 0 rgb(109 87 255 / 0.35);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--ink);
+        background-color: var(--bg);
+        background-image: radial-gradient(rgb(30 30 30 / 0.07) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .series {
+        position: absolute;
+        left: 60px;
+        top: 46px;
+        font: 700 36px/1 var(--mono);
+        letter-spacing: -0.01em;
+      }
+
+      .series .brace {
+        color: var(--yellow-dk);
+      }
+
+      .lang {
+        position: absolute;
+        right: 60px;
+        top: 38px;
+        padding: 12px 30px 14px;
+        border-radius: 999px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 28px/1.3 var(--mm);
+      }
+
+      .card {
+        position: absolute;
+        border: 4px solid var(--ink);
+        box-shadow: 12px 12px 0 var(--ink);
+      }
+
+      .number {
+        left: 64px;
+        top: 164px;
+        width: 300px;
+        height: 350px;
+        border-radius: 28px;
+        background: var(--yellow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+
+      .number .label {
+        font: 700 26px/1 var(--mono);
+        letter-spacing: 0.16em;
+      }
+
+      .number .value {
+        font: 700 200px/0.95 var(--sans);
+        letter-spacing: -0.04em;
+      }
+
+      .title-box {
+        position: absolute;
+        left: 420px;
+        top: 140px;
+        width: 480px;
+        height: 290px;
+        display: flex;
+        align-items: center;
+      }
+
+      .title {
+        width: 100%;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.32;
+        letter-spacing: -0.01em;
+        /* Editable text defaults to break-word in Chrome, which splits a long word
+           instead of letting fitTitle shrink it. */
+        overflow-wrap: normal;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, so every Myanmar run
+         in the title is wrapped in .mm (see renderTitle). A run never breaks inside:
+         Chrome's dictionary breaker would split a word like အရွယ်အစား mid-way, so a
+         title only wraps at its spaces. */
+      .title .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      /* A phrase that must not break across lines (see renderTitle). */
+      .title .nb {
+        white-space: nowrap;
+      }
+
+      .code {
+        left: 420px;
+        top: 462px;
+        width: 796px;
+        height: 92px;
+        border-radius: 22px;
+        background: var(--white);
+        box-shadow: 10px 10px 0 var(--ink);
+        display: flex;
+        align-items: center;
+        padding: 0 34px;
+      }
+
+      .code .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 5px 14px 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        color: var(--white);
+        font: 700 17px/1 var(--mono);
+      }
+
+      /* Noto Sans Myanmar sits in the stack for Burmese inside CSS strings
+         (content: " ကျပ်"). */
+      .code .src {
+        width: 100%;
+        white-space: pre;
+        overflow: hidden;
+        /* Burmese marks stack well above and below the code line, where overflow: hidden
+           would cut them off; the padding gives them room and the margin cancels it. */
+        padding-block: 18px;
+        margin-block: -18px;
+        font:
+          500 32px/1.2 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+      }
+
+      /* CSS: selectors and at-rules purple, properties ink, values teal, numbers and
+         colours amber, punctuation gray. HTML (index.html): tags and attributes
+         purple, attribute values teal. */
+      .src .sel,
+      .src .at,
+      .src .kw {
+        color: var(--purple);
+        font-weight: 700;
+      }
+
+      .src .prop {
+        color: var(--ink);
+      }
+
+      .src .val,
+      .src .str {
+        color: var(--teal-dk);
+      }
+
+      .src .fn {
+        color: var(--teal-dk);
+        font-weight: 700;
+      }
+
+      .src .num {
+        color: #b26b00;
+      }
+
+      .src .pn {
+        color: var(--gray);
+      }
+
+      .src .tag,
+      .src .attr {
+        color: var(--purple);
+      }
+
+      .src .cm {
+        color: var(--gray);
+      }
+
+      /* 34 lessons in seven modules; the squares stay clear of the brand. */
+      .progress {
+        position: absolute;
+        left: 64px;
+        bottom: 66px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .module {
+        display: flex;
+        gap: 4px;
+      }
+
+      .sq {
+        width: 15px;
+        height: 15px;
+        border-radius: 4px;
+        background: var(--dot);
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .sq.on {
+        background: var(--yellow);
+        box-shadow: inset 0 0 0 3px var(--ink);
+      }
+
+      .brand {
+        position: absolute;
+        right: 60px;
+        bottom: 50px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 30px/1 var(--sans);
+      }
+
+      /* CC BY 4.0 asks for credit wherever the gopher is used. */
+      .credit {
+        position: absolute;
+        right: 60px;
+        bottom: 18px;
+        color: #80868b;
+        font:
+          500 15px/1 "Google Sans Code",
+          monospace;
+      }
+
+      .brand svg {
+        width: 56px;
+        height: 56px;
+      }
+
+      /* The mascot stands on the right end of the code card: its box ends at 472px,
+         just over the card's top border (462px), so its feet rest on it. */
+      .mascot {
+        position: absolute;
+        right: 36px;
+        top: 100px;
+        width: 310px;
+        height: 372px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 18px;
+      }
+
+      .bubble {
+        position: relative;
+        max-width: 310px;
+        overflow: hidden;
+        padding: 8px 24px 10px;
+        border: 4px solid var(--ink);
+        border-radius: 24px;
+        background: var(--white);
+        box-shadow: 6px 6px 0 var(--ink);
+        font:
+          700 34px/1.35 "Google Sans Code",
+          "Noto Sans Myanmar",
+          monospace;
+        white-space: nowrap;
+      }
+
+      /* Burmese shapes only when one font holds the whole run, and its stacked
+         marks need a taller line than code text. */
+      .bubble.mm {
+        font-family: "Noto Sans Myanmar", "Google Sans", sans-serif;
+        line-height: 1.6;
+        padding: 4px 24px 6px;
+      }
+
+      .bubble.off {
+        display: none;
+      }
+
+      .bubble-tail {
+        position: absolute;
+        width: 26px;
+        height: 26px;
+        background: var(--white);
+        border-right: 4px solid var(--ink);
+        border-bottom: 4px solid var(--ink);
+        transform: rotate(45deg);
+      }
+
+      .parcel {
+        width: 310px;
+        height: 200px;
+        flex: none;
+        overflow: visible;
+        transform-origin: center bottom;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+      }
+
+      .toolbar button {
+        padding: 6px 12px;
+        border: 1px solid #55555c;
+        border-radius: 8px;
+        background: #3a3a3f;
+        color: #f0f0f3;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .toolbar button[aria-pressed="true"] {
+        border-color: var(--yellow);
+        color: var(--yellow);
+      }
+
+      .help {
+        max-width: 1280px;
+        color: #c9c9cf;
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series"><span class="brace">{</span> Go course <span class="brace">}</span></div>
+      <div class="lang" contenteditable="plaintext-only" spellcheck="false">မြန်မာလို</div>
+
+      <div class="card number">
+        <div class="label">LESSON</div>
+        <div class="value" id="number" contenteditable="plaintext-only" spellcheck="false">01</div>
+      </div>
+
+      <div class="title-box" id="title-box">
+        <div class="title" id="title" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="card code">
+        <div class="tab" id="file" contenteditable="plaintext-only" spellcheck="false"></div>
+        <div class="src" id="code" contenteditable="plaintext-only" spellcheck="false"></div>
+      </div>
+
+      <div class="mascot">
+        <div class="bubble" id="bubble" contenteditable="plaintext-only" spellcheck="false"></div>
+        <svg
+          class="parcel"
+          id="parcel"
+          viewBox="-160 -100 320 205"
+          role="img"
+          aria-label="The Go gopher carrying a parcel"
+        ></svg>
+      </div>
+      <!-- The tail sits outside the bubble so the bubble can clip long text. -->
+      <div class="bubble-tail" id="bubble-tail"></div>
+
+      <div class="progress" id="progress" aria-label="Lesson in the course"></div>
+
+      <div class="credit" id="credit">Go gopher by Renée French · CC BY 4.0</div>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect x="72" y="72" width="880" height="880" rx="200" fill="#0B0E14" />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      Parcel:
+      <button type="button" data-pose="happy">Happy</button>
+      <button type="button" data-pose="thinking">Thinking</button>
+      <button type="button" data-pose="joy">Joy</button>
+      <button type="button" data-action="mirror">Mirror</button>
+      <button type="button" data-tilt="-6">Tilt left</button>
+      <button type="button" data-tilt="0">Straight</button>
+      <button type="button" data-tilt="6">Tilt right</button>
+      <button type="button" data-action="bubble">Bubble</button>
+    </div>
+
+    <p class="help">
+      Click any text to edit it (including the parcel's bubble) · click a square to load that lesson
+      · pick the parcel's pose above · then screenshot only the 1280×720 frame.
+    </p>
+
+    <script>
+      /**
+       * Every lesson's thumbnail data lives here and only here; render.ts and the
+       * progress squares both read it. `slug` is the PNG name in
+       * docs/go-course-thumbnails/. `code` is one real line of that lesson's
+       * final code, short enough to stay at the full 32px (38 characters at most);
+       * `file` names the file and picks the colours (.go). The code lines are
+       * the kit's plausible lines (curriculum.md); authors' thumbnailLine values replace them.
+       */
+      const LESSONS = [
+        {
+          number: 1,
+          slug: "01-why-go",
+          title: "ဘာကြောင့် Go လဲ",
+          file: "main.go",
+          code: "wg.Go(func() { deliver(r) })",
+          bubble: "why Go?",
+          pose: "thinking",
+          tilt: -6,
+        },
+        {
+          number: 2,
+          slug: "02-hello",
+          title: "ပထမဆုံး Go program",
+          file: "main.go",
+          code: 'fmt.Println("မင်္ဂလာပါ")',
+          bubble: "hello!",
+          pose: "joy",
+          tilt: -6,
+        },
+        {
+          number: 3,
+          slug: "03-variables",
+          title: "Variable နဲ့ type",
+          file: "main.go",
+          code: 'city := "မန္တလေး"',
+          bubble: "unused?",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 4,
+          slug: "04-numbers",
+          title: "ကိန်းပြည့်နဲ့ ဒသမ ကိန်း",
+          file: "main.go",
+          code: "const lakh = 100000",
+          bubble: "17 lakhs",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 5,
+          slug: "05-text-and-printf",
+          title: "စာသားနဲ့ Printf",
+          file: "main.go",
+          code: 'item := "ကြက်ဥ"',
+          bubble: "fill blanks",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 6,
+          slug: "06-if-else",
+          title: "if နဲ့ ဆုံးဖြတ်တာ",
+          file: "main.go",
+          code: "} else if myanmar >= 40 {",
+          bubble: "passed!",
+          pose: "joy",
+          tilt: -6,
+        },
+        {
+          number: 7,
+          slug: "07-for-loops",
+          title: "for loop နဲ့ ထပ်ခါထပ်ခါ လုပ်တာ",
+          file: "main.go",
+          code: "for day := range 3 {",
+          bubble: "day 0?",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 8,
+          slug: "08-switch",
+          title: "switch နဲ့ ရွေးတာ",
+          file: "main.go",
+          code: 'case "Friday", "Fri":',
+          bubble: "friday!",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 9,
+          slug: "09-functions",
+          title: "Function ဆိုတာ",
+          file: "main.go",
+          code: "func taxiFare(km int) int {",
+          bubble: "return!",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 10,
+          slug: "10-results-and-scope",
+          title: "Result အများနဲ့ scope",
+          file: "main.go",
+          code: "total, ok = pay(total, each)",
+          bubble: "shadowed",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 11,
+          slug: "11-slices",
+          title: "Slice ဆိုတာ",
+          file: "main.go",
+          code: "for i, city := range cities {",
+          bubble: "index 0",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 12,
+          slug: "12-slices-inside",
+          title: "Slice ရဲ့ နောက်ကွယ်",
+          file: "main.go",
+          code: "fmt.Println(trip)",
+          bubble: "a copy!",
+          pose: "joy",
+          tilt: -6,
+        },
+        {
+          number: 13,
+          slug: "13-maps",
+          title: "Map နဲ့ ရှာတာ",
+          file: "main.go",
+          code: 'meaning, ok := dict["snow"]',
+          bubble: "ok?",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 14,
+          slug: "14-burmese-text",
+          title: "မြန်မာစာ၊ byte နဲ့ rune",
+          file: "main.go",
+          code: 'for i, r := range "မြန်" {',
+          bubble: "runes!",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 15,
+          slug: "15-toolkit",
+          title: "Standard library ထဲက ကိရိယာတွေ",
+          file: "main.go",
+          code: "digits[i] = r - '0' + '၀'",
+          bubble: "digits!",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 16,
+          slug: "16-structs",
+          title: "Struct နဲ့ ကိုယ်ပိုင် type",
+          file: "main.go",
+          code: 'fmt.Printf("%+v\\n", p)',
+          bubble: "a label",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 17,
+          slug: "17-pointers",
+          title: "Pointer ဆိုတာ",
+          file: "main.go",
+          code: "markDeliveredPtr(&p)",
+          bubble: "real one",
+          pose: "joy",
+          tilt: 6,
+        },
+        {
+          number: 18,
+          slug: "18-methods",
+          title: "Method ဆိုတာ",
+          file: "main.go",
+          code: "func (p Parcel) Fee() int {",
+          bubble: "method!",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 19,
+          slug: "19-many-files",
+          title: "Program တစ်ခု၊ file အများ",
+          file: "main.go",
+          code: "printReceipt(p)",
+          bubble: "one program",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 20,
+          slug: "20-interfaces",
+          title: "Interface ဆိုတာ",
+          file: "courier.go",
+          code: "type Courier interface {",
+          bubble: "can deliver",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 21,
+          slug: "21-any-and-type-switch",
+          title: "any နဲ့ type switch",
+          file: "main.go",
+          code: "switch x := v.(type) {",
+          bubble: "what type?",
+          pose: "thinking",
+          tilt: 4,
+        },
+        {
+          number: 22,
+          slug: "22-errors",
+          title: "Error ဆိုတာ တန်ဖိုးတစ်ခုပါ",
+          file: "main.go",
+          code: "name, err := cityName(code)",
+          bubble: "check err",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 23,
+          slug: "23-error-types",
+          title: "Error ကို ထုပ်တာနဲ့ error type",
+          file: "main.go",
+          code: "err := checkParcel(p)",
+          bubble: "too heavy",
+          pose: "thinking",
+          tilt: 5,
+        },
+        {
+          number: 24,
+          slug: "24-defer-panic-recover",
+          title: "defer၊ panic နဲ့ recover",
+          file: "main.go",
+          code: "if r := recover(); r != nil {",
+          bubble: "keep going",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 25,
+          slug: "25-closures",
+          title: "Closure ဆိုတာ",
+          file: "main.go",
+          code: 'nextMDY := codeMaker("MDY")',
+          bubble: "MDY-0002",
+          pose: "joy",
+          tilt: 6,
+        },
+        {
+          number: 26,
+          slug: "26-generics",
+          title: "Generics နဲ့ type မျိုးစုံ",
+          file: "main.go",
+          code: "var total T",
+          bubble: "any number",
+          pose: "happy",
+          tilt: -5,
+        },
+        {
+          number: 27,
+          slug: "27-iterators",
+          title: "Iterator နဲ့ range",
+          file: "main.go",
+          code: "if !yield(p) {",
+          bubble: "next one",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 28,
+          slug: "28-time",
+          title: "အချိန်နဲ့ မြန်မာစံတော်ချိန်",
+          file: "main.go",
+          code: "fmt.Println(leave.UTC())",
+          bubble: "+06:30",
+          pose: "happy",
+          tilt: -6,
+        },
+        {
+          number: 29,
+          slug: "29-goroutines",
+          title: "Goroutine နဲ့ တစ်ပြိုင်နက် လုပ်တာ",
+          file: "main.go",
+          code: "var wg sync.WaitGroup",
+          bubble: "at once!",
+          pose: "joy",
+          tilt: 5,
+        },
+        {
+          number: 30,
+          slug: "30-channels",
+          title: "Channel နဲ့ လက်လွှဲတာ",
+          file: "main.go",
+          code: 'parcels <- "MDY-0001"',
+          bubble: "deadlock?",
+          pose: "thinking",
+          tilt: -4,
+        },
+        {
+          number: 31,
+          slug: "31-select-and-workers",
+          title: "select နဲ့ rider အဖွဲ့",
+          file: "main.go",
+          code: "fees[i] = parcels[i].Fee()",
+          bubble: "team work",
+          pose: "happy",
+          tilt: 5,
+        },
+        {
+          number: 32,
+          slug: "32-mutex",
+          title: "Mutex နဲ့ တန်ဖိုးတစ်ခုကို မျှသုံးတာ",
+          file: "main.go",
+          code: "defer mu.Unlock()",
+          bubble: "one key",
+          pose: "thinking",
+          tilt: -5,
+        },
+        {
+          number: 33,
+          slug: "33-capstone-parcels",
+          title: "Capstone ၁၊ ပါဆယ် ဈေးတွက်တာ",
+          file: "main.go",
+          code: "n = len(today)",
+          bubble: "receipts!",
+          pose: "joy",
+          tilt: 6,
+        },
+        {
+          number: 34,
+          slug: "34-capstone-riders",
+          title: "Capstone ၂၊ rider တွေနဲ့ နေ့စဉ် report",
+          file: "main.go",
+          code: "printReport(sent)",
+          bubble: "day done",
+          pose: "joy",
+          tilt: -6,
+        },
+        {
+          number: 35,
+          slug: "35-your-computer",
+          title: "ကိုယ့်ကွန်ပျူတာပေါ်မှာ Go",
+          file: "digits.go",
+          code: "if r == 'ဝ' {",
+          bubble: "all ok",
+          pose: "joy",
+          tilt: 5,
+        },
+      ];
+      window.LESSONS = LESSONS;
+
+      // Modules of the course (curriculum.md): first programs 1–4 · decisions, loops and
+      // functions 5–9 · collections and Burmese text 10–14 · your own types 15–20 · errors and
+      // functions as values 21–26 · time and concurrency 27–31 · capstone and beyond 32–34.
+      // Module 1 holds lesson 01 (Why Go?) and lessons 02–05.
+      const PARTS = [5, 5, 5, 6, 6, 5, 3];
+
+      const number = document.getElementById("number");
+      const title = document.getElementById("title");
+      const titleBox = document.getElementById("title-box");
+      const file = document.getElementById("file");
+      const code = document.getElementById("code");
+      const progress = document.getElementById("progress");
+      const bubble = document.getElementById("bubble");
+      const bubbleTail = document.getElementById("bubble-tail");
+      const parcel = document.getElementById("parcel");
+      const thumb = document.getElementById("thumb");
+      const toolbar = document.getElementById("toolbar");
+      const mascot = { pose: "happy", mirror: false, tilt: -6, bubble: true };
+
+      // ---- The mascot: the Go gopher, carrying the course's parcels -------------------
+      // The Go gopher was designed by Renée French and is licensed under Creative Commons
+      // Attribution 4.0 (https://go.dev/blog/gopher). This is a flat sticker redrawing of
+      // that design in the course's style; every thumbnail carries the credit line (#credit).
+      // Shapes: a tall bean of a body, two big eyes at the top, small ears, a tan muzzle
+      // with a dark nose and two front teeth, tan hands and feet.
+
+      const INK = "#1e1e1e";
+      const FUR = "#7fd3f0";
+      const FUR_DARK = "#5fbfe0";
+      const TAN = "#f3cfa0";
+      const KRAFT = { front: "#e9b872", top: "#f6d7a3", side: "#cf9a52" };
+
+      function stroke(d, width = 10, color = INK) {
+        return `<path d="${d}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`;
+      }
+
+      function blob(cx, cy, rx, ry, fill, rot = 0, width = 5) {
+        return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${fill}" stroke="${INK}" stroke-width="${width}" transform="rotate(${rot} ${cx} ${cy})"/>`;
+      }
+
+      function sparkle(x, y, size) {
+        const s = size;
+        const d = `M ${x} ${y - s} Q ${x + s * 0.18} ${y - s * 0.18} ${x + s} ${y} Q ${x + s * 0.18} ${y + s * 0.18} ${x} ${y + s} Q ${x - s * 0.18} ${y + s * 0.18} ${x - s} ${y} Q ${x - s * 0.18} ${y - s * 0.18} ${x} ${y - s} Z`;
+        return `<path d="${d}" fill="#ffd255" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`;
+      }
+
+      // The body (a bean from y -84 to 88), drawn twice: an ink copy offset for the sticker
+      // shadow, then the fur with a darker belly patch.
+      const BODY_D = "M -50 -44 C -50 -96 50 -96 50 -44 L 54 52 C 56 98 -56 98 -54 52 Z";
+      const BODY =
+        `<path d="${BODY_D}" transform="translate(7 7)" fill="${INK}"/>` +
+        `<path d="${BODY_D}" fill="${FUR}" stroke="${INK}" stroke-width="6" stroke-linejoin="round"/>` +
+        `<path d="M -34 20 C -34 -4 34 -4 34 20 L 36 56 C 36 80 -36 80 -36 56 Z" fill="${FUR_DARK}" opacity="0.45"/>`;
+
+      // Ears sit behind the head.
+      const EARS = blob(-40, -76, 12, 12, FUR, 0, 5) + blob(40, -76, 12, 12, FUR, 0, 5);
+
+      // Eyes: two big white circles that nearly touch; pupils look where the pose looks.
+      function eyes(look = { x: 5, y: 2 }) {
+        const eye = (cx) =>
+          `<circle cx="${cx}" cy="-48" r="21" fill="#fff" stroke="${INK}" stroke-width="5"/>` +
+          `<circle cx="${cx + look.x}" cy="${-48 + look.y}" r="8.5" fill="${INK}"/>` +
+          `<circle cx="${cx + look.x + 3}" cy="${-48 + look.y - 3.5}" r="3" fill="#fff"/>`;
+        return eye(-22) + eye(22);
+      }
+
+      // Happy closed eyes for the joy pose: two arcs on the white.
+      const JOY_EYES =
+        `<circle cx="-22" cy="-48" r="21" fill="#fff" stroke="${INK}" stroke-width="5"/>` +
+        `<circle cx="22" cy="-48" r="21" fill="#fff" stroke="${INK}" stroke-width="5"/>` +
+        stroke("M -33 -44 Q -22 -58 -11 -44", 6) +
+        stroke("M 11 -44 Q 22 -58 33 -44", 6);
+
+      // Muzzle, nose and the two front teeth.
+      const MUZZLE =
+        blob(0, -16, 20, 13, TAN, 0, 5) +
+        `<ellipse cx="0" cy="-24" rx="8.5" ry="5.5" fill="${INK}"/>` +
+        `<rect x="-7" y="-5" width="14" height="11" rx="2" fill="#fff" stroke="${INK}" stroke-width="3.5"/>` +
+        stroke("M 0 -5 L 0 6", 2.5);
+
+      const OPEN_MUZZLE =
+        blob(0, -14, 21, 15, TAN, 0, 5) +
+        `<ellipse cx="0" cy="-24" rx="8.5" ry="5.5" fill="${INK}"/>` +
+        `<path d="M -10 -10 Q 0 14 10 -10 Z" fill="${INK}"/>` +
+        `<rect x="-6" y="-11" width="12" height="8" rx="1.5" fill="#fff" stroke="${INK}" stroke-width="3"/>`;
+
+      const CHEEKS =
+        `<ellipse cx="-36" cy="-14" rx="7" ry="4.5" fill="#ff8f7e" opacity="0.6"/>` +
+        `<ellipse cx="36" cy="-14" rx="7" ry="4.5" fill="#ff8f7e" opacity="0.6"/>`;
+
+      // A small parcel (kraft box with tape and a label) the gopher carries.
+      function box(x, y, w, h) {
+        const lid = 12;
+        return (
+          `<g transform="translate(5 5)"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${INK}"/></g>` +
+          `<polygon points="${x},${y} ${x + lid},${y - lid} ${x + w + lid},${y - lid} ${x + w},${y}" fill="${KRAFT.top}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<polygon points="${x + w},${y} ${x + w + lid},${y - lid} ${x + w + lid},${y + h - lid} ${x + w},${y + h}" fill="${KRAFT.side}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
+          `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${KRAFT.front}" stroke="${INK}" stroke-width="5"/>` +
+          `<rect x="${x + w / 2 - 7}" y="${y}" width="14" height="${h * 0.4}" fill="#ffd255" stroke="${INK}" stroke-width="3.5"/>` +
+          `<rect x="${x + w - 26}" y="${y + h - 24}" width="18" height="16" rx="2" fill="#fff" stroke="${INK}" stroke-width="3"/>` +
+          stroke(`M ${x + w - 22} ${y + h - 18} L ${x + w - 12} ${y + h - 18}`, 2.5, "#6d57ff")
+        );
+      }
+
+      // Feet per pose: happy trots (one foot forward), thinking stands, joy hops.
+      const FEET = {
+        happy: blob(-30, 92, 18, 9, TAN, -12) + blob(34, 90, 18, 9, TAN, 14),
+        thinking: blob(-26, 94, 18, 9, TAN) + blob(26, 94, 18, 9, TAN),
+        joy: blob(-30, 88, 18, 9, TAN, -20) + blob(30, 88, 18, 9, TAN, 20),
+      };
+
+      // Hands and what they hold, drawn over the body.
+      const FRONT = {
+        happy: box(-34, 22, 62, 44) + blob(-40, 40, 10, 9, TAN) + blob(40, 36, 10, 9, TAN),
+        thinking:
+          stroke("M -50 10 Q -72 34 -60 56", 9) +
+          blob(-58, 58, 10, 9, TAN) +
+          stroke("M 44 0 Q 26 6 14 -2", 9) +
+          blob(12, -2, 10, 9, TAN),
+        joy:
+          stroke("M -48 -6 Q -86 -24 -94 -62", 9) +
+          blob(-95, -66, 10, 9, TAN) +
+          stroke("M 48 -6 Q 86 -24 94 -62", 9) +
+          blob(95, -66, 10, 9, TAN),
+      };
+
+      const FACES = {
+        happy: eyes({ x: 5, y: 2 }) + CHEEKS + MUZZLE,
+        thinking: eyes({ x: 6, y: -7 }) + CHEEKS + MUZZLE,
+        joy: JOY_EYES + CHEEKS + OPEN_MUZZLE,
+      };
+
+      const EXTRAS = {
+        // Speed lines: the parcel is on its way.
+        happy:
+          stroke("M -150 -6 L -112 -6", 6) +
+          stroke("M -144 16 L -100 16", 6) +
+          stroke("M -150 38 L -114 38", 6),
+        thinking: `<circle cx="78" cy="-74" r="6" fill="#fff" stroke="${INK}" stroke-width="4"/><circle cx="100" cy="-92" r="9" fill="#fff" stroke="${INK}" stroke-width="4"/>`,
+        joy: sparkle(-136, -10, 11) + sparkle(138, -16, 10),
+      };
+
+      function parcelSvg(pose) {
+        return EXTRAS[pose] + FEET[pose] + EARS + BODY + FACES[pose] + FRONT[pose];
+      }
+
+      // ---- Progress squares -------------------------------------------------------
+
+      const squares = [];
+      for (const count of PARTS) {
+        const module = document.createElement("div");
+        module.className = "module";
+        for (let i = 0; i < count; i++) {
+          const index = squares.length + 1;
+          const square = document.createElement("button");
+          square.type = "button";
+          square.className = "sq";
+          square.title = `Lesson ${index}`;
+          square.addEventListener("click", () => window.setThumb({ lesson: index }));
+          squares.push(square);
+          module.append(square);
+        }
+        progress.append(module);
+      }
+
+      function markLesson(index) {
+        squares.forEach((square, i) => square.classList.toggle("on", i + 1 === index));
+      }
+
+      // ---- Text fitting -----------------------------------------------------------
+
+      function escapeHtml(text) {
+        return text.replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      // Terms that read as one word and must stay on one line (a hyphen inside one
+      // never breaks either).
+      const NO_BREAK_TERMS = [
+        "Go program",
+        "for loop",
+        "type switch",
+        "error type",
+        "Standard library",
+      ];
+      // Particles that stay on the line of the word before them ("layer တွေ",
+      // "Unit တွေနဲ့", "Component နဲ့" never split).
+      const PARTICLES = ["တွေနဲ့", "နဲ့", "တွေ"];
+      const MYANMAR = /[\u1000-\u109f\ua9e0-\ua9ff\uaa60-\uaa7f]+/g;
+      // Markers for a space and a hyphen that must not break; both are put back as
+      // plain characters in the markup.
+      const GLUE = "\u00a0";
+      const GLUE_HYPHEN = "\u2011";
+
+      function titleHtml(text) {
+        return escapeHtml(text)
+          .replace(MYANMAR, (run) => `<span class="mm">${run}</span>`)
+          .replaceAll(GLUE, " ")
+          .replaceAll(GLUE_HYPHEN, "-");
+      }
+
+      // Glue NO_BREAK_TERMS, each particle to the word before it and the part number
+      // to အပိုင်း, wrap each glued piece in .nb and each Burmese run in .mm so a
+      // single font shapes it. A glued piece may still break after the hyphen of its
+      // first word ("Pseudo-" / "element တွေ"), which keeps it from shrinking to a
+      // tiny single line. A part title starts its topic on a new line:
+      // "Flexbox အပိုင်း 1၊" / "axis နဲ့ wrap". (A no-break space in LESSONS would not
+      // survive the whitespace collapse below, so the glue is added here, in markup.)
+      function renderTitle() {
+        let text = title.textContent.replace(/\s+/g, " ").trim();
+        for (const term of NO_BREAK_TERMS)
+          text = text.split(term).join(term.replaceAll(" ", GLUE).replaceAll("-", GLUE_HYPHEN));
+        for (const particle of PARTICLES)
+          text = text.replace(new RegExp(` (${particle})(?= |$)`, "g"), `${GLUE}$1`);
+        text = text.replace(/Capstone ([၀-၉]+၊)/g, `Capstone${GLUE}$1`);
+        title.innerHTML = text
+          .split(" ")
+          .map((piece, i, pieces) => {
+            let html = titleHtml(piece);
+            if (piece.includes(GLUE) || piece.includes(GLUE_HYPHEN)) {
+              const firstWord = piece.split(GLUE)[0];
+              const cut = firstWord.lastIndexOf("-") + 1;
+              html = `${titleHtml(piece.slice(0, cut))}<span class="nb">${titleHtml(piece.slice(cut))}</span>`;
+            }
+            // The space stays before the <br> so textContent keeps the words apart.
+            const partEnd = /^Capstone\u00a0[၀-၉]+၊$/.test(piece) && i < pieces.length - 1;
+            return i < pieces.length - 1 ? html + (partEnd ? " <br>" : " ") : html;
+          })
+          .join("");
+        fitTitle();
+      }
+
+      // Largest size (to 116px) at which the title fits its box.
+      function fitTitle() {
+        let size = 116;
+        title.style.fontSize = `${size}px`;
+        while (
+          size > 40 &&
+          (title.scrollHeight > titleBox.clientHeight || title.scrollWidth > titleBox.clientWidth)
+        ) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      // Light CSS highlighting for a one-line rule or fragment. The line starts as a
+      // selector when it has a `{`, as a declaration when it opens with `name:`, and
+      // as a bare value otherwise.
+      function highlightCss(source) {
+        let ctx = source.includes("{")
+          ? "sel"
+          : /^\s*-?-?[A-Za-z][\w-]*\s*:\s/.test(source)
+            ? "prop"
+            : "val";
+        let atName = "";
+        const token =
+          /(\s+)|(\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(@[\w-]+)|([{}])|(;)|(#[0-9a-fA-F]{3,8}(?![\w-]))|([+-]?(?:\d+\.?\d*|\.\d+)(?:%|[A-Za-z]+)?)|(-?-?[A-Za-z_][\w-]*)(\()?|(!important)|(:(?=\s|$))|[\s\S]/gy;
+        const span = (cls, text) => `<span class="${cls}">${escapeHtml(text)}</span>`;
+        let html = "";
+        let selector = "";
+        const flushSelector = () => {
+          if (selector) html += span("sel", selector);
+          selector = "";
+        };
+        for (const m of source.matchAll(token)) {
+          const [
+            text,
+            space,
+            comment,
+            string,
+            at,
+            brace,
+            semi,
+            hex,
+            num,
+            ident,
+            call,
+            important,
+            colon,
+          ] = m;
+          if (ctx === "sel" && !space && !comment && !string && !at && !brace) {
+            // Everything up to the brace is selector text; combinators and commas
+            // read as punctuation.
+            if (/^[,>+~]$/.test(text)) {
+              flushSelector();
+              html += span("pn", text);
+            } else selector += text;
+            continue;
+          }
+          flushSelector();
+          if (space) html += text;
+          else if (comment) html += span("cm", text);
+          else if (string) html += span("str", text);
+          else if (at) {
+            html += span("at", text);
+            atName = text;
+            ctx = "at";
+          } else if (brace) {
+            html += span("pn", text);
+            if (text === "}") ctx = "sel";
+            else
+              ctx = /^@(font-face|property|counter-style|page)$/.test(atName)
+                ? "prop"
+                : ctx === "at"
+                  ? "sel"
+                  : "prop";
+            atName = "";
+          } else if (semi) {
+            html += span("pn", text);
+            ctx = ctx === "at" ? "sel" : "prop";
+          } else if (hex || num) html += span("num", text);
+          else if (ident) {
+            if (call) html += span("fn", ident) + span("pn", call);
+            else if (ctx === "prop") html += span("prop", ident);
+            else if (ctx === "val" && !ident.startsWith("--")) html += span("val", ident);
+            else html += escapeHtml(ident);
+          } else if (important) html += span("kw", text);
+          else if (colon) {
+            html += span("pn", text);
+            if (ctx === "prop") ctx = "val";
+          } else html += span("pn", text);
+        }
+        flushSelector();
+        return html;
+      }
+
+      // Light HTML highlighting: tags and attribute names purple, values teal.
+      function highlightHtml(source) {
+        const token = /(<\/?)([\w-]+)|([\w:@-]+)(?==)|("[^"]*"|'[^']*')|(\/?>|=)/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, angle, tag, attr, string, punct] = match;
+          if (angle)
+            html += `<span class="pn">${escapeHtml(angle)}</span><span class="tag">${escapeHtml(tag)}</span>`;
+          else if (attr) html += `<span class="attr">${escapeHtml(attr)}</span>`;
+          else if (string) html += `<span class="str">${escapeHtml(string)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Light JavaScript highlighting: strings teal, keywords purple, calls bold teal.
+      function highlightJs(source) {
+        const token =
+          /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`[^`]*`)|\b(const|let|if|else|return|true|false|function|new|await)\b|([A-Za-z_$][\w$]*)(?=\()|([()[\]{}.,;=])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, string, keyword, call, punct] = match;
+          if (string) html += `<span class="str">${escapeHtml(string)}</span>`;
+          else if (keyword) html += `<span class="kw">${escapeHtml(keyword)}</span>`;
+          else if (call) html += `<span class="fn">${escapeHtml(call)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Light TypeScript / JSON highlighting: keywords purple, strings and types teal,
+      // numbers orange, punctuation gray.
+      function highlightTs(source) {
+        const token =
+          /(\/\/.*$)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|\b(const|let|var|type|interface|function|return|as|satisfies|readonly|keyof|typeof|extends|implements|class|new|enum|namespace|import|export|from|declare|global|async|await|infer|is|asserts|in|if|else|case|catch|switch|override|private|protected|public|abstract|true|false|null|undefined)\b|\b(string|number|boolean|void|any|unknown|never|object|bigint|symbol|Promise|Record|Partial|Required|Pick|Omit|Readonly|ReturnType|Parameters|Awaited|Exclude|Extract|NonNullable)\b|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)(?=\s*[(<])|([()[\]{}.,;:=<>|&?^!])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, comment, string, keyword, type, num, call, punct] = match;
+          if (comment) html += `<span class="cm">${escapeHtml(comment)}</span>`;
+          else if (string) html += `<span class="str">${escapeHtml(string)}</span>`;
+          else if (keyword) html += `<span class="kw">${escapeHtml(keyword)}</span>`;
+          else if (type) html += `<span class="val">${escapeHtml(type)}</span>`;
+          else if (num) html += `<span class="num">${escapeHtml(num)}</span>`;
+          else if (call) html += `<span class="fn">${escapeHtml(call)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Light Go highlighting: keywords purple, strings and types teal, numbers orange,
+      // calls bold teal, comments and punctuation gray.
+      function highlightGo(source) {
+        const token =
+          /(\/\/.*$)|("(?:\\.|[^"\\])*"|`[^`]*`|'(?:\\.|[^'\\])*')|\b(package|import|func|return|if|else|for|range|switch|case|default|var|const|type|struct|interface|map|chan|go|defer|select|break|continue|nil|true|false)\b|\b(string|int|bool|float64|rune|byte|error|any)\b|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][\w]*)(?=\s*[(\[])|([()[\]{}.,;:=<>|&!*+\-%/])/g;
+        let html = "";
+        let last = 0;
+        for (const match of source.matchAll(token)) {
+          html += escapeHtml(source.slice(last, match.index));
+          const [text, comment, string, keyword, type, num, call, punct] = match;
+          if (comment) html += `<span class="cm">${escapeHtml(comment)}</span>`;
+          else if (string) html += `<span class="str">${escapeHtml(string)}</span>`;
+          else if (keyword) html += `<span class="kw">${escapeHtml(keyword)}</span>`;
+          else if (type) html += `<span class="val">${escapeHtml(type)}</span>`;
+          else if (num) html += `<span class="num">${escapeHtml(num)}</span>`;
+          else if (call) html += `<span class="fn">${escapeHtml(call)}</span>`;
+          else html += `<span class="pn">${escapeHtml(punct)}</span>`;
+          last = match.index + text.length;
+        }
+        return html + escapeHtml(source.slice(last));
+      }
+
+      // Shrink long code lines so they stay on one line inside the card.
+      function fitCode() {
+        let size = 32;
+        code.style.fontSize = `${size}px`;
+        while (size > 18 && code.scrollWidth > code.clientWidth) {
+          size -= 1;
+          code.style.fontSize = `${size}px`;
+        }
+      }
+
+      function renderCode() {
+        const source = code.textContent.replace(/\s*\n\s*/g, " ").trim();
+        const name = file.textContent.trim();
+        code.innerHTML = /\.(html?|vtt)$/i.test(name)
+          ? highlightHtml(source)
+          : /\.css$/i.test(name)
+            ? highlightCss(source)
+            : /\.go$/i.test(name)
+              ? highlightGo(source)
+              : /\.(m?ts|tsx|json)$/i.test(name)
+                ? highlightTs(source)
+                : /\.js$/i.test(name)
+                  ? highlightJs(source)
+                  : escapeHtml(source);
+        fitCode();
+      }
+
+      // Keep the bubble on one line: shrink long words rather than wrap them.
+      function fitBubble() {
+        bubble.classList.toggle("mm", /[\u1000-\u109f]/.test(bubble.textContent));
+        let size = 34;
+        bubble.style.fontSize = `${size}px`;
+        while (size > 18 && bubble.scrollWidth > bubble.clientWidth) {
+          size -= 1;
+          bubble.style.fontSize = `${size}px`;
+        }
+        placeTail();
+      }
+
+      // The tail hangs under the bubble, pointing down at the parcel.
+      function placeTail() {
+        bubbleTail.style.display = mascot.bubble ? "" : "none";
+        if (!mascot.bubble) return;
+        const frame = thumb.getBoundingClientRect();
+        const box = bubble.getBoundingClientRect();
+        bubbleTail.style.left = `${box.left - frame.left + box.width / 2 - 15}px`;
+        bubbleTail.style.top = `${box.bottom - frame.top - 17}px`;
+      }
+
+      function renderMascot() {
+        parcel.innerHTML = parcelSvg(mascot.pose);
+        parcel.style.transform = `scaleX(${mascot.mirror ? -1 : 1}) rotate(${mascot.tilt}deg)`;
+        bubble.classList.toggle("off", !mascot.bubble);
+        for (const button of toolbar.querySelectorAll("button")) {
+          const pressed =
+            button.dataset.pose === mascot.pose ||
+            (button.dataset.tilt !== undefined && Number(button.dataset.tilt) === mascot.tilt) ||
+            (button.dataset.action === "mirror" && mascot.mirror) ||
+            (button.dataset.action === "bubble" && mascot.bubble);
+          button.setAttribute("aria-pressed", String(pressed));
+        }
+        placeTail();
+      }
+
+      toolbar.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        if (button.dataset.pose) mascot.pose = button.dataset.pose;
+        if (button.dataset.tilt !== undefined) mascot.tilt = Number(button.dataset.tilt);
+        if (button.dataset.action === "mirror") mascot.mirror = !mascot.mirror;
+        if (button.dataset.action === "bubble") mascot.bubble = !mascot.bubble;
+        renderMascot();
+      });
+
+      /**
+       * Set any part of the thumbnail at once (used to render the course set):
+       * setThumb({ lesson: 3 }) loads LESSONS[2]; any other field overrides it:
+       * setThumb({ lesson: 3, code: "…", pose: "thinking", mirror: true, tilt: 0, bubble: "?" })
+       * Fields: number, title, file, code, pose (happy | thinking | joy), mirror, tilt,
+       * bubble (`null` hides the speech bubble).
+       */
+      window.setThumb = (input) => {
+        const base =
+          input.lesson !== undefined
+            ? LESSONS.find((l) => l.number === Number(input.lesson))
+            : null;
+        const spec = { ...(base ?? {}), ...input };
+        if (base && input.mirror === undefined) spec.mirror = false;
+        if (spec.number !== undefined) {
+          number.textContent = String(spec.number).padStart(2, "0");
+          const value = Number(spec.number);
+          markLesson(value >= 1 && value <= squares.length ? value : 0);
+        }
+        if (spec.title !== undefined) title.textContent = spec.title;
+        if (spec.file !== undefined) file.textContent = spec.file;
+        if (spec.code !== undefined) code.textContent = spec.code;
+        if (spec.pose !== undefined && FACES[spec.pose]) mascot.pose = spec.pose;
+        if (spec.mirror !== undefined) mascot.mirror = spec.mirror;
+        if (spec.tilt !== undefined) mascot.tilt = spec.tilt;
+        if (spec.bubble !== undefined) {
+          mascot.bubble = spec.bubble !== null;
+          if (spec.bubble !== null) bubble.textContent = spec.bubble;
+        }
+        renderCode();
+        renderMascot();
+        renderTitle();
+        fitBubble();
+      };
+
+      number.addEventListener("input", () => {
+        const value = Number.parseInt(number.textContent, 10);
+        markLesson(value >= 1 && value <= squares.length ? value : 0);
+      });
+      title.addEventListener("input", fitTitle);
+      title.addEventListener("blur", renderTitle);
+      file.addEventListener("blur", renderCode);
+      code.addEventListener("input", fitCode);
+      code.addEventListener("blur", renderCode);
+      bubble.addEventListener("input", fitBubble);
+
+      window.setThumb({ lesson: 1 });
+
+      // Load every face up front (Noto Sans Myanmar only loads once Burmese is on
+      // screen), then refit: sizes measured before the fonts arrive are wrong.
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '400 36px "Google Sans"',
+          '700 36px "Google Sans Code"',
+          '500 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+          '400 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => {
+          renderCode();
+          renderTitle();
+          fitBubble();
+        });
+    </script>
+  </body>
+</html>
