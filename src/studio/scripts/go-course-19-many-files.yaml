@@ -1,0 +1,1144 @@
+# Go course, lesson 19: one program in many files (Burmese).
+#
+# Start state (COURSE-KIT 3.5): main.go holds the flow (three parcels, a loop calling
+# printReceipt); parcel.go, fees.go and receipt.go hold only `package main`.
+# Edits, all insert-only (final files = probe 18-r3):
+#   1. parcel.go: Parcel (with field comments) and cityNames -> run-1: compile error
+#      `./main.go:10:3: undefined: printReceipt` (the error names the file that uses the name);
+#   2. fees.go: perKg, maxWeightKg, baseFees, the Fee method; receipt.go: import "fmt",
+#      formatKyat, printReceipt -> run-2: three receipt lines;
+#   3. main.go: a fourth parcel to Bago (1.2 kg) -> run-3: the fourth line, priced by fees.go and
+#      printed by receipt.go.
+# Boards: (O) one package = the parcel office, files = its rooms; (X) one func main per program
+# (`main redeclared in this block`, board only) and file names are for people; (P) packages,
+# modules and go.mod, capital letters as the doors between packages; (Q) quiz: a lower-case
+# function used from another file.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-19-many-files
+  title: "Go course 19: Program တစ်ခု၊ file အများ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Four files: the explorer is part of the lesson.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        func main() {
+        	parcels := []Parcel{
+        		{Code: "MDY-0001", To: "MDY", WeightKg: 2.5},
+        		{Code: "NPT-0001", To: "NPT", WeightKg: 1},
+        		{Code: "YGN-0001", To: "YGN", WeightKg: 0.5},
+        	}
+        	for _, p := range parcels {
+        		printReceipt(p)
+        	}
+        }
+      parcel.go: |
+        package main
+      fees.go: |
+        package main
+      receipt.go: |
+        package main
+  whiteboardAssets:
+    # Board O: one package is the parcel office; each file is one of its rooms.
+    - {
+        id: o-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "package main · ဖိုင် လေးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: o-pkg,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 810,
+        height: 300,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-main-box,
+        kind: rectangle,
+        x: 305,
+        y: 255,
+        width: 370,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-main,
+        kind: text,
+        x: 325,
+        y: 270,
+        width: 300,
+        height: 40,
+        text: "main.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-main-job,
+        kind: text,
+        x: 325,
+        y: 320,
+        width: 330,
+        height: 40,
+        text: "နေ့စဉ် အလုပ် အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-parcel-box,
+        kind: rectangle,
+        x: 705,
+        y: 255,
+        width: 370,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-parcel,
+        kind: text,
+        x: 725,
+        y: 270,
+        width: 300,
+        height: 40,
+        text: "parcel.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-parcel-job,
+        kind: text,
+        x: 725,
+        y: 320,
+        width: 330,
+        height: 40,
+        text: "ပါဆယ်နဲ့ မြို့တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-fees-box,
+        kind: rectangle,
+        x: 305,
+        y: 395,
+        width: 370,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-fees,
+        kind: text,
+        x: 325,
+        y: 410,
+        width: 300,
+        height: 40,
+        text: "fees.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-fees-job,
+        kind: text,
+        x: 325,
+        y: 460,
+        width: 330,
+        height: 40,
+        text: "ပို့ခ စည်းကမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-receipt-box,
+        kind: rectangle,
+        x: 705,
+        y: 395,
+        width: 370,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-receipt,
+        kind: text,
+        x: 725,
+        y: 410,
+        width: 300,
+        height: 40,
+        text: "receipt.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-receipt-job,
+        kind: text,
+        x: 725,
+        y: 460,
+        width: 330,
+        height: 40,
+        text: "ပြေစာ ပုံစံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-free,
+        kind: text,
+        x: 285,
+        y: 565,
+        width: 810,
+        height: 40,
+        text: "ဖိုင်ချင်း import မလို · compile တစ်ခါတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board X: one func main per program (board only); file names are for people.
+    - {
+        id: x-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "main function တစ်ခုပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: x-a-box,
+        kind: rectangle,
+        x: 290,
+        y: 245,
+        width: 330,
+        height: 110,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: x-a,
+        kind: text,
+        x: 310,
+        y: 260,
+        width: 280,
+        height: 40,
+        text: "main.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-a-fn,
+        kind: text,
+        x: 310,
+        y: 305,
+        width: 280,
+        height: 40,
+        text: "func main()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-b-box,
+        kind: rectangle,
+        x: 690,
+        y: 245,
+        width: 380,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: x-b,
+        kind: text,
+        x: 710,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "receipt.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-b-fn,
+        kind: text,
+        x: 710,
+        y: 305,
+        width: 300,
+        height: 40,
+        text: "func main()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-err,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 800,
+        height: 40,
+        text: "main redeclared in this block",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-names,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 800,
+        height: 40,
+        text: "ဖိုင် နာမည် · လူတွေ ဖတ်ရ လွယ်ဖို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: x-names-2,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 800,
+        height: 40,
+        text: "compiler · package နဲ့ code ကိုပဲ ကြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board P: packages and modules; a capital letter is the door between packages.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "Package နဲ့ module",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-mod-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 810,
+        height: 255,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-mod,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 500,
+        height: 40,
+        text: "module · go.mod",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-a-box,
+        kind: rectangle,
+        x: 305,
+        y: 305,
+        width: 330,
+        height: 160,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-a,
+        kind: text,
+        x: 325,
+        y: 320,
+        width: 290,
+        height: 40,
+        text: "package main",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-a-file,
+        kind: text,
+        x: 325,
+        y: 390,
+        width: 290,
+        height: 40,
+        text: "main.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-door,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 645,
+        y: 365,
+        width: 90,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-b-box,
+        kind: rectangle,
+        x: 745,
+        y: 305,
+        width: 330,
+        height: 160,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-b,
+        kind: text,
+        x: 765,
+        y: 320,
+        width: 290,
+        height: 40,
+        text: "package parcel",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-b-name,
+        kind: text,
+        x: 765,
+        y: 390,
+        width: 290,
+        height: 40,
+        text: "Parcel · Code",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-rule,
+        kind: text,
+        x: 285,
+        y: 520,
+        width: 810,
+        height: 40,
+        text: "A–Z နဲ့ စ · exported · တခြား package က သုံးရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-here,
+        kind: text,
+        x: 285,
+        y: 580,
+        width: 810,
+        height: 40,
+        text: "ဒီ course · package main တစ်ခုတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a lower-case function called from another file of the same package).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 700,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-f1,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 300,
+        height: 40,
+        text: "receipt.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 640,
+        height: 40,
+        text: "func printReceipt(p Parcel) {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-f2,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 300,
+        height: 40,
+        text: "main.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 400,
+        height: 40,
+        text: "printReceipt(p)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 362,
+        y: 282,
+        width: 50,
+        height: 52,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 285,
+        y: 460,
+        width: 400,
+        height: 40,
+        text: "က · ခေါ်လို့ ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 285,
+        y: 520,
+        width: 400,
+        height: 40,
+        text: "ခ · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 560,
+        y: 450,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7119
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:10:3: undefined: printReceipt\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 6000 ကျပ် မန္တလေး\nNPT-0001 4500 ကျပ် နေပြည်တော်\nYGN-0001 2000 ကျပ် ရန်ကုန်\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 6000 ကျပ် မန္တလေး\nNPT-0001 4500 ကျပ် နေပြည်တော်\nYGN-0001 2000 ကျပ် ရန်ကုန်\nBGO-0001 3500 ကျပ် ပဲခူး\n"
+
+scenes:
+  - id: recall
+    chapter: Program တစ်ခု၊ ဖိုင် အများ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ type တစ်ခုနဲ့ တွဲထားတဲ့ method ကို လေ့လာခဲ့ပါတယ်။ အဲဒီ program က ဖိုင် တစ်ခုတည်းမှာ
+      အတော် ရှည်လာခဲ့ပါတယ်။ တကယ့် program တွေမှာ code line ထောင်ချီ ရှိနိုင်လို့၊ ဖိုင် တစ်ခုတည်းမှာ အကုန်
+      ထည့်ထားရင် လိုတဲ့ နေရာကို ရှာရ ခက်ပါတယ်။ ဒီနေ့တော့ program တစ်ခုကို အလုပ်အလိုက် ဖိုင် လေးခုနဲ့
+      ခွဲရေးကြည့်ပါမယ်။ [[mark:sel-parcels]] main ဖိုင်ထဲမှာ ဒီနေ့ ပို့မယ့် ပါဆယ် သုံးခုရဲ့ slice ရှိပါတယ်။
+      [[mark:sel-loop]] အောက်က loop က ပါဆယ် တစ်ခုစီအတွက် ပြေစာ တစ်ကြောင်း ထုတ်ပေးမယ့် function ကို ခေါ်ပါတယ်။
+      ဒါပေမဲ့ Parcel type ရော၊ ပြေစာ ထုတ်တဲ့ function ရော ဒီ ဖိုင်ထဲမှာ မရှိပါဘူး။ ဘေးက ဖိုင် စာရင်းမှာ ဖိုင်
+      နောက်ထပ် သုံးခု ရှိပေမဲ့၊ သူတို့ထဲမှာ package main ဆိုတဲ့ line တစ်ကြောင်းစီပဲ ရှိပါသေးတယ်။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-parcels
+        type: editor.select
+        at: { mark: sel-parcels }
+        target:
+          {
+            file: main.go,
+            text: "\tparcels := []Parcel{\n\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1},\n\t\t{Code: \"YGN-0001\", To: \"YGN\", WeightKg: 0.5},\n\t}\n",
+            occurrence: 1,
+          }
+      - id: sel-loop
+        type: editor.select
+        at: { mark: sel-loop }
+        target:
+          {
+            file: main.go,
+            text: "\tfor _, p := range parcels {\n\t\tprintReceipt(p)\n\t}\n",
+            occurrence: 1,
+          }
+
+  - id: office
+    narration: >-
+      [[mark:board-office]] ဖိုင် အများကြီး ခွဲတာကို ပါဆယ် ဝန်ဆောင်မှုရဲ့ ရုံး တစ်ခုလို မြင်ကြည့်ရအောင်။
+      [[mark:draw-pkg]] ရုံး တစ်ခုလုံးက package တစ်ခုပါ။ folder တစ်ခုထဲက ဖိုင် တိုင်းရဲ့ ထိပ်မှာ package main
+      လို့ ရေးထားရင်၊ အဲဒီ ဖိုင်တွေ အားလုံးက package တစ်ခုတည်း၊ program တစ်ခုတည်း ဖြစ်ပါတယ်။
+      [[mark:draw-rooms]] ဖိုင် တစ်ခုစီကတော့ ရုံးထဲက အခန်း တစ်ခန်းစီလိုပါ။ main ဖိုင်က နေ့စဉ် အလုပ် အစဉ်ကို
+      ရေးတဲ့ နေရာ၊ parcel ဖိုင်က ပါဆယ်ဆိုတာ ဘာလဲ၊ ဘယ်မြို့တွေကို ပို့လဲ ဆိုတာ၊ fees ဖိုင်က ပို့ခ စည်းကမ်း၊
+      receipt ဖိုင်ကတော့ ပြေစာ ဘယ်လို ပုံစံ ထွက်မလဲ ဆိုတာပါ။ [[mark:draw-free]] ရုံးထဲမှာ လူတွေက အခန်း တစ်ခန်းကနေ
+      တစ်ခန်းကို လွတ်လွတ်လပ်လပ် သွားလို့ ရသလိုပဲ၊ ဖိုင် တစ်ခုထဲက နာမည်တွေကို တခြား ဖိုင်ကနေ import မလုပ်ဘဲ
+      တိုက်ရိုက် သုံးလို့ ရပါတယ်။ compiler က ဖိုင် အားလုံးကို ပေါင်းဖတ်ပြီး program တစ်ခုအဖြစ် compile လုပ်လို့ပါ။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+      - {
+          title: "The Go Programming Language Specification — Packages",
+          url: "https://go.dev/ref/spec#Packages",
+        }
+    actions:
+      - {
+          id: board-office,
+          type: whiteboard.apply,
+          at: { mark: board-office, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [o-title],
+        }
+      - {
+          id: draw-pkg,
+          type: whiteboard.apply,
+          at: { mark: draw-pkg },
+          upsertIds: [o-pkg],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-rooms,
+          type: whiteboard.apply,
+          at: { mark: draw-rooms },
+          upsertIds:
+            [
+              o-main-box,
+              o-main,
+              o-main-job,
+              o-parcel-box,
+              o-parcel,
+              o-parcel-job,
+              o-fees-box,
+              o-fees,
+              o-fees-job,
+              o-receipt-box,
+              o-receipt,
+              o-receipt-job,
+            ],
+          drawMs: 4800,
+        }
+      - {
+          id: draw-free,
+          type: whiteboard.apply,
+          at: { mark: draw-free },
+          upsertIds: [o-free],
+          drawMs: 1500,
+        }
+
+  - id: parcel-file
+    chapter: Parcel ဖိုင်
+    narration: >-
+      [[mark:close-office]] ဒါဆို parcel ဖိုင်ကနေ စရေးရအောင်။ [[mark:type-struct]] ဒီ ဖိုင်ထဲမှာ ပြီးခဲ့တဲ့ lesson
+      က Parcel struct ကို ရေးပါမယ်။ field သုံးခုက အတူတူပါပဲ၊ ဒီ တစ်ခါတော့ field တစ်ခုစီရဲ့ ဘေးမှာ ဘာကို
+      မှတ်တာလဲ ဆိုတဲ့ comment လေးတွေ ထည့်ထားပါတယ်။ [[mark:type-cities]] အောက်မှာတော့ မြို့ code တစ်ခုစီကို
+      မြန်မာ နာမည်နဲ့ တွဲထားတဲ့ map ကို ရေးပါမယ်။ ဝန်ဆောင်မှုက ပို့ပေးတဲ့ မြို့ ခြောက်မြို့ ပါပြီး၊ ပြေစာ
+      ထုတ်တဲ့အခါ မြို့ နာမည်ကို ဒီကနေ ယူမှာပါ။ [[mark:pre-run-1]] main ဖိုင်က သုံးထားတဲ့ Parcel type က အခု
+      parcel ဖိုင်ထဲမှာ ရှိသွားပါပြီ။ ကျန်တဲ့ ဖိုင် နှစ်ခု မရေးရသေးခင် compiler က ဘာပြောမလဲ ကြည့်ရအောင်။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Source file organization",
+          url: "https://go.dev/ref/spec#Source_file_organization",
+        }
+    actions:
+      - {
+          id: close-office,
+          type: whiteboard.apply,
+          at: { mark: close-office },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-parcel, type: workspace.openFile, at: { mark: type-struct }, path: parcel.go }
+      - id: type-struct
+        type: editor.type
+        at: { afterAction: open-parcel }
+        target: { file: parcel.go, after: "package main\n", occurrence: 1 }
+        text: "\n// Parcel is one parcel handed in at the counter.\ntype Parcel struct {\n\tCode     string  // tracking code: \"MDY-0001\"\n\tTo       string  // city code: \"MDY\"\n\tWeightKg float64 // weight in kilograms\n}\n"
+        cadence: line-by-line
+      - id: type-cities
+        type: editor.type
+        at: { mark: type-cities }
+        target: { file: parcel.go, after: "// weight in kilograms\n}\n", occurrence: 1 }
+        text: "\n// cityNames holds the cities the service sends to, by code.\nvar cityNames = map[string]string{\n\t\"YGN\": \"ရန်ကုန်\",\n\t\"BGO\": \"ပဲခူး\",\n\t\"NPT\": \"နေပြည်တော်\",\n\t\"MLM\": \"မော်လမြိုင်\",\n\t\"MDY\": \"မန္တလေး\",\n\t\"TGI\": \"တောင်ကြီး\",\n}\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "undefined: printReceipt",
+          timeoutMs: 8000,
+        }
+
+  - id: read-error
+    chapter: Error က ဘယ် ဖိုင်ကို ပြလဲ
+    narration: >-
+      [[mark:point-failed]] compile error တစ်ခု ပေါ်လာပါတယ်။ compile ကတည်းက ငြင်းတာ ဖြစ်လို့ ဘာမှ run
+      မသွားသေးပါဘူး။ [[mark:point-undefined]] အရင်ဆုံး ဘယ်နေရာလဲ ကြည့်ရအောင်။ main ဖိုင်ရဲ့ line ဆယ်မှာ
+      ဖြစ်တာပါ။ ပြေစာ ထုတ်တဲ့ function ကို main ဖိုင်က ခေါ်ထားပေမဲ့၊ ဘယ်ဖိုင်မှာမှ မရေးရသေးလို့ပါ။
+      [[mark:err-where]] သတိထားရမှာက error က function ကို ရေးရမယ့် receipt ဖိုင်ကို မပြဘဲ၊ အဲဒီ နာမည်ကို
+      သုံးထားတဲ့ main ဖိုင်ကို ပြတာပါ။ ဘယ်ဖိုင်မှာ ရေးမလဲ ဆိုတာ compiler က ကြိုမသိနိုင်လို့ပါ။ ပြီးတော့ main
+      ဖိုင်က Parcel type ကိုလည်း သုံးထားပေမဲ့ အဲဒီအတွက် error မရှိတာကို ကြည့်ပါ။ compiler က parcel ဖိုင်ထဲမှာ
+      Parcel ကို ရှာတွေ့သွားလို့ပါ၊ ဖိုင်တွေကို ပေါင်းဖတ်တယ် ဆိုတဲ့ သက်သေပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Declarations and scope",
+          url: "https://go.dev/ref/spec#Declarations_and_scope",
+        }
+    actions:
+      - {
+          id: point-failed,
+          type: console.point,
+          at: { mark: point-failed },
+          target: { text: "Build failed" },
+        }
+      - {
+          id: point-undefined,
+          type: console.point,
+          at: { mark: point-undefined },
+          target: { text: "./main.go:10:3: undefined: printReceipt" },
+        }
+
+  - id: fees-file
+    chapter: Fees ဖိုင်
+    narration: >-
+      [[mark:collapse-1]] ဒါဆို ပို့ခ စည်းကမ်းကို fees ဖိုင်ထဲ ရေးရအောင်။ [[mark:type-consts]] ပထမဆုံး constant
+      နှစ်ခု ရေးပါမယ်။ တစ်ကီလိုတိုင်း ပေါင်းရမယ့် ၅၀၀ ကို ဒီ တစ်ခါ နာမည် ပေးထားပြီး၊ ဝန်ဆောင်မှုက လက်ခံတဲ့
+      အလေးဆုံး ပါဆယ်ကိုလည်း နှစ်ဆယ်ကီလိုလို့ မှတ်ထားပါတယ်၊ အဲဒါကို နောက် lesson တွေမှာ သုံးပါမယ်။
+      [[mark:type-fees]] ပြီးတော့ မြို့ ခြောက်မြို့ရဲ့ အခြေခံ ပို့ခ map ကို ရေးပါမယ်။ parcel ဖိုင်က map မှာလိုပဲ
+      key တွေက မြို့ code တွေ ဖြစ်ပြီး၊ ဒီမှာတော့ မြို့ နာမည် အစား အခြေခံ ပို့ခကို ကျပ်နဲ့ မှတ်ထားပါတယ်။ နောက်ပိုင်း
+      ပို့ခ နှုန်း ပြောင်းချင်ရင် ဒီ ဖိုင်ကိုပဲ ပြင်ရုံပါ။ [[mark:type-fee]] အောက်ဆုံးမှာ
+      ပြီးခဲ့တဲ့ lesson က Fee method ကို ရေးပါမယ်။ [[mark:sel-fee-recv]] receiver က Parcel ပါ၊ ဒါပေမဲ့ Parcel
+      struct ကို parcel ဖိုင်မှာ ရေးထားတာပါ။ method ကို သူ့ type နဲ့ package တူရင်၊ ဖိုင် မတူလည်း ရေးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Packages",
+          url: "https://go.dev/ref/spec#Packages",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - { id: open-fees, type: workspace.openFile, at: { mark: type-consts }, path: fees.go }
+      - id: type-consts
+        type: editor.type
+        at: { afterAction: open-fees }
+        target: { file: fees.go, after: "package main\n", occurrence: 1 }
+        text: "\n// perKg is added for every whole kilogram.\nconst perKg = 500\n\n// maxWeightKg is the heaviest parcel the service takes.\nconst maxWeightKg = 20.0\n"
+        cadence: line-by-line
+      - id: type-fees
+        type: editor.type
+        at: { mark: type-fees }
+        target: { file: fees.go, after: "const maxWeightKg = 20.0\n", occurrence: 1 }
+        text: "\n// baseFees is the fee to each city before weight, in kyats.\nvar baseFees = map[string]int{\n\t\"YGN\": 2000,\n\t\"BGO\": 3000,\n\t\"NPT\": 4000,\n\t\"MLM\": 4500,\n\t\"MDY\": 5000,\n\t\"TGI\": 6000,\n}\n"
+        cadence: line-by-line
+      - id: type-fee
+        type: editor.type
+        at: { mark: type-fee }
+        target: { file: fees.go, after: "\t\"TGI\": 6000,\n}\n", occurrence: 1 }
+        text: "\n// Fee is the parcel's price: the city's base fee plus perKg for every whole kilogram.\nfunc (p Parcel) Fee() int {\n\treturn baseFees[p.To] + int(p.WeightKg)*perKg\n}\n"
+        cadence: line-by-line
+      - id: sel-fee-recv
+        type: editor.select
+        at: { mark: sel-fee-recv }
+        target: { file: fees.go, text: "func (p Parcel) Fee() int {", occurrence: 1 }
+
+  - id: receipt-file
+    chapter: Receipt ဖိုင်
+    narration: >-
+      [[mark:open-receipt]] နောက်ဆုံး receipt ဖိုင်ပါ။ [[mark:type-format]] ဒီ ဖိုင်က fmt package ကို သုံးမှာ ဖြစ်လို့
+      import ကို ဒီ ဖိုင်ရဲ့ ထိပ်မှာ ရေးရပါတယ်။ import က ဖိုင် တစ်ခုချင်းစီ အတွက်ပါ၊ fmt ကို မသုံးတဲ့ ကျန်တဲ့ ဖိုင်
+      သုံးခုမှာတော့ import မလိုပါဘူး။ အောက်က function က lesson ကိုးက ငွေကို ကျပ်နဲ့ ပြတဲ့ function ပါ။
+      [[mark:type-receipt]] ပြီးတော့ ပြေစာ ထုတ်တဲ့ function ကို ရေးပါမယ်။ ပါဆယ် code၊ ပို့ခနဲ့ မြို့ နာမည်ကို
+      တစ်ကြောင်းတည်း ထုတ်ပြပါတယ်။ [[mark:sel-print]] ဒီ line ထဲမှာ ဖိုင် သုံးခုက နာမည်တွေ ပါနေတာကို ကြည့်ပါ။
+      Fee method က fees ဖိုင်ကပါ၊ မြို့ နာမည် map က parcel ဖိုင်ကပါ၊ ငွေ ပုံစံ function ကတော့ ဒီ ဖိုင်ထဲကပါ။
+      [[mark:run-2]] ကဲ၊ ထပ်ပြီး run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Import declarations",
+          url: "https://go.dev/ref/spec#Import_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Source file organization",
+          url: "https://go.dev/ref/spec#Source_file_organization",
+        }
+    actions:
+      - { id: open-receipt, type: workspace.openFile, at: { mark: open-receipt }, path: receipt.go }
+      - id: type-format
+        type: editor.type
+        at: { mark: type-format }
+        target: { file: receipt.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport \"fmt\"\n\n// formatKyat shows an amount of money: 1500 → \"1500 ကျပ်\".\nfunc formatKyat(amount int) string {\n\tdigits := fmt.Sprint(amount)\n\treturn digits + \" ကျပ်\"\n}\n"
+        cadence: line-by-line
+      - id: type-receipt
+        type: editor.type
+        at: { mark: type-receipt }
+        target: { file: receipt.go, after: "\treturn digits + \" ကျပ်\"\n}\n", occurrence: 1 }
+        text: "\n// printReceipt prints one line for a parcel: code, fee, city.\nfunc printReceipt(p Parcel) {\n\tfmt.Println(p.Code, formatKyat(p.Fee()), cityNames[p.To])\n}\n"
+        cadence: line-by-line
+      - id: sel-print
+        type: editor.select
+        at: { mark: sel-print }
+        target:
+          {
+            file: receipt.go,
+            text: "fmt.Println(p.Code, formatKyat(p.Fee()), cityNames[p.To])",
+            occurrence: 1,
+          }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "YGN-0001 2000 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-receipt,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: receipt.go,
+          contains: "func printReceipt(p Parcel) {\n\tfmt.Println(p.Code, formatKyat(p.Fee()), cityNames[p.To])\n}\n",
+        }
+      - {
+          id: expect-file-fee,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: fees.go,
+          contains: "\treturn baseFees[p.To] + int(p.WeightKg)*perKg\n",
+        }
+      - {
+          id: expect-file-parcel,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: parcel.go,
+          contains: "var cityNames = map[string]string{",
+        }
+
+  - id: read-2
+    chapter: ဖိုင် လေးခု၊ program တစ်ခု
+    narration: >-
+      [[mark:point-mdy]] ဒီ တစ်ခါတော့ ပြေစာ သုံးကြောင်း ထွက်လာပါပြီ။ ပထမ စာကြောင်းက မန္တလေး ပါဆယ်ပါ၊ ၅၀၀၀
+      ပေါ်မှာ နှစ်ကီလို အတွက် ၁၀၀၀ ပေါင်းလို့ ၆၀၀၀ ကျပ်ပါ။ [[mark:point-npt]] ဒုတိယက နေပြည်တော် ပါဆယ်ပါ၊ ၄၀၀၀
+      နဲ့ တစ်ကီလို အတွက် ၅၀၀ ဆိုတော့ ၄၅၀၀ ကျပ်ပါ။ [[mark:point-ygn]] တတိယ ရန်ကုန် ပါဆယ်ကတော့ ကီလို ဝက်ပဲ
+      ရှိလို့ အခြေခံ ပို့ခ ၂၀၀၀ ကျပ်ပဲ ကျပါတယ်။ main ဖိုင်ကို တစ်ကြောင်းမှ မပြင်ဘဲ ခုနက error ပျောက်သွားတာကို
+      သတိထားပါ။ run တိုင်းမှာ ဖိုင် လေးခုလုံးကို အတူတူ compile လုပ်လို့ပါ။ ဆိုလိုတာက စာကြောင်း တစ်ကြောင်းစီဟာ
+      ဖိုင် လေးခုရဲ့ အလုပ်ကို ပေါင်းထားတာပါ။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - {
+          id: point-mdy,
+          type: console.point,
+          at: { mark: point-mdy },
+          target: { text: "MDY-0001 6000 ကျပ် မန္တလေး" },
+        }
+      - {
+          id: point-npt,
+          type: console.point,
+          at: { mark: point-npt },
+          target: { text: "NPT-0001 4500 ကျပ် နေပြည်တော်" },
+        }
+      - {
+          id: point-ygn,
+          type: console.point,
+          at: { mark: point-ygn },
+          target: { text: "YGN-0001 2000 ကျပ် ရန်ကုန်" },
+        }
+
+  - id: one-main
+    narration: >-
+      [[mark:board-main]] ဖိုင် အများကြီး ရှိပေမဲ့ program တစ်ခုမှာ လိုက်နာရမယ့် စည်းကမ်း တစ်ခု ရှိပါတယ်။
+      [[mark:draw-mains]] program စတဲ့ main function ဟာ package တစ်ခုလုံးမှာ တစ်ခုပဲ ရှိရပါတယ်။ တခြား ဖိုင်
+      တစ်ခုထဲမှာ main function နောက်တစ်ခု ထပ်ရေးမိရင်၊ Go က ဘယ်ကနေ စရမလဲ မသိတော့ပါဘူး။ [[mark:draw-redecl]]
+      အဲဒီအခါ compiler က main function နှစ်ခု ဖြစ်နေလို့ လက်မခံဘူး ဆိုတဲ့ compile error ပြပါတယ်။ compile ကတည်းက
+      ငြင်းတာ ဖြစ်လို့ ဘာမှ run မသွားပါဘူး။ [[mark:draw-names]] နောက်တစ်ချက်က ဖိုင် နာမည်တွေပါ။ parcel၊ fees၊ receipt လို့
+      နာမည်ပေးထားတာ လူတွေ ဖတ်ရ လွယ်အောင်ပါ။ ဒီလို သာမန် ဖိုင် နာမည်တွေကို compiler က အရေးမထားဘဲ၊ ဖိုင်ထဲက
+      package နဲ့ code ကိုပဲ ကြည့်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-main } }
+      - {
+          id: board-main,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [x-title],
+        }
+      - {
+          id: draw-mains,
+          type: whiteboard.apply,
+          at: { mark: draw-mains },
+          upsertIds: [x-a-box, x-a, x-a-fn, x-b-box, x-b, x-b-fn],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-redecl,
+          type: whiteboard.apply,
+          at: { mark: draw-redecl },
+          upsertIds: [x-err],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-names,
+          type: whiteboard.apply,
+          at: { mark: draw-names },
+          upsertIds: [x-names, x-names-2],
+          drawMs: 2000,
+        }
+
+  - id: one-change
+    chapter: ဖိုင် တစ်ခု ပြင်ရင်
+    narration: >-
+      [[mark:close-main]] ဒါဆို program တစ်ခုတည်း ဖြစ်တယ် ဆိုတာကို နောက်တစ်ခါ စမ်းကြည့်ရအောင်။ [[mark:back-main]]
+      main ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-bgo]] ပါဆယ် စာရင်းရဲ့ အောက်ဆုံးမှာ ပဲခူးကို ပို့မယ့် တစ်ဒသမ နှစ်
+      ကီလို ပါဆယ် တစ်ခု ထည့်ပါမယ်။ ပြင်တာက main ဖိုင်ထဲက line တစ်ကြောင်းပဲ ဖြစ်ပေမဲ့၊ ပို့ခကို fees ဖိုင်က
+      တွက်ပြီး ပြေစာကို receipt ဖိုင်က ထုတ်ပေးမှာပါ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - {
+          id: close-main,
+          type: whiteboard.apply,
+          at: { mark: close-main },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: back-main, type: workspace.openFile, at: { mark: back-main }, path: main.go }
+      - id: type-bgo
+        type: editor.type
+        at: { mark: type-bgo }
+        target:
+          {
+            file: main.go,
+            after: "{Code: \"YGN-0001\", To: \"YGN\", WeightKg: 0.5},\n",
+            occurrence: 1,
+          }
+        text: "\t\t{Code: \"BGO-0001\", To: \"BGO\", WeightKg: 1.2},\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "BGO-0001 3500 ကျပ် ပဲခူး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-bgo,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\t{Code: \"BGO-0001\", To: \"BGO\", WeightKg: 1.2},\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-bgo]] နောက်ဆုံး စာကြောင်းမှာ ပဲခူး ပါဆယ် ထွက်လာပါပြီ။ ပဲခူးရဲ့ ၃၀၀၀ ပေါ်မှာ ကီလို အပြည့်
+      တစ်ကီလို အတွက် ၅၀၀ ပေါင်းလို့ ၃၅၀၀ ကျပ်ပါ။ ကျန်တဲ့ ဖိုင် သုံးခုကို လုံးဝ မထိဘဲ အလုပ်လုပ်သွားတာက၊ ဖိုင်
+      လေးခုလုံး program တစ်ခုတည်း ဖြစ်နေလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Packages",
+          url: "https://go.dev/ref/spec#Packages",
+        }
+    actions:
+      - {
+          id: point-bgo,
+          type: console.point,
+          at: { mark: point-bgo },
+          target: { text: "BGO-0001 3500 ကျပ် ပဲခူး" },
+        }
+
+  - id: packages
+    chapter: Package နဲ့ module
+    narration: >-
+      [[mark:board-pkg]] ဒီ course ထဲက program တွေကို package main တစ်ခုတည်းနဲ့ ရေးပါတယ်။ တကယ့် project
+      အကြီးတွေမှာတော့ package အများကြီး ရှိနိုင်ပါတယ်။ [[mark:draw-module]] package တစ်ခုက folder
+      တစ်ခုပါ။ package တွေ စုထားတဲ့ project တစ်ခုလုံးကို module လို့ ခေါ်ပြီး၊ module ကို ဖော်ပြတဲ့ ဖိုင် တစ်ခုလည်း
+      ပါပါတယ်။ ဒါကို lesson သုံးဆယ့်ငါးမှာ ပြန်ကြည့်ပါမယ်။ [[mark:draw-door]] package တစ်ခုကနေ တခြား package
+      ထဲက နာမည်ကို သုံးချင်ရင်၊ အဲဒီ နာမည်ရဲ့ ပထမ စာလုံးကို English စာလုံးကြီး၊ ဆိုလိုတာက A ကနေ Z ထဲက
+      တစ်လုံးနဲ့ ရေးထားရပါမယ်။ အဲဒါကို exported လို့ ခေါ်ပြီး၊ package တွေကြားက တံခါး တစ်ခုလိုပါပဲ။ မြန်မာ စာမှာ
+      စာလုံးကြီး စာလုံးသေး မရှိလို့ ဒါက English စာလုံးတွေနဲ့ပဲ ဆိုင်ပါတယ်။ [[mark:draw-fields]] lesson
+      ဆယ့်ခြောက်ကတည်းက Parcel နဲ့ သူ့ field တွေကို စာလုံးကြီးနဲ့ စရေးခဲ့တာ ဒါကြောင့်ပါ။ နောင်တစ်ချိန်မှာ ပါဆယ်ကို
+      သီးခြား package အဖြစ် ခွဲထုတ်လိုက်ရင်တောင်၊ တခြား package ကနေ သုံးလို့ ရအောင်ပါ။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+      - {
+          title: "The Go Programming Language Specification — Exported identifiers",
+          url: "https://go.dev/ref/spec#Exported_identifiers",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-pkg } }
+      - {
+          id: board-pkg,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [p-title, p-here],
+        }
+      - {
+          id: draw-module,
+          type: whiteboard.apply,
+          at: { mark: draw-module },
+          upsertIds: [p-mod-box, p-mod, p-a-box, p-a, p-a-file, p-b-box, p-b],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-door,
+          type: whiteboard.apply,
+          at: { mark: draw-door },
+          upsertIds: [p-door, p-rule],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-fields,
+          type: whiteboard.apply,
+          at: { mark: draw-fields },
+          upsertIds: [p-b-name],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်မှာ receipt ဖိုင်က ပြေစာ function ရဲ့ ခေါင်းစဉ်နဲ့၊ main
+      ဖိုင်ထဲက ခေါ်တဲ့ line ကို ပြထားပါတယ်။ [[mark:quiz-line]] function နာမည်က English စာလုံးသေးနဲ့ စထားပါတယ်။
+      ဒါဆို main ဖိုင်က ဒီ function ကို ခေါ်လို့ ရမလား၊ compile error ပေါ်မလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ ခေါ်လို့ ရပါတယ်။ ဘာကြောင့်လဲဆိုတော့ စာလုံးကြီး
+      စည်းကမ်းက package တစ်ခုနဲ့ တစ်ခုကြားမှာပဲ အရေးပါလို့ပါ။ ဖိုင် နှစ်ခုလုံးက package main ထဲမှာ ရှိတဲ့အတွက်၊
+      စာလုံးသေးနဲ့ စတဲ့ နာမည်ကိုလည်း ဖိုင် တိုင်းကနေ မြင်ရပါတယ်။ ခုနက run ခဲ့တဲ့ program ကိုယ်တိုင်က အဲဒီလို
+      ခေါ်ထားတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Exported identifiers",
+          url: "https://go.dev/ref/spec#Exported_identifiers",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-f1, q-l1, q-f2, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ folder တစ်ခုထဲမှာ package main နဲ့ စတဲ့ ဖိုင် အားလုံးက program
+      တစ်ခုတည်းပါ။ [[mark:recap-package]] ဖိုင် တစ်ခုက နာမည်တွေကို တခြား ဖိုင်ကနေ import မလုပ်ဘဲ သုံးလို့ ရပြီး၊
+      compiler က ဖိုင် အားလုံးကို ပေါင်းဖတ်ပါတယ်။ [[mark:recap-call]] compile error က နာမည်ကို သုံးတဲ့ ဖိုင်ကို
+      ပြပြီး၊ main function က တစ်ခုပဲ ရှိရပါတယ်။ စာလုံးကြီးနဲ့ စတဲ့ နာမည်တွေကတော့ package တွေကြားမှာ
+      အရေးပါပါတယ်။ ဒီကနေ စပြီး program တွေကို ဖိုင် နှစ်ခု သုံးခုနဲ့ ခွဲရေးသွားပါမယ်။ နောက် lesson မှာတော့
+      ကားဂိတ်နဲ့ rider လို မတူတဲ့ ပို့ဆောင်သူတွေကို အလုပ် တစ်ခုတည်း လုပ်ခိုင်းနိုင်တဲ့ interface ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-package
+        type: editor.select
+        at: { mark: recap-package }
+        target: { file: main.go, text: "package main", occurrence: 1 }
+      - id: recap-call
+        type: editor.select
+        at: { mark: recap-call }
+        target: { file: main.go, text: "\t\tprintReceipt(p)\n", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
