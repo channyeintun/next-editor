@@ -1,0 +1,1135 @@
+# Go course, lesson 26: generics (Burmese).
+#
+# Start state: main.go with `sumKyats` (adds kyats, an int slice) and a main that prints it;
+# parcel.go pinned (the canonical Parcel and cityNames, COURSE-KIT §3.4).
+# Edits, all insert-only:
+#   1. `sumKg` (the same loop for float64) and its Println -> run-1: 12500 / 4;
+#   2. the generic `Sum[T int | float64]` and two calls, then `Filter[T any]`, three parcels and
+#      the Filter call -> run-2: 12500 / 4 / 12500 / 4 / 2 MDY-0001;
+#   3. `fmt.Println(Sum([]string{"MDY", "NPT"}))` -> run-3: compile error
+#      `string does not satisfy int | float64 (string missing in int | float64)`;
+#      then `// ` in front of that line (the final state compiles; it prints run-2's output).
+# Boards: (D) the same loop twice, only the types differ; (G) one stamp design with a blank:
+# T, the type parameter; (C) constraints: int | float64, any, comparable, cmp.Ordered;
+# (W) generics all along in slices, write the plain function first, generic methods; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-26-generics
+  title: "Go course 26: Generics နဲ့ type မျိုးစုံ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Two files: the explorer shows where Parcel lives (the lesson opens parcel.go once).
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // sumKyats adds up amounts of money in kyats.
+        func sumKyats(xs []int) int {
+        	var total int
+        	for _, x := range xs {
+        		total += x
+        	}
+        	return total
+        }
+
+        func main() {
+        	fmt.Println(sumKyats([]int{6000, 4500, 2000}))
+        }
+      parcel.go: |
+        package main
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string  // tracking code: "MDY-0001"
+        	To       string  // city code: "MDY"
+        	WeightKg float64 // weight in kilograms
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+  whiteboardAssets:
+    # Board D: the same loop twice; only the types differ.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Loop တူ၊ type ကွဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-box1,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 800,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-l1,
+        kind: text,
+        x: 305,
+        y: 260,
+        width: 640,
+        height: 40,
+        text: "func sumKyats(xs []int) int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-box2,
+        kind: rectangle,
+        x: 285,
+        y: 345,
+        width: 800,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-l2,
+        kind: text,
+        x: 305,
+        y: 365,
+        width: 740,
+        height: 40,
+        text: "func sumKg(xs []float64) float64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-diff,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 780,
+        height: 40,
+        text: "ကွာတာ · type ရေးတဲ့ နေရာ သုံးနေရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-cost,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 780,
+        height: 40,
+        text: "ပြင်ရင် နှစ်နေရာ · type အသစ်ဆို copy အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-cost-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 570,
+        width: 600,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    # Board G: one stamp design with a blank; T is the blank the compiler fills.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "Generics · နေရာလွတ် ပါတဲ့ ဒီဇိုင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-stamp,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 800,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-stamp-t,
+        kind: text,
+        x: 305,
+        y: 260,
+        width: 760,
+        height: 40,
+        text: "စုစုပေါင်း  ______  ကျပ်လား ကီလိုလား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-sig-box,
+        kind: rectangle,
+        x: 285,
+        y: 345,
+        width: 800,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-sig,
+        kind: text,
+        x: 305,
+        y: 365,
+        width: 760,
+        height: 40,
+        text: "func Sum[T int | float64](xs []T) T",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-blank,
+        kind: text,
+        x: 300,
+        y: 450,
+        width: 780,
+        height: 40,
+        text: "T = type ရဲ့ နေရာလွတ် (type parameter)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-int,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 600,
+        height: 40,
+        text: "Sum([]int{…})  →  T = int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-float,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 700,
+        height: 40,
+        text: "Sum([]float64{…})  →  T = float64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: constraints say which types may fill the blank.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 780,
+        height: 50,
+        text: "Constraint · T နေရာမှာ ဝင်ခွင့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 810,
+        height: 130,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-union,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 340,
+        height: 40,
+        text: "int | float64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-union-n,
+        kind: text,
+        x: 680,
+        y: 250,
+        width: 400,
+        height: 40,
+        text: "ဒီ နှစ်ခုထဲက တစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-string,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 340,
+        height: 40,
+        text: "string",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-string-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 300,
+        y: 315,
+        width: 110,
+        height: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-string-n,
+        kind: text,
+        x: 680,
+        y: 310,
+        width: 400,
+        height: 40,
+        text: "မပါ · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-any,
+        kind: text,
+        x: 305,
+        y: 405,
+        width: 340,
+        height: 40,
+        text: "any",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-any-n,
+        kind: text,
+        x: 680,
+        y: 405,
+        width: 400,
+        height: 40,
+        text: "ဘယ် type မဆို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-comp,
+        kind: text,
+        x: 305,
+        y: 470,
+        width: 340,
+        height: 40,
+        text: "comparable",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-comp-n,
+        kind: text,
+        x: 680,
+        y: 470,
+        width: 400,
+        height: 40,
+        text: "တူမတူ စစ်လို့ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ord,
+        kind: text,
+        x: 305,
+        y: 535,
+        width: 340,
+        height: 40,
+        text: "cmp.Ordered",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ord-n,
+        kind: text,
+        x: 680,
+        y: 535,
+        width: 400,
+        height: 40,
+        text: "အငယ်အကြီး စီလို့ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board W: generics all along; when to write them.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "Generics ကို ဘယ်တော့ သုံးမလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-slices,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 420,
+        height: 40,
+        text: "slices.Sort · slices.Max",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-slices-n,
+        kind: text,
+        x: 740,
+        y: 245,
+        width: 350,
+        height: 40,
+        text: "lesson 15 က generic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-box,
+        kind: rectangle,
+        x: 285,
+        y: 320,
+        width: 810,
+        height: 140,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-r1,
+        kind: text,
+        x: 305,
+        y: 340,
+        width: 770,
+        height: 40,
+        text: "အရင် · type တစ်ခုအတွက် သာမန် function",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-r2,
+        kind: text,
+        x: 305,
+        y: 400,
+        width: 770,
+        height: 40,
+        text: "ပြီးမှ · copy ကူးတော့မယ် ဆိုရင် generics",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-methods,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 780,
+        height: 40,
+        text: "Go 1.27 · method မှာလည်း type parameter",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (Sum of an empty slice).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 780,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 260,
+        width: 720,
+        height: 40,
+        text: "func Sum[T int | float64](xs []T) T",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 320,
+        width: 560,
+        height: 40,
+        text: "fmt.Println(Sum([]int{}))",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 470,
+        y: 355,
+        width: 200,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 400,
+        height: 40,
+        text: "က · 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 400,
+        height: 40,
+        text: "ခ · panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 430,
+        y: 420,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7126
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "12500\n4\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "12500\n4\n12500\n4\n2 MDY-0001\n"
+      run-3:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:55:17: string does not satisfy int | float64 (string missing in int | float64)\n"
+
+scenes:
+  - id: recall
+    chapter: တူတဲ့ code နှစ်ခါ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ function ကို တန်ဖိုး တစ်ခုလို variable ထဲ ထည့်တာ၊ တခြား function ကို
+      ပေးတာနဲ့ closure အကြောင်းကို မြင်ခဲ့ပါတယ်။ ဒီနေ့မှာတော့ function တစ်ခုတည်းကို type မျိုးစုံ
+      အတွက် သုံးလို့ရအောင် ရေးတဲ့ generics အကြောင်းကို လေ့လာပါမယ်။ ပါဆယ်ပို့ ဝန်ဆောင်မှုမှာ
+      ညနေရောက်ရင် ကောင်တာက ဝန်ထမ်းက ဒီနေ့ ရတဲ့ ပို့ခ စုစုပေါင်းနဲ့ ပါဆယ်တွေရဲ့ အလေးချိန်
+      စုစုပေါင်းကို တွက်ရပါတယ်။ [[mark:sel-sumkyats]] main ဖိုင်မှာ ပို့ခတွေကို ပေါင်းပေးတဲ့ function
+      တစ်ခု ရှိပြီးသားပါ။ ကျပ်ငွေက ကိန်းပြည့် ဖြစ်လို့ int slice ကို ယူပြီး int ကို ပြန်ပေးပါတယ်။
+      [[mark:sel-total]] အထဲမှာ total ကို zero value ဖြစ်တဲ့ သုညနဲ့ စပြီး၊ slice ထဲက ပို့ခ
+      တစ်ခုချင်းကို loop နဲ့ ပေါင်းထည့်ပါတယ်။ [[mark:sel-call]] main ထဲမှာတော့ ပါဆယ် သုံးခုရဲ့
+      ပို့ခကို ပေါင်းပြီး print ထုတ်ထားပါတယ်။
+    sources:
+      - { title: "The Go Blog — When To Use Generics", url: "https://go.dev/blog/when-generics" }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-sumkyats
+        type: editor.select
+        at: { mark: sel-sumkyats }
+        target: { file: main.go, text: "func sumKyats(xs []int) int", occurrence: 1 }
+      - id: sel-total
+        type: editor.select
+        at: { mark: sel-total }
+        target: { file: main.go, text: "var total int", occurrence: 1 }
+      - id: sel-call
+        type: editor.select
+        at: { mark: sel-call }
+        target:
+          { file: main.go, text: "fmt.Println(sumKyats([]int{6000, 4500, 2000}))", occurrence: 1 }
+
+  - id: copy
+    narration: >-
+      [[mark:type-sumkg]] အခု အလေးချိန်တွေကိုလည်း ပေါင်းချင်ပါတယ်။ ကီလိုမှာ ဒသမ ပါနိုင်လို့
+      float64 ကို သုံးရပြီး၊ ခုနက function က int slice ကိုပဲ လက်ခံလို့ ဒီအတိုင်း သုံးလို့ မရပါဘူး။
+      ဒါကြောင့် ပထမဆုံး စဉ်းစားမိတဲ့ နည်းက function ကို copy ကူးပြီး နာမည်နဲ့ type တွေကို
+      ပြောင်းလိုက်တာပါ။ ဒီ function က ကီလို slice ကို ယူပြီး ကီလို စုစုပေါင်းကို ပြန်ပေးပါတယ်။
+      [[mark:type-kgcall]] main ထဲမှာလည်း ပါဆယ် သုံးခုရဲ့ အလေးချိန်ကို ပေါင်းပြီး print ထုတ်ပါမယ်။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+    actions:
+      - id: type-sumkg
+        type: editor.type
+        at: { mark: type-sumkg }
+        target: { file: main.go, after: "\treturn total\n}\n", occurrence: 1 }
+        text: "\n// sumKg adds up weights in kilograms.\nfunc sumKg(xs []float64) float64 {\n\tvar total float64\n\tfor _, x := range xs {\n\t\ttotal += x\n\t}\n\treturn total\n}\n"
+        cadence: line-by-line
+      - id: type-kgcall
+        type: editor.type
+        at: { mark: type-kgcall }
+        target:
+          {
+            file: main.go,
+            after: "\tfmt.Println(sumKyats([]int{6000, 4500, 2000}))\n",
+            occurrence: 1,
+          }
+        text: "\tfmt.Println(sumKg([]float64{2.5, 1, 0.5}))\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "12500",
+          timeoutMs: 8000,
+        }
+
+  - id: duplicate
+    narration: >-
+      [[mark:point-kyats]] ပထမ စာကြောင်းက ပို့ခ စုစုပေါင်း တစ်သောင်း နှစ်ထောင့်ငါးရာ ကျပ်ပါ။
+      [[mark:point-kg]] ဒုတိယ စာကြောင်းကတော့ အလေးချိန် စုစုပေါင်း လေးကီလိုပါ၊ နှစ်ကီလိုခွဲ၊
+      တစ်ကီလိုနဲ့ ကီလိုဝက်ကို ပေါင်းထားတာပါ။ အဖြေ နှစ်ခုလုံး မှန်ပါတယ်။ [[mark:board-dup]] ဒါပေမဲ့
+      function နှစ်ခုကို ဘေးချင်းယှဉ်ပြီး ကြည့်ရအောင်။ [[mark:draw-dup]] loop လုပ်ပုံ၊ ပေါင်းပုံ၊
+      ပြန်ပေးပုံ အားလုံး တစ်ထပ်တည်း တူပါတယ်။ ကွာတာက type ရေးထားတဲ့ နေရာ သုံးနေရာပဲ ရှိပါတယ်။
+      [[mark:draw-cost]] ဒီလို copy ကူးထားရင် ပေါင်းပုံကို တစ်နေ့ ပြင်ချင်တဲ့အခါ နေရာ နှစ်နေရာမှာ
+      ပြင်ရပါမယ်။ တစ်နေရာ ပြင်ပြီး တစ်နေရာ မေ့ကျန်ခဲ့ရင် bug ဖြစ်ပါပြီ။ နောက်ထပ် type တစ်ခု
+      လိုလာရင်လည်း တတိယ copy ကို ထပ်ကူးရပါမယ်။
+    sources:
+      - { title: "The Go Blog — When To Use Generics", url: "https://go.dev/blog/when-generics" }
+    actions:
+      - {
+          id: point-kyats,
+          type: console.point,
+          at: { mark: point-kyats },
+          target: { text: "12500" },
+        }
+      - { id: point-kg, type: console.point, at: { mark: point-kg }, target: { text: "4" } }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-dup } }
+      - {
+          id: board-dup,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-dup,
+          type: whiteboard.apply,
+          at: { mark: draw-dup },
+          upsertIds: [d-box1, d-l1, d-box2, d-l2, d-diff],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-cost,
+          type: whiteboard.apply,
+          at: { mark: draw-cost },
+          upsertIds: [d-cost, d-cost-line],
+          drawMs: 1600,
+        }
+
+  - id: stamp
+    chapter: Type parameter
+    narration: >-
+      [[mark:board-stamp]] ဒီ ပြဿနာကို generics က ဖြေရှင်းပေးပါတယ်။ ပါဆယ် ဝန်ဆောင်မှုမှာ စာရင်းကတ်ပေါ်
+      နှိပ်တဲ့ တံဆိပ်တုံး တစ်ခု ရှိတယ် ဆိုပါစို့။ [[mark:draw-stamp]] တံဆိပ် ဒီဇိုင်းထဲမှာ ယူနစ်
+      ရေးမယ့် နေရာကို လွတ်ထားပြီး၊ နှိပ်တဲ့အခါမှ ကျပ်လား ကီလိုလား ဖြည့်ရေးတယ်လို့ စဉ်းစားကြည့်ပါ။
+      ဒီဇိုင်း တစ်ခုတည်းနဲ့ နှစ်မျိုးလုံး သုံးလို့ရပါတယ်။ [[mark:draw-blank]] generic function
+      ဆိုတာလည်း ဒီလိုပါပဲ။ type ရေးရမယ့် နေရာမှာ T ဆိုတဲ့ နေရာလွတ် တစ်ခု ထားပြီး၊ အဲဒါကို type
+      parameter လို့ ခေါ်ပါတယ်။ [[mark:draw-fill]] function ကို ခေါ်ထားတဲ့ နေရာတိုင်းမှာ compiler က
+      ပေးလိုက်တဲ့ slice ကို ကြည့်ပြီး၊ T နေရာမှာ int ဒါမှမဟုတ် float64 ကို ဖြည့်ပေးပါတယ်။
+    sources:
+      - {
+          title: "The Go Blog — An Introduction To Generics",
+          url: "https://go.dev/blog/intro-generics",
+        }
+      - {
+          title: "The Go Programming Language Specification — Type parameter declarations",
+          url: "https://go.dev/ref/spec#Type_parameter_declarations",
+        }
+    actions:
+      - {
+          id: board-stamp,
+          type: whiteboard.apply,
+          at: { mark: board-stamp },
+          open: true,
+          clear: true,
+          upsertIds: [g-title],
+        }
+      - {
+          id: draw-stamp,
+          type: whiteboard.apply,
+          at: { mark: draw-stamp },
+          upsertIds: [g-stamp, g-stamp-t],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-blank,
+          type: whiteboard.apply,
+          at: { mark: draw-blank },
+          upsertIds: [g-sig-box, g-sig, g-blank],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-fill,
+          type: whiteboard.apply,
+          at: { mark: draw-fill },
+          upsertIds: [g-int, g-float],
+          drawMs: 1800,
+        }
+
+  - id: write-sum
+    narration: >-
+      [[mark:close-stamp]] ဒါဆို ရေးကြည့်ရအောင်။ [[mark:type-sum]] ကီလို function ရဲ့ အောက်မှာ Sum
+      ဆိုတဲ့ function အသစ်ကို ရေးပါမယ်။ နာမည်ကို English စာလုံးကြီးနဲ့ စထားတာက၊ တခြား package
+      တွေကပါ ပြန်သုံးနိုင်တဲ့ ကိရိယာ မျိုး ဖြစ်လို့ပါ။ [[mark:sel-tparam]] function နာမည်ရဲ့ နောက်က
+      လေးထောင့်ကွင်းထဲမှာ
+      T ဆိုတဲ့ type parameter ကို ကြေညာထားပါတယ်။ T ရဲ့ နောက်က int ဒါမှမဟုတ် float64 ဆိုတဲ့
+      အပိုင်းကိုတော့ constraint လို့ ခေါ်ပြီး၊ T နေရာမှာ ဘယ် type တွေ ဝင်ခွင့်ရှိလဲ ဆိုတာကို
+      သတ်မှတ်ပါတယ်။ [[mark:sel-vart]] အထဲမှာ total ကို T type နဲ့ ကြေညာထားလို့၊ T က int ဖြစ်ဖြစ်
+      float64 ဖြစ်ဖြစ် သူ့ရဲ့ zero value ဖြစ်တဲ့ သုညနဲ့ စပါတယ်။ ကျန်တဲ့ loop ကတော့ အပေါ်က function နှစ်ခုနဲ့
+      အတူတူပါပဲ။ [[mark:type-sumcalls]] main ထဲမှာ Sum ကို ပို့ခ slice နဲ့ တစ်ခါ၊ ကီလို slice နဲ့
+      တစ်ခါ ခေါ်ပါမယ်။ T ကို ဘယ်နေရာမှာမှ ကိုယ်တိုင် ရေးမပေးထားတာကို သတိထားပါ။ compiler က
+      ပေးလိုက်တဲ့ slice ကို ကြည့်ပြီး သူ့ဘာသာ သိပါတယ်။
+    sources:
+      - {
+          title: "Tutorial: Getting started with generics",
+          url: "https://go.dev/doc/tutorial/generics",
+        }
+      - {
+          title: "The Go Programming Language Specification — Type constraints",
+          url: "https://go.dev/ref/spec#Type_constraints",
+        }
+    actions:
+      - {
+          id: close-stamp,
+          type: whiteboard.apply,
+          at: { mark: close-stamp },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum }
+        target: { file: main.go, after: "\treturn total\n}\n", occurrence: 2 }
+        text: "\n// Sum adds up numbers of one kind: kyats (int) or kilograms (float64).\nfunc Sum[T int | float64](xs []T) T {\n\tvar total T\n\tfor _, x := range xs {\n\t\ttotal += x\n\t}\n\treturn total\n}\n"
+        cadence: line-by-line
+      - id: sel-tparam
+        type: editor.select
+        at: { mark: sel-tparam }
+        target: { file: main.go, text: "[T int | float64]", occurrence: 1 }
+      - id: sel-vart
+        type: editor.select
+        at: { mark: sel-vart }
+        target: { file: main.go, text: "var total T", occurrence: 1 }
+      - id: type-sumcalls
+        type: editor.type
+        at: { mark: type-sumcalls }
+        target:
+          { file: main.go, after: "\tfmt.Println(sumKg([]float64{2.5, 1, 0.5}))\n", occurrence: 1 }
+        text: "\tfmt.Println(Sum([]int{6000, 4500, 2000}))\n\tfmt.Println(Sum([]float64{2.5, 1, 0.5}))\n"
+        cadence: line-by-line
+
+  - id: filter
+    chapter: Filter နဲ့ any
+    narration: >-
+      [[mark:open-parcel]] generics က ပေါင်းတဲ့ အလုပ် တစ်ခုတည်း အတွက် မဟုတ်ပါဘူး။ ပါဆယ် စာရင်းထဲက
+      တစ်ကီလိုနဲ့ အထက် ပါဆယ်တွေကိုပဲ ရွေးထုတ်ချင်တယ် ဆိုပါစို့။ [[mark:sel-weight]] parcel ဖိုင်ထဲက
+      Parcel type မှာ အလေးချိန်ကို ကီလိုနဲ့ မှတ်ထားတဲ့ field ပါပါတယ်။ [[mark:back-main]] ဒါဆို main
+      ဖိုင်ကို ပြန်သွားပြီး Filter ဆိုတဲ့ function ကို ရေးပါမယ်။ [[mark:type-filter]] ဒီ function
+      က ဘယ် type slice မဆို ယူပြီး၊ ထားမလား ဖယ်မလား ဆုံးဖြတ်ပေးတဲ့ function တစ်ခုကိုပါ ယူပါတယ်။
+      ထားမယ် ဆိုတဲ့ item တွေကိုပဲ slice အသစ်ထဲ append လုပ်ပြီး ပြန်ပေးပါတယ်။ [[mark:sel-keep]] ဒီ
+      parameter က ပြီးခဲ့တဲ့ lesson မှာ လုပ်ခဲ့သလို function တစ်ခုကို တန်ဖိုး အဖြစ် လက်ခံတာပါ။ T
+      တစ်ခုကို ယူပြီး true ဒါမှမဟုတ် false ကို ပြန်ပေးရပါမယ်။ [[mark:sel-any]] ဒီ တစ်ခါ constraint
+      က any ပါ။ any ဆိုတာ ဘယ် type မဆို ဝင်ခွင့်ရှိတယ် ဆိုတဲ့ အဓိပ္ပာယ်ပါ။ Filter က item တွေကို
+      ကိုယ်တိုင် မပေါင်း၊ မနှိုင်းယှဉ်ဘဲ ဆုံးဖြတ်ပေးတဲ့ function ဆီကို လွှဲပေးရုံပဲ လုပ်လို့ type ကို
+      ကန့်သတ်စရာ မလိုပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Type constraints",
+          url: "https://go.dev/ref/spec#Type_constraints",
+        }
+      - {
+          title: "The Go Programming Language Specification — Function types",
+          url: "https://go.dev/ref/spec#Function_types",
+        }
+    actions:
+      - { id: open-parcel, type: workspace.openFile, at: { mark: open-parcel }, path: parcel.go }
+      - id: sel-weight
+        type: editor.select
+        at: { mark: sel-weight }
+        target: { file: parcel.go, text: "WeightKg float64 // weight in kilograms", occurrence: 1 }
+      - { id: back-main, type: workspace.openFile, at: { mark: back-main }, path: main.go }
+      - id: type-filter
+        type: editor.type
+        at: { mark: type-filter }
+        target: { file: main.go, after: "\treturn total\n}\n", occurrence: 3 }
+        text: "\n// Filter keeps the items that keep says yes to.\nfunc Filter[T any](xs []T, keep func(T) bool) []T {\n\tvar out []T\n\tfor _, x := range xs {\n\t\tif keep(x) {\n\t\t\tout = append(out, x)\n\t\t}\n\t}\n\treturn out\n}\n"
+        cadence: line-by-line
+      - id: sel-keep
+        type: editor.select
+        at: { mark: sel-keep }
+        target: { file: main.go, text: "keep func(T) bool", occurrence: 1 }
+      - id: sel-any
+        type: editor.select
+        at: { mark: sel-any }
+        target: { file: main.go, text: "[T any]", occurrence: 1 }
+
+  - id: use-filter
+    narration: >-
+      [[mark:type-heavy]] main ထဲမှာ ပါဆယ် သုံးခု ထည့်ပြီး Filter ကို ခေါ်ပါမယ်။ ဆုံးဖြတ်ပေးတဲ့
+      function က ပါဆယ်ရဲ့ အလေးချိန် တစ်ကီလို ရှိရင် ဒါမှမဟုတ် ပိုရင် true ကို ပြန်ပေးပါတယ်။ ပြီးတော့
+      ရွေးလို့ရတဲ့ ပါဆယ် အရေအတွက်နဲ့ ပထမ ပါဆယ်ရဲ့ code ကို print ထုတ်ပါမယ်။ [[mark:run-2]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - id: type-heavy
+        type: editor.type
+        at: { mark: type-heavy }
+        target:
+          { file: main.go, after: "\tfmt.Println(Sum([]float64{2.5, 1, 0.5}))\n", occurrence: 1 }
+        text: "\tparcels := []Parcel{\n\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1},\n\t\t{Code: \"YGN-0001\", To: \"YGN\", WeightKg: 0.5},\n\t}\n\theavy := Filter(parcels, func(p Parcel) bool { return p.WeightKg >= 1 })\n\tfmt.Println(len(heavy), heavy[0].Code)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "2 MDY-0001",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-sum,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "func Sum[T int | float64](xs []T) T {",
+        }
+      - {
+          id: expect-file-filter,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "func Filter[T any](xs []T, keep func(T) bool) []T {",
+        }
+
+  - id: read-generic
+    narration: >-
+      [[mark:point-sum-int]] တတိယ စာကြောင်းက generic Sum ကို ပို့ခတွေနဲ့ ခေါ်ထားတာပါ။ ပထမ စာကြောင်းနဲ့
+      အဖြေ အတူတူ ရပါတယ်။ [[mark:point-sum-kg]] စတုတ္ထ စာကြောင်းကလည်း လေးကီလို ဆိုတဲ့ အဖြေ အတူတူ ပါပဲ။
+      function တစ်ခုတည်းက type နှစ်မျိုးလုံးကို မှန်မှန် ပေါင်းပေးနိုင်တာပါ။ [[mark:point-filter]]
+      နောက်ဆုံး စာကြောင်းမှာတော့ နှစ် နဲ့ မန္တလေး ပါဆယ် နံပါတ် တစ် ကို တွေ့ရပါတယ်။ နှစ်ကီလိုခွဲ
+      ပါဆယ်နဲ့ တစ်ကီလို ပါဆယ် နှစ်ခု ကျန်ပြီး၊ ကီလိုဝက် ပါဆယ်ကို ဖယ်လိုက်တာပါ။ ဒီ ခေါ်တဲ့ နေရာမှာတော့
+      compiler က T ကို Parcel လို့ ဖြည့်ပေးလိုက်တာပါ။
+    sources:
+      - {
+          title: "Tutorial: Getting started with generics",
+          url: "https://go.dev/doc/tutorial/generics",
+        }
+    actions:
+      - {
+          id: point-sum-int,
+          type: console.point,
+          at: { mark: point-sum-int },
+          target: { text: "12500", occurrence: 2 },
+        }
+      - {
+          id: point-sum-kg,
+          type: console.point,
+          at: { mark: point-sum-kg },
+          target: { text: "4", occurrence: 2 },
+        }
+      - {
+          id: point-filter,
+          type: console.point,
+          at: { mark: point-filter },
+          target: { text: "2 MDY-0001" },
+        }
+
+  - id: constraint
+    chapter: Constraint က စစ်ပေးတာ
+    narration: >-
+      [[mark:collapse-2]] ဒါဆို constraint ထဲမှာ မပါတဲ့ type ကို ပေးလိုက်ရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။
+      [[mark:type-strings]] main ရဲ့ အောက်ဆုံးမှာ မြို့ code နှစ်ခု ပါတဲ့ string slice ကို Sum နဲ့
+      ပေါင်းခိုင်းပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Satisfying a type constraint",
+          url: "https://go.dev/ref/spec#Satisfying_a_type_constraint",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-strings
+        type: editor.type
+        at: { mark: type-strings }
+        target:
+          { file: main.go, after: "\tfmt.Println(len(heavy), heavy[0].Code)\n", occurrence: 1 }
+        text: "\tfmt.Println(Sum([]string{\"MDY\", \"NPT\"}))\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "string does not satisfy int | float64",
+          timeoutMs: 8000,
+        }
+
+  - id: read-constraint
+    narration: >-
+      [[mark:point-failed]] ဒီ တစ်ခါတော့ compile error ပါ။ ဒါကြောင့် ဘာမှ run မသွားဘဲ အပေါ်က
+      စာကြောင်းတွေတောင် မထွက်လာပါဘူး။ [[mark:point-constraint]] main ဖိုင်ရဲ့ line ငါးဆယ့်ငါး၊ string
+      slice ကို ပေးလိုက်တဲ့ နေရာမှာ ဖြစ်တာပါ။ string က constraint ထဲမှာ မပါလို့ T နေရာမှာ ထည့်လို့
+      မရဘူးလို့ ပြောနေတာပါ။ [[mark:board-constraint]] constraint ဆိုတာ T ဆိုတဲ့ နေရာလွတ်မှာ ဘယ် type
+      တွေ ဝင်ခွင့်ရှိလဲ ဆိုတဲ့ စည်းကမ်းပါ။ [[mark:draw-union]] Sum ရဲ့ constraint က int နဲ့ float64
+      နှစ်ခုထဲက တစ်ခုကိုပဲ ခွင့်ပြုထားလို့ string ကို ငြင်းတာပါ။ ဒီ စည်းကမ်း ရှိလို့ပဲ function ထဲမှာ
+      ပေါင်းခွင့်ကိုလည်း compiler က ပေးတာပါ။ [[mark:draw-any]] constraint ကို any လို့ ရေးရင်တော့ ဘယ်
+      type မဆို ဝင်လာနိုင်လို့၊ ပေါင်းတဲ့ line ကိုတောင် compiler က လက်မခံတော့ပါဘူး။ [[mark:draw-more]]
+      အသုံးများတဲ့ constraint နှစ်ခု ရှိပါသေးတယ်။ comparable က တူမတူ စစ်လို့ရတဲ့ type တွေပါ။ cmp
+      package ရဲ့ Ordered ကတော့ အငယ်အကြီး နှိုင်းယှဉ်ပြီး စီလို့ရတဲ့ type တွေ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Type constraints",
+          url: "https://go.dev/ref/spec#Type_constraints",
+        }
+      - { title: "cmp package — Ordered", url: "https://pkg.go.dev/cmp#Ordered" }
+    actions:
+      - {
+          id: point-failed,
+          type: console.point,
+          at: { mark: point-failed },
+          target: { text: "Build failed" },
+        }
+      - {
+          id: point-constraint,
+          type: console.point,
+          at: { mark: point-constraint },
+          target: { text: "string does not satisfy" },
+        }
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-constraint } }
+      - {
+          id: board-constraint,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-union,
+          type: whiteboard.apply,
+          at: { mark: draw-union },
+          upsertIds: [c-box, c-union, c-union-n, c-string, c-string-x, c-string-n],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-any,
+          type: whiteboard.apply,
+          at: { mark: draw-any },
+          upsertIds: [c-any, c-any-n],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-more,
+          type: whiteboard.apply,
+          at: { mark: draw-more },
+          upsertIds: [c-comp, c-comp-n, c-ord, c-ord-n],
+          drawMs: 1800,
+        }
+
+  - id: when
+    narration: >-
+      [[mark:close-constraint]] ဒါဆို ဒီ line ကို comment အဖြစ် ပြောင်းပြီး ပိတ်လိုက်ပါမယ်။
+      [[mark:type-comment]] ရှေ့မှာ comment သင်္ကေတ ထည့်လိုက်တော့ compiler က ဒီ line ကို ကျော်သွားပြီး၊
+      program က ခုနက ဒုတိယ အကြိမ် run တုန်းက အတိုင်း ပြန်ဖြစ်သွားပါပြီ။ [[mark:board-when]] တကယ်တော့
+      generics ကို ကိုယ်တို့ အရင်ကတည်းက သုံးနေခဲ့ပါပြီ။ [[mark:draw-slices]] lesson ဆယ့်ငါးမှာ
+      ဖုန်းဘေလ်တွေကို sort လုပ်ခဲ့တဲ့ function နဲ့ အကြီးဆုံးကို ရှာခဲ့တဲ့ function က slices package ထဲက
+      generic function တွေပါ။ ဒါကြောင့် int slice ကိုရော string slice ကိုပါ သုံးလို့ရတာပါ။
+      [[mark:draw-rule]] ဒါပေမဲ့ ကိုယ်ပိုင် code မှာ generics ကို အရင်ဆုံး မစဉ်းစားပါနဲ့။ type တစ်ခု
+      အတွက် သာမန် function ကို အရင် ရေးပါ။ တူတဲ့ code ကို နောက် type တစ်ခုအတွက် copy ကူးတော့မယ်
+      ဆိုမှ generics ကို သုံးပါ။ [[mark:draw-methods]] Go ရဲ့ နောက်ပိုင်း version တွေမှာ method တွေမှာလည်း
+      ကိုယ်ပိုင် type parameter ထားလို့ ရလာပါပြီ၊ ဒါပေမဲ့ ဒီ course မှာတော့ မသုံးပါဘူး။
+    sources:
+      - { title: "slices package", url: "https://pkg.go.dev/slices" }
+      - { title: "The Go Blog — When To Use Generics", url: "https://go.dev/blog/when-generics" }
+      - { title: "Go 1.27 Release Notes", url: "https://go.dev/doc/go1.27" }
+    actions:
+      - {
+          id: close-constraint,
+          type: whiteboard.apply,
+          at: { mark: close-constraint },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: "heavy[0].Code)\n\t", occurrence: 1 }
+        text: "// "
+      - {
+          id: expect-file-comment,
+          type: expect.file,
+          at: { afterAction: type-comment },
+          path: main.go,
+          contains: "\t// fmt.Println(Sum([]string{\"MDY\", \"NPT\"}))\n",
+        }
+      - {
+          id: board-when,
+          type: whiteboard.apply,
+          at: { mark: board-when },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-slices,
+          type: whiteboard.apply,
+          at: { mark: draw-slices },
+          upsertIds: [w-slices, w-slices-n],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [w-box, w-r1, w-r2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-methods,
+          type: whiteboard.apply,
+          at: { mark: draw-methods },
+          upsertIds: [w-methods],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်မှာ Sum ကို item တစ်ခုမှ မပါတဲ့ int slice အလွတ်နဲ့
+      ခေါ်ထားပါတယ်။ [[mark:quiz-line]] ဒီ program က သုည ကို print ထုတ်မလား၊ ဒါမှမဟုတ် panic ဖြစ်ပြီး
+      ရပ်သွားမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ သုည
+      ထွက်တာပါ။ ဘာကြောင့်လဲဆိုတော့ total ကို T ရဲ့ zero value နဲ့ စထားပြီး၊ slice ထဲမှာ ဘာမှ မရှိလို့
+      loop ထဲကို တစ်ခေါက်မှ မဝင်ပါဘူး။ ဒါကြောင့် total ကို ဒီအတိုင်း ပြန်ပေးလိုက်ပြီး၊ T က int ဖြစ်လို့
+      သုည ထွက်လာတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — The zero value",
+          url: "https://go.dev/ref/spec#The_zero_value",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ type တစ်ခုချင်းအတွက် တူတဲ့ code ကို copy ကူးမယ့်အစား
+      generics ကို သုံးလို့ရပါတယ်။ [[mark:recap-tparam]] function နာမည်ရဲ့ နောက်က လေးထောင့်ကွင်းထဲမှာ T ဆိုတဲ့
+      type parameter နဲ့ သူ့ရဲ့ constraint ကို ရေးပြီး၊ ခေါ်တဲ့အခါ compiler က T ကို ဖြည့်ပေးပါတယ်။
+      [[mark:recap-any]] ဘယ် type မဆို ရတဲ့အခါ any ကို သုံးပြီး၊ constraint ထဲ မပါတဲ့ type ကိုတော့
+      compile ကတည်းက ငြင်းပါတယ်။ နောက် lesson မှာတော့ range loop ကို ကိုယ်ပိုင် function တွေနဲ့
+      သုံးတဲ့ iterator အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Blog — An Introduction To Generics",
+          url: "https://go.dev/blog/intro-generics",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-tparam
+        type: editor.select
+        at: { mark: recap-tparam }
+        target: { file: main.go, text: "[T int | float64]", occurrence: 1 }
+      - id: recap-any
+        type: editor.select
+        at: { mark: recap-any }
+        target: { file: main.go, text: "[T any]", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
