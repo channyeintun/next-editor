@@ -40,7 +40,6 @@ import {
   CollaborationAssetQuotaError,
 } from "../../db/collaborationQueries";
 import { requireUser } from "../auth/requireUser";
-import { getCurrentUser } from "../auth/session";
 import { collaborationAssetKey, readCollaborationAsset } from "../collaboration/assetStore";
 import { exactArrayBuffer, randomToken } from "../collaboration/bytes";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
@@ -61,7 +60,7 @@ import {
   scheduleAuditEvent,
   scheduleClosedRoomCleanup,
 } from "./collaborationSideEffects";
-import { isAllowedCollaborationOrigin } from "./collaborationTransportAuth";
+import { currentTransportUser, isAllowedCollaborationOrigin } from "./collaborationTransportAuth";
 import { collaborationVoiceRoute } from "./collaborationVoice";
 
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
@@ -628,8 +627,9 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
   // The voice socket's Origin rule: the session cookie alone does not show
   // that the app itself opened this socket.
   if (!isAllowedCollaborationOrigin(c)) return c.json({ error: "unauthorized" }, 403);
-  const user = await getCurrentUser(c);
-  if (!user) return c.json({ error: "not signed in" }, 401);
+  const signedIn = await currentTransportUser(c);
+  if (!signedIn) return c.json({ error: "not signed in" }, 401);
+  const { user, authSessionId } = signedIn;
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const sessionId = collaborationIdSchema.safeParse(c.req.query("sessionId"));
   const attemptId = collaborationIdSchema.safeParse(c.req.query("attemptId"));
@@ -670,6 +670,7 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
     roleVersion: access.role_version,
     sessionId: sessionId.data,
     attemptId: attemptId.data,
+    authSessionId,
   });
 });
 

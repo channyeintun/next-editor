@@ -35,6 +35,7 @@ import {
   getCollaborationRoomAccess,
   type CollaborationRoomAccess,
 } from "../../db/collaborationQueries";
+import { getSessionUser } from "../../db/queries";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
@@ -48,6 +49,10 @@ import {
 vi.mock("../../db/collaborationQueries", () => ({
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
   getCollaborationAsset: vi.fn<typeof getCollaborationAsset>(),
+}));
+
+vi.mock("../../db/queries", () => ({
+  getSessionUser: vi.fn<typeof getSessionUser>(),
 }));
 
 vi.stubGlobal(
@@ -128,8 +133,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The auth session the Worker saw sign `userId` in; see signedInAs. */
+function authSessionOf(userId: string): string {
+  return `session-of-${userId}`;
+}
+
+/** Every authSessionOf session is signed in, unless a test signs it out. */
+function signedInAs(_db: unknown, authSessionId: string) {
+  const prefix = "session-of-";
+  return Promise.resolve(
+    authSessionId.startsWith(prefix)
+      ? ({ id: authSessionId.slice(prefix.length) } as Awaited<ReturnType<typeof getSessionUser>>)
+      : null,
+  );
+}
+
 beforeEach(() => {
   vi.mocked(getCollaborationRoomAccess).mockReset();
+  vi.mocked(getSessionUser).mockReset().mockImplementation(signedInAs);
 });
 
 /** A room whose durable document starts as `seed` leaves the shared test document. */
@@ -320,6 +341,7 @@ function canonicalSession(
     roleVersion,
     sessionId,
     attemptId: uuid(),
+    authSessionId: authSessionOf(userId),
   };
 }
 
@@ -1216,6 +1238,73 @@ describe("CollaborationRoomDurableObject silent sockets", () => {
 
     expect(listenerChecks()).toHaveLength(2);
     expect(listener.closeCode).toBeNull();
+  });
+});
+
+// Each socket used to be checked against the sign-in session only at its
+// upgrade: signing out (or the session expiring) left an open socket reading
+// the room and, for an editor, writing it until it closed on its own.
+describe("CollaborationRoomDurableObject signed-out sessions", () => {
+  it("closes a socket whose session was signed out when it is revalidated", async () => {
+    const { room, connect, edit, persistedText } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
+    // The membership is unchanged, as after a sign-out.
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
+    vi.mocked(getSessionUser).mockResolvedValue(null);
+
+    await room.webSocketMessage(member as never, edit("+after-logout"));
+    await room.webSocketMessage(
+      member as never,
+      toArrayBuffer(encodeCollaborationSyncStep1(new Y.Doc())),
+    );
+
+    expect(getSessionUser).toHaveBeenCalledWith(expect.anything(), authSessionOf(MEMBER_ID));
+    expect(acks(member)).toEqual([]);
+    expect(errors(member)).toEqual([
+      expect.objectContaining({ code: "access-revoked", fatal: true }),
+    ]);
+    expect(member.closeCode).toBe(4003);
+    expect(member.frames().filter((frame) => frame.kind === "sync")).toEqual([]);
+    expect(await persistedText()).toBe("seed");
+  });
+
+  it("closes a socket whose session now belongs to someone else", async () => {
+    const { room, connect, edit } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
+    vi.mocked(getSessionUser).mockResolvedValue({ id: PEER_ID } as never);
+
+    await room.webSocketMessage(member as never, edit("+nope"));
+
+    expect(member.closeCode).toBe(4003);
+  });
+
+  it("closes a silent socket of a signed-out session on the next broadcast", async () => {
+    const { room, connect, edit } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const silent = connect(MEMBER_ID, "viewer", { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockImplementation(async (_db, _room, userId) =>
+      roomAccess(userId === MEMBER_ID ? "viewer" : "owner", 1),
+    );
+    vi.mocked(getSessionUser).mockImplementation(async (db, authSessionId) =>
+      authSessionId === authSessionOf(MEMBER_ID) ? null : signedInAs(db, authSessionId),
+    );
+
+    await room.webSocketMessage(owner as never, edit("+first"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(silent.closeCode).toBe(4003);
+  });
+
+  it("keeps a socket whose session is still signed in", async () => {
+    const { room, connect, edit } = await createRoom();
+    const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
+
+    await room.webSocketMessage(member as never, edit("+edit"));
+
+    expect(acks(member)).toHaveLength(1);
+    expect(member.closeCode).toBeNull();
   });
 });
 

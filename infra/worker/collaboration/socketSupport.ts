@@ -1,4 +1,5 @@
-import type { z } from "zod";
+import * as z from "zod";
+import { getSessionUser } from "../../db/queries";
 
 // Plumbing the room and voice Durable Objects share: their hibernatable
 // sockets, the canonical session the Worker hands them in a header, their
@@ -21,6 +22,27 @@ export const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
  * laptop plus a phone, plus a lingering socket not yet reaped.
  */
 export const MAX_SOCKETS_PER_USER = 4;
+
+/**
+ * The auth session (the session cookie's value) that authenticated a socket's
+ * upgrade, as the Worker forwards it in the canonical session. Sessions are
+ * UUIDs; the bound is generous.
+ */
+export const authSessionIdSchema = z.string().min(1).max(128);
+
+/**
+ * Whether the auth session that authenticated a socket is still signed in, for
+ * `userId`. Membership alone is not enough: signing out deletes the session and
+ * an expired one stops counting, and an open socket must end with it.
+ */
+export async function isAuthSessionCurrent(
+  db: D1Database,
+  authSessionId: string,
+  userId: string,
+): Promise<boolean> {
+  const user = await getSessionUser(db, authSessionId);
+  return user?.id === userId;
+}
 
 export function isOpen(socket: WebSocket): boolean {
   return socket.readyState === WEBSOCKET_OPEN;

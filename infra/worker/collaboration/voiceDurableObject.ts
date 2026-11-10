@@ -47,9 +47,11 @@ import { randomToken } from "./bytes";
 import type { RoomSqliteStorage } from "./roomSqliteDocumentStore";
 import {
   ACCESS_REVALIDATION_INTERVAL_MS,
+  authSessionIdSchema,
   ConnectionQuota,
   decodeHeaderJson,
   encodeHeaderJson,
+  isAuthSessionCurrent,
   isCurrentRoom,
   isOpen,
   MAX_SOCKETS_PER_USER,
@@ -79,6 +81,7 @@ const canonicalVoiceSessionSchema = z
     roleVersion: z.number().int().positive(),
     collaborationSessionId: collaborationIdSchema,
     maxMembers: z.number().int().min(1).max(MAX_VOICE_ROSTER_SIZE),
+    authSessionId: authSessionIdSchema,
   })
   .strict();
 
@@ -633,11 +636,10 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     ) {
       return attachment;
     }
-    const access = await getCollaborationRoomAccess(
-      this.env.DB,
-      attachment.roomId,
-      attachment.userId,
-    );
+    const [access, signedIn] = await Promise.all([
+      getCollaborationRoomAccess(this.env.DB, attachment.roomId, attachment.userId),
+      isAuthSessionCurrent(this.env.DB, attachment.authSessionId, attachment.userId),
+    ]);
     const latest = attachmentFor(socket);
     if (
       !latest ||
@@ -645,6 +647,14 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       latest.voiceConnectionId !== attachment.voiceConnectionId ||
       !isOpen(socket)
     ) {
+      return null;
+    }
+    // No control is newer than this: a signed-out or expired session ends
+    // the socket, and releases its media, whatever the membership read says.
+    if (!signedIn) {
+      this.retireSocket(socket, latest, CLOSE_REMOVED, "signed out", {
+        reason: "member-removed",
+      });
       return null;
     }
     // A newer control event won the await interleaving race; preserve it and

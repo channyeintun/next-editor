@@ -24,6 +24,7 @@ import type { Env } from "../env";
 import { collaborationRoute } from "./collaboration";
 
 vi.mock("../auth/session", () => ({
+  SESSION_COOKIE: "ne_session",
   getCurrentUser: vi.fn<typeof getCurrentUser>(),
 }));
 
@@ -446,12 +447,18 @@ describe("GET /rooms/:roomId/websocket", () => {
     "sessionId=30000000-0000-4000-8000-000000000001" +
     "&attemptId=40000000-0000-4000-8000-000000000001&binaryProtocolVersion=3";
 
-  function upgrade(origin: string | null) {
+  const AUTH_SESSION_ID = "50000000-0000-4000-8000-000000000001";
+
+  function upgrade(origin: string | null, cookie: string | null = `ne_session=${AUTH_SESSION_ID}`) {
     return collaborationRoute.request(
       `https://nexteditor.dev/rooms/${ROOM_ID}/websocket?${SOCKET_QUERY}`,
       {
         method: "GET",
-        headers: { Upgrade: "websocket", ...(origin === null ? {} : { Origin: origin }) },
+        headers: {
+          Upgrade: "websocket",
+          ...(origin === null ? {} : { Origin: origin }),
+          ...(cookie === null ? {} : { Cookie: cookie }),
+        },
       },
       { DB: {}, COLLABORATION_ROOMS: {}, PUBLIC_URL: "https://nexteditor.dev" } as unknown as Env,
     );
@@ -494,5 +501,24 @@ describe("GET /rooms/:roomId/websocket", () => {
       expect.anything(),
       expect.objectContaining({ roomId: ROOM_ID, userId: EDITOR_ID, role: "editor" }),
     );
+  });
+
+  // The room object rechecks the sign-in session for as long as the socket
+  // is open, so signing out ends it.
+  it("binds the forwarded session to the sign-in session that opened it", async () => {
+    await upgrade("https://nexteditor.dev");
+
+    expect(forwardCollaborationWebSocket).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ authSessionId: AUTH_SESSION_ID }),
+    );
+  });
+
+  it("answers 401 to an upgrade without a session cookie", async () => {
+    const response = await upgrade("https://nexteditor.dev", null);
+
+    expect(response.status).toBe(401);
+    expect(forwardCollaborationWebSocket).not.toHaveBeenCalled();
   });
 });

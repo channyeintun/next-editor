@@ -8,7 +8,6 @@ import {
 } from "../../../src/voice/protocol";
 import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import { requireUser } from "../auth/requireUser";
-import { getCurrentUser } from "../auth/session";
 import {
   forwardCollaborationVoiceSfuRequest,
   forwardCollaborationVoiceWebSocket,
@@ -16,7 +15,7 @@ import {
   type CanonicalVoiceSession,
 } from "../collaboration/voiceDurableObject";
 import type { Env } from "../env";
-import { isAllowedCollaborationOrigin } from "./collaborationTransportAuth";
+import { currentTransportUser, isAllowedCollaborationOrigin } from "./collaborationTransportAuth";
 
 // The room-scoped voice gateway: availability, the voice WebSocket and the SFU
 // proxy. Voice fails closed on its own flag, Origin policy and D1 membership
@@ -36,8 +35,9 @@ async function resolveVoiceAccess<E extends { Bindings: Env }>(
   if (!isAllowedCollaborationOrigin(c)) {
     return { ok: false, response: c.json({ error: "unauthorized" }, 403) };
   }
-  const user = await getCurrentUser(c);
-  if (!user) return { ok: false, response: c.json({ error: "not signed in" }, 401) };
+  const signedIn = await currentTransportUser(c);
+  if (!signedIn) return { ok: false, response: c.json({ error: "not signed in" }, 401) };
+  const { user, authSessionId } = signedIn;
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
   const sessionId = collaborationIdSchema.safeParse(collaborationSessionId);
   if (!roomId.success || !sessionId.success) {
@@ -58,6 +58,7 @@ async function resolveVoiceAccess<E extends { Bindings: Env }>(
       roleVersion: access.role_version,
       collaborationSessionId: sessionId.data,
       maxMembers: access.max_members,
+      authSessionId,
     },
   };
 }

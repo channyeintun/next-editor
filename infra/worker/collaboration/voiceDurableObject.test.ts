@@ -14,6 +14,7 @@ import {
   getCollaborationRoomAccess,
   type CollaborationRoomAccess,
 } from "../../db/collaborationQueries";
+import { getSessionUser } from "../../db/queries";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
@@ -22,6 +23,10 @@ import { CollaborationVoiceRoomDurableObject } from "./voiceDurableObject";
 
 vi.mock("../../db/collaborationQueries", () => ({
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
+}));
+
+vi.mock("../../db/queries", () => ({
+  getSessionUser: vi.fn<typeof getSessionUser>(),
 }));
 
 stubWebSocketUpgrade(() => new FakeWebSocket());
@@ -60,8 +65,20 @@ afterEach(() => {
   for (const storage of openStorages.splice(0)) storage.close();
 });
 
+/** The auth session the Worker saw sign `userId` in; every one is signed in unless a test says not. */
+function authSessionOf(userId: string): string {
+  return `session-of-${userId}`;
+}
+
 beforeEach(() => {
   vi.mocked(getCollaborationRoomAccess).mockReset();
+  vi.mocked(getSessionUser)
+    .mockReset()
+    .mockImplementation(async (_db, authSessionId) =>
+      authSessionId.startsWith("session-of-")
+        ? ({ id: authSessionId.slice("session-of-".length) } as never)
+        : null,
+    );
 });
 
 function roomAccess(role: CollaborationRole, roleVersion: number): CollaborationRoomAccess {
@@ -122,6 +139,7 @@ function createVoiceRoom(env: Env = {} as Env) {
       publishedMid: null,
       receivingMids: [],
       receivingTracks: [],
+      authSessionId: authSessionOf(userId),
       // Fresh, so a message skips the D1 access revalidation.
       accessCheckedAt: Date.now(),
       ...overrides,
@@ -183,6 +201,7 @@ function createVoiceRoom(env: Env = {} as Env) {
       roleVersion,
       collaborationSessionId: uuid(),
       maxMembers: 10,
+      authSessionId: authSessionOf(userId),
     };
     const response = await room.fetch(
       new Request(`${VOICE_ORIGIN}/websocket`, {
@@ -217,6 +236,7 @@ function createVoiceRoom(env: Env = {} as Env) {
         "roleVersion",
         "collaborationSessionId",
         "maxMembers",
+        "authSessionId",
       ].map((key) => [key, attachment[key]]),
     );
     return room.fetch(
@@ -384,6 +404,54 @@ describe("CollaborationVoiceRoomDurableObject silent sockets", () => {
 
     expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
     expect(listener.closeCode).toBeNull();
+  });
+});
+
+// The voice socket was checked against the sign-in session only at its
+// upgrade, so a signed-out member kept their seat, their roster row and the
+// media already negotiated.
+describe("CollaborationVoiceRoomDurableObject signed-out sessions", () => {
+  it("retires a socket whose session was signed out when it is revalidated", async () => {
+    const room = createVoiceRoom({ ...VOICE_ENABLED_ENV, DB: {} } as Env);
+    const member = room.join(MEMBER_ID, 1, { accessCheckedAt: 0 });
+    const peer = room.join(PEER_ID);
+    // The membership is unchanged, as after a sign-out.
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
+    vi.mocked(getSessionUser).mockResolvedValue(null);
+
+    await room.message(member, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+
+    expect(getSessionUser).toHaveBeenCalledWith(expect.anything(), authSessionOf(MEMBER_ID));
+    expect(member.closeCode).toBe(4003);
+    expect(peer.messages()).toContainEqual(
+      expect.objectContaining({ type: "voice.participant-left" }),
+    );
+    expect(peer.messages()).not.toContainEqual(
+      expect.objectContaining({
+        type: "voice.participant-upsert",
+        participant: expect.objectContaining({ userId: MEMBER_ID, muted: false }),
+      }),
+    );
+  });
+
+  it("keeps a socket whose session is still signed in", async () => {
+    const room = createVoiceRoom({ ...VOICE_ENABLED_ENV, DB: {} } as Env);
+    const member = room.join(MEMBER_ID, 1, { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
+
+    await room.message(member, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+
+    expect(member.closeCode).toBeNull();
   });
 });
 

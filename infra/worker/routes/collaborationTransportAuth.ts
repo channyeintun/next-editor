@@ -1,4 +1,7 @@
 import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
+import type { UserRow } from "../../db/types";
+import { getCurrentUser, SESSION_COOKIE } from "../auth/session";
 import type { Env } from "../env";
 
 // What a collaboration transport (the room socket, the voice socket and the
@@ -30,4 +33,19 @@ export function isAllowedCollaborationOrigin<E extends { Bindings: Env }>(c: Con
   } catch {
     return false;
   }
+}
+
+/**
+ * The signed-in user and the auth session (the session cookie's value) that
+ * authenticated this request, or null when signed out. A socket carries the
+ * session into its room or voice object, which keeps rechecking it, so signing
+ * out or the session expiring ends sockets that are already open.
+ */
+export async function currentTransportUser<E extends { Bindings: Env }>(
+  c: Context<E>,
+): Promise<{ user: UserRow; authSessionId: string } | null> {
+  const authSessionId = getCookie(c, SESSION_COOKIE);
+  if (!authSessionId) return null;
+  const user = await getCurrentUser(c);
+  return user ? { user, authSessionId } : null;
 }

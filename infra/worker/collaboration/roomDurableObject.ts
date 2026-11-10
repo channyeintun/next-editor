@@ -70,9 +70,11 @@ import { exactArrayBuffer } from "./bytes";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
 import {
   ACCESS_REVALIDATION_INTERVAL_MS,
+  authSessionIdSchema,
   ConnectionQuota,
   decodeHeaderJson,
   encodeHeaderJson,
+  isAuthSessionCurrent,
   isCurrentRoom,
   isOpen,
   MAX_SOCKETS_PER_USER,
@@ -107,6 +109,7 @@ const canonicalSocketSessionSchema = z
     roleVersion: z.number().int().positive(),
     sessionId: collaborationIdSchema,
     attemptId: collaborationIdSchema,
+    authSessionId: authSessionIdSchema,
   })
   .strict();
 
@@ -628,8 +631,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       return attachment;
     }
     let access: CollaborationRoomAccess | null;
+    let signedIn: boolean;
     try {
-      access = await getCollaborationRoomAccess(this.env.DB, attachment.roomId, attachment.userId);
+      [access, signedIn] = await Promise.all([
+        getCollaborationRoomAccess(this.env.DB, attachment.roomId, attachment.userId),
+        isAuthSessionCurrent(this.env.DB, attachment.authSessionId, attachment.userId),
+      ]);
     } catch (error) {
       console.error("collaboration_access_check_failed", {
         roomId: attachment.roomId,
@@ -653,6 +660,12 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     // frames may have updated the attachment. Build on what is stored now.
     const latest = attachmentFor(socket);
     if (!latest || !isOpen(socket)) return null;
+    // No control is newer than this: a signed-out or expired session ends
+    // the socket whatever the membership read says.
+    if (!signedIn) {
+      this.rejectSocket(socket, "access-revoked", "Your sign-in session has ended", true, 4003);
+      return null;
+    }
     // A control command that landed during the read is newer than this row;
     // keep it and let a later frame revalidate.
     if (latest.roleVersion !== attachment.roleVersion) return latest;
