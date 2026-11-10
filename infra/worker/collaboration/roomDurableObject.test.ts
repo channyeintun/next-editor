@@ -526,6 +526,97 @@ describe("CollaborationRoomDurableObject document updates", () => {
   });
 });
 
+// Yjs holds back a struct whose origin is missing, and a deletion past a
+// client's clock, and applies them inside whichever later update supplies the
+// dependency. Accepted, they were validated in that other member's update
+// instead of the sender's: a forbidden write then got the victim's edits
+// refused, and a deletion of the victim's future clocks erased everything they
+// typed afterwards.
+describe("CollaborationRoomDurableObject updates with missing dependencies", () => {
+  const VICTIM_CLIENT = 1001;
+
+  function clientUpdate(update: Uint8Array): ArrayBuffer {
+    return toArrayBuffer(
+      encodeCollaborationClientUpdate({ clientId: CLIENT_ID, updateId: uuid(), update }),
+    );
+  }
+
+  it("refuses a write held back on another member's next edit", async () => {
+    const { room, doc, connect, persistedText } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const editor = connect(MEMBER_ID, "editor");
+    const victim = new Y.Doc();
+    victim.clientID = VICTIM_CLIENT;
+    Y.applyUpdate(victim, Y.encodeStateAsUpdate(doc));
+    const beforeVictimEdit = Y.encodeStateVector(victim);
+    victim.getText("scratch").insert(victim.getText("scratch").length, "o");
+    const victimEdit = Y.encodeStateAsUpdate(victim, beforeVictimEdit);
+    const attacker = new Y.Doc();
+    Y.applyUpdate(attacker, Y.encodeStateAsUpdate(victim));
+    attacker.clientID = 4242;
+    attacker.getText("scratch").insert(attacker.getText("scratch").length, "x");
+    attacker.getMap("project").set("schemaVersion", 99);
+    // Everything the attacker wrote waits on the victim's unsent edit.
+    const planted = Y.encodeStateAsUpdate(attacker, Y.encodeStateVector(victim));
+
+    await room.webSocketMessage(editor as never, clientUpdate(planted));
+    await room.webSocketMessage(owner as never, clientUpdate(victimEdit));
+
+    expect(acks(editor)).toEqual([]);
+    expect(errors(editor)).toEqual([
+      expect.objectContaining({ code: "invalid-message", fatal: true }),
+    ]);
+    expect(editor.closeCode).toBe(1008);
+    expect(errors(owner)).toEqual([]);
+    expect(acks(owner)).toHaveLength(1);
+    expect(await persistedText()).toBe("seedo");
+  });
+
+  it("refuses a deletion of another member's future edits", async () => {
+    const { room, doc, connect, persistedText } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const editor = connect(MEMBER_ID, "editor");
+    const forged = new Y.Doc();
+    forged.clientID = VICTIM_CLIENT;
+    Y.applyUpdate(forged, Y.encodeStateAsUpdate(doc));
+    forged.getText("scratch").insert(0, "x".repeat(50));
+    forged.getText("scratch").delete(0, 50);
+    // No structs, only the deletion of the victim's first 50 clocks.
+    const deletion = Y.encodeStateAsUpdate(forged, Y.encodeStateVector(forged));
+    const victim = new Y.Doc();
+    victim.clientID = VICTIM_CLIENT;
+    Y.applyUpdate(victim, Y.encodeStateAsUpdate(doc));
+    const beforeVictimEdit = Y.encodeStateVector(victim);
+    victim.getText("scratch").insert(victim.getText("scratch").length, "o");
+
+    await room.webSocketMessage(editor as never, clientUpdate(deletion));
+    await room.webSocketMessage(
+      owner as never,
+      clientUpdate(Y.encodeStateAsUpdate(victim, beforeVictimEdit)),
+    );
+
+    expect(acks(editor)).toEqual([]);
+    expect(errors(editor)).toEqual([
+      expect.objectContaining({ code: "invalid-message", fatal: true }),
+    ]);
+    expect(acks(owner)).toHaveLength(1);
+    expect(await persistedText()).toBe("seedo");
+  });
+
+  // The client's outbox is stop-and-wait, so its next update never runs ahead
+  // of one the room has not acknowledged.
+  it("still accepts an update that depends only on acknowledged state", async () => {
+    const { room, connect, edit, persistedText } = await createRoom();
+    const editor = connect(MEMBER_ID, "editor");
+
+    await room.webSocketMessage(editor as never, edit("+one"));
+    await room.webSocketMessage(editor as never, edit("+two"));
+
+    expect(acks(editor)).toHaveLength(2);
+    expect(await persistedText()).toBe("seed+one+two");
+  });
+});
+
 describe("CollaborationRoomDurableObject sync requests", () => {
   it("answers a state vector with the missing document state", async () => {
     const { room, connect } = await createRoom();
@@ -677,7 +768,20 @@ describe("CollaborationRoomDurableObject update rate limits", () => {
     for (let index = 0; index < 125; index += 1) {
       await room.webSocketMessage(flooding as never, edit("x"));
     }
-    await room.webSocketMessage(other as never, edit("+mine"));
+    // Its own document: an edit on the shared one would build on the
+    // refused updates, which the room has never seen.
+    const others = new Y.Doc();
+    others.getText("other").insert(0, "+mine");
+    await room.webSocketMessage(
+      other as never,
+      toArrayBuffer(
+        encodeCollaborationClientUpdate({
+          clientId: CLIENT_ID,
+          updateId: uuid(),
+          update: Y.encodeStateAsUpdate(others),
+        }),
+      ),
+    );
 
     expect(acks(flooding)).toHaveLength(30);
     expect(errors(other)).toEqual([]);

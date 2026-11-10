@@ -148,6 +148,24 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
+/**
+ * What `doc` holds back for missing dependencies: structs whose origin it has
+ * not seen and deletions past a client's clock, as Yjs stores them.
+ */
+function heldBackState(doc: Y.Doc): { structs: Uint8Array | null; deletions: Uint8Array | null } {
+  return { structs: doc.store.pendingStructs?.update ?? null, deletions: doc.store.pendingDs };
+}
+
+/** Whether `after` holds back anything `before` did not. */
+function holdsBackMore(
+  before: ReturnType<typeof heldBackState>,
+  after: ReturnType<typeof heldBackState>,
+): boolean {
+  const grew = (previous: Uint8Array | null, next: Uint8Array | null) =>
+    next !== null && (previous === null || !bytesEqual(previous, next));
+  return grew(before.structs, after.structs) || grew(before.deletions, after.deletions);
+}
+
 function sendBinary(socket: WebSocket, bytes: Uint8Array): void {
   if (!isOpen(socket)) return;
   socket.send(exactArrayBuffer(bytes));
@@ -920,11 +938,21 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
           teachingTouched = true;
         }
       };
+      const heldBefore = heldBackState(validationDocument);
       validationDocument.on("afterTransaction", observeTransaction);
       try {
         Y.applyUpdate(validationDocument, frame.update, "server-teaching-validation");
       } finally {
         validationDocument.off("afterTransaction", observeTransaction);
+      }
+      // Yjs applies held-back structs and deletions inside whichever later
+      // update supplies their dependency, so the checks below would judge
+      // them as part of another member's update: a forbidden write got that
+      // member's edits refused, and a deletion of their future clocks erased
+      // what they typed next. The client's outbox is stop-and-wait, so an
+      // honest update never depends on state the room has not acknowledged.
+      if (holdsBackMore(heldBefore, heldBackState(validationDocument))) {
+        throw new Error("the update depends on state the room does not have");
       }
       // Runs on EVERY update, not only teaching ones. `schemaVersion` and the
       // nodes/texts/metadata maps are ordinary CRDT keys on the project root,
