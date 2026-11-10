@@ -7,6 +7,7 @@ import {
 import {
   createCollaborationInvitation,
   createProvisioningCollaborationRoom,
+  getCollaborationAsset,
   getCollaborationRoomAccess,
   recordCollaborationAuditEvent,
   setCollaborationRoomStatus,
@@ -17,6 +18,8 @@ import {
 import { getCurrentUser } from "../auth/session";
 import { publishCollaborationMaintenanceJob } from "../collaboration/qstash";
 import {
+  claimClosedRoomCleanup,
+  confirmClosedRoomCleanup,
   forwardCollaborationWebSocket,
   notifyCollaborationRoomControl,
 } from "../collaboration/roomDurableObject";
@@ -32,6 +35,7 @@ vi.mock("../../db/collaborationQueries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../db/collaborationQueries")>()),
   createCollaborationInvitation: vi.fn<typeof createCollaborationInvitation>(),
   createProvisioningCollaborationRoom: vi.fn<typeof createProvisioningCollaborationRoom>(),
+  getCollaborationAsset: vi.fn<typeof getCollaborationAsset>(),
   getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
   setCollaborationRoomStatus: vi.fn<typeof setCollaborationRoomStatus>(),
   recordCollaborationAuditEvent: vi.fn<typeof recordCollaborationAuditEvent>(async () => {}),
@@ -52,6 +56,8 @@ vi.mock("../collaboration/roomDurableObject", async (importOriginal) => ({
   forwardCollaborationWebSocket: vi.fn<typeof forwardCollaborationWebSocket>(
     async () => new Response(null, { status: 204 }),
   ),
+  claimClosedRoomCleanup: vi.fn<typeof claimClosedRoomCleanup>(async () => true),
+  confirmClosedRoomCleanup: vi.fn<typeof confirmClosedRoomCleanup>(async () => undefined),
 }));
 
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
@@ -112,6 +118,7 @@ async function closeRoom(): Promise<Response> {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCurrentUser).mockResolvedValue({ id: OWNER_ID } as never);
+  vi.mocked(claimClosedRoomCleanup).mockResolvedValue(true);
 });
 
 describe("signed-out callers", () => {
@@ -272,6 +279,45 @@ describe("POST /rooms/:roomId/close", () => {
     );
   });
 
+  // Each repeat close used to publish the purge job again, with no bound: an
+  // owner could spend the QStash budget every room's purge shares.
+  it("does not publish the purge again once the room says it is scheduled", async () => {
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(
+      ownerAccess({ status: "closed", closed_at: CLOSED_AT }),
+    );
+    vi.mocked(notifyCollaborationRoomControl).mockResolvedValue(true);
+    vi.mocked(claimClosedRoomCleanup).mockResolvedValue(false);
+
+    expect((await closeRoom()).status).toBe(200);
+    expect(claimClosedRoomCleanup).toHaveBeenCalledWith(expect.anything(), ROOM_ID, CLOSED_AT);
+    expect(publishCollaborationMaintenanceJob).not.toHaveBeenCalled();
+    expect(notifyCollaborationRoomControl).toHaveBeenCalledOnce();
+  });
+
+  it("tells the room once the purge is published", async () => {
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(ownerAccess());
+    vi.mocked(setCollaborationRoomStatus).mockResolvedValue(
+      room({ status: "closed", closed_at: CLOSED_AT }),
+    );
+    vi.mocked(notifyCollaborationRoomControl).mockResolvedValue(true);
+
+    expect((await closeRoom()).status).toBe(200);
+    expect(confirmClosedRoomCleanup).toHaveBeenCalledWith(expect.anything(), ROOM_ID, CLOSED_AT);
+  });
+
+  it("leaves the purge unconfirmed when publishing fails, so a repeat close retries it", async () => {
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(
+      ownerAccess({ status: "closed", closed_at: CLOSED_AT }),
+    );
+    vi.mocked(notifyCollaborationRoomControl).mockResolvedValue(true);
+    vi.mocked(publishCollaborationMaintenanceJob).mockRejectedValueOnce(new Error("quota"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect((await closeRoom()).status).toBe(200);
+    expect(confirmClosedRoomCleanup).not.toHaveBeenCalled();
+    vi.mocked(console.error).mockRestore();
+  });
+
   it("does not schedule a purge for a room that is already purged", async () => {
     vi.mocked(getCollaborationRoomAccess).mockResolvedValue(
       ownerAccess({ status: "closed", closed_at: CLOSED_AT, purged_at: CLOSED_AT + 1 }),
@@ -280,6 +326,55 @@ describe("POST /rooms/:roomId/close", () => {
 
     expect((await closeRoom()).status).toBe(200);
     expect(publishCollaborationMaintenanceJob).not.toHaveBeenCalled();
+  });
+});
+
+// A closed room's document and assets are kept seven days. When its purge
+// was never scheduled they stayed, and members could still read them.
+describe("a closed room past its retention", () => {
+  const ASSET_ID = "a".repeat(64);
+  const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+  const expired = () =>
+    ownerAccess({ status: "closed", closed_at: Date.now() - RETENTION_MS - 1000 });
+  const env = () =>
+    ({
+      DB: {},
+      BUCKET: { get: async () => ({ body: "asset", httpEtag: '"etag"' }) },
+      COLLABORATION_ROOMS: {
+        getByName: () => ({ fetch: async () => Response.json({ snapshot: {} }) }),
+      },
+    }) as unknown as Env;
+
+  it("no longer serves its assets even though its purge has not run", async () => {
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(expired());
+    vi.mocked(getCollaborationAsset).mockResolvedValue({
+      room_id: ROOM_ID,
+      asset_id: ASSET_ID,
+      size: 5,
+      mime_type: "image/png",
+      uploaded_by: OWNER_ID,
+      created_at: 1,
+    });
+
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/assets/${ASSET_ID}`,
+      { method: "GET" },
+      env(),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("no longer exports its document even though its purge has not run", async () => {
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue(expired());
+
+    const response = await collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/export`,
+      { method: "GET" },
+      env(),
+    );
+
+    expect(response.status).toBe(410);
   });
 });
 

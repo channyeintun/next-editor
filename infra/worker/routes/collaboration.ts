@@ -53,6 +53,10 @@ import {
   initializeCollaborationRoomSqliteDocument,
   initializeCollaborationRoomTeachingDocument,
 } from "../collaboration/roomDurableObject";
+import {
+  COLLABORATION_ROOM_RETENTION_MS,
+  hasCollaborationRoomRetentionEnded,
+} from "../collaboration/qstash";
 import { collaborationRoomLocationHint } from "../collaboration/roomLocation";
 import { collaborationMaintenanceRoute } from "./collaborationMaintenance";
 import {
@@ -88,6 +92,14 @@ function roomResponse(room: CollaborationRoomRow, role: CollaborationRoomAccess[
     },
     membership: { role },
   };
+}
+
+/** A room whose retention ended stays unreadable even before its purge runs. */
+function isRoomExpired(room: CollaborationRoomRow): boolean {
+  return (
+    room.purged_at !== null ||
+    (room.closed_at !== null && hasCollaborationRoomRetentionEnded(room.closed_at))
+  );
 }
 
 function memberResponse(member: Awaited<ReturnType<typeof listCollaborationRoomMembers>>[number]) {
@@ -169,10 +181,19 @@ collaborationRoute.post("/rooms", requireUser, async (c) => {
   try {
     room = await createProvisioningCollaborationRoom(c.env.DB, {
       ownerId: user.id,
+      retainedSince: Date.now() - COLLABORATION_ROOM_RETENTION_MS,
     });
   } catch (error) {
     if (error instanceof CollaborationRoomQuotaError) {
-      return c.json({ error: "active collaboration room limit reached" }, 409);
+      return c.json(
+        {
+          error:
+            error.limit === "active"
+              ? "active collaboration room limit reached"
+              : "collaboration room limit reached: a closed room counts until its retention ends",
+        },
+        409,
+      );
     }
     throw error;
   }
@@ -344,7 +365,7 @@ collaborationRoute.get("/rooms/:roomId/assets/:assetId", requireUser, async (c) 
   const access = await getCollaborationRoomAccess(c.env.DB, roomId.data, user.id);
   if (
     !access ||
-    access.purged_at !== null ||
+    isRoomExpired(access) ||
     (access.status !== "active" && access.status !== "closed")
   ) {
     return c.json({ error: "not found" }, 404);
@@ -372,7 +393,7 @@ collaborationRoute.get("/rooms/:roomId/export", requireUser, async (c) => {
   if (!roomIdResult.success) return c.json({ error: "invalid room id" }, 400);
   const access = await getCollaborationRoomAccess(c.env.DB, roomIdResult.data, user.id);
   if (!access || access.member_role !== "owner") return c.json({ error: "not found" }, 404);
-  if (access.purged_at !== null) return c.json({ error: "room document has expired" }, 410);
+  if (isRoomExpired(access)) return c.json({ error: "room document has expired" }, 410);
   try {
     const document = await exportCollaborationRoomSqliteDocument(c.env, access.id);
     if (!document) return c.json({ error: "collaboration unavailable" }, 503);

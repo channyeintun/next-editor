@@ -7,7 +7,7 @@ import {
 } from "../../db/collaborationQueries";
 import { deleteCollaborationRoomAssets } from "../collaboration/assetStore";
 import {
-  COLLABORATION_ROOM_RETENTION_MS,
+  hasCollaborationRoomRetentionEnded,
   collaborationMaintenanceDestination,
   collaborationMaintenanceJobSchema,
   verifyQStashSignature,
@@ -82,7 +82,7 @@ collaborationMaintenanceRoute.post("/jobs/maintenance", async (c) => {
   if (
     room.status !== "closed" ||
     room.closed_at !== job.data.closedAt ||
-    Date.now() < job.data.closedAt + COLLABORATION_ROOM_RETENTION_MS
+    !hasCollaborationRoomRetentionEnded(job.data.closedAt)
   ) {
     return c.body(null, 204);
   }

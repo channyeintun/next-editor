@@ -65,6 +65,7 @@ import {
 } from "./roomSqliteDocumentStore";
 import { AppliedMembershipChanges } from "./appliedMembershipChanges";
 import { collaborationAssetKey } from "./assetStore";
+import { ClosedRoomCleanupLedger } from "./closedRoomCleanupLedger";
 import { AwarenessClientOwners } from "./awarenessClientOwners";
 import { exactArrayBuffer } from "./bytes";
 import type { CollaborationRoomLocationHint } from "./roomLocation";
@@ -301,6 +302,52 @@ export async function exportCollaborationRoomSqliteDocument(
   return (await response.json()) as CollaborationBootstrapResponse;
 }
 
+const cleanupScheduleSchema = z
+  .object({ roomId: collaborationIdSchema, closedAt: z.number().int().nonnegative() })
+  .strict();
+
+async function postCleanupSchedule(
+  env: Env,
+  roomId: string,
+  closedAt: number,
+  step: "claim" | "confirm",
+): Promise<Response | null> {
+  const stub = roomStub(env, roomId);
+  if (!stub) return null;
+  const response = await stub.fetch(`${ROOM_ORIGIN}/cleanup/${step}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cleanupScheduleSchema.parse({ roomId, closedAt })),
+  });
+  if (!response.ok) throw new Error(`room cleanup ${step} failed with ${response.status}`);
+  return response;
+}
+
+/**
+ * Whether the purge for the close at `closedAt` should be published now (see
+ * ClosedRoomCleanupLedger). True when the room cannot say, so a purge is
+ * never lost to an unreachable room.
+ */
+export async function claimClosedRoomCleanup(
+  env: Env,
+  roomId: string,
+  closedAt: number,
+): Promise<boolean> {
+  const response = await postCleanupSchedule(env, roomId, closedAt, "claim");
+  if (!response) return true;
+  const body = (await response.json()) as { claimed?: unknown };
+  return body.claimed !== false;
+}
+
+/** Records that the purge for the close at `closedAt` is published. */
+export async function confirmClosedRoomCleanup(
+  env: Env,
+  roomId: string,
+  closedAt: number,
+): Promise<void> {
+  await postCleanupSchedule(env, roomId, closedAt, "confirm");
+}
+
 export async function deleteCollaborationRoomSqliteDocument(
   env: Env,
   roomId: string,
@@ -321,6 +368,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private readonly sqliteDocument: RoomSqliteDocumentStore;
   private readonly awarenessClientOwners: AwarenessClientOwners;
   private readonly appliedMembership: AppliedMembershipChanges;
+  private readonly cleanupLedger: ClosedRoomCleanupLedger;
   private readonly quietRevalidation = new QuietSocketRevalidation();
   private binaryDocument: Y.Doc | null = null;
   private binaryTeachingIntegrity: CollaborationTeachingIntegrity | null = null;
@@ -335,6 +383,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     this.appliedMembership = new AppliedMembershipChanges(
       ctx.storage as unknown as RoomSqliteStorage,
     );
+    this.cleanupLedger = new ClosedRoomCleanupLedger(ctx.storage as unknown as RoomSqliteStorage);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -380,6 +429,20 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.deleteAll();
       return Response.json({ purged: true });
+    }
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/cleanup/claim" || url.pathname === "/cleanup/confirm")
+    ) {
+      const parsed = cleanupScheduleSchema.safeParse(await request.json().catch(() => null));
+      if (!parsed.success || !isCurrentRoom(this.ctx, parsed.data.roomId)) {
+        return Response.json({ error: "invalid cleanup schedule" }, { status: 400 });
+      }
+      if (url.pathname === "/cleanup/claim") {
+        return Response.json({ claimed: this.cleanupLedger.claim(parsed.data.closedAt) });
+      }
+      this.cleanupLedger.confirm(parsed.data.closedAt);
+      return Response.json({ confirmed: true });
     }
     if (request.method === "POST" && url.pathname === "/control") {
       const parsed = collaborationRoomControlCommandSchema.safeParse(

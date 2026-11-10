@@ -30,9 +30,13 @@ export interface CollaborationRoomRow {
 }
 
 export class CollaborationRoomQuotaError extends Error {
-  constructor() {
-    super("active collaboration room quota exceeded");
+  /** Which cap refused the room: open rooms, or rooms still holding storage. */
+  readonly limit: "active" | "retained";
+
+  constructor(limit: "active" | "retained") {
+    super(`${limit} collaboration room quota exceeded`);
     this.name = "CollaborationRoomQuotaError";
+    this.limit = limit;
   }
 }
 
@@ -60,6 +64,19 @@ export interface CollaborationAssetRow {
 }
 
 const MAX_ACTIVE_ROOMS_PER_OWNER = 5;
+// Rooms one owner may hold storage for: open rooms plus closed rooms still in
+// their retention window and not yet purged. Closing frees an active slot at
+// once, but the room keeps its Durable Object document and assets until its
+// purge, so without this a create/close loop held storage, and spent a purge
+// job per room, with no bound.
+const MAX_RETAINED_ROOMS_PER_OWNER = 20;
+
+// Binds owner, retainedSince. Rooms closed before retainedSince are past their
+// retention: their purge is overdue, which is not the owner's to pay for.
+const RETAINED_ROOMS_SQL = `owner_id = ? AND (
+         status IN ('provisioning', 'active')
+         OR (status = 'closed' AND purged_at IS NULL AND closed_at > ?)
+       )`;
 
 export interface CollaborationMemberRow {
   user_id: string;
@@ -91,21 +108,29 @@ export interface CollaborationRoomAccess extends CollaborationRoomRow {
 
 export interface CreateCollaborationRoomParams {
   ownerId: string;
+  /** When the retention window of a room closed now would have begun. */
+  retainedSince: number;
 }
 
 export async function createProvisioningCollaborationRoom(
   db: D1Database,
   params: CreateCollaborationRoomParams,
 ): Promise<CollaborationRoomRow> {
-  const activeRooms = await db
+  const counts = await db
     .prepare(
-      `SELECT COUNT(*) AS count FROM collaboration_rooms
-       WHERE owner_id = ? AND status IN ('provisioning', 'active')`,
+      `SELECT
+         COALESCE(SUM(status IN ('provisioning', 'active')), 0) AS active,
+         COUNT(*) AS retained
+       FROM collaboration_rooms
+       WHERE ${RETAINED_ROOMS_SQL}`,
     )
-    .bind(params.ownerId)
-    .first<{ count: number }>();
-  if ((activeRooms?.count ?? 0) >= MAX_ACTIVE_ROOMS_PER_OWNER) {
-    throw new CollaborationRoomQuotaError();
+    .bind(params.ownerId, params.retainedSince)
+    .first<{ active: number; retained: number }>();
+  if ((counts?.active ?? 0) >= MAX_ACTIVE_ROOMS_PER_OWNER) {
+    throw new CollaborationRoomQuotaError("active");
+  }
+  if ((counts?.retained ?? 0) >= MAX_RETAINED_ROOMS_PER_OWNER) {
+    throw new CollaborationRoomQuotaError("retained");
   }
   const now = Date.now();
   const room: CollaborationRoomRow = {
@@ -143,7 +168,8 @@ export async function createProvisioningCollaborationRoom(
          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
          WHERE
            (SELECT COUNT(*) FROM collaboration_rooms
-            WHERE owner_id = ? AND status IN ('provisioning', 'active')) < ?`,
+            WHERE owner_id = ? AND status IN ('provisioning', 'active')) < ?
+           AND (SELECT COUNT(*) FROM collaboration_rooms WHERE ${RETAINED_ROOMS_SQL}) < ?`,
       )
       .bind(
         room.id,
@@ -158,6 +184,9 @@ export async function createProvisioningCollaborationRoom(
         room.updated_at,
         params.ownerId,
         MAX_ACTIVE_ROOMS_PER_OWNER,
+        params.ownerId,
+        params.retainedSince,
+        MAX_RETAINED_ROOMS_PER_OWNER,
       ),
     db
       .prepare(
@@ -170,9 +199,11 @@ export async function createProvisioningCollaborationRoom(
   ]);
 
   // Zero rows means the guard in the INSERT rejected it — the same 409 the
-  // pre-read produces, now also correct under concurrency.
+  // pre-read produces, now also correct under concurrency. A concurrent create
+  // is what lost the race, and it counts toward both caps; the active one is
+  // the usual reason.
   if ((roomInsert?.meta?.changes ?? 0) === 0) {
-    throw new CollaborationRoomQuotaError();
+    throw new CollaborationRoomQuotaError("active");
   }
 
   return room;

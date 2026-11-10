@@ -410,6 +410,44 @@ describe("CollaborationRoomDurableObject document initialization", () => {
   });
 });
 
+// A repeated close republished the purge job every time. The room now
+// remembers whether this close's purge is published, and holds a claim for a
+// minute so a publish in flight (or one that just failed) is not doubled.
+describe("CollaborationRoomDurableObject closed-room cleanup schedule", () => {
+  const CLOSED_AT = 1_700_000_000_000;
+
+  async function cleanup(room: CollaborationRoomDurableObject, step: "claim" | "confirm") {
+    const response = await room.fetch(
+      new Request(`${ROOM_ORIGIN}/cleanup/${step}`, {
+        method: "POST",
+        body: JSON.stringify({ roomId: ROOM_ID, closedAt: CLOSED_AT }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    return (await response.json()) as { claimed?: boolean };
+  }
+
+  it("lets one close publish, holds the next for a minute, then lets a retry through", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(CLOSED_AT);
+    const { room } = await createRoom();
+
+    expect(await cleanup(room, "claim")).toEqual({ claimed: true });
+    expect(await cleanup(room, "claim")).toEqual({ claimed: false });
+    now.mockReturnValue(CLOSED_AT + 61_000);
+    expect(await cleanup(room, "claim")).toEqual({ claimed: true });
+  });
+
+  it("never claims again once the publish is confirmed", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(CLOSED_AT);
+    const { room } = await createRoom();
+    await cleanup(room, "claim");
+    await cleanup(room, "confirm");
+
+    now.mockReturnValue(CLOSED_AT + 24 * 60 * 60 * 1000);
+    expect(await cleanup(room, "claim")).toEqual({ claimed: false });
+  });
+});
+
 describe("CollaborationRoomDurableObject document updates", () => {
   it("persists an editor's update, acknowledges it and fans it out", async () => {
     const { room, connect, edit, persistedText } = await createRoom();

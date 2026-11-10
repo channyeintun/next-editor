@@ -5,7 +5,11 @@ import {
   COLLABORATION_CLEANUP_DELAY,
   publishCollaborationMaintenanceJob,
 } from "../collaboration/qstash";
-import { notifyCollaborationRoomControl } from "../collaboration/roomDurableObject";
+import {
+  claimClosedRoomCleanup,
+  confirmClosedRoomCleanup,
+  notifyCollaborationRoomControl,
+} from "../collaboration/roomDurableObject";
 import { notifyCollaborationVoiceRoomControl } from "../collaboration/voiceDurableObject";
 import type { Env } from "../env";
 
@@ -89,7 +93,10 @@ export function scheduleAuditEvent<E extends { Bindings: Env }>(
   );
 }
 
-/** Queues the delayed purge of a closed room after the response. */
+/**
+ * Queues the delayed purge of a closed room after the response, unless the
+ * room says a publish for this close is already confirmed or just claimed.
+ */
 export function scheduleClosedRoomCleanup<E extends { Bindings: Env }>(
   c: Context<E>,
   roomId: string,
@@ -97,6 +104,17 @@ export function scheduleClosedRoomCleanup<E extends { Bindings: Env }>(
 ): void {
   c.executionCtx.waitUntil(
     (async () => {
+      // A room that cannot answer gets its purge published anyway: the job's
+      // deduplication ID makes a repeat harmless, and a lost purge is not.
+      const claimed = await claimClosedRoomCleanup(c.env, roomId, closedAt).catch(() => true);
+      if (!claimed) {
+        console.log("collaboration_qstash_skipped", {
+          kind: "cleanup-room",
+          roomId,
+          reason: "already-scheduled",
+        });
+        return;
+      }
       const result = await publishCollaborationMaintenanceJob(
         c.env,
         { kind: "cleanup-room", roomId, closedAt },
@@ -117,6 +135,12 @@ export function scheduleClosedRoomCleanup<E extends { Bindings: Env }>(
         messageId: result.messageId,
         deduplicated: result.deduplicated,
         delay: COLLABORATION_CLEANUP_DELAY,
+      });
+      await confirmClosedRoomCleanup(c.env, roomId, closedAt).catch((error: unknown) => {
+        console.error("collaboration_cleanup_confirm_failed", {
+          roomId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     })().catch((error) => {
       console.error("collaboration_qstash_publish_failed", {

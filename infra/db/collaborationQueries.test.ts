@@ -36,7 +36,7 @@ function makeDb(options: { preReadCount: number; roomInsertChanges: number }) {
           return statement;
         },
         async first<T>() {
-          return { count: options.preReadCount } as T;
+          return { active: options.preReadCount, retained: options.preReadCount } as T;
         },
       };
       return statement;
@@ -54,9 +54,9 @@ function makeDb(options: { preReadCount: number; roomInsertChanges: number }) {
 describe("createProvisioningCollaborationRoom", () => {
   it("rejects on the cheap pre-read when the owner is already at the cap", async () => {
     const { db } = makeDb({ preReadCount: 5, roomInsertChanges: 1 });
-    await expect(createProvisioningCollaborationRoom(db, { ownerId: "u1" })).rejects.toBeInstanceOf(
-      CollaborationRoomQuotaError,
-    );
+    await expect(
+      createProvisioningCollaborationRoom(db, { ownerId: "u1", retainedSince: 0 }),
+    ).rejects.toBeInstanceOf(CollaborationRoomQuotaError);
   });
 
   // The pre-read and the INSERT are separate round-trips, so concurrent creates
@@ -64,12 +64,13 @@ describe("createProvisioningCollaborationRoom", () => {
   // itself or every racing request commits.
   it("carries the quota predicate inside the room INSERT", async () => {
     const { db, statements } = makeDb({ preReadCount: 0, roomInsertChanges: 1 });
-    await createProvisioningCollaborationRoom(db, { ownerId: "u1" });
+    await createProvisioningCollaborationRoom(db, { ownerId: "u1", retainedSince: 0 });
 
     const roomInsert = statements.find((s) => s.sql.includes("INSERT INTO collaboration_rooms"));
     expect(roomInsert?.sql).toContain("SELECT COUNT(*) FROM collaboration_rooms");
     expect(roomInsert?.sql).toContain("status IN ('provisioning', 'active')");
-    expect(roomInsert?.args.slice(-2)).toEqual(["u1", 5]);
+    expect(roomInsert?.sql).toContain("purged_at IS NULL AND closed_at > ?");
+    expect(roomInsert?.args.slice(-5)).toEqual(["u1", 5, "u1", 0, 20]);
   });
 
   // collaboration_members.room_id has a foreign key onto collaboration_rooms, so
@@ -77,7 +78,7 @@ describe("createProvisioningCollaborationRoom", () => {
   // with an opaque D1 error whenever the quota predicate suppressed the room.
   it("derives the owner member row from the room that was actually inserted", async () => {
     const { db, statements } = makeDb({ preReadCount: 0, roomInsertChanges: 1 });
-    await createProvisioningCollaborationRoom(db, { ownerId: "u1" });
+    await createProvisioningCollaborationRoom(db, { ownerId: "u1", retainedSince: 0 });
 
     const memberInsert = statements.find((s) =>
       s.sql.includes("INSERT INTO collaboration_members"),
@@ -88,9 +89,79 @@ describe("createProvisioningCollaborationRoom", () => {
 
   it("reports the quota error when the INSERT guard suppressed the room", async () => {
     const { db } = makeDb({ preReadCount: 0, roomInsertChanges: 0 });
-    await expect(createProvisioningCollaborationRoom(db, { ownerId: "u1" })).rejects.toBeInstanceOf(
-      CollaborationRoomQuotaError,
-    );
+    await expect(
+      createProvisioningCollaborationRoom(db, { ownerId: "u1", retainedSince: 0 }),
+    ).rejects.toBeInstanceOf(CollaborationRoomQuotaError);
+  });
+});
+
+// Closing frees an active slot at once, but the closed room keeps its
+// Durable Object document and assets until its purge seven days later, so a
+// create/close loop held storage, and spent a purge job per room, with no
+// bound.
+describe("createProvisioningCollaborationRoom retained rooms", () => {
+  const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+  function ownerDatabase(): SqliteD1 {
+    const database = openSqliteD1();
+    database.sqlite
+      .prepare(
+        "INSERT INTO users (id, google_sub, email, username, created_at) VALUES (?, ?, ?, ?, 0)",
+      )
+      .run("cycler", "google-cycler", "cycler@example.com", "cycler");
+    return database;
+  }
+
+  async function createAndClose({ db }: SqliteD1, retainedSince: number) {
+    const room = await createProvisioningCollaborationRoom(db, {
+      ownerId: "cycler",
+      retainedSince,
+    });
+    await setCollaborationRoomStatus(db, room.id, "active");
+    await setCollaborationRoomStatus(db, room.id, "closed");
+    return room;
+  }
+
+  it("refuses a room past the retained cap even when none is active", async () => {
+    const database = ownerDatabase();
+    const retainedSince = Date.now() - RETENTION_MS;
+    for (let index = 0; index < 20; index += 1) await createAndClose(database, retainedSince);
+
+    await expect(
+      createProvisioningCollaborationRoom(database.db, { ownerId: "cycler", retainedSince }),
+    ).rejects.toMatchObject({ name: "CollaborationRoomQuotaError", limit: "retained" });
+  });
+
+  it("stops counting a closed room once it is purged or past its retention", async () => {
+    const database = ownerDatabase();
+    const retainedSince = Date.now() - RETENTION_MS;
+    const rooms = [];
+    for (let index = 0; index < 20; index += 1)
+      rooms.push(await createAndClose(database, retainedSince));
+    database.sqlite
+      .prepare("UPDATE collaboration_rooms SET purged_at = closed_at WHERE id = ?")
+      .run(rooms[0].id);
+    database.sqlite
+      .prepare("UPDATE collaboration_rooms SET closed_at = ? WHERE id = ?")
+      .run(retainedSince - 1, rooms[1].id);
+
+    await createProvisioningCollaborationRoom(database.db, { ownerId: "cycler", retainedSince });
+    await createProvisioningCollaborationRoom(database.db, { ownerId: "cycler", retainedSince });
+    await expect(
+      createProvisioningCollaborationRoom(database.db, { ownerId: "cycler", retainedSince }),
+    ).rejects.toBeInstanceOf(CollaborationRoomQuotaError);
+  });
+
+  it("still names the active cap when the owner has five open rooms", async () => {
+    const database = ownerDatabase();
+    const retainedSince = Date.now() - RETENTION_MS;
+    for (let index = 0; index < 5; index += 1) {
+      await createProvisioningCollaborationRoom(database.db, { ownerId: "cycler", retainedSince });
+    }
+
+    await expect(
+      createProvisioningCollaborationRoom(database.db, { ownerId: "cycler", retainedSince }),
+    ).rejects.toMatchObject({ limit: "active" });
   });
 });
 
@@ -107,7 +178,10 @@ async function openRoom({ db, sqlite }: SqliteD1) {
     insertUser.run(id, `google-${id}`, `${id}@example.com`, id);
   }
 
-  const room = await createProvisioningCollaborationRoom(db, { ownerId: OWNER_ID });
+  const room = await createProvisioningCollaborationRoom(db, {
+    ownerId: OWNER_ID,
+    retainedSince: 0,
+  });
   await setCollaborationRoomStatus(db, room.id, "active");
   const invite = (role: CollaborationInviteRole) =>
     createCollaborationInvitation(db, {

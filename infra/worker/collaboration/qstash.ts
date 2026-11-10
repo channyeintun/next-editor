@@ -24,6 +24,14 @@ export const COLLABORATION_ROOM_RETENTION_MS =
 export const COLLABORATION_CLEANUP_DELAY =
   `${COLLABORATION_ROOM_RETENTION_DAYS}d` as const satisfies QStashDelay;
 
+/**
+ * Whether a room closed at `closedAt` is past its retention, whether or not its
+ * purge has run yet: nothing may serve its document or assets after this.
+ */
+export function hasCollaborationRoomRetentionEnded(closedAt: number, now = Date.now()): boolean {
+  return now >= closedAt + COLLABORATION_ROOM_RETENTION_MS;
+}
+
 export const collaborationMaintenanceJobSchema = z
   .object({
     kind: z.literal("cleanup-room"),
