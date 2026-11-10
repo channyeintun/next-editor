@@ -1000,20 +1000,7 @@
       ];
       // Particles that stay on the line of the word before them ("Agent ကို",
       // "Production မှာ", "Edge case နဲ့" never split).
-      const PARTICLES = [
-        "တွေနဲ့",
-        "တွေကို",
-        "တွေအတွက်",
-        "နဲ့",
-        "တွေ",
-        "ကို",
-        "ရဲ့",
-        "မှာ",
-        "လို",
-        "ကနေ",
-        "ဆီက",
-        "ဆီ",
-      ];
+      const PARTICLES = ["တွေနဲ့", "တွေကို", "တွေအတွက်", "နဲ့", "တွေ", "ကို", "ရဲ့", "မှာ", "လို", "ကနေ", "ဆီက", "ဆီ"];
       const MYANMAR = /[က-႟ꧠ-꧿ꩠ-ꩿ]+/g;
       // Markers for a space and a hyphen that must not break; both are put back as
       // plain characters in the markup.

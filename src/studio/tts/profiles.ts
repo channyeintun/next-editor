@@ -105,7 +105,7 @@ const POCKET_BUNDLE_BASE = `https://huggingface.co/spaces/KevinAHM/pocket-tts-we
  * 1.20.1 → 1.30.0 changed every sample of a dialog and can move the frame where
  * speech ends — so, like the bundle revision, it keys the synthesis cache.
  */
-export const POCKET_ONNX_RUNTIME_VERSION = "1.30.0";
+export const POCKET_ONNX_RUNTIME_VERSION = "1.31.1";
 
 /** The built-in English voice; cloned voices are this profile with their own sample. */
 const POCKET_ALBA_PROFILE: PocketVoiceProfile = {

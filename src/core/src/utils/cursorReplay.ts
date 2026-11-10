@@ -58,9 +58,7 @@ const copyCursorTweenEndpoint = (cursor: CursorTweenEndpoint): CursorTweenEndpoi
   };
 };
 
-const copyCursorTween = (
-  tween: CursorTweenSnapshot | undefined,
-): CursorTweenSnapshot | undefined =>
+const copyCursorTween = (tween: CursorTweenSnapshot | undefined): CursorTweenSnapshot | undefined =>
   tween
     ? {
         from: copyCursorTweenEndpoint(tween.from),

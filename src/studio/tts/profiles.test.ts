@@ -46,13 +46,13 @@ describe("pocket voice profiles", () => {
 
     expect(
       await ttsRequestHash({ ...request, profile: requireVoiceProfile("pocket-alba-v1") }),
-    ).toBe("25a1370ff71ca8b458b37a37b591b0cbac8653d7c8526c23b8fab39f4b356905");
+    ).toBe("2cb4f1ad588b6bef1515cd88318bda862539266effae253ad5586c9fb9e395a1");
     expect(
       await ttsRequestHash({
         ...request,
         profile: customVoiceProfileOf({ id: "voice-1", sampleSha256: "abc" }),
       }),
-    ).toBe("8707f593b995068279b04a805d271b3cb73e367107b47db07c49e71cae2c420a");
+    ).toBe("d81250196bc4724b14fa92f3da2542800875760d7b49cb86074e9ccdcd639cf4");
   });
 
   // Engine v2 decodes the trailing latents of a capped chunk, so the v1 keys

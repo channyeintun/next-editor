@@ -18,7 +18,7 @@ export const FIRST_ROW_CARD_MEDIA: readonly (string | null)[] = Array.from(
   (_, index) =>
     index === 0
       ? null
-      : GALLERY_COLUMN_QUERIES.filter(({ columns }) => columns > index).reduce(
-          (narrowest, entry) => (entry.columns < narrowest.columns ? entry : narrowest),
+      : GALLERY_COLUMN_QUERIES.filter(({ columns }) => columns > index).reduce((narrowest, entry) =>
+          entry.columns < narrowest.columns ? entry : narrowest,
         ).query,
 );

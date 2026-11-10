@@ -147,7 +147,7 @@ describe("Cursor", () => {
     stepFrame(200);
 
     expect(overlay()!.style.opacity).toBe("1");
-    expect(overlay()!.style.transform).toBe("translate3d(50px, 50px, 0)");
+    expect(overlay()!.style.transform).toBe("translate3d(50px, 50px, 0px)");
   });
 
   it("ignores a hide sent outside playback (the studio hiding its own pointer)", async () => {

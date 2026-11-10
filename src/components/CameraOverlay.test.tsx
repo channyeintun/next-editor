@@ -57,11 +57,11 @@ describe("CameraOverlay", () => {
     );
     const overlay = move.parentElement as HTMLElement;
     // jsdom's window is 1024 × 768; the overlay starts above the player bar's right end.
-    expect(overlay.style.transform).toBe("translate3d(824px, 504px, 0)");
+    expect(overlay.style.transform).toBe("translate3d(824px, 504px, 0px)");
 
     move.focus();
     fireEvent.click(move);
-    expect(overlay.style.transform).toBe("translate3d(24px, 504px, 0)");
+    expect(overlay.style.transform).toBe("translate3d(24px, 504px, 0px)");
     expect(move).toHaveFocus();
     // On the left half, minimize docks to the left edge.
     fireEvent.click(screen.getByRole("button", { name: "Minimize camera" }));
