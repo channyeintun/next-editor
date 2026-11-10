@@ -115,12 +115,17 @@ function projectWith(...paths: string[]) {
   };
 }
 
-function prepare(runtime: StudioRuntime, project: { files: Record<string, unknown> }) {
+function prepare(
+  runtime: StudioRuntime,
+  project: { files: Record<string, unknown> },
+  runActionId = "run",
+) {
   if (runtime.kind === "none" || runtime.kind === "webcontainer") {
     throw new Error("test misuse");
   }
   return preparePlaygroundRun({
     runtime,
+    runActionId,
     mode: "fixture",
     project: project as Parameters<typeof preparePlaygroundRun>[0]["project"],
     timeoutMs: 1_000,
@@ -310,6 +315,7 @@ describe("preparePlaygroundRun", () => {
     if (runtime.kind !== "go-playground") throw new Error("unreachable");
     const prepared = preparePlaygroundRun({
       runtime,
+      runActionId: "run",
       mode: "fixture",
       project: projectWith("main.go") as Parameters<typeof preparePlaygroundRun>[0]["project"],
       timeoutMs: 1_000,
@@ -370,7 +376,7 @@ describe("fixture runs", () => {
       // The kind rides along so a failing diff names the language.
       expect({ kind, ...outcome }).toEqual({
         kind,
-        resultLines: fixtureRunConsoleLines(runtime),
+        resultLines: fixtureRunConsoleLines(runtime, "run"),
         ok: true,
         status: "success",
         attempts: 1,
@@ -392,7 +398,7 @@ describe("fixture runs", () => {
     const outcome = await prepare(runtime, projectWith("main.rs")).run();
     expect(outcome.ok).toBe(false);
     expect(outcome.status).toBe("compile-error");
-    expect(outcome.resultLines).toEqual(fixtureRunConsoleLines(runtime));
+    expect(outcome.resultLines).toEqual(fixtureRunConsoleLines(runtime, "run"));
   });
 });
 
@@ -504,5 +510,142 @@ describe("isPlaygroundRuntimeKind", () => {
       webcontainer: false,
       none: false,
     });
+  });
+});
+
+describe("per-run fixtures (`results`)", () => {
+  /** The same minimal result per kind, pinned for two runs by id. */
+  const perRunInputs = Object.entries(PLAYGROUND_FIXTURE_INPUTS).map(([kind, fixture]) => {
+    const { result, ...rest } = fixture as { result: unknown };
+    return [kind, { ...rest, results: { "run-1": result, "run-2": result } }] as const;
+  });
+
+  it("accepts `results` on every Playground kind", () => {
+    const rejected = perRunInputs
+      .filter(
+        ([kind, fixture]) =>
+          !studioRuntimeSchema.safeParse({ kind, defaultMode: "fixture", fixture }).success,
+      )
+      .map(([kind]) => kind);
+
+    expect(rejected).toEqual([]);
+  });
+
+  it("rejects a fixture with both `result` and `results`, or neither", () => {
+    const go = PLAYGROUND_FIXTURE_INPUTS["go-playground"] as { latencyMs: number; result: unknown };
+    const both = studioRuntimeSchema.safeParse({
+      kind: "go-playground",
+      defaultMode: "fixture",
+      fixture: { ...go, results: { "run-1": go.result } },
+    });
+    const neither = studioRuntimeSchema.safeParse({
+      kind: "go-playground",
+      defaultMode: "fixture",
+      fixture: { latencyMs: 5 },
+    });
+
+    expect(both.success).toBe(false);
+    expect(both.error?.issues.map((issue) => issue.message)).toEqual([
+      "a fixture holds exactly one of `result` (every run replays it) or `results` (one result per runtime.run id), not both",
+    ]);
+    expect(neither.success).toBe(false);
+    expect(neither.error?.issues.map((issue) => issue.message)).toEqual([
+      "a fixture needs `result` (every run replays it) or `results` (one result per runtime.run id)",
+    ]);
+  });
+
+  it("holds each `results` entry to the runner contract, on every kind", () => {
+    const accepted = Object.entries(IMPOSSIBLE_FIXTURE_RESULTS)
+      .filter(
+        ([kind, result]) =>
+          studioRuntimeSchema.safeParse({
+            kind,
+            defaultMode: "fixture",
+            fixture: {
+              latencyMs: 5,
+              results: {
+                "run-1": (
+                  PLAYGROUND_FIXTURE_INPUTS[kind as StudioPlaygroundRuntimeKind] as {
+                    result: unknown;
+                  }
+                ).result,
+                "run-2": result,
+              },
+            },
+          }).success,
+      )
+      .map(([kind]) => kind);
+
+    expect(accepted).toEqual([]);
+  });
+
+  it("rejects a misspelt field inside a `results` entry, with its path", () => {
+    const parsed = studioRuntimeSchema.safeParse({
+      kind: "go-playground",
+      defaultMode: "fixture",
+      fixture: {
+        latencyMs: 5,
+        results: { "run-1": { status: "success", output: "", exitCode: 0, exitcode: 0 } },
+      },
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toEqual(["fixture", "results", "run-1"]);
+  });
+
+  it("replays the result of the run that is running", async () => {
+    const runtime = studioRuntimeSchema.parse({
+      kind: "go-playground",
+      defaultMode: "fixture",
+      fixture: {
+        latencyMs: 5,
+        results: {
+          "run-1": { status: "success", output: "first\n", exitCode: 0 },
+          "run-2": { status: "success", output: "second\n", exitCode: 0 },
+          "run-3": {
+            status: "compile-error",
+            output: "",
+            compileErrors: "./menu.go:9:2: undefined: price\n",
+          },
+        },
+      },
+    });
+    const project = projectWith("main.go");
+
+    const first = await prepare(runtime, project, "run-1").run();
+    const second = await prepare(runtime, project, "run-2").run();
+    const third = await prepare(runtime, project, "run-3").run();
+
+    expect(first).toMatchObject({
+      ok: true,
+      status: "success",
+      resultLines: ["first", "[go-run] Program exited"],
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      status: "success",
+      resultLines: ["second", "[go-run] Program exited"],
+    });
+    expect(third).toMatchObject({
+      ok: false,
+      status: "compile-error",
+      resultLines: ["[go-run error] Build failed", "./menu.go:9:2: undefined: price"],
+    });
+  });
+
+  it("refuses a run id the fixture has no result for", () => {
+    const runtime = studioRuntimeSchema.parse({
+      kind: "go-playground",
+      defaultMode: "fixture",
+      fixture: {
+        latencyMs: 5,
+        results: { "run-1": { status: "success", output: "", exitCode: 0 } },
+      },
+    });
+    if (!isPlaygroundRuntime(runtime)) throw new Error("not a Playground runtime");
+
+    expect(() => fixtureRunConsoleLines(runtime, "run-9")).toThrow(
+      'runtime.fixture.results has no result for runtime.run "run-9"',
+    );
   });
 });

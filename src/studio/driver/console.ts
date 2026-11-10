@@ -13,6 +13,8 @@ import {
   preparePlaygroundRun,
   runErrorPrefixFor,
 } from "../playgroundRuntime";
+import { pinnedFailureConsoleLines } from "../fixtureConsoleLines";
+import { runOutcomeIssue } from "../fixtureRuns";
 import { isPlaygroundRuntime, isPlaygroundRuntimeKind } from "../plan";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { isCoveredAt, roundPoint, type StudioPointer } from "./pointer";
@@ -83,6 +85,9 @@ export function consoleCommands(
   // The header line the latest Playground run printed, so pointing at the
   // console reads that run's output and not an earlier one's identical line.
   let lastRunHeader: string | null = null;
+  // The console lines of runs that ended with the failure their fixture pins
+  // (a lesson about a compile error): error lines `waitForOutput` expects.
+  const pinnedFailureLines = new Set<string>();
 
   return {
     async pointConsole({ target, durationMs, timeoutMs }) {
@@ -164,7 +169,7 @@ export function consoleCommands(
       return { line: visible.line.text, travelMs };
     },
 
-    async runWorkspace(timeoutMs) {
+    async runWorkspace({ actionId, timeoutMs }) {
       const runtime = deps.runtime;
       if (!isPlaygroundRuntime(runtime)) {
         throw new StudioActionError(
@@ -185,6 +190,7 @@ export function consoleCommands(
 
       const prepared = preparePlaygroundRun({
         runtime,
+        runActionId: actionId,
         mode: deps.runtimeMode,
         project: deps.workspace.getProject(),
         timeoutMs,
@@ -205,8 +211,14 @@ export function consoleCommands(
 
       appendRunnerConsoleLines(deps.runtimePanelStore, outcome.resultLines);
 
-      if (!outcome.ok) {
-        throw new StudioActionError(`The program did not run cleanly (status ${outcome.status})`);
+      // A run must end the way its fixture pins it — cleanly, or with the
+      // compile or vet error a lesson about that error shows on purpose.
+      const outcomeIssue = runOutcomeIssue(runtime.fixture, actionId, outcome.status);
+      if (outcomeIssue) {
+        throw new StudioActionError(outcomeIssue);
+      }
+      for (const line of pinnedFailureConsoleLines(runtime, [actionId])) {
+        pinnedFailureLines.add(line);
       }
 
       return {
@@ -270,7 +282,7 @@ export function consoleCommands(
         () => {
           const lines = deps.runtimePanelStore.getSnapshot().context.consoleLines;
           const errorLine = errorPrefix
-            ? lines.find((line) => line.startsWith(errorPrefix))
+            ? lines.find((line) => line.startsWith(errorPrefix) && !pinnedFailureLines.has(line))
             : undefined;
           if (errorLine) {
             throw new StudioActionError(`The run reported an error: ${errorLine}`);

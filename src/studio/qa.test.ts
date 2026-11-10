@@ -411,6 +411,50 @@ describe("runArtifactChecks", () => {
     expect(failedIds(checks)).toContain("checkpoint.output.out");
   });
 
+  it("exempts only the error lines of a run the fixture pins to fail", async () => {
+    const base = makePlan();
+    const plan = parseStudioPlan({
+      ...base,
+      runtime: {
+        kind: "go-playground",
+        defaultMode: "fixture",
+        fixture: {
+          latencyMs: 10,
+          results: {
+            "run-1": { status: "success", output: "3 cubed is 27\n", exitCode: 0 },
+            "run-2": {
+              status: "compile-error",
+              output: "",
+              compileErrors: "./main.go:4:2: undefined: cube\n",
+            },
+          },
+        },
+      },
+      actions: [
+        base.actions[0],
+        { id: "run-1", type: "runtime.run", at: 15, timeoutMs: 1_000 },
+        ...base.actions.slice(1),
+        { id: "run-2", type: "runtime.run", at: 30, timeoutMs: 1_000 },
+      ],
+    });
+    const recording = makeRecording(plan);
+    recording.runtimeSnapshot!.consoleLines = [
+      "[go-run] go run main.go",
+      "3 cubed is 27",
+      "[go-run] Program exited",
+      "[go-run] go run main.go",
+      "[go-run error] Build failed",
+      "./main.go:4:2: undefined: cube",
+    ];
+    expect(failedIds(await checksFor(recording, plan))).not.toContain("runtime.noErrors");
+
+    // A failure the fixture does not pin is still a broken render.
+    recording.runtimeSnapshot!.consoleLines.push(
+      "[go-run error] The program took too long to compile and run",
+    );
+    expect(failedIds(await checksFor(recording, plan))).toContain("runtime.noErrors");
+  });
+
   it("does not mistake program output that prints 'error]' for a runner error", async () => {
     const plan = makePlan();
     const recording = makeRecording(plan);

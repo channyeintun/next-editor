@@ -8,7 +8,11 @@ import { compileWithEstimatedNarration, estimateByTokens } from "../script/estim
 import { RECORDING_BUFFER_MS } from "../script/schedule";
 import { DEFAULT_STUDIO_PLAN_SLUG, STUDIO_SOURCES, mergeStudioSources } from "./index";
 
-describe("studio lesson registry", () => {
+// Three of these tests parse (and one compiles) every checked-in script — 256
+// of them, growing with each course. Each sweep takes ~2.5 s on its own but
+// passes the default 5 s when the whole studio suite runs in parallel, so the
+// budget here is sized for the registry rather than for one lesson.
+describe("studio lesson registry", { timeout: 30_000 }, () => {
   it("registers exactly the checked-in scripts", () => {
     // Scripts auto-register by filename without any manual registry edit, so
     // the expected list is read from the same directory — a new lesson needs

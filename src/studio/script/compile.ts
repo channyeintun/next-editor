@@ -21,6 +21,7 @@ import {
   typingChunksOf,
   typingSeedsOf,
 } from "./actionTiming";
+import { consoleTargetIssuesInOrder } from "./consolePoints";
 import { CompileError } from "./errors";
 import type { ExtractedNarration } from "./markers";
 import { requireMarker } from "./markers";
@@ -174,6 +175,18 @@ export function compileLessonScript({
     warnings: pointerWarnings,
   } = planPointerChoreography({ script, authored, busyMs: busyById });
   warnings.push(...pointerWarnings);
+
+  // ---- Console targets against the run each one follows -------------------
+  // A per-run fixture prints a different console at each run, so a point or an
+  // output check is only decidable in performance order.
+  const consoleIssues = consoleTargetIssuesInOrder(
+    script.runtime,
+    authored.map((entry) => entry.action),
+  );
+  if (consoleIssues.length > 0) {
+    throw new CompileError(consoleIssues.join("; "));
+  }
+
   // A closing shares its select's instant, so it is placed right before that
   // select: the sort below keeps ties in array order.
   const closingBefore = new Map(dockClosings.map((closing) => [closing.beforeActionId, closing]));

@@ -74,7 +74,7 @@ export async function invokeAction(
         timeoutMs: action.timeoutMs,
       });
     case "runtime.run":
-      return driver.runWorkspace(action.timeoutMs);
+      return driver.runWorkspace({ actionId: action.id, timeoutMs: action.timeoutMs });
     case "runtime.start":
       return driver.startRuntime(action.timeoutMs);
     case "runtime.waitForReady":

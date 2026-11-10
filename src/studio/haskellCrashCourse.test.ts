@@ -65,6 +65,7 @@ describe("haskell crash course", () => {
     if (runtime.kind !== "haskell-playground") {
       throw new Error("expected a haskell-playground runtime");
     }
+    if (!runtime.fixture.result) throw new Error("expected one pinned result");
     fixtureStdout = runtime.fixture.result.stdout;
   });
 
@@ -120,12 +121,12 @@ describe("haskell crash course", () => {
     }
     // The lesson's single run must also succeed, for the same reason: a pinned
     // compile-error or runtime-error result emits "[haskell-run error] …".
-    expect(runtime.fixture.result.status).toBe("success");
+    expect(runtime.fixture.result?.status).toBe("success");
     expect(runtime.fixture.transientErrorKinds).toEqual([]);
     // The program writes nothing to stderr and produces no compiler warnings,
     // so a live render's console has to match the fixture's exactly.
-    expect(runtime.fixture.result.stderr).toBe("");
-    expect(runtime.fixture.result.warnings).toBeUndefined();
+    expect(runtime.fixture.result?.stderr).toBe("");
+    expect(runtime.fixture.result?.warnings).toBeUndefined();
   });
 
   it("prints exactly one line per statement of main", () => {

@@ -40,6 +40,7 @@ describe("zig crash course", () => {
     program = replayTypedFile(script, "main.zig");
     const runtime = script.runtime;
     if (runtime.kind !== "zig-playground") throw new Error("expected a zig-playground runtime");
+    if (!runtime.fixture.result) throw new Error("expected one pinned result");
     fixtureOutput = runtime.fixture.result.output;
   });
 
@@ -77,7 +78,7 @@ describe("zig crash course", () => {
     if (runtime.kind !== "zig-playground") throw new Error("expected a zig-playground runtime");
     // The lesson's single run must also succeed, for the same reason: a pinned
     // compile-error or runtime-error result emits "[zig-run error] …" itself.
-    expect(runtime.fixture.result.status).toBe("success");
+    expect(runtime.fixture.result?.status).toBe("success");
     expect(runtime.fixture.transientErrorKinds).toEqual([]);
   });
 

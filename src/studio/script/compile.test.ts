@@ -399,6 +399,172 @@ describe("compileLessonScript", () => {
     });
   });
 
+  describe("per-run fixtures", () => {
+    const success = (output: string) => ({ status: "success", exitCode: 0, output });
+    // selectScript's lesson with a fixture of one result per run id.
+    function perRun(actions: unknown[], results: Record<string, unknown>) {
+      const base = selectScript();
+      return parseLessonScript({
+        ...base,
+        runtime: { ...base.runtime, fixture: { latencyMs: 100, results } },
+        scenes: [
+          {
+            ...base.scenes[0],
+            narration:
+              "First we open the program. [[mark:a]] Let's run it and see. [[mark:b]] Here is the first " +
+              "line it printed. [[mark:c]] Now we run it once more. [[mark:d]] And look at the new line.",
+            actions,
+          },
+        ],
+      });
+    }
+    const run = (id: string, mark: string) => ({ id, type: "runtime.run", at: { mark } });
+    const point = (mark: string, text: string) => ({
+      id: `point-${mark}`,
+      type: "console.point",
+      at: { mark },
+      target: { text },
+    });
+    const expectOutput = (mark: string, contains: string) => ({
+      id: `expect-${mark}`,
+      type: "expect.output",
+      at: { mark },
+      timeoutMs: 1_000,
+      contains,
+    });
+    const twoRuns = { "run-1": success("first\n"), "run-2": success("second\n") };
+
+    it("checks a point after run 2 against run 2's output only", () => {
+      const script = perRun(
+        [run("run-1", "a"), point("b", "first"), run("run-2", "c"), point("d", "second")],
+        twoRuns,
+      );
+      const { plan } = compileLessonScript(scheduledInputFor(script));
+      expect(plan.runtime.kind === "go-playground" && plan.runtime.fixture.results).toEqual(
+        twoRuns,
+      );
+      expect(plan.actions.filter((action) => action.type === "console.point")).toHaveLength(2);
+    });
+
+    it("rejects a point that only the other run's output matches", () => {
+      // "second" is in run 2's output, so the script parses; the point follows run 1.
+      const early = perRun([run("run-1", "a"), point("b", "second"), run("run-2", "c")], twoRuns);
+      expect(() => compileLessonScript(scheduledInputFor(early))).toThrow(
+        `console.point "point-b" targets output line 1 containing "second", but runtime.run "run-1"'s console has 0 such lines`,
+      );
+      const late = perRun([run("run-1", "a"), run("run-2", "c"), point("d", "first")], twoRuns);
+      expect(() => compileLessonScript(scheduledInputFor(late))).toThrow(
+        `console.point "point-d" targets output line 1 containing "first", but runtime.run "run-2"'s console has 0 such lines`,
+      );
+    });
+
+    it("rejects a point no run prints when the script is parsed", () => {
+      expect(() =>
+        perRun([run("run-1", "a"), run("run-2", "c"), point("d", "third")], twoRuns),
+      ).toThrow(
+        /console.point "point-d" fits none of the lesson's runs: .*runtime.run "run-1"'s console has 0 such lines; .*runtime.run "run-2"'s console has 0 such lines/,
+      );
+    });
+
+    it("checks expect.output against the run it follows", () => {
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(
+            perRun([run("run-1", "a"), run("run-2", "c"), expectOutput("d", "second")], twoRuns),
+          ),
+        ),
+      ).not.toThrow();
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(
+            perRun([run("run-1", "a"), run("run-2", "c"), expectOutput("d", "first")], twoRuns),
+          ),
+        ),
+      ).toThrow(
+        `expect.output "expect-d" waits for a console line containing "first", but runtime.run "run-2"'s console has none`,
+      );
+      expect(() =>
+        perRun([run("run-1", "a"), run("run-2", "c"), expectOutput("d", "third")], twoRuns),
+      ).toThrow(/expect.output "expect-d" fits none of the lesson's runs/);
+    });
+
+    it("still needs a run before a point", () => {
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(
+            perRun([point("a", "first"), run("run-1", "b")], { "run-1": success("first\n") }),
+          ),
+        ),
+      ).toThrow(/console.point "point-a" comes before the lesson's first runtime.run/);
+    });
+
+    it("checks a pinned compile error's lines like any other run's", () => {
+      const results = {
+        "run-1": success("first\n"),
+        "run-2": {
+          status: "compile-error",
+          output: "",
+          compileErrors: "./main.go:4:2: undefined: price\n",
+        },
+      };
+      expect(() =>
+        compileLessonScript(
+          scheduledInputFor(
+            perRun([run("run-1", "a"), run("run-2", "c"), point("d", "undefined: price")], results),
+          ),
+        ),
+      ).not.toThrow();
+    });
+
+    it("needs a result for every run, keyed only by run ids", () => {
+      expect(() =>
+        perRun([run("run-1", "a"), run("run-2", "c")], { "run-1": success("x\n") }),
+      ).toThrow(
+        'Action "run-2" (runtime.run) has no pinned result — add "run-2" to runtime.fixture.results',
+      );
+      expect(() =>
+        perRun([run("run-1", "a")], { "run-1": success("x\n"), "run-9": success("x\n") }),
+      ).toThrow(
+        'runtime.fixture.results has an entry for "run-9", which is not the id of any action — every key must be a runtime.run action id',
+      );
+      expect(() =>
+        perRun([run("run-1", "a"), point("b", "x")], {
+          "run-1": success("x\n"),
+          "point-b": success("x\n"),
+        }),
+      ).toThrow(
+        'runtime.fixture.results has an entry for "point-b", but action "point-b" has type console.point, not runtime.run — every key must be a runtime.run action id',
+      );
+    });
+  });
+
+  it("rejects an expect.output the single pinned result never prints, when parsed", () => {
+    const base = selectScript();
+    expect(() =>
+      parseLessonScript({
+        ...base,
+        scenes: [
+          {
+            ...base.scenes[0],
+            narration: "First we open the program. [[mark:run]] Let's run it. [[mark:check]] Done.",
+            actions: [
+              { id: "run", type: "runtime.run", at: { mark: "run" } },
+              {
+                id: "check",
+                type: "expect.output",
+                at: { mark: "check" },
+                timeoutMs: 1_000,
+                contains: "bye",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(
+      `expect.output "check" waits for a console line containing "bye", but the run's console has none`,
+    );
+  });
+
   it("only lets console lessons point at the console", () => {
     const base = selectScript();
     const noRuntime = {
@@ -827,7 +993,7 @@ describe("lessonScriptSchema", () => {
     if (runtime.kind !== "kotlin-playground")
       throw new Error("expected a kotlin-playground runtime");
     expect(runtime.fixture.transientErrorKinds).toEqual(["timeout"]);
-    expect(runtime.fixture.result.warnings).toBe("w: unused");
+    expect(runtime.fixture.result?.warnings).toBe("w: unused");
   });
 
   // Both schemas build an action's payload from the plan's shared field shapes;

@@ -3,6 +3,7 @@ import { PLAYGROUND_LANGUAGES } from "../runtime/playgroundLanguages";
 import type { WorkspaceProject } from "../types/workspace";
 import { StudioActionError, abortableSleep, cancelledError } from "./async";
 import { fixtureRunConsoleLines } from "./fixtureConsoleLines";
+import { CLEAN_RUN_STATUS, pinnedRunStatus } from "./fixtureRuns";
 import {
   PLAYGROUND_TRANSIENT_ERROR_KINDS,
   type StudioPlaygroundRuntime,
@@ -21,7 +22,8 @@ import {
  * for transient service failures; compile and program errors are terminal.
  * Retries are silent in the recorded console (the receipt carries the attempt
  * history) — only a *final* failure surfaces error lines. Fixture mode
- * replays the pinned result, optionally simulating transient failures first.
+ * replays the running action's pinned result (fixtureRuns.ts), optionally
+ * simulating transient failures first.
  */
 
 const RETRYABLE_KINDS = new Set<string>(PLAYGROUND_TRANSIENT_ERROR_KINDS);
@@ -200,6 +202,8 @@ function engineFor(kind: StudioPlaygroundRuntimeKind): PlaygroundEngine {
 
 export interface PlaygroundRunInput {
   runtime: StudioPlaygroundRuntime;
+  /** The `runtime.run` action performing this run: a fixture-mode run replays its result. */
+  runActionId: string;
   mode: "live" | "fixture";
   project: Pick<WorkspaceProject, "files">;
   timeoutMs: number;
@@ -242,12 +246,14 @@ export function preparePlaygroundRun(input: PlaygroundRunInput): PlaygroundRunPr
           if (transientKind) {
             throw new ServiceFailure(transientKind, `Simulated transient ${transientKind}`);
           }
-          // The pinned result goes through the same console builders a live
-          // run's result does; every runner reports a clean run as "success".
+          // The running action's pinned result goes through the same console
+          // builders a live run's result does; every runner reports a clean
+          // run as "success".
+          const status = pinnedRunStatus(fixture, input.runActionId);
           return {
-            resultLines: fixtureRunConsoleLines(input.runtime),
-            ok: fixture.result.status === "success",
-            status: fixture.result.status,
+            resultLines: fixtureRunConsoleLines(input.runtime, input.runActionId),
+            ok: status === CLEAN_RUN_STATUS,
+            status,
             attempts: attempt,
             transientFailures,
           };

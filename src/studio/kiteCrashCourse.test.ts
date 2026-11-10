@@ -42,7 +42,7 @@ describe("kite crash course", () => {
     const fixture = script.runtime;
     expect(fixture.kind).toBe("kite-playground");
     if (fixture.kind !== "kite-playground") return;
-    expect(kite.run(program)).toBe(fixture.fixture.result.stdout);
+    expect(kite.run(program)).toBe(fixture.fixture.result?.stdout);
   });
 
   it("asserts only output the program really produces", () => {

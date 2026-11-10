@@ -103,7 +103,8 @@ export interface StudioDriver {
     durationMs: number;
     timeoutMs: number;
   }): Promise<Record<string, unknown>>;
-  runWorkspace(timeoutMs: number): Promise<Record<string, unknown>>;
+  /** Performs the `runtime.run` action `actionId`; a fixture-mode run replays its pinned result. */
+  runWorkspace(input: { actionId: string; timeoutMs: number }): Promise<Record<string, unknown>>;
   startRuntime(timeoutMs: number): Promise<Record<string, unknown>>;
   waitForRuntimeReady(timeoutMs: number): Promise<Record<string, unknown>>;
   collapseRuntimeDock(timeoutMs: number): Promise<Record<string, unknown>>;

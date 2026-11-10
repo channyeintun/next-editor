@@ -7,6 +7,7 @@ import { parseKotlinPlaygroundRunResult } from "../runtime/kotlinPlayground/type
 import { parseRustPlaygroundRunResult } from "../runtime/rustPlayground/types";
 import { parseZigPlaygroundRunResult } from "../runtime/zigPlayground/types";
 import { totalTypingDurationMs } from "./cadence";
+import { pinnedRunFixtureShapeIssue } from "./fixtureRuns";
 import {
   actionContractIssues,
   duplicatePinnedIdIssues,
@@ -594,7 +595,7 @@ export const studioNarrationSchema = z.object({
  * that a success carries none, that a program which never built has no exit
  * status. Every client already refuses a result that breaks them, through the
  * `parse*RunResult` its response goes through; the studio's fixture path skips
- * the client entirely and hands `fixture.result` straight to the console
+ * the client entirely and hands the pinned result straight to the console
  * formatter, so without this the plan would validate a pinned console no live
  * run can produce — the exact thing pinning a fixture exists to prevent.
  *
@@ -624,7 +625,9 @@ export const PLAYGROUND_TRANSIENT_ERROR_KINDS = ["rate-limited", "timeout", "una
 
 /**
  * Deterministic stand-in for a live run: the exact normalized result the
- * Playground would return for the pinned sources. Fixture renders replay it
+ * Playground would return for the pinned sources — one for every run
+ * (`result`), or one per `runtime.run` id (`results`) when the lesson changes
+ * its code between runs. Fixture renders replay the running action's result
  * through the same console formatting path after `latencyMs`. Each language
  * keeps its own result schema; this factory owns the fields they all share.
  *
@@ -639,15 +642,28 @@ function playgroundFixture<
   TransientKinds extends readonly [string, ...string[]],
   Result extends z.ZodType,
 >(transientKinds: TransientKinds, result: Result) {
-  return z.strictObject({
-    latencyMs: positiveMs,
-    /**
-     * Transient service failures to simulate before the result, one per attempt
-     * — exercises the driver's declared-idempotent retry path deterministically.
-     */
-    transientErrorKinds: z.array(z.enum(transientKinds)).default([]),
-    result,
-  });
+  return z
+    .strictObject({
+      latencyMs: positiveMs,
+      /**
+       * Transient service failures to simulate before the result, one per attempt
+       * — exercises the driver's declared-idempotent retry path deterministically.
+       */
+      transientErrorKinds: z.array(z.enum(transientKinds)).default([]),
+      /** The one result every `runtime.run` replays. */
+      result: result.optional(),
+      /**
+       * One result per `runtime.run`, keyed by its action id — for a lesson
+       * that runs, changes the code, and runs again. Exactly one of `result`
+       * and `results` (fixtureRuns.ts owns the rule; the runtime contract
+       * checks the keys against the lesson's runs).
+       */
+      results: z.record(z.string().min(1), result).optional(),
+    })
+    .superRefine((fixture, ctx) => {
+      const issue = pinnedRunFixtureShapeIssue(fixture);
+      if (issue) ctx.addIssue({ code: "custom", message: issue });
+    });
 }
 
 /** Go Playground stand-in result — mirrors the worker-normalized contract. */

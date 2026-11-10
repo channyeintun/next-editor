@@ -1,6 +1,7 @@
 import type { Recording } from "../core/src";
 import type { RuntimeRecordingSnapshot } from "../core/src/runtime";
-import type { StudioPlan } from "./plan";
+import { pinnedFailureConsoleLines } from "./fixtureConsoleLines";
+import { isPlaygroundRuntime, type StudioPlan } from "./plan";
 import { PREVIEW_ERROR_LINE } from "./qaPreview";
 import { workspaceTextFilesOf } from "./recordingWorkspace";
 import type { StudioCheckResult } from "./report";
@@ -37,8 +38,20 @@ export function runtimeGateChecks({
   const results: StudioCheckResult[] = [];
   // A preview error line fails here too, matched by the preview gates' own
   // rule, so the two gates can never disagree about a line.
+  // A run the fixture pins to fail (a lesson about a compile error) prints its
+  // error lines on purpose; only those exact lines are exempt.
+  const pinnedFailureLines = new Set(
+    isPlaygroundRuntime(plan.runtime)
+      ? pinnedFailureConsoleLines(
+          plan.runtime,
+          plan.actions.filter((action) => action.type === "runtime.run").map((action) => action.id),
+        )
+      : [],
+  );
   const errorLines = consoleLines.filter(
-    (line) => RUNNER_ERROR_LINE.test(line) || PREVIEW_ERROR_LINE.test(line),
+    (line) =>
+      (RUNNER_ERROR_LINE.test(line) && !pinnedFailureLines.has(line)) ||
+      PREVIEW_ERROR_LINE.test(line),
   );
   const runtimeError =
     lastRuntimeSnapshot?.errorMessage ??

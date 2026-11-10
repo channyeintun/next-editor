@@ -73,23 +73,23 @@ describe("x86-64 assembly crash course", () => {
   });
 
   it("pins a fixture that is exactly what the program prints and exits with", () => {
-    expect(result.stdout).toBe(fixture.result.stdout);
-    expect(result.stderr).toBe(fixture.result.stderr);
-    expect(result.exitCode).toBe(fixture.result.exitCode);
+    expect(result.stdout).toBe(fixture.result?.stdout);
+    expect(result.stderr).toBe(fixture.result?.stderr);
+    expect(result.exitCode).toBe(fixture.result?.exitCode);
     // The status and the transient kinds are what the fixture path *does*, not
     // what it prints: `preparePlaygroundRun` returns `ok: false` for anything
     // but "success", so `runtime.run` throws "The program did not run cleanly"
     // and the render dies at the run — with stdout, registers and flags all
     // still matching the real run, so nothing above would notice.
-    expect(fixture.result.status).toBe("success");
+    expect(fixture.result?.status).toBe("success");
     expect(fixture.transientErrorKinds).toEqual([]);
   });
 
   it("pins the registers the run really leaves behind", () => {
     // A fixture that names different registers, or the same ones with
     // different values, would replay a console the live runner never produces.
-    expect(result.registers).toEqual(fixture.result.registers);
-    expect(result.flags).toEqual(fixture.result.flags);
+    expect(result.registers).toEqual(fixture.result?.registers);
+    expect(result.flags).toEqual(fixture.result?.flags);
   });
 
   it("only asserts output the console really contains", () => {

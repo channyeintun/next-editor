@@ -6,6 +6,7 @@ import type {
   StudioRuntimeKind,
   StudioWorkspacePin,
 } from "./plan";
+import { pinnedRunIdIssues } from "./fixtureRuns";
 
 /**
  * The runtime contract both the script schema and the plan schema check: which
@@ -175,6 +176,8 @@ export function runtimeContractIssues(
       }
     }
   } else if (runtime.kind !== "none") {
+    // A Playground runtime: a per-run fixture must cover exactly its runs.
+    issues.push(...pinnedRunIdIssues(runtime.fixture, actions));
     for (const action of actions) {
       if (
         action.type === "runtime.start" ||

@@ -20,7 +20,7 @@ import {
   type PinnedReference,
 } from "../runtimeContract";
 import { VOXCPM2_MAX_SEED } from "../tts/voxcpm2Protocol";
-import { consolePointIssues } from "./consolePoints";
+import { consoleTargetIssues } from "./consolePoints";
 import {
   MarkerError,
   extractScriptNarration,
@@ -494,7 +494,7 @@ export const lessonScriptSchema = z
       });
     }
 
-    for (const message of consolePointIssues(script)) {
+    for (const message of consoleTargetIssues(script)) {
       ctx.addIssue({ code: "custom", message });
     }
   });
