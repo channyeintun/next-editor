@@ -1,0 +1,963 @@
+# Go course, lesson 10: several results, scope and shadowing (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. splitBill(total, people int) (each, left int) above main, and a call that prints both
+#      results -> run-1: 3333 1;
+#   2. pay(total, amount int) (int, bool), then a loop over three friends that writes
+#      `total, ok := pay(total, each)` inside the loop -> run-2: a clean run that is wrong
+#      (1 3333 / 2 3333 / 3 3333 / 0 ကျပ် ရပြီ): the loop's := makes a second total;
+#   3. `var ok bool` before the loop, `// ` in front of the := line and a new line with `=`
+#      -> run-3: 2 6666 / 3 9999 / 9999 ကျပ် ရပြီ.
+# Boards: (R) two results in, `_` to drop one on purpose, one name for two results refused;
+# (S) scope: main's block and the loop's block, a name looked up from the inside out, := in the
+# inner block = a second box with the same name; (Q) quiz (shadowing inside an if).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-10-results-and-scope
+  title: "Go course 10: Result အများနဲ့ scope"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board R: two values in, two results out; `_` drops one on purpose; one name is refused.
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "Result နှစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r-in,
+        kind: text,
+        x: 300,
+        y: 258,
+        width: 150,
+        height: 40,
+        text: "10000, 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 460,
+        y: 262,
+        width: 80,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: r-fn, kind: rectangle, x: 555, y: 235, width: 230, height: 85, strokeColor: "#1971c2" }
+    - {
+        id: r-fn-text,
+        kind: text,
+        x: 590,
+        y: 258,
+        width: 170,
+        height: 40,
+        text: "splitBill",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 795,
+        y: 262,
+        width: 70,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: r-out,
+        kind: text,
+        x: 880,
+        y: 240,
+        width: 150,
+        height: 40,
+        text: "3333, 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-out-names,
+        kind: text,
+        x: 880,
+        y: 290,
+        width: 185,
+        height: 40,
+        text: "each, left",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-blank-box,
+        kind: rectangle,
+        x: 285,
+        y: 365,
+        width: 800,
+        height: 120,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-blank,
+        kind: text,
+        x: 305,
+        y: 378,
+        width: 560,
+        height: 40,
+        text: "each, _ := splitBill(10000, 3)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-blank-note,
+        kind: text,
+        x: 305,
+        y: 430,
+        width: 640,
+        height: 40,
+        text: "_ · မလိုတဲ့ result ကို တမင် ပစ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-one-box,
+        kind: rectangle,
+        x: 285,
+        y: 510,
+        width: 800,
+        height: 120,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-one,
+        kind: text,
+        x: 305,
+        y: 523,
+        width: 520,
+        height: 40,
+        text: "each := splitBill(10000, 3)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-one-note,
+        kind: text,
+        x: 305,
+        y: 575,
+        width: 770,
+        height: 40,
+        text: "variable တစ်ခု၊ result နှစ်ခု · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-one-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 305,
+        y: 535,
+        width: 480,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    # Board S: scope, the two blocks and the second total.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 720,
+        height: 50,
+        text: "Scope · နာမည်ကို မြင်ရတဲ့ နယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-outer,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 800,
+        height: 285,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-outer-label,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 260,
+        height: 40,
+        text: "main ရဲ့ block",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-out-box,
+        kind: rectangle,
+        x: 305,
+        y: 330,
+        width: 210,
+        height: 85,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-out-text,
+        kind: text,
+        x: 330,
+        y: 352,
+        width: 160,
+        height: 40,
+        text: "total · 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-inner,
+        kind: rectangle,
+        x: 560,
+        y: 260,
+        width: 500,
+        height: 235,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-inner-label,
+        kind: text,
+        x: 580,
+        y: 275,
+        width: 260,
+        height: 40,
+        text: "loop ရဲ့ block",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-in-box,
+        kind: rectangle,
+        x: 580,
+        y: 345,
+        width: 250,
+        height: 85,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-in-text,
+        kind: text,
+        x: 600,
+        y: 367,
+        width: 210,
+        height: 40,
+        text: "total · 3333",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-in-new,
+        kind: text,
+        x: 850,
+        y: 367,
+        width: 205,
+        height: 40,
+        text: ":= box အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-lookup,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 640,
+        height: 40,
+        text: "နာမည်ကို အတွင်းကနေ အပြင်ကို ရှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-shadow,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 700,
+        height: 40,
+        text: "shadowing · အပြင်က total ဖုံးသွား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-shadow-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 635,
+        width: 520,
+        height: 12,
+        strokeColor: "#e03131",
+      }
+    # Board Q: the quiz (a second total inside an if).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 230,
+        width: 560,
+        height: 300,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 245,
+        width: 300,
+        height: 40,
+        text: "total := 9999",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 290,
+        width: 400,
+        height: 40,
+        text: "if total < 10000 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 305,
+        y: 335,
+        width: 460,
+        height: 40,
+        text: "    total := total + 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 305,
+        y: 380,
+        width: 460,
+        height: 40,
+        text: "    fmt.Println(total)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l5,
+        kind: text,
+        x: 305,
+        y: 425,
+        width: 60,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l6,
+        kind: text,
+        x: 305,
+        y: 470,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(total)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 305,
+        y: 508,
+        width: 330,
+        height: 12,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 260,
+        height: 40,
+        text: "က · 10000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 620,
+        y: 555,
+        width: 260,
+        height: 40,
+        text: "ခ · 9999",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 790,
+        y: 545,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7110
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "3333 1\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "3333 1\n1 3333\n2 3333\n3 3333\n0 ကျပ် ရပြီ\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "3333 1\n1 3333\n2 6666\n3 9999\n9999 ကျပ် ရပြီ\n"
+
+scenes:
+  - id: recall
+    chapter: Result နှစ်ခု ပြန်ပေးတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ function ကို ကီလိုမီတာ ပေးလိုက်ရင် တက္ကစီခ ဆိုတဲ့ အဖြေ တစ်ခု ပြန်ရခဲ့ပါတယ်။
+      ဒါပေမဲ့ တချို့ အလုပ်တွေမှာ အဖြေ တစ်ခုထက် ပိုလိုပါတယ်။ ဥပမာ သူငယ်ချင်း သုံးယောက် ညစာ အတူ စားပြီး
+      တစ်သောင်း ကျသွားတယ် ဆိုပါစို့။ တစ်ယောက်ကို ဘယ်လောက်စီ ပေးရမလဲ ဆိုတာရယ်၊ ညီညီ ခွဲလို့ မရဘဲ
+      ဘယ်လောက် ကျန်နေလဲ ဆိုတာရယ်၊ အဖြေ နှစ်ခု လိုပါတယ်။ [[mark:today]] ဒီနေ့ lesson မှာ အဖြေ နှစ်ခု ပြန်ပေးတဲ့
+      function ကို ရေးကြည့်ပြီး၊ နာမည် တစ်ခုကို code ရဲ့ ဘယ်နေရာကနေ မြင်ရလဲ ဆိုတာကိုလည်း
+      လေ့လာပါမယ်။ [[mark:type-split]] main ရဲ့ အပေါ်မှာ ကျသင့်ငွေကို လူအရေအတွက်နဲ့ ခွဲပေးမယ့် function
+      တစ်ခု ရေးပါမယ်။ ထိပ်ဆုံး line ကတော့ ဒီ function က ဘာလုပ်လဲ ဆိုတာ လူဖတ်ဖို့ ရေးထားတဲ့ comment
+      ပါ။ [[mark:sel-params]] function က ကျသင့်ငွေ စုစုပေါင်းနဲ့ လူဘယ်နှစ်ယောက်လဲ ဆိုတာကို ယူပါတယ်။
+      [[mark:sel-results]] ထူးခြားတာက result နေရာမှာ type တစ်ခုတည်း မဟုတ်ဘဲ၊ ကွင်းထဲမှာ each နဲ့ left
+      ဆိုတဲ့ နာမည် နှစ်ခု ပါနေတာပါ။ ဆိုလိုတာက ဒီ function က int နှစ်ခု ပြန်ပေးမယ်၊ ပထမ တစ်ခုက
+      တစ်ယောက်စီ ပေးရမယ့် ငွေ၊ ဒုတိယ တစ်ခုက ကျန်တဲ့ ငွေ လို့ ကတိပေးထားတာပါ။ result တွေကို နာမည်
+      ပေးထားတော့ ဖတ်တဲ့သူက ဘယ် result က ဘာလဲ ဆိုတာ ချက်ချင်း သိပါတယ်။
+    sources:
+      - {
+          title: "Effective Go — Multiple return values",
+          url: "https://go.dev/doc/effective_go#multiple-returns",
+        }
+      - {
+          title: "Effective Go — Named result parameters",
+          url: "https://go.dev/doc/effective_go#named-results",
+        }
+      - {
+          title: "The Go Programming Language Specification — Function declarations",
+          url: "https://go.dev/ref/spec#Function_declarations",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: type-split
+        type: editor.type
+        at: { mark: type-split }
+        target: { file: main.go, after: "import \"fmt\"\n", occurrence: 1 }
+        text: "\n// splitBill shares a bill among people: each pays the same, left is what is over.\nfunc splitBill(total, people int) (each, left int) {\n\teach = total / people\n\tleft = total % people\n\treturn each, left\n}\n"
+        cadence: line-by-line
+      - id: sel-params
+        type: editor.select
+        at: { mark: sel-params }
+        target: { file: main.go, text: "total, people int", occurrence: 1 }
+      - id: sel-results
+        type: editor.select
+        at: { mark: sel-results }
+        target: { file: main.go, text: "(each, left int)", occurrence: 1 }
+
+  - id: named
+    narration: >-
+      [[mark:sel-body]] နာမည်ပေးထားတဲ့ result တွေက function စတာနဲ့ zero value ထည့်ထားပြီးသား box
+      တွေအဖြစ် အဆင်သင့် ရှိနေပါပြီ။ ဒါကြောင့် function ထဲမှာ box အသစ် မလုပ်တော့ဘဲ၊ ရှိပြီးသား box ထဲကို
+      တန်ဖိုး ထည့်ရုံပဲ ထည့်ပါတယ်။ ပထမ line က ကျသင့်ငွေကို လူအရေအတွက်နဲ့ စားပြီး တစ်ယောက်စီ ပေးရမယ့်
+      ငွေကို ရှာတာ ဖြစ်ပြီး၊ ဒုတိယ line က စားလို့ ကျန်တဲ့ အကြွင်းကို ရှာတာပါ။ နောက်ဆုံး line က နှစ်ခုလုံးကို အစဉ်လိုက် ပြန်ပေးတာပါ။ [[mark:type-call]] အခု main ထဲမှာ
+      ဒီ function ကို ခေါ်ကြည့်ရအောင်။ result နှစ်ခု ပြန်လာတော့ ဘယ်ဘက်မှာလည်း box နှစ်ခု ကြေညာပြီး
+      လက်ခံပါတယ်။ ပထမ result က each ထဲကို၊ ဒုတိယ result က left ထဲကို အစဉ်လိုက် ဝင်ပါတယ်။ ပြီးတော့
+      နှစ်ခုလုံးကို print ထုတ်ပါမယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Return statements",
+          url: "https://go.dev/ref/spec#Return_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - id: sel-body
+        type: editor.select
+        at: { mark: sel-body }
+        target:
+          { file: main.go, text: "each = total / people\n\tleft = total % people", occurrence: 1 }
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\teach, left := splitBill(10000, 3)\n\tfmt.Println(each, left)\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "3333 1",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-split,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "func splitBill(total, people int) (each, left int) {",
+        }
+
+  - id: blank
+    narration: >-
+      [[mark:point-split]] output မှာ ၃၃၃၃ နဲ့ တစ် ထွက်လာပါတယ်။ ဆိုလိုတာက တစ်ယောက်ကို ၃၃၃၃ ကျပ်စီ
+      ပေးရပြီး၊ တစ်ကျပ် ကျန်နေတာပါ။ [[mark:board-results]] board ပေါ်မှာ ပြန်ကြည့်ရအောင်။ function ထဲကို
+      တန်ဖိုး နှစ်ခု ဝင်သွားပြီး၊ အဖြေ နှစ်ခု ပြန်ထွက်လာတာပါ။ [[mark:draw-blank]] တခါတလေ result
+      တစ်ခုကိုပဲ လိုတတ်ပါတယ်။ ဥပမာ တစ်ယောက်စီ ပေးရမယ့် ငွေကိုပဲ လိုပြီး ကျန်တဲ့ ငွေကို မလိုဘူး
+      ဆိုပါစို့။ အဲဒီအခါ မလိုတဲ့ result ရဲ့ နေရာမှာ underscore ကို ထည့်ပါတယ်။ underscore က ဒီ result ကို
+      တမင် ပစ်လိုက်တာပါ လို့ Go ကို ပြောတာပါ။ left ကို ကြေညာထားပြီး မသုံးရင် compile error ရမှာ
+      ဖြစ်လို့ ဒီနည်းက အသုံးဝင်ပါတယ်။ [[mark:draw-one]] ဒါပေမဲ့ variable တစ်ခုတည်းနဲ့ result နှစ်ခုကို
+      လက်ခံလို့တော့ မရပါဘူး။ variable က တစ်ခုပဲ ရှိပေမဲ့ function က result နှစ်ခု ပြန်ပေးတယ် ဆိုပြီး
+      compiler က ငြင်းပါတယ်။ ဆိုလိုတာက result တိုင်းကို နေရာ တစ်ခုစီ ပေးရမယ်၊ မလိုတာကိုတော့
+      underscore နဲ့ တမင် ပစ်ရမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Effective Go — The blank identifier",
+          url: "https://go.dev/doc/effective_go#blank",
+        }
+      - {
+          title: "The Go Programming Language Specification — Blank identifier",
+          url: "https://go.dev/ref/spec#Blank_identifier",
+        }
+    actions:
+      - {
+          id: point-split,
+          type: console.point,
+          at: { mark: point-split },
+          target: { text: "3333 1" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-results } }
+      - {
+          id: board-results,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [r-title, r-in, r-arrow1, r-fn, r-fn-text, r-arrow2, r-out, r-out-names],
+        }
+      - {
+          id: draw-blank,
+          type: whiteboard.apply,
+          at: { mark: draw-blank },
+          upsertIds: [r-blank-box, r-blank, r-blank-note],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-one,
+          type: whiteboard.apply,
+          at: { mark: draw-one },
+          upsertIds: [r-one-box, r-one, r-one-note, r-one-x],
+          drawMs: 2200,
+        }
+
+  - id: pay
+    chapter: တန်ဖိုးနဲ့ ok
+    narration: >-
+      [[mark:close-results]] အခု သူငယ်ချင်းတွေ ငွေ လာပေးတာကို program နဲ့ စုကြည့်ရအောင်။
+      [[mark:type-pay]] pay ဆိုတဲ့ function တစ်ခု ထပ်ရေးပါမယ်။ ဒီ function က အခုထိ စုထားတဲ့ ငွေနဲ့
+      သူငယ်ချင်း တစ်ယောက် ပေးတဲ့ ငွေကို ယူပြီး၊ ပေါင်းပြီးသား စုစုပေါင်းနဲ့ bool တစ်ခုကို ပြန်ပေးပါတယ်။
+      ဒီ တစ်ခါမှာ result တွေကို နာမည် မပေးဘဲ type ပဲ ရေးထားပါတယ်။ [[mark:sel-false]] ပေးတဲ့ ငွေက
+      သုည ဒါမှမဟုတ် သုညထက် နည်းနေရင်၊ စုစုပေါင်းကို မပြောင်းဘဲ false ကို ပြန်ပေးပါတယ်။ ဒီ bool ကို ok
+      လို့ ခေါ်လေ့ ရှိပြီး၊ ပထမ result က တကယ် ယုံလို့ရတဲ့ အဖြေလား ဆိုတာကို ပြောပြတာပါ။ တန်ဖိုး တစ်ခုနဲ့
+      ok ကို တွဲ ပြန်ပေးတဲ့ ပုံစံကို Go မှာ မကြာခဏ တွေ့ရမှာ ဖြစ်ပြီး၊ နောက်ပိုင်း lesson တွေမှာ ok အစား
+      error ပြန်ပေးတဲ့ ပုံစံကိုလည်း တွေ့ရပါမယ်။
+    sources:
+      - {
+          title: "Effective Go — Multiple return values",
+          url: "https://go.dev/doc/effective_go#multiple-returns",
+        }
+      - {
+          title: "The Go Programming Language Specification — Return statements",
+          url: "https://go.dev/ref/spec#Return_statements",
+        }
+    actions:
+      - {
+          id: close-results,
+          type: whiteboard.apply,
+          at: { mark: close-results },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-pay
+        type: editor.type
+        at: { mark: type-pay }
+        target: { file: main.go, after: "\treturn each, left\n}\n", occurrence: 1 }
+        text: "\n// pay adds one friend's payment to the total; ok is false when nothing was paid.\nfunc pay(total, amount int) (int, bool) {\n\tif amount <= 0 {\n\t\treturn total, false\n\t}\n\treturn total + amount, true\n}\n"
+        cadence: line-by-line
+      - id: sel-false
+        type: editor.select
+        at: { mark: sel-false }
+        target: { file: main.go, text: "return total, false", occurrence: 1 }
+
+  - id: loop
+    narration: >-
+      [[mark:type-loop]] main ထဲမှာတော့ စုမိတဲ့ ငွေကို သုညနဲ့ စပြီး၊ သူငယ်ချင်း သုံးယောက်အတွက် loop တစ်ခု
+      ရေးပါမယ်။ loop ပြီးရင် စုစုပေါင်းကို တစ်ကြောင်း ထုတ်ပြပါမယ်။ [[mark:sel-shadow]] loop ထဲက ဒီ line
+      ကို ကြည့်ပါ။ အခေါက်တိုင်းမှာ pay ကို ခေါ်ပြီး result နှစ်ခုကို total နဲ့ ok ထဲ ထည့်ပါတယ်။ ok က
+      အရင်က မရှိသေးတဲ့ နာမည် ဖြစ်လို့ box အသစ် လုပ်တဲ့ သင်္ကေတကို သုံးထားပါတယ်။ [[mark:sel-check]]
+      အောက်က if ကတော့ ok က false ဖြစ်ရင် မပေးရသေး လို့ ပြပါတယ်။ ok ကို ဒီလို မစစ်ရင် မသုံးတဲ့ variable
+      ဖြစ်ပြီး compile error ရမှာပါ။ ပြီးတော့ အခေါက်တိုင်းမှာ သူငယ်ချင်း နံပါတ်နဲ့ အခုထိ စုမိတဲ့ ငွေကို
+      ထုတ်ပြပါတယ်။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Short variable declarations",
+          url: "https://go.dev/ref/spec#Short_variable_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "\tfmt.Println(each, left)\n", occurrence: 1 }
+        text: "\n\ttotal := 0\n\tfor friend := range 3 {\n\t\ttotal, ok := pay(total, each)\n\t\tif !ok {\n\t\t\tfmt.Println(friend+1, \"မပေးရသေး\")\n\t\t}\n\t\tfmt.Println(friend+1, total)\n\t}\n\tfmt.Println(total, \"ကျပ် ရပြီ\")\n"
+        cadence: line-by-line
+      - id: sel-shadow
+        type: editor.select
+        at: { mark: sel-shadow }
+        target: { file: main.go, text: "total, ok := pay(total, each)", occurrence: 1 }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target: { file: main.go, text: "if !ok {", occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "0 ကျပ် ရပြီ",
+          timeoutMs: 8000,
+        }
+
+  - id: wrong
+    chapter: Error မရှိတဲ့ bug
+    narration: >-
+      [[mark:point-r2-first]] ပထမ သူငယ်ချင်း ပေးပြီးတော့ ၃၃၃၃ ဖြစ်ပါတယ်၊ ဒါက မှန်ပါတယ်။
+      [[mark:point-r2-third]] ဒါပေမဲ့ တတိယ သူငယ်ချင်း ပေးပြီးတဲ့အထိ ၃၃၃၃ ပဲ ရှိနေပါတယ်၊ ၉၉၉၉ ဖြစ်ရမှာပါ။
+      [[mark:point-r2-total]] အဆိုးဆုံးကတော့ နောက်ဆုံး စာကြောင်းပါ၊ စုစုပေါင်း သုည ကျပ် လို့ ပြနေပါတယ်။
+      သတိထားကြည့်ပါ၊ compile error လည်း မရှိ၊ vet ကလည်း ဘာမှ သတိမပေးဘဲ program က အဆုံးထိ run
+      သွားပါတယ်။ ဒါပေမဲ့ အဖြေက မှားနေပါတယ်။ ဒါကို bug လို့ ခေါ်ပါတယ်။ bug ဆိုတာ code ထဲမှာ ကိုယ်တို့
+      ရေးမှားထားတဲ့ နေရာပါ။ ဒီလို bug မျိုးကို compiler က ဖမ်းပေးလို့ မရတာမို့ ကိုယ်တိုင် နားလည်ထားဖို့
+      လိုပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Declarations and scope",
+          url: "https://go.dev/ref/spec#Declarations_and_scope",
+        }
+    actions:
+      - {
+          id: point-r2-first,
+          type: console.point,
+          at: { mark: point-r2-first },
+          target: { text: "1 3333" },
+        }
+      - {
+          id: point-r2-third,
+          type: console.point,
+          at: { mark: point-r2-third },
+          target: { text: "3 3333" },
+        }
+      - {
+          id: point-r2-total,
+          type: console.point,
+          at: { mark: point-r2-total },
+          target: { text: "0 ကျပ် ရပြီ" },
+        }
+
+  - id: scope
+    chapter: Scope နဲ့ shadowing
+    narration: >-
+      [[mark:board-scope]] ဘာဖြစ်သွားလဲ နားလည်ဖို့ scope ကို သိရပါမယ်။ scope ဆိုတာ နာမည် တစ်ခုကို မြင်ရတဲ့
+      နယ်ပါ။ တွန့်ကွင်း တစ်စုံကြားက code အပိုင်းကို block လို့ ခေါ်ပြီး၊ block ထဲမှာ ကြေညာတဲ့ နာမည်က
+      အဲဒီ block ထဲမှာပဲ ရှိပါတယ်။ [[mark:draw-outer]] main function တစ်ခုလုံးက block တစ်ခုပါ၊ total ကို
+      အဲဒီမှာ သုညနဲ့ လုပ်ထားပါတယ်။ [[mark:draw-inner]] loop ရဲ့ အထဲက code ကလည်း main ရဲ့ block ထဲမှာ
+      ရှိနေတဲ့ block ငယ် တစ်ခုပါ။ အဲဒီထဲမှာ box အသစ် လုပ်တဲ့ သင်္ကေတကို သုံးလိုက်တော့၊ Go က ok အတွက်တင်
+      မကဘဲ total အတွက်ပါ box အသစ် လုပ်ပေးလိုက်ပါတယ်။ နာမည်တူ box နှစ်ခု ဖြစ်သွားတာပါ။
+      [[mark:draw-lookup]] Go က နာမည် တစ်ခုကို ရှာတဲ့အခါ အတွင်းဆုံး block ကနေ စရှာပြီး၊ မတွေ့မှ အပြင်ကို
+      ဆက်ရှာပါတယ်။ ဒါကြောင့် loop ထဲမှာ total လို့ ပြောရင် အတွင်း box ကို ဆိုလိုတာ ဖြစ်ပြီး၊ main ရဲ့ total က
+      ဖုံးသွားပါတယ်။ [[mark:draw-shadow]] ဒါကို shadowing လို့ ခေါ်ပါတယ်။ pay ကို ခေါ်တဲ့ ညာဘက်က total
+      ကတော့ အပြင် box ဖြစ်နေသေးလို့ အခေါက်တိုင်း သုည ပေါင်း ၃၃၃၃ ပဲ ရပါတယ်။ အတွင်း box က အခေါက်
+      ပြီးတိုင်း ပျောက်သွားပြီး၊ main ရဲ့ total ကတော့ တစ်ခါမှ မပြောင်းဘဲ သုည ဖြစ်နေတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Declarations and scope",
+          url: "https://go.dev/ref/spec#Declarations_and_scope",
+        }
+      - {
+          title: "The Go Programming Language Specification — Blocks",
+          url: "https://go.dev/ref/spec#Blocks",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-scope } }
+      - {
+          id: board-scope,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-outer,
+          type: whiteboard.apply,
+          at: { mark: draw-outer },
+          upsertIds: [s-outer, s-outer-label, s-out-box, s-out-text],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-inner,
+          type: whiteboard.apply,
+          at: { mark: draw-inner },
+          upsertIds: [s-inner, s-inner-label, s-in-box, s-in-text, s-in-new],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-lookup,
+          type: whiteboard.apply,
+          at: { mark: draw-lookup },
+          upsertIds: [s-lookup],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-shadow,
+          type: whiteboard.apply,
+          at: { mark: draw-shadow },
+          upsertIds: [s-shadow, s-shadow-line],
+          drawMs: 1400,
+        }
+
+  - id: fix
+    narration: >-
+      [[mark:close-scope]] ပြင်ဖို့ကတော့ loop ထဲမှာ box အသစ် မလုပ်ဘဲ၊ main ရဲ့ box တွေထဲကိုပဲ ထည့်ရပါမယ်။
+      [[mark:type-var-ok]] ဒါပေမဲ့ ok က loop ထဲမှာပဲ ရှိခဲ့တာမို့၊ loop မစခင် var နဲ့ ကြိုကြေညာထားပါမယ်။
+      [[mark:type-comment]] မှားနေတဲ့ line ရဲ့ ရှေ့မှာ comment အမှတ်အသား ထည့်ပြီး ပိတ်ထားလိုက်ပါမယ်။
+      comment ဖြစ်သွားတဲ့ line ကို Go က run မလုပ်တော့ပါဘူး။ [[mark:type-assign]] ပြီးတော့ အောက်မှာ ထည့်ရုံ
+      ထည့်တဲ့ သင်္ကေတနဲ့ line အသစ် တစ်ကြောင်း ရေးပါမယ်။ အခု total ရော ok ရော main ရဲ့ box တွေ
+      ဖြစ်သွားပါပြီ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Effective Go — Redeclaration and reassignment",
+          url: "https://go.dev/doc/effective_go#redeclaration",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - {
+          id: close-scope,
+          type: whiteboard.apply,
+          at: { mark: close-scope },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-var-ok
+        type: editor.type
+        at: { mark: type-var-ok }
+        target: { file: main.go, after: "\ttotal := 0\n", occurrence: 1 }
+        text: "\tvar ok bool\n"
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: "for friend := range 3 {\n\t\t", occurrence: 1 }
+        text: "// "
+      - id: type-assign
+        type: editor.type
+        at: { mark: type-assign }
+        target: { file: main.go, after: "// total, ok := pay(total, each)\n", occurrence: 1 }
+        text: "\t\ttotal, ok = pay(total, each)\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "9999 ကျပ် ရပြီ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-assign,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\ttotal, ok = pay(total, each)\n",
+        }
+
+  - id: right
+    narration: >-
+      [[mark:point-r3-two]] ဒီ တစ်ခါမှာတော့ ဒုတိယ သူငယ်ချင်း ပေးပြီးတဲ့အခါ ၆၆၆၆ ဖြစ်လာပါပြီ။ စုမိတဲ့ ငွေက
+      အခေါက်တိုင်း တိုးလာတာကို တွေ့ရပါတယ်။ [[mark:point-r3-total]] နောက်ဆုံး စာကြောင်းမှာ ၉၉၉၉ ကျပ်
+      ရပါပြီ။ တစ်သောင်း ပြည့်ဖို့ လိုနေတဲ့ တစ်ကျပ်ကတော့ ပထမ စာကြောင်းမှာ မြင်ခဲ့တဲ့ left ပါ။ ညီညီ ခွဲလို့
+      မရလို့ ကျန်ခဲ့တဲ့ ငွေပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - {
+          id: point-r3-two,
+          type: console.point,
+          at: { mark: point-r3-two },
+          target: { text: "2 6666" },
+        }
+      - {
+          id: point-r3-total,
+          type: console.point,
+          at: { mark: point-r3-total },
+          target: { text: "9999 ကျပ် ရပြီ" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ total ကို ၉၉၉၉ နဲ့ စထားပြီး၊ if ရဲ့ block
+      ထဲမှာတော့ box အသစ် လုပ်တဲ့ သင်္ကေတနဲ့ total ကို တစ် ပေါင်းထားပါတယ်။ [[mark:quiz-line]] if ပြီးသွားတဲ့
+      နောက်မှာ ရှိတဲ့ ဒီ line က ဘာ ထုတ်ပြမလဲ။ တစ်သောင်းလား၊ ၉၉၉၉ လား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ ၉၉၉၉ ပါ။ ဘာကြောင့်လဲဆိုတော့ if ထဲက total က
+      အဲဒီ block ထဲမှာပဲ ရှိတဲ့ box အသစ် ဖြစ်လို့ပါ။ block ထဲမှာတော့ တစ်သောင်း ထွက်ပေမဲ့၊ block ပြီးသွားတော့
+      အဲဒီ box လည်း ပျောက်သွားပြီး၊ အပြင်က total ကို တစ်ခါမှ မထိခဲ့ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Declarations and scope",
+          url: "https://go.dev/ref/spec#Declarations_and_scope",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-l5, q-l6, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-results]] function က result တစ်ခုထက် ပို
+      ပြန်ပေးနိုင်ပြီး၊ နာမည်ပေးထားရင် ဘယ် result က ဘာလဲ ရှင်းပါတယ်။ မလိုတဲ့ result ကိုတော့ underscore
+      နဲ့ တမင် ပစ်လို့ ရပါတယ်။ [[mark:recap-ok]] တန်ဖိုးနဲ့ ok တွဲ ပြန်ပေးရင်၊ ok က အဖြေကို ယုံလို့ရလား
+      ဆိုတာ ပြောပါတယ်။ [[mark:recap-assign]] block အတွင်းမှာ box အသစ် လုပ်တဲ့ သင်္ကေတကို သုံးရင်
+      နာမည်တူ box အသစ် ရပြီး၊ အပြင်ကဟာ မပြောင်းပါဘူး။ compile error လည်း မပေးတာမို့၊ ရှိပြီးသား box ကို
+      ပြောင်းချင်ရင် ထည့်ရုံ ထည့်တဲ့ သင်္ကေတကို သုံးပါ။ နောက် lesson မှာတော့ တန်ဖိုး အများကြီးကို variable
+      တစ်ခုထဲမှာ အစဉ်လိုက် စီထားတဲ့ slice ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Effective Go — Named result parameters",
+          url: "https://go.dev/doc/effective_go#named-results",
+        }
+      - {
+          title: "The Go Programming Language Specification — Declarations and scope",
+          url: "https://go.dev/ref/spec#Declarations_and_scope",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-results
+        type: editor.select
+        at: { mark: recap-results }
+        target: { file: main.go, text: "(each, left int)", occurrence: 1 }
+      - id: recap-ok
+        type: editor.select
+        at: { mark: recap-ok }
+        target: { file: main.go, text: "(int, bool)", occurrence: 1 }
+      - id: recap-assign
+        type: editor.select
+        at: { mark: recap-assign }
+        target: { file: main.go, text: "total, ok = pay(total, each)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
