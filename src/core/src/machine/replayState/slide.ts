@@ -12,8 +12,10 @@ import { createViewChangeResolver } from "./viewChanges";
 // Slide track replay.
 //
 // Reconstructs the slide deck state (open/maximized/current slide/vertical index)
-// at a given time by scanning back from the target event for the most recent
-// navigation/structural/index event, then maps it onto a concrete slide index.
+// at a given event from the most recent navigation/structural/index event at or
+// before it, then maps it onto a concrete slide index. Where those most recent
+// events are is kept per track (see SlideTrackIndex), so a tick that crosses many
+// events does not scan the track back from each of them.
 // ============================================================================
 
 export interface SlideReplayApplication {
@@ -47,22 +49,80 @@ const CLOSED_SLIDE_APPLICATION: SlideReplayApplication = {
 };
 
 /**
- * The most recent matching event at or before `eventIndex`. Scanning backwards
- * in place (rather than reversing a copy of the prefix) keeps state reconstruction
- * allocation-free and lets each query stop at its first hit — which for these
- * predicates is usually within a few events.
+ * Where a slide track last set each part of the deck state. `lastX[i]` is the index
+ * of the latest event at or before i that set X, or -1.
+ *
+ * buildSlideStateAtEvent used to find these by scanning back from the event, once
+ * per lookup. A forward tick asks for every event it crosses, and a lookup with
+ * nothing to find (a close on a track that names no slide) ran back to the start of
+ * the track. A lesson file can put any number of events on one timestamp, so one
+ * tick over n of them cost n²/2 steps inside a state machine action on the viewer's
+ * main thread. The index is a prefix fold instead: each event is read once, however
+ * the playhead gets there.
  */
-function findLastEventAtOrBefore(
-  slideEvents: SlideEvent[],
-  eventIndex: number,
-  matches: (event: SlideEvent) => boolean,
-): SlideEvent | undefined {
-  for (let index = eventIndex; index >= 0; index -= 1) {
-    if (matches(slideEvents[index])) {
-      return slideEvents[index];
-    }
+interface SlideTrackIndex {
+  /** The latest `slide_open` or `slide_close`. */
+  lastVisibility: number[];
+  /** The latest event that changed how the deck is shown (see `isSlideViewEvent`). */
+  lastView: number[];
+  /** The latest event that names a slide. */
+  lastPosition: number[];
+  /** The latest event that set a vertical index for the slide shown at i. */
+  lastIndexv: number[];
+  /** Fold state: per slide, the latest event so far that set its vertical index. */
+  indexvBySlideId: Map<SlideEvent["slideId"], number>;
+  /** Fold state: the latest event so far that set a vertical index, whatever it names. */
+  lastAnyIndexv: number;
+}
+
+const slideTrackIndexCache = new WeakMap<SlideEvent[], SlideTrackIndex>();
+
+/**
+ * The track's index, folded through `eventIndex` at least. It is extended only as
+ * far as it is asked, and kept per events array, which streamed playback only ever
+ * appends to in place.
+ */
+function getSlideTrackIndex(slideEvents: SlideEvent[], eventIndex: number): SlideTrackIndex {
+  let trackIndex = slideTrackIndexCache.get(slideEvents);
+  if (!trackIndex) {
+    trackIndex = {
+      lastVisibility: [],
+      lastView: [],
+      lastPosition: [],
+      lastIndexv: [],
+      indexvBySlideId: new Map(),
+      lastAnyIndexv: -1,
+    };
+    slideTrackIndexCache.set(slideEvents, trackIndex);
   }
-  return undefined;
+
+  const { lastVisibility, lastView, lastPosition, lastIndexv, indexvBySlideId } = trackIndex;
+  for (let cursor = lastPosition.length; cursor <= eventIndex; cursor += 1) {
+    const slideEvent = slideEvents[cursor];
+    const { slideId } = slideEvent;
+    const position = slideId ? cursor : (lastPosition[cursor - 1] ?? -1);
+
+    if (slideEvent.indexv != null) {
+      indexvBySlideId.set(slideId, cursor);
+      trackIndex.lastAnyIndexv = cursor;
+    }
+    // The slide shown at this event is the one the latest position event names. Before
+    // any event names a slide, the vertical index is the last one set at all.
+    const shownSlideId = slideId || slideEvents[position]?.slideId;
+
+    lastVisibility.push(
+      SLIDE_VISIBILITY_EVENT_TYPES.has(slideEvent.type)
+        ? cursor
+        : (lastVisibility[cursor - 1] ?? -1),
+    );
+    lastView.push(isSlideViewEvent(slideEvent) ? cursor : (lastView[cursor - 1] ?? -1));
+    lastPosition.push(position);
+    lastIndexv.push(
+      shownSlideId ? (indexvBySlideId.get(shownSlideId) ?? -1) : trackIndex.lastAnyIndexv,
+    );
+  }
+
+  return trackIndex;
 }
 
 /** Whether the deck is maximized after `lastViewEvent`, the latest view event. */
@@ -72,23 +132,14 @@ function resolveMaximized(lastViewEvent: SlideEvent | undefined): boolean {
   return false;
 }
 
-/**
- * The deck state at `eventIndex`. Each backward lookup runs only when its answer is
- * used: the view lookup only for an open deck, and the index lookup only when the
- * event carries no vertical index of its own.
- */
+/** The deck state at `eventIndex`: what the latest events at or before it left. */
 function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): SlidePreviewState {
   const slideEvent = slideEvents[eventIndex];
-  const lastVisibilityEvent = findLastEventAtOrBefore(slideEvents, eventIndex, (event) =>
-    SLIDE_VISIBILITY_EVENT_TYPES.has(event.type),
-  );
-  const lastPositionEvent = findLastEventAtOrBefore(slideEvents, eventIndex, (event) =>
-    Boolean(event.slideId),
-  );
-  const targetSlideId = slideEvent.slideId || lastPositionEvent?.slideId;
-  const isOpen = lastVisibilityEvent?.type === "slide_open";
-  const isMaximized =
-    isOpen && resolveMaximized(findLastEventAtOrBefore(slideEvents, eventIndex, isSlideViewEvent));
+  const trackIndex = getSlideTrackIndex(slideEvents, eventIndex);
+  // The event's own slide when it names one: it is then its own latest position event.
+  const targetSlideId = slideEvents[trackIndex.lastPosition[eventIndex]]?.slideId;
+  const isOpen = slideEvents[trackIndex.lastVisibility[eventIndex]]?.type === "slide_open";
+  const isMaximized = isOpen && resolveMaximized(slideEvents[trackIndex.lastView[eventIndex]]);
 
   let indexv: number | undefined;
   if (slideEvent.type === "slide_close") {
@@ -96,11 +147,7 @@ function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): 
   } else if (slideEvent.indexv != null) {
     indexv = slideEvent.indexv;
   } else {
-    indexv = findLastEventAtOrBefore(
-      slideEvents,
-      eventIndex,
-      (event) => (targetSlideId ? event.slideId === targetSlideId : true) && event.indexv != null,
-    )?.indexv;
+    indexv = slideEvents[trackIndex.lastIndexv[eventIndex]]?.indexv;
   }
 
   return {
@@ -111,21 +158,50 @@ function buildSlideStateAtEvent(slideEvents: SlideEvent[], eventIndex: number): 
   };
 }
 
+const deckIndexCache = new WeakMap<Slide[], Map<SlidePreviewState["currentSlideId"], number>>();
+
+/**
+ * Where the slide with `slideId` is in the deck, or -1. Kept per deck, which a
+ * recording saves once and never edits: every crossed event asks, and searching the
+ * deck each time cost events x slides comparisons on a tick over a long track.
+ */
+function findSlideIndex(
+  slides: Slide[] | undefined,
+  slideId: SlidePreviewState["currentSlideId"],
+): number {
+  if (!slides) {
+    return -1;
+  }
+
+  let indexById = deckIndexCache.get(slides);
+  if (!indexById) {
+    indexById = new Map();
+    for (let index = 0; index < slides.length; index += 1) {
+      const { id } = slides[index];
+      // The first slide with an id is the one a search from the front finds.
+      if (!indexById.has(id)) {
+        indexById.set(id, index);
+      }
+    }
+    deckIndexCache.set(slides, indexById);
+  }
+
+  return indexById.get(slideId) ?? -1;
+}
+
 function createSlideReplayApplication(
   slideEvents: SlideEvent[],
   slides: Slide[] | undefined,
   eventIndex: number,
 ): SlideReplayApplication | null {
   const slideEvent = slideEvents[eventIndex];
-  // Without a deck only a close can be placed, so skip the backward scans.
+  // Without a deck only a close can be placed, so skip resolving the state.
   if (slideEvent.type !== "slide_close" && !slides?.length) {
     return null;
   }
   const slideState = buildSlideStateAtEvent(slideEvents, eventIndex);
   const slideIndex =
-    slideEvent.type === "slide_close"
-      ? -1
-      : (slides?.findIndex((slide) => slide.id === slideState.currentSlideId) ?? -1);
+    slideEvent.type === "slide_close" ? -1 : findSlideIndex(slides, slideState.currentSlideId);
 
   if (slideIndex === -1 && slideEvent.type !== "slide_close") {
     return null;
@@ -142,9 +218,8 @@ function createSlideReplayApplication(
  * can place, or -1. A close always places; any other event places when the slide it
  * shows (its own slideId, else the nearest earlier one) is in the deck. So every event
  * from one slideId-bearing event up to the next shows the same slide: such a run places
- * its newest event, or only its closes. One pass back finds the answer. Asking each
- * event in turn costs a backward scan per event, O(n²) on a long track that places
- * nothing.
+ * its newest event, or only its closes. One pass back finds the answer, without
+ * resolving a deck state for each event on a long track that places nothing.
  */
 function findLastPlaceableEventIndex(
   slideEvents: SlideEvent[],
@@ -161,7 +236,7 @@ function findLastPlaceableEventIndex(
     if (!slideId) {
       continue;
     }
-    if (slides?.some((slide) => slide.id === slideId)) {
+    if (findSlideIndex(slides, slideId) >= 0) {
       return runEnd;
     }
     if (runClose >= 0) {

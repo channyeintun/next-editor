@@ -312,6 +312,208 @@ describe("slide replay resync", () => {
   });
 });
 
+describe("slide replay of a tick across many events", () => {
+  /** The same event, counting how often replay reads the field `key` from it. */
+  function counted<T extends object>(target: T, key: string, reads: { count: number }): T {
+    const value = (target as Record<string, unknown>)[key];
+    return Object.defineProperty({ ...target }, key, {
+      enumerable: true,
+      get() {
+        reads.count += 1;
+        return value;
+      },
+    });
+  }
+
+  it("reads each crossed event a bounded number of times, not once per earlier event", () => {
+    // A lesson file can carry any number of slide events on one timestamp, and one
+    // tick crosses them all. Each close used to scan back to the start of the track
+    // for the slide it shows: n(n+3)/2 reads, two million for these 2,000 events.
+    const reads = { count: 0 };
+    const slideEvents: SlideEvent[] = Array.from({ length: 2_000 }, () =>
+      counted({ type: "slide_close", timestamp: 1_000 }, "slideId", reads),
+    );
+
+    const result = getSlideReplayResult({
+      slideEvents,
+      slides: [],
+      currentTime: 1_000,
+      lastAppliedIndex: -1,
+      isResync: false,
+    });
+
+    expect(result.nextIndex).toBe(slideEvents.length - 1);
+    expect(result.applications).toHaveLength(slideEvents.length);
+    expect(result.applications.at(-1)).toEqual({
+      slideIndex: -1,
+      slideState: { isOpen: false, isMaximized: false, currentSlideId: null, indexv: 0 },
+    });
+    expect(reads.count).toBeLessThanOrEqual(4 * slideEvents.length);
+  });
+
+  it("finds the vertical index of each crossed event without rescanning the track", () => {
+    // An event with no vertical index of its own takes the one last set for its
+    // slide. None was ever set here, so that lookup also ran back to the start.
+    const reads = { count: 0 };
+    const slideEvents: SlideEvent[] = Array.from({ length: 2_000 }, (_, index) =>
+      counted(
+        { type: "slide_change", timestamp: 1_000, slideId: index % 2 ? "one" : "two" },
+        "indexv",
+        reads,
+      ),
+    );
+
+    const result = getSlideReplayResult({
+      slideEvents,
+      slides,
+      currentTime: 1_000,
+      lastAppliedIndex: -1,
+      isResync: false,
+    });
+
+    expect(result.applications).toHaveLength(slideEvents.length);
+    expect(reads.count).toBeLessThanOrEqual(4 * slideEvents.length);
+  });
+
+  it("looks each crossed slide up in the deck without scanning the deck", () => {
+    // The deck comes from the lesson file too. Every crossed event used to search
+    // it from the front: events x slides id comparisons, a million here.
+    const reads = { count: 0 };
+    const deck: Slide[] = Array.from({ length: 500 }, (_, index) =>
+      counted(
+        { id: `slide-${index}`, order: index, content: "", contentType: "html" },
+        "id",
+        reads,
+      ),
+    );
+    const slideEvents: SlideEvent[] = Array.from({ length: 2_000 }, () => ({
+      type: "slide_change",
+      timestamp: 1_000,
+      slideId: "slide-499",
+      indexv: 0,
+    }));
+
+    const result = getSlideReplayResult({
+      slideEvents,
+      slides: deck,
+      currentTime: 1_000,
+      lastAppliedIndex: -1,
+      isResync: false,
+    });
+
+    expect(result.applications).toHaveLength(slideEvents.length);
+    expect(result.applications[0]?.slideIndex).toBe(499);
+    expect(reads.count).toBeLessThanOrEqual(4 * deck.length);
+
+    // A seek asks whether each slide it passes is still in the deck.
+    reads.count = 0;
+    const gone: SlideEvent[] = Array.from({ length: 2_000 }, (_, index) => ({
+      type: "slide_change",
+      timestamp: index,
+      slideId: `gone-${index}`,
+    }));
+    getSlideReplayResult({
+      slideEvents: gone,
+      slides: deck,
+      currentTime: 5_000,
+      lastAppliedIndex: -1,
+      isResync: true,
+    });
+    expect(reads.count).toBeLessThanOrEqual(4 * deck.length);
+  });
+
+  // The deck state at an event, read straight off the track: each part of it is the
+  // latest earlier event that set it. Slow, and what the replay must keep showing.
+  function stateByScanningBack(slideEvents: SlideEvent[], eventIndex: number) {
+    const lastBefore = (matches: (event: SlideEvent) => boolean) =>
+      slideEvents.slice(0, eventIndex + 1).findLast(matches);
+    const slideEvent = slideEvents[eventIndex];
+    const slideId = slideEvent.slideId || lastBefore((event) => Boolean(event.slideId))?.slideId;
+    const visibility = lastBefore(
+      (event) => event.type === "slide_open" || event.type === "slide_close",
+    );
+    const view = lastBefore(
+      (event) => event.type !== "slide_change" && event.type !== "slide_interaction",
+    );
+    const isOpen = visibility?.type === "slide_open";
+    return {
+      isOpen,
+      isMaximized:
+        isOpen &&
+        (view?.type === "slide_maximize" ||
+          (view?.type === "slide_open" && (view.isMaximized ?? false))),
+      currentSlideId: slideId || null,
+      indexv:
+        slideEvent.type === "slide_close"
+          ? 0
+          : (slideEvent.indexv ??
+            lastBefore(
+              (event) => (slideId ? event.slideId === slideId : true) && event.indexv != null,
+            )?.indexv),
+    };
+  }
+
+  it("applies, for every crossed event, the state a scan back from it finds", () => {
+    const arbEvent = fc.record(
+      {
+        gap: fc.nat({ max: 2 }),
+        type: fc.constantFrom<SlideEvent["type"]>(
+          "slide_open",
+          "slide_close",
+          "slide_change",
+          "slide_maximize",
+          "slide_minimize",
+          "slide_interaction",
+        ),
+        slideId: fc.constantFrom("one", "two", "gone", ""),
+        isMaximized: fc.boolean(),
+        indexv: fc.nat({ max: 2 }),
+      },
+      { requiredKeys: ["gap", "type"] },
+    );
+
+    fc.assert(
+      fc.property(
+        fc.array(arbEvent, { maxLength: 30 }),
+        fc.constantFrom(undefined, [], slides),
+        fc.array(fc.nat({ max: 8 }), { maxLength: 6 }),
+        (steps, deck, tickGaps) => {
+          let time = 0;
+          const slideEvents: SlideEvent[] = steps.map(({ gap, ...event }) => {
+            time += gap;
+            return { ...event, timestamp: time };
+          });
+          const expected = slideEvents.flatMap((slideEvent, index) => {
+            const slideState = stateByScanningBack(slideEvents, index);
+            if (slideEvent.type === "slide_close") return [{ slideIndex: -1, slideState }];
+            const slideIndex =
+              deck?.findIndex((slide) => slide.id === slideState.currentSlideId) ?? -1;
+            return slideIndex < 0 ? [] : [{ slideIndex, slideState }];
+          });
+
+          // Ticks of any length, starting over on the same track, apply every placed event.
+          const applied: unknown[] = [];
+          let lastAppliedIndex = -1;
+          let currentTime = -1;
+          for (const gap of [...tickGaps, time + 1]) {
+            currentTime += gap;
+            const result = getSlideReplayResult({
+              slideEvents,
+              slides: deck,
+              currentTime,
+              lastAppliedIndex,
+              isResync: false,
+            });
+            applied.push(...result.applications);
+            lastAppliedIndex = result.nextIndex;
+          }
+          expect(applied).toEqual(expected);
+        },
+      ),
+    );
+  });
+});
+
 describe("getSlideViewChangeIndex", () => {
   it("marks opening, closing, maximizing and minimizing, not navigation", () => {
     const events: SlideEvent[] = [
