@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isChatImageDataUrl } from "../../agent/imageAttachments";
 import type { ChatItem } from "../../types/chat";
 import { formatToolResultOutput } from "./toolResultOutput";
 
@@ -58,7 +59,9 @@ function ToolResultRow({ item }: { item: Extract<ChatItem, { kind: "tool_result"
 }
 
 function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) {
-  if (!item.text && !item.images?.length) {
+  // A replayed transcript's images are whatever the recording holds.
+  const images = item.images?.filter((image) => isChatImageDataUrl(image.dataUrl)) ?? [];
+  if (!item.text && images.length === 0) {
     return null;
   }
 
@@ -72,9 +75,9 @@ function MessageRow({ item }: { item: Extract<ChatItem, { kind: "message" }> }) 
         >
           {/* Who wrote it is otherwise shown only by alignment and colour. */}
           <span className="sr-only">{item.role === "user" ? "You said: " : "Agent: "}</span>
-          {item.images?.length ? (
-            <div className={`mb-2 grid gap-2 ${item.images.length > 1 ? "grid-cols-2" : ""}`}>
-              {item.images.map((image) => (
+          {images.length ? (
+            <div className={`mb-2 grid gap-2 ${images.length > 1 ? "grid-cols-2" : ""}`}>
+              {images.map((image) => (
                 <img
                   key={image.id}
                   src={image.dataUrl}

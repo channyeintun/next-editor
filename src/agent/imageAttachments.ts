@@ -5,6 +5,21 @@ export const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"]);
 
+/**
+ * Whether a chat image's URL is what createChatImage makes: a base64 data: URL
+ * of a supported type. A recorded transcript (a lesson's chat track) carries its
+ * images as plain strings, and any other URL would make the app fetch an address
+ * the recording chose, with the viewer's cookies when it is on this origin.
+ */
+export function isChatImageDataUrl(dataUrl: string): boolean {
+  const separator = dataUrl.indexOf(";base64,");
+  return (
+    separator !== -1 &&
+    dataUrl.startsWith("data:") &&
+    SUPPORTED_IMAGE_TYPES.has(dataUrl.slice("data:".length, separator).toLowerCase())
+  );
+}
+
 export function getClipboardImageFiles(clipboardData: DataTransfer): File[] {
   const itemFiles = Array.from(clipboardData.items)
     .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
