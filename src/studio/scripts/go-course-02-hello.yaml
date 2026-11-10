@@ -1,0 +1,857 @@
+# Go course, lesson 02: the first Go program (Burmese; the course pilot, sets the voice).
+#
+# Start state: main.go holds only `package main` and an empty `func main`.
+# Edits, all insert-only:
+#   1. one Println line inside main -> run-1: compile error `./main.go:4:2: undefined: fmt`;
+#   2. `import "fmt"` under the package line -> run-2: မင်္ဂလာပါ;
+#   3. two more Println lines -> run-3: three lines, in the order they were written.
+# Boards: (P) a program is instructions done top to bottom; (C) code -> compile -> program -> run
+# -> output, with run-1's error as the compiler refusing before anything ran; (Q) the quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-02-hello
+  title: "Go course 02: ပထမဆုံး Go program"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board P: a program is instructions, done from the top down.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 170,
+        width: 420,
+        height: 50,
+        text: "Program ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-box,
+        kind: rectangle,
+        x: 290,
+        y: 250,
+        width: 500,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-step1,
+        kind: text,
+        x: 315,
+        y: 275,
+        width: 450,
+        height: 40,
+        text: "1 · မင်္ဂလာပါ လို့ ရေးပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-step2,
+        kind: text,
+        x: 315,
+        y: 345,
+        width: 450,
+        height: 40,
+        text: "2 · နောက်တစ်ကြောင်း ရေးပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-step3,
+        kind: text,
+        x: 315,
+        y: 415,
+        width: 450,
+        height: 40,
+        text: "3 · ပြီးရင် ရပ်ပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 800,
+        y: 265,
+        width: 50,
+        height: 200,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-order,
+        kind: text,
+        x: 860,
+        y: 340,
+        width: 230,
+        height: 40,
+        text: "အပေါ်ကနေ အောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-go-box,
+        kind: rectangle,
+        x: 290,
+        y: 530,
+        width: 700,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-go,
+        kind: text,
+        x: 315,
+        y: 550,
+        width: 640,
+        height: 40,
+        text: "code = ညွှန်ကြားချက်တွေကို Go နဲ့ ရေးထားတဲ့ စာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: code -> compile -> program -> run -> output; run-1's error stops at compile.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 440,
+        height: 50,
+        text: "Compile နဲ့ run",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-code,
+        kind: rectangle,
+        x: 270,
+        y: 245,
+        width: 210,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-code-label,
+        kind: text,
+        x: 300,
+        y: 270,
+        width: 150,
+        height: 40,
+        text: "main.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 270,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-compile,
+        kind: rectangle,
+        x: 570,
+        y: 245,
+        width: 230,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-compile-label,
+        kind: text,
+        x: 615,
+        y: 270,
+        width: 150,
+        height: 40,
+        text: "compile",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-check,
+        kind: text,
+        x: 565,
+        y: 345,
+        width: 250,
+        height: 40,
+        text: "အကုန် ဖတ်ပြီး စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 810,
+        y: 270,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-prog,
+        kind: rectangle,
+        x: 890,
+        y: 245,
+        width: 200,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-prog-label,
+        kind: text,
+        x: 925,
+        y: 270,
+        width: 140,
+        height: 40,
+        text: "program",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 970,
+        y: 345,
+        width: 40,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: c-run, kind: rectangle, x: 890, y: 410, width: 200, height: 80, strokeColor: "#2f9e44" }
+    - {
+        id: c-run-label,
+        kind: text,
+        x: 960,
+        y: 430,
+        width: 70,
+        height: 40,
+        text: "run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 970,
+        y: 500,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-output,
+        kind: text,
+        x: 935,
+        y: 560,
+        width: 130,
+        height: 40,
+        text: "output",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-err-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 665,
+        y: 395,
+        width: 40,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - { id: c-err, kind: rectangle, x: 540, y: 465, width: 300, height: 90, strokeColor: "#e03131" }
+    - {
+        id: c-err-label,
+        kind: text,
+        x: 560,
+        y: 490,
+        width: 260,
+        height: 40,
+        text: "error · run မသွား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a typo on the third line: does anything print first?).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 440,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 800,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 255,
+        width: 640,
+        height: 40,
+        text: 'fmt.Println("မင်္ဂလာပါ")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 310,
+        width: 760,
+        height: 40,
+        text: 'fmt.Println("Go ကို အတူတူ လေ့လာကြရအောင်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 640,
+        height: 40,
+        text: 'fmt.Printn("ပထမဆုံး program ပါ")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-typo,
+        kind: freedraw,
+        stroke: circle,
+        x: 340,
+        y: 355,
+        width: 130,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 640,
+        height: 40,
+        text: "က · နှစ်ကြောင်း ထွက်ပြီးမှ error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 640,
+        height: 40,
+        text: "ခ · error ပဲ ပေါ်၊ ဘာစာမှ မထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 960,
+        y: 520,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7102
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:4:2: undefined: fmt\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "မင်္ဂလာပါ\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "မင်္ဂလာပါ\nGo ကို အတူတူ လေ့လာကြရအောင်\nပထမဆုံး program ပါ\n"
+
+scenes:
+  - id: welcome
+    chapter: ပထမဆုံး Go program ကို ရေးကြည့်ရအောင်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ Go ကို ဘာကြောင့် ဖန်တီးခဲ့လဲ၊ ဘယ်မှာ အသုံးဝင်လဲ ဆိုတာ ကြည့်ခဲ့ပြီး၊ rider
+      သုံးယောက် တစ်ပြိုင်နက် ပါဆယ် ပို့တဲ့ program တစ်ခုကိုလည်း run ကြည့်ခဲ့ပါတယ်။ အဲဒီလို program
+      မျိုးကို ကိုယ်တိုင် ရေးနိုင်ဖို့ ဒီနေ့ကစပြီး အခြေခံကနေ တစ်ဆင့်ချင်း သွားကြပါမယ်။ စာ တစ်ကြောင်း
+      ထုတ်ပြတဲ့ program လေးကနေ စပြီး၊ variable၊ loop၊ function လို အခြေခံ အချက်တွေကို တစ်ခုချင်း
+      လေ့လာသွားမှာ ဖြစ်ပါတယ်။ [[mark:examples]] ပထမ အပိုင်း သုံးပိုင်းမှာတော့ lesson တစ်ခုစီက ကိုယ်တို့
+      နေ့စဉ် ဘဝထဲက အိမ်သုံး ငွေစာရင်း၊ တက္ကစီခ၊ စာမေးပွဲ အမှတ်၊ မြန်မာ စာနဲ့ မြန်မာ ဂဏန်း လို ဥပမာ
+      တစ်ခုစီကို သုံးပါမယ်။ [[mark:here]] ဒီ course ထဲက program တွေ အားလုံးကို lesson ထဲမှာပဲ တိုက်ရိုက်
+      ရေးပြီး run လို့ ရတဲ့အတွက်၊ ကိုယ့် ကွန်ပျူတာမှာ ဘာမှ ကြိုပြင်ဆင်ထားစရာ မလိုပါဘူး။ ဒီ lesson မှာတော့
+      program ဆိုတာ ဘာလဲ ဆိုတာကနေ စပြီး၊ စာ ထုတ်ပြတဲ့ Go program တစ်ခုကို အတူတူ ရေးကြည့်ပါမယ်။ ရေးရင်းနဲ့
+      error တစ်ခုကိုလည်း တွေ့ရမှာပါ၊ အဲဒီ error ကို ဘယ်လို ဖတ်ရမလဲ ဆိုတာပါ တစ်ခါတည်း လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Tutorial: Get started with Go",
+          url: "https://go.dev/doc/tutorial/getting-started",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: program
+    chapter: Program ဆိုတာ
+    narration: >-
+      [[mark:board-program]] အရင်ဆုံး program ဆိုတာ ဘာလဲ ဆိုတာ ကြည့်ရအောင်။ program ဆိုတာ ကွန်ပျူတာကို
+      ဒါလုပ်ပါ၊ ပြီးရင် ဟိုဟာ လုပ်ပါ ဆိုပြီး အစီအစဉ်အတိုင်း ရေးပေးထားတဲ့ ညွှန်ကြားချက်တွေပါ။
+      [[mark:draw-steps]] ဥပမာအားဖြင့် ဒီမှာ ညွှန်ကြားချက် သုံးခု ရှိပါတယ်။ ပထမ တစ်ခုက မင်္ဂလာပါ လို့
+      ရေးဖို့၊ ဒုတိယ တစ်ခုက နောက်ထပ် စာ တစ်ကြောင်း ရေးဖို့၊ တတိယ တစ်ခုကတော့ ပြီးရင် ရပ်ဖို့ ဖြစ်ပါတယ်။
+      [[mark:draw-order]] ကွန်ပျူတာက ဒီ ညွှန်ကြားချက်တွေကို အပေါ်ဆုံးကနေ စပြီး၊ တစ်ခု ပြီးမှ နောက်တစ်ခုကို
+      အောက်ဘက်ကို ဆင်းပြီး လိုက်လုပ်ပါတယ်။ သတိထားရမှာက ကွန်ပျူတာက ရေးထားတဲ့ အတိုင်းပဲ အတိအကျ လုပ်တာပါ။
+      ကိုယ် ဆိုလိုချင်တာကို သူ့ဘာသာ ခန့်မှန်းပြီး လုပ်မပေးပါဘူး။ [[mark:draw-code]] အဲဒီ ညွှန်ကြားချက်တွေကို ရေးထားတဲ့
+      စာသားကို code လို့ ခေါ်ပါတယ်။ code ရေးလို့ရတဲ့ ဘာသာစကား အများကြီး ရှိပြီး၊ Go က အဲဒီထဲက တစ်ခုပါ။
+    sources:
+      - {
+          title: "Tutorial: Get started with Go",
+          url: "https://go.dev/doc/tutorial/getting-started",
+        }
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
+    actions:
+      - {
+          id: board-program,
+          type: whiteboard.apply,
+          at: { mark: board-program, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-steps,
+          type: whiteboard.apply,
+          at: { mark: draw-steps },
+          upsertIds: [p-box, p-step1, p-step2, p-step3],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-order,
+          type: whiteboard.apply,
+          at: { mark: draw-order },
+          upsertIds: [p-arrow, p-order],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-code,
+          type: whiteboard.apply,
+          at: { mark: draw-code },
+          upsertIds: [p-go-box, p-go],
+          drawMs: 1800,
+        }
+
+  - id: the-file
+    chapter: Go ဖိုင် တစ်ခုရဲ့ အစိတ်အပိုင်းတွေ
+    narration: >-
+      [[mark:close-program]] ဒါဆို Go code ကို တကယ် ကြည့်ရအောင်။ ဒါက main ဖိုင်ပါ၊ ဒီ course မှာ program
+      တိုင်း ဒီ ဖိုင်ကနေ စပါတယ်။ အခုတော့ code နည်းနည်းလေးပဲ ရှိပါသေးတယ်၊ ဒါပေမဲ့ Go program တိုင်းမှာ
+      ပါရမယ့် အပိုင်း နှစ်ခု ပါနေပါပြီ။ [[mark:sel-package]] ပထမ line ကို ကြည့်ပါ။ ဒီ ဖိုင်ဟာ ဘယ် package
+      ထဲမှာ ပါလဲ ဆိုတာကို ပြောတာပါ။ package ဆိုတာ ဆက်စပ်နေတဲ့ Go code တွေကို အုပ်စု တစ်ခုအဖြစ် စုထားတာပါ။
+      ဒီမှာ package နာမည်က main ဖြစ်နေတာ အရေးကြီးပါတယ်၊ ဘာကြောင့်လဲဆိုတော့ main package ဆိုတာ ကွန်ပျူတာ
+      run လို့ရတဲ့ program အဖြစ် ပြောင်းပေးရမယ့် package ဖြစ်လို့ပါ။ [[mark:sel-main]] အောက်က အပိုင်းကတော့ main ဆိုတဲ့ function ပါ။ function ဆိုတာ အလုပ်
+      တစ်ခုကို နာမည်ပေးပြီး စုထားတဲ့ code အပိုင်းပါ၊ လိုတဲ့အခါ အဲဒီ နာမည်နဲ့ ခေါ်သုံးလို့ ရပါတယ်။ အခု သိထားရမှာက main function က program
+      စတဲ့ နေရာ ဆိုတာပါ။ [[mark:main-start]] program ကို run လိုက်တဲ့အခါ Go က main function ကို ရှာပြီး၊ သူ့ အထဲက
+      ညွှန်ကြားချက်တွေကို အပေါ်ကနေ အောက်ကို တစ်ခုချင်း လုပ်ပါတယ်။ တွန့်ကွင်း နှစ်ခုကြားက နေရာက function ရဲ့ အထဲ
+      ဖြစ်ပါတယ်။ အခုတော့ အထဲမှာ ဘာမှ မရှိသေးလို့ run ရင်လည်း ဘာစာမှ ထွက်လာမှာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Package clause",
+          url: "https://go.dev/ref/spec#Package_clause",
+        }
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
+    actions:
+      - {
+          id: close-program,
+          type: whiteboard.apply,
+          at: { mark: close-program },
+          open: false,
+          upsertIds: [],
+        }
+      - id: sel-package
+        type: editor.select
+        at: { mark: sel-package }
+        target: { file: main.go, text: "package main", occurrence: 1 }
+      - id: sel-main
+        type: editor.select
+        at: { mark: sel-main }
+        target: { file: main.go, text: "func main() {\n}", occurrence: 1 }
+
+  - id: first-line
+    chapter: ပထမဆုံး line
+    narration: >-
+      [[mark:type-hello]] ဒါဆို main ရဲ့ အထဲမှာ ပထမဆုံး ညွှန်ကြားချက်ကို ရေးကြည့်ရအောင်။ ဒီ line က
+      မင်္ဂလာပါ ဆိုတဲ့ စာကို output မှာ တစ်ကြောင်း ထုတ်ပြခိုင်းတာပါ။ output ဆိုတာ program က ကိုယ့်ကို
+      ပြန်ပြတဲ့ စာကြောင်းတွေပါ။ ထုတ်ပြချင်တဲ့ စာကို double quote နှစ်ခုကြားမှာ ထည့်ရေးရပါတယ်။ ဒါမှ Go က
+      ဒါဟာ code မဟုတ်ဘဲ ဒီအတိုင်း ပြရမယ့် စာသား ဖြစ်တယ် ဆိုတာ သိပါတယ်။ [[mark:sel-println]] ရှေ့က အပိုင်းကို ကြည့်ပါ။ ဒါက fmt ဆိုတဲ့ package ထဲမှာ
+      ရှိတဲ့ Println ဆိုတဲ့ function ကို ခေါ်တာပါ။ Println ဆိုတာ print line ကို ဆိုလိုတာ ဖြစ်ပြီး၊ ပေးလိုက်တဲ့
+      စာကို ထုတ်ပြပြီးရင် line အသစ် တစ်ကြောင်း ဆင်းပေးပါတယ်။ ဒါကြောင့် Println တစ်ခါ ခေါ်တိုင်း output မှာ
+      စာကြောင်း တစ်ကြောင်းစီ ရမှာပါ။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+      - {
+          title: "The Go Programming Language Specification — String literals",
+          url: "https://go.dev/ref/spec#String_literals",
+        }
+    actions:
+      - id: type-hello
+        type: editor.type
+        at: { mark: type-hello }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tfmt.Println(\"မင်္ဂလာပါ\")\n"
+      - id: sel-println
+        type: editor.select
+        at: { mark: sel-println }
+        target: { file: main.go, text: "fmt.Println", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "undefined: fmt",
+          timeoutMs: 8000,
+        }
+
+  - id: read-error
+    chapter: Error ကို ဖတ်ကြည့်ရအောင်
+    narration: >-
+      [[mark:point-build]] ကြည့်ပါ၊ မင်္ဂလာပါ ဆိုတဲ့ စာ မထွက်လာဘဲ error တစ်ခု ပေါ်လာပါတယ်။ ပထမ
+      စာကြောင်းက program ကို တည်ဆောက်လို့ မရဘူးလို့ ပြောတာပါ။ ဒါကို compile error လို့ ခေါ်ပါတယ်၊
+      ဆိုလိုတာက compiler က program ကို ဖတ်ကြည့်ပြီး လက်မခံတာ ဖြစ်လို့ ဘာမှ run မသွားသေးပါဘူး။ error
+      ဆိုတာ ကြောက်စရာ မဟုတ်ပါဘူး၊ ဘယ်နေရာမှာ ဘာပြင်ရမလဲ ဆိုတာကို ပြောပြတဲ့ စာပါ။ [[mark:point-err]] ဒုတိယ စာကြောင်းကို ဖတ်ကြည့်ရအောင်။ အရင်ဆုံး ဘယ်နေရာလဲ
+      ဆိုတာကို ရှေ့ဆုံးမှာ ပြထားပါတယ်။ main ဖိုင်ရဲ့ line နံပါတ် လေး ဖြစ်ပြီး၊ နောက်က ဂဏန်းကတော့ အဲဒီ line
+      ထဲက ဘယ်နေရာလဲ ဆိုတဲ့ column ပါ။ ဒီမှာတော့ fmt စတဲ့ နေရာကို ညွှန်ပြနေပါတယ်။ [[mark:err-what]] ပြီးတော့ ဘာပြောလဲ
+      ဆိုတော့၊ fmt ဆိုတဲ့ နာမည်ကို compiler က မသိသေးပါဘူးလို့ ပြောနေတာပါ။ ဘာကြောင့်လဲဆိုတော့ စာ
+      ထုတ်ပြပေးတဲ့ fmt package ကို ကိုယ်တို့ import မလုပ်ရသေးလို့ပါ။ Go မှာ တခြား package ကို သုံးချင်ရင်
+      ဖိုင်ရဲ့ အပေါ်ပိုင်းမှာ အရင် ကြိုပြောထားရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Import declarations",
+          url: "https://go.dev/ref/spec#Import_declarations",
+        }
+      - {
+          title: "Tutorial: Get started with Go",
+          url: "https://go.dev/doc/tutorial/getting-started",
+        }
+    actions:
+      - {
+          id: point-build,
+          type: console.point,
+          at: { mark: point-build },
+          target: { text: "Build failed" },
+        }
+      - {
+          id: point-err,
+          type: console.point,
+          at: { mark: point-err },
+          target: { text: "./main.go:4:2: undefined: fmt" },
+        }
+
+  - id: compile-run
+    chapter: Compile နဲ့ run
+    narration: >-
+      [[mark:board-compile]] ဒီ error ကို ပိုနားလည်ဖို့၊ code ကနေ output ရောက်တဲ့အထိ ဘာတွေ ဖြစ်လဲ ဆိုတာ
+      ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-code-box]] ကိုယ်ရေးတဲ့ code က main ဖိုင်ထဲက စာသား သက်သက်ပါ။
+      ကွန်ပျူတာက ဒီ စာသားကို တိုက်ရိုက် နားမလည်ပါဘူး။ [[mark:draw-compile]] ဒါကြောင့် ပထမ အဆင့်မှာ compiler
+      လို့ ခေါ်တဲ့ Go ရဲ့ tool တစ်ခုက code တစ်ခုလုံးကို အစကနေ အဆုံးထိ ဖတ်ပြီး စစ်ပါတယ်။ ဂိတ်ပေါက်မှာ
+      စည်းကမ်းကြီးတဲ့ စစ်ဆေးသူ တစ်ယောက် ရပ်နေသလိုပါပဲ၊ နားမလည်တဲ့ နေရာ တစ်ခု ရှိရင်တောင် ရှေ့ ဆက်ခွင့်
+      မပေးပါဘူး။ [[mark:draw-program]] အားလုံး အဆင်ပြေရင်တော့ compiler က code ကို ကွန်ပျူတာ run လို့ရတဲ့
+      program အဖြစ် ပြောင်းပေးပါတယ်။ ဒီ အဆင့်ကို compile လုပ်တယ်လို့ ခေါ်ပါတယ်။ [[mark:draw-run]] ဒုတိယ
+      အဆင့်ကတော့ run တာပါ။ ကွန်ပျူတာက program ထဲက ညွှန်ကြားချက်တွေကို အပေါ်ကနေ အောက် တစ်ခုချင်း လုပ်ပြီး၊
+      ထုတ်ပြခိုင်းတဲ့ စာတွေက output မှာ ပေါ်လာပါတယ်။ [[mark:draw-err]] ခုနက ကိုယ်တို့ တွေ့ခဲ့တာက ပထမ
+      အဆင့်မှာတင် compiler က ငြင်းလိုက်တာပါ။ program မရလိုက်တဲ့အတွက် run တဲ့ အဆင့်ကို လုံးဝ မရောက်ခဲ့ပါဘူး။
+    sources:
+      - {
+          title: "Tutorial: Get started with Go",
+          url: "https://go.dev/doc/tutorial/getting-started",
+        }
+      - { title: "The Go Programming Language Specification", url: "https://go.dev/ref/spec" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-compile } }
+      - {
+          id: board-compile,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-code-box,
+          type: whiteboard.apply,
+          at: { mark: draw-code-box },
+          upsertIds: [c-code, c-code-label],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-compile,
+          type: whiteboard.apply,
+          at: { mark: draw-compile },
+          upsertIds: [c-arrow1, c-compile, c-compile-label, c-check],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-program,
+          type: whiteboard.apply,
+          at: { mark: draw-program },
+          upsertIds: [c-arrow2, c-prog, c-prog-label],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-run,
+          type: whiteboard.apply,
+          at: { mark: draw-run },
+          upsertIds: [c-arrow3, c-run, c-run-label, c-arrow4, c-output],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-err,
+          type: whiteboard.apply,
+          at: { mark: draw-err },
+          upsertIds: [c-err-arrow, c-err, c-err-label],
+          drawMs: 1800,
+        }
+
+  - id: import
+    chapter: import နဲ့ fmt package
+    narration: >-
+      [[mark:close-compile]] ဒါဆို compiler ကို fmt package အကြောင်း ပြောပြရအောင်။ [[mark:type-import]]
+      package line ရဲ့ အောက်မှာ import line တစ်ကြောင်း ထည့်ပါမယ်။ import ဆိုတာ တခြား package ကို ဒီ
+      ဖိုင်ထဲမှာ ခေါ်သုံးမယ်လို့ ပြောတာပါ။ fmt package က Go နဲ့ အတူ ပါလာပြီးသား package ပါ။ သူ့ထဲမှာ
+      စာသားကို ပုံစံချတာ၊ output ထုတ်ပြတာ လို အလုပ်တွေအတွက် function တွေ စုထားပါတယ်။ ဒါဆို compiler က fmt ကို သိသွားပါပြီ။ [[mark:run-2]] ကဲ၊ ထပ်ပြီး
+      run ကြည့်ရအောင်။ [[mark:point-hello]] ဒီတစ်ခါတော့ compiler က လက်ခံသွားပြီး၊ output မှာ မင်္ဂလာပါ ဆိုတဲ့
+      စာ တစ်ကြောင်း ထွက်လာပါပြီ။ ဒါ ကိုယ်တို့ရဲ့ ပထမဆုံး Go program ပါ။ quote ထဲမှာ ရေးထားတဲ့ မြန်မာ စာကို ဘာမှ မပြောင်းဘဲ မှန်မှန်ကန်ကန် ထုတ်ပြတာကိုလည်း တွေ့ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Import declarations",
+          url: "https://go.dev/ref/spec#Import_declarations",
+        }
+      - { title: "fmt package", url: "https://pkg.go.dev/fmt#Println" }
+    actions:
+      - {
+          id: close-compile,
+          type: whiteboard.apply,
+          at: { mark: close-compile },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: main.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport \"fmt\"\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "မင်္ဂလာပါ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-import,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: 'import "fmt"',
+        }
+      - {
+          id: point-hello,
+          type: console.point,
+          at: { mark: point-hello },
+          target: { text: "မင်္ဂလာပါ" },
+        }
+
+  - id: order
+    chapter: အပေါ်ကနေ အောက်
+    narration: >-
+      [[mark:collapse-2]] program ကို line နှစ်ကြောင်း ထပ်ထည့်ပြီး နည်းနည်း ပိုရှည်အောင် လုပ်ကြည့်ရအောင်။
+      [[mark:type-more]] ပထမ line ရဲ့ အောက်မှာ Go ကို အတူတူ လေ့လာကြရအောင် ဆိုတဲ့ စာ တစ်ကြောင်းနဲ့၊ ပထမဆုံး
+      program ပါ ဆိုတဲ့ စာ တစ်ကြောင်း ထည့်ပါမယ်။ fmt ကို ဖိုင်ရဲ့ အပေါ်မှာ တစ်ခါ import လုပ်ထားပြီး ဖြစ်လို့၊ ဖိုင်ထဲမှာ ဘယ်နှစ်ခါ
+      ပြန်သုံးသုံး ထပ်ပြီး import လုပ်စရာ မလိုပါဘူး။ run မလုပ်ခင် ခဏ ခန့်မှန်းကြည့်ပါ၊ output မှာ ဘယ်စာက
+      အရင် ထွက်လာမလဲ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။ [[mark:point-l1]] ပထမ စာကြောင်းမှာ မင်္ဂလာပါ
+      ဆိုတဲ့ စာ ထွက်လာပါတယ်၊ ဒါက main ထဲက ပထမဆုံး line ပါ။ [[mark:point-l2]] ဒုတိယ စာကြောင်းက Go ကို အတူတူ
+      လေ့လာကြရအောင် ဆိုတဲ့ စာဖြစ်ပြီး၊ ဒုတိယ line က ထုတ်ပြတာပါ။ [[mark:point-l3]] တတိယ စာကြောင်းမှာတော့
+      ပထမဆုံး program ပါ ဆိုတဲ့ စာကို တွေ့ရပါတယ်။ ဆိုတော့ output က code ထဲမှာ ရေးထားတဲ့ အစဉ်အတိုင်း
+      အတိအကျ ထွက်လာတာပါ။ ဘာကြောင့်လဲဆိုတော့ main function ထဲက line တွေကို ကွန်ပျူတာက အပေါ်ကနေ အောက်ကို
+      တစ်ကြောင်း ပြီးမှ တစ်ကြောင်း လုပ်သွားလို့ပါ။ line နှစ်ကြောင်းရဲ့ နေရာကို လဲလိုက်ရင် output မှာလည်း
+      အဲဒီ စာနှစ်ကြောင်းရဲ့ နေရာ လဲသွားမှာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-more
+        type: editor.type
+        at: { mark: type-more }
+        target: { file: main.go, after: "\tfmt.Println(\"မင်္ဂလာပါ\")\n", occurrence: 1 }
+        text: "\tfmt.Println(\"Go ကို အတူတူ လေ့လာကြရအောင်\")\n\tfmt.Println(\"ပထမဆုံး program ပါ\")\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "ပထမဆုံး program ပါ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-more,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: 'fmt.Println("ပထမဆုံး program ပါ")',
+        }
+      - { id: point-l1, type: console.point, at: { mark: point-l1 }, target: { text: "မင်္ဂလာပါ" } }
+      - {
+          id: point-l2,
+          type: console.point,
+          at: { mark: point-l2 },
+          target: { text: "Go ကို အတူတူ လေ့လာကြရအောင်" },
+        }
+      - {
+          id: point-l3,
+          type: console.point,
+          at: { mark: point-l3 },
+          target: { text: "ပထမဆုံး program ပါ" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program မှာ line သုံးကြောင်း ရှိပါတယ်။ [[mark:quiz-typo]] တတိယ line မှာတော့ Println ကို ရိုက်ရင်း စာလုံး တစ်လုံး ကျန်သွားပါတယ်။ ဒီ program ကို run ရင်၊ ပထမ နှစ်ကြောင်းက output မှာ အရင်
+      ထွက်လာပြီးမှ error ပေါ်မလား၊ ဒါမှမဟုတ် error တစ်ခုတည်းပဲ ပေါ်ပြီး ဘာစာမှ မထွက်ဘူးလား။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ error တစ်ခုတည်း ပေါ်ပြီး ဘာစာမှ
+      မထွက်တာပါ။ ဘာကြောင့်လဲဆိုတော့ compiler က program ကို run မလုပ်ခင် တစ်ခုလုံးကို အရင် ဖတ်စစ်ပြီး၊
+      နားမလည်တဲ့ နေရာ တစ်ခု တွေ့တာနဲ့ program ကို လုံးဝ ပြောင်းမပေးလို့ပါ။ ပထမ နှစ်ကြောင်းက မှန်နေပေမဲ့
+      run တဲ့ အဆင့်ကို ရောက်မလာတဲ့အတွက် တစ်ကြောင်းမှ ထွက်မလာပါဘူး။ error ကတော့ မှားရိုက်ထားတဲ့ line ကို ညွှန်ပြပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-typo,
+          type: whiteboard.apply,
+          at: { mark: quiz-typo },
+          upsertIds: [q-typo],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဒီနေ့ ကိုယ်တို့ ပထမဆုံး Go program ကို ရေးခဲ့ပါတယ်။
+      [[mark:recap-package]] ဒီ course ထဲက Go ဖိုင် တိုင်းဟာ package main နဲ့ စပြီး၊ program က main function
+      ကနေ စ run ပါတယ်။ [[mark:recap-import]] တခြား package ကို သုံးချင်ရင် import နဲ့ ကြိုပြောထားရပါတယ်၊ ဒီနေ့
+      သုံးခဲ့တဲ့ fmt package ထဲက Println က စာ တစ်ကြောင်းကို output မှာ ထုတ်ပြပေးပါတယ်။ [[mark:recap-lines]]
+      main ထဲက line တွေကို အပေါ်ကနေ အောက်ကို အစဉ်လိုက် run ပါတယ်။ ဒါပေမဲ့ run မလုပ်ခင်မှာ compiler က
+      code တစ်ခုလုံးကို အရင် စစ်ပြီး၊ နားမလည်တဲ့ နေရာ ရှိရင် ဘယ် ဖိုင်၊ ဘယ် line မှာလဲ ဆိုတာနဲ့ အတူ compile
+      error ပြပါတယ်။ လေ့ကျင့်ချင်ရင် lesson ကို pause လုပ်ပြီး quote ထဲက စာတွေကို ကိုယ့် စာနဲ့ ပြောင်းကြည့်ပါ၊
+      ပြီးရင် run ကြည့်ပါ။ နောက် lesson မှာတော့ နာမည်၊ အသက် လို တန်ဖိုးတွေကို နာမည်ပေးပြီး မှတ်ထားလို့ရတဲ့
+      variable ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Tutorial: Get started with Go",
+          url: "https://go.dev/doc/tutorial/getting-started",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-package
+        type: editor.select
+        at: { mark: recap-package }
+        target: { file: main.go, text: "package main", occurrence: 1 }
+      - id: recap-import
+        type: editor.select
+        at: { mark: recap-import }
+        target: { file: main.go, text: 'import "fmt"', occurrence: 1 }
+      - id: recap-lines
+        type: editor.select
+        at: { mark: recap-lines }
+        target:
+          {
+            file: main.go,
+            text: "\tfmt.Println(\"မင်္ဂလာပါ\")\n\tfmt.Println(\"Go ကို အတူတူ လေ့လာကြရအောင်\")\n\tfmt.Println(\"ပထမဆုံး program ပါ\")\n",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
