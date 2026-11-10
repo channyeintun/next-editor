@@ -186,7 +186,21 @@ export async function upsertUserByGoogleSub(
   }
 }
 
-export async function createSession(db: D1Database, userId: string): Promise<SessionRow> {
+export interface CreateSessionOptions {
+  /**
+   * The session the signing-in browser held until now, whoever it belonged
+   * to. Its cookie is about to be overwritten, so its row is deleted with the
+   * new one's INSERT: otherwise it would stay valid until it expires, in reach
+   * of anyone who copied that cookie.
+   */
+  replaces?: string;
+}
+
+export async function createSession(
+  db: D1Database,
+  userId: string,
+  options: CreateSessionOptions = {},
+): Promise<SessionRow> {
   const now = Date.now();
   const session: SessionRow = {
     id: crypto.randomUUID(),
@@ -200,6 +214,9 @@ export async function createSession(db: D1Database, userId: string): Promise<Ses
   // with the INSERT so sign-in pays one round trip for both.
   await db.batch([
     db.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").bind(userId, now),
+    ...(options.replaces
+      ? [db.prepare("DELETE FROM sessions WHERE id = ?").bind(options.replaces)]
+      : []),
     db
       .prepare("INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
       .bind(session.id, session.user_id, session.created_at, session.expires_at),

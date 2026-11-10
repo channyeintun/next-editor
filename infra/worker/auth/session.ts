@@ -45,13 +45,16 @@ function setSessionCookie(c: Context, session: SessionRow): void {
 /**
  * Signs the user in on this response: writes a session row and sets its
  * cookie. Every sign-in path (Google One Tap, the Google redirect, passkeys)
- * ends here.
+ * ends here. The session this browser held before, if any, ends here too,
+ * since its cookie is being replaced.
  */
 export async function startSession<E extends { Bindings: Env }>(
   c: Context<E>,
   userId: string,
 ): Promise<SessionRow> {
-  const session = await createSession(c.env.DB, userId);
+  const session = await createSession(c.env.DB, userId, {
+    replaces: getCookie(c, SESSION_COOKIE),
+  });
   setSessionCookie(c, session);
   return session;
 }
