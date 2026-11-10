@@ -133,17 +133,42 @@ interface KotlinStreamSegment {
 // markers. Any text between marker blocks (never observed, but not
 // contractually excluded) is preserved as stdout so output can't silently
 // vanish.
+//
+// The split must stay linear in the untruncated text (up to
+// PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES, ../playgroundProxy.ts): the program
+// controls what sits between the markers, so it can print its own openers.
+// One lazy back-referenced regex (/<(out|err)Stream>([\s\S]*?)<\/\1Stream>/g)
+// rescanned to the end of the text from every opener with no closer, which is
+// quadratic CPU for `print("</outStream>" + "<errStream>".repeat(k))`. Openers
+// are found by a forward-only scan instead, and each closer with indexOf. A
+// stream with no closer after one opener has none after any later opener
+// either, so that stream's later openers are skipped without searching again:
+// the result is the same segments the regex produced, in one pass.
+const STREAM_OPENER = /<(out|err)Stream>/g;
+
 function parseUpstreamOutputText(text: string): KotlinStreamSegment[] {
   const segments: KotlinStreamSegment[] = [];
-  const marker = /<(out|err)Stream>([\s\S]*?)<\/\1Stream>/g;
+  const opener = new RegExp(STREAM_OPENER);
+  const unclosed = { out: false, err: false };
   let lastIndex = 0;
 
-  for (const match of text.matchAll(marker)) {
+  for (let match = opener.exec(text); match !== null; match = opener.exec(text)) {
+    const stream = match[1] === "err" ? "err" : "out";
+    if (unclosed[stream]) continue;
+    const bodyStart = opener.lastIndex;
+    const closer = `</${stream}Stream>`;
+    const closeIndex = text.indexOf(closer, bodyStart);
+    if (closeIndex === -1) {
+      unclosed[stream] = true;
+      if (unclosed.out && unclosed.err) break;
+      continue;
+    }
     if (match.index > lastIndex) {
       segments.push({ stream: "out", text: text.slice(lastIndex, match.index) });
     }
-    segments.push({ stream: match[1] === "err" ? "err" : "out", text: match[2] });
-    lastIndex = match.index + match[0].length;
+    segments.push({ stream, text: text.slice(bodyStart, closeIndex) });
+    lastIndex = closeIndex + closer.length;
+    opener.lastIndex = lastIndex;
   }
   if (lastIndex < text.length) {
     segments.push({ stream: "out", text: text.slice(lastIndex) });

@@ -630,4 +630,80 @@ describe("normalizeUpstreamRunResponse", () => {
       exception: "java.lang.IllegalStateException: boom",
     });
   });
+
+  // The program writes whatever it likes between upstream's markers, so its
+  // output can carry openers that never close. Each one used to restart a
+  // scan to the end of the text, which is quadratic CPU in the size of the
+  // output before it is ever truncated. The budget is generous: the linear
+  // split takes a few milliseconds here, the old regex seconds.
+  const UNCLOSED_OPENERS = 40_000;
+  const LINEAR_BUDGET_MS = 250;
+
+  function timedNormalize(text: string) {
+    const startedAt = performance.now();
+    const result = normalizeUpstreamRunResponse({ errors: {}, text });
+    return { result, elapsedMs: performance.now() - startedAt };
+  }
+
+  it("splits marker-shaped stdout in linear time", () => {
+    // print("</outStream>" + "<errStream>".repeat(k)), as upstream returns it.
+    const injected = "<errStream>".repeat(UNCLOSED_OPENERS);
+    const { result, elapsedMs } = timedNormalize(`<outStream></outStream>${injected}</outStream>`);
+
+    // All of it is stdout text (cut to the output bound after the split).
+    expect(result?.status).toBe("success");
+    expect(result?.output.startsWith(injected.slice(0, 1024))).toBe(true);
+    expect(elapsedMs).toBeLessThan(LINEAR_BUDGET_MS);
+  });
+
+  it("splits marker-shaped stderr in linear time", () => {
+    // The mirror payload, written to stderr.
+    const injected = "<outStream>".repeat(UNCLOSED_OPENERS);
+    const { result, elapsedMs } = timedNormalize(`<errStream></errStream>${injected}</errStream>`);
+
+    expect(result?.status).toBe("success");
+    expect(result?.output.startsWith(injected.slice(0, 1024))).toBe(true);
+    expect(elapsedMs).toBeLessThan(LINEAR_BUDGET_MS);
+  });
+
+  it("splits many closed blocks in linear time", () => {
+    const { result, elapsedMs } = timedNormalize(
+      `${"<outStream>x</outStream>".repeat(UNCLOSED_OPENERS)}<errStream>y</errStream>`,
+    );
+
+    expect(result).toEqual({ status: "success", output: `${"x".repeat(UNCLOSED_OPENERS)}y` });
+    expect(elapsedMs).toBeLessThan(LINEAR_BUDGET_MS);
+  });
+
+  it("keeps the marker semantics for nested and unclosed openers", () => {
+    // A block runs to the first closer of its own stream, so a nested opener
+    // of the other stream is body text.
+    expect(
+      normalizeUpstreamRunResponse({
+        errors: {},
+        text: "<outStream>a<errStream>b</errStream>c</outStream>",
+      }),
+    ).toEqual({ status: "success", output: "a<errStream>b</errStream>c" });
+    // An opener with no closer is plain stdout, and a later block of the other
+    // stream still splits: the kill notice is found in its own stderr block.
+    expect(
+      normalizeUpstreamRunResponse({
+        errors: {},
+        text:
+          "<outStream>never closed" +
+          "<errStream>Evaluation stopped while it's taking too long</errStream>",
+      }),
+    ).toEqual({
+      status: "runtime-error",
+      output: "<outStream>never closed",
+      exception: "Evaluation stopped while it's taking too long",
+    });
+    // A stream's first unclosed opener is text, and so is every later one.
+    expect(
+      normalizeUpstreamRunResponse({
+        errors: {},
+        text: "<errStream>a<outStream>b</outStream><errStream>c",
+      }),
+    ).toEqual({ status: "success", output: "<errStream>ab<errStream>c" });
+  });
 });
