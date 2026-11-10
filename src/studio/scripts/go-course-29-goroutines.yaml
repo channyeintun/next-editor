@@ -1,0 +1,1036 @@
+# Go course, lesson 29: goroutines (Burmese).
+#
+# Start state: main.go pinned as probe 28-sequential: an import block "fmt", "time"; `job`
+# (rider, d); `deliver(rider, d)` sleeps d then prints; three jobs (လှလှ 300 ms, အောင်အောင်
+# 100 ms, မောင်မောင် 200 ms); elapsed time rounded to 100 ms.
+#   run-1 (pinned program): 300ms လှလှ / 100ms အောင်အောင် / 200ms မောင်မောင် / 600ms ကြာ.
+# Edits, all insert-only:
+#   1. `go ` in front of the deliver call -> run-2: 0s ကြာ (main ends, nobody arrived);
+#   2. "sync" into the import block, `var wg sync.WaitGroup`, `// ` before the go line,
+#      `wg.Go(func() { deliver(j.rider, j.d) })`, `wg.Wait()` -> run-3:
+#      100ms အောင်အောင် / 200ms မောင်မောင် / 300ms လှလှ / 300ms ကြာ.
+# Boards: (S) three trips in a row vs together, as time bars; (M) main ends, the program ends;
+# (W) the wait group, and the older Add / Done form; (Q) quiz: wg.Go without Wait.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-29-goroutines
+  title: "Go course 29: Goroutine နဲ့ တစ်ပြိုင်နက် လုပ်တာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"time"
+        )
+
+        // job is one delivery: who rides and how long it takes.
+        type job struct {
+        	rider string
+        	d     time.Duration
+        }
+
+        // deliver rides for d, then says the parcel arrived.
+        func deliver(rider string, d time.Duration) {
+        	time.Sleep(d)
+        	fmt.Println(d, rider)
+        }
+
+        func main() {
+        	jobs := []job{
+        		{"လှလှ", 300 * time.Millisecond},
+        		{"အောင်အောင်", 100 * time.Millisecond},
+        		{"မောင်မောင်", 200 * time.Millisecond},
+        	}
+        	start := time.Now()
+        	for _, j := range jobs {
+        		deliver(j.rider, j.d)
+        	}
+        	fmt.Println(time.Since(start).Round(100*time.Millisecond), "ကြာ")
+        }
+  whiteboardAssets:
+    # Board S: three trips in a row, then three riders together (time bars).
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "ခရီး သုံးခု ဘယ်လောက် ကြာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-seq-label,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 460,
+        height: 40,
+        text: "တစ်ယောက်ပြီးမှ တစ်ယောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-b1, kind: rectangle, x: 300, y: 272, width: 300, height: 50, strokeColor: "#1971c2" }
+    - {
+        id: s-b1t,
+        kind: text,
+        x: 320,
+        y: 278,
+        width: 120,
+        height: 40,
+        text: "300ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-b2, kind: rectangle, x: 600, y: 272, width: 100, height: 50, strokeColor: "#1971c2" }
+    - {
+        id: s-b2t,
+        kind: text,
+        x: 608,
+        y: 278,
+        width: 88,
+        height: 40,
+        text: "100ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-b3, kind: rectangle, x: 700, y: 272, width: 200, height: 50, strokeColor: "#1971c2" }
+    - {
+        id: s-b3t,
+        kind: text,
+        x: 720,
+        y: 278,
+        width: 120,
+        height: 40,
+        text: "200ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-seq-total,
+        kind: text,
+        x: 930,
+        y: 278,
+        width: 130,
+        height: 40,
+        text: "600ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-seq-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 930,
+        y: 312,
+        width: 100,
+        height: 14,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-par-label,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 320,
+        height: 40,
+        text: "တစ်ပြိုင်နက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-p1, kind: rectangle, x: 300, y: 412, width: 300, height: 50, strokeColor: "#2f9e44" }
+    - {
+        id: s-p1t,
+        kind: text,
+        x: 320,
+        y: 418,
+        width: 120,
+        height: 40,
+        text: "300ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-p2, kind: rectangle, x: 300, y: 472, width: 100, height: 50, strokeColor: "#2f9e44" }
+    - {
+        id: s-p2t,
+        kind: text,
+        x: 308,
+        y: 478,
+        width: 88,
+        height: 40,
+        text: "100ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: s-p3, kind: rectangle, x: 300, y: 532, width: 200, height: 50, strokeColor: "#2f9e44" }
+    - {
+        id: s-p3t,
+        kind: text,
+        x: 320,
+        y: 538,
+        width: 120,
+        height: 40,
+        text: "200ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-par-total,
+        kind: text,
+        x: 650,
+        y: 418,
+        width: 130,
+        height: 40,
+        text: "300ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-par-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 650,
+        y: 452,
+        width: 100,
+        height: 14,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-par-note,
+        kind: text,
+        x: 650,
+        y: 485,
+        width: 420,
+        height: 40,
+        text: "အကြာဆုံး rider တစ်ယောက်စာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board M: main ends, so the program ends.
+    - {
+        id: m-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 680,
+        height: 50,
+        text: "main ပြီးတာနဲ့ program ပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: m-main-box,
+        kind: rectangle,
+        x: 290,
+        y: 250,
+        width: 340,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-main,
+        kind: text,
+        x: 315,
+        y: 280,
+        width: 290,
+        height: 40,
+        text: "main → 0s ကြာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-riders-box,
+        kind: rectangle,
+        x: 690,
+        y: 250,
+        width: 390,
+        height: 200,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-r1,
+        kind: text,
+        x: 715,
+        y: 265,
+        width: 300,
+        height: 40,
+        text: "လှလှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-r2,
+        kind: text,
+        x: 715,
+        y: 325,
+        width: 300,
+        height: 40,
+        text: "အောင်အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-r3,
+        kind: text,
+        x: 715,
+        y: 385,
+        width: 300,
+        height: 40,
+        text: "မောင်မောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 705,
+        y: 300,
+        width: 360,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-note,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 760,
+        height: 40,
+        text: "rider တွေ လမ်းပေါ်မှာ၊ ရုံး ပိတ်သွားပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-note-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 535,
+        width: 560,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    # Board W: the wait group, and the older form.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "Wait group",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 805,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-l1,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 360,
+        height: 40,
+        text: "var wg sync.WaitGroup",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-l1n,
+        kind: text,
+        x: 690,
+        y: 250,
+        width: 380,
+        height: 40,
+        text: "စာရင်း အလွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-l2,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 360,
+        height: 40,
+        text: "wg.Go(func() { … })",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-l2n,
+        kind: text,
+        x: 690,
+        y: 310,
+        width: 380,
+        height: 40,
+        text: "goroutine စ၊ စာရင်း ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-l3,
+        kind: text,
+        x: 305,
+        y: 370,
+        width: 360,
+        height: 40,
+        text: "wg.Wait()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-l3n,
+        kind: text,
+        x: 690,
+        y: 370,
+        width: 380,
+        height: 40,
+        text: "အားလုံး ပြီးမှ ဆက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-old-box,
+        kind: rectangle,
+        x: 285,
+        y: 455,
+        width: 805,
+        height: 180,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-old-label,
+        kind: text,
+        x: 305,
+        y: 467,
+        width: 600,
+        height: 40,
+        text: "အရင် code တွေမှာ တွေ့ရမယ့် ပုံစံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-old1,
+        kind: text,
+        x: 305,
+        y: 525,
+        width: 300,
+        height: 40,
+        text: "wg.Add(1)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-old2,
+        kind: text,
+        x: 305,
+        y: 580,
+        width: 700,
+        height: 40,
+        text: "go func() { defer wg.Done(); … }()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (wg.Go without Wait).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 805,
+        height: 215,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 420,
+        height: 40,
+        text: "for _, j := range jobs {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 300,
+        width: 770,
+        height: 40,
+        text: "    wg.Go(func() { deliver(j.rider, j.d) })",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 305,
+        y: 350,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 305,
+        y: 400,
+        width: 560,
+        height: 40,
+        text: 'fmt.Println(…, "ကြာ")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 295,
+        y: 340,
+        width: 140,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 620,
+        height: 40,
+        text: "က · rider သုံးယောက် + 300ms ကြာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 620,
+        height: 40,
+        text: "ခ · 0s ကြာ တစ်ကြောင်းတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 540,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7129
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "300ms လှလှ\n100ms အောင်အောင်\n200ms မောင်မောင်\n600ms ကြာ\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "0s ကြာ\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "100ms အောင်အောင်\n200ms မောင်မောင်\n300ms လှလှ\n300ms ကြာ\n"
+
+scenes:
+  - id: recall
+    chapter: Goroutine နဲ့ တစ်ပြိုင်နက် လုပ်တာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ Time နဲ့ Duration ကို သုံးပြီး ညကား ရောက်မယ့် အချိန်ကို တွက်ခဲ့ပါတယ်။
+      ဒီနေ့တော့ ကြာချိန်တွေကို သုံးပြီး အလုပ် အများကို တစ်ပြိုင်နက် လုပ်တာကို လေ့လာပါမယ်။ ရန်ကုန်
+      မြို့ထဲမှာ ပို့ရမယ့် ပါဆယ် သုံးထုပ် ရှိပြီး၊ rider သုံးယောက်က တစ်ယောက် တစ်ထုပ်စီ ပို့ကြမယ်
+      ဆိုပါစို့။ [[mark:sel-job]] main ဖိုင်ထဲက ဒီ struct က ပို့ရမယ့် အလုပ် တစ်ခုပါ။ ဘယ် rider စီးမလဲ
+      ဆိုတာနဲ့ ခရီး ဘယ်လောက် ကြာမလဲ ဆိုတဲ့ Duration ပါပါတယ်။ [[mark:sel-deliver]] ဒီ function က ပါဆယ်
+      တစ်ထုပ် ပို့တာပါ။ Sleep က ပေးထားတဲ့ ကြာချိန် ပြည့်တဲ့အထိ function ကို ရှေ့ မဆက်ဘဲ ရပ်ထားခိုင်းတာ
+      ဖြစ်ပြီး၊ ဒါကို ဆိုင်ကယ် စီးတဲ့ အချိန်လို့ ယူဆပါမယ်။ ကြာချိန် ပြည့်ရင် ကြာချိန်နဲ့ rider နာမည်ကို
+      print ထုတ်ပြီး ပါဆယ် ရောက်ကြောင်း ပြောပါတယ်။ [[mark:sel-jobs]] အလုပ် သုံးခုကတော့ rider လှလှ က
+      မီလီစက္ကန့် သုံးရာ၊ rider အောင်အောင် က တစ်ရာ၊ rider မောင်မောင် က နှစ်ရာ ကြာပါတယ်။ တကယ့် ခရီးက
+      မိနစ်တွေ ကြာပေမဲ့၊ ဒီမှာတော့ မီလီစက္ကန့် တစ်ရာကို ခရီး တိုတို တစ်ခုလို့ သဘောထားပါမယ်။
+      [[mark:sel-since]] loop မစခင် စတဲ့ အချိန်ကို မှတ်ထားပြီး၊ အဆုံးမှာ စကတည်းက ဘယ်လောက် ကြာပြီလဲ
+      ဆိုတာကို မီလီစက္ကန့် တစ်ရာ အနီးဆုံးအထိ ညှိပြီး print ထုတ်ပါတယ်။ အခု loop က rider တွေကို
+      တစ်ယောက်ပြီးမှ တစ်ယောက် ပို့ခိုင်းပါတယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "time package — Sleep", url: "https://pkg.go.dev/time#Sleep" }
+      - { title: "time package — Since", url: "https://pkg.go.dev/time#Since" }
+      - { title: "time package — Duration.Round", url: "https://pkg.go.dev/time#Duration.Round" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-job
+        type: editor.select
+        at: { mark: sel-job }
+        target:
+          {
+            file: main.go,
+            text: "type job struct {\n\trider string\n\td     time.Duration\n}",
+            occurrence: 1,
+          }
+      - id: sel-deliver
+        type: editor.select
+        at: { mark: sel-deliver }
+        target: { file: main.go, text: "time.Sleep(d)", occurrence: 1 }
+      - id: sel-jobs
+        type: editor.select
+        at: { mark: sel-jobs }
+        target:
+          {
+            file: main.go,
+            text: "\t\t{\"လှလှ\", 300 * time.Millisecond},\n\t\t{\"အောင်အောင်\", 100 * time.Millisecond},\n\t\t{\"မောင်မောင်\", 200 * time.Millisecond},\n",
+            occurrence: 1,
+          }
+      - id: sel-since
+        type: editor.select
+        at: { mark: sel-since }
+        target:
+          { file: main.go, text: "time.Since(start).Round(100*time.Millisecond)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "600ms ကြာ",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-first]] ပထမ စာကြောင်းမှာ လှလှ က မီလီစက္ကန့် သုံးရာ ကြာပြီး ရောက်ပါတယ်။ ပြီးမှ
+      အောင်အောင် နဲ့ မောင်မောင် ဆက်ရောက်ပြီး၊ slice ထဲက အစဉ်အတိုင်းပဲ ထွက်လာပါတယ်။
+      [[mark:point-600]] နောက်ဆုံး စာကြောင်းကတော့ စုစုပေါင်း မီလီစက္ကန့် ခြောက်ရာ ကြာတယ် ဆိုတာပါ။
+      [[mark:board-seq]] ဘာကြောင့်လဲဆိုတော့ function ကို ပုံမှန်အတိုင်း ခေါ်ရင်၊ အဲဒီ function ပြီးတဲ့အထိ
+      ခေါ်တဲ့ နေရာက ရှေ့ မဆက်လို့ပါ။ [[mark:draw-seq]] ဆိုလိုတာက rider တစ်ယောက်တည်းက ခရီး သုံးခုကို
+      ဆက်တိုက် သွားသလိုပါပဲ။ သုံးရာ၊ တစ်ရာ၊ နှစ်ရာ ကို ပေါင်းတော့ ခြောက်ရာ ဖြစ်ပါတယ်။ rider
+      သုံးယောက် ရှိပေမဲ့ တစ်ယောက် သွားတုန်း ကျန်တဲ့ နှစ်ယောက်က ဘာမှ မလုပ်ဘဲ ထိုင်ရတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - {
+          id: point-first,
+          type: console.point,
+          at: { mark: point-first },
+          target: { text: "300ms လှလှ" },
+        }
+      - {
+          id: point-600,
+          type: console.point,
+          at: { mark: point-600 },
+          target: { text: "600ms ကြာ" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-seq } }
+      - {
+          id: board-seq,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-seq,
+          type: whiteboard.apply,
+          at: { mark: draw-seq },
+          upsertIds: [s-seq-label, s-b1, s-b1t, s-b2, s-b2t, s-b3, s-b3t, s-seq-total, s-seq-line],
+          drawMs: 3000,
+        }
+
+  - id: go
+    chapter: go ဆိုတဲ့ keyword
+    narration: >-
+      [[mark:close-seq]] ဒါဆို rider သုံးယောက်ကို တစ်ပြိုင်နက် ထွက်ခိုင်းကြည့်ရအောင်။ Go မှာ တခြား
+      အလုပ်တွေနဲ့ တစ်ပြိုင်နက် run နေတဲ့ function ကို goroutine လို့ ခေါ်ပါတယ်။ rider တစ်ယောက်ကို
+      ဆိုင်ကယ် တစ်စီးနဲ့ လမ်းပေါ် လွှတ်လိုက်သလိုပါပဲ။ [[mark:type-go]] function ခေါ်တဲ့ နေရာရဲ့ ရှေ့မှာ
+      go ဆိုတဲ့ keyword ကို ထည့်ပါမယ်။ [[mark:sel-go]] ဒီ keyword က function ကို goroutine အသစ်
+      တစ်ခုနဲ့ စပေးပြီး၊ ပြီးတဲ့အထိ မစောင့်ဘဲ နောက် line ကို ချက်ချင်း ဆက်သွားပါတယ်။ ဒါကြောင့် loop က
+      rider သုံးယောက်ကို ချက်ချင်း လွှတ်လိုက်မှာပါ။ ဒါဆို စုစုပေါင်း ကြာချိန် လျော့သွားမလား၊
+      ကြည့်ရအောင်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Go statements",
+          url: "https://go.dev/ref/spec#Go_statements",
+        }
+    actions:
+      - {
+          id: close-seq,
+          type: whiteboard.apply,
+          at: { mark: close-seq },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-go
+        type: editor.type
+        at: { mark: type-go }
+        target: { file: main.go, after: "for _, j := range jobs {\n\t\t", occurrence: 1 }
+        text: "go "
+      - id: sel-go
+        type: editor.select
+        at: { mark: sel-go }
+        target: { file: main.go, text: "go deliver(j.rider, j.d)", occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "0s ကြာ",
+          timeoutMs: 8000,
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-zero]] output မှာ သုည စက္ကန့် ကြာတယ် ဆိုတဲ့ စာကြောင်း တစ်ကြောင်းတည်းပဲ ထွက်လာပါတယ်။
+      ဘယ် rider ရောက်ကြောင်းမှ မပါပါဘူး။ compile error လည်း မဟုတ်၊ panic လည်း မဟုတ်ဘဲ program က
+      ပုံမှန် ပြီးသွားပေမဲ့၊ ကိုယ် လိုချင်တဲ့ အဖြေ မဟုတ်ပါဘူး။ ဒီလို ဘာ သတိပေးချက်မှ မပါဘဲ အဖြေ လွဲနေတာကလည်း bug ပါပဲ။ [[mark:board-main]] ဘာကြောင့်လဲဆိုတော့
+      main function ပြီးသွားတာနဲ့ program တစ်ခုလုံး ပြီးသွားလို့ပါ။ [[mark:draw-main]] main က rider
+      သုံးယောက်ကို လွှတ်ပြီးတာနဲ့ ကြာချိန်ကို ချက်ချင်း print ထုတ်ပြီး ပြီးသွားပါတယ်။ အဲဒီ အချိန်မှာ
+      ဘယ်သူမှ မရောက်သေးလို့ သုည စက္ကန့်ပါ။ [[mark:draw-riders]] rider တွေ လမ်းပေါ်မှာ ရှိတုန်း ပါဆယ် ရုံးက
+      တံခါး ပိတ်ပြီး အိမ်ပြန်သွားသလိုပါပဲ။ main ပြီးတဲ့အခါ Go က ကျန်တဲ့ goroutine တွေကို မစောင့်ဘဲ၊
+      program ကို ချက်ချင်း ရပ်လိုက်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Program execution",
+          url: "https://go.dev/ref/spec#Program_execution",
+        }
+    actions:
+      - {
+          id: point-zero,
+          type: console.point,
+          at: { mark: point-zero },
+          target: { text: "0s ကြာ" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-main } }
+      - {
+          id: board-main,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-main,
+          type: whiteboard.apply,
+          at: { mark: draw-main },
+          upsertIds: [m-main-box, m-main, m-riders-box, m-r1, m-r2, m-r3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-riders,
+          type: whiteboard.apply,
+          at: { mark: draw-riders },
+          upsertIds: [m-strike, m-note, m-note-line],
+          drawMs: 2000,
+        }
+
+  - id: waitgroup
+    chapter: Wait group
+    narration: >-
+      [[mark:board-wait]] ဒါကြောင့် main ကို rider အားလုံး ပြန်ရောက်တဲ့အထိ ရပ်ထားပေးမယ့် နည်း လိုပါတယ်။
+      အဲဒါကို wait group လို့ ခေါ်ပါတယ်။ rider အားလုံး ပြန်မရောက်မချင်း ရုံး မပိတ်ဘူး ဆိုတဲ့ စည်းကမ်း
+      တစ်ခုလိုပါပဲ။ [[mark:draw-wg]] wait group ကို var နဲ့ ကြေညာရုံနဲ့ သူ့ zero value က စာရင်း အလွတ်
+      ဖြစ်ပြီး၊ ချက်ချင်း သုံးလို့ ရပါတယ်။ သူ့ရဲ့ Go ဆိုတဲ့ method က function ကို goroutine အသစ်နဲ့
+      စပေးပြီး စာရင်းထဲ တစ်ခု ထည့်ပါတယ်။ အဲဒီ function ပြီးတဲ့အခါမှာတော့ စာရင်းထဲက ပြန်ထုတ်ပေးပါတယ်။ Wait
+      ကတော့ စာရင်း ကုန်သွားတဲ့အထိ ခေါ်တဲ့ နေရာမှာ ရပ်ထားပါတယ်။ [[mark:draw-old]] ဒီ Go method က Go
+      ရဲ့ နောက်ပိုင်း version တွေမှ ပါလာတာ ဖြစ်လို့၊ အရင် code တွေမှာတော့ board အောက်ပိုင်းက ပုံစံကို
+      တွေ့ရပါမယ်။ goroutine မစခင် စာရင်းထဲ တစ်ခု ကိုယ်တိုင် ထည့်ပြီး၊ goroutine ထဲမှာ ပြီးကြောင်း
+      ကိုယ်တိုင် မှတ်ပေးရတာပါ။ အလုပ် အတူတူပဲ ဖြစ်ပေမဲ့ ဒီ course မှာတော့ Go method ကိုပဲ သုံးပါမယ်။
+    sources:
+      - { title: "sync package — WaitGroup", url: "https://pkg.go.dev/sync#WaitGroup" }
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+      - { title: "Go 1.25 Release Notes", url: "https://go.dev/doc/go1.25" }
+    actions:
+      - {
+          id: board-wait,
+          type: whiteboard.apply,
+          at: { mark: board-wait },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-wg,
+          type: whiteboard.apply,
+          at: { mark: draw-wg },
+          upsertIds: [w-box, w-l1, w-l1n, w-l2, w-l2n, w-l3, w-l3n],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-old,
+          type: whiteboard.apply,
+          at: { mark: draw-old },
+          upsertIds: [w-old-box, w-old-label, w-old1, w-old2],
+          drawMs: 2400,
+        }
+
+  - id: type-wg
+    narration: >-
+      [[mark:close-wait]] ကဲ၊ code ထဲမှာ ထည့်ကြည့်ရအောင်။ [[mark:type-sync]] wait group က sync ဆိုတဲ့
+      package ထဲမှာ ရှိလို့ import ထဲမှာ ထည့်ပါမယ်။ [[mark:type-var]] စတဲ့ အချိန်ရဲ့ အောက်မှာ wait group
+      တစ်ခု ကြေညာပါမယ်။ [[mark:type-comment]] ခုနက go ပါတဲ့ line ကိုတော့ ဖျက်မပစ်ဘဲ comment
+      လုပ်ထားခဲ့ပါမယ်။ ရှေ့မှာ comment သင်္ကေတ ထည့်လိုက်ရင် Go က အဲဒီ line ကို မဖတ်တော့ပေမဲ့၊ ခုနက
+      ပုံစံနဲ့ နှိုင်းယှဉ်ကြည့်လို့ ရပါတယ်။ [[mark:type-wggo]] သူ့ အောက်မှာ wait group ကနေ goroutine စတဲ့
+      line ကို ရေးပါမယ်။ [[mark:sel-closure]] ဒီ အပိုင်းက closure lesson မှာ တွေ့ခဲ့တဲ့ နာမည်မရှိတဲ့
+      function ပါ။ အထဲမှာ ခုနက function ကိုပဲ ခေါ်ထားပြီး၊ loop ရဲ့ j ကို မှတ်ထားပါတယ်။ Go ရဲ့ နောက်ပိုင်း
+      version တွေမှာ loop ရဲ့ အခေါက်တိုင်းက ကိုယ်ပိုင် j တစ်ခုစီ ရလို့၊ goroutine တစ်ခုစီက ကိုယ့် rider
+      ကို မှန်မှန်ကန်ကန် ရပါတယ်။ [[mark:type-wait]] နောက်ဆုံးမှာ loop ပြီးတာနဲ့၊ ကြာချိန်ကို print
+      မထုတ်ခင် rider အားလုံး ပြန်ရောက်တဲ့အထိ ရပ်ထားပါမယ်။ loop ထဲမှာ မထားဘဲ loop အပြင်မှာ ထားရတာက၊ rider တွေ အားလုံးကို အရင် လွှတ်ပြီးမှ စောင့်ချင်လို့ပါ။ loop ထဲမှာ ထားမိရင် တစ်ယောက် ပြန်ရောက်မှ နောက်တစ်ယောက် ထွက်တဲ့ ပုံစံ ပြန်ဖြစ်သွားပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+      - { title: "Fixing For Loops in Go 1.22", url: "https://go.dev/blog/loopvar-preview" }
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - {
+          id: close-wait,
+          type: whiteboard.apply,
+          at: { mark: close-wait },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-sync
+        type: editor.type
+        at: { mark: type-sync }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"sync\"\n"
+      - id: type-var
+        type: editor.type
+        at: { mark: type-var }
+        target: { file: main.go, after: "\tstart := time.Now()\n", occurrence: 1 }
+        text: "\tvar wg sync.WaitGroup\n"
+        cadence: line-by-line
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: "for _, j := range jobs {\n\t\t", occurrence: 1 }
+        text: "// "
+      - id: type-wggo
+        type: editor.type
+        at: { mark: type-wggo }
+        target: { file: main.go, after: "\t\t// go deliver(j.rider, j.d)\n", occurrence: 1 }
+        text: "\t\twg.Go(func() { deliver(j.rider, j.d) })\n"
+        cadence: line-by-line
+      - id: sel-closure
+        type: editor.select
+        at: { mark: sel-closure }
+        target: { file: main.go, text: "func() { deliver(j.rider, j.d) }", occurrence: 1 }
+      - id: type-wait
+        type: editor.type
+        at: { mark: type-wait }
+        target:
+          {
+            file: main.go,
+            after: "\t\twg.Go(func() { deliver(j.rider, j.d) })\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\twg.Wait()\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "300ms ကြာ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-go,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\twg.Go(func() { deliver(j.rider, j.d) })\n",
+        }
+      - {
+          id: expect-file-wait,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\twg.Wait()\n",
+        }
+
+  - id: read-3
+    chapter: အကြာဆုံး တစ်ယောက်စာပဲ ကြာတယ်
+    narration: >-
+      [[mark:point-aung]] ဒီ တစ်ခါမှာ အောင်အောင် အရင် ရောက်ပါတယ်။ ပြီးတော့ မောင်မောင်၊ နောက်ဆုံးမှ လှလှ
+      ရောက်ပါတယ်။ [[mark:point-hla]] slice ထဲမှာ လှလှ က ပထမ ဖြစ်ပေမဲ့ သူ့ ခရီးက အကြာဆုံး ဖြစ်လို့
+      နောက်ဆုံးမှ ရောက်တာပါ။ အားလုံး တစ်ပြိုင်နက် ထွက်သွားတော့ ရောက်တဲ့ အစဉ်က ကြာချိန် အတိုင်း
+      ဖြစ်သွားတာပါ။ ဒီ program မှာ ကြာချိန်တွေ မတူကြလို့ ဒီ အစဉ်က အမြဲ တူပါတယ်။ ကြာချိန် တူနေရင်တော့ goroutine ဘယ်ဟာ အရင် ပြီးမလဲ ဆိုတာကို Go က အာမခံ မပေးပါဘူး။ [[mark:point-300]] စုစုပေါင်း ကြာချိန်ကလည်း မီလီစက္ကန့် သုံးရာပဲ ဖြစ်ပါတယ်။
+      [[mark:board-par]] board ပေါ်မှာ ခုနက ပုံနဲ့ နှိုင်းယှဉ်ကြည့်ရအောင်။ [[mark:draw-par]] rider သုံးယောက်လုံး
+      တစ်ချိန်တည်း ထွက်ကြတော့၊ main က အကြာဆုံး rider ပြန်ရောက်တာကိုပဲ စောင့်ရပါတယ်။ ဒါကြောင့် ခြောက်ရာ
+      ကနေ သုံးရာ ဖြစ်သွားတာပါ။ တစ်ပြိုင်နက် လုပ်တာက ခရီး တစ်ခုစီကို မြန်အောင် မလုပ်ပေးပါဘူး၊ ခရီး
+      တစ်ခုစီက အရင်အတိုင်း ကြာပါတယ်။ အချိန် သက်သာတာက တစ်ယောက်ကို တစ်ယောက် မစောင့်ရတော့လို့ပါ။
+    sources:
+      - { title: "sync package — WaitGroup.Wait", url: "https://pkg.go.dev/sync#WaitGroup.Wait" }
+    actions:
+      - {
+          id: point-aung,
+          type: console.point,
+          at: { mark: point-aung },
+          target: { text: "100ms အောင်အောင်" },
+        }
+      - {
+          id: point-hla,
+          type: console.point,
+          at: { mark: point-hla },
+          target: { text: "300ms လှလှ" },
+        }
+      - {
+          id: point-300,
+          type: console.point,
+          at: { mark: point-300 },
+          target: { text: "300ms ကြာ" },
+        }
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-par } }
+      - {
+          id: board-par,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds:
+            [s-title, s-seq-label, s-b1, s-b1t, s-b2, s-b2t, s-b3, s-b3t, s-seq-total, s-seq-line],
+        }
+      - {
+          id: draw-par,
+          type: whiteboard.apply,
+          at: { mark: draw-par },
+          upsertIds:
+            [
+              s-par-label,
+              s-p1,
+              s-p1t,
+              s-p2,
+              s-p2t,
+              s-p3,
+              s-p3t,
+              s-par-total,
+              s-par-line,
+              s-par-note,
+            ],
+          drawMs: 3000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ wait group နဲ့ rider တွေကို
+      လွှတ်ထားပေမဲ့၊ loop ပြီးတဲ့ နေရာမှာ ရပ်ထားတဲ့ line ကို မေ့ကျန်ခဲ့ပါတယ်။ [[mark:quiz-line]] ဒီ
+      program ကို run ရင် က လို rider သုံးယောက်လုံး ရောက်ပြီး သုံးရာ ကြာမလား၊ ခ လို သုည စက္ကန့်
+      တစ်ကြောင်းတည်း ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      ခ ပါ။ ဘာကြောင့်လဲဆိုတော့ wait group ရဲ့ Go က goroutine တွေကို စပေးပြီး စာရင်း မှတ်ထားရုံပါပဲ၊
+      main ကို ရပ်ထားပေးတာက Wait ပါ။ Wait မပါရင် main က ချက်ချင်း ပြီးသွားလို့၊ ဒုတိယ run လိုပဲ rider
+      တွေ မရောက်ခင် program ပြီးသွားပါတယ်။
+    sources:
+      - { title: "sync package — WaitGroup.Wait", url: "https://pkg.go.dev/sync#WaitGroup.Wait" }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ function ခေါ်တဲ့ နေရာရဲ့ ရှေ့မှာ go ထည့်ရင် goroutine အသစ်နဲ့
+      စပြီး ချက်ချင်း ရှေ့ဆက်ပါတယ်။ ဒါပေမဲ့ main ပြီးတာနဲ့ program ပြီးသွားလို့၊ goroutine တွေကို
+      စောင့်ပေးမယ့် နည်း လိုပါတယ်။ [[mark:recap-go]] wait group ရဲ့ Go က goroutine ကို စပြီး စာရင်း
+      မှတ်ပေးပါတယ်။ [[mark:recap-wait]] Wait က အားလုံး ပြီးတဲ့အထိ main ကို ရပ်ထားပေးပါတယ်။
+      တစ်ပြိုင်နက် လုပ်ရင် စုစုပေါင်း ကြာချိန်က အကြာဆုံး အလုပ်လောက်ပဲ ကြာပြီး၊ ပြီးတဲ့ အစဉ်ကတော့
+      ကြာချိန် အတိုင်း ဖြစ်ပါတယ်။ နောက် lesson မှာတော့ goroutine တွေကြား ပါဆယ်တွေကို လက်လွှဲပေးတဲ့
+      channel ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "sync package — WaitGroup", url: "https://pkg.go.dev/sync#WaitGroup" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-go
+        type: editor.select
+        at: { mark: recap-go }
+        target: { file: main.go, text: "wg.Go(func() { deliver(j.rider, j.d) })", occurrence: 1 }
+      - id: recap-wait
+        type: editor.select
+        at: { mark: recap-wait }
+        target: { file: main.go, text: "wg.Wait()", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
