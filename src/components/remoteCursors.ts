@@ -22,11 +22,14 @@ import "./remoteCursors.css";
  * but `name` comes straight from the Google ID token's `name` claim with only a
  * length check, so a peer whose account name contains Markdown could render a
  * link or a remote image inside another participant's editor hover — phishing
- * plus an IP beacon that fires on hovering their cursor. Escaping the syntax
- * characters keeps the name readable while making it inert.
+ * plus an IP beacon that fires on hovering their cursor. Monaco's GFM rendering
+ * also links a bare URL, a `www.` host or an email address, which take no
+ * Markdown syntax at all. CommonMark lets a backslash escape any ASCII
+ * punctuation, so escaping every one shows the name as plain text: nothing
+ * Markdown or autolinking can start from is left unescaped.
  */
 function escapeMarkdown(value: string): string {
-  return value.replace(/[\\`*_{}[\]()#+\-.!<>|~]/g, "\\$&");
+  return value.replace(/[!-/:-@[-`{-~]/g, "\\$&");
 }
 
 /** What these helpers need of CodeEditor's y-monaco binding. */

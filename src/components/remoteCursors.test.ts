@@ -1,3 +1,4 @@
+import { marked } from "marked";
 import { describe, expect, it, vi } from "vite-plus/test";
 import * as Y from "yjs";
 import type { CollaborationParticipant } from "../contexts/CollaborationContext";
@@ -156,9 +157,36 @@ describe("remoteSelectionDecorations", () => {
       0,
       "![x](https://example.test/a.png) *Ada*",
     );
-    const escaped = "\\!\\[x\\]\\(https://example\\.test/a\\.png\\) \\*Ada\\*";
+    const escaped = "\\!\\[x\\]\\(https\\:\\/\\/example\\.test\\/a\\.png\\) \\*Ada\\*";
     expect(selectionDecoration.options.hoverMessage).toEqual({ value: escaped });
     expect(caretDecoration.options.hoverMessage).toEqual({ value: escaped });
+  });
+
+  // Monaco renders the hover with marked's GFM defaults, which turn a bare URL,
+  // a www. host or an email address into a link with no Markdown syntax at all.
+  it("shows any name as plain text in the hover, never as a link or image", () => {
+    const names = [
+      "https://3232235777",
+      "http://example.test/login",
+      "www.example.test",
+      "someone@example.test",
+      "<https://example.test>",
+      "[Ada](https://example.test)",
+      "![x](https://example.test/a.png)",
+      "&#104;ttps://example.test &amp; <b>bold</b>",
+      "`code` ~~gone~~ **Ada** _Ada_ # Ada",
+    ];
+    for (const name of names) {
+      const [caret] = remoteSelectionDecorations(resolveRemoteSelection(model, 0, 0), 0, name);
+      const value = caret?.options.hoverMessage;
+      const html = marked.parse(
+        typeof value === "object" && value !== null && "value" in value ? String(value.value) : "",
+        { async: false, gfm: true },
+      );
+      expect(html).not.toMatch(/<(a|img|code|strong|em|del|h1|b)\b/i);
+      const shown = new DOMParser().parseFromString(html, "text/html").body.textContent?.trim();
+      expect(shown).toBe(name);
+    }
   });
 });
 
