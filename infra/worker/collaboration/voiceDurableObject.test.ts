@@ -1,13 +1,30 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { CollaborationRole } from "../../../src/collaboration/protocol";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+  COLLABORATION_PROTOCOL_VERSION,
+  COLLABORATION_SQLITE_PERSISTENCE_VERSION,
+  type CollaborationRole,
+} from "../../../src/collaboration/protocol";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import {
   COLLABORATION_VOICE_PROTOCOL_VERSION,
   VOICE_CAPABILITY_HEADER,
 } from "../../../src/voice/protocol";
+import {
+  getCollaborationRoomAccess,
+  type CollaborationRoomAccess,
+} from "../../db/collaborationQueries";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
+import { SqliteTestStorage } from "../testing/sqliteStorage";
+import { stubWebSocketUpgrade } from "../testing/webSocketUpgrade";
 import { CollaborationVoiceRoomDurableObject } from "./voiceDurableObject";
+
+vi.mock("../../db/collaborationQueries", () => ({
+  getCollaborationRoomAccess: vi.fn<typeof getCollaborationRoomAccess>(),
+}));
+
+stubWebSocketUpgrade(() => new FakeWebSocket());
 
 vi.stubGlobal(
   "WebSocketRequestResponsePair",
@@ -37,12 +54,46 @@ const VOICE_ENABLED_ENV = {
   REALTIME_SFU_APP_SECRET: "secret",
 } as unknown as Env;
 
+const openStorages: SqliteTestStorage[] = [];
+
+afterEach(() => {
+  for (const storage of openStorages.splice(0)) storage.close();
+});
+
+beforeEach(() => {
+  vi.mocked(getCollaborationRoomAccess).mockReset();
+});
+
+function roomAccess(role: CollaborationRole, roleVersion: number): CollaborationRoomAccess {
+  return {
+    id: ROOM_ID,
+    owner_id: PEER_ID,
+    host_user_id: PEER_ID,
+    status: "active",
+    transport: "cloudflare-websocket",
+    persistence_version: COLLABORATION_SQLITE_PERSISTENCE_VERSION,
+    protocol_version: COLLABORATION_PROTOCOL_VERSION,
+    document_schema_version: COLLABORATION_DOCUMENT_SCHEMA_VERSION,
+    role_version: roleVersion,
+    max_members: 10,
+    created_at: 1,
+    updated_at: 1,
+    closed_at: null,
+    purged_at: null,
+    member_role: role,
+  };
+}
+
 function createVoiceRoom(env: Env = {} as Env) {
   const sockets: FakeWebSocket[] = [];
+  const storage = new SqliteTestStorage();
+  openStorages.push(storage);
   const ctx = {
     id: { name: ROOM_ID },
+    storage,
     setWebSocketAutoResponse: () => undefined,
     getWebSockets: () => sockets,
+    acceptWebSocket: (socket: FakeWebSocket) => sockets.push(socket),
   };
   const room = new CollaborationVoiceRoomDurableObject(ctx as unknown as DurableObjectState, env);
 
@@ -101,6 +152,49 @@ function createVoiceRoom(env: Env = {} as Env) {
     );
   }
 
+  function closeRoom(roleVersion: number) {
+    return room.fetch(
+      new Request(`${VOICE_ORIGIN}/control`, {
+        method: "POST",
+        body: JSON.stringify({
+          event: {
+            kind: "room-closed",
+            roomId: ROOM_ID,
+            roleVersion,
+            targetUserId: null,
+            occurredAt: Date.now(),
+          },
+        }),
+      }),
+    );
+  }
+
+  /** Opens a voice socket through the upgrade, with the session the Worker read from D1. */
+  async function upgrade(
+    userId: string,
+    roleVersion: number,
+  ): Promise<{ response: Response; socket: FakeWebSocket | null }> {
+    const before = sockets.length;
+    const session = {
+      roomId: ROOM_ID,
+      userId,
+      displayName: "Member",
+      role: "editor",
+      roleVersion,
+      collaborationSessionId: uuid(),
+      maxMembers: 10,
+    };
+    const response = await room.fetch(
+      new Request(`${VOICE_ORIGIN}/websocket`, {
+        headers: {
+          Upgrade: "websocket",
+          "X-Collaboration-Voice-Session": encodeURIComponent(JSON.stringify(session)),
+        },
+      }),
+    );
+    return { response, socket: sockets.length > before ? sockets.at(-1)! : null };
+  }
+
   function message(socket: FakeWebSocket, body: Record<string, unknown>) {
     return room.webSocketMessage(socket as unknown as WebSocket, JSON.stringify(body));
   }
@@ -139,7 +233,7 @@ function createVoiceRoom(env: Env = {} as Env) {
     );
   }
 
-  return { join, control, message, sfu };
+  return { join, control, closeRoom, upgrade, message, sfu };
 }
 
 describe("CollaborationVoiceRoomDurableObject membership control", () => {
@@ -185,6 +279,111 @@ describe("CollaborationVoiceRoomDurableObject membership control", () => {
 
     expect(member.closeCode).toBeNull();
     expect(member.deserializeAttachment()).toMatchObject({ role: "editor", roleVersion: 3 });
+  });
+});
+
+// The Worker reads D1 once for the voice upgrade. A removal that commits
+// after the read can reach this object first; /control retired only the
+// sockets open then, and the late upgrade joined the call with a seat and
+// the whole roster.
+describe("CollaborationVoiceRoomDurableObject upgrades that predate an applied change", () => {
+  const upsertsFor = (socket: FakeWebSocket, userId: string) =>
+    socket
+      .messages()
+      .filter(
+        (message) =>
+          message.type === "voice.participant-upsert" &&
+          (message.participant as { userId: string }).userId === userId,
+      );
+
+  it("refuses an upgrade read before a removal it has applied", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const peer = room.join(PEER_ID, 4);
+    const member = room.join(MEMBER_ID, 4);
+    await room.control(5, MEMBER_ID, null);
+    expect(member.closeCode).toBe(4003);
+
+    const late = await room.upgrade(MEMBER_ID, 4);
+
+    expect(late.response.status).toBe(403);
+    expect(late.socket).toBeNull();
+    expect(upsertsFor(peer, MEMBER_ID)).toEqual([]);
+  });
+
+  it("refuses it even when no socket was open to carry the removal", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    await room.control(5, MEMBER_ID, null);
+
+    expect((await room.upgrade(MEMBER_ID, 4)).response.status).toBe(403);
+  });
+
+  it("accepts the member again once they rejoin at a later version", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    await room.control(5, MEMBER_ID, null);
+
+    expect((await room.upgrade(MEMBER_ID, 6)).response.status).toBe(101);
+  });
+
+  it("refuses every upgrade once the room has been closed", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    await room.closeRoom(5);
+
+    expect((await room.upgrade(MEMBER_ID, 5)).response.status).toBe(409);
+  });
+
+  it("gives an upgrade read before a demotion the demoted role", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    await room.control(5, MEMBER_ID, "viewer");
+
+    const late = await room.upgrade(MEMBER_ID, 4);
+
+    expect(late.response.status).toBe(101);
+    expect(late.socket!.deserializeAttachment()).toMatchObject({ role: "viewer", roleVersion: 5 });
+  });
+});
+
+// Rechecks ran only on a frame the socket sent, and by design the client
+// sends no heartbeat, so a member who lost access with no /control reaching
+// their socket kept a seat and every roster update.
+describe("CollaborationVoiceRoomDurableObject silent sockets", () => {
+  it("rechecks a silent recipient whose access check is stale and retires it", async () => {
+    const room = createVoiceRoom({ ...VOICE_ENABLED_ENV, DB: {} } as Env);
+    const silent = room.join(MEMBER_ID, 1, { accessCheckedAt: 0 });
+    const peer = room.join(PEER_ID);
+    vi.mocked(getCollaborationRoomAccess).mockImplementation(async (_db, _room, userId) =>
+      userId === MEMBER_ID ? null : roomAccess("editor", 1),
+    );
+
+    await room.message(peer, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getCollaborationRoomAccess).toHaveBeenCalledWith(expect.anything(), ROOM_ID, MEMBER_ID);
+    expect(silent.closeCode).toBe(4003);
+    expect(peer.messages()).toContainEqual(
+      expect.objectContaining({ type: "voice.participant-left" }),
+    );
+  });
+
+  it("leaves a recipient whose access check is fresh alone", async () => {
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const listener = room.join(MEMBER_ID);
+    const peer = room.join(PEER_ID);
+
+    await room.message(peer, {
+      type: "voice.mute-changed",
+      version: COLLABORATION_VOICE_PROTOCOL_VERSION,
+      revision: 1,
+      muted: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
+    expect(listener.closeCode).toBeNull();
   });
 });
 

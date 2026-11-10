@@ -42,7 +42,9 @@ import { getCollaborationRoomAccess } from "../../db/collaborationQueries";
 import type { Env } from "../env";
 import { readBodyWithLimit } from "../httpBody";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
+import { AppliedMembershipChanges } from "./appliedMembershipChanges";
 import { randomToken } from "./bytes";
+import type { RoomSqliteStorage } from "./roomSqliteDocumentStore";
 import {
   ACCESS_REVALIDATION_INTERVAL_MS,
   ConnectionQuota,
@@ -51,6 +53,7 @@ import {
   isCurrentRoom,
   isOpen,
   MAX_SOCKETS_PER_USER,
+  QuietSocketRevalidation,
   rateWindowCount,
 } from "./socketSupport";
 
@@ -191,17 +194,23 @@ export async function notifyCollaborationVoiceRoomControl(
   return response.ok;
 }
 
-// Ephemeral per-room voice coordinator. All durable knowledge lives in the
-// hibernating WebSocket attachments so a wake-up can reconstruct the joined
-// roster and the session/track/mid ownership registry without any storage
-// migration (plan §5.2).
+// Ephemeral per-room voice coordinator. The roster and the session/track/mid
+// ownership registry live in the hibernating WebSocket attachments so a
+// wake-up can reconstruct them without any storage migration (plan §5.2). The
+// one thing kept in storage is the record of applied membership changes,
+// which must outlive the sockets it closed.
 export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
   private roomRevision: number | null = null;
   private readonly connectionQuota = new ConnectionQuota(MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE);
   private readonly sfuRequestQueue = new VoiceSfuRequestQueue();
+  private readonly appliedMembership: AppliedMembershipChanges;
+  private readonly quietRevalidation = new QuietSocketRevalidation();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.appliedMembership = new AppliedMembershipChanges(
+      ctx.storage as unknown as RoomSqliteStorage,
+    );
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -312,15 +321,28 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     return publications;
   }
 
-  // Validated and encoded once, then the same frame goes to every member.
+  // Validated and encoded once, then the same frame goes to every member. A
+  // recipient whose access check is stale is rechecked in the background: the
+  // client sends no heartbeat, so a member who stays silent is otherwise never
+  // rechecked.
   private broadcast(message: VoiceServerMessage, except?: WebSocket): void {
     const encoded = encodeVoiceMessage(message);
-    for (const { socket } of this.activeSockets()) {
+    const now = Date.now();
+    for (const { socket, attachment } of this.activeSockets()) {
       if (socket === except || !isOpen(socket)) continue;
       try {
         socket.send(encoded);
       } catch {
         socket.close(1011, "broadcast failed");
+        continue;
+      }
+      if (this.quietRevalidation.due(socket, () => attachment.accessCheckedAt, now)) {
+        void this.refreshAccess(socket, attachment).catch((error: unknown) => {
+          console.error("collaboration_voice_access_recheck_failed", {
+            roomId: attachment.roomId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
       }
     }
   }
@@ -342,8 +364,8 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
   }
 
   private async acceptConnection(request: Request): Promise<Response> {
-    const session = decodeHeaderJson(canonicalVoiceSessionSchema, request, VOICE_SESSION_HEADER);
-    if (!session || !isCurrentRoom(this.ctx, session.roomId)) {
+    const forwarded = decodeHeaderJson(canonicalVoiceSessionSchema, request, VOICE_SESSION_HEADER);
+    if (!forwarded || !isCurrentRoom(this.ctx, forwarded.roomId)) {
       return Response.json({ error: "invalid voice session" }, { status: 403 });
     }
 
@@ -354,12 +376,30 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     const capability = randomToken();
     const capabilityDigest = await sha256Hex(capability);
 
-    if (!this.connectionQuota.consume(session.userId)) {
+    if (!this.connectionQuota.consume(forwarded.userId)) {
       return Response.json(
         { error: "voice connection rate limit exceeded" },
         { status: 429, headers: { "Retry-After": "60" } },
       );
     }
+    // Checked after the await, so a /control handled during it is counted:
+    // the Worker's D1 read can predate a removal or role change this object
+    // has already applied, which retired or changed only the sockets open then.
+    const admission = this.appliedMembership.admit(
+      forwarded.userId,
+      forwarded.role,
+      forwarded.roleVersion,
+    );
+    if (!admission.admitted) {
+      return admission.reason === "room-closed"
+        ? Response.json({ error: "room is not active" }, { status: 409 })
+        : Response.json({ error: "unauthorized" }, { status: 403 });
+    }
+    const session: CanonicalVoiceSession = {
+      ...forwarded,
+      role: admission.role,
+      roleVersion: admission.roleVersion,
+    };
 
     // A second socket for the same (userId, collaborationSessionId) is a
     // reconnect generation and replaces the old one.
@@ -662,6 +702,7 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
 
   private applyControl(command: CollaborationRoomControlCommand): void {
     const { event } = command;
+    this.appliedMembership.record(command);
     if (event.kind === "room-closed") {
       for (const { socket, attachment } of this.activeSockets()) {
         this.retireSocket(socket, attachment, CLOSE_ROOM_CLOSED, "room closed", {
