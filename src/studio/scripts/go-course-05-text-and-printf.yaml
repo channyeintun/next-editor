@@ -1,0 +1,820 @@
+# Go course, lesson 05: text and Printf (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and a main holding the market item
+# (`item := "ကြက်ဥ"`) and its price (`price := 3500`) from lesson 04's market trip.
+# Edits, all insert-only:
+#   1. a Println of price, "ကျပ်" and item, then a Println of item + "ဆယ်လုံး" -> run-1:
+#      3500 ကျပ် ကြက်ဥ / ကြက်ဥဆယ်လုံး;
+#   2. `fmt.Printf("%d ကျပ် - %s\n", item)` (the price left out) -> run-2: vet
+#      `main.go:10:14: fmt.Printf format %d has arg item of wrong type string`, and the program still
+#      prints `%!d(string=ကြက်ဥ) ကျပ် - %!s(MISSING)`;
+#   3. `price, ` before item, a Sprintf line joined with " ဆယ်လုံး", and a %v %q Printf -> run-3:
+#      3500 ကျပ် - ကြက်ဥ / 3500 ကျပ် - ကြက်ဥ ဆယ်လုံး / 3500 "ကြက်ဥ".
+# Boards: (P) a Printf format is a form with blanks that the arguments fill left to right;
+# (W) what vet saw: the word in the number blank, nothing for the text blank; (Q) quiz: + on a number.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-05-text-and-printf
+  title: "Go course 05: စာသားနဲ့ Printf"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	item := "ကြက်ဥ"
+        	price := 3500
+        }
+  whiteboardAssets:
+    # Board P: a Printf format is a form with blanks.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 720,
+        height: 50,
+        text: "Printf · နေရာလွတ် ပါတဲ့ ပုံစံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-arg1,
+        kind: text,
+        x: 320,
+        y: 235,
+        width: 120,
+        height: 40,
+        text: "price",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-arg2,
+        kind: text,
+        x: 640,
+        y: 235,
+        width: 100,
+        height: 40,
+        text: "item",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-arrow1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 350,
+        y: 278,
+        width: 40,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-arrow2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 665,
+        y: 278,
+        width: 40,
+        height: 50,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-form,
+        kind: rectangle,
+        x: 285,
+        y: 335,
+        width: 800,
+        height: 85,
+        strokeColor: "#1971c2",
+      }
+    - { id: p-b1, kind: rectangle, x: 310, y: 350, width: 120, height: 55, strokeColor: "#f08c00" }
+    - {
+        id: p-b1t,
+        kind: text,
+        x: 345,
+        y: 357,
+        width: 60,
+        height: 40,
+        text: "%d",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-mid,
+        kind: text,
+        x: 450,
+        y: 357,
+        width: 160,
+        height: 40,
+        text: "ကျပ် -",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: p-b2, kind: rectangle, x: 625, y: 350, width: 120, height: 55, strokeColor: "#f08c00" }
+    - {
+        id: p-b2t,
+        kind: text,
+        x: 660,
+        y: 357,
+        width: 60,
+        height: 40,
+        text: "%s",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-nl,
+        kind: text,
+        x: 775,
+        y: 357,
+        width: 60,
+        height: 40,
+        text: "\\n",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-r1,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 360,
+        height: 40,
+        text: "%d · ဂဏန်း နေရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-r2,
+        kind: text,
+        x: 690,
+        y: 455,
+        width: 380,
+        height: 40,
+        text: "%s · စာသား နေရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-r3,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 640,
+        height: 40,
+        text: "\\n · ဒီမှာ line ဆုံးပြီး ဆင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-order,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 700,
+        height: 40,
+        text: "ဘယ်ကနေ ညာ · ပထမ တန်ဖိုး → ပထမ နေရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board W: what vet saw in run-2.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "vet က ဘာကို တွေ့လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-arg,
+        kind: text,
+        x: 330,
+        y: 240,
+        width: 100,
+        height: 40,
+        text: "item",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 350,
+        y: 283,
+        width: 40,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - { id: w-b1, kind: rectangle, x: 310, y: 340, width: 120, height: 55, strokeColor: "#e03131" }
+    - {
+        id: w-b1t,
+        kind: text,
+        x: 345,
+        y: 347,
+        width: 60,
+        height: 40,
+        text: "%d",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: w-b2, kind: rectangle, x: 625, y: 340, width: 120, height: 55, strokeColor: "#f08c00" }
+    - {
+        id: w-b2t,
+        kind: text,
+        x: 660,
+        y: 347,
+        width: 60,
+        height: 40,
+        text: "%s",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-missing,
+        kind: text,
+        x: 765,
+        y: 347,
+        width: 300,
+        height: 40,
+        text: "← ဘာမှ မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-out,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 700,
+        height: 40,
+        text: "%!d(string=ကြက်ဥ) ကျပ် - %!s(MISSING)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-out-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 470,
+        width: 640,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-vet-box,
+        kind: rectangle,
+        x: 285,
+        y: 520,
+        width: 800,
+        height: 95,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: w-vet,
+        kind: text,
+        x: 305,
+        y: 545,
+        width: 740,
+        height: 40,
+        text: "vet · program ကို မတား၊ သတိပဲ ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a number joined with +).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 800,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 260,
+        width: 400,
+        height: 40,
+        text: "price := 3500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-want,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 600,
+        height: 40,
+        text: "လိုချင်တာ · 3500 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 640,
+        height: 40,
+        text: 'က · fmt.Println(price + " ကျပ်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 640,
+        height: 40,
+        text: 'ခ · fmt.Println(price, "ကျပ်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 490,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7105
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "3500 ကျပ် ကြက်ဥ\nကြက်ဥဆယ်လုံး\n"
+      run-2:
+        status: vet-error
+        exitCode: 0
+        output: "3500 ကျပ် ကြက်ဥ\nကြက်ဥဆယ်လုံး\n%!d(string=ကြက်ဥ) ကျပ် - %!s(MISSING)\n"
+        vetErrors: "main.go:10:14: fmt.Printf format %d has arg item of wrong type string\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "3500 ကျပ် ကြက်ဥ\nကြက်ဥဆယ်လုံး\n3500 ကျပ် - ကြက်ဥ\n3500 ကျပ် - ကြက်ဥ ဆယ်လုံး\n3500 \"ကြက်ဥ\"\n"
+
+scenes:
+  - id: recall
+    chapter: ပြေစာ တစ်ကြောင်း
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ လစာကို သိန်းနဲ့ ခွဲကြည့်ပြီး၊ ဈေးက ဝယ်လာတဲ့ ကြက်သားကို ပိဿာကနေ ကီလို
+      ပြောင်းကြည့်ခဲ့ပါတယ်။ အဲဒီ ဈေးဝယ် ခရီးမှာပဲ ကြက်ဥ ဆယ်လုံးကိုလည်း ၃၅၀၀ ကျပ်နဲ့ ဝယ်ခဲ့တယ် ဆိုပါစို့။
+      ဒီနေ့တော့ ဈေးဆိုင်က ပေးတဲ့ ပြေစာလို၊ ဈေးနှုန်းနဲ့ ပစ္စည်း နာမည်ကို တစ်ကြောင်းတည်းမှာ သေသေသပ်သပ်
+      ထုတ်ပြတာကို လေ့လာပါမယ်။ [[mark:sel-vars]] main ထဲမှာ variable နှစ်ခု ရှိပြီးသားပါ။ ပထမ တစ်ခုက
+      ပစ္စည်း နာမည် ဖြစ်လို့ string ဖြစ်ပြီး၊ ဒုတိယ တစ်ခုက ဈေးနှုန်းပါ။ ပြီးခဲ့တဲ့ lesson မှာ ပြောခဲ့သလို
+      ငွေကို ကျပ် အပြည့်နဲ့ ရေးတာ ဖြစ်လို့ ဈေးနှုန်းက int ပါ။ ဆိုတော့ ဂဏန်း တစ်ခုနဲ့ စာသား တစ်ခုကို
+      ဘယ်လို တွဲထုတ်ကြမလဲ ဆိုတာ နည်းလမ်း သုံးမျိုးနဲ့ ကြည့်သွားပါမယ်။
+    sources:
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+      - {
+          title: "The Go Programming Language Specification — String types",
+          url: "https://go.dev/ref/spec#String_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-vars
+        type: editor.select
+        at: { mark: sel-vars }
+        target: { file: main.go, text: "item := \"ကြက်ဥ\"\n\tprice := 3500", occurrence: 1 }
+
+  - id: join
+    chapter: Println နဲ့ စာသား ဆက်တာ
+    narration: >-
+      [[mark:type-println]] ပထမ နည်းက ကိုယ်တို့ သိပြီးသား Println ပါ။ ဈေးနှုန်း၊ ကျပ် ဆိုတဲ့ စာနဲ့
+      ပစ္စည်း နာမည် သုံးခုကို သီးခြားစီ ခွဲပြီး Println တစ်ခါတည်းကို ပေးလိုက်ပါမယ်။ type မတူတဲ့ တန်ဖိုးတွေကို ရောပေးလို့
+      ရတာက Println ရဲ့ အားသာချက်ပါ။ [[mark:type-plus]] ဒုတိယ နည်းကတော့ စာသား နှစ်ခုကို ပေါင်းတဲ့
+      သင်္ကေတနဲ့ ဆက်တာပါ။ ပစ္စည်း နာမည်ရဲ့ နောက်မှာ ဆယ်လုံး ဆိုတဲ့ စာကို ဆက်ပြီး၊ စာသား တစ်ခုတည်း
+      ဖြစ်အောင် လုပ်ပြီး ထုတ်ပြပါမယ်။ ဒီ နှစ်ကြောင်း ထွက်လာပုံ ကွာမလား ကြည့်ရအောင်။ [[mark:run-1]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+      - {
+          title: "The Go Programming Language Specification — String concatenation",
+          url: "https://go.dev/ref/spec#String_concatenation",
+        }
+    actions:
+      - id: type-println
+        type: editor.type
+        at: { mark: type-println }
+        target: { file: main.go, after: "\tprice := 3500\n", occurrence: 1 }
+        text: "\tfmt.Println(price, \"ကျပ်\", item)\n"
+      - id: type-plus
+        type: editor.type
+        at: { mark: type-plus }
+        target: { file: main.go, after: "\tfmt.Println(price, \"ကျပ်\", item)\n", occurrence: 1 }
+        text: "\tfmt.Println(item + \"ဆယ်လုံး\")\n"
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "ကြက်ဥဆယ်လုံး",
+          timeoutMs: 8000,
+        }
+
+  - id: read-join
+    narration: >-
+      [[mark:point-spaces]] ပထမ စာကြောင်းမှာ ၃၅၀၀၊ ကျပ်၊ ကြက်ဥ ဆိုပြီး ထွက်လာပါတယ်။ ကိုယ်က space
+      မရေးပေးထားပေမဲ့ Println က တန်ဖိုး တစ်ခုနဲ့ တစ်ခုကြားမှာ space တစ်ခုစီ အလိုလို ထည့်ပေးပါတယ်။
+      [[mark:point-joined]] ဒုတိယ စာကြောင်းမှာတော့ ကြက်ဥနဲ့ ဆယ်လုံး ကြားမှာ space မရှိဘဲ ကပ်နေပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့ ပေါင်းတဲ့ သင်္ကေတက စာသား နှစ်ခုကို ကြားမှာ ဘာမှ မထည့်ဘဲ တိုက်ရိုက်
+      ဆက်ပေးလို့ပါ။ space လိုချင်ရင် quote ထဲမှာ ကိုယ်တိုင် ထည့်ရေးရပါမယ်။ [[mark:plus-strings]] ဒီ နည်း
+      နှစ်ခုနဲ့ စာကြောင်း ထုတ်လို့ ရပေမဲ့၊ ကြားထဲက စာနဲ့ space ကို ကိုယ်တိုင် အတိအကျ ထိန်းချင်ရင်တော့
+      မလုံလောက်သေးပါဘူး။
+    sources:
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+      - {
+          title: "The Go Programming Language Specification — String concatenation",
+          url: "https://go.dev/ref/spec#String_concatenation",
+        }
+    actions:
+      - {
+          id: point-spaces,
+          type: console.point,
+          at: { mark: point-spaces },
+          target: { text: "3500 ကျပ် ကြက်ဥ" },
+        }
+      - {
+          id: point-joined,
+          type: console.point,
+          at: { mark: point-joined },
+          target: { text: "ကြက်ဥဆယ်လုံး" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: plus-strings } }
+
+  - id: form
+    chapter: Printf ဆိုတာ
+    narration: >-
+      [[mark:board-form]] ဥပမာအားဖြင့် ပြေစာ တစ်ကြောင်းမှာ ဈေးနှုန်းနဲ့ ပစ္စည်းကြားမှာ တုံးတို တစ်ခု ထည့်ချင်တာ
+      မျိုး၊ ကိုယ် လိုချင်တဲ့ ပုံစံ အတိအကျနဲ့ ထုတ်ချင်တဲ့အခါ တတိယ နည်းဖြစ်တဲ့ Printf ကို သုံးပါတယ်။
+      [[mark:draw-form]] Printf ရဲ့ ပထမ တန်ဖိုးက format ပါ။ format ဆိုတာ နေရာလွတ်တွေ ချန်ထားတဲ့ ပုံစံ
+      စာရွက် တစ်ခုလိုပါပဲ။ ပုံစံထဲက ရာခိုင်နှုန်း သင်္ကေတနဲ့ စတဲ့ အမှတ်အသား တစ်ခုစီက နေရာလွတ် တစ်ခုစီပါ၊
+      အဲဒါတွေကို verb လို့ ခေါ်ပါတယ်။ [[mark:draw-verbs]] ဒီ ပုံစံမှာ ပထမ နေရာလွတ်က ဂဏန်း ဝင်ရမယ့် နေရာ
+      ဖြစ်ပြီး၊ ဒုတိယ နေရာလွတ်ကတော့ စာသား ဝင်ရမယ့် နေရာပါ။ ကြားထဲက ကျပ်နဲ့ တုံးတိုကတော့ ရေးထားတဲ့
+      အတိုင်း ထွက်မှာပါ။ [[mark:draw-newline]] အဆုံးက အမှတ်အသားကတော့ ဒီမှာ line ဆုံးပြီး နောက် line
+      ဆင်းပါ လို့ ပြောတာပါ။ Println လို အလိုလို မဆင်းပေးလို့ ကိုယ်တိုင် ထည့်ရပါတယ်။ [[mark:draw-args]]
+      format ရဲ့ နောက်က တန်ဖိုးတွေကတော့ နေရာလွတ်တွေကို ဘယ်ကနေ ညာ အစဉ်လိုက် ဖြည့်ပါတယ်။ ပထမ တန်ဖိုးက
+      ပထမ နေရာလွတ်ထဲ၊ ဒုတိယ တန်ဖိုးက ဒုတိယ နေရာလွတ်ထဲ ဝင်ပါတယ်။
+    sources:
+      - { title: "fmt package — Printf", url: "https://pkg.go.dev/fmt#Printf" }
+      - { title: "fmt package — Printing", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - {
+          id: board-form,
+          type: whiteboard.apply,
+          at: { mark: board-form },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-form,
+          type: whiteboard.apply,
+          at: { mark: draw-form },
+          upsertIds: [p-form, p-b1, p-b1t, p-mid, p-b2, p-b2t, p-nl],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-verbs,
+          type: whiteboard.apply,
+          at: { mark: draw-verbs },
+          upsertIds: [p-r1, p-r2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-newline,
+          type: whiteboard.apply,
+          at: { mark: draw-newline },
+          upsertIds: [p-r3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-args,
+          type: whiteboard.apply,
+          at: { mark: draw-args },
+          upsertIds: [p-arg1, p-arg2, p-arrow1, p-arrow2, p-order],
+          drawMs: 2400,
+        }
+
+  - id: printf
+    narration: >-
+      [[mark:close-form]] ဒါဆို ပြေစာ line ကို Printf နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-printf]] format
+      ထဲမှာ ဂဏန်း နေရာလွတ်၊ ကျပ်၊ တုံးတို၊ စာသား နေရာလွတ် နဲ့ line ဆုံးတဲ့ အမှတ်အသားကို အစဉ်လိုက် ရေးပြီး၊
+      နောက်မှာ ပစ္စည်း နာမည်ကို ထည့်ပေးပါမယ်။ ဒါဆို ဈေးနှုန်းနဲ့ ကြက်ဥ ဆိုတဲ့ ပြေစာ line ကို ရမယ်လို့
+      မျှော်လင့်ပါတယ်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "fmt package — Printf", url: "https://pkg.go.dev/fmt#Printf" }
+    actions:
+      - {
+          id: close-form,
+          type: whiteboard.apply,
+          at: { mark: close-form },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-printf
+        type: editor.type
+        at: { mark: type-printf }
+        target: { file: main.go, after: "\tfmt.Println(item + \"ဆယ်လုံး\")\n", occurrence: 1 }
+        text: "\tfmt.Printf(\"%d ကျပ် - %s\\n\", item)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "%!s(MISSING)",
+          timeoutMs: 8000,
+        }
+
+  - id: vet
+    chapter: vet က သတိပေးတာ
+    narration: >-
+      [[mark:point-vet]] ဒီ တစ်ခါ output ရဲ့ အပေါ်ဆုံးမှာ vet ဆိုတဲ့ စာကြောင်း နှစ်ကြောင်း ပေါ်လာပါတယ်။
+      vet ဆိုတာ Go နဲ့ အတူ ပါလာတဲ့ စစ်ဆေးတဲ့ tool တစ်ခုပါ။ compiler က လက်ခံပြီး program ကို run
+      ပေးပြီးသား ဖြစ်ပေမဲ့၊ မှားနိုင်တဲ့ နေရာကို vet က ထောက်ပြတာပါ။ ဒါကို vet warning လို့ ခေါ်ပါတယ်။
+      [[mark:point-vet-line]] ဒုတိယ စာကြောင်းမှာ အရင်ဆုံး ဘယ်နေရာလဲ ကြည့်ရအောင်။ main ဖိုင်ရဲ့ line ဆယ်၊
+      Printf line မှာ ဖြစ်ပြီး၊ column က ပထမ နေရာလွတ်ကို ညွှန်ပြနေပါတယ်။ vet က ပြောနေတာက၊ ဂဏန်း ထည့်ရမယ့်
+      ပထမ နေရာလွတ်ထဲကို string ရောက်သွားတယ် ဆိုတာပါ။ [[mark:point-marks]] program ကလည်း run သွားလို့
+      ပထမ နှစ်ကြောင်းက ခုနက အတိုင်း ထွက်ပြီး၊ နောက်ဆုံး စာကြောင်းမှာ ထူးဆန်းတဲ့ အမှတ်အသားတွေ ပါလာပါတယ်။
+      နေရာလွတ် မှားဖြည့်ထားတဲ့ နေရာမှာ fmt က ဒီလို အမှတ်အသား ထားခဲ့တာပါ။ [[mark:board-vet]] ဘာဖြစ်သွားလဲ
+      ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-wrong]] ကိုယ်တို့ ပေးလိုက်တာ ပစ္စည်း နာမည် တစ်ခုတည်းပါ။ အဲဒါက
+      ဘယ်ကနေ ညာ အစဉ်အတိုင်း ပထမ နေရာလွတ်ထဲ ဝင်သွားတဲ့အတွက် ဂဏန်း နေရာမှာ စာသား ရောက်နေပါတယ်။
+      [[mark:draw-missing]] ဒုတိယ နေရာလွတ်အတွက်တော့ ဖြည့်စရာ တန်ဖိုး မကျန်တော့လို့ ဘာမှ မရှိဘူး ဆိုတဲ့
+      အမှတ်အသား ထွက်လာတာပါ။ ဆိုလိုတာက ဈေးနှုန်းကို ထည့်ပေးဖို့ ကျန်ခဲ့တာပါ။ [[mark:draw-vet]] ဒီလို
+      မှားတာမျိုးကို compiler က မဖမ်းပါဘူး၊ program ကလည်း ရပ်မသွားပါဘူး။ ဒါကြောင့် vet က ကြိုသတိပေးတာ
+      အရမ်း အသုံးဝင်ပါတယ်။ vet warning မြင်ရင် program run သွားပေမဲ့ ပြင်ရမယ့် နေရာ ရှိတယ်လို့ မှတ်ထားပါ။
+    sources:
+      - { title: "cmd/vet", url: "https://pkg.go.dev/cmd/vet" }
+      - { title: "fmt package — Format errors", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - {
+          id: point-vet,
+          type: console.point,
+          at: { mark: point-vet },
+          target: { text: "[go-vet] Vet found issues" },
+        }
+      - {
+          id: point-vet-line,
+          type: console.point,
+          at: { mark: point-vet-line },
+          target: { text: "[go-vet] main.go:10:14:" },
+        }
+      - {
+          id: point-marks,
+          type: console.point,
+          at: { mark: point-marks },
+          target: { text: "%!d(string" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-vet } }
+      - {
+          id: board-vet,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-wrong,
+          type: whiteboard.apply,
+          at: { mark: draw-wrong },
+          upsertIds: [w-arg, w-arrow, w-b1, w-b1t, w-b2, w-b2t],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-missing,
+          type: whiteboard.apply,
+          at: { mark: draw-missing },
+          upsertIds: [w-missing, w-out, w-out-line],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-vet,
+          type: whiteboard.apply,
+          at: { mark: draw-vet },
+          upsertIds: [w-vet-box, w-vet],
+          drawMs: 1500,
+        }
+
+  - id: fix
+    chapter: Sprintf နဲ့ စာကြောင်း တည်ဆောက်တာ
+    narration: >-
+      [[mark:close-vet]] ဒါဆို ပြင်ကြည့်ရအောင်။ [[mark:type-fix]] ပစ္စည်း နာမည်ရဲ့ ရှေ့မှာ ဈေးနှုန်းကို
+      ထည့်ပေးလိုက်ရင်၊ ပထမ နေရာလွတ်ထဲ ဂဏန်း၊ ဒုတိယ နေရာလွတ်ထဲ စာသား မှန်မှန် ဝင်ပါပြီ။
+      [[mark:type-sprintf]] နောက်ထပ် line နှစ်ကြောင်း ထည့်ပါမယ်။ ပထမ line က Sprintf ပါ။ Sprintf က
+      Printf နဲ့ ပုံစံ အတူတူပဲ ဖြစ်ပေမဲ့၊ ရလာတဲ့ စာကြောင်းကို output မှာ မထုတ်ဘဲ string အဖြစ် ပြန်ပေးပါတယ်။
+      ဒါကြောင့် အဲဒီ string ကို line ဆိုတဲ့ variable ထဲ ထည့်ထားပြီး၊ ဒုတိယ line မှာ ဆယ်လုံး ဆိုတဲ့ စာကို
+      ဆက်ပြီး ထုတ်ပြပါမယ်။ ပြေစာ line ကို ချက်ချင်း မထုတ်ဘဲ နောက်မှ သုံးဖို့ မှတ်ထားချင်တဲ့အခါ Sprintf ကို
+      သုံးပါတယ်။ [[mark:type-verbs]] နောက်ဆုံး line မှာ verb အသစ် နှစ်ခုကို စမ်းကြည့်ပါမယ်။ ပထမ verb က
+      ဘယ် type မဆို ပုံမှန် ပုံစံနဲ့ ထုတ်ပေးတဲ့ verb ဖြစ်ပြီး၊ ဘာသုံးရမလဲ မသေချာရင် သုံးလို့ ရပါတယ်။
+      ဒုတိယ verb ကတော့ string ကို quote နဲ့ ဝိုင်းပြီး ပြပေးပါတယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "fmt package — Sprintf", url: "https://pkg.go.dev/fmt#Sprintf" }
+      - { title: "fmt package — Printing", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - {
+          id: close-vet,
+          type: whiteboard.apply,
+          at: { mark: close-vet },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        target: { file: main.go, after: "- %s\\n\", ", occurrence: 1 }
+        text: "price, "
+      - id: type-sprintf
+        type: editor.type
+        at: { mark: type-sprintf }
+        target:
+          { file: main.go, after: "\tfmt.Printf(\"%d ကျပ် - %s\\n\", price, item)\n", occurrence: 1 }
+        text: "\tline := fmt.Sprintf(\"%d ကျပ် - %s\", price, item)\n\tfmt.Println(line + \" ဆယ်လုံး\")\n"
+        cadence: line-by-line
+      - id: type-verbs
+        type: editor.type
+        at: { mark: type-verbs }
+        target: { file: main.go, after: "\tfmt.Println(line + \" ဆယ်လုံး\")\n", occurrence: 1 }
+        text: "\tfmt.Printf(\"%v %q\\n\", price, item)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "ကြက်ဥ ဆယ်လုံး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-fix,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "fmt.Printf(\"%d ကျပ် - %s\\n\", price, item)",
+        }
+
+  - id: read-fix
+    narration: >-
+      [[mark:point-receipt]] vet warning မရှိတော့ပါဘူး။ တတိယ စာကြောင်းမှာ ၃၅၀၀ ကျပ်၊ တုံးတို၊ ကြက်ဥ
+      ဆိုပြီး ကိုယ် လိုချင်တဲ့ ပြေစာ ပုံစံ အတိအကျ ထွက်လာပါပြီ။ ဂဏန်းကို ရှေ့ဆုံးမှာ ထားတာ
+      တမင်ပါ။ မြန်မာ စာလုံးတွေက တစ်လုံးနဲ့ တစ်လုံး အကျယ် မတူလို့ စာသားရဲ့ နောက်မှာ ထားတဲ့ ဂဏန်းတွေက
+      တစ်တန်းတည်း မညီပါဘူး။ ဂဏန်းကို အရင် ထားရင်တော့ စာကြောင်း တိုင်းရဲ့ အစမှာ ဈေးနှုန်းကို ချက်ချင်း
+      မြင်ရမှာပါ။ [[mark:point-sprintf]] စတုတ္ထ
+      စာကြောင်းက Sprintf နဲ့ တည်ဆောက်ထားတဲ့ string ပါ။ ပုံစံ အတူတူ ထွက်ပြီး နောက်မှာ ဆယ်လုံး
+      ကပ်လာတာကို တွေ့ရပါတယ်၊ Sprintf ရဲ့ အဖြေက သာမန် string ဖြစ်လို့ ဆက်လို့ ရတာပါ။ [[mark:point-verbs]]
+      နောက်ဆုံး စာကြောင်းမှာ ဂဏန်းကို ပုံမှန် အတိုင်း ပြပြီး၊ ကြက်ဥ ကိုတော့ quote နဲ့ ပြပါတယ်။ string ရဲ့
+      အစနဲ့ အဆုံးကို မြင်ရလို့ string ထဲမှာ space အပို ပါနေလား စစ်ချင်တဲ့အခါ အသုံးဝင်ပါတယ်။
+    sources:
+      - { title: "fmt package — Printing", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - {
+          id: point-receipt,
+          type: console.point,
+          at: { mark: point-receipt },
+          target: { text: "3500 ကျပ် - ကြက်ဥ" },
+        }
+      - {
+          id: point-sprintf,
+          type: console.point,
+          at: { mark: point-sprintf },
+          target: { text: "ကြက်ဥ ဆယ်လုံး" },
+        }
+      - {
+          id: point-verbs,
+          type: console.point,
+          at: { mark: point-verbs },
+          target: { text: '3500 "ကြက်ဥ"' },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဈေးနှုန်းကို int အနေနဲ့ ထားပြီး၊ output မှာ ၃၅၀၀ ကျပ် လို့
+      ထွက်စေချင်ပါတယ်။ [[mark:quiz-options]] က line က ဈေးနှုန်းနဲ့ ကျပ် ဆိုတဲ့ စာကို ပေါင်းတဲ့ သင်္ကေတနဲ့
+      ဆက်ထားပြီး၊ ခ line ကတော့ ဈေးနှုန်းနဲ့ ကျပ် ဆိုတဲ့ စာကို သီးခြားစီ ခွဲပြီး Println ကို ပေးထားပါတယ်။ ဘယ် line က လိုချင်တဲ့ စာကြောင်းကို
+      ထုတ်ပေးမလဲ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ ပါ။
+      ဘာကြောင့်လဲဆိုတော့ ပေါင်းတဲ့ သင်္ကေတက string နှစ်ခုကိုပဲ ဆက်ပေးလို့ပါ။ က line မှာ int နဲ့ string ကို
+      ဆက်ထားလို့ ပြီးခဲ့တဲ့ lesson က int နဲ့ float64 လိုပဲ type မတူဘူး ဆိုပြီး compile
+      ကတည်းက ငြင်းပါတယ်။ ခ line ကတော့ Println က type မတူတဲ့
+      တန်ဖိုးတွေကို space ခြားပြီး ထုတ်ပေးလို့ ၃၅၀၀ ကျပ် ဆိုပြီး ထွက်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — String concatenation",
+          url: "https://go.dev/ref/spec#String_concatenation",
+        }
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-want],
+        }
+      - {
+          id: quiz-options,
+          type: whiteboard.apply,
+          at: { mark: quiz-options },
+          upsertIds: [q-a, q-b],
+          drawMs: 1600,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-println]] Println က တန်ဖိုးတွေကြားမှာ space
+      ထည့်ပေးပြီး၊ ပေါင်းတဲ့ သင်္ကေတကတော့ string တွေကို ကြားမှာ ဘာမှ မထည့်ဘဲ ဆက်ပေးပါတယ်။
+      [[mark:recap-printf]] Printf ရဲ့ format က နေရာလွတ် ပါတဲ့ ပုံစံ ဖြစ်ပြီး၊ နောက်က တန်ဖိုးတွေက
+      နေရာလွတ်တွေကို ဘယ်ကနေ ညာ ဖြည့်ပါတယ်။ နေရာလွတ်နဲ့ တန်ဖိုး မကိုက်ရင် program က run သွားပေမဲ့ vet က
+      သတိပေးပါတယ်။ [[mark:recap-sprintf]] Sprintf ကတော့ အဲဒီ စာကြောင်းကို ထုတ်မပြဘဲ string အဖြစ်
+      ပြန်ပေးပါတယ်။ ဒီနေ့နဲ့ course ရဲ့ ပထမ အပိုင်း ပြီးသွားပါပြီ။ နောက် lesson မှာတော့ အမှတ် ဘယ်လောက် ရလဲ ကြည့်ပြီး
+      အောင်လား ကျလား ဆုံးဖြတ်တဲ့ program လို၊ အခြေအနေကို ကြည့်ပြီး ဆုံးဖြတ်တဲ့ if ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "fmt package — Printing", url: "https://pkg.go.dev/fmt" }
+      - { title: "cmd/vet", url: "https://pkg.go.dev/cmd/vet" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-println
+        type: editor.select
+        at: { mark: recap-println }
+        target: { file: main.go, text: 'fmt.Println(item + "ဆယ်လုံး")', occurrence: 1 }
+      - id: recap-printf
+        type: editor.select
+        at: { mark: recap-printf }
+        target:
+          { file: main.go, text: "fmt.Printf(\"%d ကျပ် - %s\\n\", price, item)", occurrence: 1 }
+      - id: recap-sprintf
+        type: editor.select
+        at: { mark: recap-sprintf }
+        target:
+          { file: main.go, text: 'line := fmt.Sprintf("%d ကျပ် - %s", price, item)', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
