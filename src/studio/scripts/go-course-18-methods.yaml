@@ -1,0 +1,1030 @@
+# Go course, lesson 18: methods (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"`, the lesson-17 Parcel (Code, To,
+# WeightKg: the fee is no longer a field), baseFees for three cities and a main holding one parcel.
+# Edits, all insert-only (final program = probe 17-methods):
+#   1. the Fee method under baseFees, and a Println of the parcel's code and fee in main
+#      -> run-1: MDY-0001 6000;
+#   2. CashBag with a value-receiver Add, a second parcel, a bag that takes both fees
+#      -> run-2: the bag still holds 0 (a bug, no error);
+#   3. `*` in Add's receiver -> run-3: 10500.
+# Boards: (M) a function beside the label vs a method stamped on it; (N) a field and a method
+# cannot share a name (said, not run); (R) a value receiver works on a photocopy of the bag, a
+# pointer receiver walks to the real one; (Q) quiz: a value method called through a pointer.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-18-methods
+  title: "Go course 18: Method ဆိုတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string
+        	To       string
+        	WeightKg float64
+        }
+
+        // baseFees is the fee to each city before weight, in kyats.
+        var baseFees = map[string]int{"YGN": 2000, "NPT": 4000, "MDY": 5000}
+
+        func main() {
+        	a := Parcel{Code: "MDY-0001", To: "MDY", WeightKg: 2.5}
+        }
+  whiteboardAssets:
+    # Board M: a function stands beside the label; a method is a stamp on the label.
+    - {
+        id: m-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "Method ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: m-fn-name,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 200,
+        height: 40,
+        text: "function",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-fn-box,
+        kind: rectangle,
+        x: 290,
+        y: 300,
+        width: 330,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-fn,
+        kind: text,
+        x: 320,
+        y: 325,
+        width: 200,
+        height: 40,
+        text: "fee(a)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-fn-note,
+        kind: text,
+        x: 290,
+        y: 410,
+        width: 360,
+        height: 40,
+        text: "ပါဆယ်ကို ထည့်ပေးရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-me-name,
+        kind: text,
+        x: 700,
+        y: 245,
+        width: 200,
+        height: 40,
+        text: "method",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-label-box,
+        kind: rectangle,
+        x: 690,
+        y: 300,
+        width: 400,
+        height: 170,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-label,
+        kind: text,
+        x: 715,
+        y: 315,
+        width: 350,
+        height: 40,
+        text: "Code · To · WeightKg",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: m-stamp, kind: ellipse, x: 770, y: 370, width: 230, height: 80, strokeColor: "#f08c00" }
+    - {
+        id: m-stamp-text,
+        kind: text,
+        x: 840,
+        y: 390,
+        width: 100,
+        height: 40,
+        text: "Fee()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-me-note,
+        kind: text,
+        x: 690,
+        y: 490,
+        width: 400,
+        height: 40,
+        text: "a.Fee() · label ပေါ်က",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-recv,
+        kind: text,
+        x: 290,
+        y: 580,
+        width: 800,
+        height: 40,
+        text: "receiver · Fee က Parcel နဲ့ တွဲထားတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board N: a struct cannot have a field and a method with one name (said, not run).
+    - {
+        id: n-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Field နဲ့ method နာမည်တူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: n-box,
+        kind: rectangle,
+        x: 290,
+        y: 245,
+        width: 520,
+        height: 140,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-field,
+        kind: text,
+        x: 315,
+        y: 265,
+        width: 460,
+        height: 40,
+        text: "Fee int    · field",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-method,
+        kind: text,
+        x: 315,
+        y: 325,
+        width: 460,
+        height: 40,
+        text: "Fee() int  · method",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-err,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 800,
+        height: 40,
+        text: "field and method with the same name Fee",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-rule,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 800,
+        height: 40,
+        text: "နာမည် တစ်ခု၊ field လား method လား တစ်ခုပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-ok,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 700,
+        height: 40,
+        text: "ဒီ course · ပို့ခကို method နဲ့ တွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1000,
+        y: 560,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    # Board R: a value receiver gets a photocopy of the bag; a pointer receiver reaches the real bag.
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "Value receiver နဲ့ pointer receiver",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r-real-box,
+        kind: rectangle,
+        x: 290,
+        y: 250,
+        width: 300,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-real,
+        kind: text,
+        x: 315,
+        y: 280,
+        width: 250,
+        height: 40,
+        text: "bag · total 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-copy-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 600,
+        y: 280,
+        width: 80,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-copy-box,
+        kind: rectangle,
+        x: 690,
+        y: 250,
+        width: 400,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-copy,
+        kind: text,
+        x: 710,
+        y: 280,
+        width: 360,
+        height: 40,
+        text: "မိတ္တူ · total 6000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-lost,
+        kind: text,
+        x: 690,
+        y: 365,
+        width: 400,
+        height: 40,
+        text: "method ပြီးရင် ပျောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-ptr-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 420,
+        y: 365,
+        width: 40,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-ptr-box,
+        kind: rectangle,
+        x: 290,
+        y: 455,
+        width: 560,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-ptr,
+        kind: text,
+        x: 315,
+        y: 480,
+        width: 500,
+        height: 40,
+        text: "*CashBag · အိတ် အစစ်ကို ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-rule,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 800,
+        height: 40,
+        text: "ဖတ်ရုံဆို value · ပြောင်းမယ်ဆို pointer",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a value-receiver method called through a pointer).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 640,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 600,
+        height: 40,
+        text: 'a := Parcel{To: "MDY", WeightKg: 2.5}',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: "ptr := &a",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(ptr.Fee())",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 470,
+        y: 340,
+        width: 190,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 285,
+        y: 450,
+        width: 400,
+        height: 40,
+        text: "က · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 285,
+        y: 510,
+        width: 400,
+        height: 40,
+        text: "ခ · 6000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 500,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7118
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 6000\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 6000\n0\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 6000\n10500\n"
+
+scenes:
+  - id: recall
+    chapter: Method ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ pointer ကို လေ့လာခဲ့ပါတယ်။ function က ပါဆယ်ရဲ့ မိတ္တူကို မယူဘဲ စင်နံပါတ်ကို
+      ယူရင်၊ ပါဆယ် အစစ်ကို ပြင်လို့ ရတယ် ဆိုတာ တွေ့ခဲ့ပါတယ်။ ဒီနေ့ lesson မှာတော့ type တစ်ခုနဲ့ တွဲထားတဲ့
+      function ဖြစ်တဲ့ method ကို လေ့လာပါမယ်။ [[mark:sel-struct]] main ဖိုင်ထဲက Parcel struct ကို ကြည့်ပါ။
+      ပါဆယ် code၊ ပို့မယ့် မြို့နဲ့ အလေးချိန် ဆိုတဲ့ field သုံးခု ရှိပါတယ်။ lesson ဆယ့်ခြောက်မှာတော့ ပို့ခကိုလည်း
+      field တစ်ခု အနေနဲ့ label ပေါ်မှာ လက်နဲ့ ရေးထားခဲ့ပါတယ်။ ဒီနေ့တော့ ပို့ခကို မြို့နဲ့ အလေးချိန်ကနေ program
+      က ကိုယ်တိုင် တွက်ပေးအောင် လုပ်ပါမယ်။ [[mark:sel-fees]] ဒီ map က မြို့ code တစ်ခုစီအတွက် အခြေခံ ပို့ခကို ကျပ်နဲ့
+      မှတ်ထားတာပါ။ ဒီ lesson အတွက် စည်းကမ်းက၊ အခြေခံ ပို့ခပေါ်မှာ ကီလို အပြည့် တစ်ကီလိုတိုင်းအတွက် ၅၀၀ ကျပ်
+      ပေါင်းတာပါ။ ဒီ ပို့ခတွေကလည်း lesson အတွက် ဥပမာ ထားတာပါ၊ တကယ့် ဈေးနှုန်း မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-struct
+        type: editor.select
+        at: { mark: sel-struct }
+        target:
+          {
+            file: main.go,
+            text: "type Parcel struct {\n\tCode     string\n\tTo       string\n\tWeightKg float64\n}",
+            occurrence: 1,
+          }
+      - id: sel-fees
+        type: editor.select
+        at: { mark: sel-fees }
+        target:
+          {
+            file: main.go,
+            text: 'var baseFees = map[string]int{"YGN": 2000, "NPT": 4000, "MDY": 5000}',
+            occurrence: 1,
+          }
+
+  - id: board-m
+    narration: >-
+      [[mark:board-method]] ဒီ တွက်နည်းကို ရေးဖို့ လမ်း နှစ်လမ်း ရှိပါတယ်။ [[mark:draw-fn]] ပထမ လမ်းက lesson
+      ကိုးမှာ ရေးခဲ့သလို သာမန် function တစ်ခုပါ။ အဲဒီ function က label ရဲ့ ဘေးမှာ ရပ်နေတဲ့ စက် တစ်လုံးလိုပါပဲ၊
+      ပါဆယ်ကို argument အနေနဲ့ ထည့်ပေးမှ တွက်ပေးပါတယ်။ [[mark:draw-method]] ဒုတိယ လမ်းကတော့ method ပါ။
+      method ဆိုတာ type တစ်ခုနဲ့ တွဲထားတဲ့ function ပါ။ label ပေါ်မှာ တံဆိပ် တစ်ခု ကပ်ထားသလိုပါပဲ၊ ပါဆယ်
+      တိုင်းမှာ ပို့ခ တွက်တဲ့ တံဆိပ် ပါလာပါတယ်။ ခေါ်တဲ့အခါမှာလည်း ပါဆယ် variable ရဲ့ နောက်မှာ method နာမည်ကို
+      တွဲပြီး ခေါ်ပါတယ်။ [[mark:draw-recv]] method က ဘယ် type နဲ့ တွဲထားလဲ ဆိုတာကို receiver လို့ ခေါ်ပါတယ်။
+      ဒီမှာ receiver က Parcel ပါ။ အလုပ်ကတော့ function နဲ့ အတူတူပါပဲ၊ ဒါပေမဲ့ method က ပါဆယ်နဲ့ ဆိုင်တဲ့
+      အလုပ်ကို ပါဆယ်နဲ့ အတူ စုထားပေးပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - {
+          id: board-method,
+          type: whiteboard.apply,
+          at: { mark: board-method, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-fn,
+          type: whiteboard.apply,
+          at: { mark: draw-fn },
+          upsertIds: [m-fn-name, m-fn-box, m-fn, m-fn-note],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-method,
+          type: whiteboard.apply,
+          at: { mark: draw-method },
+          upsertIds: [m-me-name, m-label-box, m-label, m-stamp, m-stamp-text, m-me-note],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-recv,
+          type: whiteboard.apply,
+          at: { mark: draw-recv },
+          upsertIds: [m-recv],
+          drawMs: 1400,
+        }
+
+  - id: write
+    chapter: Method ရေးကြည့်ရအောင်
+    narration: >-
+      [[mark:close-method]] ဒါဆို ပို့ခ တွက်တဲ့ Fee method ကို ရေးကြည့်ရအောင်။ [[mark:type-fee]] map ရဲ့ အောက်မှာ
+      comment တစ်ကြောင်းနဲ့ method ကို ရေးပါမယ်။ function ရေးတာနဲ့ အတူတူပါပဲ၊ ကွာတာ တစ်ခုက func ဆိုတဲ့
+      keyword နဲ့ method နာမည်ကြားမှာ ကွင်း တစ်စုံ ထပ်ပါလာတာပါ။ [[mark:sel-recv]] ဒီ ကွင်းထဲက အပိုင်းက receiver
+      ပါ။ ဒီ method က Parcel အတွက် ဖြစ်ပြီး၊ ခေါ်လိုက်တဲ့ ပါဆယ်ကို method ထဲမှာ p ဆိုတဲ့ နာမည်နဲ့ သုံးလို့ ရတယ်လို့
+      ပြောတာပါ။ [[mark:sel-return]] return line က map ထဲကနေ မြို့ရဲ့ အခြေခံ ပို့ခကို ယူပြီး၊ ကီလို အပြည့်
+      အရေအတွက်ကို ၅၀၀ နဲ့ မြှောက်ထားတာ ပေါင်းပါတယ်။ အလေးချိန်ကို int ပြောင်းတဲ့အခါ ဒသမ နောက်က အပိုင်း
+      ပြတ်ကျလို့၊ နှစ်ကီလိုခွဲက နှစ် ဖြစ်သွားပါတယ်။ [[mark:type-print]] main ထဲမှာတော့ မန္တလေးကို ပို့မယ့်
+      ပါဆယ်ရဲ့ code နဲ့ ပို့ခကို print ထုတ်ပါမယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - {
+          id: close-method,
+          type: whiteboard.apply,
+          at: { mark: close-method },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-fee
+        type: editor.type
+        at: { mark: type-fee }
+        target: { file: main.go, after: "\"MDY\": 5000}\n", occurrence: 1 }
+        text: "\n// Fee is the city's base fee plus 500 kyats for every whole kilogram.\nfunc (p Parcel) Fee() int {\n\treturn baseFees[p.To] + int(p.WeightKg)*500\n}\n"
+        cadence: line-by-line
+      - id: sel-recv
+        type: editor.select
+        at: { mark: sel-recv }
+        target: { file: main.go, text: "(p Parcel)", occurrence: 1 }
+      - id: sel-return
+        type: editor.select
+        at: { mark: sel-return }
+        target:
+          { file: main.go, text: "return baseFees[p.To] + int(p.WeightKg)*500", occurrence: 1 }
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target: { file: main.go, after: "WeightKg: 2.5}\n", occurrence: 1 }
+        text: "\tfmt.Println(a.Code, a.Fee())\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "MDY-0001 6000",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-fee,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "func (p Parcel) Fee() int {\n\treturn baseFees[p.To] + int(p.WeightKg)*500\n}\n",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-fee]] output မှာ မန္တလေး ပါဆယ်ရဲ့ code နဲ့ ၆၀၀၀ ထွက်လာပါတယ်။ မန္တလေးရဲ့ အခြေခံ ပို့ခ ၅၀၀၀
+      ပေါ်မှာ နှစ်ကီလို အတွက် ၁၀၀၀ ပေါင်းလို့ ၆၀၀၀ ရတာပါ။ ပို့ခကို label ပေါ်မှာ ကိုယ်တိုင် ရေးမထားဘဲ ပါဆယ်ရဲ့
+      အချက်အလက်ကနေ method က တွက်ပေးတာ ဖြစ်လို့၊ အလေးချိန် ပြောင်းရင် ပို့ခလည်း လိုက်ပြောင်းမှာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Conversions",
+          url: "https://go.dev/ref/spec#Conversions",
+        }
+    actions:
+      - {
+          id: point-fee,
+          type: console.point,
+          at: { mark: point-fee },
+          target: { text: "MDY-0001 6000" },
+        }
+
+  - id: same-name
+    narration: >-
+      [[mark:board-name]] ဒီနေရာမှာ မေးစရာ တစ်ခု ရှိပါတယ်။ lesson ဆယ့်ခြောက်က ပို့ခ field ကို ဘာကြောင့် ဖြုတ်ထားရတာလဲ။
+      [[mark:draw-both]] field ရော method ရော နာမည် တူတူ ထားလိုက်ရင်၊ ပါဆယ် တစ်ခုရဲ့ ပို့ခကို ခေါ်တဲ့အခါ ရေးထားတဲ့
+      field ကို ပြောတာလား၊ တွက်ပေးမယ့် method ကို ပြောတာလား ဆိုတာ မသိနိုင်တော့ပါဘူး။ [[mark:draw-err]] ဒါကြောင့်
+      compiler က အဲဒီလို code ကို လက်မခံဘဲ compile error ပြပါတယ်။ Fee ဆိုတဲ့ field နဲ့ method ကို နာမည်တူ
+      ထားလို့ မရပါဘူး လို့ ပြောတာပါ။ [[mark:draw-name-rule]] ဆိုလိုတာက struct တစ်ခုမှာ နာမည် တစ်ခုကို field
+      အတွက် ဒါမှမဟုတ် method အတွက်၊ တစ်နေရာတည်းမှာပဲ သုံးလို့ ရပါတယ်။ [[mark:draw-ok]] ဒီ course မှာတော့
+      ပို့ခကို အမြဲ method နဲ့ပဲ တွက်သွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-name } }
+      - {
+          id: board-name,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-both,
+          type: whiteboard.apply,
+          at: { mark: draw-both },
+          upsertIds: [n-box, n-field, n-method],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-err,
+          type: whiteboard.apply,
+          at: { mark: draw-err },
+          upsertIds: [n-err],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-name-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-name-rule },
+          upsertIds: [n-rule],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-ok,
+          type: whiteboard.apply,
+          at: { mark: draw-ok },
+          upsertIds: [n-ok, n-check],
+          drawMs: 1200,
+        }
+
+  - id: bag
+    chapter: Rider ရဲ့ ငွေအိတ်
+    narration: >-
+      [[mark:close-name]] အခု ပို့ခ ကောက်တဲ့ ဘက်ကို ကြည့်ရအောင်။ rider လှလှ က ပို့သူတွေ အိမ်ကနေ ပါဆယ် လာယူတိုင်း ပို့ခကို ကောက်ပြီး၊
+      ငွေအိတ် တစ်ခုထဲ ထည့်ထားပါတယ်။ [[mark:type-bag]] အဲဒီ ငွေအိတ်အတွက် CashBag ဆိုတဲ့ struct ကို ရေးပါမယ်။ အထဲမှာ
+      စုစုပေါင်း ငွေကို မှတ်ထားမယ့် total ဆိုတဲ့ field တစ်ခုပဲ ပါပါတယ်။ အောက်က Add method ကတော့ ပေးလိုက်တဲ့
+      ပမာဏကို total ထဲ ပေါင်းထည့်ပေးပါတယ်။ [[mark:sel-bag-recv]] သူ့ receiver ကလည်း Fee မှာလိုပဲ CashBag
+      တန်ဖိုး တစ်ခုပါ။ ဒီ method ကို ခေါ်လိုက်တိုင်း အိတ်ထဲကို ငွေ ဝင်လာမယ်လို့ ထင်ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+    actions:
+      - {
+          id: close-name,
+          type: whiteboard.apply,
+          at: { mark: close-name },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-bag
+        type: editor.type
+        at: { mark: type-bag }
+        target: { file: main.go, after: "int(p.WeightKg)*500\n}\n", occurrence: 1 }
+        text: "\n// CashBag is the cash a rider has collected today.\ntype CashBag struct {\n\ttotal int\n}\n\nfunc (b CashBag) Add(amount int) {\n\tb.total += amount\n}\n"
+        cadence: line-by-line
+      - id: sel-bag-recv
+        type: editor.select
+        at: { mark: sel-bag-recv }
+        target: { file: main.go, text: "(b CashBag)", occurrence: 1 }
+
+  - id: use-bag
+    narration: >-
+      [[mark:type-b]] main ထဲမှာ နေပြည်တော်ကို ပို့မယ့် တစ်ကီလို ပါဆယ် တစ်ခု ထပ်ထည့်ပါမယ်။ [[mark:type-use]] ပြီးတော့
+      ငွေအိတ် အသစ် တစ်ခု လုပ်ပြီး ပါဆယ် နှစ်ခုရဲ့ ပို့ခကို တစ်ခုပြီးတစ်ခု ထည့်ပါမယ်။ ငွေအိတ်ကို var နဲ့ ကြေညာထားလို့
+      total က zero value ဖြစ်တဲ့ သုညနဲ့ စပါတယ်။ ၆၀၀၀ နဲ့ ၄၅၀၀ ထည့်လိုက်ရင် အိတ်ထဲမှာ ၁၀၅၀၀ ရှိရပါမယ်။
+      [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — The zero value",
+          url: "https://go.dev/ref/spec#The_zero_value",
+        }
+    actions:
+      - id: type-b
+        type: editor.type
+        at: { mark: type-b }
+        target: { file: main.go, after: "WeightKg: 2.5}\n", occurrence: 1 }
+        text: "\tb := Parcel{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1}\n"
+        cadence: line-by-line
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target: { file: main.go, after: "a.Fee())\n", occurrence: 1 }
+        text: "\tvar bag CashBag\n\tbag.Add(a.Fee())\n\tbag.Add(b.Fee())\n\tfmt.Println(bag.total)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "MDY-0001 6000",
+          timeoutMs: 8000,
+        }
+
+  - id: read-2
+    chapter: ငွေတွေ ဘယ်ရောက်သွားလဲ
+    narration: >-
+      [[mark:point-zero]] ဒုတိယ စာကြောင်းကို ကြည့်ပါ၊ ၁၀၅၀၀ မဟုတ်ဘဲ သုည ထွက်လာပါတယ်။ compiler ကလည်း ဘာမှ မပြောသလို program ကလည်း ရပ်မသွားပါဘူး။ program က ကောင်းကောင်း run သွားပေမဲ့ ငွေ နှစ်ခါ ထည့်ထားတာ အိတ်ထဲ မရောက်ပါဘူး။
+      ဒါက code ထဲမှာ ကိုယ်တို့ ရေးမှားထားတဲ့ bug ပါ။ ဘာကြောင့်လဲ ဆိုတာ board နဲ့ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Go FAQ — Should I define methods on values or pointers?",
+          url: "https://go.dev/doc/faq#methods_on_values_or_pointers",
+        }
+    actions:
+      - {
+          id: point-zero,
+          type: console.point,
+          at: { mark: point-zero },
+          target: { text: "0", occurrence: 2 },
+        }
+
+  - id: receivers
+    chapter: Value receiver နဲ့ pointer receiver
+    narration: >-
+      [[mark:board-recv]] lesson ဆယ့်ခုနစ်မှာ function ကို struct ပေးလိုက်ရင် မိတ္တူ ရတယ် ဆိုတာ မှတ်မိမှာပါ။
+      receiver ကလည်း argument တစ်ခုလိုပါပဲ။ [[mark:draw-real]] main ထဲမှာ ငွေအိတ် အစစ် ရှိပြီး သူ့ total က
+      သုညပါ။ [[mark:draw-copy]] ငွေထည့်တဲ့ method ကို ခေါ်လိုက်တဲ့အခါ receiver က CashBag တန်ဖိုး ဖြစ်လို့၊ Go က
+      ငွေအိတ်ရဲ့ မိတ္တူ တစ်ခုကို method ဆီ ပေးပါတယ်။ method က ၆၀၀၀ ကို အဲဒီ မိတ္တူထဲကိုပဲ ထည့်ပါတယ်။
+      [[mark:draw-lost]] method ပြီးသွားတာနဲ့ မိတ္တူလည်း ပျောက်သွားပြီး၊ ငွေအိတ် အစစ်ကတော့ သုညအတိုင်း
+      ကျန်ခဲ့ပါတယ်။ ဒါကို value receiver လို့ ခေါ်ပါတယ်၊ ပို့ခ တွက်တာလို ဖတ်ရုံ ဖတ်တဲ့ အလုပ်အတွက်တော့
+      အဆင်ပြေပါတယ်။ [[mark:draw-ptr]] ငွေအိတ် အစစ်ကို ပြင်ချင်ရင်တော့ receiver ကို CashBag ရဲ့ pointer ဖြစ်အောင်
+      ပြောင်းရပါမယ်။ အဲဒါကို pointer receiver လို့ ခေါ်ပြီး၊ method က အိတ် အစစ် ရှိတဲ့ နေရာကို တန်း
+      ရောက်သွားတာပါ။ [[mark:draw-rule]] ဆိုလိုတာက ဖတ်ရုံဆိုရင် value receiver၊ ပြောင်းမယ်ဆိုရင် pointer receiver ပါ။
+    sources:
+      - {
+          title: "Go FAQ — Should I define methods on values or pointers?",
+          url: "https://go.dev/doc/faq#methods_on_values_or_pointers",
+        }
+      - {
+          title: "The Go Programming Language Specification — Method sets",
+          url: "https://go.dev/ref/spec#Method_sets",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-recv } }
+      - {
+          id: board-recv,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-real,
+          type: whiteboard.apply,
+          at: { mark: draw-real },
+          upsertIds: [r-real-box, r-real],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-copy,
+          type: whiteboard.apply,
+          at: { mark: draw-copy },
+          upsertIds: [r-copy-arrow, r-copy-box, r-copy],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-lost,
+          type: whiteboard.apply,
+          at: { mark: draw-lost },
+          upsertIds: [r-lost],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-ptr,
+          type: whiteboard.apply,
+          at: { mark: draw-ptr },
+          upsertIds: [r-ptr-arrow, r-ptr-box, r-ptr],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [r-rule],
+          drawMs: 1400,
+        }
+
+  - id: fix
+    narration: >-
+      [[mark:close-recv]] ဒါဆို receiver ကို ပြင်ရအောင်။ [[mark:type-star]] receiver ရဲ့ type ရှေ့မှာ pointer
+      သင်္ကေတ တစ်လုံး ထည့်လိုက်ပါမယ်။ code မှာ ပြင်ရတာ ဒီ စာလုံး တစ်လုံးပါပဲ။ [[mark:sel-call]] main ထဲက
+      ငွေထည့်တဲ့ line ကို ကြည့်ပါ။ lesson ဆယ့်ခုနစ်မှာလို ငွေအိတ်ရဲ့ address ကို ကိုယ်တိုင် ယူပေးစရာ မလိုပါဘူး။
+      method က pointer receiver ဖြစ်ပြီး ငွေအိတ်က variable တစ်ခု ဖြစ်နေတဲ့အတွက်၊ Go က address ကို ကိုယ့်အစား
+      ယူပေးပါတယ်။ [[mark:run-3]] ကဲ၊ ထပ်ပြီး run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+      - {
+          title: "Effective Go — Pointers vs. Values",
+          url: "https://go.dev/doc/effective_go#pointers_vs_values",
+        }
+    actions:
+      - {
+          id: close-recv,
+          type: whiteboard.apply,
+          at: { mark: close-recv },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-star
+        type: editor.type
+        at: { mark: type-star }
+        target: { file: main.go, after: "func (b ", occurrence: 1 }
+        text: "*"
+      - id: sel-call
+        type: editor.select
+        at: { mark: sel-call }
+        target: { file: main.go, text: "bag.Add(a.Fee())", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "10500",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-star,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "func (b *CashBag) Add(amount int) {",
+        }
+
+  - id: read-3
+    chapter: ဘယ် receiver ကို ရွေးမလဲ
+    narration: >-
+      [[mark:point-total]] ဒီ တစ်ခါတော့ ဒုတိယ စာကြောင်းမှာ ၁၀၅၀၀ ထွက်လာပါပြီ။ ၆၀၀၀ နဲ့ ၄၅၀၀ ကို အိတ် အစစ်ထဲ
+      တကယ် ထည့်လိုက်တာပါ။ [[mark:rule-fee]] ဒါဆို ဘယ်အချိန်မှာ ဘယ် receiver ကို ရွေးမလဲ။ ပို့ခ တွက်တဲ့ method လို
+      တန်ဖိုးကို ဖတ်ရုံပဲ ဖတ်ရင် value receiver နဲ့ လုံလောက်ပါတယ်။ [[mark:rule-add]] ငွေထည့်တဲ့ method လို
+      တန်ဖိုးကို ပြောင်းရမယ် ဆိုရင်တော့ pointer receiver ကို သုံးပါ။ ပြီးတော့ type တစ်ခုမှာ ပြောင်းတဲ့ method
+      တစ်ခု ရှိတာနဲ့၊ အဲဒီ type ရဲ့ method အားလုံးကို pointer receiver ပေးထားတာ ကောင်းပါတယ်။ ဒါမှ type
+      တစ်ခုရဲ့ method တွေ အားလုံး တစ်ပုံစံတည်း ဖြစ်နေမှာပါ။
+    sources:
+      - {
+          title: "Go FAQ — Should I define methods on values or pointers?",
+          url: "https://go.dev/doc/faq#methods_on_values_or_pointers",
+        }
+    actions:
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "10500" },
+        }
+      - id: rule-fee
+        type: editor.select
+        at: { mark: rule-fee }
+        target: { file: main.go, text: "func (p Parcel) Fee() int {", occurrence: 1 }
+      - id: rule-add
+        type: editor.select
+        at: { mark: rule-add }
+        target: { file: main.go, text: "func (b *CashBag) Add(amount int) {", occurrence: 1 }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်မှာ မန္တလေး ပါဆယ် တစ်ခု ရှိပြီး၊ အဲဒီ ပါဆယ်ရဲ့ pointer ကို
+      variable တစ်ခုထဲ ထည့်ထားပါတယ်။ [[mark:quiz-line]] Fee method က value receiver ပါ၊ ဒါပေမဲ့ ဒီမှာ ပါဆယ်ကနေ
+      မဟုတ်ဘဲ pointer ကနေ ခေါ်ထားပါတယ်။ compile error ပေါ်မလား၊ ၆၀၀၀ ထွက်မလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ ၆၀၀၀ ပါ။ ဘာကြောင့်လဲဆိုတော့ lesson ဆယ့်ခုနစ်မှာ pointer
+      ကနေ field ကို ဖတ်တဲ့အခါ Go က pointer နောက်ကို လိုက်သွားပေးသလိုပဲ၊ ဒီမှာလည်း ပါဆယ် အစစ်ဆီ လိုက်သွားပြီး
+      အဲဒီ ပါဆယ်ရဲ့ မိတ္တူကို method ဆီ ပေးလို့ပါ။ ဖတ်ရုံ ဖတ်တဲ့ method ဖြစ်လို့ မိတ္တူနဲ့ တွက်လည်း အဖြေ
+      အတူတူပါပဲ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method sets",
+          url: "https://go.dev/ref/spec#Method_sets",
+        }
+      - {
+          title: "Effective Go — Pointers vs. Values",
+          url: "https://go.dev/doc/effective_go#pointers_vs_values",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ method ဆိုတာ type တစ်ခုနဲ့ တွဲထားတဲ့ function ဖြစ်ပြီး၊ variable ရဲ့
+      နောက်မှာ နာမည်ကို တွဲပြီး ခေါ်ပါတယ်။ [[mark:recap-fee]] ပို့ခ တွက်တဲ့ method လို ဖတ်ရုံ ဖတ်တဲ့ method က
+      value receiver နဲ့ မိတ္တူကို ယူပါတယ်။ [[mark:recap-add]] ငွေထည့်တဲ့ method လို တန်ဖိုး ပြောင်းရမယ့် method
+      ကတော့ pointer receiver နဲ့ အစစ်ကို ပြင်ပါတယ်၊ ခေါ်တဲ့အခါ address ကို Go က ယူပေးပါတယ်။ ဒီနေ့ program က
+      ဖိုင် တစ်ခုတည်းမှာ အတော် ရှည်လာပါပြီ။ နောက် lesson မှာတော့ program တစ်ခုကို ဖိုင် အများကြီးနဲ့
+      ခွဲရေးတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-fee
+        type: editor.select
+        at: { mark: recap-fee }
+        target:
+          {
+            file: main.go,
+            text: "func (p Parcel) Fee() int {\n\treturn baseFees[p.To] + int(p.WeightKg)*500\n}",
+            occurrence: 1,
+          }
+      - id: recap-add
+        type: editor.select
+        at: { mark: recap-add }
+        target:
+          {
+            file: main.go,
+            text: "func (b *CashBag) Add(amount int) {\n\tb.total += amount\n}",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
