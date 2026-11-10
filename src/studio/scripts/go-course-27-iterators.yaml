@@ -1,0 +1,964 @@
+# Go course, lesson 27: iterators (Burmese).
+#
+# Start state: main.go with `package main`, `import (\n\t"fmt"\n)` (strings and iter arrive as
+# single inserted lines in sorted position) and an empty `func main`; parcel.go pinned (the
+# canonical Parcel and cityNames, COURSE-KIT §3.4).
+# Edits, all insert-only:
+#   1. "strings" and a range loop over strings.SplitSeq on a bus route split at the Burmese
+#      comma -> run-1: ရန်ကုန် ပဲခူး မန္တလေး (one line);
+#   2. "iter", the canonical heavierThan iterator without its print line, three parcels
+#      (2.5, 6, 8 kg) and a range over heavierThan(parcels, 2) -> run-2 adds MDY-0001 /
+#      NPT-0001 / YGN-0001;
+#   3. a `fmt.Println("yield", p.Code)` inside the iterator and a `break` after the first parcel
+#      over 5 kg -> run-3: yield MDY-0001 / MDY-0001 / yield NPT-0001 / NPT-0001 (the third
+#      parcel is never yielded).
+# Boards: (R) Split builds the whole slice, SplitSeq hands one city a round; (I) ready-made
+# iterators and lesson 13's slices.Sorted(maps.Keys(m)) explained; (B) the counter clerk hands
+# parcels to rider လှလှ one at a time: yield true = one more, break = false, stop; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-27-iterators
+  title: "Go course 27: Iterator နဲ့ range"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Two files: the explorer shows parcel.go, where Parcel lives.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        }
+      parcel.go: |
+        package main
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string  // tracking code: "MDY-0001"
+        	To       string  // city code: "MDY"
+        	WeightKg float64 // weight in kilograms
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+  whiteboardAssets:
+    # Board R: Split makes the whole slice at once; SplitSeq hands over one city a round.
+    - {
+        id: r-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Split နဲ့ SplitSeq",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: r-route-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 560,
+        height: 75,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-route,
+        kind: text,
+        x: 305,
+        y: 258,
+        width: 500,
+        height: 40,
+        text: "ရန်ကုန်၊ပဲခူး၊မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-split,
+        kind: text,
+        x: 300,
+        y: 360,
+        width: 360,
+        height: 40,
+        text: "Split",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-split-n,
+        kind: text,
+        x: 560,
+        y: 360,
+        width: 530,
+        height: 40,
+        text: "→ slice အပြည့် · တစ်ခါတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-seq-box,
+        kind: rectangle,
+        x: 285,
+        y: 430,
+        width: 810,
+        height: 140,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: r-seq,
+        kind: text,
+        x: 305,
+        y: 445,
+        width: 240,
+        height: 40,
+        text: "SplitSeq",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-seq-n,
+        kind: text,
+        x: 560,
+        y: 445,
+        width: 520,
+        height: 40,
+        text: "→ တစ်ခေါက် တစ်မြို့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: r-seq-r,
+        kind: text,
+        x: 305,
+        y: 510,
+        width: 770,
+        height: 40,
+        text: "ရန်ကုန်  →  ပဲခူး  →  မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board I: ready-made iterators; lesson 13's recipe explained.
+    - {
+        id: i-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 780,
+        height: 50,
+        text: "Iterator ပြန်ပေးတဲ့ function တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: i-l1,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 680,
+        height: 40,
+        text: "strings.SplitSeq · strings.Lines",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-l2,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 680,
+        height: 40,
+        text: "slices.Values · maps.Keys",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-box,
+        kind: rectangle,
+        x: 285,
+        y: 380,
+        width: 810,
+        height: 185,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: i-recipe,
+        kind: text,
+        x: 305,
+        y: 395,
+        width: 620,
+        height: 40,
+        text: "slices.Sorted(maps.Keys(m))",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-recipe-n,
+        kind: text,
+        x: 305,
+        y: 450,
+        width: 770,
+        height: 40,
+        text: "key တွေကို စု၊ sort လုပ် → slice",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: i-collect,
+        kind: text,
+        x: 305,
+        y: 505,
+        width: 770,
+        height: 40,
+        text: "slices.Collect → စုရုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: one parcel at a time; the clerk looks up after each.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 780,
+        height: 50,
+        text: "yield · တစ်ခု ပေးပြီးတိုင်း မေးတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-clerk-box,
+        kind: rectangle,
+        x: 285,
+        y: 245,
+        width: 330,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-clerk,
+        kind: text,
+        x: 305,
+        y: 260,
+        width: 290,
+        height: 40,
+        text: "ကောင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-clerk-n,
+        kind: text,
+        x: 305,
+        y: 305,
+        width: 290,
+        height: 40,
+        text: "iterator",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 630,
+        y: 280,
+        width: 100,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-rider-box,
+        kind: rectangle,
+        x: 745,
+        y: 245,
+        width: 345,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-rider,
+        kind: text,
+        x: 765,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "rider လှလှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-rider-n,
+        kind: text,
+        x: 765,
+        y: 305,
+        width: 300,
+        height: 40,
+        text: "range loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-yes-box,
+        kind: rectangle,
+        x: 285,
+        y: 395,
+        width: 810,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-yes,
+        kind: text,
+        x: 305,
+        y: 410,
+        width: 760,
+        height: 40,
+        text: "yield(p) → true · နောက်တစ်ခု ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-no-box,
+        kind: rectangle,
+        x: 285,
+        y: 485,
+        width: 810,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-no,
+        kind: text,
+        x: 305,
+        y: 500,
+        width: 760,
+        height: 40,
+        text: "break → false · return နဲ့ ရပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (an iterator that ignores yield's answer).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 620,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 560,
+        height: 40,
+        text: "for _, p := range parcels {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 345,
+        y: 305,
+        width: 300,
+        height: 40,
+        text: "yield(p)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 305,
+        y: 360,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 345,
+        y: 340,
+        width: 130,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-loop,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 780,
+        height: 40,
+        text: "loop · ပထမ ပါဆယ်ပြီးတာနဲ့ break",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 500,
+        height: 40,
+        text: "က · loop ဆက်သွားမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 500,
+        height: 40,
+        text: "ခ · panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 450,
+        y: 550,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7127
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "ရန်ကုန် ပဲခူး မန္တလေး \n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "ရန်ကုန် ပဲခူး မန္တလေး \nMDY-0001\nNPT-0001\nYGN-0001\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "ရန်ကုန် ပဲခူး မန္တလေး \nyield MDY-0001\nMDY-0001\nyield NPT-0001\nNPT-0001\n"
+
+scenes:
+  - id: recall
+    chapter: Range နဲ့ iterator
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ type parameter ပါတဲ့ generic function တွေနဲ့ ပို့ခရော ကီလိုကိုပါ function
+      တစ်ခုတည်းနဲ့ ပေါင်းခဲ့ပါတယ်။ ဒီနေ့မှာတော့ range loop ကို ပြန်ကြည့်ပါမယ်။ အခုထိ range ကို slice၊
+      map၊ string နဲ့ ဂဏန်း တစ်ခုပေါ်မှာ သုံးခဲ့ပါတယ်။ Go မှာ range က function တစ်မျိုးကိုလည်း
+      လက်ခံပါတယ်။ အဲဒီ function ကို iterator လို့ ခေါ်ပြီး၊ တန်ဖိုးတွေကို တစ်ခုချင်း ထုတ်ပေးတဲ့ function
+      ဖြစ်ပါတယ်။ [[mark:board-route]] ဥပမာ ကားဂိတ်မှာ ကားလမ်းကြောင်း တစ်ခုကို မြို့နာမည်တွေ
+      ပုဒ်ကလေးနဲ့ ခြားပြီး စာကြောင်း တစ်ကြောင်းတည်း ရေးထားတယ် ဆိုပါစို့။ [[mark:draw-split]] strings
+      package ထဲက Split က အဲဒီ စာကြောင်းကို တစ်ခါတည်း အကုန်ခွဲပြီး slice အပြည့် တစ်ခုကို လုပ်ပေးပါတယ်။
+      [[mark:draw-seq]] SplitSeq ကတော့ slice မလုပ်ပါဘူး။ loop ရဲ့ အခေါက်တိုင်းမှာ မြို့ တစ်မြို့စီကို
+      ခွဲပြီး လွှဲပေးတဲ့ iterator ကို ပြန်ပေးတာပါ။
+    sources:
+      - {
+          title: "The Go Blog — Range Over Function Types",
+          url: "https://go.dev/blog/range-functions",
+        }
+      - { title: "strings package — SplitSeq", url: "https://pkg.go.dev/strings#SplitSeq" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-route,
+          type: whiteboard.apply,
+          at: { mark: board-route },
+          open: true,
+          clear: true,
+          upsertIds: [r-title, r-route-box, r-route],
+        }
+      - {
+          id: draw-split,
+          type: whiteboard.apply,
+          at: { mark: draw-split },
+          upsertIds: [r-split, r-split-n],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-seq,
+          type: whiteboard.apply,
+          at: { mark: draw-seq },
+          upsertIds: [r-seq-box, r-seq, r-seq-n, r-seq-r],
+          drawMs: 2600,
+        }
+
+  - id: route
+    narration: >-
+      [[mark:close-route]] ဒါဆို ရေးကြည့်ရအောင်။ [[mark:type-strings]] အရင်ဆုံး import ထဲမှာ strings
+      package ကို ထည့်ပါမယ်။ [[mark:type-loop]] main ထဲက range loop က SplitSeq ပေးတဲ့ မြို့ တစ်မြို့ချင်းကို
+      ယူပြီး၊ နောက်မှာ space တစ်ခု ခံပြီး တစ်ကြောင်းတည်းမှာ print ထုတ်ပါတယ်။ slice ကို လျှောက်တုန်းကလို
+      index မပါဘဲ၊ city ဆိုတဲ့ variable တစ်ခုတည်းထဲကို အခေါက်တိုင်း မြို့နာမည် string တစ်ခု ဝင်လာပါတယ်။ loop ပြီးတော့ စာကြောင်းကို
+      အဆုံးသတ်ဖို့ line အသစ် တစ်ခု ထုတ်ပါတယ်။ [[mark:sel-sep]] ခွဲမယ့် နေရာကို ပြောတဲ့ ဒီ စာက ပုဒ်ကလေးပါ။
+      byte သုံးခု ပါတဲ့ မြန်မာ သင်္ကေတ ဖြစ်ပေမဲ့၊ ခွဲမယ့် နေရာကို string အဖြစ် ပေးရလို့ ပြဿနာ မရှိပါဘူး။ [[mark:run-1]] ကဲ၊
+      run လိုက်ရအောင်။
+    sources:
+      - { title: "strings package — SplitSeq", url: "https://pkg.go.dev/strings#SplitSeq" }
+    actions:
+      - {
+          id: close-route,
+          type: whiteboard.apply,
+          at: { mark: close-route },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-strings
+        type: editor.type
+        at: { mark: type-strings }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"strings\"\n"
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tfor city := range strings.SplitSeq(\"ရန်ကုန်၊ပဲခူး၊မန္တလေး\", \"၊\") {\n\t\tfmt.Print(city, \" \")\n\t}\n\tfmt.Println()\n"
+        cadence: line-by-line
+      - id: sel-sep
+        type: editor.select
+        at: { mark: sel-sep }
+        target: { file: main.go, text: '"၊"', occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "ရန်ကုန် ပဲခူး မန္တလေး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-seq,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "for city := range strings.SplitSeq(",
+        }
+
+  - id: ready-made
+    narration: >-
+      [[mark:point-route]] output မှာ ရန်ကုန်၊ ပဲခူး၊ မန္တလေး ဆိုပြီး မြို့ သုံးမြို့ကို space ခြားပြီး
+      တွေ့ရပါတယ်။ slice ကို လျှောက်တဲ့ range loop လိုပဲ ရေးထားပေမဲ့၊ ဒီမှာ range လုပ်နေတာက slice မဟုတ်ဘဲ
+      SplitSeq က ပြန်ပေးတဲ့ iterator ပါ။ [[mark:board-ready]] standard library မှာ ဒီလို iterator
+      ပြန်ပေးတဲ့ function တွေ အများကြီး ရှိပါတယ်။ [[mark:draw-ready]] strings package မှာ စာကြောင်းတွေကို
+      တစ်ကြောင်းချင်း ပေးတဲ့ Lines ရှိပြီး၊ slices package မှာ slice ထဲက တန်ဖိုးတွေကို တစ်ခုချင်း ပေးတဲ့
+      Values ရှိပါတယ်။ [[mark:draw-recipe]] lesson ဆယ့်သုံးမှာ map ကို အစဉ်လိုက် ထုတ်ဖို့ သုံးခဲ့တဲ့ နည်းကိုလည်း
+      အခု နားလည်လို့ ရပါပြီ။ maps package ရဲ့ Keys က map ထဲက key တွေကို တစ်ခုချင်း ထုတ်ပေးတဲ့ iterator ပါ။
+      slices package ရဲ့ Sorted က အဲဒီ key တွေကို slice တစ်ခုထဲ စုပြီး sort လုပ်ပေးပါတယ်။ sort မလိုဘဲ
+      စုရုံပဲ လိုရင်တော့ Collect ကို သုံးပါတယ်။
+    sources:
+      - { title: "iter package", url: "https://pkg.go.dev/iter" }
+      - { title: "slices package — Sorted", url: "https://pkg.go.dev/slices#Sorted" }
+      - { title: "maps package", url: "https://pkg.go.dev/maps" }
+    actions:
+      - {
+          id: point-route,
+          type: console.point,
+          at: { mark: point-route },
+          target: { text: "ရန်ကုန် ပဲခူး မန္တလေး" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-ready } }
+      - {
+          id: board-ready,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [i-title],
+        }
+      - {
+          id: draw-ready,
+          type: whiteboard.apply,
+          at: { mark: draw-ready },
+          upsertIds: [i-l1, i-l2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-recipe,
+          type: whiteboard.apply,
+          at: { mark: draw-recipe },
+          upsertIds: [i-box, i-recipe, i-recipe-n, i-collect],
+          drawMs: 2800,
+        }
+
+  - id: own
+    chapter: ကိုယ်ပိုင် iterator
+    narration: >-
+      [[mark:close-ready]] ဒါဆို ကိုယ်ပိုင် iterator တစ်ခုကို ရေးကြည့်ရအောင်။ ပါဆယ် စာရင်းထဲက သတ်မှတ်ထားတဲ့
+      ကီလိုထက် လေးတဲ့ ပါဆယ်တွေကို တစ်ခုချင်း ပေးမယ့် iterator ပါ။ slice အသစ် တစ်ခု ပြန်ပေးတဲ့
+      function လည်း ရေးလို့ ရပေမဲ့၊ iterator ဆိုရင် loop က တောင်းမှ တစ်ခုချင်း ရှာပေးလို့ စာရင်း အပြည့်ကို
+      ကြိုမလုပ်ရပါဘူး။ ခေါ်သုံးတဲ့သူ ဘက်ကလည်း ပါဆယ်တွေကို ဘယ်လို ရှာလဲ ဆိုတာ သိစရာ မလိုဘဲ range နဲ့
+      လျှောက်ရုံပါပဲ။ [[mark:type-iter]] import ထဲမှာ iter
+      package ကို ထည့်ပါမယ်။ [[mark:type-heavier]] ပြီးတော့ import ရဲ့ အောက်မှာ function ကို ရေးပါမယ်။ ဒီ
+      function က ပါဆယ် slice နဲ့ ကီလို ကို ယူပြီး၊ iter package ရဲ့ Seq ကို ပြန်ပေးပါတယ်။ Seq က ပြီးခဲ့တဲ့
+      lesson က generics နဲ့ ရေးထားတဲ့ type ပါ။ လေးထောင့်ကွင်းထဲက Parcel က T နေရာလွတ်ကို ဖြည့်ပေးပြီး၊ ဒီ
+      iterator က Parcel တွေကို ပေးမယ်လို့ ပြောတာပါ။
+      [[mark:sel-yield]] ပြန်ပေးတဲ့ အရာက function တစ်ခုပါ။ သူက yield ဆိုတဲ့ function ကို parameter အဖြစ်
+      လက်ခံပါတယ်။ yield ဆိုတာ range loop ဆီကို တန်ဖိုး တစ်ခု လွှဲပေးတဲ့ function ပါ။ [[mark:sel-check]]
+      အထဲမှာတော့ loop က ပါဆယ် တစ်ခုချင်းကို စစ်ပြီး၊ လေးတဲ့ ပါဆယ် တွေ့တိုင်း yield ကို ခေါ်ပြီး loop ဆီ
+      လွှဲပေးပါတယ်။ yield က true ဒါမှမဟုတ် false ပြန်ပေးတာကိုတော့ နောက်မှ ကြည့်ပါမယ်။
+    sources:
+      - { title: "iter package", url: "https://pkg.go.dev/iter" }
+      - {
+          title: "The Go Blog — Range Over Function Types",
+          url: "https://go.dev/blog/range-functions",
+        }
+    actions:
+      - {
+          id: close-ready,
+          type: whiteboard.apply,
+          at: { mark: close-ready },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-iter
+        type: editor.type
+        at: { mark: type-iter }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"iter\"\n"
+      - id: type-heavier
+        type: editor.type
+        at: { mark: type-heavier }
+        target: { file: main.go, after: "\t\"strings\"\n)\n", occurrence: 1 }
+        text: "\n// heavierThan yields the parcels heavier than kg, one at a time.\nfunc heavierThan(parcels []Parcel, kg float64) iter.Seq[Parcel] {\n\treturn func(yield func(Parcel) bool) {\n\t\tfor _, p := range parcels {\n\t\t\tif p.WeightKg > kg {\n\t\t\t\tif !yield(p) {\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n"
+        cadence: line-by-line
+      - id: sel-yield
+        type: editor.select
+        at: { mark: sel-yield }
+        target: { file: main.go, text: "func(yield func(Parcel) bool)", occurrence: 1 }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target: { file: main.go, text: "if p.WeightKg > kg {", occurrence: 1 }
+
+  - id: use
+    narration: >-
+      [[mark:type-use]] main ထဲမှာ နှစ်ကီလိုခွဲ၊ ခြောက်ကီလို၊ ရှစ်ကီလို ရှိတဲ့ ပါဆယ် သုံးခုကို ထည့်ပါမယ်။
+      ပြီးတော့ နှစ်ကီလိုထက် လေးတဲ့ ပါဆယ်တွေကို range နဲ့ လျှောက်ပြီး ပါဆယ် code ကို print ထုတ်ပါမယ်။ slice
+      ကို လျှောက်တာနဲ့ ရေးပုံ အတူတူပါပဲ၊ ကွာတာက range ရဲ့ နောက်မှာ ကိုယ်ပိုင် function ကို ခေါ်ထားတာပါ။
+      [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - id: type-use
+        type: editor.type
+        at: { mark: type-use }
+        target: { file: main.go, after: "\tfmt.Println()\n", occurrence: 1 }
+        text: "\tparcels := []Parcel{\n\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 6},\n\t\t{Code: \"YGN-0001\", To: \"YGN\", WeightKg: 8},\n\t}\n\tfor p := range heavierThan(parcels, 2) {\n\t\tfmt.Println(p.Code)\n\t}\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "YGN-0001",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-iter,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "func heavierThan(parcels []Parcel, kg float64) iter.Seq[Parcel] {",
+        }
+
+  - id: read-own
+    narration: >-
+      [[mark:point-mdy]] ဒုတိယ စာကြောင်းကစပြီး ပါဆယ် code တွေ ထွက်လာပါတယ်။ မန္တလေး ပါဆယ်က နှစ်ကီလိုခွဲ
+      ဖြစ်လို့ နှစ်ကီလိုထက် လေးပါတယ်။ [[mark:point-npt]] နောက်မှာ နေပြည်တော် ပါဆယ်၊ [[mark:point-ygn]]
+      နောက်ဆုံးမှာ ရန်ကုန် ပါဆယ် ပါ။ ပါဆယ် သုံးခုလုံး နှစ်ကီလိုထက် လေးလို့ yield ကို သုံးခါ ခေါ်ခဲ့ပြီး၊ loop
+      ထဲက code ကလည်း သုံးခေါက် run သွားတာပါ။ နောက်ကွယ်မှာ ဖြစ်တာကတော့ ဒီလိုပါ။ range က iterator
+      function ကို ခေါ်ပါတယ်။ iterator က yield ကို ခေါ်တိုင်း loop ရဲ့ အထဲက code တစ်ခေါက် run ပြီး၊ ပြီးတာနဲ့
+      iterator ဆီ ပြန်ရောက်လာပြီး နောက်ပါဆယ်ကို ဆက်ရှာပါတယ်။
+    sources:
+      - { title: "iter package", url: "https://pkg.go.dev/iter" }
+    actions:
+      - {
+          id: point-mdy,
+          type: console.point,
+          at: { mark: point-mdy },
+          target: { text: "MDY-0001" },
+        }
+      - {
+          id: point-npt,
+          type: console.point,
+          at: { mark: point-npt },
+          target: { text: "NPT-0001" },
+        }
+      - {
+          id: point-ygn,
+          type: console.point,
+          at: { mark: point-ygn },
+          target: { text: "YGN-0001" },
+        }
+
+  - id: stop
+    chapter: break နဲ့ yield
+    narration: >-
+      [[mark:board-break]] ခုနက run မှာ iterator က ပါဆယ် စာရင်း အဆုံးထိ ရောက်သွားတော့ သူ့ဘာသာ
+      return လုပ်ပြီး၊ range loop လည်း အဲဒီမှာ ပြီးသွားပါတယ်။ ဒါဆို loop က အလယ်မှာ break နဲ့
+      ထွက်သွားရင် ဘာဖြစ်မလဲ။ [[mark:draw-hand]]
+      ကောင်တာက ဝန်ထမ်းက rider လှလှ ကို ပါဆယ်တွေ တစ်ခုချင်း လှမ်းပေးတယ် ဆိုပါစို့။ တစ်ခု ပေးပြီးတိုင်း
+      လှလှ ကို မော့ကြည့်ပြီး နောက်တစ်ခု ယူဦးမလား မေးပါတယ်။ [[mark:draw-yes]] ယူမယ် ဆိုရင် နောက်တစ်ခု
+      ဆက်ပေးပါတယ်။ yield ကလည်း ဒီလိုပါပဲ၊ loop က ဆက်လိုချင်သေးရင် yield က true ကို ပြန်ပေးပါတယ်။ [[mark:draw-no]]
+      လှလှ က ခေါင်းခါလိုက်ရင်တော့ ဝန်ထမ်းက ပါဆယ် ဆက်မပေးတော့ပါဘူး။ loop က break နဲ့ ထွက်သွားရင် yield
+      က false ကို ပြန်ပေးပြီး၊ iterator က ချက်ချင်း ရပ်ရပါမယ်။
+    sources:
+      - {
+          title: "The Go Blog — Range Over Function Types",
+          url: "https://go.dev/blog/range-functions",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-break } }
+      - {
+          id: board-break,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-hand,
+          type: whiteboard.apply,
+          at: { mark: draw-hand },
+          upsertIds: [b-clerk-box, b-clerk, b-clerk-n, b-arrow, b-rider-box, b-rider, b-rider-n],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-yes,
+          type: whiteboard.apply,
+          at: { mark: draw-yes },
+          upsertIds: [b-yes-box, b-yes],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-no,
+          type: whiteboard.apply,
+          at: { mark: draw-no },
+          upsertIds: [b-no-box, b-no],
+          drawMs: 1400,
+        }
+
+  - id: trace
+    narration: >-
+      [[mark:close-break]] code ထဲမှာ ပြန်ကြည့်ရအောင်။ [[mark:sel-not-yield]] iterator ထဲက ဒီ line က
+      yield ကို ခေါ်ပြီး အဖြေကို စစ်ပါတယ်။ false ရရင် return နဲ့ ချက်ချင်း ထွက်သွားပါတယ်။ [[mark:type-trace]]
+      ဒါကို မြင်ရအောင် yield ကို မခေါ်ခင် ပါဆယ် code ကို print ထုတ်တဲ့ line တစ်ကြောင်း iterator ထဲမှာ
+      ထည့်ပါမယ်။ [[mark:type-break]] main ရဲ့ loop ထဲမှာတော့ ငါးကီလိုထက် လေးတဲ့ ပါဆယ် တွေ့တာနဲ့ break နဲ့
+      ထွက်ပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Break statements",
+          url: "https://go.dev/ref/spec#Break_statements",
+        }
+      - { title: "iter package", url: "https://pkg.go.dev/iter" }
+    actions:
+      - {
+          id: close-break,
+          type: whiteboard.apply,
+          at: { mark: close-break },
+          open: false,
+          upsertIds: [],
+        }
+      - id: sel-not-yield
+        type: editor.select
+        at: { mark: sel-not-yield }
+        target: { file: main.go, text: "if !yield(p) {", occurrence: 1 }
+      - id: type-trace
+        type: editor.type
+        at: { mark: type-trace }
+        target: { file: main.go, after: "\t\t\tif p.WeightKg > kg {\n", occurrence: 1 }
+        text: "\t\t\t\tfmt.Println(\"yield\", p.Code)\n"
+        cadence: line-by-line
+      - id: type-break
+        type: editor.type
+        at: { mark: type-break }
+        target: { file: main.go, after: "\t\tfmt.Println(p.Code)\n", occurrence: 1 }
+        text: "\t\tif p.WeightKg > 5 {\n\t\t\tbreak\n\t\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "yield NPT-0001",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-break,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tif p.WeightKg > 5 {\n\t\t\tbreak\n\t\t}\n",
+        }
+
+  - id: read-trace
+    narration: >-
+      [[mark:point-y1]] ပထမဆုံး iterator က မန္တလေး ပါဆယ်ကို yield လုပ်မယ်လို့ ပြောပါတယ်။ [[mark:point-l1]]
+      loop က အဲဒီ ပါဆယ်ကို print ထုတ်ပါတယ်။ နှစ်ကီလိုခွဲပဲ ရှိလို့ loop က မထွက်သေးဘဲ၊ yield က true ကို ပြန်ပေးပါတယ်။
+      [[mark:point-y2]] နောက် iterator က နေပြည်တော် ပါဆယ်ကို လွှဲပေးပြီး၊ [[mark:point-l2]] loop က print
+      ထုတ်ပါတယ်။ ဒီ ပါဆယ်က ခြောက်ကီလို ဖြစ်လို့ loop က break နဲ့ ထွက်သွားပါတယ်။ အဲဒီအချိန်မှာ yield က
+      false ပြန်ပေးလို့ iterator က return လုပ်လိုက်ပါတယ်။ ဒါကြောင့် ရန်ကုန် ပါဆယ်ကို yield လုပ်တဲ့
+      စာကြောင်း မပါတော့ပါဘူး။ တတိယ ပါဆယ်ကို လုံးဝ မလွှဲပေးခဲ့တာပါ။ [[mark:trace-order]] output မှာ yield စာကြောင်းနဲ့ loop
+      ရဲ့ စာကြောင်း တစ်လှည့်စီ ထွက်နေတာကိုလည်း သတိထားကြည့်ပါ။ iterator က ပါဆယ် အားလုံးကို အရင် ရှာပြီးမှ
+      ပေးတာ မဟုတ်ဘဲ၊ တစ်ခု ပေးလိုက်၊ loop က အလုပ်လုပ်လိုက်၊ ပြီးမှ နောက်တစ်ခု ရှာလိုက် ဆိုပြီး
+      အလှည့်ကျ သွားတာပါ။
+    sources:
+      - {
+          title: "The Go Blog — Range Over Function Types",
+          url: "https://go.dev/blog/range-functions",
+        }
+    actions:
+      - {
+          id: point-y1,
+          type: console.point,
+          at: { mark: point-y1 },
+          target: { text: "yield MDY-0001" },
+        }
+      - {
+          id: point-l1,
+          type: console.point,
+          at: { mark: point-l1 },
+          target: { text: "MDY-0001", occurrence: 2 },
+        }
+      - {
+          id: point-y2,
+          type: console.point,
+          at: { mark: point-y2 },
+          target: { text: "yield NPT-0001" },
+        }
+      - {
+          id: point-l2,
+          type: console.point,
+          at: { mark: point-l2 },
+          target: { text: "NPT-0001", occurrence: 2 },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က iterator က yield ပြန်ပေးတဲ့ အဖြေကို မစစ်ဘဲ
+      ပါဆယ်တိုင်းအတွက် yield ကို ခေါ်ပါတယ်။ [[mark:quiz-line]] loop က ပထမ ပါဆယ်ပြီးတာနဲ့ break လုပ်ရင်
+      ဘာဖြစ်မလဲ။ loop က ဆက်သွားမလား၊ ဒါမှမဟုတ် panic ဖြစ်ပြီး program ရပ်သွားမလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ panic ဖြစ်ပြီး ရပ်သွားတာပါ။
+      ဘာကြောင့်လဲဆိုတော့ loop က break နဲ့ ထွက်ပြီးသားမှာ yield ကို ထပ်ခေါ်ရင်၊ Go က ဒါကို bug လို့
+      သတ်မှတ်ပြီး run နေတုန်း ရပ်လိုက်လို့ပါ။ ဒါကြောင့် yield က false ပြန်ပေးရင် အမြဲ return လုပ်ရပါမယ်။
+    sources:
+      - { title: "iter package", url: "https://pkg.go.dev/iter" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-loop, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ range loop က slice နဲ့ map တင် မကဘဲ iterator function
+      တွေကိုလည်း လျှောက်လို့ ရပါတယ်။ [[mark:recap-seq]] standard library ရဲ့ iterator တွေက တန်ဖိုးတွေကို
+      slice မလုပ်ဘဲ တစ်ခုချင်း ပေးပြီး၊ slice လိုရင်တော့ Collect ဒါမှမဟုတ် Sorted နဲ့ စုလို့ ရပါတယ်။
+      [[mark:recap-own]] ကိုယ်ပိုင် iterator ကတော့ yield ကို ခေါ်ပြီး
+      တန်ဖိုး တစ်ခုချင်း လွှဲပေးပါတယ်။ [[mark:recap-stop]] yield က false ပြန်ပေးရင် loop က ရပ်ချင်ပြီ
+      ဆိုတဲ့ အဓိပ္ပာယ် ဖြစ်လို့ iterator က ချက်ချင်း ရပ်ရပါမယ်။ နောက် lesson မှာတော့ course ရဲ့ အပိုင်း အသစ်ကို စပြီး၊
+      ညကား ထွက်ချိန်နဲ့ ရောက်ချိန်ကို မြန်မာစံတော်ချိန်နဲ့ တွက်တဲ့ အချိန် အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Blog — Range Over Function Types",
+          url: "https://go.dev/blog/range-functions",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-seq
+        type: editor.select
+        at: { mark: recap-seq }
+        target: { file: main.go, text: "strings.SplitSeq", occurrence: 1 }
+      - id: recap-own
+        type: editor.select
+        at: { mark: recap-own }
+        target: { file: main.go, text: "func(yield func(Parcel) bool)", occurrence: 1 }
+      - id: recap-stop
+        type: editor.select
+        at: { mark: recap-stop }
+        target: { file: main.go, text: "if !yield(p) {", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
