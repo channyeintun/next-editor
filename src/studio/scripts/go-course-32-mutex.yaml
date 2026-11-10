@@ -1,0 +1,1221 @@
+# Go course, lesson 32: sharing one value with a mutex (Burmese).
+#
+# Start state: main.go holds the imports (fmt, sync, time), the day's total and a main that sends
+# two riders out at once with wg.Go; the function they call is not written yet.
+# Edits, all insert-only:
+#   1. addCash (read the total, count for a while, write the new total) -> run-1: 4500 ကျပ်, 200ms
+#      (a lost update: always the same wrong answer, because the counting times differ);
+#   2. `var mu sync.Mutex` under the total, `mu.Lock()` + `defer mu.Unlock()` at the top of
+#      addCash -> run-2: 10500 ကျပ်, 300ms (right, and one rider waits for the key).
+# Boards: (L) the lost update on a time line; (K) one key to the cash box; (B) keep the mutex
+# beside its data, never copy it (the vet line, board only); (C) channel or mutex, and the race
+# detector; (Q) the quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-32-mutex
+  title: "Go course 32: Mutex နဲ့ တန်ဖိုးတစ်ခုကို မျှသုံးတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"sync"
+        	"time"
+        )
+
+        var total int
+
+        func main() {
+        	start := time.Now()
+        	var wg sync.WaitGroup
+        	wg.Go(func() { addCash(6000, 100*time.Millisecond) })
+        	wg.Go(func() { addCash(4500, 200*time.Millisecond) })
+        	wg.Wait()
+        	fmt.Println(total, "ကျပ်")
+        	fmt.Println(time.Since(start).Round(100*time.Millisecond), "ကြာ")
+        }
+  whiteboardAssets:
+    # Board L: the lost update on a time line (both read 0; the slower write wins).
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "ပေါင်းထားတာ ပျောက်သွားတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-t0,
+        kind: text,
+        x: 480,
+        y: 235,
+        width: 120,
+        height: 40,
+        text: "အစ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-t1,
+        kind: text,
+        x: 690,
+        y: 235,
+        width: 140,
+        height: 40,
+        text: "100ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-t2,
+        kind: text,
+        x: 900,
+        y: 235,
+        width: 140,
+        height: 40,
+        text: "200ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-n1,
+        kind: text,
+        x: 280,
+        y: 310,
+        width: 170,
+        height: 40,
+        text: "လှလှ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-n2,
+        kind: text,
+        x: 280,
+        y: 400,
+        width: 180,
+        height: 40,
+        text: "အောင်အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r1,
+        kind: text,
+        x: 475,
+        y: 310,
+        width: 170,
+        height: 40,
+        text: "0 ကို ဖတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r2,
+        kind: text,
+        x: 475,
+        y: 400,
+        width: 170,
+        height: 40,
+        text: "0 ကို ဖတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 640,
+        y: 305,
+        width: 40,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-w1,
+        kind: text,
+        x: 690,
+        y: 310,
+        width: 190,
+        height: 40,
+        text: "6000 ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 640,
+        y: 395,
+        width: 250,
+        height: 40,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-w2,
+        kind: text,
+        x: 900,
+        y: 400,
+        width: 190,
+        height: 40,
+        text: "4500 ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-tot,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 170,
+        height: 40,
+        text: "total",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-tv1,
+        kind: text,
+        x: 700,
+        y: 500,
+        width: 120,
+        height: 40,
+        text: "6000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-tv2-box,
+        kind: rectangle,
+        x: 885,
+        y: 488,
+        width: 130,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-tv2,
+        kind: text,
+        x: 905,
+        y: 500,
+        width: 100,
+        height: 40,
+        text: "4500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 695,
+        y: 500,
+        width: 90,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-lost,
+        kind: text,
+        x: 280,
+        y: 580,
+        width: 560,
+        height: 40,
+        text: "6000 ကျပ် ပျောက်သွားပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board K: one key to the cash box.
+    - {
+        id: k-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Mutex · သော့ တစ်ချောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: k-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 340,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-box-label,
+        kind: text,
+        x: 300,
+        y: 270,
+        width: 300,
+        height: 40,
+        text: "ငွေသေတ္တာ · total",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-lock,
+        kind: text,
+        x: 660,
+        y: 250,
+        width: 420,
+        height: 40,
+        text: "Lock · သော့ ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-unlock,
+        kind: text,
+        x: 660,
+        y: 305,
+        width: 420,
+        height: 40,
+        text: "Unlock · သော့ ပြန်ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-steps,
+        kind: text,
+        x: 280,
+        y: 385,
+        width: 600,
+        height: 40,
+        text: "သော့ရသူ · ဖတ် → ရေတွက် → ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-wait-box,
+        kind: rectangle,
+        x: 270,
+        y: 450,
+        width: 620,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: k-wait,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 580,
+        height: 40,
+        text: "ကျန်တဲ့သူ · သော့ ပြန်ရမှ ဆက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-mutex-box,
+        kind: rectangle,
+        x: 270,
+        y: 560,
+        width: 820,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-mutex,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 780,
+        height: 40,
+        text: "mutex · တစ်ကြိမ်မှာ တစ်ယောက်တည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: keep the mutex beside its data; a copied mutex is a bug vet reports.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Mutex ကို data ဘေးမှာ ထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 470,
+        height: 185,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-c1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 420,
+        height: 40,
+        text: "type CashBag struct {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c2,
+        kind: text,
+        x: 300,
+        y: 290,
+        width: 420,
+        height: 40,
+        text: "    mu    sync.Mutex",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c3,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 420,
+        height: 40,
+        text: "    total int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c4,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-beside,
+        kind: text,
+        x: 790,
+        y: 300,
+        width: 300,
+        height: 40,
+        text: "သော့နဲ့ ငွေ အတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-check,
+        kind: freedraw,
+        stroke: check,
+        x: 800,
+        y: 350,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-copy,
+        kind: rectangle,
+        x: 280,
+        y: 450,
+        width: 810,
+        height: 175,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-copy-code,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 640,
+        height: 40,
+        text: "func (b CashBag) Add(amount int)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-vet1,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 520,
+        height: 40,
+        text: "Add passes lock by value:",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-vet2,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 680,
+        height: 40,
+        text: "play.CashBag contains sync.Mutex",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: channel or mutex; the race detector on your own computer.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Channel လား၊ Mutex လား",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: c-ch, kind: rectangle, x: 280, y: 240, width: 380, height: 200, strokeColor: "#1971c2" }
+    - {
+        id: c-ch-name,
+        kind: text,
+        x: 300,
+        y: 255,
+        width: 200,
+        height: 40,
+        text: "channel",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ch-1,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 340,
+        height: 40,
+        text: "ပါဆယ်ကို လက်လွှဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-ch-2,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 340,
+        height: 40,
+        text: "ကိုင်သူ တစ်ယောက်ပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: c-mu, kind: rectangle, x: 700, y: 240, width: 390, height: 200, strokeColor: "#f08c00" }
+    - {
+        id: c-mu-name,
+        kind: text,
+        x: 720,
+        y: 255,
+        width: 200,
+        height: 40,
+        text: "mutex",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-mu-1,
+        kind: text,
+        x: 720,
+        y: 315,
+        width: 350,
+        height: 40,
+        text: "total ကို မျှသုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-mu-2,
+        kind: text,
+        x: 720,
+        y: 375,
+        width: 350,
+        height: 40,
+        text: "သော့ရသူပဲ ပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-race,
+        kind: rectangle,
+        x: 280,
+        y: 480,
+        width: 810,
+        height: 90,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-race-t,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 760,
+        height: 40,
+        text: "go test -race · data race ကို ရှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (the lock covers only the write).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 300,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 225,
+        width: 560,
+        height: 295,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l0,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 520,
+        height: 40,
+        text: "func addCash(...) {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 520,
+        height: 40,
+        text: "    t := total",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 520,
+        height: 40,
+        text: "    time.Sleep(counting)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 520,
+        height: 40,
+        text: "    mu.Lock()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 520,
+        height: 40,
+        text: "    total = t + amount",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l5,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 520,
+        height: 40,
+        text: "    mu.Unlock()",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l6,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 290,
+        y: 268,
+        width: 440,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 300,
+        height: 40,
+        text: "က · 10500 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 660,
+        y: 560,
+        width: 300,
+        height: 40,
+        text: "ခ · 4500 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 970,
+        y: 550,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7132
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "4500 ကျပ်\n200ms ကြာ\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "10500 ကျပ်\n300ms ကြာ\n"
+
+scenes:
+  - id: recall
+    chapter: တန်ဖိုး တစ်ခုကို နှစ်ယောက် ပြင်ရင်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ rider အဖွဲ့ တစ်ဖွဲ့က ပါဆယ်တွေကို ခွဲယူပို့ပြီး၊ rider တစ်ယောက်ချင်းက
+      ပို့ခကို ကိုယ့် ပါဆယ်အတွက် သတ်မှတ်ထားတဲ့ နေရာမှာပဲ ရေးခဲ့ပါတယ်။ ဒါကြောင့် ဘယ်သူမှ
+      တခြားသူရဲ့ နေရာကို မထိခဲ့ပါဘူး။ ဒီနေ့တော့ goroutine နှစ်ခုက variable တစ်ခုတည်းကို
+      တစ်ပြိုင်နက် ပြင်ရင် ဘာဖြစ်လဲ၊ ပြီးတော့ အဲဒီ တန်ဖိုးကို ဘယ်လို မှန်မှန်ကန်ကန် မျှသုံးရလဲ ဆိုတာ
+      ကြည့်ပါမယ်။ [[mark:sel-total]] ဒီ variable က တစ်နေ့လုံး ကောက်ခဲ့တဲ့ ငွေ စုစုပေါင်းပါ။ ညနေ
+      ရောက်ရင် rider တွေက ကောက်ခဲ့တဲ့ ငွေကို ပြန်လာအပ်ပြီး ဒီ စုစုပေါင်းထဲကို ပေါင်းထည့်ရပါတယ်။
+      [[mark:sel-riders]] main ထဲမှာတော့ rider နှစ်ယောက်ကို goroutine နှစ်ခုအဖြစ် တစ်ပြိုင်တည်း
+      လွှတ်ထားပါတယ်။ rider လှလှ က ၆၀၀၀ ကျပ် ယူလာပြီး ငွေ ရေတွက်ဖို့ မီလီစက္ကန့် ၁၀၀ ကြာပါတယ်။
+      rider အောင်အောင် ကတော့ ၄၅၀၀ ကျပ် ယူလာပြီး မီလီစက္ကန့် ၂၀၀ ကြာပါတယ်။ [[mark:sel-print]]
+      နှစ်ယောက်လုံး ပြီးတဲ့အထိ wait group နဲ့ ရပ်ထားပြီးမှ၊ စုစုပေါင်းနဲ့ ကြာချိန်ကို ထုတ်ပြပါမယ်။
+    sources:
+      - { title: "The Go Memory Model", url: "https://go.dev/ref/mem" }
+      - { title: "sync package — WaitGroup", url: "https://pkg.go.dev/sync#WaitGroup" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-total
+        type: editor.select
+        at: { mark: sel-total }
+        target: { file: main.go, text: "var total int", occurrence: 1 }
+      - id: sel-riders
+        type: editor.select
+        at: { mark: sel-riders }
+        target:
+          {
+            file: main.go,
+            text: "\twg.Go(func() { addCash(6000, 100*time.Millisecond) })\n\twg.Go(func() { addCash(4500, 200*time.Millisecond) })\n",
+            occurrence: 1,
+          }
+      - id: sel-print
+        type: editor.select
+        at: { mark: sel-print }
+        target:
+          { file: main.go, text: "\twg.Wait()\n\tfmt.Println(total, \"ကျပ်\")\n", occurrence: 1 }
+
+  - id: add-cash
+    chapter: ဖတ်၊ ရေတွက်၊ ပြန်ရေး
+    narration: >-
+      [[mark:type-add]] ဒါဆို rider တွေ ခေါ်သုံးမယ့်၊ ငွေ ပေါင်းထည့်တဲ့ function ကို ရေးကြည့်ရအောင်။
+      ဒီ function က ငွေ ပမာဏနဲ့ ရေတွက်ရမယ့် ကြာချိန်ကို ယူပြီး အဆင့် သုံးဆင့်နဲ့ အလုပ်လုပ်ပါတယ်။
+      ပထမ အဆင့်မှာ စုစုပေါင်းကို ဖတ်ပြီး ကိုယ်ပိုင် မှတ်စု variable တစ်ခုထဲ ကူးမှတ်ထားပါတယ်။ ဒုတိယ
+      အဆင့်မှာ ငွေ ရေတွက်နေသလို အချိန် အနည်းငယ် ရပ်ပါတယ်။ တတိယ အဆင့်မှာတော့ မှတ်ထားတဲ့ ဂဏန်းကို
+      ယူလာတဲ့ ငွေနဲ့ ပေါင်းပြီး စုစုပေါင်းထဲကို ပြန်ရေးပါတယ်။ [[mark:sel-steps]] ဒီ သုံးကြောင်းကို
+      ပြန်ကြည့်ပါ။ ဖတ်တာနဲ့ ရေးတာက line နှစ်ကြောင်း ခွဲနေပြီး၊ ကြားထဲမှာ အချိန် ရှိနေတာကို
+      သတိထားပါ။ rider တစ်ယောက်တည်း ဆိုရင်တော့ ဒါ ဘာ ပြဿနာမှ မရှိပါဘူး။ [[mark:predict]] run
+      မလုပ်ခင် ခန့်မှန်းကြည့်ပါ။ ၆၀၀၀ နဲ့ ၄၅၀၀ ပေါင်းရင် ၁၀၅၀၀ ကျပ် ရရမှာပါ။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+      - { title: "time package — Sleep", url: "https://pkg.go.dev/time#Sleep" }
+    actions:
+      - id: type-add
+        type: editor.type
+        at: { mark: type-add }
+        target: { file: main.go, after: "var total int\n", occurrence: 1 }
+        text: "\n// addCash reads the day's total, counts for a while, then writes the new total.\nfunc addCash(amount int, counting time.Duration) {\n\tt := total\n\ttime.Sleep(counting)\n\ttotal = t + amount\n}\n"
+        cadence: line-by-line
+      - id: sel-steps
+        type: editor.select
+        at: { mark: sel-steps }
+        target:
+          {
+            file: main.go,
+            text: "\tt := total\n\ttime.Sleep(counting)\n\ttotal = t + amount\n",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "4500 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-add,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\ttotal = t + amount\n",
+        }
+
+  - id: read-1
+    chapter: ငွေ ၆၀၀၀ ဘယ်ရောက်သွားလဲ
+    narration: >-
+      [[mark:point-total]] output ရဲ့ ပထမ စာကြောင်းကို ကြည့်ပါ။ ၁၀၅၀၀ မဟုတ်ဘဲ ၄၅၀၀ ကျပ်ပဲ
+      ထွက်လာပါတယ်။ rider လှလှ အပ်ခဲ့တဲ့ ၆၀၀၀ ကျပ် ပျောက်သွားပါပြီ။ compile error လည်း မရှိ၊ panic
+      လည်း မဖြစ်ဘဲ program က အဆုံးထိ run သွားပေမဲ့ အဖြေ မှားနေတာပါ။ ဆိုလိုတာက ဒါ code ထဲက bug
+      ပါ။ [[mark:point-time]] ဒုတိယ စာကြောင်းကတော့ မီလီစက္ကန့် ၂၀၀ ကြာတယ်လို့ ပြပါတယ်။ နှစ်ယောက်လုံး
+      တစ်ပြိုင်နက် အလုပ်လုပ်တဲ့အတွက် ပိုကြာတဲ့ တစ်ယောက်လောက်ပဲ ကြာတာပါ။ ဒီ program ကို ဘယ်နှစ်ခါ
+      run run၊ ဒီ အဖြေ မှားကိုပဲ အမြဲ ရပါမယ်။ ဘာကြောင့်လဲဆိုတော့ ရေတွက်ချိန် နှစ်ခုကို မတူအောင်
+      တမင် ထားလို့ပါ။ တကယ့် program တွေမှာတော့ ဒီလို bug က တစ်ခါတစ်လေမှ ပေါ်တတ်လို့ ရှာရ
+      ပိုခက်ပါတယ်။
+    sources:
+      - { title: "The Go Memory Model", url: "https://go.dev/ref/mem" }
+    actions:
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "4500 ကျပ်" },
+        }
+      - {
+          id: point-time,
+          type: console.point,
+          at: { mark: point-time },
+          target: { text: "200ms ကြာ" },
+        }
+
+  - id: lost
+    chapter: ပေါင်းထားတာ ပျောက်သွားတာ
+    narration: >-
+      [[mark:board-lost]] ဘာဖြစ်သွားလဲ ဆိုတာ အချိန်အလိုက် ဆွဲကြည့်ရအောင်။ [[mark:draw-read]] အစမှာ
+      rider နှစ်ယောက်လုံးက စုစုပေါင်းကို တစ်ပြိုင်နက် ဖတ်ကြပါတယ်။ အဲဒီ အချိန်မှာ ဘယ်သူမှ မရေးရသေးလို့
+      နှစ်ယောက်လုံး သုည လို့ပဲ မှတ်ထားကြပါတယ်။ [[mark:draw-write1]] မီလီစက္ကန့် ၁၀၀ ရောက်တော့ လှလှ
+      ရေတွက်ပြီးသွားပြီး၊ သုညနဲ့ ၆၀၀၀ ပေါင်းထားတဲ့ ၆၀၀၀ ကို ရေးလိုက်ပါတယ်။ [[mark:draw-write2]]
+      မီလီစက္ကန့် ၂၀၀ ရောက်တော့ အောင်အောင် ပြီးသွားပါတယ်။ သူ့ မှတ်စုထဲမှာ သုည ပဲ ရှိနေသေးလို့ ၄၅၀၀
+      ကို ရေးလိုက်ပါတယ်။ ဒါကြောင့် လှလှ ရေးထားတဲ့ ၆၀၀၀ ကို အပေါ်ကနေ ထပ်ရေးပြီး ဖျက်လိုက်သလို
+      ဖြစ်သွားပါတယ်။ [[mark:draw-lost]] ဒါကို ပေါင်းထားတာ ပျောက်သွားတာ လို့ ခေါ်ပါတယ်၊ နောက်ဆုံး
+      ရေးတဲ့သူက နိုင်သွားတာပါ။ အကြောင်းရင်းက ဖတ်တာနဲ့ ရေးတာ ကြားမှာ တခြား goroutine တစ်ခု
+      ဝင်လာနိုင်လို့ပါ။ goroutine နှစ်ခုက variable တစ်ခုတည်းကို တစ်ပြိုင်နက် ထိပြီး၊ အနည်းဆုံး
+      တစ်ခုက ရေးနေရင် အဲဒါကို data race လို့ ခေါ်ပါတယ်။
+    sources:
+      - { title: "Data Race Detector", url: "https://go.dev/doc/articles/race_detector" }
+      - { title: "The Go Memory Model", url: "https://go.dev/ref/mem" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-lost } }
+      - {
+          id: board-lost,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-read,
+          type: whiteboard.apply,
+          at: { mark: draw-read },
+          upsertIds: [l-t0, l-n1, l-n2, l-r1, l-r2, l-tot],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-write1,
+          type: whiteboard.apply,
+          at: { mark: draw-write1 },
+          upsertIds: [l-t1, l-a1, l-w1, l-tv1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-write2,
+          type: whiteboard.apply,
+          at: { mark: draw-write2 },
+          upsertIds: [l-t2, l-a2, l-w2, l-tv2-box, l-tv2, l-strike],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-lost,
+          type: whiteboard.apply,
+          at: { mark: draw-lost },
+          upsertIds: [l-lost],
+          drawMs: 1200,
+        }
+
+  - id: key
+    chapter: Mutex ဆိုတာ
+    narration: >-
+      [[mark:board-key]] ဒါဆို ဒီ bug ကို ဘယ်လို ကာကွယ်မလဲ။ ငွေသေတ္တာ တစ်လုံးမှာ သော့ တစ်ချောင်းပဲ
+      ရှိတယ် ဆိုပါစို့။ [[mark:draw-box]] ငွေ ပေါင်းထည့်ချင်တဲ့ rider က သော့ကို အရင် ယူရပါတယ်။
+      သော့ ရတဲ့သူက စုစုပေါင်းကို ဖတ်၊ ငွေ ရေတွက်၊ ပြန်ရေးပြီးမှ သော့ကို ပြန်ပေးပါတယ်။
+      [[mark:draw-wait]] တခြား rider ကလည်း သော့ ယူချင်ပေမဲ့ တစ်ယောက်ယောက် ကိုင်ထားရင်၊ သော့ ပြန်ရတဲ့အထိ
+      အဲဒီ နေရာမှာပဲ ရပ်ထားရပါတယ်။ [[mark:draw-mutex]] Go မှာ ဒီ သော့ကို mutex လို့ ခေါ်ပါတယ်။
+      mutex ဆိုတာ တစ်ကြိမ်မှာ goroutine တစ်ခုတည်းပဲ သုံးခွင့်ရအောင် ထိန်းပေးတဲ့ သော့ပါ။ sync
+      package ထဲမှာ ပါပြီး၊ သော့ ယူတာကို lock လုပ်တယ်၊ ပြန်ပေးတာကို unlock လုပ်တယ်လို့ ခေါ်ပါတယ်။
+      mutex ရဲ့ zero value က ဘယ်သူမှ lock မလုပ်ရသေးတဲ့ mutex ဖြစ်လို့၊ variable ကြေညာလိုက်တာနဲ့
+      ချက်ချင်း သုံးလို့ ရပါတယ်။
+    sources:
+      - { title: "sync package — Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+    actions:
+      - {
+          id: board-key,
+          type: whiteboard.apply,
+          at: { mark: board-key },
+          open: true,
+          clear: true,
+          upsertIds: [k-title],
+        }
+      - {
+          id: draw-box,
+          type: whiteboard.apply,
+          at: { mark: draw-box },
+          upsertIds: [k-box, k-box-label, k-lock, k-steps, k-unlock],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-wait,
+          type: whiteboard.apply,
+          at: { mark: draw-wait },
+          upsertIds: [k-wait-box, k-wait],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-mutex,
+          type: whiteboard.apply,
+          at: { mark: draw-mutex },
+          upsertIds: [k-mutex-box, k-mutex],
+          drawMs: 1400,
+        }
+
+  - id: fix
+    chapter: Lock နဲ့ defer Unlock
+    narration: >-
+      [[mark:close-key]] ဒါဆို code ထဲကို သော့ ထည့်ကြည့်ရအောင်။ [[mark:type-mu]] စုစုပေါင်း
+      variable ရဲ့ အောက်မှာ mutex variable တစ်ခု ကြေညာပါမယ်။ သူက စုစုပေါင်းကို ကာကွယ်တဲ့ သော့
+      ဖြစ်လို့ အဲဒီ variable ရဲ့ ဘေးမှာပဲ ထားတာပါ။ [[mark:type-lock]] ပြီးတော့ function ရဲ့
+      အပေါ်ဆုံးမှာ၊ စုစုပေါင်းကို မဖတ်ခင် lock လုပ်ပါမယ်။ နောက်တစ်ကြောင်းက defer နဲ့ unlock
+      လုပ်တာပါ။ defer က function ပြီးခါနီးမှ လုပ်ဖို့ ချိန်းထားတာ ဆိုတာ မှတ်မိမှာပါ။ ဒါကြောင့်
+      function က ဘယ်လမ်းကနေ ထွက်ထွက်၊ panic ဖြစ်ရင်တောင် သော့ကို ပြန်ပေးမှာ သေချာပါတယ်။ lock နဲ့
+      defer unlock ကို နှစ်ကြောင်း တွဲပြီး ရေးတာက Go programmer တွေရဲ့ အကျင့်ပါ။
+      [[mark:sel-locked]] အခု ဖတ်တာ၊ ရေတွက်တာ၊ ပြန်ရေးတာ သုံးဆင့်လုံးက သော့ ကိုင်ထားချိန်ထဲမှာ
+      ရောက်နေပါပြီ။ ဒါကြောင့် ကြားထဲမှာ ဘယ်သူမှ ဝင်လို့ မရတော့ပါဘူး။ [[mark:run-2]] ကဲ၊ ထပ်ပြီး
+      run ကြည့်ရအောင်။
+    sources:
+      - { title: "sync package — Mutex.Lock", url: "https://pkg.go.dev/sync#Mutex.Lock" }
+      - {
+          title: "The Go Programming Language Specification — Defer statements",
+          url: "https://go.dev/ref/spec#Defer_statements",
+        }
+    actions:
+      - {
+          id: close-key,
+          type: whiteboard.apply,
+          at: { mark: close-key },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-mu
+        type: editor.type
+        at: { mark: type-mu }
+        target: { file: main.go, after: "var total int\n", occurrence: 1 }
+        text: "var mu sync.Mutex\n"
+      - id: type-lock
+        type: editor.type
+        at: { mark: type-lock }
+        target:
+          {
+            file: main.go,
+            after: "func addCash(amount int, counting time.Duration) {\n",
+            occurrence: 1,
+          }
+        text: "\tmu.Lock()\n\tdefer mu.Unlock()\n"
+      - id: sel-locked
+        type: editor.select
+        at: { mark: sel-locked }
+        target:
+          {
+            file: main.go,
+            text: "\tmu.Lock()\n\tdefer mu.Unlock()\n\tt := total\n\ttime.Sleep(counting)\n\ttotal = t + amount\n",
+            occurrence: 1,
+          }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "10500 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-mu,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "var mu sync.Mutex",
+        }
+      - {
+          id: expect-file-lock,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\tmu.Lock()\n\tdefer mu.Unlock()\n",
+        }
+
+  - id: read-2
+    chapter: မှန်သွားပေမဲ့ ပိုကြာတယ်
+    narration: >-
+      [[mark:point-total-2]] ဒီတစ်ခါ ပထမ စာကြောင်းမှာ ၁၀၅၀၀ ကျပ် ဆိုတဲ့ မှန်တဲ့ အဖြေ ထွက်လာပါပြီ။
+      rider နှစ်ယောက်ရဲ့ ငွေ နှစ်ခုလုံး စုစုပေါင်းထဲ ရောက်သွားပါတယ်။ [[mark:point-time-2]] ဒါပေမဲ့
+      ဒုတိယ စာကြောင်းကို ကြည့်ပါ၊ မီလီစက္ကန့် ၂၀၀ ကနေ ၃၀၀ ဖြစ်သွားပါတယ်။ ဘာကြောင့်လဲဆိုတော့ သော့
+      ရတဲ့ rider ရေတွက်နေတုန်း နောက်တစ်ယောက်က ရပ်ထားရတဲ့အတွက်၊ မီလီစက္ကန့် ၁၀၀ နဲ့ ၂၀၀ က ဆက်တိုက်
+      ဖြစ်သွားလို့ပါ။ ဘယ်သူ သော့ အရင် ရလဲ ဆိုတာကိုတော့ ကိုယ် ကြိုမသိနိုင်ပါဘူး၊ ဒါပေမဲ့ ဘယ်သူ အရင်
+      ရရ၊ စုစုပေါင်းနဲ့ ကြာချိန်က အတူတူပါပဲ။ [[mark:turns]] ဆိုတော့ အဖြေ မှန်ဖို့အတွက် အလှည့်ကျ ရပ်ရတဲ့ အချိန်
+      ပိုကုန်ပါတယ်။ ဒါကြောင့် သော့ကို ဖတ်တာကနေ ရေးတာအထိ ကိုင်ထားပေမဲ့၊ အဲဒီထက် ပိုမကိုင်ထားဖို့
+      သတိထားရပါတယ်။
+    sources:
+      - { title: "sync package — Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+    actions:
+      - {
+          id: point-total-2,
+          type: console.point,
+          at: { mark: point-total-2 },
+          target: { text: "10500 ကျပ်" },
+        }
+      - {
+          id: point-time-2,
+          type: console.point,
+          at: { mark: point-time-2 },
+          target: { text: "300ms ကြာ" },
+        }
+
+  - id: rules
+    chapter: Mutex ကို data ဘေးမှာ ထားပါ
+    narration: >-
+      [[mark:board-rules]] mutex ကို သုံးတဲ့အခါ မှတ်ထားစရာ နှစ်ခု ရှိပါတယ်။ [[mark:draw-bag]] ပထမ
+      တစ်ခုက mutex ကို သူ ကာကွယ်တဲ့ data နဲ့ အတူ ထားဖို့ပါ။ capstone မှာ rider တွေရဲ့ ငွေအိတ်ကို
+      struct တစ်ခုအဖြစ် ရေးမှာပါ၊ သော့နဲ့ စုစုပေါင်းကို အဲဒီ struct ထဲမှာ ဘေးချင်းကပ် ထားပါမယ်။ ဒါဆို
+      စုစုပေါင်းကို ထိမယ့်သူ တိုင်းက သော့ကို ဘေးမှာတင် မြင်ရပါတယ်။ [[mark:draw-copy]] ဒုတိယ
+      တစ်ခုကတော့ mutex ပါတဲ့ struct ကို copy မကူးဖို့ပါ။ method ရဲ့ receiver မှာ pointer မပါရင်၊
+      method က ငွေအိတ်ရဲ့ မိတ္တူကို ရပါတယ်။ အဲဒီအခါ မိတ္တူထဲက သော့ကို lock လုပ်ပြီး မိတ္တူထဲကိုပဲ ငွေ
+      ထည့်သွားလို့ မူရင်း ငွေအိတ်ကို ဘာမှ မထိပါဘူး။ [[mark:draw-vet]] ဒီလို bug ကို vet က ဖမ်းပေးပါတယ်။
+      mutex ပါတဲ့ struct ကို copy ကူးမိလို့ vet က သတိပေးတာပါ။ ပြင်နည်းကတော့ lesson ဆယ့်ရှစ်မှာ
+      လုပ်ခဲ့သလို receiver မှာ pointer သုံးတာပါ။
+    sources:
+      - { title: "sync package — Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+      - { title: "cmd/vet", url: "https://pkg.go.dev/cmd/vet" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-rules } }
+      - {
+          id: board-rules,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-bag,
+          type: whiteboard.apply,
+          at: { mark: draw-bag },
+          upsertIds: [b-code, b-c1, b-c2, b-c3, b-c4, b-beside, b-check],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-copy,
+          type: whiteboard.apply,
+          at: { mark: draw-copy },
+          upsertIds: [b-copy, b-copy-code],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-vet,
+          type: whiteboard.apply,
+          at: { mark: draw-vet },
+          upsertIds: [b-vet1, b-vet2],
+          drawMs: 1600,
+        }
+
+  - id: choose
+    chapter: Channel လား၊ Mutex လား
+    narration: >-
+      [[mark:board-choose]] lesson နှစ်ခု အရင်က channel ကိုလည်း လေ့လာခဲ့ပါတယ်။ ဒါဆို ဘယ်အချိန်မှာ
+      ဘာကို သုံးမလဲ။ [[mark:draw-channel]] channel က ပါဆယ်ကို လက်လွှဲပေးသလိုပါ။ လွှဲလိုက်ပြီးရင်
+      လက်ခံတဲ့ goroutine ကပဲ ကိုင်ထားလို့၊ တစ်ချိန်မှာ ကိုင်ထားသူ တစ်ယောက်ပဲ ရှိပါတယ်။ အလုပ်တွေ
+      တစ်ယောက်ဆီကနေ တစ်ယောက်ဆီ ရွေ့သွားတဲ့အခါ channel က သင့်တော်ပါတယ်။ [[mark:draw-mutex-side]]
+      mutex ကတော့ နေရာ တစ်ခုတည်းမှာ ရှိနေတဲ့ တန်ဖိုး တစ်ခုကို goroutine အများက အလှည့်ကျ ပြင်တဲ့အခါ
+      သုံးပါတယ်။ ဒီနေ့ရဲ့ စုစုပေါင်းလို၊ ရေတွက်ထားတဲ့ အရေအတွက်လို၊ map တစ်ခုလို တန်ဖိုးတွေပါ။
+      [[mark:draw-race]] နောက်ဆုံး တစ်ခုက၊ ကိုယ့် ကွန်ပျူတာပေါ်မှာ Go နဲ့ အလုပ်လုပ်တဲ့အခါ data race
+      ကို program run နေတုန်း ရှာပေးတဲ့ race detector ဆိုတဲ့ tool ရှိပါတယ်။ အဲဒီ အကြောင်းကို နောက်ဆုံး
+      lesson မှာ ပြန်ပြောပါမယ်။
+    sources:
+      - {
+          title: "Effective Go — Share by communicating",
+          url: "https://go.dev/doc/effective_go#sharing",
+        }
+      - { title: "Data Race Detector", url: "https://go.dev/doc/articles/race_detector" }
+    actions:
+      - {
+          id: board-choose,
+          type: whiteboard.apply,
+          at: { mark: board-choose },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-channel,
+          type: whiteboard.apply,
+          at: { mark: draw-channel },
+          upsertIds: [c-ch, c-ch-name, c-ch-1, c-ch-2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-mutex-side,
+          type: whiteboard.apply,
+          at: { mark: draw-mutex-side },
+          upsertIds: [c-mu, c-mu-name, c-mu-1, c-mu-2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-race,
+          type: whiteboard.apply,
+          at: { mark: draw-race },
+          upsertIds: [c-race, c-race-t],
+          drawMs: 1600,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က function မှာ lock နဲ့ unlock ကို စုစုပေါင်းကို
+      ပြန်ရေးတဲ့ line တစ်ကြောင်းတည်းရဲ့ အပေါ်နဲ့ အောက်မှာပဲ ထားထားပါတယ်။ [[mark:quiz-read]] ဖတ်တာနဲ့
+      ရေတွက်တာကတော့ သော့ရဲ့ အပြင်ဘက်မှာ ကျန်နေပါတယ်။ main က အရင်အတိုင်း ဆိုရင်၊ output မှာ ၁၀၅၀၀
+      ကျပ် ထွက်မလား၊ ၄၅၀၀ ကျပ် ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခ၊ ၄၅၀၀ ကျပ်ပါ။ ဘာကြောင့်လဲဆိုတော့ rider နှစ်ယောက်လုံးက သော့
+      မယူခင်မှာ စုစုပေါင်းကို ဖတ်ပြီး သုည လို့ မှတ်ထားကြလို့ပါ။ ရေးတဲ့အခါ တစ်ယောက်ချင်း ရေးပေမဲ့
+      မှတ်ထားတဲ့ ဂဏန်းက ဟောင်းနေပြီ ဖြစ်လို့ ငွေ ပျောက်တာ မပြောင်းပါဘူး။ သော့က ဖတ်တာကနေ ရေးတာအထိ
+      တစ်ဆက်တည်း ဖုံးထားမှ ကာကွယ်လို့ ရပါတယ်။
+    sources:
+      - { title: "The Go Memory Model", url: "https://go.dev/ref/mem" }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l0, q-l1, q-l2, q-l3, q-l4, q-l5, q-l6, q-a, q-b],
+        }
+      - {
+          id: quiz-read,
+          type: whiteboard.apply,
+          at: { mark: quiz-read },
+          upsertIds: [q-circle],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ goroutine နှစ်ခုက variable တစ်ခုတည်းကို ဖတ်ပြီး ပြန်ရေးရင်၊
+      ကြားထဲမှာ တစ်ယောက် ဝင်လာပြီး ပေါင်းထားတာ ပျောက်သွားနိုင်ပါတယ်။ compile error လည်း မပေါ်၊ panic
+      လည်း မဖြစ်တဲ့ bug မျိုးပါ။ [[mark:recap-mu]] ဒါကို ကာကွယ်ဖို့ data ရဲ့ ဘေးမှာ mutex တစ်ခု
+      ထားပါတယ်။ [[mark:recap-lock]] function ရဲ့ အစမှာ lock လုပ်ပြီး defer နဲ့ unlock လုပ်ရင်၊ ဖတ်တာကနေ
+      ရေးတာအထိ တစ်ကြိမ်မှာ goroutine တစ်ခုပဲ ဝင်ခွင့်ရပါတယ်။ အဖြေ မှန်သွားပေမဲ့ အလှည့်ကျ ရပ်ရလို့
+      ပိုကြာတာကိုလည်း မြင်ခဲ့ပါတယ်။ နောက် lesson မှာတော့ course ရဲ့ နောက်ဆုံး အပိုင်းဖြစ်တဲ့ capstone ကို
+      စပြီး၊ ဖိုင် ခုနစ်ခုနဲ့ ရေးထားတဲ့ ပါဆယ် program တစ်ခုမှာ မနက်ပိုင်း ပါဆယ်တွေရဲ့ ပို့ခကို တွက်ပြီး
+      ပြေစာ ထုတ်တာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "sync package — Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-mu
+        type: editor.select
+        at: { mark: recap-mu }
+        target: { file: main.go, text: "var mu sync.Mutex", occurrence: 1 }
+      - id: recap-lock
+        type: editor.select
+        at: { mark: recap-lock }
+        target: { file: main.go, text: "\tmu.Lock()\n\tdefer mu.Unlock()\n", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
