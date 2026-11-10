@@ -11,15 +11,17 @@
       href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;700&display=block"
     />
     <!--
-      The learning roadmap for the nine Burmese courses, 1080×1350 (4:5, the tallest
+      The learning roadmap for the ten Burmese courses, 1080×1350 (4:5, the tallest
       image a Facebook feed shows whole). Same brand as docs/css-course-poster.html:
       cream page, ink, yellow/purple/teal, Google Sans + Google Sans Code, Burmese in
       Noto Sans Myanmar.
 
       The left rail is the web developer path, in the order to take it; the two dashed
       notes on it are what the courses assume but do not teach (HTML, JavaScript). The
-      right column holds the three courses that need none of the others. Lesson counts
-      are the published playlists' (246 in all, about 35 hours).
+      right column holds the four courses that need none of the others, the Go course
+      (marked new) first because it starts from no programming at all. Lesson counts are
+      the playlists' (281 in all: 246 published before the Go course's 35; about 35 hours
+      before Go).
 
       Render it with `bun docs/learning-roadmap-poster-render.ts` (writes
       docs/learning-roadmap-poster.png).
@@ -300,30 +302,47 @@
       .side {
         display: flex;
         flex-direction: column;
-        gap: 34px;
-        padding-top: 14px;
+        gap: 30px;
+        padding-top: 12px;
       }
 
       .side .course {
         position: relative;
-        padding: 26px 18px 12px;
+        padding: 26px 18px 10px;
         box-shadow: 8px 8px 0 var(--ink);
+      }
+
+      .side .course.new {
+        background: #fff4c7;
+      }
+
+      .side .course .badge {
+        display: inline-block;
+        margin-left: 10px;
+        padding: 3px 10px 5px;
+        border: 2.5px solid var(--ink);
+        border-radius: 8px;
+        background: var(--purple);
+        color: var(--white);
+        font: 700 16px/1 var(--mono);
+        letter-spacing: 0.08em;
+        vertical-align: 5px;
       }
 
       .side .course .who {
         position: absolute;
         left: 16px;
-        top: -21px;
-        padding: 3px 14px 5px;
+        top: -20px;
+        padding: 3px 12px 5px;
         border: 3px solid var(--ink);
         border-radius: 999px;
-        font: 700 19px/1.62 var(--mm);
+        font: 700 17px/1.62 var(--mm);
         white-space: nowrap;
       }
 
       .side .course .name {
         white-space: normal;
-        font-size: 28px;
+        font-size: 26px;
       }
 
       .side .course .what {
@@ -332,9 +351,12 @@
         line-height: 1.66;
       }
 
+      /* The count sits on the card's top border, opposite the audience tag. */
       .side .course .count {
-        display: inline-block;
-        margin-top: 8px;
+        position: absolute;
+        right: 12px;
+        top: -15px;
+        font-size: 15px;
       }
 
       /* ---- link + footer ---- */
@@ -438,8 +460,8 @@
       </div>
 
       <div class="stats">
-        <span class="stat"><b>9</b> courses</span>
-        <span class="stat"><b>246</b> lessons</span>
+        <span class="stat"><b>10</b> courses</span>
+        <span class="stat"><b>281</b> lessons</span>
         <span class="stat"><b>35+</b> hours</span>
       </div>
 
@@ -524,25 +546,32 @@
         <section>
           <h2 class="col-title">ကြိုက်တဲ့အချိန် စလို့ရ</h2>
           <div class="side">
+            <div class="course new">
+              <span class="who" style="background: var(--yellow)">Programming အသစ်စသူ</span>
+              <span class="count">35 lessons</span>
+              <div class="name">Go Course<span class="badge">NEW</span></div>
+              <div class="what">ပထမဆုံး program ကနေ goroutine အထိ</div>
+            </div>
+
             <div class="course">
               <span class="who" style="background: var(--purple-lt)">Code မရေးတတ်လည်း ရ</span>
+              <span class="count">32 lessons</span>
               <div class="name">AI Builder Course</div>
               <div class="what">AI agent နဲ့ product အစစ် တည်ဆောက်နည်း</div>
-              <span class="count">32 lessons</span>
             </div>
 
             <div class="course">
               <span class="who" style="background: var(--teal)">Code မပါ</span>
+              <span class="count">32 lessons</span>
               <div class="name">Site Reliability Engineering</div>
               <div class="what">Production ကို စိတ်ချရအောင် ထိန်းကျောင်းနည်း</div>
-              <span class="count">32 lessons</span>
             </div>
 
             <div class="course">
-              <span class="who" style="background: var(--coral)">Language တစ်ခု သိပြီးသူ</span>
+              <span class="who" style="background: var(--coral)">Language တစ်ခု သိသူ</span>
+              <span class="count">20 lessons</span>
               <div class="name">Rust From Zero</div>
               <div class="what">Ownership, borrowing ကို အခြေခံကနေ</div>
-              <span class="count">20 lessons</span>
             </div>
           </div>
         </section>
