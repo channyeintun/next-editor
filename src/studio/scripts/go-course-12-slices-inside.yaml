@@ -1,0 +1,998 @@
+# Go course, lesson 12: what a slice really is (Burmese).
+#
+# Start state: main.go with a parenthesized import block holding "fmt" and a `trip` slice of four
+# cities (Yangon, Bago, Naypyitaw, Mandalay) in `main`.
+# Edits, all insert-only:
+#   1. `day1 := trip[:2]` and a Println of its len, cap and value -> run-1: 2 4 [ရန်ကုန် ပဲခူး];
+#   2. `day1 = append(day1, "တောင်ငူ")` and `fmt.Println(trip)` -> run-2: the trip has lost
+#      Naypyitaw (no error, a bug);
+#   3. `"slices"` into the import block, `slices.Clone(` and `)` around `trip[:2]`, and the len/cap
+#      Println again after the append -> run-3: 2 2 …, the trip intact, 3 4 [ရန်ကုန် ပဲခူး တောင်ငူ].
+# Boards: (S) the array as a row of seats with two frames hung over it (trip, day1), len and cap,
+# then append writing into trip's seat; (G) what append does when the capacity is full; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-12-slices-inside
+  title: "Go course 12: Slice ရဲ့ နောက်ကွယ်"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        	trip := []string{"ရန်ကုန်", "ပဲခူး", "နေပြည်တော်", "မန္တလေး"}
+        }
+  whiteboardAssets:
+    # Board S: the array is a row of seats; a slice is a frame hung over it.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Slice = ခုံတန်းပေါ်က ဘောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-new-box,
+        kind: rectangle,
+        x: 705,
+        y: 222,
+        width: 170,
+        height: 52,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-new,
+        kind: text,
+        x: 722,
+        y: 230,
+        width: 140,
+        height: 40,
+        text: "တောင်ငူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-new-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 800,
+        y: 276,
+        width: 30,
+        height: 46,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-i0,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 40,
+        height: 40,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-i1,
+        kind: text,
+        x: 500,
+        y: 282,
+        width: 40,
+        height: 40,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-i2,
+        kind: text,
+        x: 700,
+        y: 282,
+        width: 40,
+        height: 40,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-i3,
+        kind: text,
+        x: 900,
+        y: 282,
+        width: 40,
+        height: 40,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-seat0,
+        kind: rectangle,
+        x: 290,
+        y: 325,
+        width: 190,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-seat1,
+        kind: rectangle,
+        x: 490,
+        y: 325,
+        width: 190,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-seat2,
+        kind: rectangle,
+        x: 690,
+        y: 325,
+        width: 190,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-seat3,
+        kind: rectangle,
+        x: 890,
+        y: 325,
+        width: 190,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-c0,
+        kind: text,
+        x: 305,
+        y: 340,
+        width: 165,
+        height: 40,
+        text: "ရန်ကုန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-c1,
+        kind: text,
+        x: 505,
+        y: 340,
+        width: 165,
+        height: 40,
+        text: "ပဲခူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-c2,
+        kind: text,
+        x: 702,
+        y: 340,
+        width: 172,
+        height: 40,
+        text: "နေပြည်တော်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-c3,
+        kind: text,
+        x: 905,
+        y: 340,
+        width: 165,
+        height: 40,
+        text: "မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 700,
+        y: 340,
+        width: 175,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-trip-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 400,
+        width: 790,
+        height: 15,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-trip-lbl,
+        kind: text,
+        x: 300,
+        y: 422,
+        width: 420,
+        height: 40,
+        text: "trip · len 4 · cap 4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-day1-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 465,
+        width: 390,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-day1-lbl,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 300,
+        height: 40,
+        text: "day1 · len 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-cap-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 690,
+        y: 458,
+        width: 380,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-cap-lbl,
+        kind: text,
+        x: 780,
+        y: 490,
+        width: 200,
+        height: 40,
+        text: "cap 4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-array,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 560,
+        height: 40,
+        text: "array · အရှည် ပုံသေ ခုံတန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-lost,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 620,
+        height: 40,
+        text: "ခုံတန်း တစ်ခုတည်း · trip လည်း ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board G: append when the capacity is full.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "append နဲ့ cap",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-room-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 810,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-room,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 770,
+        height: 40,
+        text: "cap မပြည့် → ရှိပြီးသား ခုံတန်းထဲ ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-full-box,
+        kind: rectangle,
+        x: 285,
+        y: 335,
+        width: 810,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-full,
+        kind: text,
+        x: 305,
+        y: 350,
+        width: 770,
+        height: 40,
+        text: "cap ပြည့် → ခုံတန်း အသစ်၊ copy ကူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-nums-box,
+        kind: rectangle,
+        x: 285,
+        y: 440,
+        width: 600,
+        height: 140,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-nums,
+        kind: text,
+        x: 305,
+        y: 455,
+        width: 400,
+        height: 40,
+        text: "cap · 2 → 4 → 8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-note,
+        kind: text,
+        x: 305,
+        y: 515,
+        width: 560,
+        height: 40,
+        text: "Go ရွေးတဲ့ ဂဏန်း · ပြောင်းနိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a write through a sub-slice).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 560,
+        height: 210,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 250,
+        width: 500,
+        height: 40,
+        text: "km := []int{320, 270, 70}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 297,
+        width: 400,
+        height: 40,
+        text: "first := km[:1]",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 310,
+        y: 344,
+        width: 400,
+        height: 40,
+        text: "first[0] = 300",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 310,
+        y: 391,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(km[0])",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 295,
+        y: 336,
+        width: 260,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 300,
+        height: 40,
+        text: "က · 320",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 300,
+        height: 40,
+        text: "ခ · 300",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 530,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7112
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "2 4 [ရန်ကုန် ပဲခူး]\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "2 4 [ရန်ကုန် ပဲခူး]\n[ရန်ကုန် ပဲခူး တောင်ငူ မန္တလေး]\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "2 2 [ရန်ကုန် ပဲခူး]\n[ရန်ကုန် ပဲခူး နေပြည်တော် မန္တလေး]\n3 4 [ရန်ကုန် ပဲခူး တောင်ငူ]\n"
+
+scenes:
+  - id: recall
+    chapter: Slice ကို ဖြတ်ယူတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ ခရီးစဉ်ထဲက မြို့တွေကို slice ထဲ ထည့်ပြီး၊ index နဲ့ ယူတာ၊ range နဲ့
+      လျှောက်တာ၊ append နဲ့ မြို့ အသစ် ထပ်ထည့်တာတွေကို လုပ်ခဲ့ပါတယ်။ ဒီနေ့ lesson မှာတော့ slice ရဲ့
+      နောက်ကွယ်မှာ တကယ် ဘာရှိလဲ ဆိုတာကို ကြည့်ပါမယ်။ ဒါကို သိထားမှ append က ဘာကြောင့် တစ်ခါတလေ
+      မထင်ထားတဲ့ ရလဒ် ပေးတတ်လဲ ဆိုတာ နားလည်မှာပါ။ [[mark:sel-trip]] main ဖိုင်မှာ trip ဆိုတဲ့ slice
+      တစ်ခု ရှိပြီးသားပါ။ ရန်ကုန်ကနေ ပဲခူး၊ နေပြည်တော်ကို ဖြတ်ပြီး မန္တလေးအထိ သွားမယ့် ခရီးစဉ်ပါ။
+      ခရီးက ရှည်လို့ နှစ်ရက် ခွဲသွားမယ် ဆိုပါစို့။ ပထမနေ့မှာ ရန်ကုန်နဲ့ ပဲခူးကိုပဲ သွားမှာ ဖြစ်လို့၊ trip
+      ထဲက ရှေ့ဆုံး မြို့ နှစ်မြို့ကို သီးသန့် slice တစ်ခု အနေနဲ့ လိုချင်ပါတယ်။
+    sources:
+      - { title: "Go Slices: usage and internals", url: "https://go.dev/blog/slices-intro" }
+      - {
+          title: "The Go Programming Language Specification — Slice types",
+          url: "https://go.dev/ref/spec#Slice_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-trip
+        type: editor.select
+        at: { mark: sel-trip }
+        target:
+          {
+            file: main.go,
+            text: 'trip := []string{"ရန်ကုန်", "ပဲခူး", "နေပြည်တော်", "မန္တလေး"}',
+            occurrence: 1,
+          }
+
+  - id: slicing
+    narration: >-
+      [[mark:type-day1]] trip ထဲက အပိုင်း တစ်ခုကို ဖြတ်ယူဖို့ စမယ့် index နဲ့ ရပ်မယ့် index ကို
+      ပေးရပါတယ်။ ပြီးတော့ ရလာတဲ့ slice ရဲ့ len၊ cap နဲ့ အထဲက မြို့တွေကို print ထုတ်ကြည့်ပါမယ်။
+      [[mark:sel-cut]] ဒီ ဖြတ်ယူတဲ့ ပုံစံကို ကြည့်ပါ။ ရပ်မယ့် index က နှစ် ဖြစ်ပေမဲ့ index နှစ်ကိုယ်တိုင်
+      မပါပါဘူး၊ အဲဒီ မတိုင်ခင်အထိပဲ ယူတာပါ။ စမယ့် index ကို မရေးထားရင်တော့ သုညကနေ စတယ်လို့ ယူပါတယ်။
+      ဒါကြောင့် ဒီမှာ index သုည နဲ့ တစ်၊ ဆိုလိုတာက ရန်ကုန်နဲ့ ပဲခူးကို ရပါမယ်။ [[mark:sel-print1]] print
+      ထုတ်တဲ့ line မှာ len နဲ့ cap နှစ်ခုလုံး ပါပါတယ်။ len ကို ပြီးခဲ့တဲ့ lesson မှာ သုံးခဲ့ပြီးပါပြီ၊ cap
+      ကတော့ ဒီနေ့ အသစ်ပါ။ ဘာလဲ ဆိုတာကို output ကို ကြည့်ပြီးမှ ရှင်းပါမယ်။ [[mark:run-1]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Slice expressions",
+          url: "https://go.dev/ref/spec#Slice_expressions",
+        }
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - id: type-day1
+        type: editor.type
+        at: { mark: type-day1 }
+        target: { file: main.go, after: "\"မန္တလေး\"}\n", occurrence: 1 }
+        text: "\tday1 := trip[:2]\n\tfmt.Println(len(day1), cap(day1), day1)\n"
+        cadence: line-by-line
+      - id: sel-cut
+        type: editor.select
+        at: { mark: sel-cut }
+        target: { file: main.go, text: "trip[:2]", occurrence: 1 }
+      - id: sel-print1
+        type: editor.select
+        at: { mark: sel-print1 }
+        target: { file: main.go, text: "fmt.Println(len(day1), cap(day1), day1)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "2 4 [ရန်ကုန် ပဲခူး]",
+          timeoutMs: 8000,
+        }
+
+  - id: window
+    chapter: Slice ဆိုတာ ဘောင် တစ်ခုပါ
+    narration: >-
+      [[mark:point-r1]] output မှာ နှစ်၊ လေး၊ ပြီးတော့ ရန်ကုန်နဲ့ ပဲခူးကို တွေ့ရပါတယ်။ ပထမ ဂဏန်း နှစ်က
+      len ပါ၊ ပထမနေ့ slice ထဲမှာ မြို့ နှစ်မြို့ ရှိလို့ပါ။ ဒါပေမဲ့ ဒုတိယ ဂဏန်း လေး ကတော့ ဘယ်က
+      လာတာလဲ။ အဲဒါကို နားလည်ဖို့ slice ရဲ့ နောက်ကွယ်ကို ကြည့်ရပါမယ်။ [[mark:board-shelf]] Go မှာ slice
+      တစ်ခု လုပ်လိုက်တဲ့အခါ၊ တန်ဖိုးတွေကို array ဆိုတဲ့ အရှည် ပုံသေ ခုံတန်း တစ်ခုပေါ်မှာ စီထားပါတယ်။
+      [[mark:draw-seats]] trip အတွက်ကတော့ ခုံ လေးခုံ ပါတဲ့ ခုံတန်းပါ၊ ခုံ တစ်ခုံစီမှာ မြို့ တစ်မြို့စီ
+      ရှိနေပါတယ်။ [[mark:draw-trip]] slice ကိုယ်တိုင်ထဲမှာ တန်ဖိုးတွေ မရှိပါဘူး။ ခုံတန်းပေါ်မှာ
+      ချိတ်ထားတဲ့ ဘောင် တစ်ခုပါ။ trip ရဲ့ ဘောင်က ခုံ လေးခုံလုံးကို မြင်ရပါတယ်။ [[mark:draw-day1]]
+      ဖြတ်ယူလိုက်တဲ့ ပထမနေ့ slice ကလည်း ဘောင် အသစ် တစ်ခုပဲ ဖြစ်ပြီး၊ ခုံတန်း အသစ် မဟုတ်ပါဘူး။ ခုံတန်း
+      တစ်ခုတည်းရဲ့ ရှေ့ ခုံ နှစ်ခုံကိုပဲ မြင်ရအောင် ချိတ်ထားတာပါ။ ဒါကြောင့် မြို့တွေကို copy မကူးပါဘူး။
+      [[mark:draw-cap]] len က ဘောင်ထဲမှာ မြင်ရတဲ့ ခုံ အရေအတွက်ပါ။ cap ကတော့ ဘောင် စတဲ့ နေရာကနေ ခုံတန်း
+      ဆုံးတဲ့အထိ ခုံ ဘယ်နှစ်ခုံ ရှိလဲ ဆိုတာပါ။ ဆိုလိုတာက ခုံတန်း မပြောင်းဘဲ ဒီ ဘောင်ကို ဘယ်လောက်အထိ
+      ချဲ့လို့ ရလဲ ဆိုတာပါ။ ဒါကြောင့် ပထမနေ့ slice ရဲ့ cap က လေး ဖြစ်နေတာပါ။ ဥပမာ ပဲခူးကနေ စပြီး
+      ဖြတ်ယူခဲ့ရင်တော့ ဘောင် စတဲ့ နေရာက ခုံတန်းရဲ့ ဒုတိယ ခုံ ဖြစ်သွားလို့ cap က သုံး ပဲ ရပါမယ်။
+    sources:
+      - { title: "Go Slices: usage and internals", url: "https://go.dev/blog/slices-intro" }
+      - {
+          title: "The Go Programming Language Specification — Slice types",
+          url: "https://go.dev/ref/spec#Slice_types",
+        }
+      - {
+          title: "A Tour of Go — Slice length and capacity",
+          url: "https://go.dev/tour/moretypes/11",
+        }
+    actions:
+      - {
+          id: point-r1,
+          type: console.point,
+          at: { mark: point-r1 },
+          target: { text: "2 4 [ရန်ကုန် ပဲခူး]" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-shelf } }
+      - {
+          id: board-shelf,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-seats,
+          type: whiteboard.apply,
+          at: { mark: draw-seats },
+          upsertIds:
+            [
+              s-seat0,
+              s-seat1,
+              s-seat2,
+              s-seat3,
+              s-c0,
+              s-c1,
+              s-c2,
+              s-c3,
+              s-i0,
+              s-i1,
+              s-i2,
+              s-i3,
+              s-array,
+            ],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-trip,
+          type: whiteboard.apply,
+          at: { mark: draw-trip },
+          upsertIds: [s-trip-line, s-trip-lbl],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-day1,
+          type: whiteboard.apply,
+          at: { mark: draw-day1 },
+          upsertIds: [s-day1-line, s-day1-lbl],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-cap,
+          type: whiteboard.apply,
+          at: { mark: draw-cap },
+          upsertIds: [s-cap-arrow, s-cap-lbl],
+          drawMs: 1500,
+        }
+
+  - id: append
+    narration: >-
+      [[mark:close-shelf]] ခရီးစဉ်ကို နည်းနည်း ပြင်ကြည့်ရအောင်။ ပထမနေ့မှာ ပဲခူး ပြီးရင် တောင်ငူ အထိ ဆက်သွားပြီး
+      အဲဒီမှာ တစ်ညအိပ်မယ် ဆိုပါစို့။ [[mark:type-append]] ဒါကြောင့် ပထမနေ့ slice ထဲကို append နဲ့ တောင်ငူကို
+      ထပ်ထည့်ပြီး၊ ပြန်ရလာတဲ့ slice ကို အဲဒီ variable ထဲမှာပဲ ပြန်ထည့်ပါမယ်။ ပြီးတော့ ပထမနေ့ကို မဟုတ်ဘဲ
+      trip တစ်ခုလုံးကို print ထုတ်ကြည့်ပါမယ်။ trip ကို ကိုယ်က ဘာမှ မပြင်ထားတဲ့အတွက် မူလ မြို့ လေးမြို့ပဲ
+      ထွက်လာရမှာပါ။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+    actions:
+      - {
+          id: close-shelf,
+          type: whiteboard.apply,
+          at: { mark: close-shelf },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-append
+        type: editor.type
+        at: { mark: type-append }
+        target:
+          { file: main.go, after: "\tfmt.Println(len(day1), cap(day1), day1)\n", occurrence: 1 }
+        text: "\tday1 = append(day1, \"တောင်ငူ\")\n\tfmt.Println(trip)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "[ရန်ကုန် ပဲခူး တောင်ငူ မန္တလေး]",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-append,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\tday1 = append(day1, \"တောင်ငူ\")\n",
+        }
+
+  - id: shared
+    chapter: append က trip ကို ပြင်သွားတာ
+    narration: >-
+      [[mark:point-trip]] ဒုတိယ စာကြောင်းကို ကြည့်ပါ။ trip ထဲမှာ ရန်ကုန်၊ ပဲခူး၊ တောင်ငူ၊ မန္တလေး ဖြစ်သွားပါတယ်။
+      နေပြည်တော် ပျောက်သွားပြီး အဲဒီ နေရာမှာ တောင်ငူ ဝင်နေပါတယ်။ compile error လည်း မရှိ၊ panic လည်း
+      မဖြစ်ပါဘူး။ program က ပုံမှန် run သွားပေမဲ့ ရလဒ်က မှားနေလို့ ဒါက code ထဲက bug ပါ။
+      [[mark:board-append]] ဘာဖြစ်သွားလဲ ဆိုတာ ခုံတန်းပေါ်မှာ ပြန်ကြည့်ရအောင်။ ပထမနေ့ ဘောင်ထဲမှာ ခုံ
+      နှစ်ခုံပဲ မြင်ရပေမဲ့ cap က လေး ဖြစ်လို့၊ ဘောင်ရဲ့ နောက်မှာ ချဲ့လို့ရတဲ့ ခုံ နှစ်ခုံ ရှိသေးတယ်လို့
+      append က မြင်ပါတယ်။ [[mark:draw-write]] ဒါကြောင့် ခုံတန်း အသစ် မယူဘဲ၊ ဘောင်ရဲ့ နောက်က ခုံထဲကို တောင်ငူကို
+      တန်းရေးလိုက်ပါတယ်။ ဒါပေမဲ့ အဲဒီ ခုံက trip ရဲ့ index နှစ်၊ နေပြည်တော် ရှိနေတဲ့ ခုံ ဖြစ်နေပါတယ်။
+      [[mark:draw-lost]] ဘောင် နှစ်ခုက ခုံတန်း တစ်ခုတည်းကို မျှသုံးနေလို့၊ တစ်ဖက်က ရေးလိုက်တာကို နောက်တစ်ဖက်က
+      မြင်ရတာပါ။ Go က ဘာကြောင့် ဒီလို လုပ်ထားလဲ ဆိုတော့၊ ဖြတ်ယူတိုင်း တန်ဖိုးတွေကို copy မကူးရတော့ မြန်ပြီး
+      memory လည်း သက်သာလို့ပါ။ ဒါပေမဲ့ ဖြတ်ယူထားတဲ့ slice ကို append လုပ်တဲ့အခါ မူရင်းကို ထိနိုင်တယ်
+      ဆိုတာကို အမြဲ သတိထားရပါမယ်။
+    sources:
+      - { title: "Go Slices: usage and internals", url: "https://go.dev/blog/slices-intro" }
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+    actions:
+      - {
+          id: point-trip,
+          type: console.point,
+          at: { mark: point-trip },
+          target: { text: "[ရန်ကုန် ပဲခူး တောင်ငူ မန္တလေး]" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-append } }
+      - {
+          id: board-append,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          upsertIds: [],
+        }
+      - {
+          id: draw-write,
+          type: whiteboard.apply,
+          at: { mark: draw-write },
+          upsertIds: [s-new-box, s-new, s-new-arrow, s-strike],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-lost,
+          type: whiteboard.apply,
+          at: { mark: draw-lost },
+          upsertIds: [s-lost],
+          drawMs: 1500,
+        }
+
+  - id: growth
+    chapter: cap ပြည့်ရင်
+    narration: >-
+      [[mark:board-grow]] ဒါဆို cap ပြည့်နေတဲ့ slice၊ ဆိုလိုတာက ဘောင်ရဲ့ နောက်မှာ ခုံ မကျန်တော့တဲ့ slice ကို
+      append လုပ်ရင်ကော ဘာဖြစ်မလဲ။
+      [[mark:draw-room]] ဘောင်ရဲ့ နောက်မှာ ခုံ ကျန်သေးရင်၊ append က ရှိပြီးသား ခုံတန်းထဲမှာပဲ ရေးပါတယ်။
+      ခုနက မြင်ခဲ့တဲ့ အတိုင်းပါ။ [[mark:draw-full]] ခုံ မကျန်တော့ရင်တော့၊ Go က ပိုကြီးတဲ့ ခုံတန်း
+      အသစ် တစ်ခုကို ယူပြီး ရှိပြီးသား တန်ဖိုးတွေကို copy ကူးပါတယ်။ ပြီးမှ တန်ဖိုး အသစ်ကို ထည့်ပြီး၊ ခုံတန်း
+      အသစ်ပေါ်က ဘောင်ကို ပြန်ပေးပါတယ်။ အဲဒီအခါ ခုံတန်း ဟောင်းကို မထိတော့ပါဘူး။ [[mark:draw-numbers]]
+      ဥပမာ item တစ်ခုမှ မပါတဲ့ slice အလွတ် ထဲကို string တွေ တစ်ခုချင်း append လုပ်သွားရင်၊ အခု Go version မှာ cap က
+      နှစ်၊ လေး၊ ရှစ် ဆိုပြီး ကြီးသွားတာကို တွေ့ရပါတယ်။ ဒါပေမဲ့ ဒီ ဂဏန်းတွေက Go ကိုယ်တိုင် ရွေးတာ ဖြစ်ပြီး
+      နောက် version တွေမှာ ပြောင်းနိုင်လို့၊ code ထဲမှာ အဲဒီ ဂဏန်းတွေကို အားကိုးပြီး မရေးပါနဲ့။ မှတ်ထားရမှာက၊
+      append က ခုံတန်း ဟောင်းထဲ ရေးမလား၊ အသစ် ယူမလား ဆိုတာ cap ပေါ်မှာ မူတည်တယ် ဆိုတာပါပဲ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+      - { title: "Go Slices: usage and internals", url: "https://go.dev/blog/slices-intro" }
+    actions:
+      - {
+          id: board-grow,
+          type: whiteboard.apply,
+          at: { mark: board-grow },
+          open: true,
+          clear: true,
+          upsertIds: [g-title],
+        }
+      - {
+          id: draw-room,
+          type: whiteboard.apply,
+          at: { mark: draw-room },
+          upsertIds: [g-room-box, g-room],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-full,
+          type: whiteboard.apply,
+          at: { mark: draw-full },
+          upsertIds: [g-full-box, g-full],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-numbers,
+          type: whiteboard.apply,
+          at: { mark: draw-numbers },
+          upsertIds: [g-nums-box, g-nums, g-note],
+          drawMs: 2000,
+        }
+
+  - id: clone
+    chapter: Clone နဲ့ ကိုယ်ပိုင် copy
+    narration: >-
+      [[mark:close-grow]] ဒါဆို ပထမနေ့ slice ကို trip နဲ့ ခုံတန်း မမျှဘဲ၊ ကိုယ်ပိုင် ခုံတန်းပေါ်မှာ
+      ထားချင်ရင် ဘယ်လို လုပ်မလဲ။ [[mark:type-import]] Go နဲ့ အတူ ပါလာတဲ့ package တွေထဲမှာ slice တွေနဲ့ အလုပ်လုပ်ဖို့
+      slices ဆိုတဲ့ package ရှိပါတယ်။ အဲဒါကို import block ထဲမှာ တစ်ကြောင်း ထပ်ထည့်ပါမယ်။
+      [[mark:type-clone]] ပြီးတော့ ဖြတ်ယူထားတဲ့ အပိုင်းကို အဲဒီ package ထဲက Clone ဆိုတဲ့ function ထဲ
+      ထည့်လိုက်ပါမယ်။ [[mark:sel-clone]] Clone က ပေးလိုက်တဲ့ slice ထဲက တန်ဖိုးတွေကို ခုံတန်း အသစ်
+      တစ်ခုပေါ် copy ကူးပြီး၊ အဲဒီ အသစ်ကို ပြန်ပေးပါတယ်။ ဒါကြောင့် ပထမနေ့ slice က trip ရဲ့ ခုံတန်းနဲ့ ဘာမှ
+      မဆိုင်တော့ပါဘူး။ ဖြတ်ယူထားတဲ့ အပိုင်းကို သီးသန့် ပြင်မယ်၊ append လုပ်မယ် ဆိုရင် ဒီလို ကိုယ်ပိုင် copy
+      ယူထားတာ အန္တရာယ် ကင်းပါတယ်။ [[mark:type-last]] နောက်ဆုံးမှာ append ပြီးတဲ့ နောက် ပထမနေ့ slice ရဲ့ len၊ cap နဲ့
+      မြို့တွေကို ထပ်ပြီး print ထုတ်ကြည့်ပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "slices package — Clone", url: "https://pkg.go.dev/slices#Clone" }
+    actions:
+      - {
+          id: close-grow,
+          type: whiteboard.apply,
+          at: { mark: close-grow },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"slices\"\n"
+      - id: type-clone
+        type: editor.type
+        at: { mark: type-clone }
+        target: { file: main.go, after: "day1 := ", occurrence: 1 }
+        text: "slices.Clone("
+      - id: type-clone-end
+        type: editor.type
+        at: { afterAction: type-clone }
+        target: { file: main.go, after: "slices.Clone(trip[:2]", occurrence: 1 }
+        text: ")"
+      - id: sel-clone
+        type: editor.select
+        at: { mark: sel-clone }
+        target: { file: main.go, text: "slices.Clone(trip[:2])", occurrence: 1 }
+      - id: type-last
+        type: editor.type
+        at: { mark: type-last }
+        target: { file: main.go, after: "\tfmt.Println(trip)\n", occurrence: 1 }
+        text: "\tfmt.Println(len(day1), cap(day1), day1)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "3 4 [ရန်ကုန် ပဲခူး တောင်ငူ]",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-clone,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "day1 := slices.Clone(trip[:2])",
+        }
+      - {
+          id: expect-file-import,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\"fmt\"\n\t\"slices\"\n",
+        }
+
+  - id: own-copy
+    narration: >-
+      [[mark:point-clone]] ပထမ စာကြောင်းမှာ ဒီ တစ်ခါ နှစ်၊ နှစ် ဖြစ်သွားပါပြီ။ ဒီ တစ်ခါမှာ Clone က မြို့
+      နှစ်မြို့စာ ခုံတန်း အသစ်ကို ယူလိုက်လို့ cap ကလည်း နှစ်ပဲ ဖြစ်နေတာပါ။ [[mark:point-intact]] ဒုတိယ
+      စာကြောင်းမှာတော့ trip ထဲက နေပြည်တော် မပျောက်တော့ပါဘူး၊ မြို့ လေးမြို့လုံး မူလ အတိုင်းပါ။
+      [[mark:point-grown]] နောက်ဆုံး စာကြောင်းမှာ ပထမနေ့ slice က len သုံး၊ cap လေး ဖြစ်ပြီး တောင်ငူ
+      ပါလာပါတယ်။ cap နှစ်ပဲ ရှိတဲ့ slice ကို append လုပ်တော့ ဘောင်ရဲ့ နောက်မှာ ခုံ မကျန်လို့၊ Go က ပိုကြီးတဲ့ ခုံတန်း
+      အသစ်ကို ယူလိုက်တာပါ။ ဒီ cap လေး ဆိုတဲ့ ဂဏန်းကလည်း Go ရွေးတာပါ။ အရေးကြီးတာက trip ကို လုံးဝ
+      မထိတော့ဘူး ဆိုတာပါ။
+    sources:
+      - { title: "slices package — Clone", url: "https://pkg.go.dev/slices#Clone" }
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+    actions:
+      - {
+          id: point-clone,
+          type: console.point,
+          at: { mark: point-clone },
+          target: { text: "2 2 [ရန်ကုန် ပဲခူး]" },
+        }
+      - {
+          id: point-intact,
+          type: console.point,
+          at: { mark: point-intact },
+          target: { text: "[ရန်ကုန် ပဲခူး နေပြည်တော် မန္တလေး]" },
+        }
+      - {
+          id: point-grown,
+          type: console.point,
+          at: { mark: point-grown },
+          target: { text: "3 4 [ရန်ကုန် ပဲခူး တောင်ငူ]" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program မှာ ကီလိုမီတာ သုံးခု ပါတဲ့ slice
+      ကနေ ရှေ့ဆုံး တစ်ခုကိုပဲ ဖြတ်ယူထားပါတယ်။ [[mark:quiz-line]] ပြီးတော့ ဖြတ်ယူထားတဲ့ slice ရဲ့ index
+      သုညကို သုံးရာ လို့ ပြောင်းလိုက်ပါတယ်။ ဒါဆို မူရင်း slice ရဲ့ ပထမ တန်ဖိုးက သုံးရာ့နှစ်ဆယ် ဆက်ဖြစ်နေမလား၊
+      သုံးရာ ဖြစ်သွားမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊
+      သုံးရာ ဖြစ်သွားပါတယ်။ ဘာကြောင့်လဲဆိုတော့ ဖြတ်ယူထားတဲ့ slice က ဘောင် တစ်ခုပဲ ဖြစ်ပြီး၊ မူရင်း slice
+      နဲ့ ခုံတန်း တစ်ခုတည်းကို မျှသုံးနေလို့ပါ။ append မဟုတ်ဘဲ index နဲ့ တိုက်ရိုက် ပြင်တာလည်း မူရင်းကို
+      ပြင်တာပါပဲ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Slice expressions",
+          url: "https://go.dev/ref/spec#Slice_expressions",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ slice ကို ဖြတ်ယူလိုက်ရင် copy မရပါဘူး၊ ခုံတန်း
+      တစ်ခုတည်းပေါ်က ဘောင် အသစ် တစ်ခုပဲ ရပါတယ်။ [[mark:recap-cut]] len က ဘောင်ထဲမှာ မြင်ရတဲ့ အရေအတွက်ဖြစ်ပြီး၊ cap
+      က ခုံတန်း မပြောင်းဘဲ ကြီးနိုင်တဲ့ အထိပါ။ [[mark:recap-append]] cap ထဲမှာ နေရာ ကျန်သေးရင် append က
+      မျှသုံးနေတဲ့ ခုံတန်းထဲ ရေးလို့ မူရင်းကို ပြင်မိနိုင်ပါတယ်။ [[mark:recap-clone]] ကိုယ်ပိုင် copy
+      လိုချင်ရင်တော့ Clone ကို သုံးပါ။ နောက် lesson မှာတော့ index နံပါတ်နဲ့ မဟုတ်ဘဲ နာမည် တစ်ခုနဲ့
+      တန်ဖိုးကို ရှာတဲ့ map ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Go Slices: usage and internals", url: "https://go.dev/blog/slices-intro" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-cut
+        type: editor.select
+        at: { mark: recap-cut }
+        target: { file: main.go, text: "trip[:2]", occurrence: 1 }
+      - id: recap-append
+        type: editor.select
+        at: { mark: recap-append }
+        target: { file: main.go, text: 'append(day1, "တောင်ငူ")', occurrence: 1 }
+      - id: recap-clone
+        type: editor.select
+        at: { mark: recap-clone }
+        target: { file: main.go, text: "slices.Clone", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
