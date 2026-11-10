@@ -143,7 +143,9 @@ describe("critiqueScript", () => {
   // The Director CLI writes `<slug>.critique.json` next to each script, and
   // nothing else re-ran it when the critic changed — one sidecar kept notes
   // from rules deleted long before. Regenerate with `bun scripts/studio-director.ts`.
-  it("keeps every checked-in critique sidecar current", () => {
+  // Parses and critiques every checked-in lesson (hundreds), about 3 s alone and more
+  // than the 5 s default when the whole suite runs beside it.
+  it("keeps every checked-in critique sidecar current", { timeout: 30_000 }, () => {
     const scriptsDir = resolve(__dirname, "../scripts");
     const files = readdirSync(scriptsDir);
     const yamls = files.filter((name) => name.endsWith(".yaml")).sort();
