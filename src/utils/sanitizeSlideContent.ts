@@ -24,6 +24,15 @@ export const SLIDE_INLINE_IMAGE_TYPES = "png|gif|jpe?g|webp|avif|svg\\+xml";
 
 const IMAGE_DATA_URL = new RegExp(`^data:image/(?:${SLIDE_INLINE_IMAGE_TYPES});`, "i");
 
+// Style that can run code or load more of it. Written to stay linear in the
+// length of the value: the test is unanchored, so "binding" needs no "[-\w]*"
+// prefix (every "-moz-binding:" contains "binding:"), and the spaces after a
+// quote in "url(" are matched only after that quote. The greedy prefix, and
+// two "\s*" around an optional quote, made one long run of word characters or
+// spaces cost the square of its length on the main thread.
+const UNSAFE_STYLE =
+  /(?:expression\s*\(|@import|binding\s*:|url\s*\(\s*(?:["']\s*)?(?:javascript|vbscript):)/i;
+
 function isImageElement(elementName: string): boolean {
   return elementName === "img" || elementName === "image";
 }
@@ -73,12 +82,7 @@ function sanitizeElement(element: Element, inlineImages?: ReadonlyMap<string, st
       }
       continue;
     }
-    if (
-      name === "style" &&
-      /(?:expression\s*\(|@import|[-\w]*binding\s*:|url\s*\(\s*["']?\s*(?:javascript|vbscript):)/i.test(
-        attribute.value,
-      )
-    ) {
+    if (name === "style" && UNSAFE_STYLE.test(attribute.value)) {
       element.removeAttribute(attribute.name);
     }
   }

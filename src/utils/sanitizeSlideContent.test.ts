@@ -80,3 +80,48 @@ describe("sanitizeSlideContent XLink attributes", () => {
     expect(sanitized).toContain('<a href="https://example.com"');
   });
 });
+
+describe("sanitizeSlideContent style attributes", () => {
+  it.each([
+    "width: expression(alert(1))",
+    "@import 'x.css'",
+    "-moz-binding: url(x.xml#y)",
+    "behavior: url(x); binding : x",
+    "background: url( ' javascript:alert(1))",
+    "background: url('vbscript:x')",
+    "background: URL(JavaScript:x)",
+  ])("removes a style that can run code: %s", (style) => {
+    const sanitized = sanitizeSlideContent(`<p style="${style}">x</p>`, "text/html");
+
+    expect(sanitized).toBe("<p>x</p>");
+  });
+
+  it("keeps an ordinary style", () => {
+    const sanitized = sanitizeSlideContent(
+      '<p style="color: red; background: url(&quot;/a.png&quot;)">x</p>',
+      "text/html",
+    );
+
+    expect(sanitized).toBe('<p style="color: red; background: url(&quot;/a.png&quot;)">x</p>');
+  });
+
+  // A lesson's slides arrive from its .ne unbounded, and this runs on the main
+  // thread while the slide renders. A backtracking check on one long run of word
+  // characters, or of spaces after "url(", grew with the square of its length.
+  it.each([
+    ["a run of word characters", "a".repeat(50_000)],
+    ["spaces after url(", `url(${" ".repeat(50_000)}`],
+    ["a quote and spaces after url(", `url(&quot;${" ".repeat(50_000)}`],
+  ])("checks a long style in linear time: %s", (_label, style) => {
+    for (const mimeType of ["text/html", "image/svg+xml"] as const) {
+      const content =
+        mimeType === "text/html"
+          ? `<div style="${style}"></div>`
+          : `<svg xmlns="http://www.w3.org/2000/svg"><rect style="${style}"/></svg>`;
+      const started = performance.now();
+      const sanitized = sanitizeSlideContent(content, mimeType);
+      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(sanitized).toContain("style=");
+    }
+  });
+});
