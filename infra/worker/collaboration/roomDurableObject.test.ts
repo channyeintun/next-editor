@@ -194,8 +194,9 @@ async function createRoom(
   async function upgrade(
     userId: string,
     sessionId: string,
+    roleVersion = 1,
   ): Promise<{ response: Response; socket: FakeSocket | null }> {
-    const session = canonicalSession(userId, "editor", sessionId);
+    const session = canonicalSession(userId, "editor", sessionId, roleVersion);
     const response = await room.fetch(
       new Request(`${ROOM_ORIGIN}/websocket`, {
         headers: {
@@ -270,7 +271,35 @@ async function createRoom(
     );
   }
 
-  return { room, doc, connect, upgrade, disconnect, restart, edit, persistedText, control };
+  function closeRoom(roleVersion: number) {
+    return room.fetch(
+      new Request(`${ROOM_ORIGIN}/control`, {
+        method: "POST",
+        body: JSON.stringify({
+          event: {
+            kind: "room-closed",
+            roomId: ROOM_ID,
+            roleVersion,
+            targetUserId: null,
+            occurredAt: Date.now(),
+          },
+        }),
+      }),
+    );
+  }
+
+  return {
+    room,
+    doc,
+    connect,
+    upgrade,
+    disconnect,
+    restart,
+    edit,
+    persistedText,
+    control,
+    closeRoom,
+  };
 }
 
 /** The session the Worker hands the room when a member opens a socket. */
@@ -1056,6 +1085,137 @@ describe("CollaborationRoomDurableObject awareness", () => {
     expect(member.deserializeAttachment()).toMatchObject({
       awarenessState: { collaboration: { role: "viewer" } },
     });
+  });
+});
+
+// The Worker reads D1 once for an upgrade and forwards that snapshot. A
+// removal that commits after the read can reach the room first; its /control
+// closed only the sockets open then, and the late upgrade got the access the
+// member had just lost.
+describe("CollaborationRoomDurableObject upgrades that predate an applied change", () => {
+  it("refuses an upgrade read before a removal the room has applied", async () => {
+    const { upgrade, control } = await createRoom();
+
+    expect((await control(2, MEMBER_ID, null)).status).toBe(200);
+    const late = await upgrade(MEMBER_ID, uuid(), 1);
+
+    expect(late.response.status).toBe(403);
+    expect(late.socket).toBeNull();
+  });
+
+  it("remembers the removal across a restart", async () => {
+    const { control, restart } = await createRoom();
+    await control(2, MEMBER_ID, null);
+
+    const response = await restart().fetch(
+      new Request(`${ROOM_ORIGIN}/websocket`, {
+        headers: {
+          Upgrade: "websocket",
+          "X-Collaboration-Session": encodeURIComponent(
+            JSON.stringify(canonicalSession(MEMBER_ID, "editor", uuid(), 1)),
+          ),
+        },
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("accepts the member again once they rejoin at a later version", async () => {
+    const { upgrade, control } = await createRoom();
+    await control(2, MEMBER_ID, null);
+
+    const rejoined = await upgrade(MEMBER_ID, uuid(), 3);
+
+    expect(rejoined.response.status).toBe(101);
+  });
+
+  it("gives an upgrade read before a demotion the demoted role", async () => {
+    const { room, upgrade, edit, control, persistedText } = await createRoom();
+    await control(2, MEMBER_ID, "viewer");
+
+    const late = await upgrade(MEMBER_ID, uuid(), 1);
+    await room.webSocketMessage(late.socket as never, edit("+nope"));
+
+    expect(late.socket!.deserializeAttachment()).toMatchObject({ role: "viewer", roleVersion: 2 });
+    expect(errors(late.socket!)).toEqual([expect.objectContaining({ code: "read-only" })]);
+    expect(await persistedText()).toBe("seed");
+  });
+
+  it("refuses every upgrade once the room has been closed", async () => {
+    const { upgrade, closeRoom } = await createRoom();
+    await closeRoom(1);
+
+    expect((await upgrade(MEMBER_ID, uuid(), 1)).response.status).toBe(409);
+  });
+
+  it("does not let an older role change override a newer one", async () => {
+    const { upgrade, control } = await createRoom();
+    await control(3, MEMBER_ID, null);
+    await control(2, MEMBER_ID, "editor");
+
+    expect((await upgrade(MEMBER_ID, uuid(), 1)).response.status).toBe(403);
+  });
+});
+
+// Rechecks ran only on a frame from the socket itself, and pings are answered
+// without waking the room, so a member who never sent one kept receiving every
+// edit after losing access whenever no /control reached their socket.
+describe("CollaborationRoomDurableObject silent sockets", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("rechecks a silent recipient whose access check is stale and closes it", async () => {
+    const { room, connect, edit } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const silent = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockImplementation(async (_db, _room, userId) =>
+      userId === MEMBER_ID ? null : roomAccess("owner", 1),
+    );
+
+    await room.webSocketMessage(owner as never, edit("+first"));
+    await settle();
+    await room.webSocketMessage(owner as never, edit("+second"));
+
+    expect(getCollaborationRoomAccess).toHaveBeenCalledWith(expect.anything(), ROOM_ID, MEMBER_ID);
+    expect(silent.closeCode).toBe(4003);
+    expect(silent.frames().filter((frame) => frame.kind === "server-update")).toHaveLength(1);
+  });
+
+  it("leaves a recipient whose access check is fresh alone", async () => {
+    const { room, connect, edit } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const listener = connect(MEMBER_ID, "viewer");
+
+    await room.webSocketMessage(owner as never, edit("+edit"));
+    await settle();
+
+    expect(getCollaborationRoomAccess).not.toHaveBeenCalled();
+    expect(listener.closeCode).toBeNull();
+  });
+
+  it("rechecks a silent recipient at most once an interval", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const { room, connect, edit } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const listener = connect(MEMBER_ID, "viewer", { accessCheckedAt: 0 });
+    vi.mocked(getCollaborationRoomAccess).mockImplementation(async (_db, _room, userId) =>
+      roomAccess(userId === MEMBER_ID ? "viewer" : "owner", 1),
+    );
+
+    for (let index = 0; index < 5; index += 1) {
+      await room.webSocketMessage(owner as never, edit("x"));
+      await settle();
+    }
+    const listenerChecks = () =>
+      vi.mocked(getCollaborationRoomAccess).mock.calls.filter(([, , user]) => user === MEMBER_ID);
+    expect(listenerChecks()).toHaveLength(1);
+
+    now.mockReturnValue(1_700_000_006_000);
+    await room.webSocketMessage(owner as never, edit("y"));
+    await settle();
+
+    expect(listenerChecks()).toHaveLength(2);
+    expect(listener.closeCode).toBeNull();
   });
 });
 

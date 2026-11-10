@@ -63,6 +63,7 @@ import {
   type RoomSqliteStorage,
   type StoredAppendRoomSqliteUpdateResult,
 } from "./roomSqliteDocumentStore";
+import { AppliedMembershipChanges } from "./appliedMembershipChanges";
 import { collaborationAssetKey } from "./assetStore";
 import { AwarenessClientOwners } from "./awarenessClientOwners";
 import { exactArrayBuffer } from "./bytes";
@@ -75,6 +76,7 @@ import {
   isCurrentRoom,
   isOpen,
   MAX_SOCKETS_PER_USER,
+  QuietSocketRevalidation,
   rateWindowCount,
   SocketFrameWindow,
 } from "./socketSupport";
@@ -315,6 +317,8 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   private sqliteCompactionScheduled = false;
   private readonly sqliteDocument: RoomSqliteDocumentStore;
   private readonly awarenessClientOwners: AwarenessClientOwners;
+  private readonly appliedMembership: AppliedMembershipChanges;
+  private readonly quietRevalidation = new QuietSocketRevalidation();
   private binaryDocument: Y.Doc | null = null;
   private binaryTeachingIntegrity: CollaborationTeachingIntegrity | null = null;
   private teachingInitializationTail: Promise<void> = Promise.resolve();
@@ -323,6 +327,9 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     super(ctx, env);
     this.sqliteDocument = new RoomSqliteDocumentStore(ctx.storage as unknown as RoomSqliteStorage);
     this.awarenessClientOwners = new AwarenessClientOwners(
+      ctx.storage as unknown as RoomSqliteStorage,
+    );
+    this.appliedMembership = new AppliedMembershipChanges(
       ctx.storage as unknown as RoomSqliteStorage,
     );
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
@@ -503,17 +510,35 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
   }
 
   private acceptConnection(request: Request): Response {
-    const session = decodeHeaderJson(canonicalSocketSessionSchema, request, SESSION_HEADER);
-    if (!session) return new Response("invalid collaboration session", { status: 403 });
-    if (!isCurrentRoom(this.ctx, session.roomId)) {
+    const forwarded = decodeHeaderJson(canonicalSocketSessionSchema, request, SESSION_HEADER);
+    if (!forwarded) return new Response("invalid collaboration session", { status: 403 });
+    if (!isCurrentRoom(this.ctx, forwarded.roomId)) {
       return new Response("invalid collaboration room", { status: 403 });
     }
-    if (!this.connectionQuota.consume(session.userId)) {
+    if (!this.connectionQuota.consume(forwarded.userId)) {
       return new Response("collaboration connection rate limit exceeded", {
         status: 429,
         headers: { "Retry-After": "60" },
       });
     }
+    // The Worker's D1 read can predate a removal or role change whose /control
+    // this object has already applied; that control closed or changed only the
+    // sockets open then.
+    const admission = this.appliedMembership.admit(
+      forwarded.userId,
+      forwarded.role,
+      forwarded.roleVersion,
+    );
+    if (!admission.admitted) {
+      return admission.reason === "room-closed"
+        ? new Response("collaboration room is closed", { status: 409 })
+        : new Response("collaboration room access was revoked", { status: 403 });
+    }
+    const session: CanonicalSocketSession = {
+      ...forwarded,
+      role: admission.role,
+      roleVersion: admission.roleVersion,
+    };
 
     // Counted before anything is replaced, so a refusal changes nothing. The
     // session's own previous socket does not count: the reconnect replaces it.
@@ -1283,6 +1308,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
 
   private applyControl(command: CollaborationRoomControlCommand): void {
     const { event } = command;
+    this.appliedMembership.record(command);
     if (event.kind === "room-closed") {
       this.broadcast({ type: "control.room", data: event });
       for (const socket of this.ctx.getWebSockets()) socket.close(4001, "room closed");
@@ -1342,16 +1368,37 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
     this.fanOut(JSON.stringify(collaborationWebSocketServerMessageSchema.parse(message)), except);
   }
 
-  /** Sends `payload` to every open socket but `except`; a socket that fails to take it is closed. */
+  /**
+   * Sends `payload` to every open socket but `except`; a socket that fails to
+   * take it is closed. A recipient whose access check is stale is rechecked in
+   * the background, so one that never sends a frame still loses the room
+   * within an interval of losing access.
+   */
   private fanOut(payload: string | ArrayBuffer, except?: WebSocket): void {
+    const now = Date.now();
     for (const socket of this.ctx.getWebSockets()) {
       if (socket === except || !isOpen(socket)) continue;
       try {
         socket.send(payload);
       } catch {
         socket.close(1011, "broadcast failed");
+        continue;
+      }
+      if (this.quietRevalidation.due(socket, () => attachmentFor(socket)?.accessCheckedAt, now)) {
+        this.revalidateQuietSocket(socket);
       }
     }
+  }
+
+  private revalidateQuietSocket(socket: WebSocket): void {
+    const attachment = attachmentFor(socket);
+    if (!attachment) return;
+    void this.refreshAccess(socket, attachment).catch((error: unknown) => {
+      console.error("collaboration_access_recheck_failed", {
+        roomId: attachment.roomId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private broadcastLeave(socket: WebSocket): void {

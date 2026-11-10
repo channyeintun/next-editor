@@ -88,6 +88,32 @@ export class SocketFrameWindow {
 }
 
 /**
+ * When each socket is next due an access recheck because the object sends it
+ * something. Rechecks otherwise run only on a frame the socket sends, so a
+ * member who only listens (pings are answered without waking the object) kept
+ * receiving everything after losing access whenever no /control reached their
+ * socket. It lives in memory, so after a wake-up the first send rechecks.
+ */
+export class QuietSocketRevalidation {
+  private readonly dueAt = new WeakMap<WebSocket, number>();
+
+  /**
+   * Whether `socket` is due now; a due socket's next check is one interval
+   * away. `accessCheckedAt` is read only when the socket is not yet tracked.
+   */
+  due(socket: WebSocket, accessCheckedAt: () => number | undefined, now = Date.now()): boolean {
+    let dueAt = this.dueAt.get(socket);
+    if (dueAt === undefined) {
+      dueAt = (accessCheckedAt() ?? 0) + ACCESS_REVALIDATION_INTERVAL_MS;
+      this.dueAt.set(socket, dueAt);
+    }
+    if (now < dueAt) return false;
+    this.dueAt.set(socket, now + ACCESS_REVALIDATION_INTERVAL_MS);
+    return true;
+  }
+}
+
+/**
  * Connection attempts per user in the current minute. It lives in memory, so
  * it restarts when the object hibernates or is evicted.
  */
