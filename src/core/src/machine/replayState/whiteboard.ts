@@ -1,5 +1,4 @@
 import {
-  applyWhiteboardEvent,
   compareWhiteboardElementIndices,
   EMPTY_WHITEBOARD_SCENE,
   type WhiteboardElementJSON,
@@ -8,6 +7,7 @@ import {
 } from "../../whiteboard";
 import { findTimedEventIndexAtOrBefore } from "../../utils/timedIndex";
 import { createViewChangeResolver } from "./viewChanges";
+import { createWhiteboardSceneFold, type WhiteboardSceneFold } from "./whiteboardSceneFold";
 
 // ============================================================================
 // Whiteboard track replay.
@@ -15,11 +15,10 @@ import { createViewChangeResolver } from "./viewChanges";
 // Each event carries a compact delta (upserts/removedIds) rather than a full
 // scene, so unlike the runtime track (one full snapshot per event) reconstructing
 // the scene at an index requires folding every prior delta. Per
-// `whiteboardEvents` array reference, the fold keeps a checkpoint scene every
-// WHITEBOARD_SCENE_CHECKPOINT_INTERVAL events plus the scene it resolved last
-// (see getWhiteboardSceneAt), so a seek within the part already folded applies
-// at most the interval minus one events, and playback advancing one event
-// applies one.
+// `whiteboardEvents` array reference, the fold keeps checkpoint scenes along the
+// track plus the scene it resolved last (see getWhiteboardSceneAt), so a seek
+// within the part already folded starts from the nearest checkpoint, and playback
+// advancing one event applies one.
 //
 // On top of the exact per-event states, ticks that land *between* two events
 // get an interpolated scene (see getInterpolatedState): freedraw strokes render
@@ -30,17 +29,34 @@ import { createViewChangeResolver } from "./viewChanges";
 // ============================================================================
 
 /**
- * How often the fold keeps the scene it has reached. Retention is about one scene
- * per this many events, and a seek folds at most this many minus one events from
- * the nearest kept scene (about 2 ms at 300 elements).
+ * The fewest events between two kept scenes. A scene is also kept only once the
+ * events since the last one did as much work as it has elements (see
+ * {@link whiteboardEventWork}). So the scenes kept for a track hold no more element
+ * slots than the track has events and changes, and a seek folds, from the nearest
+ * kept scene, fewer than this many events or less work than the scene it lands on
+ * has elements. A track of small events over a small scene keeps one scene every
+ * this many events.
  */
 const WHITEBOARD_SCENE_CHECKPOINT_INTERVAL = 64;
 
+interface WhiteboardSceneCheckpoint {
+  /** The index of the event `scene` is folded through. */
+  index: number;
+  scene: WhiteboardSceneState;
+}
+
 interface WhiteboardReplayIndex {
-  /** `checkpoints[k]` is the scene folded through index `(k + 1) * interval - 1`. */
-  checkpoints: WhiteboardSceneState[];
-  /** The scene resolved last, so ticks that stay on or advance from it fold little. */
-  recent: { index: number; scene: WhiteboardSceneState } | null;
+  /** The kept scenes, in index order. */
+  checkpoints: WhiteboardSceneCheckpoint[];
+  /** The last index a fold has reached. Every checkpoint is at or before it. */
+  foldedThrough: number;
+  /** The work of the events after the last checkpoint, through `foldedThrough`. */
+  workSinceCheckpoint: number;
+  /**
+   * The scene resolved last, and the fold that stands at it, so ticks that stay on it
+   * are free and ticks that advance from it apply only the events they cross.
+   */
+  recent: { index: number; scene: WhiteboardSceneState; fold: WhiteboardSceneFold } | null;
 }
 
 export interface WhiteboardReplayResult {
@@ -49,6 +65,29 @@ export interface WhiteboardReplayResult {
 }
 
 const whiteboardReplayIndexCache = new WeakMap<WhiteboardEvent[], WhiteboardReplayIndex>();
+
+/** What folding `event` costs: one step, and one per element it upserts or removes. */
+function whiteboardEventWork(event: WhiteboardEvent): number {
+  return 1 + (event.upserts?.length ?? 0) + (event.removedIds?.length ?? 0);
+}
+
+/** The last kept scene at or before `index`, if any. `checkpoints` is in index order. */
+function findCheckpointAtOrBefore(
+  checkpoints: WhiteboardSceneCheckpoint[],
+  index: number,
+): WhiteboardSceneCheckpoint | undefined {
+  let low = 0;
+  let high = checkpoints.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    if (checkpoints[middle].index <= index) {
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return checkpoints[high];
+}
 
 /**
  * The scene after folding events 0 through `index` (`0 <= index < events.length`).
@@ -62,12 +101,14 @@ const whiteboardReplayIndexCache = new WeakMap<WhiteboardEvent[], WhiteboardRepl
  * few hundred KB compressed) hung the tab and then exhausted memory, on the main
  * thread inside a state machine action where it could not be interrupted.
  *
- * 35204cca bounded the fold to the requested index, but still kept one scene per
- * event up to it, so a seek near the end of a long track retained the same ~n²/2
- * slots (36 MB for 10,000 events over 300 elements, 505 MB for 10,000 events that
- * each add an element). Now only every WHITEBOARD_SCENE_CHECKPOINT_INTERVAL-th scene is kept,
- * plus the last one resolved. The first fold to a far index still applies every
- * event before it once.
+ * 35204cca bounded the fold to the requested index, and 0e176f8a kept only every
+ * 64th scene. Both still built a sorted scene for every event they folded, so a
+ * tick or a seek across n events over a scene of E elements cost n × E (a million
+ * one-element events over a few thousand elements is a frozen tab), and the kept
+ * scenes held (n / 64) × E slots. Now the events are folded into one working scene
+ * (see whiteboardSceneFold.ts), a sorted scene is built only for a checkpoint and
+ * for the index asked for, and checkpoints are spaced by the work between them. A
+ * fold costs about the changes it crosses plus the scene it ends on.
  *
  * The fold is a pure prefix scan, so starting from a kept scene is exact, and so is
  * extending it: streaming playback appends to this same array in place
@@ -77,7 +118,7 @@ function getWhiteboardSceneAt(events: WhiteboardEvent[], index: number): Whitebo
   let replayIndex = whiteboardReplayIndexCache.get(events);
 
   if (!replayIndex) {
-    replayIndex = { checkpoints: [], recent: null };
+    replayIndex = { checkpoints: [], foldedThrough: -1, workSinceCheckpoint: 0, recent: null };
     whiteboardReplayIndexCache.set(events, replayIndex);
   }
 
@@ -88,25 +129,46 @@ function getWhiteboardSceneAt(events: WhiteboardEvent[], index: number): Whitebo
 
   // Start from the last kept checkpoint at or before `index` (none: the empty
   // scene), or from the recent scene when it lies between that checkpoint and `index`.
-  const interval = WHITEBOARD_SCENE_CHECKPOINT_INTERVAL;
-  const slot = Math.min(Math.floor((index + 1) / interval), checkpoints.length) - 1;
-  let start = (slot + 1) * interval - 1;
-  let scene = slot >= 0 ? checkpoints[slot] : EMPTY_WHITEBOARD_SCENE;
+  const checkpoint = findCheckpointAtOrBefore(checkpoints, index);
+  if (checkpoint?.index === index) {
+    replayIndex.recent = { ...checkpoint, fold: createWhiteboardSceneFold(checkpoint.scene) };
+    return checkpoint.scene;
+  }
+  let start = checkpoint?.index ?? -1;
+  let fold: WhiteboardSceneFold;
   if (recent && recent.index > start && recent.index < index) {
     start = recent.index;
-    scene = recent.scene;
+    fold = recent.fold;
+    // The fold leaves `recent.index` below. An event that throws must not leave it
+    // recorded there, half applied.
+    replayIndex.recent = null;
+  } else {
+    fold = createWhiteboardSceneFold(checkpoint?.scene ?? EMPTY_WHITEBOARD_SCENE);
   }
 
-  // Every checkpoint at or before an index already resolved is kept, so the fold
-  // meets the missing ones in order and keeps each as it passes it.
+  // Every index up to `foldedThrough` has had its chance to become a checkpoint, so
+  // a fold keeps new ones only past it, where it meets the events in order.
+  let scene: WhiteboardSceneState | undefined;
   for (let cursor = start + 1; cursor <= index; cursor += 1) {
-    scene = applyWhiteboardEvent(scene, events[cursor]);
-    if (cursor + 1 === (checkpoints.length + 1) * interval) {
-      checkpoints.push(scene);
+    fold.apply(events[cursor]);
+    scene = undefined;
+    if (cursor <= replayIndex.foldedThrough) {
+      continue;
+    }
+    replayIndex.foldedThrough = cursor;
+    replayIndex.workSinceCheckpoint += whiteboardEventWork(events[cursor]);
+    if (
+      cursor - (checkpoints.at(-1)?.index ?? -1) >= WHITEBOARD_SCENE_CHECKPOINT_INTERVAL &&
+      replayIndex.workSinceCheckpoint >= fold.size()
+    ) {
+      scene = fold.scene();
+      checkpoints.push({ index: cursor, scene });
+      replayIndex.workSinceCheckpoint = 0;
     }
   }
 
-  replayIndex.recent = { index, scene };
+  scene ??= fold.scene();
+  replayIndex.recent = { index, scene, fold };
   return scene;
 }
 
@@ -192,17 +254,25 @@ function getInterpolatedState(
   const fraction = (currentTime - windowStart) / (upcoming.timestamp - windowStart);
   const baseState =
     nextIndex >= 0 ? getWhiteboardSceneAt(events, nextIndex) : EMPTY_WHITEBOARD_SCENE;
-  const baseById = new Map(baseState.elements.map((element) => [element.id, element]));
+  // Where each element is in `elements`: the base scene's, then the ones pushed below.
+  // Searching the array for each upsert cost upserts x elements on every frame of the
+  // window, and a lesson file sets both.
+  const baseElements = baseState.elements;
+  const positionById = new Map(baseElements.map((element, position) => [element.id, position]));
 
   let elements: WhiteboardElementJSON[] | null = null;
   for (const target of upcoming.upserts) {
-    const synthesized = synthesizeInterpolatedElement(baseById.get(target.id), target, fraction);
+    const position = positionById.get(target.id);
+    // A pushed element is not in the base scene: its upsert was repeated in this event.
+    const base =
+      position !== undefined && position < baseElements.length ? baseElements[position] : undefined;
+    const synthesized = synthesizeInterpolatedElement(base, target, fraction);
     if (!synthesized) continue;
-    elements ??= [...baseState.elements];
-    const existingIndex = elements.findIndex((element) => element.id === target.id);
-    if (existingIndex >= 0) {
-      elements[existingIndex] = synthesized;
+    elements ??= [...baseElements];
+    if (position !== undefined) {
+      elements[position] = synthesized;
     } else {
+      positionById.set(target.id, elements.length);
       elements.push(synthesized);
     }
   }

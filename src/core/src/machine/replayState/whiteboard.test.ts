@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vite-plus/test";
 import {
   getWhiteboardReplayResult,
@@ -167,6 +168,204 @@ describe("whiteboard replay", () => {
         }).stateToApply?.elements.map((e) => e.id),
       ).toEqual(foldDirectly(events, index).elements.map((e) => e.id));
     }
+  });
+});
+
+describe("whiteboard replay of a lesson file's own sizes", () => {
+  // The scene size, the upserts in an event and the number of events all come from
+  // the lesson file, and replay runs inside a state machine action on the viewer's
+  // main thread. These count how often replay reads an element, so the bounds do not
+  // depend on the machine.
+  interface Reads {
+    id: number;
+    index: number;
+  }
+
+  /** A rectangle that counts the reads of its `id` and of its fractional `index`. */
+  function countedElement(position: number, reads: Reads): WhiteboardElementJSON {
+    const id = `r${position}`;
+    const index = `a${String(position).padStart(6, "0")}`;
+    return Object.defineProperties(element(id), {
+      id: {
+        enumerable: true,
+        get() {
+          reads.id += 1;
+          return id;
+        },
+      },
+      index: {
+        enumerable: true,
+        get() {
+          reads.index += 1;
+          return index;
+        },
+      },
+    });
+  }
+
+  it("animates an event's upserts without searching the scene for each of them", () => {
+    // Every element moves in the next event. Putting each in-between element back
+    // used to search the scene from the front: half a scene per upsert, two million
+    // id reads here, on every frame of the 150 ms before the event.
+    const size = 2_000;
+    const reads: Reads = { id: 0, index: 0 };
+    const events: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: Array.from({ length: size }, (_, position) => countedElement(position, reads)),
+      },
+      {
+        timestamp: 1_000,
+        // Last element first, so each search runs past the ones not yet replaced.
+        upserts: Array.from({ length: size }, (_, position) => ({
+          ...element(`r${size - 1 - position}`),
+          index: `a${String(size - 1 - position).padStart(6, "0")}`,
+          version: 2,
+          x: 3,
+        })),
+      },
+    ];
+    getWhiteboardReplayResult({ whiteboardEvents: events, currentTime: 500, lastAppliedIndex: -1 });
+    reads.id = 0;
+
+    const result = getWhiteboardReplayResult({
+      whiteboardEvents: events,
+      currentTime: 950,
+      lastAppliedIndex: 0,
+    });
+
+    expect(result.nextIndex).toBe(0);
+    expect(result.stateToApply?.elements.map((e) => [e.id, e.x])).toEqual(
+      Array.from({ length: size }, (_, position) => [`r${position}`, 2]),
+    );
+    expect(reads.id).toBeLessThanOrEqual(4 * size);
+  });
+
+  it("folds many small events over a large scene without rebuilding the scene for each", () => {
+    // Each event changes one element. Folding it used to rebuild and re-sort the
+    // whole scene: events x elements, six million reads here.
+    const size = 1_000;
+    const count = 2_000;
+    const reads: Reads = { id: 0, index: 0 };
+    const events: WhiteboardEvent[] = [
+      {
+        timestamp: 0,
+        upserts: Array.from({ length: size }, (_, position) => countedElement(position, reads)),
+      },
+      ...Array.from({ length: count }, (_, step) => ({
+        timestamp: 10,
+        upserts: [{ ...element("r0"), index: "a000000", version: step + 2, x: step + 1 }],
+      })),
+    ];
+    getWhiteboardReplayResult({ whiteboardEvents: events, currentTime: 0, lastAppliedIndex: -1 });
+    reads.id = 0;
+    reads.index = 0;
+
+    const result = getWhiteboardReplayResult({
+      whiteboardEvents: events,
+      currentTime: 20,
+      lastAppliedIndex: 0,
+    });
+
+    expect(result.nextIndex).toBe(count);
+    expect(result.stateToApply?.elements).toHaveLength(size);
+    expect(result.stateToApply?.elements[0]).toMatchObject({ id: "r0", x: count });
+    expect(reads.id + reads.index).toBeLessThanOrEqual(8 * (size + count));
+  });
+
+  it("folds a track that only grows without re-sorting it for each event", () => {
+    // Each event adds an element, so the scene is as long as the track. Kept scenes
+    // used to come every 64 events whatever their size: n²/128 slots held, and n²/2
+    // reads on the way to the end.
+    const count = 4_000;
+    const reads: Reads = { id: 0, index: 0 };
+    const events: WhiteboardEvent[] = Array.from({ length: count }, (_, position) => ({
+      timestamp: position * 10,
+      upserts: [countedElement(position, reads)],
+    }));
+
+    const end = getWhiteboardReplayResult({
+      whiteboardEvents: events,
+      currentTime: count * 10,
+      lastAppliedIndex: -1,
+    });
+    expect(end.stateToApply?.elements.map((e) => e.id)).toEqual(
+      Array.from({ length: count }, (_, position) => `r${position}`),
+    );
+    expect(reads.id + reads.index).toBeLessThanOrEqual(16 * count);
+
+    // A seek back folds from a kept scene, in work bounded by the scene it lands on.
+    reads.id = 0;
+    reads.index = 0;
+    const back = getWhiteboardReplayResult({
+      whiteboardEvents: events,
+      currentTime: 2_999 * 10,
+      lastAppliedIndex: end.nextIndex,
+    });
+    expect(back.stateToApply?.elements).toHaveLength(3_000);
+    expect(reads.id + reads.index).toBeLessThanOrEqual(16 * 3_000);
+  });
+
+  it("shows the scene a direct fold shows, wherever the playhead goes", () => {
+    const arbStep = fc.record(
+      {
+        upserts: fc.array(
+          fc.record(
+            { id: fc.constantFrom("a", "b", "c", "d"), index: fc.constantFrom("a0", "a1") },
+            { requiredKeys: ["id"] },
+          ),
+          { maxLength: 3 },
+        ),
+        removedIds: fc.array(fc.constantFrom("a", "b", "c", "d"), { maxLength: 1 }),
+        isOpen: fc.boolean(),
+      },
+      { requiredKeys: [] },
+    );
+
+    fc.assert(
+      fc.property(
+        fc.array(arbStep, { minLength: 1, maxLength: 300 }),
+        fc.array(fc.nat({ max: 299 }), { minLength: 1, maxLength: 12 }),
+        fc.nat({ max: 300 }),
+        (steps, seeks, streamedFirst) => {
+          let version = 0;
+          const all: WhiteboardEvent[] = steps.map(({ upserts, ...step }, index) => ({
+            ...step,
+            // Far enough apart that no seek lands in an animation window.
+            timestamp: index * 1_000,
+            ...(upserts
+              ? {
+                  upserts: upserts.map((upsert) => ({
+                    ...element(upsert.id),
+                    ...upsert,
+                    version: (version += 1),
+                  })),
+                }
+              : {}),
+          }));
+          // The track streams in: the rest is appended in place after the first seek.
+          const events = all.slice(0, Math.max(1, streamedFirst));
+
+          let lastAppliedIndex = -1;
+          seeks.forEach((seek, turn) => {
+            if (turn === 1) events.push(...all.slice(events.length));
+            const index = seek % events.length;
+            const result = getWhiteboardReplayResult({
+              whiteboardEvents: events,
+              currentTime: index * 1_000,
+              lastAppliedIndex,
+            });
+
+            expect(result.nextIndex).toBe(index);
+            // A seek that stays on the applied event has nothing new to show.
+            expect(result.stateToApply).toEqual(
+              index === lastAppliedIndex ? undefined : foldDirectly(all, index),
+            );
+            lastAppliedIndex = index;
+          });
+        },
+      ),
+    );
   });
 });
 

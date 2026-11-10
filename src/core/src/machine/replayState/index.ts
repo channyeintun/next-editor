@@ -7,6 +7,7 @@
 //   * runtime.ts   — runtime snapshot
 //   * slide.ts     — slide deck state
 //   * whiteboard.ts — whiteboard scene state
+//   * whiteboardSceneFold.ts — folding a run of whiteboard events into one scene
 //   * chat.ts      — coding-agent chat transcript
 //   * viewChanges.ts — where a track last changed how its panel is shown
 //
