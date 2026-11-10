@@ -1,0 +1,1074 @@
+# Go course, lesson 14: Burmese text, bytes and runes (Burmese).
+#
+# Start state: main.go with `package main`, an import block holding only "fmt" (the block takes
+# "unicode/utf8" later as one inserted line) and an empty `func main`.
+# Edits, all insert-only:
+#   1. s := "မြန်မာ" and a Println of len("Go") and len(s) -> run-1: 2 18;
+#   2. the rune count in that Println, the "unicode/utf8" import line, and a range loop over "မြန်"
+#      printed on one line -> run-2: 2 18 6 / 0:'မ' 3:'ြ' 6:'န' 9:'်';
+#   3. s[0] with len([]rune(s)), then the first two runes as a string -> run-3 adds 225 6 / မြ.
+# Boards: (B) text is stored as bytes: Unicode numbers every character, UTF-8 stores the number
+# (one byte for G, three for မ, 6 x 3 = 18); (L) three levels: what you see -> runes -> bytes for
+# the syllable မြန်; (C) never cut Burmese text by bytes, and even runes can cut a syllable;
+# (Q) the quiz (len of ကား).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-14-burmese-text
+  title: "Go course 14: မြန်မာစာ၊ byte နဲ့ rune"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board B: text is stored as bytes.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "စာသားကို byte တွေနဲ့ သိမ်းတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-g,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 140,
+        height: 40,
+        text: "G · 71",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-g-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 450,
+        y: 255,
+        width: 70,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-g-box,
+        kind: rectangle,
+        x: 535,
+        y: 240,
+        width: 90,
+        height: 55,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-g-byte,
+        kind: text,
+        x: 560,
+        y: 250,
+        width: 50,
+        height: 40,
+        text: "71",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-g-note,
+        kind: text,
+        x: 850,
+        y: 250,
+        width: 200,
+        height: 40,
+        text: "1 byte",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-m,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 140,
+        height: 40,
+        text: "မ · 4121",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-m-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 450,
+        y: 345,
+        width: 70,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-m-box1,
+        kind: rectangle,
+        x: 535,
+        y: 330,
+        width: 90,
+        height: 55,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-m-box2,
+        kind: rectangle,
+        x: 635,
+        y: 330,
+        width: 90,
+        height: 55,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-m-box3,
+        kind: rectangle,
+        x: 735,
+        y: 330,
+        width: 90,
+        height: 55,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-m-byte1,
+        kind: text,
+        x: 550,
+        y: 340,
+        width: 65,
+        height: 40,
+        text: "225",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-m-byte2,
+        kind: text,
+        x: 650,
+        y: 340,
+        width: 65,
+        height: 40,
+        text: "128",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-m-byte3,
+        kind: text,
+        x: 750,
+        y: 340,
+        width: 65,
+        height: 40,
+        text: "153",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-m-note,
+        kind: text,
+        x: 850,
+        y: 340,
+        width: 200,
+        height: 40,
+        text: "3 bytes",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-unicode,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 780,
+        height: 40,
+        text: "Unicode · စာလုံးတိုင်းကို နံပါတ် ပေးထား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-utf8,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 780,
+        height: 40,
+        text: "UTF-8 · အဲဒီ နံပါတ်ကို byte တွေနဲ့ သိမ်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-sum-box,
+        kind: rectangle,
+        x: 285,
+        y: 555,
+        width: 600,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-sum,
+        kind: text,
+        x: 305,
+        y: 570,
+        width: 540,
+        height: 40,
+        text: "မြန်မာ · 6 × 3 = 18 bytes",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board L: three levels for the syllable မြန်.
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "မြင်တာ → rune → byte",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-see-label,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 170,
+        height: 40,
+        text: "မြင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-see-box,
+        kind: rectangle,
+        x: 500,
+        y: 235,
+        width: 550,
+        height: 65,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-see,
+        kind: text,
+        x: 735,
+        y: 247,
+        width: 100,
+        height: 40,
+        text: "မြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-rune-label,
+        kind: text,
+        x: 300,
+        y: 335,
+        width: 170,
+        height: 40,
+        text: "rune",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: l-r1, kind: rectangle, x: 500, y: 320, width: 130, height: 60, strokeColor: "#1971c2" }
+    - { id: l-r2, kind: rectangle, x: 640, y: 320, width: 130, height: 60, strokeColor: "#1971c2" }
+    - { id: l-r3, kind: rectangle, x: 780, y: 320, width: 130, height: 60, strokeColor: "#1971c2" }
+    - { id: l-r4, kind: rectangle, x: 920, y: 320, width: 130, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: l-r1-t,
+        kind: text,
+        x: 540,
+        y: 330,
+        width: 60,
+        height: 40,
+        text: "'မ'",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r2-t,
+        kind: text,
+        x: 680,
+        y: 330,
+        width: 60,
+        height: 40,
+        text: "'ြ'",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r3-t,
+        kind: text,
+        x: 820,
+        y: 330,
+        width: 60,
+        height: 40,
+        text: "'န'",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-r4-t,
+        kind: text,
+        x: 960,
+        y: 330,
+        width: 60,
+        height: 40,
+        text: "'်'",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-byte-label,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 170,
+        height: 40,
+        text: "byte",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: l-b1a, kind: rectangle, x: 505, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b1b, kind: rectangle, x: 548, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b1c, kind: rectangle, x: 591, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b2a, kind: rectangle, x: 645, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b2b, kind: rectangle, x: 688, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b2c, kind: rectangle, x: 731, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b3a, kind: rectangle, x: 785, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b3b, kind: rectangle, x: 828, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b3c, kind: rectangle, x: 871, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b4a, kind: rectangle, x: 925, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b4b, kind: rectangle, x: 968, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - { id: l-b4c, kind: rectangle, x: 1011, y: 415, width: 38, height: 45, strokeColor: "#1971c2" }
+    - {
+        id: l-off-label,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 170,
+        height: 40,
+        text: "နေရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-off1,
+        kind: text,
+        x: 510,
+        y: 485,
+        width: 30,
+        height: 40,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-off2,
+        kind: text,
+        x: 650,
+        y: 485,
+        width: 30,
+        height: 40,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-off3,
+        kind: text,
+        x: 790,
+        y: 485,
+        width: 30,
+        height: 40,
+        text: "6",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-off4,
+        kind: text,
+        x: 930,
+        y: 485,
+        width: 30,
+        height: 40,
+        text: "9",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-note,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 700,
+        height: 40,
+        text: "မြင်တာ 1 · rune 4 · byte 12",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: never cut Burmese text by bytes.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "Byte နဲ့ မဖြတ်ပါနဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-bad-box,
+        kind: rectangle,
+        x: 285,
+        y: 245,
+        width: 800,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-bad,
+        kind: text,
+        x: 305,
+        y: 260,
+        width: 600,
+        height: 40,
+        text: 's[:4]  →  "မ\xe1"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-good-box,
+        kind: rectangle,
+        x: 285,
+        y: 350,
+        width: 800,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-good,
+        kind: text,
+        x: 305,
+        y: 365,
+        width: 600,
+        height: 40,
+        text: "[]rune(s)[:2]  →  မြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-check,
+        kind: freedraw,
+        stroke: check,
+        x: 990,
+        y: 360,
+        width: 55,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-warn-box,
+        kind: rectangle,
+        x: 285,
+        y: 455,
+        width: 800,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-warn,
+        kind: text,
+        x: 305,
+        y: 470,
+        width: 740,
+        height: 40,
+        text: "[]rune(s)[:3]  →  မြန  · အသတ် ကျန်ခဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (len of a three-rune word).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 520,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 265,
+        width: 460,
+        height: 40,
+        text: 'fmt.Println(len("ကား"))',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 200,
+        height: 40,
+        text: "က · 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 200,
+        height: 40,
+        text: "ခ · 9",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 430,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7114
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "2 18\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "2 18 6\n0:'မ' 3:'ြ' 6:'န' 9:'်' \n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "2 18 6\n0:'မ' 3:'ြ' 6:'န' 9:'်' \n225 6\nမြ\n"
+
+scenes:
+  - id: recall
+    chapter: စာသားရဲ့ အရှည်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ map ကို သုံးပြီး English စကားလုံး တစ်လုံးရဲ့ မြန်မာ အဓိပ္ပာယ်ကို key နဲ့
+      ချက်ချင်း ရှာခဲ့ပါတယ်။ အဲဒီမှာ မြန်မာ စာတွေကို string အဖြစ် သုံးခဲ့ပေမဲ့၊ string တစ်ခုရဲ့ အထဲမှာ
+      တကယ် ဘာရှိလဲ ဆိုတာကိုတော့ မကြည့်ခဲ့ရသေးပါဘူး။ [[mark:example]] ဥပမာအားဖြင့် နာမည် ဖြည့်ရတဲ့ form တစ်ခုက
+      စာလုံး နှစ်ဆယ်ထက် မပိုရဘူး လို့ ကန့်သတ်ထားတယ် ဆိုပါစို့။ အဲဒါကို စစ်ဖို့ဆိုရင် program က မြန်မာ
+      စာသား တစ်ခုမှာ စာလုံး ဘယ်နှစ်လုံး ပါလဲ ဆိုတာကို မှန်မှန်ကန်ကန် ရေတွက်နိုင်ရပါမယ်။ [[mark:type-word]]
+      main ထဲမှာ မြန်မာ ဆိုတဲ့ စကားလုံးကို s ဆိုတဲ့ variable ထဲ ထည့်ပါမယ်။ ပြီးတော့ အရှည်ကို ပြန်ပေးတဲ့ len ကို သုံးပြီး၊ English စာလုံး နှစ်လုံးပါတဲ့ Go ဆိုတဲ့ စာရဲ့ အရှည်နဲ့ s ရဲ့ အရှည်ကို ဘေးချင်းယှဉ်ပြီး print ထုတ်ပါမယ်။
+      [[mark:predict]] Go အတွက် နှစ် ထွက်မှာ သေချာပါတယ်။ မြန်မာ ဆိုတဲ့ စကားလုံး အတွက်ကော ဘယ်လောက် ထွက်မလဲ၊ run
+      မလုပ်ခင် ကိုယ့်ဘာသာ ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: type-word
+        type: editor.type
+        at: { mark: type-word }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\ts := \"မြန်မာ\"\n\tfmt.Println(len(\"Go\"), len(s))\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "2 18",
+          timeoutMs: 8000,
+        }
+
+  - id: bytes
+    narration: >-
+      [[mark:point-len]] output မှာ နှစ် နဲ့ ၁၈ ထွက်လာပါတယ်။ Go အတွက် နှစ် က မှန်ပါတယ်။ ဒါပေမဲ့ မြန်မာ
+      ဆိုတဲ့ စကားလုံးကို ကြည့်ရင် စာလုံး ၁၈ လုံး မရှိပါဘူး။ ဘာကြောင့် ဒီလောက် များနေရလဲ ဆိုတော့၊ len က
+      string ထဲက စာလုံးတွေကို ရေတွက်တာ မဟုတ်ဘဲ byte တွေကို ရေတွက်လို့ပါ။ [[mark:byte-gloss]] byte ဆိုတာ
+      သုညကနေ ၂၅၅ အထိ ရှိတဲ့ ဂဏန်း အသေးလေး တစ်ခုပါ။ ကွန်ပျူတာက စာ၊ ပုံ၊ အသံ မှန်သမျှကို ဒီလို
+      ဂဏန်း အသေးလေးတွေနဲ့ပဲ သိမ်းပါတယ်။ Go ရဲ့ string ဆိုတာလည်း တကယ်တော့ byte တွေကို အစီအစဉ်အတိုင်း
+      စီထားတာပါ။ ဒါကြောင့် string ရဲ့ အရှည်ဆိုတာ byte ဘယ်နှစ်ခု ရှိလဲ ဆိုတဲ့ အရေအတွက်ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — String types",
+          url: "https://go.dev/ref/spec#String_types",
+        }
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - { id: point-len, type: console.point, at: { mark: point-len }, target: { text: "2 18" } }
+
+  - id: utf8-board
+    chapter: Byte နဲ့ UTF-8
+    narration: >-
+      [[mark:board-bytes]] ဒါဆို စာလုံး တစ်လုံးကို byte ဘယ်နှစ်ခုနဲ့ သိမ်းလဲ ကြည့်ရအောင်။ ကွန်ပျူတာက
+      စာလုံးကို တိုက်ရိုက် မသိပါဘူး၊ ဂဏန်းကိုပဲ သိပါတယ်။ ဒါကြောင့် ကမ္ဘာပေါ်က ဘာသာစကား အမျိုးမျိုးရဲ့
+      စာလုံးတိုင်းကို နံပါတ် တစ်ခုစီ ပေးထားတဲ့ စနစ် တစ်ခု ရှိပြီး၊ အဲဒါကို Unicode လို့ ခေါ်ပါတယ်။
+      [[mark:draw-g]] ဥပမာ English စာလုံး G ရဲ့ နံပါတ်က ၇၁ ပါ။ English စာလုံးတွေလို နံပါတ် ငယ်တဲ့ စာလုံးတွေကို byte တစ်ခုတည်းနဲ့ သိမ်းပါတယ်။ [[mark:draw-ma]] မြန်မာ စာလုံး မ ရဲ့ နံပါတ်ကတော့ လေးထောင်ကျော်ပါ။
+      ၂၅၅ ထက် ကြီးလို့ byte တစ်ခုထဲ မဆံ့ပါဘူး။ ဒါကြောင့် byte သုံးခုမှာ ခွဲပြီး သိမ်းပါတယ်။
+      [[mark:draw-utf8]] နံပါတ်ကို byte တွေနဲ့ ဘယ်လို ခွဲသိမ်းမလဲ ဆိုတဲ့ နည်းကို UTF8 လို့ ခေါ်ပြီး၊ Go ရဲ့
+      string တွေက ဒီနည်းကို သုံးပါတယ်။ UTF8 မှာ မြန်မာ စာမှာ သုံးတဲ့ စာလုံးတွေကို byte သုံးခုစီနဲ့ သိမ်းပါတယ်။
+      [[mark:draw-sum]] မြန်မာ ဆိုတဲ့ စကားလုံးမှာ Unicode စာလုံး ခြောက်လုံး ပါလို့၊ ခြောက်ကို သုံးနဲ့ မြှောက်တော့ byte ၁၈ ခု ဖြစ်တာပါ။ ဒါဆို ဒီ ခြောက်လုံးဆိုတာ ဘာတွေလဲ။ code နဲ့ ရေတွက်ကြည့်ရအောင်။
+    sources:
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-bytes } }
+      - {
+          id: board-bytes,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-g,
+          type: whiteboard.apply,
+          at: { mark: draw-g },
+          upsertIds: [b-g, b-g-arrow, b-g-box, b-g-byte, b-g-note],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-ma,
+          type: whiteboard.apply,
+          at: { mark: draw-ma },
+          upsertIds:
+            [
+              b-m,
+              b-m-arrow,
+              b-m-box1,
+              b-m-box2,
+              b-m-box3,
+              b-m-byte1,
+              b-m-byte2,
+              b-m-byte3,
+              b-m-note,
+            ],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-utf8,
+          type: whiteboard.apply,
+          at: { mark: draw-utf8 },
+          upsertIds: [b-unicode, b-utf8],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-sum,
+          type: whiteboard.apply,
+          at: { mark: draw-sum },
+          upsertIds: [b-sum-box, b-sum],
+          drawMs: 1200,
+        }
+
+  - id: runes
+    chapter: Rune ဆိုတာ
+    narration: >-
+      [[mark:close-bytes]] Go မှာ Unicode စာလုံး တစ်လုံးကို rune လို့ ခေါ်ပါတယ်။ rune တစ်လုံးဆိုတာ
+      အဲဒီ စာလုံးရဲ့ Unicode နံပါတ်ပါ။ [[mark:type-count]] အရှည်ကို print ထုတ်တဲ့ line ထဲမှာ rune ဘယ်နှစ်လုံး
+      ပါလဲ ရေတွက်ပေးတဲ့ function ကို ထပ်ထည့်ပါမယ်။ [[mark:type-import]] ဒီ function က UTF8 စာသားတွေ
+      အတွက် ကိရိယာတွေ စုထားတဲ့ package ထဲမှာ ရှိလို့၊ import block ထဲမှာ အဲဒီ package ကို တစ်ကြောင်း
+      ထပ်ထည့်ပေးရပါမယ်။ [[mark:type-loop]] ပြီးတော့ မြန် ဆိုတဲ့ အသံ တစ်ခုတည်းကို range နဲ့ လျှောက်ကြည့်ပါမယ်။
+      string ကို range နဲ့ လျှောက်ရင် အခေါက်တိုင်းမှာ rune တစ်လုံးနဲ့၊ အဲဒီ rune စတဲ့ byte နေရာကို ပေးပါတယ်။
+      [[mark:sel-printf]] loop ထဲမှာ နေရာနဲ့ rune ကို တစ်ကြောင်းတည်းမှာ ဘေးချင်းကပ် ထုတ်ပြီး၊ rune ကို quote
+      နဲ့ ပြခိုင်းထားပါတယ်။ ဘာကြောင့်လဲဆိုတော့ တခြား စာလုံးနဲ့ တွဲမှ ပေါ်တဲ့ သင်္ကေတ တစ်ခုကို သူ့ချည်း ထုတ်ရင် ရှေ့က space နဲ့ ကပ်သွားလို့ပါ။ loop ပြီးတဲ့အခါ အောက်က line က စာကြောင်းကို ဆုံးပေးပါတယ်။ [[mark:run-2]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "utf8 package — RuneCountInString",
+          url: "https://pkg.go.dev/unicode/utf8#RuneCountInString",
+        }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+      - {
+          title: "The Go Programming Language Specification — Rune literals",
+          url: "https://go.dev/ref/spec#Rune_literals",
+        }
+    actions:
+      - {
+          id: close-bytes,
+          type: whiteboard.apply,
+          at: { mark: close-bytes },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-count
+        type: editor.type
+        at: { mark: type-count }
+        target: { file: main.go, after: "len(s)", occurrence: 1 }
+        text: ", utf8.RuneCountInString(s)"
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"unicode/utf8\"\n"
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "utf8.RuneCountInString(s))\n", occurrence: 1 }
+        text: "\tfor i, r := range \"မြန်\" {\n\t\tfmt.Printf(\"%d:%q \", i, r)\n\t}\n\tfmt.Println()\n"
+        cadence: line-by-line
+      - id: sel-printf
+        type: editor.select
+        at: { mark: sel-printf }
+        target: { file: main.go, text: 'fmt.Printf("%d:%q ", i, r)', occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "2 18 6",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-count,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: 'fmt.Println(len("Go"), len(s), utf8.RuneCountInString(s))',
+        }
+
+  - id: read-runes
+    narration: >-
+      [[mark:point-count]] ပထမ စာကြောင်းရဲ့ နောက်ဆုံးမှာ ခြောက် ထွက်လာပါပြီ။ byte ၁၈ ခု ရှိပေမဲ့ rune ကတော့
+      ခြောက်လုံးပဲ ရှိပါတယ်။ [[mark:point-loop]] ဒုတိယ စာကြောင်းက loop ရဲ့ output ပါ။ နေရာ နံပါတ်တွေက သုည၊
+      သုံး၊ ခြောက်၊ ကိုး ဆိုပြီး သုံးခုစီ ခုန်သွားတာကို သတိထားကြည့်ပါ။ rune တစ်လုံးက byte သုံးခု ယူလို့ပါ။
+      range က byte တစ်ခုချင်း မသွားဘဲ rune တစ်လုံးချင်း သွားပေးတာပါ။ [[mark:four-runes]] ပြီးတော့ ထူးခြားတာ
+      တစ်ခုက မြန် ဆိုတဲ့ အသံ တစ်ခုတည်းမှာ rune လေးလုံး ပါနေတာပါ။ မ၊ ယရစ်၊ န နဲ့ အသတ် ပါ။ ကိုယ်တို့
+      မျက်စိနဲ့ ကြည့်ရင် တစ်ဆက်တည်း မြင်ရပေမဲ့၊ ယရစ် လို ဗျည်းတွဲ၊ အသတ် လို သင်္ကေတ တွေက Unicode မှာ
+      rune တစ်လုံးစီ ဖြစ်ပါတယ်။
+    sources:
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - {
+          id: point-count,
+          type: console.point,
+          at: { mark: point-count },
+          target: { text: "2 18 6" },
+        }
+      - { id: point-loop, type: console.point, at: { mark: point-loop }, target: { text: "0:'မ'" } }
+
+  - id: levels
+    chapter: မြင်တာ၊ rune နဲ့ byte
+    narration: >-
+      [[mark:board-levels]] ဒါကို အဆင့် သုံးဆင့်နဲ့ ပြန်ကြည့်ရအောင်။ [[mark:draw-see]] အပေါ်ဆုံးမှာ ကိုယ်တို့
+      မျက်စိနဲ့ မြင်ရတဲ့ မြန် ဆိုတဲ့ အသံ တစ်ခု ရှိပါတယ်။ [[mark:draw-runes]] Go ကတော့ အဲဒါကို rune လေးလုံး
+      အဖြစ် မြင်ပါတယ်။ [[mark:draw-bytes]] rune တစ်လုံးစီက byte သုံးခုစီ ဖြစ်လို့ စုစုပေါင်း byte ဆယ့်နှစ်ခု
+      ရှိပါတယ်။ range က ပေးတဲ့ နေရာ နံပါတ်တွေဟာ rune တစ်လုံးချင်း စတဲ့ byte နေရာတွေပါ။ [[mark:levels-note]]
+      ဒါကြောင့် စာလုံး ဘယ်နှစ်လုံးလဲ လို့ မေးရင်၊ ဘယ်အဆင့်ကို ဆိုလိုတာလဲ ဆိုတာ အရင် စဉ်းစားရပါမယ်။ len က
+      byte ကို ရေတွက်ပြီး၊ ဒီနေ့ ထည့်ခဲ့တဲ့ function က rune ကို ရေတွက်ပါတယ်။ မျက်စိနဲ့ မြင်ရတဲ့ အသံ
+      တစ်ခုမှာ rune ဘယ်နှစ်လုံး ပါလဲ ဆိုတာကတော့ အသံ တစ်ခုချင်းပေါ် မူတည်ပါတယ်။ English စာမှာတော့ ဒီ အဆင့်
+      သုံးဆင့်လုံး အများအားဖြင့် တူနေလို့၊ ဒီ ကွာခြားချက်ကို သတိမထားမိကြတာ များပါတယ်။
+    sources:
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+      - { title: "utf8 package", url: "https://pkg.go.dev/unicode/utf8" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-levels } }
+      - {
+          id: board-levels,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-see,
+          type: whiteboard.apply,
+          at: { mark: draw-see },
+          upsertIds: [l-see-label, l-see-box, l-see],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-runes,
+          type: whiteboard.apply,
+          at: { mark: draw-runes },
+          upsertIds: [l-rune-label, l-r1, l-r2, l-r3, l-r4, l-r1-t, l-r2-t, l-r3-t, l-r4-t],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-bytes,
+          type: whiteboard.apply,
+          at: { mark: draw-bytes },
+          upsertIds:
+            [
+              l-byte-label,
+              l-b1a,
+              l-b1b,
+              l-b1c,
+              l-b2a,
+              l-b2b,
+              l-b2c,
+              l-b3a,
+              l-b3b,
+              l-b3c,
+              l-b4a,
+              l-b4b,
+              l-b4c,
+              l-off-label,
+              l-off1,
+              l-off2,
+              l-off3,
+              l-off4,
+            ],
+          drawMs: 3000,
+        }
+      - {
+          id: levels-note,
+          type: whiteboard.apply,
+          at: { mark: levels-note },
+          upsertIds: [l-note],
+          drawMs: 1000,
+        }
+
+  - id: index
+    chapter: Byte တစ်ခုနဲ့ rune slice
+    narration: >-
+      [[mark:close-levels]] နောက်တစ်ခု ကြည့်ရအောင်။ slice မှာ index နဲ့ item တစ်ခုကို ယူခဲ့သလို၊ string
+      မှာလည်း index နဲ့ ယူလို့ ရပါတယ်။ [[mark:type-index]] ဒီ line နှစ်ကြောင်းကို ထည့်ပါမယ်။ [[mark:sel-s0]]
+      ဒါက s ရဲ့ index သုည ကို ယူတာပါ။ မ ဆိုတဲ့ စာလုံး ရမလား၊ တခြား တစ်ခုခု ရမလား ဆိုတာ output မှာ
+      ကြည့်ရပါမယ်။ [[mark:sel-runes]] ဒါကတော့ s ကို rune slice အဖြစ် ပြောင်းပြီး အရှည်ကို ယူတာပါ။ rune slice ဆိုတာ
+      rune တွေကို slice တစ်ခုထဲမှာ တစ်လုံးချင်း ခွဲထည့်ထားတာ ဖြစ်လို့၊ သူ့ရဲ့ အရှည်က rune အရေအတွက်နဲ့
+      တူရပါမယ်။ [[mark:sel-first-two]] နောက်ဆုံး line က အဲဒီ rune slice ထဲက ပထမ rune နှစ်လုံးကို ယူပြီး
+      string ပြန်ပြောင်းတာပါ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+      - {
+          title: "The Go Programming Language Specification — Conversions to and from a string type",
+          url: "https://go.dev/ref/spec#Conversions_to_and_from_a_string_type",
+        }
+    actions:
+      - {
+          id: close-levels,
+          type: whiteboard.apply,
+          at: { mark: close-levels },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-index
+        type: editor.type
+        at: { mark: type-index }
+        target: { file: main.go, after: "\tfmt.Println()\n", occurrence: 1 }
+        text: "\tfmt.Println(s[0], len([]rune(s)))\n\tfmt.Println(string([]rune(s)[:2]))\n"
+        cadence: line-by-line
+      - id: sel-s0
+        type: editor.select
+        at: { mark: sel-s0 }
+        target: { file: main.go, text: "s[0]", occurrence: 1 }
+      - id: sel-runes
+        type: editor.select
+        at: { mark: sel-runes }
+        target: { file: main.go, text: "len([]rune(s))", occurrence: 1 }
+      - id: sel-first-two
+        type: editor.select
+        at: { mark: sel-first-two }
+        target: { file: main.go, text: "string([]rune(s)[:2])", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "225 6",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-runes,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tfmt.Println(string([]rune(s)[:2]))\n",
+        }
+
+  - id: read-index
+    narration: >-
+      [[mark:point-byte]] တတိယ စာကြောင်းမှာ ၂၂၅ နဲ့ ခြောက် ထွက်လာပါတယ်။ index သုည က မ ဆိုတဲ့ စာလုံး
+      မဟုတ်ဘဲ ၂၂၅ ဆိုတဲ့ ဂဏန်း ဖြစ်နေပါတယ်။ ဒါက မ ရဲ့ byte သုံးခုထဲက ပထမ byte ပါ။ string
+      ကို index နဲ့ ယူရင် စာလုံး မရဘဲ byte ပဲ ရတာပါ။ ခြောက် ကတော့ rune slice ရဲ့ အရှည် ဖြစ်ပြီး rune
+      ခြောက်လုံးနဲ့ ကိုက်ပါတယ်။ [[mark:point-two]] နောက်ဆုံး စာကြောင်းမှာတော့ မြ လို့ ထွက်လာပါတယ်၊ မ နဲ့
+      ယရစ် rune နှစ်လုံးပါ။ rune slice ပြောင်းပြီးမှ ယူတဲ့အတွက် စာလုံးတွေ မပျက်ဘဲ မှန်မှန် ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - { id: point-byte, type: console.point, at: { mark: point-byte }, target: { text: "225 6" } }
+      - { id: point-two, type: console.point, at: { mark: point-two }, target: { text: "မြ" } }
+
+  - id: cut
+    narration: >-
+      [[mark:board-cut]] ဒါဆို byte နဲ့ တိုက်ရိုက် ဖြတ်ရင် ဘာဖြစ်မလဲ။ [[mark:draw-cut-bytes]] s ရဲ့ ပထမ byte လေးခုကိုပဲ ဖြတ်ယူလိုက်ရင်၊ မ ရဲ့ byte သုံးခုနဲ့ နောက် စာလုံးရဲ့ byte တစ်ခုပဲ ပါလာပါတယ်။ ပိုင်းပြတ်နေတဲ့
+      byte တစ်ခုက ဘယ်စာလုံးမှ မဟုတ်တော့လို့၊ quote နဲ့ ထုတ်ကြည့်ရင် Go က စာလုံး အဖြစ် မပြနိုင်ဘဲ byte ရဲ့ ဂဏန်းကိုပဲ ပြပါတယ်။
+      ဒါကြောင့် မြန်မာ စာသားကို byte နဲ့ ဘယ်တော့မှ မဖြတ်ပါနဲ့။ [[mark:draw-cut-good]] rune slice နဲ့ ဖြတ်ရင်တော့
+      စာလုံး မပျက်ပါဘူး။ [[mark:draw-cut-warn]] ဒါပေမဲ့ သတိထားရမှာက၊ rune သုံးလုံးမှာ ဖြတ်ရင် မြန ဆိုပြီး
+      အသတ် ကျန်ခဲ့ပါတယ်။ rune တစ်လုံးက ကိုယ်တို့ ဖတ်တဲ့ စာလုံး တစ်လုံးနဲ့ အမြဲ မတူတဲ့အတွက်၊ မြန်မာ စာကို
+      ဖြတ်တဲ့အခါ အသံ တစ်ခုရဲ့ အလယ်မှာ မပြတ်အောင် ဂရုစိုက်ရပါတယ်။
+    sources:
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+      - { title: "utf8 package — ValidString", url: "https://pkg.go.dev/unicode/utf8#ValidString" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-cut } }
+      - {
+          id: board-cut,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-cut-bytes,
+          type: whiteboard.apply,
+          at: { mark: draw-cut-bytes },
+          upsertIds: [c-bad-box, c-bad],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-cut-good,
+          type: whiteboard.apply,
+          at: { mark: draw-cut-good },
+          upsertIds: [c-good-box, c-good, c-check],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-cut-warn,
+          type: whiteboard.apply,
+          at: { mark: draw-cut-warn },
+          upsertIds: [c-warn-box, c-warn],
+          drawMs: 1400,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program က ကား ဆိုတဲ့ စကားလုံးရဲ့ အရှည်ကို print
+      ထုတ်ပါတယ်။ ကား မှာ က၊ ရေးချ နဲ့ ဝစ္စပေါက် ဆိုပြီး rune သုံးလုံး ပါပါတယ်။ ဒီ program က သုံး ကို
+      ထုတ်မလား၊ ကိုး ကို ထုတ်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့
+      ခ၊ ကိုး ပါ။ ဘာကြောင့်လဲဆိုတော့ len က rune ကို မရေတွက်ဘဲ byte ကို ရေတွက်လို့ပါ။ rune သုံးလုံး ရှိပြီး
+      တစ်လုံးစီက byte သုံးခုစီ ဖြစ်လို့ ကိုး ရတာပါ။ rune အရေအတွက်ကို လိုချင်ရင်တော့ ဒီနေ့ သုံးခဲ့တဲ့ rune
+      ရေတွက်တဲ့ function ကို သုံးရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-a, q-b],
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ Go ရဲ့ string ဆိုတာ byte တွေကို အစီအစဉ်အတိုင်း စီထားတာပါ။
+      [[mark:recap-len]] ဒါကြောင့် len က byte ကို ရေတွက်ပြီး၊ မြန်မာ စာလုံး တစ်လုံးက byte သုံးခု ယူပါတယ်။
+      [[mark:recap-count]] rune ဆိုတာ Unicode စာလုံး တစ်လုံးဖြစ်ပြီး၊ rune အရေအတွက်ကို ဒီ function နဲ့
+      ရေတွက်ပါတယ်။ [[mark:recap-range]] range ကလည်း string ကို rune တစ်လုံးချင်း လျှောက်ပေးပါတယ်။
+      [[mark:recap-runes]] စာလုံးတွေကို ယူချင်ရင်၊ ဖြတ်ချင်ရင် rune slice ပြောင်းပြီးမှ လုပ်ပါ။ မြင်ရတဲ့ အသံ
+      တစ်ခုမှာ rune အများကြီး ပါနိုင်တာကိုလည်း မမေ့ပါနဲ့။ နောက် lesson မှာတော့ စာသားနဲ့ ဂဏန်းတွေအတွက် Go
+      နဲ့ အတူ ပါလာတဲ့ ကိရိယာတွေ အကြောင်းနဲ့၊ မြန်မာ ဂဏန်းတွေကို ပြောင်းတဲ့ နည်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-len
+        type: editor.select
+        at: { mark: recap-len }
+        target: { file: main.go, text: "len(s)", occurrence: 1 }
+      - id: recap-count
+        type: editor.select
+        at: { mark: recap-count }
+        target: { file: main.go, text: "utf8.RuneCountInString(s)", occurrence: 1 }
+      - id: recap-range
+        type: editor.select
+        at: { mark: recap-range }
+        target: { file: main.go, text: 'range "မြန်"', occurrence: 1 }
+      - id: recap-runes
+        type: editor.select
+        at: { mark: recap-runes }
+        target: { file: main.go, text: "[]rune(s)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
