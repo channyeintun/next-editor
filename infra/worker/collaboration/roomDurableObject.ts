@@ -1040,6 +1040,7 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         }
       };
       const heldBefore = heldBackState(validationDocument);
+      const stateBefore = Y.decodeStateVector(Y.encodeStateVector(validationDocument));
       validationDocument.on("afterTransaction", observeTransaction);
       try {
         Y.applyUpdate(validationDocument, frame.update, "server-teaching-validation");
@@ -1070,6 +1071,10 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         }
         this.binaryTeachingIntegrity = after;
       }
+      // Last, so a refused update claims nothing it did not pass the checks
+      // for: every client ID this update wrote new structs under must be the
+      // sender's (see AwarenessClientOwners).
+      this.claimWrittenClients(attachment, stateBefore, validationDocument);
     } catch {
       this.resetBinaryDocument();
       this.rejectSocket(
@@ -1145,6 +1150,29 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         quotaExceeded ? undefined : 1011,
         event.updateId,
       );
+    }
+  }
+
+  /**
+   * Throws unless every client ID whose state `doc` advanced past `before` is
+   * the sender's, claiming any that no member owns yet. Yjs skips a struct
+   * whose ID it already has, so structs written under another member's client
+   * ID (which every member sees in awareness) at that member's next clocks
+   * made the room drop that member's real edits after acknowledging them.
+   * Structs the room already had advance nothing and are not checked.
+   */
+  private claimWrittenClients(
+    attachment: SocketAttachment,
+    before: Map<number, number>,
+    doc: Y.Doc,
+  ): void {
+    for (const [client, clock] of Y.decodeStateVector(Y.encodeStateVector(doc))) {
+      if (clock <= (before.get(client) ?? 0)) continue;
+      // The socket's awareness ID is its document's client ID, claimed already.
+      if (client === attachment.awarenessClientId) continue;
+      if (!this.awarenessClientOwners.claim(client, attachment.userId)) {
+        throw new Error("the update writes under another member's client ID");
+      }
     }
   }
 

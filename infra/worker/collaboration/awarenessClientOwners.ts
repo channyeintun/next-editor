@@ -9,12 +9,14 @@ const AWARENESS_CLIENT_OWNERSHIP_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_AWARENESS_CLIENTS_PER_MEMBER = 16;
 
 /**
- * The member each awareness client ID in the room belongs to.
+ * The member each awareness client ID in the room belongs to. A document's
+ * awareness client ID is its Yjs clientID, so this is also who may write
+ * document structs under that ID.
  *
  * Peers keep one awareness state per client ID, so the room lets only one open
  * socket publish each ID. That alone would let another member take the ID of a
  * member who is offline and keep them out when they reconnect with it; this
- * record gives the ID to the member who published it first.
+ * record gives the ID to the member who published (or wrote under) it first.
  */
 export class AwarenessClientOwners {
   private readonly storage: RoomSqliteStorage;

@@ -692,6 +692,90 @@ describe("CollaborationRoomDurableObject updates with missing dependencies", () 
     expect(await persistedText()).toBe("seedo");
   });
 
+  // Yjs skips a struct whose ID it already has, so an editor who wrote under
+  // another member's client ID (every member sees it in awareness) at that
+  // member's next clocks made the room drop their real edits after acking them.
+  it("refuses structs written under another member's client ID", async () => {
+    const { room, doc, connect, persistedText } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const editor = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(owner as never, awarenessFrame(owner, VICTIM_CLIENT, 1));
+    const forged = new Y.Doc();
+    forged.clientID = VICTIM_CLIENT;
+    Y.applyUpdate(forged, Y.encodeStateAsUpdate(doc));
+    const beforeForgery = Y.encodeStateVector(forged);
+    forged.getText("scratch").insert(0, "EVIL");
+    const victim = new Y.Doc();
+    victim.clientID = VICTIM_CLIENT;
+    Y.applyUpdate(victim, Y.encodeStateAsUpdate(doc));
+    const beforeVictimEdit = Y.encodeStateVector(victim);
+    victim.getText("scratch").insert(victim.getText("scratch").length, "mine");
+
+    await room.webSocketMessage(
+      editor as never,
+      clientUpdate(Y.encodeStateAsUpdate(forged, beforeForgery)),
+    );
+    await room.webSocketMessage(
+      owner as never,
+      clientUpdate(Y.encodeStateAsUpdate(victim, beforeVictimEdit)),
+    );
+
+    expect(acks(editor)).toEqual([]);
+    expect(errors(editor)).toEqual([
+      expect.objectContaining({ code: "invalid-message", fatal: true }),
+    ]);
+    expect(acks(owner)).toHaveLength(1);
+    expect(await persistedText()).toBe("seedmine");
+  });
+
+  it("gives a new client ID to the member who writes under it first", async () => {
+    const { room, doc, connect, persistedText } = await createRoom();
+    const first = connect(MEMBER_ID, "editor");
+    const second = connect(PEER_ID, "editor");
+    const writer = new Y.Doc();
+    writer.clientID = 5555;
+    Y.applyUpdate(writer, Y.encodeStateAsUpdate(doc));
+    const write = (text: string) => {
+      const before = Y.encodeStateVector(writer);
+      writer.getText("scratch").insert(writer.getText("scratch").length, text);
+      return clientUpdate(Y.encodeStateAsUpdate(writer, before));
+    };
+
+    await room.webSocketMessage(first as never, write("+first"));
+    await room.webSocketMessage(second as never, write("+second"));
+
+    expect(acks(first)).toHaveLength(1);
+    expect(errors(second)).toEqual([expect.objectContaining({ code: "invalid-message" })]);
+    expect(await persistedText()).toBe("seed+first");
+  });
+
+  // Structs the room already has change nothing, whoever wrote them.
+  it("accepts an update that repeats another member's stored structs", async () => {
+    const { room, doc, connect } = await createRoom();
+    const owner = connect(OWNER_ID, "owner");
+    const editor = connect(MEMBER_ID, "editor");
+    await room.webSocketMessage(owner as never, awarenessFrame(owner, VICTIM_CLIENT, 1));
+    const victim = new Y.Doc();
+    victim.clientID = VICTIM_CLIENT;
+    Y.applyUpdate(victim, Y.encodeStateAsUpdate(doc));
+    const beforeVictimEdit = Y.encodeStateVector(victim);
+    victim.getText("scratch").insert(0, "owner ");
+    const victimEdit = Y.encodeStateAsUpdate(victim, beforeVictimEdit);
+    await room.webSocketMessage(owner as never, clientUpdate(victimEdit));
+    const echo = new Y.Doc();
+    Y.applyUpdate(echo, Y.encodeStateAsUpdate(victim));
+    const beforeEcho = Y.encodeStateVector(echo);
+    echo.getText("scratch").insert(echo.getText("scratch").length, "!");
+
+    await room.webSocketMessage(
+      editor as never,
+      clientUpdate(Y.mergeUpdates([victimEdit, Y.encodeStateAsUpdate(echo, beforeEcho)])),
+    );
+
+    expect(errors(editor)).toEqual([]);
+    expect(acks(editor)).toHaveLength(1);
+  });
+
   // The client's outbox is stop-and-wait, so its next update never runs ahead
   // of one the room has not acknowledged.
   it("still accepts an update that depends only on acknowledged state", async () => {
@@ -879,14 +963,27 @@ describe("CollaborationRoomDurableObject update rate limits", () => {
 
   it("still caps the whole room at 120 accepted updates a second", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
-    const { room, connect, edit } = await createRoom();
+    const { room, connect } = await createRoom();
     const editors = Array.from({ length: 5 }, (_, index) =>
       connect(`20000000-0000-4000-8000-00000000001${index}`, "editor"),
     );
 
     for (const editor of editors) {
+      // Each member writes from their own document: a client ID is one member's.
+      const own = new Y.Doc();
       for (let index = 0; index < 25; index += 1) {
-        await room.webSocketMessage(editor as never, edit("x"));
+        const before = Y.encodeStateVector(own);
+        own.getText("scratch").insert(0, "x");
+        await room.webSocketMessage(
+          editor as never,
+          toArrayBuffer(
+            encodeCollaborationClientUpdate({
+              clientId: CLIENT_ID,
+              updateId: uuid(),
+              update: Y.encodeStateAsUpdate(own, before),
+            }),
+          ),
+        );
       }
     }
 
