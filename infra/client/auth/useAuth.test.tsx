@@ -14,8 +14,13 @@ vi.mock("@simplewebauthn/browser", () => ({
   WebAuthnError: class extends Error {},
 }));
 
-const { ME_QUERY_KEY, PASSKEY_LIST_QUERY_KEY, useGoogleCredentialSignIn, useSignOut } =
-  await import("./useAuth");
+const {
+  ME_QUERY_KEY,
+  PASSKEY_LIST_QUERY_KEY,
+  useGoogleCredentialSignIn,
+  useSignOut,
+  useSignOutEverywhere,
+} = await import("./useAuth");
 const { useSignInWithPasskey } = await import("./usePasskey");
 
 function user(id: string): AuthUser {
@@ -76,6 +81,19 @@ describe("signing out", () => {
 
     await act(() => result.current.mutateAsync());
 
+    expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeNull();
+    expect(cached(queryClient, OWNER_KEYS)).toEqual([]);
+    expect(cached(queryClient, PUBLIC_KEYS)).toEqual(PUBLIC_KEYS);
+  });
+
+  it("ends every session of the account and forgets it here too", async () => {
+    const queryClient = signedInAs(user("a"));
+    post.mockResolvedValue({ data: {} });
+    const { result } = renderAuthHook(queryClient, () => useSignOutEverywhere());
+
+    await act(() => result.current.mutateAsync());
+
+    expect(post).toHaveBeenCalledWith("/auth/logout-everywhere");
     expect(queryClient.getQueryData(ME_QUERY_KEY)).toBeNull();
     expect(cached(queryClient, OWNER_KEYS)).toEqual([]);
     expect(cached(queryClient, PUBLIC_KEYS)).toEqual(PUBLIC_KEYS);

@@ -62,19 +62,33 @@ export function useAuth(options: { enabled?: boolean } = {}) {
   };
 }
 
+/** What this tab forgets once its session has ended. */
+function forgetSignedInAccount(queryClient: QueryClient): void {
+  queryClient.setQueryData(ME_QUERY_KEY, null);
+  clearOwnerScopedQueries(queryClient);
+  // Otherwise One Tap's automatic sign-in (GoogleOneTap.tsx) would put
+  // the user straight back into a session on the next prompt.
+  disableGoogleAutoSelect();
+}
+
 export function useSignOut() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       await apiClient.post("/auth/logout");
     },
-    onSuccess: () => {
-      queryClient.setQueryData(ME_QUERY_KEY, null);
-      clearOwnerScopedQueries(queryClient);
-      // Otherwise One Tap's automatic sign-in (GoogleOneTap.tsx) would put
-      // the user straight back into a session on the next prompt.
-      disableGoogleAutoSelect();
+    onSuccess: () => forgetSignedInAccount(queryClient),
+  });
+}
+
+/** Ends every session the account has, on every browser and device, this one included. */
+export function useSignOutEverywhere() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await apiClient.post("/auth/logout-everywhere");
     },
+    onSuccess: () => forgetSignedInAccount(queryClient),
   });
 }
 

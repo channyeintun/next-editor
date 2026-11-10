@@ -37,6 +37,18 @@ export function isPasskeyAlreadyRegistered(error: unknown): boolean {
   );
 }
 
+// The server adds a passkey only for a recent sign-in (requireRecentSignIn in
+// worker/auth/requireUser.ts) and answers an older session 403 with
+// `reauthenticate: true`: the user has to sign in again first, which is not a
+// failure of the ceremony.
+export function isPasskeySignInTooOld(error: unknown): boolean {
+  return (
+    axios.isAxiosError(error) &&
+    error.response?.status === 403 &&
+    (error.response.data as { reauthenticate?: unknown } | undefined)?.reauthenticate === true
+  );
+}
+
 // The WebAuthn client is only needed once someone starts a passkey ceremony,
 // so it stays out of the bundle every page loads. It is fetched alongside the
 // ceremony's options request, so the ceremony starts no later than it did when
@@ -76,6 +88,23 @@ export function useRegisterPasskey() {
       ]);
       const response = await startRegistration({ optionsJSON: options });
       await apiClient.post("/auth/passkey/register/verify", response);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PASSKEY_LIST_QUERY_KEY });
+    },
+  });
+}
+
+/**
+ * Removes one of the signed-in account's passkeys, so it no longer signs in.
+ * Needs no WebAuthn: the device may still list the passkey, but the account
+ * no longer accepts it.
+ */
+export function useRemovePasskey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/auth/passkey/credentials/${encodeURIComponent(id)}`);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: PASSKEY_LIST_QUERY_KEY });

@@ -76,3 +76,20 @@ export async function updatePasskeyCredentialAfterAuth(
     .bind(counter, Date.now(), credentialId)
     .run();
 }
+
+/**
+ * Removes one of the user's own passkeys, so it no longer signs in. Scoped by
+ * owner in the WHERE, so another account's credential id matches nothing and
+ * answers false, the same as an id that does not exist.
+ */
+export async function deletePasskeyCredential(
+  db: D1Database,
+  userId: string,
+  credentialId: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare("DELETE FROM passkey_credentials WHERE id = ? AND user_id = ?")
+    .bind(credentialId, userId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}

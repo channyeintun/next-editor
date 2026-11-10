@@ -1,5 +1,6 @@
+import { AxiosError, AxiosHeaders } from "axios";
 import { describe, expect, it } from "vite-plus/test";
-import { isPasskeyAlreadyRegistered, isPasskeyCancel } from "./usePasskey";
+import { isPasskeyAlreadyRegistered, isPasskeyCancel, isPasskeySignInTooOld } from "./usePasskey";
 
 // What @simplewebauthn/browser's WebAuthnError looks like to a caller: an
 // Error whose `code` names the case and whose `name` comes from its cause.
@@ -42,5 +43,29 @@ describe("isPasskeyCancel", () => {
   it("treats a dismissed passkey dialog as a cancel", () => {
     expect(isPasskeyCancel(domError("NotAllowedError"))).toBe(true);
     expect(isPasskeyCancel(domError("InvalidStateError"))).toBe(false);
+  });
+});
+
+function httpError(status: number, data: unknown): AxiosError {
+  return new AxiosError("Request failed", "ERR_BAD_REQUEST", undefined, undefined, {
+    status,
+    statusText: "",
+    data,
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+  });
+}
+
+describe("isPasskeySignInTooOld", () => {
+  // Adding a passkey needs a recent sign-in, and the server says so with a
+  // flagged 403 rather than a ceremony failure.
+  it("recognizes the server asking for a fresh sign-in", () => {
+    expect(isPasskeySignInTooOld(httpError(403, { error: "x", reauthenticate: true }))).toBe(true);
+  });
+
+  it("leaves other refusals alone", () => {
+    expect(isPasskeySignInTooOld(httpError(403, { error: "x" }))).toBe(false);
+    expect(isPasskeySignInTooOld(httpError(401, { reauthenticate: true }))).toBe(false);
+    expect(isPasskeySignInTooOld(domError("NotAllowedError"))).toBe(false);
   });
 });

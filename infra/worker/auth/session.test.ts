@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { authRoute } from "./session";
-import { getSessionUser, updateUsername } from "../../db/queries";
+import { getLiveSession, updateUsername, type LiveSession } from "../../db/queries";
 import type { UserRow } from "../../db/types";
 
 vi.mock("../../db/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../db/queries")>()),
-  getSessionUser: vi.fn<() => Promise<UserRow | null>>(),
+  getLiveSession: vi.fn<() => Promise<LiveSession | null>>(),
   updateUsername: vi.fn<() => Promise<unknown>>(),
 }));
 
@@ -25,7 +25,10 @@ function patchUsername(body: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getSessionUser).mockResolvedValue({ id: "user-1" } as UserRow);
+  vi.mocked(getLiveSession).mockResolvedValue({
+    user: { id: "user-1" } as UserRow,
+    signedInAt: 0,
+  });
 });
 
 describe("authRoute username", () => {

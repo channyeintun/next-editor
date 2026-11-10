@@ -1,17 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { KeyRound, LibraryBig, LogOut, Plus } from "lucide-react";
-import { useAuth, useSignOut, signInUrl, avatarProxyUrl } from "./useAuth";
+import { KeyRound, LibraryBig, LogOut, MonitorSmartphone, Plus, ShieldCheck } from "lucide-react";
+import { useAuth, useSignOut, useSignOutEverywhere, signInUrl, avatarProxyUrl } from "./useAuth";
 import {
   browserSupportsPasskeys,
   isPasskeyAlreadyRegistered,
   isPasskeyCancel,
+  isPasskeySignInTooOld,
   passkeyErrorMessage,
   usePasskeyList,
   useRegisterPasskey,
   useSignInWithPasskey,
 } from "./usePasskey";
 import GoogleOneTap from "./GoogleOneTap";
+import PasskeyListDialog from "./PasskeyListDialog";
 import GoogleIcon from "@app/components/icon/Google";
 import PopoverMenu from "@app/components/PopoverMenu";
 import HoverRing from "@app/components/hoverRing/HoverRing";
@@ -23,7 +25,9 @@ import { analytics } from "@app/utils/analytics";
 export default function AuthMenu() {
   const { user, isSignedIn, isLoading } = useAuth();
   const signOut = useSignOut();
+  const signOutEverywhere = useSignOutEverywhere();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [passkeysOpen, setPasskeysOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Identify user on login and on every page load when already signed in.
@@ -103,6 +107,12 @@ export default function AuthMenu() {
           My Library
         </Link>
         {browserSupportsPasskeys() && <AddPasskeyMenuItem />}
+        <ManagePasskeysMenuItem
+          onOpen={() => {
+            setMenuOpen(false);
+            setPasskeysOpen(true);
+          }}
+        />
         <button
           type="button"
           role="menuitem"
@@ -118,8 +128,47 @@ export default function AuthMenu() {
           <LogOut className="size-4 text-slate-400" />
           {signOut.isPending ? "Signing out…" : "Sign out"}
         </button>
+        {/* Ends the sessions on every other browser and device too: the way
+            out after a lost device or a session left signed in elsewhere. */}
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setMenuOpen(false);
+            analytics.capture("signed_out_everywhere");
+            analytics.reset();
+            signOutEverywhere.mutate();
+          }}
+          disabled={signOutEverywhere.isPending}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+        >
+          <MonitorSmartphone className="size-4 text-slate-400" />
+          {signOutEverywhere.isPending ? "Signing out…" : "Sign out everywhere"}
+        </button>
       </PopoverMenu>
+      {passkeysOpen && (
+        <PasskeyListDialog onClose={() => setPasskeysOpen(false)} returnFocusTo={triggerRef} />
+      )}
     </div>
+  );
+}
+
+// Opens the passkey list, where the owner reviews and removes them. Shown only
+// once the account has a passkey; removing one needs no WebAuthn support, so
+// unlike adding it is offered in every browser.
+function ManagePasskeysMenuItem({ onOpen }: { onOpen: () => void }) {
+  const { passkeys } = usePasskeyList();
+  if (passkeys.length === 0) return null;
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onOpen}
+      className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+    >
+      <ShieldCheck className="size-4 text-slate-400" />
+      Manage passkeys
+    </button>
   );
 }
 
@@ -174,17 +223,33 @@ function PasskeySignInButton() {
 // the whole flow so the pending/added/failed feedback is visible where the
 // user just clicked. "Add another passkey" (vs "a") is the persistent signal
 // that the account already has one — the transient outcomes reset after a
-// few seconds.
+// few seconds. A session too old to add one turns the item into a link to
+// sign in again, which stays until the menu closes.
 function AddPasskeyMenuItem() {
   const register = useRegisterPasskey();
   const { passkeys } = usePasskeyList();
-  const [outcome, setOutcome] = useState<"idle" | "added" | "duplicate" | "failed">("idle");
+  const [outcome, setOutcome] = useState<"idle" | "added" | "duplicate" | "failed" | "reauth">(
+    "idle",
+  );
 
   useEffect(() => {
-    if (outcome === "idle") return;
+    if (outcome === "idle" || outcome === "reauth") return;
     const timer = setTimeout(() => setOutcome("idle"), 3000);
     return () => clearTimeout(timer);
   }, [outcome]);
+
+  if (outcome === "reauth") {
+    return (
+      <a
+        href={signInUrl(window.location.pathname)}
+        role="menuitem"
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm text-white transition-colors hover:bg-white/10"
+      >
+        <KeyRound className="size-4 text-slate-400" />
+        Sign in again to add a passkey
+      </a>
+    );
+  }
 
   const label = register.isPending
     ? "Adding passkey…"
@@ -213,9 +278,11 @@ function AddPasskeyMenuItem() {
             setOutcome(
               isPasskeyCancel(err)
                 ? "idle"
-                : isPasskeyAlreadyRegistered(err)
-                  ? "duplicate"
-                  : "failed",
+                : isPasskeySignInTooOld(err)
+                  ? "reauth"
+                  : isPasskeyAlreadyRegistered(err)
+                    ? "duplicate"
+                    : "failed",
             ),
         });
       }}

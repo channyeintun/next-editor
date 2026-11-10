@@ -12,13 +12,14 @@ import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import type { Env } from "../env";
 import { readJsonWithLimit } from "../httpBody";
 import {
+  deletePasskeyCredential,
   getPasskeyCredentialWithUser,
   insertPasskeyCredential,
   listPasskeyCredentials,
   updatePasskeyCredentialAfterAuth,
 } from "../../db/passkeyQueries";
 import { passkeyRowToSummary, userRowToAuthUser } from "../../db/types";
-import { requireUser } from "./requireUser";
+import { requireRecentSignIn, requireUser } from "./requireUser";
 import { isHttps, startSession } from "./session";
 
 const RP_NAME = "Next Editor";
@@ -34,6 +35,19 @@ const MAX_VERIFY_REQUEST_BYTES = 32 * 1024;
 // the response would carry.
 const CHALLENGE_COOKIE = "ne_webauthn";
 const CHALLENGE_MAX_AGE_SECONDS = 5 * 60;
+
+// A passkey signs in on its own, has no expiry and outlives every session, so
+// adding one must not be open to any session that has merely stayed alive (up
+// to 30 days: a borrowed or shared browser, a copied cookie). It needs a
+// sign-in from the last few minutes, Google or passkey. The verify step allows
+// the challenge's own lifetime on top, so a ceremony started inside the window
+// can still finish: no challenge is issued to an older session in the first
+// place.
+const ENROLLMENT_SIGN_IN_WINDOW_MS = 10 * 60 * 1000;
+const requireEnrollmentSignIn = requireRecentSignIn(ENROLLMENT_SIGN_IN_WINDOW_MS);
+const requireEnrollmentVerifySignIn = requireRecentSignIn(
+  ENROLLMENT_SIGN_IN_WINDOW_MS + CHALLENGE_MAX_AGE_SECONDS * 1000,
+);
 
 interface ChallengePayload {
   challenge: string;
@@ -113,16 +127,31 @@ export const passkeyRoute = new Hono<{ Bindings: Env }>();
 
 // The signed-in user's registered passkeys — lets the account menu show
 // whether the account already has one (the WebAuthn ceremony itself can't
-// tell the page "you already registered here"; it just fails).
+// tell the page "you already registered here"; it just fails), and lists them
+// for review and removal.
 passkeyRoute.get("/credentials", requireUser, async (c) => {
   const user = c.get("user");
   const credentials = await listPasskeyCredentials(c.env.DB, user.id);
   return c.json({ passkeys: credentials.map(passkeyRowToSummary) });
 });
 
+// Removes one of the signed-in user's passkeys, so it no longer signs in: the
+// owner's way to undo a passkey added on a shared computer or by someone else.
+// Any live session may remove one (unlike adding), since removal only ever
+// takes access away; the owner can still sign in with Google.
+passkeyRoute.delete("/credentials/:id", requireUser, async (c) => {
+  const user = c.get("user");
+  const removed = await deletePasskeyCredential(c.env.DB, user.id, c.req.param("id"));
+  if (!removed) {
+    return c.json({ error: "passkey not found" }, 404);
+  }
+  return c.json({ removed: true });
+});
+
 // Registration is adding a passkey to the signed-in account, so both
-// register endpoints require a session.
-passkeyRoute.post("/register/options", requireUser, async (c) => {
+// register endpoints require a session, and a recent sign-in (see
+// ENROLLMENT_SIGN_IN_WINDOW_MS).
+passkeyRoute.post("/register/options", requireEnrollmentSignIn, async (c) => {
   const user = c.get("user");
 
   const { rpID } = relyingParty(c);
@@ -157,7 +186,7 @@ passkeyRoute.post("/register/options", requireUser, async (c) => {
   return c.json(options);
 });
 
-passkeyRoute.post("/register/verify", requireUser, async (c) => {
+passkeyRoute.post("/register/verify", requireEnrollmentVerifySignIn, async (c) => {
   const user = c.get("user");
 
   const challenge = await takeChallengeCookie(c, "register");

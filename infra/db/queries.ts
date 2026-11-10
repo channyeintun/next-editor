@@ -168,22 +168,39 @@ export async function createSession(db: D1Database, userId: string): Promise<Ses
   return session;
 }
 
+/** A live session: the account it signs in, and when that sign-in happened. */
+export interface LiveSession {
+  user: UserRow;
+  /** Epoch ms the session was created, i.e. when the user last proved who they are. */
+  signedInAt: number;
+}
+
 // Null for a missing OR expired session — callers don't need to distinguish
 // the two (both mean "not signed in").
-export async function getSessionUser(db: D1Database, sessionId: string): Promise<UserRow | null> {
+export async function getLiveSession(
+  db: D1Database,
+  sessionId: string,
+): Promise<LiveSession | null> {
   const row = await db
     .prepare(
-      `SELECT users.* FROM sessions
+      `SELECT users.*, sessions.created_at AS session_created_at FROM sessions
        JOIN users ON users.id = sessions.user_id
        WHERE sessions.id = ? AND sessions.expires_at > ?`,
     )
     .bind(sessionId, Date.now())
-    .first<UserRow>();
-  return row ?? null;
+    .first<UserRow & { session_created_at: number }>();
+  if (!row) return null;
+  const { session_created_at: signedInAt, ...user } = row;
+  return { user, signedInAt };
 }
 
 export async function deleteSession(db: D1Database, sessionId: string): Promise<void> {
   await db.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
+}
+
+/** Signs the user out of every browser and device: all of their sessions, live or not. */
+export async function deleteUserSessions(db: D1Database, userId: string): Promise<void> {
+  await db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId).run();
 }
 
 export interface ListPublishedLessonsResult {

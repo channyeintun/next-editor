@@ -6,7 +6,9 @@ import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import {
   createSession,
   deleteSession,
-  getSessionUser,
+  deleteUserSessions,
+  getLiveSession,
+  type LiveSession,
   updateUsername,
   USERNAME_PATTERN,
 } from "../../db/queries";
@@ -58,12 +60,23 @@ export function clearSessionCookie(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
 }
 
+/**
+ * The current request's live session, with when it signed in, or null. Only
+ * the routes that care how recently the user proved who they are need this
+ * (requireRecentSignIn); the rest ask getCurrentUser.
+ */
+export async function getCurrentSession<E extends { Bindings: Env }>(
+  c: Context<E>,
+): Promise<LiveSession | null> {
+  const sessionId = getCookie(c, SESSION_COOKIE);
+  if (!sessionId) return null;
+  return getLiveSession(c.env.DB, sessionId);
+}
+
 // Resolves the signed-in user for the current request, or null. Every
 // authenticated route in the Worker calls this.
 export async function getCurrentUser<E extends { Bindings: Env }>(c: Context<E>) {
-  const sessionId = getCookie(c, SESSION_COOKIE);
-  if (!sessionId) return null;
-  return getSessionUser(c.env.DB, sessionId);
+  return (await getCurrentSession(c))?.user ?? null;
 }
 
 // Mounted at /api/auth in worker/index.ts.
@@ -108,6 +121,20 @@ authRoute.post("/logout", async (c) => {
   if (sessionId) {
     await deleteSession(c.env.DB, sessionId);
   }
+  clearSessionCookie(c);
+  return c.json({ success: true });
+});
+
+// Ends every session the account has, this browser's included: the way out
+// when a device was lost or a session may have been copied. A passkey added
+// from such a session is removed separately (DELETE
+// /api/auth/passkey/credentials/:id), since a passkey is not a session.
+authRoute.post("/logout-everywhere", async (c) => {
+  const user = await getCurrentUser(c);
+  if (!user) {
+    return c.json({ error: "not signed in" }, 401);
+  }
+  await deleteUserSessions(c.env.DB, user.id);
   clearSessionCookie(c);
   return c.json({ success: true });
 });
