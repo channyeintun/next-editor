@@ -1,0 +1,1009 @@
+# Go course, lesson 20: interfaces (Burmese).
+#
+# Start state: main.go (`package main`, `import "fmt"`, an empty main), courier.go holding only
+# `package main`, parcel.go and fees.go pinned from lesson 19 (COURSE-KIT §3.4).
+# Edits, all insert-only:
+#   1. courier.go: the Courier interface, BusGate with Fee and Hours, busHours; main.go: quote and
+#      quote(BusGate{City: "MDY"}, 2.5) -> run-1: 6000 ကျပ် 9 နာရီ;
+#   2. courier.go: Rider with Fee only; main.go: quote(Rider{Name: "လှလှ"}, 2.5) -> run-2: compile
+#      error `./main.go:12:8: cannot use Rider{…} … (missing method Hours)`;
+#   3. courier.go: Rider's Hours; parcel.go: import "fmt" and String(); main.go: a parcel printed
+#      -> run-3: 6000 ကျပ် 9 နာရီ / 2600 ကျပ် 3 နာရီ / MDY-0001 2.5 kg မန္တလေး.
+# Boards: (J) an interface is a job notice: anyone who can say a fee and a time, BusGate and Rider
+# both fit, quote reads only the notice, no declaration needed; (S) fmt's Stringer, a parcel printed
+# before and after String(); (Q) quiz: a Parcel (Fee() int, no Hours) passed to quote.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-20-interfaces
+  title: "Go course 20: Interface ဆိုတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Four files: the explorer is part of the lesson (the code moves between them).
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+      courier.go: |
+        package main
+      parcel.go: |
+        package main
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string  // tracking code: "MDY-0001"
+        	To       string  // city code: "MDY"
+        	WeightKg float64 // weight in kilograms
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+      fees.go: |
+        package main
+
+        // perKg is added for every whole kilogram.
+        const perKg = 500
+
+        // maxWeightKg is the heaviest parcel the service takes.
+        const maxWeightKg = 20.0
+
+        // baseFees is the fee to each city before weight, in kyats.
+        var baseFees = map[string]int{
+        	"YGN": 2000,
+        	"BGO": 3000,
+        	"NPT": 4000,
+        	"MLM": 4500,
+        	"MDY": 5000,
+        	"TGI": 6000,
+        }
+
+        // Fee is the parcel's price: the city's base fee plus perKg for every whole kilogram.
+        func (p Parcel) Fee() int {
+        	return baseFees[p.To] + int(p.WeightKg)*perKg
+        }
+  whiteboardAssets:
+    # Board J: an interface is a job notice.
+    - {
+        id: j-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Interface = အလုပ်ခေါ်စာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: j-notice,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 480,
+        height: 195,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: j-head,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 440,
+        height: 40,
+        text: "ဈေးနဲ့ ကြာချိန် ပြောနိုင်သူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-m1,
+        kind: text,
+        x: 305,
+        y: 315,
+        width: 420,
+        height: 40,
+        text: "Fee(kg float64) int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-m2,
+        kind: text,
+        x: 305,
+        y: 370,
+        width: 300,
+        height: 40,
+        text: "Hours() int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 778,
+        y: 260,
+        width: 60,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-bus-box,
+        kind: rectangle,
+        x: 850,
+        y: 235,
+        width: 230,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-bus,
+        kind: text,
+        x: 868,
+        y: 255,
+        width: 150,
+        height: 40,
+        text: "BusGate",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-check1,
+        kind: freedraw,
+        stroke: check,
+        x: 1025,
+        y: 250,
+        width: 45,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: j-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 778,
+        y: 370,
+        width: 60,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-rider-box,
+        kind: rectangle,
+        x: 850,
+        y: 345,
+        width: 230,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: j-rider,
+        kind: text,
+        x: 868,
+        y: 365,
+        width: 150,
+        height: 40,
+        text: "Rider",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-check2,
+        kind: freedraw,
+        stroke: check,
+        x: 1025,
+        y: 360,
+        width: 45,
+        height: 45,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: j-quote,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 560,
+        height: 40,
+        text: "quote(c Courier, kg float64)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-quote-note,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 760,
+        height: 40,
+        text: "ဘယ်သူလဲ မမေး၊ method နှစ်ခုကိုပဲ ခေါ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-no-impl,
+        kind: text,
+        x: 300,
+        y: 580,
+        width: 760,
+        height: 40,
+        text: "Courier ဖြစ်တယ်လို့ ကြေညာစရာ မလို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: j-no-impl-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 618,
+        width: 480,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    # Board S: fmt's Stringer.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "fmt ရဲ့ Stringer",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: s-box, kind: rectangle, x: 285, y: 235, width: 420, height: 80, strokeColor: "#6741d9" }
+    - {
+        id: s-iface,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 380,
+        height: 40,
+        text: "String() string",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-before,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 330,
+        height: 40,
+        text: "String မရှိရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-before-out,
+        kind: text,
+        x: 660,
+        y: 350,
+        width: 400,
+        height: 40,
+        text: "{MDY-0001 MDY 2.5}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-after,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 330,
+        height: 40,
+        text: "String ရှိရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-after-out,
+        kind: text,
+        x: 660,
+        y: 420,
+        width: 420,
+        height: 40,
+        text: "MDY-0001 2.5 kg မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-after-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 660,
+        y: 460,
+        width: 380,
+        height: 15,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-note,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 760,
+        height: 40,
+        text: "Println က String ရှိမရှိ စစ်ပြီး ခေါ်ပေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a Parcel passed to quote).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 560,
+        height: 150,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 500,
+        height: 40,
+        text: "func (p Parcel) Fee() int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 320,
+        width: 300,
+        height: 40,
+        text: "quote(p, 2.5)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 295,
+        y: 308,
+        width: 260,
+        height: 65,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 520,
+        height: 40,
+        text: "က · Fee ရှိလို့ ရတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 400,
+        height: 40,
+        text: "ခ · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 640,
+        y: 470,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 560,
+        height: 40,
+        text: "wrong type for method Fee",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7120
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "6000 ကျပ် 9 နာရီ\n"
+      run-2:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:12:8: cannot use Rider{…} (value of struct type Rider) as Courier value in argument to quote: Rider does not implement Courier (missing method Hours)\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "6000 ကျပ် 9 နာရီ\n2600 ကျပ် 3 နာရီ\nMDY-0001 2.5 kg မန္တလေး\n"
+
+scenes:
+  - id: recall
+    chapter: Interface ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ program တစ်ခုကို ဖိုင် အများကြီးနဲ့ ခွဲရေးခဲ့ပြီး၊ package တစ်ခုထဲက ဖိုင်တွေက
+      တစ်ခုနဲ့ တစ်ခု import မလုပ်ဘဲ နာမည်တွေကို မျှသုံးလို့ ရတာ မြင်ခဲ့ပါတယ်။ ဒီနေ့တော့ ပါဆယ်ပို့ ဝန်ဆောင်မှုမှာ
+      ပါဆယ်ကို သယ်ပေးမယ့်သူ နှစ်မျိုး ရှိနေတဲ့ ပြဿနာကို ကြည့်ပါမယ်။ တခြား မြို့တွေကို ပို့မယ့် ပါဆယ်က
+      ကားဂိတ်ကနေ အဝေးပြေး ဘတ်စ်ကားနဲ့ သွားပြီး၊ ရန်ကုန် မြို့ထဲမှာတော့ ဆိုင်ကယ်နဲ့ rider က ပို့ပေးပါတယ်။
+      [[mark:problem]] နှစ်မျိုးလုံးမှာ ပို့ခ တွက်ပုံလည်း မတူ၊ ကြာချိန်လည်း မတူပါဘူး။ ဒါပေမဲ့ ကောင်တာက ဝန်ထမ်း
+      ပို့သူကို ပြောရမှာကတော့ အတူတူပါပဲ၊ ဘယ်လောက် ကျမလဲ၊ ဘယ်နှနာရီ ကြာမလဲ ဆိုတာပါ။ ဒါကြောင့် သယ်ပေးမယ့်သူ
+      ဘယ်သူပဲ ဖြစ်ဖြစ် အလုပ်လုပ်တဲ့ function တစ်ခုတည်း လိုချင်ပါတယ်။ [[mark:board-job]] Go မှာ ဒါကို
+      interface နဲ့ လုပ်ပါတယ်။ interface ကို အလုပ်ခေါ်စာ တစ်စောင်လို့ မြင်ကြည့်ပါ။ [[mark:draw-notice]] ဒီ
+      အလုပ်ခေါ်စာမှာ၊ အလေးချိန်ကို ပေးရင် ပို့ခ ပြောနိုင်ပြီး ဘယ်နှနာရီ ကြာမလဲ ပြောနိုင်သူ ဆိုရင် ဘယ်သူမဆို
+      လက်ခံမယ်လို့ ရေးထားပါတယ်။ ဆိုလိုတာက interface ဆိုတာ ဒီ method တွေ ရှိရင် ဘယ် type မဆို လက်ခံမယ်
+      ဆိုတဲ့ သဘောတူချက်ပါ။ [[mark:draw-fit]] ကားဂိတ်ကလည်း ဒီ နှစ်ခုကို ပြောနိုင်သလို၊ rider ကလည်း
+      ပြောနိုင်ပါတယ်။ ဒါကြောင့် နှစ်ယောက်လုံး ဒီ အလုပ်နဲ့ ကိုက်ပါတယ်။ [[mark:draw-quote]] ဈေး တွက်ပေးမယ့်
+      function ကတော့ အလုပ်ခေါ်စာကိုပဲ ကြည့်ပြီး၊ လာတာ ကားဂိတ်လား rider လား မမေးပါဘူး။
+      [[mark:draw-no-impl]] သတိထားရမှာက Go မှာ ကိုယ် ဒီ အလုပ်ကို လုပ်နိုင်တယ်လို့ ကြိုပြီး ကြေညာစရာ
+      မလိုတာပါ။ method တွေ ရှိနေရုံနဲ့ ကိုက်ပြီးသား ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Interface types",
+          url: "https://go.dev/ref/spec#Interface_types",
+        }
+      - {
+          title: "Effective Go — Interfaces and other types",
+          url: "https://go.dev/doc/effective_go#interfaces_and_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-job,
+          type: whiteboard.apply,
+          at: { mark: board-job },
+          open: true,
+          clear: true,
+          upsertIds: [j-title],
+        }
+      - {
+          id: draw-notice,
+          type: whiteboard.apply,
+          at: { mark: draw-notice },
+          upsertIds: [j-notice, j-head, j-m1, j-m2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-fit,
+          type: whiteboard.apply,
+          at: { mark: draw-fit },
+          upsertIds:
+            [j-arrow1, j-bus-box, j-bus, j-check1, j-arrow2, j-rider-box, j-rider, j-check2],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-quote,
+          type: whiteboard.apply,
+          at: { mark: draw-quote },
+          upsertIds: [j-quote, j-quote-note],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-no-impl,
+          type: whiteboard.apply,
+          at: { mark: draw-no-impl },
+          upsertIds: [j-no-impl, j-no-impl-line],
+          drawMs: 1500,
+        }
+
+  - id: courier
+    chapter: Courier interface
+    narration: >-
+      [[mark:close-job]] ဒါဆို ဒီ အလုပ်ခေါ်စာကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-courier]] courier ဖိုင်က
+      package main တစ်ကြောင်းပဲ ပါတဲ့ ဖိုင်အသစ်ပါ။ [[mark:type-courier]] ဒီမှာ Courier ဆိုတဲ့ interface type
+      တစ်ခုကို ကြေညာပါမယ်။ struct လိုပဲ type အသစ်ကို နာမည်ပေးပြီး ကြေညာတာ ဖြစ်ပေမဲ့၊ အထဲမှာ field မပါဘဲ
+      method တွေရဲ့ ပုံစံပဲ ပါပါတယ်။ [[mark:sel-fee-sig]] ပထမ method က Fee ပါ။ ကီလိုနဲ့ အလေးချိန်ကို ယူပြီး
+      ပို့ခကို ကျပ်နဲ့ ပြန်ပေးရပါမယ်။ [[mark:sel-hours-sig]] ဒုတိယ method က Hours ပါ၊ ဘာမှ မယူဘဲ ကြာချိန်ကို
+      နာရီနဲ့ ပြန်ပေးပါတယ်။ ဒီမှာ method တွေ ဘယ်လို အလုပ်လုပ်လဲ ဆိုတာ တစ်ကြောင်းမှ မရေးထားတာကို
+      သတိထားကြည့်ပါ။ interface က ဘာလုပ်နိုင်ရမလဲ ဆိုတာကိုပဲ ပြောပြီး၊ ဘယ်လို လုပ်မလဲ ဆိုတာကတော့ type
+      တစ်ခုစီရဲ့ ကိုယ်ပိုင် အလုပ်ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Basic interfaces",
+          url: "https://go.dev/ref/spec#Basic_interfaces",
+        }
+    actions:
+      - {
+          id: close-job,
+          type: whiteboard.apply,
+          at: { mark: close-job },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-courier, type: workspace.openFile, at: { mark: open-courier }, path: courier.go }
+      - id: type-courier
+        type: editor.type
+        at: { mark: type-courier }
+        target: { file: courier.go, after: "package main\n", occurrence: 1 }
+        text: "\n// Courier is anyone who can carry a parcel: they say the fee and how long it takes.\ntype Courier interface {\n\tFee(kg float64) int\n\tHours() int\n}\n"
+        cadence: line-by-line
+      - id: sel-fee-sig
+        type: editor.select
+        at: { mark: sel-fee-sig }
+        target: { file: courier.go, text: "Fee(kg float64) int", occurrence: 1 }
+      - id: sel-hours-sig
+        type: editor.select
+        at: { mark: sel-hours-sig }
+        target: { file: courier.go, text: "Hours() int", occurrence: 1 }
+
+  - id: busgate
+    narration: >-
+      [[mark:type-busgate]] ပထမ သယ်ပေးသူက ကားဂိတ်ပါ။ BusGate ဆိုတဲ့ struct မှာ ဘယ်မြို့ကို ပို့မလဲ ဆိုတဲ့
+      City field တစ်ခုပဲ ပါပါတယ်။ အောက်မှာ method နှစ်ခု ရေးထားပါတယ်။ Fee က fees ဖိုင်ထဲက မြို့အလိုက်
+      အခြေခံ ပို့ခကို ယူပြီး၊ ကီလို အပြည့် တစ်ခုစီအတွက် ငါးရာ ပေါင်းပါတယ်။ Hours ကတော့ ဘတ်စ်ကား
+      ကြာချိန်ကို map ထဲကနေ ရှာပေးပါတယ်။ [[mark:type-bushours]] အဲဒီ map ကိုလည်း အောက်မှာ ထည့်ပါမယ်။
+      ရန်ကုန်ကနေ မြို့တစ်မြို့ချင်းစီကို ဘတ်စ်ကား ဘယ်နှနာရီ ကြာလဲ ဆိုတာပါ၊ ဥပမာ မန္တလေးဆိုရင် ကိုးနာရီပါ။
+      [[mark:sel-busgate-fee]] BusGate ရဲ့ Fee method ကို ကြည့်ပါ။ အလုပ်ခေါ်စာထဲက Fee နဲ့ ယူတာလည်း တူ၊
+      ပြန်ပေးတာလည်း တူပါတယ်။ Hours လည်း ဒီအတိုင်းပါပဲ။ ဒါပေမဲ့ ဒီဖိုင် ဘယ်နေရာမှာမှ BusGate က Courier
+      ဖြစ်တယ်လို့ ရေးမထားပါဘူး။ method နှစ်ခု ရှိနေရုံနဲ့ Go က Courier အဖြစ် လက်ခံပါပြီ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Implementing an interface",
+          url: "https://go.dev/ref/spec#Implementing_an_interface",
+        }
+      - {
+          title: "The Go Programming Language Specification — Method sets",
+          url: "https://go.dev/ref/spec#Method_sets",
+        }
+    actions:
+      - id: type-busgate
+        type: editor.type
+        at: { mark: type-busgate }
+        target: { file: courier.go, after: "\tHours() int\n}\n", occurrence: 1 }
+        text: "\n// BusGate sends parcels to another city on a highway bus.\ntype BusGate struct {\n\tCity string\n}\n\nfunc (b BusGate) Fee(kg float64) int {\n\treturn baseFees[b.City] + int(kg)*perKg\n}\n\nfunc (b BusGate) Hours() int {\n\treturn busHours[b.City]\n}\n"
+        cadence: line-by-line
+      - id: type-bushours
+        type: editor.type
+        at: { mark: type-bushours }
+        target: { file: courier.go, after: "\treturn busHours[b.City]\n}\n", occurrence: 1 }
+        text: "\n// busHours is how long the bus takes from Yangon.\nvar busHours = map[string]int{\"BGO\": 2, \"NPT\": 6, \"MLM\": 7, \"MDY\": 9, \"TGI\": 11}\n"
+        cadence: line-by-line
+      - id: sel-busgate-fee
+        type: editor.select
+        at: { mark: sel-busgate-fee }
+        target: { file: courier.go, text: "func (b BusGate) Fee(kg float64) int", occurrence: 1 }
+
+  - id: quote
+    chapter: Interface ကို ယူတဲ့ function
+    narration: >-
+      [[mark:open-main-1]] ဒါဆို main ဖိုင်မှာ ဈေး တွက်ပေးမယ့် function ကို ရေးကြည့်ရအောင်။
+      [[mark:type-quote]] quote ဆိုတဲ့ function က Courier တစ်ခုနဲ့ ကီလိုကို ယူပြီး၊ ပို့ခနဲ့ ကြာချိန်ကို
+      တစ်ကြောင်းတည်း print ထုတ်ပါတယ်။ [[mark:sel-quote-param]] parameter ရဲ့ type ကို ကြည့်ပါ။ BusGate
+      မဟုတ်ဘဲ Courier ပါ။ ဒါကြောင့် ဒီ function ထဲမှာ c နဲ့ လုပ်လို့ရတာက အလုပ်ခေါ်စာထဲမှာ ပါတဲ့ Fee နဲ့ Hours
+      နှစ်ခုပဲ ဖြစ်ပါတယ်။ ဘယ်မြို့လဲ ဆိုတဲ့ City field ကိုတောင် quote က မမြင်ရပါဘူး။ [[mark:type-call-bus]]
+      main ထဲမှာတော့ မန္တလေးကို ပို့မယ့် ကားဂိတ်နဲ့၊ နှစ်ကီလိုခွဲ ပါဆယ် အတွက် quote ကို ခေါ်ပါမယ်။
+      ကားဂိတ်ကို Courier ရဲ့ နေရာမှာ ထည့်ပေးလိုက်တာပါ။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Interface types",
+          url: "https://go.dev/ref/spec#Interface_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { mark: open-main-1 }, path: main.go }
+      - id: type-quote
+        type: editor.type
+        at: { mark: type-quote }
+        target: { file: main.go, after: "import \"fmt\"\n\n", occurrence: 1 }
+        text: "// quote prints what one courier would charge for a parcel, and how long it takes.\nfunc quote(c Courier, kg float64) {\n\tfmt.Println(c.Fee(kg), \"ကျပ်\", c.Hours(), \"နာရီ\")\n}\n\n"
+        cadence: line-by-line
+      - id: sel-quote-param
+        type: editor.select
+        at: { mark: sel-quote-param }
+        target: { file: main.go, text: "c Courier", occurrence: 1 }
+      - id: type-call-bus
+        type: editor.type
+        at: { mark: type-call-bus }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tquote(BusGate{City: \"MDY\"}, 2.5)\n"
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "6000 ကျပ် 9 နာရီ",
+          timeoutMs: 8000,
+        }
+
+  - id: read-bus
+    narration: >-
+      [[mark:point-bus]] output မှာ ၆၀၀၀ ကျပ်နဲ့ ကိုးနာရီ ထွက်လာပါတယ်။ မန္တလေးရဲ့ အခြေခံ ပို့ခ ၅၀၀၀ ကို၊
+      ကီလို အပြည့် နှစ်ခုအတွက် တစ်ထောင် ပေါင်းထားလို့ ၆၀၀၀ ဖြစ်တာပါ။ quote က BusGate ကို Courier အဖြစ်
+      လက်ခံပြီး၊ BusGate ရဲ့ ကိုယ်ပိုင် method တွေကို ခေါ်သွားတာပါ။ [[mark:collapse-1]] ဒါဆို ဒုတိယ
+      သယ်ပေးသူ rider ကို ထည့်ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Effective Go — Interfaces and other types",
+          url: "https://go.dev/doc/effective_go#interfaces_and_types",
+        }
+    actions:
+      - {
+          id: point-bus,
+          type: console.point,
+          at: { mark: point-bus },
+          target: { text: "6000 ကျပ် 9 နာရီ" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+
+  - id: rider
+    narration: >-
+      [[mark:open-courier-2]] courier ဖိုင်ရဲ့ အောက်ဆုံးမှာ Rider ဆိုတဲ့ struct ကို ထည့်ပါမယ်။
+      [[mark:type-rider]] Rider မှာ ပို့ပေးမယ့်သူရဲ့ နာမည် field ပါပါတယ်။ သူ့ရဲ့ Fee method က ရန်ကုန် မြို့ထဲ
+      ပို့ခ နှစ်ထောင်ကို အခြေခံပြီး၊ ကီလို အပြည့် တစ်ခုစီ အတွက် သုံးရာ ပေါင်းပါတယ်။ ဒါပေမဲ့ Hours method ကို
+      မရေးရသေးပါဘူး။ [[mark:open-main-2]] main ဖိုင်ကို ပြန်သွားပြီး၊ [[mark:type-call-rider]] rider လှလှ
+      က ပို့ပေးမယ့် ပါဆယ် အတွက်လည်း quote ကို ခေါ်ပါမယ်။ အလေးချိန်က အတူတူပဲ နှစ်ကီလိုခွဲ ပါ။
+      ဒီ တစ်ခါတော့ Rider ကို Courier ရဲ့ နေရာမှာ ထည့်ပေးလိုက်တာပါ။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Struct types",
+          url: "https://go.dev/ref/spec#Struct_types",
+        }
+    actions:
+      - {
+          id: open-courier-2,
+          type: workspace.openFile,
+          at: { mark: open-courier-2 },
+          path: courier.go,
+        }
+      - id: type-rider
+        type: editor.type
+        at: { mark: type-rider }
+        target: { file: courier.go, after: "\"MDY\": 9, \"TGI\": 11}\n", occurrence: 1 }
+        text: "\n// Rider delivers inside Yangon by motorbike.\ntype Rider struct {\n\tName string\n}\n\nfunc (r Rider) Fee(kg float64) int {\n\treturn 2000 + int(kg)*300\n}\n"
+        cadence: line-by-line
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-call-rider
+        type: editor.type
+        at: { mark: type-call-rider }
+        target: { file: main.go, after: "\tquote(BusGate{City: \"MDY\"}, 2.5)\n", occurrence: 1 }
+        text: "\tquote(Rider{Name: \"လှလှ\"}, 2.5)\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "missing method Hours",
+          timeoutMs: 8000,
+        }
+
+  - id: missing
+    chapter: Method တစ်ခု လိုနေရင်
+    narration: >-
+      [[mark:point-build]] ဒီ တစ်ခါတော့ compile error ပေါ်လာပါတယ်။ compile ကတည်းက ငြင်းတာ ဖြစ်လို့ ကားဂိတ်ရဲ့
+      line တောင် run မသွားပါဘူး။ [[mark:point-err]] ဘယ်နေရာလဲ ကြည့်ရအောင်။ main ဖိုင်ရဲ့ line ဆယ့်နှစ်၊ quote ကို
+      rider နဲ့ ခေါ်တဲ့ line ပါ။ message က ရှည်ပေမဲ့ အရေးကြီးတာက အဆုံးမှာပါ။ Rider မှာ Hours method
+      မရှိသေးလို့ Courier အဖြစ် လက်မခံပါဘူး လို့ ပြောနေတာပါ။ ဆိုလိုတာက compiler က quote ကို ခေါ်တဲ့
+      နေရာမှာ အလုပ်ခေါ်စာနဲ့ တိုက်စစ်ပြီး၊ ဘယ် method လိုနေလဲ ဆိုတာကို နာမည်နဲ့ တကွ ပြောပေးတာပါ။
+      [[mark:err-why]] ပြီးခဲ့တဲ့ lesson မှာလိုပဲ compile error က Rider ကို သုံးတဲ့ main ဖိုင်ကို ပြတာ သတိထားပါ။ ပြင်ရမှာကတော့
+      courier ဖိုင်ထဲက Rider ပါ။ [[mark:collapse-2]] ဒီလို compile ကတည်းက ဖမ်းပေးလို့၊ method မစုံတဲ့ type
+      တစ်ခုကို program run နေတုန်းမှ သုံးမိမယ့် အန္တရာယ် မရှိပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Implementing an interface",
+          url: "https://go.dev/ref/spec#Implementing_an_interface",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignability",
+          url: "https://go.dev/ref/spec#Assignability",
+        }
+    actions:
+      - {
+          id: point-build,
+          type: console.point,
+          at: { mark: point-build },
+          target: { text: "Build failed" },
+        }
+      - {
+          id: point-err,
+          type: console.point,
+          at: { mark: point-err },
+          target: { text: "missing method Hours" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+
+  - id: fix
+    narration: >-
+      [[mark:open-courier-3]] ဒါဆို courier ဖိုင်ကို ပြန်သွားပြီး၊ [[mark:type-hours]] Rider အတွက် Hours
+      method ကို ထည့်ပါမယ်။ ရန်ကုန် မြို့ထဲမှာ rider က သုံးနာရီ လောက်နဲ့ ပို့ပေးတယ်လို့ ယူထားပါတယ်။ အခု
+      Rider မှာလည်း method နှစ်ခုလုံး ရှိသွားလို့ Courier နဲ့ ကိုက်ပါပြီ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+    actions:
+      - {
+          id: open-courier-3,
+          type: workspace.openFile,
+          at: { mark: open-courier-3 },
+          path: courier.go,
+        }
+      - id: type-hours
+        type: editor.type
+        at: { mark: type-hours }
+        target: { file: courier.go, after: "\treturn 2000 + int(kg)*300\n}\n", occurrence: 1 }
+        text: "\nfunc (r Rider) Hours() int {\n\treturn 3\n}\n"
+        cadence: line-by-line
+
+  - id: stringer
+    chapter: Stringer
+    narration: >-
+      [[mark:board-stringer]] run မကြည့်ခင် interface ရဲ့ နောက်ထပ် အသုံး တစ်ခုကို ကြည့်ရအောင်။ fmt package
+      ထဲမှာလည်း ကိုယ်ပိုင် interface လေး တစ်ခု ရှိပါတယ်။ [[mark:draw-iface]] Stringer လို့ ခေါ်ပြီး၊ စာသား
+      ပြန်ပေးတဲ့ String ဆိုတဲ့ method တစ်ခုတည်း ပါပါတယ်။ Println က တန်ဖိုး တစ်ခုကို print မထုတ်ခင် ဒီ method
+      ရှိမရှိ စစ်ကြည့်ပြီး၊ ရှိရင် အဲဒါကို ခေါ်ပြီး ရလာတဲ့ စာကို ပြပါတယ်။ [[mark:draw-before]] String method
+      မရှိရင်တော့ struct ကို တွန့်ကွင်းထဲမှာ field တွေ စီပြီး ပြတာကို lesson ဆယ့်ခြောက်မှာ မြင်ခဲ့ပါတယ်။
+      [[mark:draw-after]] ပါဆယ်မှာ String method ထည့်လိုက်ရင်တော့ code၊ အလေးချိန်နဲ့ မြို့နာမည်ကို ကိုယ်
+      ပြချင်တဲ့ ပုံစံအတိုင်း ထုတ်ပြပါလိမ့်မယ်။ [[mark:draw-note]] ဒါလည်း Courier လိုပဲ၊ Parcel က Stringer
+      ဖြစ်တယ်လို့ ကြေညာစရာ မလိုပါဘူး။ method ရှိရင် fmt က သူ့ဘာသာ သိပါတယ်။
+    sources:
+      - { title: "fmt package — Stringer", url: "https://pkg.go.dev/fmt#Stringer" }
+      - {
+          title: "Effective Go — Interface conversions and type assertions",
+          url: "https://go.dev/doc/effective_go#interface_conversions",
+        }
+    actions:
+      - {
+          id: board-stringer,
+          type: whiteboard.apply,
+          at: { mark: board-stringer },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-iface,
+          type: whiteboard.apply,
+          at: { mark: draw-iface },
+          upsertIds: [s-box, s-iface],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-before,
+          type: whiteboard.apply,
+          at: { mark: draw-before },
+          upsertIds: [s-before, s-before-out],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-after,
+          type: whiteboard.apply,
+          at: { mark: draw-after },
+          upsertIds: [s-after, s-after-out, s-after-line],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: draw-note },
+          upsertIds: [s-note],
+          drawMs: 1200,
+        }
+
+  - id: string-code
+    narration: >-
+      [[mark:close-stringer]] ဒါဆို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-parcel]] parcel ဖိုင်ကို ဖွင့်ပါမယ်။
+      [[mark:type-import]] String method ထဲမှာ fmt ကို သုံးမှာ ဖြစ်လို့ အရင်ဆုံး fmt ကို import လုပ်ပါမယ်။
+      [[mark:type-string]] ပြီးတော့ ဖိုင်ရဲ့ အောက်ဆုံးမှာ Parcel အတွက် String method ကို ထည့်ပါမယ်။ ဒီ
+      method က ပါဆယ်ရဲ့ code၊ ကီလို နဲ့ မြို့နာမည်ကို စာကြောင်း တစ်ကြောင်းအဖြစ် ဆက်ပြီး ပြန်ပေးပါတယ်။
+      မြို့နာမည်ကို အပေါ်က map ထဲကနေ ရှာထားလို့ မြန်မာလို ထွက်ပါမယ်။ [[mark:open-main-3]] နောက်ဆုံး
+      main ဖိုင်မှာ၊ [[mark:type-print-parcel]] မန္တလေး ပါဆယ် တစ်ခု လုပ်ပြီး ဒီအတိုင်း print ထုတ်ပါမယ်။
+      [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "fmt package — Stringer", url: "https://pkg.go.dev/fmt#Stringer" }
+      - { title: "fmt package — Sprint", url: "https://pkg.go.dev/fmt#Sprint" }
+    actions:
+      - {
+          id: close-stringer,
+          type: whiteboard.apply,
+          at: { mark: close-stringer },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-parcel, type: workspace.openFile, at: { mark: open-parcel }, path: parcel.go }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: parcel.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport \"fmt\"\n"
+      - id: type-string
+        type: editor.type
+        at: { mark: type-string }
+        target: { file: parcel.go, after: "\t\"TGI\": \"တောင်ကြီး\",\n}\n", occurrence: 1 }
+        text: "\n// String is how a parcel prints: code, weight, city.\nfunc (p Parcel) String() string {\n\treturn fmt.Sprint(p.Code, \" \", p.WeightKg, \" kg \", cityNames[p.To])\n}\n"
+        cadence: line-by-line
+      - { id: open-main-3, type: workspace.openFile, at: { mark: open-main-3 }, path: main.go }
+      - id: type-print-parcel
+        type: editor.type
+        at: { mark: type-print-parcel }
+        target: { file: main.go, after: "\tquote(Rider{Name: \"လှလှ\"}, 2.5)\n", occurrence: 1 }
+        text: "\tp := Parcel{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5}\n\tfmt.Println(p)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "MDY-0001 2.5 kg မန္တလေး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-hours,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: courier.go,
+          contains: "func (r Rider) Hours() int",
+        }
+      - {
+          id: expect-file-string,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: parcel.go,
+          contains: "func (p Parcel) String() string",
+        }
+
+  - id: read-all
+    narration: >-
+      [[mark:point-bus-2]] ပထမ စာကြောင်းက ခုနကအတိုင်း ကားဂိတ်ရဲ့ ၆၀၀၀ ကျပ်နဲ့ ကိုးနာရီ ပါ။
+      [[mark:point-rider]] ဒုတိယ စာကြောင်းမှာတော့ rider ရဲ့ ၂၆၀၀ ကျပ်နဲ့ သုံးနာရီ ထွက်လာပါပြီ။ နှစ်ထောင်ကို
+      ကီလို နှစ်ခုအတွက် ခြောက်ရာ ပေါင်းထားတာပါ။ quote function ကို တစ်ကြောင်းမှ မပြင်ခဲ့ပေမဲ့၊ သယ်ပေးသူ
+      အသစ် တစ်မျိုးနဲ့ အလုပ်လုပ်သွားတာကို သတိထားကြည့်ပါ။ နောက်ထပ် သယ်ပေးသူ တစ်မျိုး ထပ်လာရင်လည်း method
+      နှစ်ခု ရေးပေးရုံပါပဲ။ [[mark:point-parcel]] နောက်ဆုံး စာကြောင်းက ပါဆယ်ကို print ထုတ်ထားတာပါ။
+      တွန့်ကွင်း မပါတော့ဘဲ code၊ နှစ်ကီလိုခွဲ နဲ့ မန္တလေး ဆိုပြီး၊ ကိုယ် ရေးထားတဲ့ String method ရဲ့ ပုံစံအတိုင်း
+      ထွက်လာတာပါ။
+    sources:
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+      - { title: "fmt package — Stringer", url: "https://pkg.go.dev/fmt#Stringer" }
+    actions:
+      - {
+          id: point-bus-2,
+          type: console.point,
+          at: { mark: point-bus-2 },
+          target: { text: "6000 ကျပ် 9 နာရီ" },
+        }
+      - {
+          id: point-rider,
+          type: console.point,
+          at: { mark: point-rider },
+          target: { text: "2600 ကျပ် 3 နာရီ" },
+        }
+      - {
+          id: point-parcel,
+          type: console.point,
+          at: { mark: point-parcel },
+          target: { text: "MDY-0001 2.5 kg မန္တလေး" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ fees ဖိုင်ထဲမှာ ပါဆယ်ရဲ့ ပို့ခကို တွက်ပေးတဲ့ Fee method
+      ရှိပါတယ်။ [[mark:quiz-line]] ဒါဆို ပါဆယ် တစ်ခုကို quote ထဲ တိုက်ရိုက် ထည့်ပေးရင် ရမလား။ Fee method
+      ရှိလို့ ရမလား၊ ဒါမှမဟုတ် compile error ရမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခ၊ compile error ပါ။ ဘာကြောင့်လဲဆိုတော့ method နာမည် တူရုံနဲ့
+      မလုံလောက်လို့ပါ။ Parcel ရဲ့ Fee က ကီလို မယူဘဲ ပါဆယ်ထဲက အလေးချိန်ကိုပဲ သုံးလို့၊ အလုပ်ခေါ်စာထဲက
+      Fee နဲ့ ပုံစံ မတူပါဘူး။ compiler ကလည်း Fee method ရဲ့ type မှားနေတယ်လို့ ပြောပါတယ်။ ပြီးတော့ Parcel
+      မှာ Hours method လည်း မရှိပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Implementing an interface",
+          url: "https://go.dev/ref/spec#Implementing_an_interface",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check, q-why],
+          drawMs: 1200,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ interface ဆိုတာ ဒီ method တွေ ရှိရင် ဘယ် type မဆို လက်ခံမယ်
+      ဆိုတဲ့ သဘောတူချက်ပါ။ [[mark:recap-quote]] Courier ကို ယူတဲ့ function က ကားဂိတ်ရော rider ရော
+      လက်ခံပြီး၊ ဘယ်သူလဲ ဆိုတာ မသိဘဲ method တွေကိုပဲ ခေါ်ပါတယ်။ [[mark:recap-rider]] type တစ်ခုက method
+      တွေ ရှိနေရုံနဲ့ ကိုက်ပြီး၊ တစ်ခု လိုနေရင် compiler က ခေါ်တဲ့ နေရာမှာတင် ဘယ် method လိုလဲ ပြောပါတယ်။
+      [[mark:recap-print]] String method ရေးထားရင်တော့ Println က ကိုယ့် type ကို ကိုယ် လိုချင်တဲ့ ပုံစံနဲ့
+      ပြပေးပါတယ်။ နောက် lesson မှာတော့ interface တန်ဖိုး တစ်ခုရဲ့ အထဲမှာ ဘာတွေ ရှိလဲ ဆိုတာနဲ့၊ ဘာမဆို
+      ထည့်လို့ရတဲ့ any အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Effective Go — Interfaces and other types",
+          url: "https://go.dev/doc/effective_go#interfaces_and_types",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-quote
+        type: editor.select
+        at: { mark: recap-quote }
+        target: { file: main.go, text: "func quote(c Courier, kg float64)", occurrence: 1 }
+      - id: recap-rider
+        type: editor.select
+        at: { mark: recap-rider }
+        target: { file: main.go, text: 'quote(Rider{Name: "လှလှ"}, 2.5)', occurrence: 1 }
+      - id: recap-print
+        type: editor.select
+        at: { mark: recap-print }
+        target: { file: main.go, text: "fmt.Println(p)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
