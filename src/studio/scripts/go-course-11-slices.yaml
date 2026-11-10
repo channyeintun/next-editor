@@ -1,0 +1,938 @@
+# Go course, lesson 11: slices (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. `cities := []string{…}` (ရန်ကုန်, နေပြည်တော်, မန္တလေး) and a range loop printing index and
+#      city -> run-1: 0 ရန်ကုန် / 1 နေပြည်တော် / 2 မန္တလေး;
+#   2. `fmt.Println(cities[len(cities)])` right under the declaration (nothing printed before it)
+#      -> run-2: panic `index out of range [3] with length 3` at main.go:7;
+#   3. `// ` in front of that line; `cities = append(…, "ပြင်ဦးလွင်")`; `km := []int{320, 270}`,
+#      `km = append(km, 70)` and a total with range; one Println with len, the last city and
+#      the total -> run-3 adds 4 ပြင်ဦးလွင် 660 ကီလိုမီတာ.
+# Boards: (B) bus seats numbered from 0, len, the last index, then the seat after the last that
+# does not exist (drawn again at the panic); (A) append gives back the longer slice, so assign it
+# back; a bare append is refused (said/board); (Q) quiz (index 2 of three).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-11-slices
+  title: "Go course 11: Slice ဆိုတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board B: a slice is a row of numbered bus seats.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "Slice · အစဉ်လိုက် စာရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-i0,
+        kind: text,
+        x: 375,
+        y: 240,
+        width: 30,
+        height: 40,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-i1,
+        kind: text,
+        x: 580,
+        y: 240,
+        width: 30,
+        height: 40,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-i2,
+        kind: text,
+        x: 785,
+        y: 240,
+        width: 30,
+        height: 40,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-s0, kind: rectangle, x: 290, y: 285, width: 195, height: 90, strokeColor: "#1971c2" }
+    - { id: b-s1, kind: rectangle, x: 495, y: 285, width: 195, height: 90, strokeColor: "#1971c2" }
+    - { id: b-s2, kind: rectangle, x: 700, y: 285, width: 195, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: b-c0,
+        kind: text,
+        x: 310,
+        y: 310,
+        width: 160,
+        height: 40,
+        text: "ရန်ကုန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c1,
+        kind: text,
+        x: 505,
+        y: 310,
+        width: 180,
+        height: 40,
+        text: "နေပြည်တော်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c2,
+        kind: text,
+        x: 720,
+        y: 310,
+        width: 160,
+        height: 40,
+        text: "မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-steps,
+        kind: text,
+        x: 300,
+        y: 405,
+        width: 600,
+        height: 40,
+        text: "index · အစကနေ ဘယ်နှစ်ခုံ ကျော်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-len,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 360,
+        height: 40,
+        text: "len(cities) · 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-last,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 520,
+        height: 40,
+        text: "နောက်ဆုံး index · 3 - 1 = 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-i3,
+        kind: text,
+        x: 975,
+        y: 240,
+        width: 30,
+        height: 40,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-s3, kind: rectangle, x: 905, y: 285, width: 175, height: 90, strokeColor: "#e03131" }
+    - {
+        id: b-none,
+        kind: text,
+        x: 950,
+        y: 310,
+        width: 95,
+        height: 40,
+        text: "မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-panic,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 600,
+        height: 40,
+        text: "cities[3] · run နေတုန်း panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-panic-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 622,
+        width: 430,
+        height: 12,
+        strokeColor: "#e03131",
+      }
+    # Board A: append gives back the longer slice.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 680,
+        height: 50,
+        text: "append · နောက်ဆုံးမှာ ထပ်ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-old,
+        kind: text,
+        x: 300,
+        y: 245,
+        width: 560,
+        height: 40,
+        text: "ရန်ကုန် · နေပြည်တော် · မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-len,
+        kind: text,
+        x: 985,
+        y: 245,
+        width: 90,
+        height: 40,
+        text: "len 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 420,
+        y: 292,
+        width: 40,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: a-new,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 675,
+        height: 40,
+        text: "ရန်ကုန် · နေပြည်တော် · မန္တလေး · ပြင်ဦးလွင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-new-len,
+        kind: text,
+        x: 985,
+        y: 355,
+        width: 90,
+        height: 40,
+        text: "len 4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-ok-box,
+        kind: rectangle,
+        x: 285,
+        y: 425,
+        width: 800,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-ok,
+        kind: text,
+        x: 305,
+        y: 450,
+        width: 700,
+        height: 40,
+        text: 'cities = append(cities, "ပြင်ဦးလွင်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-bad-box,
+        kind: rectangle,
+        x: 285,
+        y: 535,
+        width: 800,
+        height: 105,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-bad,
+        kind: text,
+        x: 305,
+        y: 545,
+        width: 560,
+        height: 40,
+        text: 'append(cities, "ပြင်ဦးလွင်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-bad-note,
+        kind: text,
+        x: 305,
+        y: 592,
+        width: 640,
+        height: 40,
+        text: "ပြန်မထည့်ရင် · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (index 2 of three passengers).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 230,
+        width: 800,
+        height: 230,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 245,
+        width: 360,
+        height: 40,
+        text: "seats := []string{",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 295,
+        width: 620,
+        height: 40,
+        text: '    "လှလှ", "အောင်အောင်", "မောင်မောင်",',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 305,
+        y: 345,
+        width: 60,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 305,
+        y: 400,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(seats[2])",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 525,
+        y: 390,
+        width: 140,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 400,
+        height: 40,
+        text: "က · မောင်မောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 400,
+        height: 40,
+        text: "ခ · panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 580,
+        y: 490,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7111
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "0 ရန်ကုန်\n1 နေပြည်တော်\n2 မန္တလေး\n"
+      run-2:
+        status: runtime-error
+        exitCode: 2
+        output: "panic: runtime error: index out of range [3] with length 3\n\ngoroutine 1 [running]:\nmain.main()\n\t/tmp/sandbox1000000000/src/main.go:7 +0x1c\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "0 ရန်ကုန်\n1 နေပြည်တော်\n2 မန္တလေး\n4 ပြင်ဦးလွင် 660 ကီလိုမီတာ\n"
+
+scenes:
+  - id: recall
+    chapter: Slice ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ function က result အများကို ပြန်ပေးတာနဲ့၊ နာမည် တစ်ခုကို ဘယ် block ကနေ
+      မြင်ရလဲ ဆိုတာ လေ့လာခဲ့ပါတယ်။ အခုထိ variable တစ်ခုမှာ တန်ဖိုး တစ်ခုပဲ ထည့်ခဲ့ပါတယ်။ ဒါပေမဲ့
+      ရန်ကုန်ကနေ နေပြည်တော်ကို ဖြတ်ပြီး မန္တလေးကို သွားမယ့် ခရီးစဉ် တစ်ခုကို စဉ်းစားကြည့်ပါ။ မြို့ တစ်မြို့ကို
+      variable တစ်ခုစီ ပေးရရင် မြို့ ဆယ်မြို့ ရှိတဲ့ ခရီးမှာ variable ဆယ်ခု လိုမှာပါ။ [[mark:today]] ဒီနေ့ lesson
+      မှာ တန်ဖိုး အများကြီးကို variable တစ်ခုထဲမှာ အစဉ်လိုက် စီထားတဲ့ slice ကို လေ့လာပါမယ်။
+      [[mark:type-cities]] main ထဲမှာ ခရီးစဉ်ရဲ့ မြို့တွေကို cities ဆိုတဲ့ variable တစ်ခုထဲ ထည့်ပါမယ်။
+      [[mark:sel-type]] ညာဘက်က ဒီ အပိုင်းက type ပါ၊ string တွေရဲ့ slice လို့ ဖတ်ပါတယ်။ slice ဆိုတာ type တူတဲ့
+      တန်ဖိုးတွေကို အစဉ်လိုက် စီထားတဲ့ စာရင်းပါ။ [[mark:sel-values]] နောက်က တွန့်ကွင်းထဲမှာတော့ မြို့
+      သုံးမြို့ကို ခရီးသွားမယ့် အစဉ်အတိုင်း ရေးထားပါတယ်။ slice က ဒီ အစဉ်ကို မှတ်ထားပေးပါတယ်။ string
+      တွေရဲ့ slice ဖြစ်လို့ အထဲမှာ စာသားပဲ ထည့်လို့ ရပြီး၊ ဂဏန်း တစ်ခုကို ရောထည့်ရင် compiler က လက်မခံပါဘူး။
+      ဒါကြောင့် slice တစ်ခုထဲက တန်ဖိုးတွေဟာ အမြဲ type တူပါတယ်။
+    sources:
+      - { title: "A Tour of Go — Slices", url: "https://go.dev/tour/moretypes/7" }
+      - {
+          title: "The Go Programming Language Specification — Slice types",
+          url: "https://go.dev/ref/spec#Slice_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: type-cities
+        type: editor.type
+        at: { mark: type-cities }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tcities := []string{\"ရန်ကုန်\", \"နေပြည်တော်\", \"မန္တလေး\"}\n"
+        cadence: line-by-line
+      - id: sel-type
+        type: editor.select
+        at: { mark: sel-type }
+        target: { file: main.go, text: "[]string", occurrence: 1 }
+      - id: sel-values
+        type: editor.select
+        at: { mark: sel-values }
+        target: { file: main.go, text: '{"ရန်ကုန်", "နေပြည်တော်", "မန္တလေး"}', occurrence: 1 }
+
+  - id: seats
+    narration: >-
+      [[mark:board-seats]] slice ကို ကားပေါ်က နံပါတ်တပ်ထားတဲ့ ထိုင်ခုံ တစ်တန်းလို့ မြင်ကြည့်ပါ။
+      [[mark:draw-seats]] ထိုင်ခုံ တစ်ခုံမှာ မြို့ တစ်မြို့စီ နေရာယူထားပါတယ်။ [[mark:draw-index]] ထိုင်ခုံ
+      နံပါတ်ကို index လို့ ခေါ်ပါတယ်။ index ဆိုတာ စာရင်းထဲက နေရာ နံပါတ်ပါ။ သတိထားရမှာက Go မှာ index
+      က တစ်ကနေ မစဘဲ သုညကနေ စတာပါ။ [[mark:draw-steps]] ဒါကို မှတ်ရလွယ်အောင် အစကနေ ထိုင်ခုံ ဘယ်နှစ်ခုံ
+      ကျော်ရလဲ လို့ တွေးကြည့်ပါ။ ရန်ကုန်ကို ရောက်ဖို့ ဘာမှ ကျော်စရာ မလိုလို့ index သုည၊ မန္တလေးကို ရောက်ဖို့
+      နှစ်ခုံ ကျော်ရလို့ index နှစ် ဖြစ်ပါတယ်။ [[mark:draw-len]] slice ထဲမှာ တန်ဖိုး ဘယ်နှစ်ခု ရှိလဲ သိချင်ရင်
+      len ကို သုံးပါတယ်။ ဒီမှာ မြို့ သုံးမြို့ ရှိလို့ len က သုံး ကို ပြန်ပေးပါတယ်။ [[mark:draw-last]] ဒါကြောင့် နောက်ဆုံး index က အရေအတွက်ထက်
+      အမြဲ တစ် လျော့ပါတယ်။ ဒီ အချက်ကို နောက်မှ ပြန်သုံးရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+      - {
+          title: "A Tour of Go — Slice length and capacity",
+          url: "https://go.dev/tour/moretypes/11",
+        }
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - {
+          id: board-seats,
+          type: whiteboard.apply,
+          at: { mark: board-seats },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-seats,
+          type: whiteboard.apply,
+          at: { mark: draw-seats },
+          upsertIds: [b-s0, b-s1, b-s2, b-c0, b-c1, b-c2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-index,
+          type: whiteboard.apply,
+          at: { mark: draw-index },
+          upsertIds: [b-i0, b-i1, b-i2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-steps,
+          type: whiteboard.apply,
+          at: { mark: draw-steps },
+          upsertIds: [b-steps],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-len,
+          type: whiteboard.apply,
+          at: { mark: draw-len },
+          upsertIds: [b-len],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-last,
+          type: whiteboard.apply,
+          at: { mark: draw-last },
+          upsertIds: [b-last],
+          drawMs: 1000,
+        }
+
+  - id: loop
+    narration: >-
+      [[mark:close-seats]] ဒါဆို မြို့တွေကို တစ်မြို့ချင်း ထုတ်ပြကြည့်ရအောင်။ [[mark:type-loop]] range ကို
+      slice နဲ့ တွဲသုံးရင်၊ loop က slice ကို အစကနေ အဆုံးထိ တစ်ခုချင်း လျှောက်ပေးပါတယ်။ အခေါက်တိုင်းမှာ
+      index နဲ့ အဲဒီ နေရာက တန်ဖိုး နှစ်ခုလုံးကို ပေးလို့၊ i နဲ့ city ထဲ ထည့်ပြီး print ထုတ်ပါမယ်။ ပြီးခဲ့တဲ့ lesson
+      တွေမှာ ဂဏန်း တစ်ခုကို range လုပ်ခဲ့တုန်းက အခေါက် နံပါတ်ပဲ ရခဲ့ပေမဲ့၊ slice ဆိုရင်တော့ တန်ဖိုးပါ
+      ရပါတယ်။ [[mark:sel-range]] range က slice ထဲမှာ တန်ဖိုး ဘယ်နှစ်ခု ရှိလဲ ကိုယ်တိုင် သိလို့၊ အခေါက်
+      ဘယ်နှစ်ခေါက် လုပ်ရမလဲ ဆိုတာကို ကိုယ်က ပြောပေးစရာ မလိုပါဘူး။ မြို့ ထပ်တိုးလာရင်လည်း loop ကို ပြင်စရာ
+      မလိုပါဘူး။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "A Tour of Go — Range", url: "https://go.dev/tour/moretypes/16" }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: close-seats,
+          type: whiteboard.apply,
+          at: { mark: close-seats },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "\"မန္တလေး\"}\n", occurrence: 1 }
+        text: "\tfor i, city := range cities {\n\t\tfmt.Println(i, city)\n\t}\n"
+        cadence: line-by-line
+      - id: sel-range
+        type: editor.select
+        at: { mark: sel-range }
+        target: { file: main.go, text: "range cities", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "2 မန္တလေး",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-first]] ပထမ စာကြောင်းမှာ သုည နဲ့ ရန်ကုန် ကို တွေ့ရပါတယ်။ ရန်ကုန်က ပထမဆုံး မြို့
+      ဖြစ်ပေမဲ့ index က သုည ဖြစ်နေတာကို သတိထားပါ။ [[mark:point-middle]] ဒုတိယ စာကြောင်းက တစ် နဲ့
+      နေပြည်တော် ဖြစ်ပြီး၊ loop ရဲ့ ဒုတိယ အခေါက်ပါ။ [[mark:point-last]] နောက်ဆုံး စာကြောင်းမှာတော့ နှစ် နဲ့
+      မန္တလေး ပါ။ မြို့ သုံးမြို့ ရှိပေမဲ့ နောက်ဆုံး index က နှစ်ပဲ ဖြစ်ပါတယ်။ ဒါဆို index သုံးမှာ ဘာရှိမလဲ။
+    sources:
+      - { title: "A Tour of Go — Range", url: "https://go.dev/tour/moretypes/16" }
+    actions:
+      - {
+          id: point-first,
+          type: console.point,
+          at: { mark: point-first },
+          target: { text: "0 ရန်ကုန်" },
+        }
+      - {
+          id: point-middle,
+          type: console.point,
+          at: { mark: point-middle },
+          target: { text: "1 နေပြည်တော်" },
+        }
+      - {
+          id: point-last,
+          type: console.point,
+          at: { mark: point-last },
+          target: { text: "2 မန္တလေး" },
+        }
+
+  - id: past-end
+    chapter: နောက်ဆုံး ထိုင်ခုံရဲ့ နောက်မှာ
+    narration: >-
+      [[mark:collapse-1]] slice ထဲက တန်ဖိုး တစ်ခုတည်းကို လိုချင်ရင်တော့၊ slice ရဲ့ နာမည်နောက်မှာ ထောင့်ကွင်း
+      ထဲ index ကို ထည့်ပြီး ယူပါတယ်။ ဥပမာ index သုညဆိုရင် ရန်ကုန်၊ index နှစ်ဆိုရင် မန္တလေး ရပါမယ်။ ဒါဆို
+      နောက်ဆုံး ထိုင်ခုံကို ကျော်ပြီး တောင်းရင် ဘာဖြစ်မလဲ၊ စမ်းကြည့်ရအောင်။ [[mark:type-bad]] slice ကို ကြေညာတဲ့ line ရဲ့ အောက်မှာ၊ index
+      နေရာမှာ len ကို ထည့်ပြီး print ထုတ်တဲ့ line တစ်ကြောင်း ထည့်ပါမယ်။ ဆိုလိုတာက အရေအတွက်နဲ့ တူတဲ့
+      နံပါတ်၊ ထိုင်ခုံ နံပါတ် သုံးကို တောင်းတာပါ။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-bad
+        type: editor.type
+        at: { mark: type-bad }
+        target: { file: main.go, after: "\"မန္တလေး\"}\n", occurrence: 1 }
+        text: "\tfmt.Println(cities[len(cities)])\n"
+        cadence: fast-explainer
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "index out of range [3] with length 3",
+          timeoutMs: 8000,
+        }
+
+  - id: panic
+    chapter: Panic ဆိုတာ
+    narration: >-
+      [[mark:point-panic]] ဒီ တစ်ခါတော့ compile က လက်ခံသွားပေမဲ့၊ run နေတုန်းမှာ program က panic ဖြစ်ပြီး
+      ရပ်သွားပါတယ်။ panic ဆိုတာ program run နေတုန်း bug တစ်ခုကြောင့် ဆက်မလုပ်နိုင်တော့ဘဲ ရပ်သွားတာပါ။
+      ပထမ စာကြောင်းက အရေးအကြီးဆုံးပါ။ သုံးခုပဲ ရှိတဲ့ slice ထဲက index သုံးကို ယူဖို့ ကြိုးစားလို့ program
+      ရပ်သွားတယ်လို့ ပြောနေတာပါ။ [[mark:panic-where]] အောက်က စာကြောင်းတွေကတော့ ဘယ်နေရာမှာ ဖြစ်လဲ ဆိုတာ ပြတာဖြစ်ပြီး၊
+      main ဖိုင်ရဲ့ line ခုနစ်မှာ ရပ်သွားတယ်လို့ ညွှန်ပြနေပါတယ်။ အဲဒီ line ကနေ ရပ်သွားလို့ အောက်က loop လည်း
+      run မသွားတော့ပါဘူး။ [[mark:board-panic]] board ပေါ်မှာ ပြန်ကြည့်ရင်၊ [[mark:draw-none]] ထိုင်ခုံ
+      နံပါတ် သုံး ဆိုတာ မရှိပါဘူး။ နောက်ဆုံး ထိုင်ခုံရဲ့ နောက်မှာ ဘာမှ မရှိတော့လို့ပါ။ [[mark:why-run]]
+      compiler က ဒါကို ဘာကြောင့် ကြိုမဖမ်းပေးလဲ ဆိုတော့၊ slice ရဲ့ အရှည်က program run နေတုန်း
+      ပြောင်းနိုင်လို့ပါ။ ဒါကြောင့် ဒီလို bug ကို compile error အဖြစ် မတွေ့ရဘဲ၊ run နေတုန်း panic အဖြစ်
+      တွေ့ရတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Run-time panics",
+          url: "https://go.dev/ref/spec#Run_time_panics",
+        }
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+    actions:
+      - {
+          id: point-panic,
+          type: console.point,
+          at: { mark: point-panic },
+          target: { text: "panic: runtime error: index out of range [3] with length 3" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-panic } }
+      - {
+          id: board-panic,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          upsertIds: [b-i3],
+        }
+      - {
+          id: draw-none,
+          type: whiteboard.apply,
+          at: { mark: draw-none },
+          upsertIds: [b-s3, b-none, b-panic, b-panic-line],
+          drawMs: 2000,
+        }
+
+  - id: append
+    chapter: append နဲ့ ထပ်ထည့်တာ
+    narration: >-
+      [[mark:close-panic]] ဒီ line ကို ဆက် run စရာ မလိုတော့တဲ့အတွက်၊ [[mark:type-comment]] ရှေ့မှာ comment
+      အမှတ်အသား ထည့်ပြီး ပိတ်ထားလိုက်ပါမယ်။ အခု ခရီးစဉ်ကို မန္တလေးကနေ ပြင်ဦးလွင် အထိ ဆက်ချင်တယ်
+      ဆိုပါစို့။ [[mark:type-append]] loop ရဲ့ အောက်မှာ append ကို သုံးပြီး ပြင်ဦးလွင်ကို slice ရဲ့
+      နောက်ဆုံးမှာ ထပ်ထည့်ပါမယ်။ [[mark:board-append]] append က မူလ slice နဲ့ ထပ်ထည့်မယ့် တန်ဖိုးကို ယူပြီး၊
+      တန်ဖိုး တစ်ခု ပိုပါတဲ့ slice ကို ပြန်ပေးပါတယ်။ [[mark:draw-grow]] ဆိုတော့ အရင်က သုံးခု ရှိခဲ့ရာကနေ
+      append ပြီးရင် လေးခု ဖြစ်သွားပါတယ်။ [[mark:draw-assign]] ပြန်ရလာတဲ့ slice ကို cities ထဲကို ပြန်ထည့်ပေးမှ
+      cities ကိုယ်တိုင် ရှည်သွားမှာပါ။ [[mark:draw-bad]] ပြန်မထည့်ဘဲ append ကို ဒီအတိုင်း ရေးထားရင်တော့၊
+      ပြန်ရတဲ့ တန်ဖိုးကို မသုံးထားဘူး ဆိုပြီး compiler က လက်မခံပါဘူး။ ပြန်ထည့်ဖို့ မေ့သွားတာကို compile
+      ကတည်းက ဖမ်းပေးတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+      - { title: "Effective Go — Append", url: "https://go.dev/doc/effective_go#append" }
+    actions:
+      - {
+          id: close-panic,
+          type: whiteboard.apply,
+          at: { mark: close-panic },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: "\"မန္တလေး\"}\n\t", occurrence: 1 }
+        text: "// "
+      - id: type-append
+        type: editor.type
+        at: { mark: type-append }
+        target: { file: main.go, after: "\t\tfmt.Println(i, city)\n\t}\n", occurrence: 1 }
+        text: "\tcities = append(cities, \"ပြင်ဦးလွင်\")\n"
+        cadence: line-by-line
+      - {
+          id: board-append,
+          type: whiteboard.apply,
+          at: { mark: board-append },
+          open: true,
+          clear: true,
+          upsertIds: [a-title, a-old, a-old-len],
+        }
+      - {
+          id: draw-grow,
+          type: whiteboard.apply,
+          at: { mark: draw-grow },
+          upsertIds: [a-arrow, a-new, a-new-len],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-assign,
+          type: whiteboard.apply,
+          at: { mark: draw-assign },
+          upsertIds: [a-ok-box, a-ok],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-bad,
+          type: whiteboard.apply,
+          at: { mark: draw-bad },
+          upsertIds: [a-bad-box, a-bad, a-bad-note],
+          drawMs: 1800,
+        }
+
+  - id: km
+    narration: >-
+      [[mark:close-append]] ခရီးစဉ်ရဲ့ ကီလိုမီတာတွေကိုလည်း slice တစ်ခုနဲ့ ထားကြည့်ရအောင်။ [[mark:type-km]]
+      km ဆိုတဲ့ int တွေရဲ့ slice မှာ ရန်ကုန်ကနေ နေပြည်တော် ၃၂၀ နဲ့ နေပြည်တော်ကနေ မန္တလေး ၂၇၀ ကို ထည့်ပြီး၊
+      မန္တလေးကနေ ပြင်ဦးလွင် ၇၀ ကို append လုပ်ပါမယ်။ ဒီ ကီလိုမီတာတွေက ဥပမာ အနေနဲ့ ထားတဲ့ ကိန်းတွေပါ။ km က int တွေရဲ့ slice ဖြစ်လို့ append လုပ်တဲ့ တန်ဖိုးကလည်း int ဖြစ်ရပါမယ်၊
+      စာသား တစ်ခုကို append လုပ်ရင် compiler က လက်မခံပါဘူး။ [[mark:km-total]] ပြီးတော့ total ကို
+      သုညနဲ့ စပြီး range နဲ့ တစ်ခုချင်း ပေါင်းပါမယ်၊ for loop lesson မှာ ငွေ စုခဲ့တဲ့ ပုံစံ အတိုင်းပါပဲ။ [[mark:sel-blank]] ဒီ loop မှာ index ကို မလိုလို့
+      ပြီးခဲ့တဲ့ lesson မှာ တွေ့ခဲ့တဲ့ underscore နဲ့ တမင် ပစ်ထားပါတယ်။ [[mark:type-print]] နောက်ဆုံးမှာ မြို့
+      အရေအတွက်၊ နောက်ဆုံး မြို့နဲ့ ကီလိုမီတာ စုစုပေါင်းကို တစ်ကြောင်းတည်း ထုတ်ပြပါမယ်။ [[mark:sel-last]]
+      နောက်ဆုံး မြို့ကို ယူတဲ့ ဒီ အပိုင်းကို ကြည့်ပါ။ index နေရာမှာ len ထဲက တစ် နှုတ်ထားလို့၊ slice
+      ဘယ်လောက် ရှည်ရှည် နောက်ဆုံး တန်ဖိုးကို အမြဲ ရပါတယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+      - {
+          title: "The Go Programming Language Specification — Blank identifier",
+          url: "https://go.dev/ref/spec#Blank_identifier",
+        }
+    actions:
+      - {
+          id: close-append,
+          type: whiteboard.apply,
+          at: { mark: close-append },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-km
+        type: editor.type
+        at: { mark: type-km }
+        target: { file: main.go, after: "\tcities = append(cities, \"ပြင်ဦးလွင်\")\n", occurrence: 1 }
+        text: "\tkm := []int{320, 270}\n\tkm = append(km, 70)\n\ttotal := 0\n\tfor _, d := range km {\n\t\ttotal += d\n\t}\n"
+        cadence: line-by-line
+      - id: sel-blank
+        type: editor.select
+        at: { mark: sel-blank }
+        target: { file: main.go, text: "for _, d := range km {", occurrence: 1 }
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target: { file: main.go, after: "\t\ttotal += d\n\t}\n", occurrence: 1 }
+        text: "\tfmt.Println(len(cities), cities[len(cities)-1], total, \"ကီလိုမီတာ\")\n"
+        cadence: line-by-line
+      - id: sel-last
+        type: editor.select
+        at: { mark: sel-last }
+        target: { file: main.go, text: "cities[len(cities)-1]", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "4 ပြင်ဦးလွင် 660 ကီလိုမီတာ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-append,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tcities = append(cities, \"ပြင်ဦးလွင်\")\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-trip]] နောက်ဆုံး စာကြောင်းမှာ မြို့ လေးမြို့၊ နောက်ဆုံး မြို့က ပြင်ဦးလွင်၊ ခရီး
+      စုစုပေါင်း ၆၆၀ ကီလိုမီတာ လို့ ထွက်လာပါတယ်။ append လုပ်ပြီးမှ len က လေး ဖြစ်သွားတာပါ။ ပြင်ဦးလွင်က slice ရဲ့ နောက်ဆုံးမှာ ဝင်သွားလို့ သူ့ index
+      က သုံး ဖြစ်ပြီး၊ len ထဲက တစ် နှုတ်တဲ့ နည်းနဲ့ မှန်မှန် ရှာတွေ့ပါတယ်။
+      [[mark:point-loop]] အပေါ်က loop ကတော့ မြို့ သုံးမြို့ပဲ ထုတ်ပြပါတယ်။ program က အပေါ်ကနေ အောက်ကို
+      run တာမို့၊ loop run တဲ့ အချိန်မှာ ပြင်ဦးလွင် မပါသေးလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+    actions:
+      - {
+          id: point-trip,
+          type: console.point,
+          at: { mark: point-trip },
+          target: { text: "4 ပြင်ဦးလွင် 660 ကီလိုမီတာ" },
+        }
+      - {
+          id: point-loop,
+          type: console.point,
+          at: { mark: point-loop },
+          target: { text: "2 မန္တလေး" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က slice မှာ ခရီးသည် သုံးယောက် ရှိပါတယ်၊ လှလှ၊
+      အောင်အောင် နဲ့ မောင်မောင် ပါ။ [[mark:quiz-line]] အောက်ဆုံး line က index နှစ်ကို print ထုတ်ပါတယ်။ ဒါဆို
+      မောင်မောင် ထွက်လာမလား၊ ဒါမှမဟုတ် panic ဖြစ်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ က၊ မောင်မောင် ထွက်လာတာပါ။ ဘာကြောင့်လဲဆိုတော့ သုံးယောက် ရှိတဲ့ slice
+      ရဲ့ index တွေက သုည၊ တစ်၊ နှစ် ဖြစ်လို့ပါ။ နှစ်က နောက်ဆုံး ထိုင်ခုံ ဖြစ်ပြီး၊ panic ဖြစ်တာက index သုံးကို
+      တောင်းမှပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-slice]] slice က type တူတဲ့ တန်ဖိုးတွေကို
+      အစဉ်လိုက် စီထားတဲ့ စာရင်း ဖြစ်ပြီး၊ index က သုညကနေ စပါတယ်။ len က အရေအတွက်ကို ပေးလို့ နောက်ဆုံး index
+      က len ထက် တစ် လျော့ပါတယ်။ [[mark:recap-panic]] နောက်ဆုံး နေရာကို ကျော်ပြီး ဖတ်ရင် compile error
+      မဟုတ်ဘဲ run နေတုန်း panic ဖြစ်ပါတယ်။ [[mark:recap-append]] append က ပိုရှည်တဲ့ slice ကို ပြန်ပေးလို့
+      ပြန်ထည့်ပေးရပါတယ်။ နောက် lesson မှာတော့ slice တစ်ခုရဲ့ နောက်ကွယ်မှာ တကယ် ဘာရှိလဲ၊ append က
+      ဘာကြောင့် တခါတလေ အံ့သြစရာ ဖြစ်စေလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "A Tour of Go — Slices", url: "https://go.dev/tour/moretypes/7" }
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-slice
+        type: editor.select
+        at: { mark: recap-slice }
+        target:
+          { file: main.go, text: 'cities := []string{"ရန်ကုန်", "နေပြည်တော်", "မန္တလေး"}', occurrence: 1 }
+      - id: recap-panic
+        type: editor.select
+        at: { mark: recap-panic }
+        target: { file: main.go, text: "// fmt.Println(cities[len(cities)])", occurrence: 1 }
+      - id: recap-append
+        type: editor.select
+        at: { mark: recap-append }
+        target: { file: main.go, text: 'cities = append(cities, "ပြင်ဦးလွင်")', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
