@@ -19,6 +19,7 @@ import {
 } from "../runtime/webcontainer/console";
 import {
   getOrBootSharedWebContainer,
+  resetSharedWebContainer,
   teardownSharedWebContainer,
 } from "../runtime/webcontainer/sharedContainer";
 
@@ -383,7 +384,15 @@ export function useWebContainerRuntimeSession({
     setErrorMessage(null);
   };
 
-  const resetRuntimeSession = () => {
+  /**
+   * Stops the session's processes and drops its container. A reset for another
+   * project or lesson type tears the shared container down whoever booted it,
+   * since the agent's bash tool may have booted or joined it without this session
+   * (see resetSharedWebContainer). An unmount (`unmounting`) tears down only the
+   * container this session claimed, and leaves the rest to the editor's hold
+   * release, which hands a boot still in flight to the editor replacing this one.
+   */
+  const resetRuntimeSession = ({ unmounting = false }: { unmounting?: boolean } = {}) => {
     runtimeGenerationRef.current += 1;
     runnerStartIdRef.current += 1;
     stopForegroundProcesses();
@@ -391,7 +400,11 @@ export function useWebContainerRuntimeSession({
     stopTerminalProcess();
     terminalSessionsRef.current = [];
     removeInstanceListeners();
-    teardownSharedWebContainer(instanceRef.current);
+    if (unmounting) {
+      teardownSharedWebContainer(instanceRef.current);
+    } else {
+      resetSharedWebContainer();
+    }
     instanceRef.current = null;
     // The setters below publish the emptied output; a pending frame adds nothing.
     pendingOutputFlushRef.current?.cancel();
@@ -419,7 +432,7 @@ export function useWebContainerRuntimeSession({
     }
 
     const generation = runtimeGenerationRef.current;
-    const instance = await getOrBootSharedWebContainer();
+    const instance = await getOrBootSharedWebContainer("runtime");
 
     if (!isRuntimeGenerationActive(generation)) {
       return instance;

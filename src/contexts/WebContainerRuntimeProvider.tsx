@@ -244,13 +244,13 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }
   };
 
-  const resetRuntime = () => {
+  const resetRuntime = (options?: { unmounting?: boolean }) => {
     hasRunInitCommandRef.current = false;
     lastRunRef.current = null;
     prepareRuntimePromiseRef.current = null;
     // Also cancels a pending reverse sync.
     resetWorkspaceSync();
-    resetRuntimeSession();
+    resetRuntimeSession(options);
   };
 
   /**
@@ -694,7 +694,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
   // resetRuntime also clears the pending reverse-sync timer.
   const onUnmount = useEffectEvent(() => {
-    resetRuntime();
+    resetRuntime({ unmounting: true });
   });
 
   // The editor holds the shared container while it is mounted. On unmount,

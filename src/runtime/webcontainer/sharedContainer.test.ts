@@ -150,6 +150,44 @@ describe("shared WebContainer lifetime", () => {
     expect(instance.setPreviewScript).toHaveBeenCalledExactlyOnceWith("preview recorder script");
   });
 
+  it("tears down a boot that a reset gave up on, and boots the next caller afresh after it", async () => {
+    const landFirstBoot = deferNextBoot();
+    const joined = sharedContainer.getOrBootSharedWebContainer();
+    sharedContainer.resetSharedWebContainer();
+    const second = createStandInWebContainer();
+    bootsInto(second);
+    const next = sharedContainer.getOrBootSharedWebContainer("runtime");
+    // Only one WebContainer boots at a time: the next boot waits for the first.
+    await vi.waitFor(() => expect(bootWebContainer).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(bootWebContainer).toHaveBeenCalledOnce();
+
+    const first = createStandInWebContainer();
+    landFirstBoot(first);
+
+    await expect(joined).resolves.toBe(first);
+    expect(first.teardown).toHaveBeenCalledOnce();
+    await expect(next).resolves.toBe(second);
+    expect(bootWebContainer).toHaveBeenCalledTimes(2);
+    await expect(sharedContainer.getOrBootSharedWebContainer()).resolves.toBe(second);
+  });
+
+  it("gives the runtime its own container in place of one only the agent used", async () => {
+    const agentOnly = createStandInWebContainer();
+    bootsInto(agentOnly);
+    await sharedContainer.getOrBootSharedWebContainer();
+    const own = createStandInWebContainer();
+    bootsInto(own);
+
+    await expect(sharedContainer.getOrBootSharedWebContainer("runtime")).resolves.toBe(own);
+    expect(agentOnly.teardown).toHaveBeenCalledOnce();
+
+    // From then on the agent joins the runtime's container, and so does the runtime.
+    await expect(sharedContainer.getOrBootSharedWebContainer()).resolves.toBe(own);
+    await expect(sharedContainer.getOrBootSharedWebContainer("runtime")).resolves.toBe(own);
+    expect(own.teardown).not.toHaveBeenCalled();
+  });
+
   it("counts a holder's repeated release once", async () => {
     const instance = createStandInWebContainer();
     bootsInto(instance);

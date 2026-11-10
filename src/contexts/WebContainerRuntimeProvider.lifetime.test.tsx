@@ -9,6 +9,10 @@ import {
   teardownSharedWebContainer,
 } from "../runtime/webcontainer/sharedContainer";
 import { useWebContainerRuntimeActions } from "../hooks/useWebContainerRuntime";
+import { useWorkspaceActions } from "../hooks/useWorkspace";
+import { createWorkspaceFile } from "../starters/shared";
+import type { WorkspaceActions } from "../stores/workspaceActions";
+import type { WorkspaceProject } from "../types/workspace";
 import type { WebContainerRuntimeActions } from "./WebContainerRuntimeContext";
 
 // Only the boot is faked: the shared container's lifetime is the real one.
@@ -38,11 +42,29 @@ function deferNextBoot(): (instance: StandInWebContainer) => void {
   return (instance) => land?.(instance as unknown as WebContainer);
 }
 
+function nodeProject(id: string, files: Record<string, string>): WorkspaceProject {
+  return {
+    id,
+    name: id,
+    lessonType: "javascript",
+    entryFilePath: "main.js",
+    folders: [],
+    files: Object.fromEntries(
+      Object.entries({ "main.js": "", ...files }).map(([path, content]) => [
+        path,
+        createWorkspaceFile(path, content),
+      ]),
+    ),
+  };
+}
+
 async function renderEditor({ runner = false } = {}) {
   let runtime: WebContainerRuntimeActions | null = null;
+  let workspace: WorkspaceActions | null = null;
 
   function Capture() {
     runtime = useWebContainerRuntimeActions();
+    workspace = useWorkspaceActions();
     return null;
   }
 
@@ -78,7 +100,25 @@ async function renderEditor({ runner = false } = {}) {
     return starting;
   };
 
-  return { startRuntime, unmount: view.unmount };
+  /** Loads `project` in place, as an imported recording or a next lesson does. */
+  const loadProject = (project: WorkspaceProject) => {
+    act(() => {
+      if (!workspace) throw new Error("Expected the workspace provider to render");
+      workspace.loadProject(project, project.entryFilePath);
+    });
+  };
+
+  return { startRuntime, loadProject, unmount: view.unmount };
+}
+
+/**
+ * The agent's bash tool on its own: it boots or joins the shared container
+ * without holding it or telling the runtime, then mounts the project it reads.
+ */
+async function bashMounts(tree: object): Promise<WebContainer> {
+  const instance = await getOrBootSharedWebContainer();
+  await instance.mount(tree as never);
+  return instance;
 }
 
 describe("WebContainerRuntimeProvider shared container lifetime", () => {
@@ -150,6 +190,114 @@ describe("WebContainerRuntimeProvider shared container lifetime", () => {
 
     next.unmount();
     expect(instance.teardown).toHaveBeenCalledOnce();
+  });
+
+  // A project change resets the runtime so the next project starts from a clean
+  // container. A container only the agent's bash tool booted still holds that
+  // command's copy of the old project, files it wrote and anything it left running.
+  it("tears down a container the agent booted when the project changes", async () => {
+    const agentContainer = createStandInWebContainer();
+    bootWebContainer.mockResolvedValueOnce(agentContainer as unknown as WebContainer);
+    const editor = await renderEditor();
+    editor.loadProject(nodeProject("lesson-a", { ".pnpmfile.cjs": "from lesson A" }));
+    await act(async () => {
+      await bashMounts({ "lesson-a": true });
+    });
+
+    editor.loadProject(nodeProject("project-b", {}));
+    expect(agentContainer.teardown).toHaveBeenCalledOnce();
+
+    const next = createStandInWebContainer();
+    bootWebContainer.mockResolvedValueOnce(next as unknown as WebContainer);
+    await act(async () => {
+      await editor.startRuntime();
+    });
+    expect(bootWebContainer).toHaveBeenCalledTimes(2);
+    expect(next.mount).toHaveBeenCalledOnce();
+    expect(agentContainer.mount).toHaveBeenCalledOnce();
+
+    editor.unmount();
+  });
+
+  // The runtime mounts a project over the container's tree without removing the
+  // paths it does not know, and its reverse sync then reads them all back into the
+  // workspace. So it never adopts a container only the agent has used, whatever
+  // that tool mounted there; the same id does not make it the same project.
+  it("boots its own container instead of the one the agent booted", async () => {
+    const agentContainer = createStandInWebContainer();
+    bootWebContainer.mockResolvedValueOnce(agentContainer as unknown as WebContainer);
+    const editor = await renderEditor();
+    await act(async () => {
+      await bashMounts({ "planted.cjs": true });
+    });
+
+    const own = createStandInWebContainer();
+    bootWebContainer.mockResolvedValueOnce(own as unknown as WebContainer);
+    await act(async () => {
+      await editor.startRuntime();
+    });
+
+    expect(agentContainer.teardown).toHaveBeenCalledOnce();
+    expect(own.mount).toHaveBeenCalledOnce();
+    expect(own.teardown).not.toHaveBeenCalled();
+
+    editor.unmount();
+  });
+
+  // The agent's bash tool still shares the runtime's container: it reads the files
+  // the user is looking at, and its changes fold back into the workspace.
+  it("lets the agent join the runtime's container", async () => {
+    const instance = createStandInWebContainer();
+    bootWebContainer.mockResolvedValueOnce(instance as unknown as WebContainer);
+    const editor = await renderEditor();
+    await act(async () => {
+      await editor.startRuntime();
+    });
+
+    await act(async () => {
+      expect(await bashMounts({})).toBe(instance);
+    });
+    expect(bootWebContainer).toHaveBeenCalledOnce();
+    expect(instance.teardown).not.toHaveBeenCalled();
+
+    editor.unmount();
+  });
+
+  // A project change while the first boot is still in flight, with an approved
+  // bash command waiting on that boot: the command mounts the old project there
+  // once it lands, so the next project must not be handed the same container.
+  it("does not hand the next project a boot that was in flight at the reset", async () => {
+    const landFirstBoot = deferNextBoot();
+    const editor = await renderEditor();
+    editor.loadProject(nodeProject("lesson-a", {}));
+    const firstStart = editor.startRuntime();
+    let agentInstance: WebContainer | null = null;
+    const agentMount = bashMounts({ "lesson-a": true }).then(
+      (instance) => {
+        agentInstance = instance;
+      },
+      () => {},
+    );
+
+    editor.loadProject(nodeProject("project-b", {}));
+    const next = createStandInWebContainer();
+    bootWebContainer.mockResolvedValueOnce(next as unknown as WebContainer);
+    const nextStart = editor.startRuntime();
+
+    const first = createStandInWebContainer();
+    await act(async () => {
+      landFirstBoot(first);
+      await Promise.all([firstStart, agentMount, nextStart]);
+    });
+
+    expect(agentInstance).toBe(first);
+    expect(first.teardown).toHaveBeenCalledOnce();
+    expect(bootWebContainer).toHaveBeenCalledTimes(2);
+    expect(next.mount).toHaveBeenCalledOnce();
+    // The bash tool's copy of lesson A is the only thing the old container got.
+    expect(first.mount).toHaveBeenCalledOnce();
+
+    editor.unmount();
   });
 
   // The provider resets before it releases, so its processes are stopped before

@@ -52,7 +52,9 @@ const inputSchema = z.object({
 // repeated bash calls keep reusing it, and a command still running when the
 // editor unmounts goes down with the container. A call made after that boots or
 // joins a container nobody holds, which lives at most until the next editor
-// mounts and unmounts.
+// mounts and unmounts. A container this tool booted goes down at the editor's
+// next runtime reset or start, which never adopt it (see SharedWebContainerUser);
+// the next call then mounts afresh into the new instance.
 // This module-level state lets repeated bash calls in one agent turn skip
 // re-mounting when nothing changed.
 let mountedInstance: WebContainer | null = null;

@@ -8,11 +8,25 @@ const sharedWebContainerState: {
   instance: WebContainer | null;
   bootPromise: Promise<WebContainer> | null;
   holders: number;
+  /** An editor's runtime booted or joined the container (or the boot in flight). */
+  runtimeOwned: boolean;
+  /** A boot a reset gave up on; settles once it has landed and been torn down. */
+  retiringBoot: Promise<void> | null;
 } = {
   instance: null,
   bootPromise: null,
   holders: 0,
+  runtimeOwned: false,
+  retiringBoot: null,
 };
+
+/**
+ * Who asks for the container. An editor's runtime mounts its project over the
+ * container's tree without removing paths it does not know, and its reverse sync
+ * reads every path back into the workspace, so it must start from a container it
+ * booted or joined itself. The agent's bash tool may use any container.
+ */
+export type SharedWebContainerUser = "runtime" | "agent";
 
 const webContainerTaskQueues = new WeakMap<WebContainer, Promise<void>>();
 
@@ -71,50 +85,82 @@ export function isWebContainerRuntimeSupported(): boolean {
   return window.crossOriginIsolated === true && !isMobileBrowser();
 }
 
-export async function getOrBootSharedWebContainer(): Promise<WebContainer> {
-  if (sharedWebContainerState.instance) {
-    return sharedWebContainerState.instance;
-  }
+function bootSharedWebContainer(): Promise<WebContainer> {
+  preconnectWebContainerCdn();
+  // Fetched alongside the boot, not statically: it carries the ~77 KB recorder
+  // bundle as text, which no page that never boots a WebContainer (mobile,
+  // playback) should fetch. A failure surfaces where it is awaited below; this
+  // handler only keeps it from going unhandled when the boot fails first.
+  const previewScriptModule = import("./previewScript");
+  previewScriptModule.catch(() => {});
 
-  if (!sharedWebContainerState.bootPromise) {
-    preconnectWebContainerCdn();
-    // Fetched alongside the boot, not statically: it carries the ~77 KB recorder
-    // bundle as text, which no page that never boots a WebContainer (mobile,
-    // playback) should fetch. A failure surfaces where it is awaited below; this
-    // handler only keeps it from going unhandled when the boot fails first.
-    const previewScriptModule = import("./previewScript");
-    previewScriptModule.catch(() => {});
+  // Only one WebContainer boots at a time, so a boot a reset gave up on lands
+  // and goes down before this one starts.
+  const boot: Promise<WebContainer> = (sharedWebContainerState.retiringBoot ?? Promise.resolve())
+    .then(() => import("@webcontainer/api"))
+    .then(({ WebContainer }) =>
+      WebContainer.boot({
+        coep: "require-corp",
+        forwardPreviewErrors: true,
+        workdirName: "next-editor-runtime",
+      }),
+    )
+    .then(async (instance) => {
+      // Install the rrweb recorder into every preview HTML response up front,
+      // so replay works regardless of how the app renders (SSR/CSR/hybrid).
+      // Set once per boot; it persists for the instance's whole lifetime and
+      // applies to every preview reloaded afterwards.
+      try {
+        const { createRuntimePreviewScript } = await previewScriptModule;
+        await instance.setPreviewScript(createRuntimePreviewScript());
+      } catch (error) {
+        console.warn("Failed to install runtime preview recorder script:", error);
+      }
 
-    sharedWebContainerState.bootPromise = import("@webcontainer/api")
-      .then(({ WebContainer }) =>
-        WebContainer.boot({
-          coep: "require-corp",
-          forwardPreviewErrors: true,
-          workdirName: "next-editor-runtime",
-        }),
-      )
-      .then(async (instance) => {
-        // Install the rrweb recorder into every preview HTML response up front,
-        // so replay works regardless of how the app renders (SSR/CSR/hybrid).
-        // Set once per boot; it persists for the instance's whole lifetime and
-        // applies to every preview reloaded afterwards.
-        try {
-          const { createRuntimePreviewScript } = await previewScriptModule;
-          await instance.setPreviewScript(createRuntimePreviewScript());
-        } catch (error) {
-          console.warn("Failed to install runtime preview recorder script:", error);
-        }
-
-        sharedWebContainerState.instance = instance;
+      if (sharedWebContainerState.bootPromise !== boot) {
+        // A reset gave up on this boot while it was in flight: whoever joined it
+        // was working for the workspace the reset replaced.
+        instance.teardown();
         return instance;
-      })
-      .catch((error) => {
+      }
+
+      sharedWebContainerState.instance = instance;
+      return instance;
+    })
+    .catch((error) => {
+      if (sharedWebContainerState.bootPromise === boot) {
         sharedWebContainerState.bootPromise = null;
-        throw error;
-      });
+      }
+      throw error;
+    });
+
+  return boot;
+}
+
+export async function getOrBootSharedWebContainer(
+  user: SharedWebContainerUser = "agent",
+): Promise<WebContainer> {
+  const state = sharedWebContainerState;
+
+  if (user === "runtime") {
+    if ((state.instance || state.bootPromise) && !state.runtimeOwned) {
+      // Only the agent's bash tool has used this container: it holds that tool's
+      // copy of some workspace, maybe another project's, plus whatever its
+      // commands wrote or left running.
+      resetSharedWebContainer();
+    }
+    state.runtimeOwned = true;
   }
 
-  return sharedWebContainerState.bootPromise;
+  if (state.instance) {
+    return state.instance;
+  }
+
+  if (!state.bootPromise) {
+    state.bootPromise = bootSharedWebContainer();
+  }
+
+  return state.bootPromise;
 }
 
 export function teardownSharedWebContainer(instance: WebContainer | null): void {
@@ -126,6 +172,41 @@ export function teardownSharedWebContainer(instance: WebContainer | null): void 
   webContainerTaskQueues.delete(instance);
   sharedWebContainerState.instance = null;
   sharedWebContainerState.bootPromise = null;
+  sharedWebContainerState.runtimeOwned = false;
+}
+
+/**
+ * Tears down the shared container whoever booted it, for a runtime reset (a
+ * project or lesson-type change): the next project starts from a clean boot and
+ * install. That includes a container only the agent's bash tool booted, which no
+ * runtime session claimed, and a boot still in flight, which is torn down when it
+ * lands; the next caller boots a container of its own after it.
+ */
+export function resetSharedWebContainer(): void {
+  const state = sharedWebContainerState;
+
+  if (state.instance) {
+    teardownSharedWebContainer(state.instance);
+    return;
+  }
+
+  const boot = state.bootPromise;
+  state.runtimeOwned = false;
+  if (!boot) {
+    return;
+  }
+
+  state.bootPromise = null;
+  const retiring = boot.then(
+    () => undefined,
+    () => undefined,
+  );
+  state.retiringBoot = retiring;
+  void retiring.then(() => {
+    if (state.retiringBoot === retiring) {
+      state.retiringBoot = null;
+    }
+  });
 }
 
 /**
@@ -134,7 +215,8 @@ export function teardownSharedWebContainer(instance: WebContainer | null): void 
  * container between commands without holding it. The last release tears the
  * container down, or tears down a boot still in flight once it lands, unless
  * someone holds the container by then. A reset (a project or lesson-type change)
- * still tears the instance down directly, for a clean reinstall.
+ * still tears the container down directly, for a clean reinstall (see
+ * resetSharedWebContainer).
  */
 export function holdSharedWebContainer(): () => void {
   sharedWebContainerState.holders += 1;
