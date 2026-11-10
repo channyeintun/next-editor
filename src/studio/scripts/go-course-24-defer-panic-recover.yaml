@@ -1,0 +1,1031 @@
+# Go course, lesson 24: defer, panic and recover (Burmese).
+#
+# Start state: main.go with `package main`, an import block holding only "fmt" ("strings" arrives
+# as one inserted line at run-2) and an empty `func main`.
+# Edits, all insert-only (canonical states: probes 23b-defer, 23b-panic, 23b-recover):
+#   1. closeDay with two defers (lock the store room, then hand in the cash) and its call in main
+#      -> run-1: ငွေကို အပ် / ပစ္စည်း အခန်းကို သော့ခတ် (the reverse of the written order);
+#      then the doc comment above closeDay;
+#   2. the day loop over three tracking codes (one typed without its dash) printing the part after
+#      the dash inline in main, before closeDay(), + "strings" -> run-2 ✗ panic
+#      `index out of range [1] with length 1` at main.go:16; closeDay never ran;
+#   3. safely(code, work func()) (work() first, then the deferred recover), and the loop's print
+#      line wrapped in `safely(code, func() {` … `})` -> run-3: 0001 / NPT0002 ပြဿနာ: … /
+#      0003 / both deferred lines (5 lines).
+# Boards: (D) defers as a stack of plates, taken from the top; (P) three parcels, the bad one
+# panics, a recover net under each parcel's work, recover only inside a defer; (Q) the quiz
+# (an early return: does the deferred line still run?).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-24-defer-panic-recover
+  title: "Go course 24: defer၊ panic နဲ့ recover"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: "package main\n\nimport (\n\t\"fmt\"\n)\n\nfunc main() {\n}\n"
+  whiteboardAssets:
+    # Board D: every defer puts one plate on the stack; returning takes them from the top.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "defer ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-push,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 560,
+        height: 40,
+        text: "defer တစ်ခါ = ပန်းကန် တစ်ချပ် တင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-plate1,
+        kind: rectangle,
+        x: 290,
+        y: 450,
+        width: 470,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-plate1-label,
+        kind: text,
+        x: 310,
+        y: 465,
+        width: 430,
+        height: 40,
+        text: "1 · ပစ္စည်း အခန်းကို သော့ခတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-plate2,
+        kind: rectangle,
+        x: 290,
+        y: 360,
+        width: 470,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-plate2-label,
+        kind: text,
+        x: 310,
+        y: 375,
+        width: 430,
+        height: 40,
+        text: "2 · ငွေကို အပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-take-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 790,
+        y: 355,
+        width: 50,
+        height: 170,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-take,
+        kind: text,
+        x: 850,
+        y: 380,
+        width: 240,
+        height: 40,
+        text: "အပေါ်ကနေ ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-take2,
+        kind: text,
+        x: 850,
+        y: 430,
+        width: 240,
+        height: 40,
+        text: "2 ပြီးမှ 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-why-box,
+        kind: rectangle,
+        x: 290,
+        y: 555,
+        width: 720,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-why,
+        kind: text,
+        x: 310,
+        y: 570,
+        width: 680,
+        height: 40,
+        text: "နောက်ဆုံး ဖွင့်တာကို အရင်ဆုံး ပြန်ပိတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board P: one bad parcel stops the whole program; a recover net under each parcel's work.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 460,
+        height: 50,
+        text: "panic နဲ့ recover",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-box1,
+        kind: rectangle,
+        x: 290,
+        y: 245,
+        width: 240,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-box1-label,
+        kind: text,
+        x: 330,
+        y: 265,
+        width: 170,
+        height: 40,
+        text: "MDY-0001",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-box2,
+        kind: rectangle,
+        x: 560,
+        y: 245,
+        width: 240,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-box2-label,
+        kind: text,
+        x: 605,
+        y: 265,
+        width: 160,
+        height: 40,
+        text: "NPT0002",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-box3,
+        kind: rectangle,
+        x: 830,
+        y: 245,
+        width: 240,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-box3-label,
+        kind: text,
+        x: 870,
+        y: 265,
+        width: 170,
+        height: 40,
+        text: "YGN-0003",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-bad,
+        kind: freedraw,
+        stroke: circle,
+        x: 545,
+        y: 232,
+        width: 270,
+        height: 106,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-stop-box,
+        kind: rectangle,
+        x: 290,
+        y: 355,
+        width: 780,
+        height: 65,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-stop,
+        kind: text,
+        x: 310,
+        y: 368,
+        width: 700,
+        height: 40,
+        text: "recover မရှိရင် · program တစ်ခုလုံး ရပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-net1,
+        kind: rectangle,
+        x: 290,
+        y: 445,
+        width: 240,
+        height: 65,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-net1-label,
+        kind: text,
+        x: 350,
+        y: 458,
+        width: 130,
+        height: 40,
+        text: "recover",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-net2,
+        kind: rectangle,
+        x: 560,
+        y: 445,
+        width: 240,
+        height: 65,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-net2-label,
+        kind: text,
+        x: 620,
+        y: 458,
+        width: 130,
+        height: 40,
+        text: "recover",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-net3,
+        kind: rectangle,
+        x: 830,
+        y: 445,
+        width: 240,
+        height: 65,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-net3-label,
+        kind: text,
+        x: 890,
+        y: 458,
+        width: 130,
+        height: 40,
+        text: "recover",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-rule-box,
+        kind: rectangle,
+        x: 290,
+        y: 545,
+        width: 780,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-rule,
+        kind: text,
+        x: 310,
+        y: 560,
+        width: 700,
+        height: 40,
+        text: "recover ကို defer ထဲမှာပဲ ခေါ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a defer, then an early return; probe `quiz`).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 225,
+        width: 800,
+        height: 290,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 500,
+        height: 40,
+        text: "func send(kg float64) {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 275,
+        width: 700,
+        height: 40,
+        text: '    defer fmt.Println("စာရင်း မှတ်")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 400,
+        height: 40,
+        text: "    if kg > 20 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 300,
+        y: 355,
+        width: 700,
+        height: 40,
+        text: '        fmt.Println("လေးလွန်း")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l5,
+        kind: text,
+        x: 300,
+        y: 395,
+        width: 400,
+        height: 40,
+        text: "        return",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l6,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 200,
+        height: 40,
+        text: "    }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l7,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 200,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-call,
+        kind: text,
+        x: 820,
+        y: 470,
+        width: 220,
+        height: 40,
+        text: "send(22)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-return,
+        kind: freedraw,
+        stroke: circle,
+        x: 390,
+        y: 388,
+        width: 160,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 600,
+        height: 40,
+        text: "က · လေးလွန်း တစ်ကြောင်းတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 595,
+        width: 600,
+        height: 40,
+        text: "ခ · လေးလွန်း၊ ပြီးမှ စာရင်း မှတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 585,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7124
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "ငွေကို အပ်\nပစ္စည်း အခန်းကို သော့ခတ်\n"
+      run-2:
+        status: runtime-error
+        exitCode: 2
+        output: "0001\npanic: runtime error: index out of range [1] with length 1\n\ngoroutine 1 [running]:\nmain.main()\n\t/tmp/sandbox1000000000/src/main.go:16 +0xe8\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "0001\nNPT0002 ပြဿနာ: runtime error: index out of range [1] with length 1\n0003\nငွေကို အပ်\nပစ္စည်း အခန်းကို သော့ခတ်\n"
+
+scenes:
+  - id: recall
+    chapter: နေ့ကုန်ရင် မဖြစ်မနေ လုပ်ရမယ့် အလုပ်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ error ကို ပါဆယ် code နဲ့ ထုပ်ပြီး ပိုအသေးစိတ် ပြောပြတာနဲ့၊ ကိုယ်ပိုင် error type
+      ကို လေ့လာခဲ့ပါတယ်။ error ဆိုတာ function က ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်ပြီး၊ ခေါ်တဲ့သူက စစ်ပြီး ဆုံးဖြတ်ရတာပါ။
+      ဒီနေ့မှာတော့ function တစ်ခု ဘယ်လိုပဲ ပြီးပြီး မဖြစ်မနေ လုပ်ရမယ့် အလုပ်တွေအတွက် defer ကို လေ့လာပါမယ်။
+      ပြီးတော့ တကယ့် panic တစ်ခု ဖြစ်လာတဲ့အခါ program တစ်ခုလုံး မရပ်သွားအောင် recover နဲ့ ဘယ်လို
+      ကာကွယ်မလဲ ဆိုတာကိုလည်း ကြည့်ပါမယ်။ [[mark:problem]] ပါဆယ်ပို့ ဝန်ဆောင်မှုမှာ ညနေ ရုံးပိတ်ချိန်
+      ရောက်ရင်၊ ကောင်တာက ဝန်ထမ်းက အိမ်မပြန်ခင် အလုပ် နှစ်ခုကို အမြဲ လုပ်ရပါတယ်။ တစ်နေ့လုံး ကောက်ထားတဲ့
+      ငွေကို အပ်ရပါမယ်၊ ပြီးတော့ ပစ္စည်း အခန်းကို သော့ခတ်ရပါမယ်။ နေ့ တစ်နေ့ ဘယ်လိုပဲ ပြီးပြီး ဒီ နှစ်ခုကို
+      မမေ့ဖို့ လိုပါတယ်။
+    sources:
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: defer
+    chapter: defer ဆိုတာ
+    narration: >-
+      [[mark:type-close]] ဒါဆို နေ့ကုန်ချိန်ကို ကိုယ်စားပြုတဲ့ function တစ်ခု ရေးကြည့်ရအောင်။ function ရဲ့
+      အထဲမှာ ပစ္စည်း အခန်းကို သော့ခတ် ဆိုတဲ့ စာကို ထုတ်ပြတဲ့ line တစ်ကြောင်း ရှိပြီး၊ ရှေ့ဆုံးမှာ defer ဆိုတဲ့
+      စကားလုံး ပါပါတယ်။ [[mark:sel-defer]] defer ဆိုတာ ဒီ အလုပ်ကို အခု ချက်ချင်း မလုပ်သေးဘဲ၊ function
+      ပြီးခါနီးမှ လုပ်ဖို့ ချိန်းထားတာပါ။ ဆိုလိုတာက ဒီ line ကို ရောက်တဲ့အခါ Go က စာကို မထုတ်သေးဘဲ
+      မှတ်ထားလိုက်ပြီး၊ function က ပြန်ထွက်တော့မယ့် အချိန်ကျမှ ထုတ်ပြပေးမှာပါ။ [[mark:type-cash]] အောက်မှာ
+      ငွေကို အပ် ဆိုတဲ့ defer line တစ်ကြောင်း ထပ်ထည့်ပါမယ်။ ဒါဆို ချိန်းထားတဲ့ အလုပ် နှစ်ခု ရှိသွားပါပြီ။
+      [[mark:type-call]] နောက်ဆုံး main ထဲကနေ ဒီ function ကို ခေါ်ပါမယ်။ run မလုပ်ခင် ခန့်မှန်းကြည့်ပါ၊
+      output မှာ ဘယ် စာကြောင်းက အရင် ထွက်လာမလဲ။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Defer statements",
+          url: "https://go.dev/ref/spec#Defer_statements",
+        }
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - id: type-close
+        type: editor.type
+        at: { mark: type-close }
+        target: { file: main.go, after: "\t\"fmt\"\n)\n", occurrence: 1 }
+        text: "\nfunc closeDay() {\n\tdefer fmt.Println(\"ပစ္စည်း အခန်းကို သော့ခတ်\")\n}\n"
+        cadence: line-by-line
+      - id: sel-defer
+        type: editor.select
+        at: { mark: sel-defer }
+        target: { file: main.go, text: "defer", occurrence: 1 }
+      - id: type-cash
+        type: editor.type
+        at: { mark: type-cash }
+        target:
+          { file: main.go, after: "\tdefer fmt.Println(\"ပစ္စည်း အခန်းကို သော့ခတ်\")\n", occurrence: 1 }
+        text: "\tdefer fmt.Println(\"ငွေကို အပ်\")\n"
+        cadence: line-by-line
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tcloseDay()\n"
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "ငွေကို အပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-defer,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\tdefer fmt.Println(\"ငွေကို အပ်\")\n}",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-cash]] ပထမ စာကြောင်းမှာ ငွေကို အပ် ဆိုတဲ့ စာ ထွက်လာပါတယ်။ code ထဲမှာတော့ ဒီ line ကို
+      ဒုတိယ ရေးထားတာပါ။ [[mark:point-lock]] ဒုတိယ စာကြောင်းကတော့ ပစ္စည်း အခန်းကို သော့ခတ် ဖြစ်ပြီး၊ ပထမ
+      ရေးထားတဲ့ line ပါ။ ဆိုတော့ defer လုပ်ထားတဲ့ အလုပ်တွေက ရေးထားတဲ့ အစဉ်ရဲ့ ပြောင်းပြန် run ပါတယ်။
+      နောက်ဆုံး ချိန်းထားတာကို အရင်ဆုံး လုပ်ပြီး၊ ပထမဆုံး ချိန်းထားတာကို နောက်ဆုံးမှ လုပ်တာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Defer statements",
+          url: "https://go.dev/ref/spec#Defer_statements",
+        }
+    actions:
+      - {
+          id: point-cash,
+          type: console.point,
+          at: { mark: point-cash },
+          target: { text: "ငွေကို အပ်" },
+        }
+      - {
+          id: point-lock,
+          type: console.point,
+          at: { mark: point-lock },
+          target: { text: "ပစ္စည်း အခန်းကို သော့ခတ်" },
+        }
+
+  - id: plates
+    chapter: နောက်ဆုံး ချိန်းတာ အရင် လုပ်
+    narration: >-
+      [[mark:board-plates]] ဘာကြောင့် ပြောင်းပြန် ဖြစ်ရလဲ ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-push]] defer
+      တစ်ခါ ရေးတိုင်း Go က ပန်းကန်ပြား တစ်ချပ်ပေါ်မှာ အလုပ် တစ်ခုကို ရေးပြီး ထပ်တင်ထားတယ်လို့ မြင်ကြည့်ပါ။
+      [[mark:draw-plate1]] ပထမ defer က ပစ္စည်း အခန်းကို သော့ခတ်ဖို့ ဖြစ်လို့ အောက်ဆုံးမှာ ရောက်ပါတယ်။
+      [[mark:draw-plate2]] ဒုတိယ defer ဖြစ်တဲ့ ငွေအပ်ဖို့ ပန်းကန်က သူ့အပေါ်မှာ ထပ်တင်ပါတယ်။
+      [[mark:draw-take]] function ပြီးတဲ့အခါ Go က ပန်းကန်တွေကို အပေါ်ဆုံးကနေ တစ်ချပ်ချင်း ပြန်ယူပြီး
+      အလုပ်ကို လုပ်ပါတယ်။ ဒါကြောင့် ငွေအပ်တာက အရင် ဖြစ်ပြီး၊ သော့ခတ်တာက နောက်မှ ဖြစ်တာပါ။
+      [[mark:draw-why]] တကယ့် ဘဝမှာလည်း ဒီ အစဉ်က သဘာဝ ကျပါတယ်။ မနက်မှာ ပစ္စည်း အခန်းကို အရင် ဖွင့်ပြီးမှ
+      ငွေအိတ်ကို ထုတ်ယူတာ ဖြစ်လို့၊ ညနေမှာ ငွေကို အရင် အပ်ပြီးမှ အခန်းကို သော့ခတ်ရတာပါ။
+    sources:
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+      - {
+          title: "The Go Programming Language Specification — Defer statements",
+          url: "https://go.dev/ref/spec#Defer_statements",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-plates } }
+      - {
+          id: board-plates,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-push,
+          type: whiteboard.apply,
+          at: { mark: draw-push },
+          upsertIds: [d-push],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-plate1,
+          type: whiteboard.apply,
+          at: { mark: draw-plate1 },
+          upsertIds: [d-plate1, d-plate1-label],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-plate2,
+          type: whiteboard.apply,
+          at: { mark: draw-plate2 },
+          upsertIds: [d-plate2, d-plate2-label],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-take,
+          type: whiteboard.apply,
+          at: { mark: draw-take },
+          upsertIds: [d-take-arrow, d-take, d-take2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: draw-why },
+          upsertIds: [d-why-box, d-why],
+          drawMs: 1600,
+        }
+
+  - id: why-defer
+    narration: >-
+      [[mark:close-plates]] ဒီ စည်းကမ်းကို မမေ့အောင် function ရဲ့ အပေါ်မှာ comment တစ်ကြောင်း ရေးထားပါမယ်။
+      [[mark:type-comment]] defer တွေက function ပြန်ထွက်တဲ့အခါမှ run ပြီး၊ နောက်ဆုံး တစ်ခုက အရင် run
+      တယ်လို့ မှတ်ထားတာပါ။ ဒါဆို function ရဲ့ အဆုံးမှာ ရိုးရိုး line နှစ်ကြောင်း ရေးရင်ရော မရဘူးလား။ ရပါတယ်၊
+      ဒါပေမဲ့ function ရှည်လာရင် အဆုံးမှာ ရေးဖို့ မေ့သွားတတ်ပါတယ်။ defer ကိုတော့ အလုပ်ကို စတဲ့ နေရာမှာတင်
+      ရေးထားလို့ ရပြီး၊ function ဘယ်လမ်းကနေ ပြန်ထွက်ထွက် Go က မမေ့ဘဲ လုပ်ပေးပါတယ်။
+    sources:
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - {
+          id: close-plates,
+          type: whiteboard.apply,
+          at: { mark: close-plates },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: "\t\"fmt\"\n)\n\n", occurrence: 1 }
+        text: "// closeDay is the end of the working day: defers run when it returns, last one first.\n"
+        cadence: line-by-line
+
+  - id: day-loop
+    chapter: ပါဆယ် တစ်ခု မှားနေရင်
+    narration: >-
+      [[mark:type-loop]] အခု main ထဲမှာ ဒီနေ့ လက်ခံထားတဲ့ ပါဆယ် code သုံးခုကို လျှောက်ပြီး၊ code
+      တစ်ခုစီရဲ့ နံပါတ် အပိုင်းကို ထုတ်ပြတဲ့ loop တစ်ခုကို နေ့ကုန်ချိန် function မခေါ်ခင်မှာ ထည့်ပါမယ်။
+      [[mark:sel-split]] strings package ထဲက Split က code ကို dash နေရာမှာ ဖြတ်ပြီး၊ အပိုင်းတွေကို slice
+      တစ်ခုအဖြစ် ပြန်ပေးပါတယ်။ ဥပမာ မန္တလေး ပါဆယ် နံပါတ် တစ်ရဲ့ code ဆိုရင် မြို့ code နဲ့ နံပါတ် ဆိုပြီး
+      အပိုင်း နှစ်ခု ရပါတယ်။ နောက်ဆုံးက index တစ်ကတော့ ဒုတိယ အပိုင်း ဖြစ်တဲ့ နံပါတ်ကို ယူတာပါ။
+      [[mark:type-import]] strings package ကို သုံးမှာ ဖြစ်လို့ import ထဲမှာ ထည့်ပါမယ်။ [[mark:sel-typo]]
+      ဒါပေမဲ့ ဒုတိယ code ကို ကြည့်ပါ။ ကောင်တာက ဝန်ထမ်းက ရိုက်တုန်း dash ကို မေ့ကျန်ခဲ့ပါတယ်။
+      [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "strings package — Split", url: "https://pkg.go.dev/strings#Split" }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tfor _, code := range []string{\"MDY-0001\", \"NPT0002\", \"YGN-0003\"} {\n\t\tfmt.Println(strings.Split(code, \"-\")[1])\n\t}\n"
+        cadence: line-by-line
+      - id: sel-split
+        type: editor.select
+        at: { mark: sel-split }
+        target: { file: main.go, text: 'strings.Split(code, "-")[1]', occurrence: 1 }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"strings\"\n"
+      - id: sel-typo
+        type: editor.select
+        at: { mark: sel-typo }
+        target: { file: main.go, text: '"NPT0002"', occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "index out of range [1] with length 1",
+          timeoutMs: 8000,
+        }
+
+  - id: panic
+    chapter: Panic တစ်ခုက နေ့ တစ်နေ့လုံးကို ရပ်စေတယ်
+    narration: >-
+      [[mark:point-panic]] compile ကတော့ လက်ခံသွားပေမဲ့၊ run နေတုန်းမှာ program က panic ဖြစ်ပြီး
+      ရပ်သွားပါတယ်။ ပထမ ပါဆယ်ရဲ့ နံပါတ်ကို ထုတ်ပြပြီးနောက်၊ ဒုတိယ ပါဆယ်ကို ရောက်တော့ ရပ်သွားတာပါ။ ဒီ line က ဘာပြောလဲ
+      ဆိုတော့၊ dash မပါတဲ့ code ကို ခွဲတော့ အပိုင်း တစ်ခုပဲ ရလို့၊ ဒုတိယ အပိုင်းကို ယူတဲ့အခါ ရပ်သွားတာပါ။
+      အောက်က စာကြောင်းတွေကတော့ main ဖိုင်ရဲ့ line ဆယ့်ခြောက်မှာ ရပ်သွားတယ်လို့ ပြနေပါတယ်။
+      [[mark:panic-lost]] ပိုဆိုးတာက တတိယ ပါဆယ်ကို လုံးဝ မရောက်တော့သလို၊ နေ့ကုန်ချိန် function ကိုလည်း
+      ခေါ်ခွင့် မရလိုက်ပါဘူး။ ဆိုလိုတာက ငွေလည်း မအပ်ရ၊ အခန်းလည်း သော့ မခတ်ရဘဲ နေ့ကုန်သွားတာပါ။ panic
+      တစ်ခုက ပါဆယ် တစ်ခုတည်းကို မဟုတ်ဘဲ program တစ်ခုလုံးကို ရပ်စေပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Run-time panics",
+          url: "https://go.dev/ref/spec#Run_time_panics",
+        }
+      - { title: "strings package — Split", url: "https://pkg.go.dev/strings#Split" }
+    actions:
+      - {
+          id: point-panic,
+          type: console.point,
+          at: { mark: point-panic },
+          target: { text: "panic: runtime error: index out of range [1] with length 1" },
+        }
+
+  - id: net
+    chapter: recover နဲ့ ကာကွယ်တာ
+    narration: >-
+      [[mark:board-net]] ဒါဆို ပါဆယ် တစ်ခု မှားနေရင်တောင်၊ ကျန်တဲ့ ပါဆယ်တွေ ဆက်သွားပြီး နေ့ကို ပုံမှန်
+      ပိတ်နိုင်အောင် ဘယ်လို လုပ်မလဲ။ [[mark:draw-parcels]] board ပေါ်မှာ ဒီနေ့ ပါဆယ် သုံးခု ရှိပါတယ်၊
+      အလယ်က တစ်ခုက dash မပါတဲ့ ပါဆယ်ပါ။ [[mark:draw-stop]] အခုလောလောဆယ် အဲဒီ ပါဆယ်မှာ panic
+      ဖြစ်တာနဲ့ program တစ်ခုလုံး ရပ်သွားပါတယ်။ [[mark:draw-nets]] ဒါကြောင့် ပါဆယ် တစ်ခုစီရဲ့ အလုပ်ကို
+      အောက်က ပိုက်ကွန် တစ်ခုစီနဲ့ ကာထားပါမယ်။ ဒီ ပိုက်ကွန်ကို Go မှာ recover လို့ ခေါ်ပါတယ်၊ panic ကို
+      ဖမ်းပြီး program ကို ဆက်သွားစေတာပါ။ [[mark:draw-rule]] သတိထားရမှာက recover က defer လုပ်ထားတဲ့
+      function ထဲမှာမှ အလုပ်လုပ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ panic ဖြစ်တဲ့အခါ Go က ပုံမှန် code တွေကို ဆက်မ
+      run တော့ဘဲ၊ function ကနေ ထွက်သွားရင်းနဲ့ defer လုပ်ထားတဲ့ အလုပ်တွေကိုပဲ run ပေးလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Handling panics",
+          url: "https://go.dev/ref/spec#Handling_panics",
+        }
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-net } }
+      - {
+          id: board-net,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-parcels,
+          type: whiteboard.apply,
+          at: { mark: draw-parcels },
+          upsertIds: [p-box1, p-box1-label, p-box2, p-box2-label, p-box3, p-box3-label, p-bad],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-stop,
+          type: whiteboard.apply,
+          at: { mark: draw-stop },
+          upsertIds: [p-stop-box, p-stop],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-nets,
+          type: whiteboard.apply,
+          at: { mark: draw-nets },
+          upsertIds: [p-net1, p-net1-label, p-net2, p-net2-label, p-net3, p-net3-label],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [p-rule-box, p-rule],
+          drawMs: 1400,
+        }
+
+  - id: safely
+    narration: >-
+      [[mark:close-net]] ပိုက်ကွန် ပါတဲ့ function ကို ရေးကြည့်ရအောင်။ [[mark:type-safely]] ဒီ function က ပါဆယ်
+      code တစ်ခုနဲ့ လုပ်ရမယ့် အလုပ် တစ်ခုကို ယူပါတယ်။ [[mark:sel-work]] အလုပ်ရဲ့ type ကို ကြည့်ပါ၊ ဒါက
+      input မယူ၊ ဘာမှ ပြန်မပေးတဲ့ function တစ်ခုပါ။ ဆိုလိုတာက function တစ်ခုကို တခြား function ဆီ တန်ဖိုး
+      တစ်ခုလို ပေးလိုက်လို့ ရတာပါ၊ ဒီ အကြောင်းကို နောက် lesson မှာ အသေးစိတ် ကြည့်ပါမယ်။ အခုတော့
+      ပေးလိုက်တဲ့ အလုပ်ကို ခေါ်ပြီး run လိုက်တာပဲ ရှိပါသေးတယ်။ [[mark:type-recover]] အလုပ်ကို မခေါ်ခင်
+      အပေါ်မှာ defer လုပ်ထားတဲ့ function တစ်ခု ထည့်ပါမယ်။ [[mark:sel-recover]] အထဲမှာ recover ကို ခေါ်ပါတယ်။
+      panic မဖြစ်ရင် recover က nil ကို ပြန်ပေးလို့ ဘာမှ မလုပ်ပါဘူး။ panic ဖြစ်ခဲ့ရင်တော့ panic ရဲ့
+      အကြောင်းအရာကို ပြန်ပေးပြီး panic ကို ရပ်လိုက်ပါတယ်။ ဒါကြောင့် ပါဆယ် code နဲ့ ပြဿနာကို ထုတ်ပြပြီး၊
+      ဒီ function ကနေ ပုံမှန် ပြန်ထွက်သွားပါတယ်။ [[mark:type-wrap]] နောက်ဆုံး main ထဲက print line ကို ဒီ
+      function ထဲမှာ အလုပ် တစ်ခုအဖြစ် ထုပ်ပါမယ်။ [[mark:type-wrap-close]] ကွင်းကို ပိတ်ပေးလိုက်ရင်၊ ပါဆယ်
+      တစ်ခုစီရဲ့ အလုပ်က ကိုယ်ပိုင် ပိုက်ကွန် တစ်ခုစီနဲ့ run ပါပြီ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Handling panics",
+          url: "https://go.dev/ref/spec#Handling_panics",
+        }
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - {
+          id: close-net,
+          type: whiteboard.apply,
+          at: { mark: close-net },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-safely
+        type: editor.type
+        at: { mark: type-safely }
+        target: { file: main.go, after: "\tdefer fmt.Println(\"ငွေကို အပ်\")\n}\n", occurrence: 1 }
+        text: "\n// safely runs one parcel's work; a panic is reported and the day goes on.\nfunc safely(code string, work func()) {\n\twork()\n}\n"
+        cadence: line-by-line
+      - id: sel-work
+        type: editor.select
+        at: { mark: sel-work }
+        target: { file: main.go, text: "work func()", occurrence: 1 }
+      - id: type-recover
+        type: editor.type
+        at: { mark: type-recover }
+        target: { file: main.go, after: "func safely(code string, work func()) {\n", occurrence: 1 }
+        text: "\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\tfmt.Println(code, \"ပြဿနာ:\", r)\n\t\t}\n\t}()\n"
+        cadence: line-by-line
+      - id: sel-recover
+        type: editor.select
+        at: { mark: sel-recover }
+        target: { file: main.go, text: "if r := recover(); r != nil {", occurrence: 1 }
+      - id: type-wrap
+        type: editor.type
+        at: { mark: type-wrap }
+        target: { file: main.go, after: "\"YGN-0003\"} {\n\t\t", occurrence: 1 }
+        text: "safely(code, func() {\n\t\t\t"
+        cadence: fast-explainer
+      - id: type-wrap-close
+        type: editor.type
+        at: { mark: type-wrap-close }
+        target: { file: main.go, after: "[1])\n", occurrence: 1 }
+        text: "\t\t})\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "NPT0002 ပြဿနာ:",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-recover,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "if r := recover(); r != nil {",
+        }
+      - {
+          id: expect-file-wrap,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tsafely(code, func() {\n\t\t\tfmt.Println(strings.Split(code, \"-\")[1])\n\t\t})\n",
+        }
+
+  - id: read-3
+    chapter: နေ့ကို ပုံမှန် ပိတ်နိုင်ပြီ
+    narration: >-
+      [[mark:point-problem]] ဒီ တစ်ခါတော့ program က အဆုံးထိ run သွားပါတယ်။ ဒုတိယ စာကြောင်းကို ကြည့်ပါ၊
+      dash မပါတဲ့ ပါဆယ်ရဲ့ code နဲ့ အတူ ပြဿနာ ဆိုတဲ့ စာ၊ ပြီးတော့ ခုနက panic ရဲ့ အကြောင်းအရာ အတိုင်း ထွက်လာပါတယ်။
+      recover က panic ကို ဖမ်းပြီး ကိုယ်တို့ဆီ ပြန်ပေးလိုက်တာပါ။ [[mark:point-next]] တတိယ စာကြောင်းမှာ
+      ရန်ကုန် ပါဆယ်ရဲ့ နံပါတ် ထွက်လာပါတယ်၊ ဆိုတော့ loop က နောက် ပါဆယ်ကို ဆက်သွားခဲ့ပါတယ်။
+      [[mark:point-close]] နောက်ဆုံး နှစ်ကြောင်းမှာတော့ ငွေကို အပ်ပြီး အခန်းကို သော့ခတ်တာ တွေ့ရပါပြီ၊ နေ့ကို
+      ပုံမှန် ပိတ်နိုင်သွားပါပြီ။
+    sources:
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - {
+          id: point-problem,
+          type: console.point,
+          at: { mark: point-problem },
+          target: { text: "NPT0002 ပြဿနာ:" },
+        }
+      - { id: point-next, type: console.point, at: { mark: point-next }, target: { text: "0003" } }
+      - {
+          id: point-close,
+          type: console.point,
+          at: { mark: point-close },
+          target: { text: "ငွေကို အပ်" },
+        }
+
+  - id: boundary
+    chapter: recover ကို ဘယ်မှာ သုံးမလဲ
+    narration: >-
+      [[mark:sel-boundary]] ဒါပေမဲ့ recover ကို နေရာတိုင်းမှာ ထည့်ပြီး panic တွေကို ဖုံးထားဖို့ မဟုတ်ပါဘူး။
+      panic ဆိုတာ code ထဲက bug ဒါမှမဟုတ် ဖြစ်ကို မဖြစ်သင့်တဲ့ အခြေအနေကို ပြောတာပါ။ ဒီမှာ recover ကို
+      ပါဆယ် တစ်ခုစီရဲ့ အလုပ် စတဲ့ နေရာ တစ်နေရာတည်းမှာပဲ ထားပြီး၊ ပြဿနာကို ဖုံးမထားဘဲ code နဲ့ အတူ
+      ထုတ်ပြထားပါတယ်။ ဒါမှ နောက်မှ ပြန်ကြည့်ပြီး ပြင်လို့ ရမှာပါ။ [[mark:errors-normal]] ပြီးတော့ မြို့ code
+      မှားတာ၊ ပါဆယ် လေးလွန်းတာ လို ကြိုမျှော်လို့ ရတဲ့ ပြဿနာတွေအတွက်ကတော့၊ ပြီးခဲ့တဲ့ lesson တွေက error
+      ကို ပြန်ပေးတဲ့ နည်းကပဲ ပုံမှန် နည်းလမ်း ဖြစ်ပါတယ်။ panic နဲ့ recover ကို error အစား မသုံးပါနဲ့။
+    sources:
+      - { title: "Effective Go — Recover", url: "https://go.dev/doc/effective_go#recover" }
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - id: sel-boundary
+        type: editor.select
+        at: { mark: sel-boundary }
+        target: { file: main.go, text: "safely(code, func() {", occurrence: 1 }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က function က ပါဆယ်ရဲ့ အလေးချိန်ကို ယူပြီး၊
+      ပထမဆုံး စာရင်း မှတ် ဆိုတဲ့ စာကို defer လုပ်ထားပါတယ်။ [[mark:quiz-return]] ပြီးတော့ အလေးချိန်က
+      နှစ်ဆယ် ကီလိုထက် များရင် လေးလွန်း လို့ ထုတ်ပြပြီး၊ function ရဲ့ အလယ်ကနေ return နဲ့ ပြန်ထွက်ပါတယ်။
+      နှစ်ဆယ့်နှစ် ကီလို ပါဆယ်နဲ့ ခေါ်ရင်၊ က လေးလွန်း ဆိုတဲ့ စာ တစ်ကြောင်းတည်း ထွက်မလား၊ ဒါမှမဟုတ် ခ
+      လေးလွန်း ပြီးမှ စာရင်း မှတ် ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
+      အဖြေကတော့ ခ ပါ။ ဘာကြောင့်လဲဆိုတော့ defer လုပ်ထားတဲ့ အလုပ်က function ရဲ့ အဆုံး line ကို ရောက်မှ
+      မဟုတ်ဘဲ၊ function ပြန်ထွက်တိုင်း run လို့ပါ။ return က အလယ်မှာ ရှိရှိ၊ အဆုံးမှာ ရှိရှိ၊ defer line ကို
+      ရောက်ခဲ့ပြီးရင် Go က အမြဲ လုပ်ပေးပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Defer statements",
+          url: "https://go.dev/ref/spec#Defer_statements",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-l5, q-l6, q-l7, q-call, q-a, q-b],
+        }
+      - {
+          id: quiz-return,
+          type: whiteboard.apply,
+          at: { mark: quiz-return },
+          upsertIds: [q-return],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-defer]] defer က အလုပ် တစ်ခုကို function
+      ပြန်ထွက်ခါနီးမှ လုပ်ဖို့ ချိန်းထားတာ ဖြစ်ပြီး၊ ချိန်းထားတာ အများကြီး ရှိရင် နောက်ဆုံး ချိန်းတာကို အရင်
+      လုပ်ပါတယ်။ [[mark:recap-recover]] panic က program တစ်ခုလုံးကို ရပ်စေပေမဲ့၊ defer လုပ်ထားတဲ့
+      function ထဲက recover က panic ကို ဖမ်းပြီး ဆက်သွားစေနိုင်ပါတယ်။ ဒါကို ပါဆယ် တစ်ခုစီ လို နေရာ
+      တစ်နေရာမှာပဲ သုံးပြီး၊ ကြိုမျှော်လို့ ရတဲ့ ပြဿနာတွေအတွက်တော့ error ကိုပဲ ပြန်ပေးပါ။ [[mark:recap-func]]
+      ဒီနေ့ ပါဆယ် တစ်ခုစီရဲ့ အလုပ်ကို function တစ်ခုအဖြစ် ထုပ်ပြီး ပေးလိုက်တာကိုလည်း သတိထားမိမှာပါ။ နောက်
+      lesson မှာတော့ function ကို တန်ဖိုး တစ်ခုလို variable ထဲ ထည့်ထား၊ ပေးပို့၊ ပြန်ပေးလို့ ရတဲ့ အကြောင်းနဲ့ closure ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Defer, Panic, and Recover", url: "https://go.dev/blog/defer-panic-and-recover" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-defer
+        type: editor.select
+        at: { mark: recap-defer }
+        target:
+          {
+            file: main.go,
+            text: "\tdefer fmt.Println(\"ပစ္စည်း အခန်းကို သော့ခတ်\")\n\tdefer fmt.Println(\"ငွေကို အပ်\")\n",
+            occurrence: 1,
+          }
+      - id: recap-recover
+        type: editor.select
+        at: { mark: recap-recover }
+        target: { file: main.go, text: "if r := recover(); r != nil {", occurrence: 1 }
+      - id: recap-func
+        type: editor.select
+        at: { mark: recap-func }
+        target: { file: main.go, text: "safely(code, func() {", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
