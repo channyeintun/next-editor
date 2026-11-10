@@ -1,0 +1,971 @@
+# Go course, lesson 04: whole numbers, decimals and constants (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. `const lakh`, a salary and the lakhs line (/), then the rest line (%) -> run-1:
+#      17 သိန်း / 50000 ကျပ်;
+#   2. viss (int), kgPerViss (float64), kg := viss * kgPerViss and its Println -> run-2: compile
+#      error `./main.go:12:8: invalid operation: viss * kgPerViss (mismatched types int and float64)`;
+#   3. `float64(` + `)` around viss, then a Println of int(kg) -> run-3 adds 4.899 ကီလို /
+#      4 ကီလို အပြည့်.
+# Boards: (L) lakh bundles: / counts the bundles, % is the loose rest; (T) int and float64 do not
+# mix, a written conversion does; (F) 0.1 + 0.2 as variables, so money stays int, and min / max;
+# (Q) quiz: float64 of an integer division.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-04-numbers
+  title: "Go course 04: ကိန်းပြည့်နဲ့ ဒသမ ကိန်း"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board L: a salary in lakh bundles and a loose rest.
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "သိန်း ထုပ်နဲ့ ကျန်တဲ့ ငွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: l-b1, kind: rectangle, x: 290, y: 245, width: 80, height: 60, strokeColor: "#1971c2" }
+    - { id: l-b2, kind: rectangle, x: 385, y: 245, width: 80, height: 60, strokeColor: "#1971c2" }
+    - { id: l-b3, kind: rectangle, x: 480, y: 245, width: 80, height: 60, strokeColor: "#1971c2" }
+    - { id: l-b4, kind: rectangle, x: 575, y: 245, width: 80, height: 60, strokeColor: "#1971c2" }
+    - {
+        id: l-count,
+        kind: text,
+        x: 675,
+        y: 255,
+        width: 170,
+        height: 40,
+        text: "… 17 ထုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: l-pile, kind: ellipse, x: 870, y: 235, width: 210, height: 85, strokeColor: "#f08c00" }
+    - {
+        id: l-pile-t,
+        kind: text,
+        x: 920,
+        y: 257,
+        width: 110,
+        height: 40,
+        text: "50000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-one,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 460,
+        height: 40,
+        text: "တစ်ထုပ် = 100000 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-div-box,
+        kind: rectangle,
+        x: 285,
+        y: 400,
+        width: 800,
+        height: 75,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-div,
+        kind: text,
+        x: 305,
+        y: 418,
+        width: 700,
+        height: 40,
+        text: "1750000 / 100000  →  17 ထုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-mod-box,
+        kind: rectangle,
+        x: 285,
+        y: 500,
+        width: 800,
+        height: 75,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-mod,
+        kind: text,
+        x: 305,
+        y: 518,
+        width: 700,
+        height: 40,
+        text: "1750000 % 100000  →  50000 ကျန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: int and float64 do not mix; a written conversion does.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "int နဲ့ float64 မရောဘူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-int-box,
+        kind: ellipse,
+        x: 285,
+        y: 240,
+        width: 230,
+        height: 85,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-int,
+        kind: text,
+        x: 330,
+        y: 262,
+        width: 150,
+        height: 40,
+        text: "3 · int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-times,
+        kind: text,
+        x: 540,
+        y: 262,
+        width: 40,
+        height: 40,
+        text: "×",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-float-box,
+        kind: rectangle,
+        x: 600,
+        y: 240,
+        width: 300,
+        height: 85,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-float,
+        kind: text,
+        x: 620,
+        y: 262,
+        width: 260,
+        height: 40,
+        text: "1.633 · float64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 290,
+        y: 255,
+        width: 610,
+        height: 55,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: t-rule,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 760,
+        height: 40,
+        text: "Go က type ကို ကိုယ့်ဘာသာ မပြောင်းပေးဘူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-conv-box,
+        kind: rectangle,
+        x: 285,
+        y: 430,
+        width: 800,
+        height: 85,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t-conv,
+        kind: text,
+        x: 305,
+        y: 452,
+        width: 520,
+        height: 40,
+        text: "float64(viss) * kgPerViss",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-ok,
+        kind: text,
+        x: 860,
+        y: 452,
+        width: 200,
+        height: 40,
+        text: "→ 4.899",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-conv-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 760,
+        height: 40,
+        text: "conversion · type ကို ကိုယ်တိုင် ရေးပြီး ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board F: decimals are close, not exact, so money stays int; min and max.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "ဒသမ ကိန်းနဲ့ ငွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 450,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-l1,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 400,
+        height: 40,
+        text: "a, b := 0.1, 0.2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-l2,
+        kind: text,
+        x: 305,
+        y: 295,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(a + b)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-out,
+        kind: text,
+        x: 760,
+        y: 272,
+        width: 330,
+        height: 40,
+        text: "0.30000000000000004",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-out-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 760,
+        y: 310,
+        width: 320,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-int-box,
+        kind: rectangle,
+        x: 285,
+        y: 375,
+        width: 800,
+        height: 75,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-int,
+        kind: text,
+        x: 305,
+        y: 393,
+        width: 360,
+        height: 40,
+        text: "ငွေ · int · ကျပ် အပြည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-flt,
+        kind: text,
+        x: 690,
+        y: 393,
+        width: 380,
+        height: 40,
+        text: "ပိဿာ၊ ကီလို · float64",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-min,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 560,
+        height: 40,
+        text: "min(3000, 2500, 4000)  →  2500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-max,
+        kind: text,
+        x: 300,
+        y: 555,
+        width: 560,
+        height: 40,
+        text: "max(3000, 2500, 4000)  →  4000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (float64 of an integer division).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 800,
+        height: 135,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 400,
+        height: 40,
+        text: "salary := 1750000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 310,
+        width: 700,
+        height: 40,
+        text: "fmt.Println(float64(salary / 100000))",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: underline,
+        x: 560,
+        y: 345,
+        width: 280,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 400,
+        height: 40,
+        text: "က · 17.5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 400,
+        height: 40,
+        text: "ခ · 17",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 430,
+        y: 470,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7104
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "17 သိန်း\n50000 ကျပ်\n"
+      run-2:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:12:8: invalid operation: viss * kgPerViss (mismatched types int and float64)\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "17 သိန်း\n50000 ကျပ်\n4.899 ကီလို\n4 ကီလို အပြည့်\n"
+
+scenes:
+  - id: recall
+    chapter: လစာကို သိန်းနဲ့ ခွဲကြည့်ရအောင်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ variable ဆိုတာ နာမည် တပ်ထားတဲ့ box တစ်ခုလို့ မြင်ခဲ့ပြီး၊ box တစ်ခုစီထဲမှာ
+      တန်ဖိုး တစ်ခုစီ မှတ်ထားခဲ့ပါတယ်။ ဒီနေ့တော့ အဲဒီ တန်ဖိုးတွေနဲ့ တွက်ချက်ကြည့်ပါမယ်။ နေ့စဉ် ဘဝမှာ
+      အများဆုံး တွက်ရတာက ငွေ ဖြစ်လို့ ငွေနဲ့ပဲ စကြည့်ရအောင်။ [[mark:board-lakh]] ရုံးမှာ အလုပ်လုပ်တဲ့
+      လှလှ ရဲ့ တစ်လ လစာက ၁၇ သိန်း ငါးသောင်း ဆိုပါစို့။ ဒီ လစာထဲမှာ တစ်သိန်း အပြည့် ဘယ်နှစ်သိန်း ရှိပြီး၊
+      သိန်း မပြည့်တော့တဲ့ ငွေ ဘယ်လောက် ကျန်လဲ ဆိုတာကို program နဲ့ ခွဲကြည့်ချင်ပါတယ်။
+      [[mark:draw-bundles]] ငွေစက္ကူတွေကို တစ်သိန်းစီ ထုပ်ထားတယ်လို့ မြင်ကြည့်ပါ။ စုစုပေါင်း ငွေကို
+      တစ်ထုပ်ရဲ့ ပမာဏနဲ့ စားလိုက်ရင် ထုပ် ဘယ်နှစ်ထုပ် ရလဲ ဆိုတာ သိရပါတယ်၊ ဒီ လစာမှာတော့ ၁၇ ထုပ်
+      ရပါတယ်။ [[mark:draw-pile]] ထုပ်ပြီးတဲ့ အခါမှာ တစ်ထုပ် မပြည့်တော့တဲ့ ငွေ နည်းနည်း ကျန်ပါသေးတယ်။
+      အဲဒီ ကျန်တဲ့ ငွေကို အကြွင်းလို့ ခေါ်ပြီး၊ Go မှာ အကြွင်း ရှာဖို့ သီးသန့် သင်္ကေတ တစ်ခု ရှိပါတယ်။
+      ဒီ လစာမှာ ကျန်တာက ငါးသောင်း ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Integer operators",
+          url: "https://go.dev/ref/spec#Integer_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Arithmetic operators",
+          url: "https://go.dev/ref/spec#Arithmetic_operators",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-lakh,
+          type: whiteboard.apply,
+          at: { mark: board-lakh },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-bundles,
+          type: whiteboard.apply,
+          at: { mark: draw-bundles },
+          upsertIds: [l-b1, l-b2, l-b3, l-b4, l-count, l-one, l-div-box, l-div],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-pile,
+          type: whiteboard.apply,
+          at: { mark: draw-pile },
+          upsertIds: [l-pile, l-pile-t, l-mod-box, l-mod],
+          drawMs: 2200,
+        }
+
+  - id: lakhs
+    chapter: const နဲ့ စားတာ
+    narration: >-
+      [[mark:close-lakh]] ဒါဆို ဒီ အတွက်ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-lakh]] ပထမ line မှာ
+      တစ်သိန်း ဆိုတဲ့ ဂဏန်းကို lakh ဆိုတဲ့ နာမည်နဲ့ ကြေညာပါမယ်။ ဒုတိယ line မှာ လစာကို variable
+      တစ်ခုထဲ ထည့်ပြီး၊ တတိယ line မှာတော့ လစာကို တစ်သိန်းနဲ့ စားပြီး ရတဲ့ အဖြေကို သိန်း ဆိုတဲ့ စာနဲ့ အတူ print
+      ထုတ်ပါမယ်။ [[mark:sel-const]] ပထမ line ကို ကြည့်ပါ။ ဒီ တစ်ခါ var မဟုတ်ဘဲ const ဆိုတဲ့ keyword နဲ့
+      စထားပါတယ်။ constant ဆိုတာ နာမည်ပေးထားပြီး ပြောင်းလို့ မရတဲ့ တန်ဖိုးပါ။ တစ်သိန်းက ဘယ်တော့မှ
+      မပြောင်းတဲ့ ဂဏန်း ဖြစ်လို့ constant နဲ့ ထားတာ သင့်တော်ပါတယ်။ [[mark:const-why]] ပြီးတော့ သုည
+      ငါးလုံး ပါတဲ့ ဂဏန်းကို code ထဲမှာ ရေတွက်ပြီး ဖတ်နေရတာထက်၊ lakh ဆိုတဲ့ နာမည်ကို ဖတ်ရတာ ပိုရှင်းပါတယ်။
+      constant ထဲကို နောက်မှ တန်ဖိုး အသစ် ထည့်ဖို့ ကြိုးစားရင် compiler က လက်မခံပါဘူး။ [[mark:sel-div]]
+      ဒီ line ထဲက စားတဲ့ သင်္ကေတက board ပေါ်မှာ ပြခဲ့တဲ့ အတိုင်း သိန်း ထုပ် ဘယ်နှစ်ထုပ် ရလဲ ဆိုတာကို
+      ရေတွက်ပေးမှာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Constant declarations",
+          url: "https://go.dev/ref/spec#Constant_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Integer operators",
+          url: "https://go.dev/ref/spec#Integer_operators",
+        }
+    actions:
+      - {
+          id: close-lakh,
+          type: whiteboard.apply,
+          at: { mark: close-lakh },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-lakh
+        type: editor.type
+        at: { mark: type-lakh }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tconst lakh = 100000\n\tsalary := 1750000\n\tfmt.Println(salary/lakh, \"သိန်း\")\n"
+        cadence: line-by-line
+      - id: sel-const
+        type: editor.select
+        at: { mark: sel-const }
+        target: { file: main.go, text: "const lakh = 100000", occurrence: 1 }
+      - id: sel-div
+        type: editor.select
+        at: { mark: sel-div }
+        target: { file: main.go, text: "salary/lakh", occurrence: 1 }
+
+  - id: rest
+    narration: >-
+      [[mark:type-rest]] နောက် line ကလည်း အတူတူပါပဲ။ စားတဲ့ သင်္ကေတ နေရာမှာ အကြွင်း ရှာတဲ့ သင်္ကေတကို
+      သုံးပြီး၊ ထုပ်ပြီးလို့ ကျန်တဲ့ ငွေကို ကျပ် ဆိုတဲ့ စာနဲ့ ထုတ်ပြပါမယ်။ ဒီ နှစ်ကြောင်းကို တွဲသုံးရင်
+      ငွေ ပမာဏ တစ်ခုကို သိန်း ထုပ်တွေနဲ့ ကျန်တဲ့ ငွေ ဆိုပြီး နှစ်ပိုင်း ခွဲပြလို့ ရပါတယ်။ run မလုပ်ခင်
+      output မှာ ဘာထွက်မလဲ ခန့်မှန်းကြည့်ပါ။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Integer operators",
+          url: "https://go.dev/ref/spec#Integer_operators",
+        }
+    actions:
+      - id: type-rest
+        type: editor.type
+        at: { mark: type-rest }
+        target: { file: main.go, after: "\tfmt.Println(salary/lakh, \"သိန်း\")\n", occurrence: 1 }
+        text: "\tfmt.Println(salary%lakh, \"ကျပ်\")\n"
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "50000 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-rest,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: 'fmt.Println(salary%lakh, "ကျပ်")',
+        }
+
+  - id: read-lakhs
+    narration: >-
+      [[mark:point-lakhs]] ပထမ စာကြောင်းမှာ ၁၇ သိန်း လို့ ထွက်လာပါတယ်။ တကယ်တမ်း လစာက ၁၇ သိန်းခွဲ
+      ဖြစ်ပေမဲ့ ဒသမ မပါဘဲ ၁၇ ပဲ ရတာကို သတိထားပါ။ ဘာကြောင့်လဲဆိုတော့ လစာရော တစ်သိန်းရော ကိန်းပြည့်
+      ဖြစ်တဲ့အတွက်၊ Go က အဖြေကိုလည်း ကိန်းပြည့်အဖြစ်ပဲ ပေးပြီး ကျန်တဲ့ အပိုင်းကို ဖြုတ်ချလိုက်လို့ပါ။
+      [[mark:point-rest]] ဖြုတ်ချလိုက်တဲ့ အပိုင်းကို ဒုတိယ စာကြောင်းက ပြပါတယ်၊ ငါးသောင်း ကျပ် ပါ။ ၁၇
+      သိန်းနဲ့ ငါးသောင်းကို ပြန်ပေါင်းရင် မူလ လစာ အတိအကျ ပြန်ရပါတယ်။ [[mark:why-int]] ဒီ program မှာ
+      ငွေကို int နဲ့ပဲ မှတ်ထားတာကိုလည်း သတိထားမိမှာပါ။ နေ့စဉ် သုံးတဲ့ ငွေမှာ ကျပ် အပြည့်တွေပဲ ရှိပြီး
+      ပြားကို မသုံးကြတော့တဲ့အတွက် ဒသမ မလိုပါဘူး။ ဒါကြောင့် ဒီ course မှာ ကျပ်ငွေ မှန်သမျှကို int နဲ့ပဲ
+      ရေးသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Integer operators",
+          url: "https://go.dev/ref/spec#Integer_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+    actions:
+      - {
+          id: point-lakhs,
+          type: console.point,
+          at: { mark: point-lakhs },
+          target: { text: "17 သိန်း" },
+        }
+      - {
+          id: point-rest,
+          type: console.point,
+          at: { mark: point-rest },
+          target: { text: "50000 ကျပ်" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: why-int } }
+
+  - id: viss
+    chapter: ဒသမ ကိန်းနဲ့ float64
+    narration: >-
+      ဒါပေမဲ့ တချို့ တန်ဖိုးတွေကတော့ ကိန်းပြည့် မဟုတ်ပါဘူး။ လှလှ က ဈေးကနေ ကြက်သား သုံးပိဿာ
+      ဝယ်လာတယ် ဆိုပါစို့။ ဆိုင်က ပိဿာနဲ့ ချိန်ပေးပေမဲ့၊ ဟင်းချက်နည်းက ကီလိုနဲ့ ပြောထားလို့ ကီလို ဘယ်လောက်
+      ရှိလဲ သိချင်ပါတယ်။ တစ်ပိဿာ ဆိုတာ တစ်ဒသမ ခြောက်သုံးသုံး ကီလိုလောက် ရှိပါတယ်။ [[mark:type-viss]]
+      ဒါကြောင့် ပိဿာ အရေအတွက်ကို variable တစ်ခု၊ တစ်ပိဿာမှာ ရှိတဲ့ ကီလိုကို variable တစ်ခု ထားပြီး၊
+      နှစ်ခုကို မြှောက်ပြီး ရတဲ့ ကီလိုကို print ထုတ်ပါမယ်။ [[mark:sel-float]] ဒုတိယ variable ကို ကြည့်ပါ။
+      တန်ဖိုးမှာ ဒသမ ပါနေလို့ Go က ဒါကို int လို့ မယူဘဲ float64 လို့ ယူပါတယ်။ float64 ဆိုတာ ဒသမ
+      ကိန်းတွေ အတွက် type ပါ။ ပိဿာ အရေအတွက်မှာတော့ ဒသမ မပါလို့ int ဖြစ်ပါတယ်။ ဒီ နှစ်ခုကို
+      မြှောက်လို့ ရမလား ကြည့်ရအောင်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Short variable declarations",
+          url: "https://go.dev/ref/spec#Short_variable_declarations",
+        }
+    actions:
+      - id: type-viss
+        type: editor.type
+        at: { mark: type-viss }
+        target: { file: main.go, after: "\tfmt.Println(salary%lakh, \"ကျပ်\")\n", occurrence: 1 }
+        text: "\tviss := 3\n\tkgPerViss := 1.633\n\tkg := viss * kgPerViss\n\tfmt.Println(kg, \"ကီလို\")\n"
+        cadence: line-by-line
+      - id: sel-float
+        type: editor.select
+        at: { mark: sel-float }
+        target: { file: main.go, text: "kgPerViss := 1.633", occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "mismatched types int and float64",
+          timeoutMs: 8000,
+        }
+
+  - id: mismatch
+    chapter: int နဲ့ float64 မရောဘူး
+    narration: >-
+      [[mark:point-build]] ဒီ တစ်ခါမှာ output မှာ ကီလို မထွက်လာဘဲ compile error ပေါ်လာပါတယ်။ compile
+      ကတည်းက ငြင်းတာ ဖြစ်လို့ ခုနက ထွက်ခဲ့တဲ့ သိန်းနဲ့ ကျပ် စာကြောင်းတွေတောင် မထွက်လာပါဘူး။
+      [[mark:point-mismatch]] error စာကြောင်းကို ကြည့်ရအောင်။ main ဖိုင်ရဲ့ line ဆယ့်နှစ်၊ ကီလို တွက်တဲ့
+      line မှာ ဖြစ်တာပါ။ error က ပြောနေတာကတော့၊ int နဲ့ float64 ကို တိုက်ရိုက် မြှောက်လို့ မရဘူး၊ type မတူလို့
+      ဆိုတာပါ။ စာကြောင်းရဲ့ နောက်ဆုံးမှာ type နှစ်ခုရဲ့ နာမည်ကိုလည်း ပြထားပါတယ်။ [[mark:board-types]] ဘာကြောင့်
+      ဒီလောက် တင်းကျပ်ရလဲ ဆိုတာ ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-mix]] ဘယ်ဘက် box ထဲမှာ ကိန်းပြည့် သုံး၊
+      ညာဘက် box ထဲမှာ ဒသမ ကိန်း ရှိပါတယ်။ type မတူတဲ့ တန်ဖိုး နှစ်ခုကို အတူ တွက်ချင်ရင် တစ်ခုကို အရင်
+      ပြောင်းရပါမယ်။ [[mark:draw-rule]] ဘယ်ဟာကို ဘယ် type ပြောင်းမလဲ ဆိုတာ ကိုယ် ဆုံးဖြတ်ရမယ့် ကိစ္စ ဖြစ်လို့၊
+      Go က ကိုယ့်ကိုယ်စား တိတ်တိတ်လေး မပြောင်းပေးပါဘူး။ အလိုလို ပြောင်းသွားရင် ဒသမ ပျောက်သွားတာ မျိုးကို
+      ကိုယ် သတိမထားမိဘဲ ဖြစ်သွားနိုင်လို့ပါ။ [[mark:draw-conv]] ဖြေရှင်းနည်းကတော့ conversion ပါ။ conversion
+      ဆိုတာ type တစ်ခုကနေ တစ်ခုကို ပြောင်းတာပါ။ ပြောင်းချင်တဲ့ type ရဲ့ နာမည်ကို ရှေ့မှာ ရေးပြီး တန်ဖိုးကို
+      ကွင်းနဲ့ ဝိုင်းလိုက်ရင်၊ အဲဒီ type နဲ့ တန်ဖိုး အသစ် တစ်ခု ရပါတယ်။ ပိဿာ အရေအတွက်ကို float64 ပြောင်းလိုက်ရင်
+      နှစ်ဖက်လုံး float64 ဖြစ်သွားလို့ မြှောက်လို့ ရပါပြီ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Operators",
+          url: "https://go.dev/ref/spec#Operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Conversions",
+          url: "https://go.dev/ref/spec#Conversions",
+        }
+    actions:
+      - {
+          id: point-build,
+          type: console.point,
+          at: { mark: point-build },
+          target: { text: "Build failed" },
+        }
+      - {
+          id: point-mismatch,
+          type: console.point,
+          at: { mark: point-mismatch },
+          target: { text: "./main.go:12:8: invalid operation" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-types } }
+      - {
+          id: board-types,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-mix,
+          type: whiteboard.apply,
+          at: { mark: draw-mix },
+          upsertIds: [t-int-box, t-int, t-times, t-float-box, t-float],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [t-strike, t-rule],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-conv,
+          type: whiteboard.apply,
+          at: { mark: draw-conv },
+          upsertIds: [t-conv-box, t-conv, t-ok, t-conv-note],
+          drawMs: 2600,
+        }
+
+  - id: convert
+    chapter: Conversion
+    narration: >-
+      [[mark:close-types]] ဒါဆို ကီလို တွက်တဲ့ line ကို ပြင်ကြည့်ရအောင်။ [[mark:type-open]] ပိဿာ
+      အရေအတွက်ကို float64 ပြောင်းဖို့ conversion နဲ့ ဝိုင်းလိုက်ပါမယ်၊ [[mark:type-close]] ဒါဆို မြှောက်တဲ့
+      နှစ်ဖက်လုံး float64 ဖြစ်သွားပြီး ကီလိုကလည်း float64 ဖြစ်ပါတယ်။ [[mark:type-int]] ပြီးတော့ ကီလို
+      အပြည့် ဘယ်လောက်လဲ သိချင်လို့ line တစ်ကြောင်း ထပ်ထည့်ပါမယ်။ ဒီ တစ်ခါ ပြောင်းတာက ပြောင်းပြန်ပါ၊
+      ကီလိုကို int ပြောင်းပြီး ကီလို အပြည့် ဆိုတဲ့ စာနဲ့ ထုတ်ပြပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Conversions",
+          url: "https://go.dev/ref/spec#Conversions",
+        }
+    actions:
+      - {
+          id: close-types,
+          type: whiteboard.apply,
+          at: { mark: close-types },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-open
+        type: editor.type
+        at: { mark: type-open }
+        target: { file: main.go, after: "\tkg := ", occurrence: 1 }
+        text: "float64("
+      - id: type-close
+        type: editor.type
+        at: { mark: type-close }
+        target: { file: main.go, after: "float64(viss", occurrence: 1 }
+        text: ")"
+      - id: type-int
+        type: editor.type
+        at: { mark: type-int }
+        target: { file: main.go, after: "\tfmt.Println(kg, \"ကီလို\")\n", occurrence: 1 }
+        text: "\tfmt.Println(int(kg), \"ကီလို အပြည့်\")\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "4 ကီလို အပြည့်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-conv,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "kg := float64(viss) * kgPerViss",
+        }
+
+  - id: read-kg
+    narration: >-
+      ဒီ တစ်ခါတော့ compile error မရှိတော့ပါဘူး။ ပထမ နှစ်ကြောင်းက ခုနက သိန်းနဲ့ ကျပ်
+      ပါ။ [[mark:point-kg]] တတိယ စာကြောင်းမှာတော့ လေးဒသမ ရှစ်ကိုးကိုး ကီလို လို့ ထွက်လာပါတယ်၊ ကြက်သား သုံးပိဿာက
+      ငါးကီလို နီးပါး ရှိတာပါ။ [[mark:point-whole]] နောက်ဆုံး စာကြောင်းကို သတိထားကြည့်ပါ။ int ပြောင်းလိုက်တော့
+      လေး ပဲ ရပါတယ်။ လေးဒသမ ရှစ်ကိုးကိုး ဆိုတာ ငါးနဲ့ ပိုနီးပေမဲ့၊ Go က အနီးဆုံး ကိန်းပြည့်ကို ယူတာ
+      မဟုတ်ပါဘူး။ ဒသမ နောက်က အပိုင်းကို ဖြတ်ပစ်လိုက်တာပါ။ ဒါကြောင့် conversion ရေးတိုင်း ဘာ
+      ပျောက်သွားနိုင်လဲ ဆိုတာကို စဉ်းစားပြီးမှ ရေးရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Conversions",
+          url: "https://go.dev/ref/spec#Conversions",
+        }
+    actions:
+      - { id: point-kg, type: console.point, at: { mark: point-kg }, target: { text: "4.899 ကီလို" } }
+      - {
+          id: point-whole,
+          type: console.point,
+          at: { mark: point-whole },
+          target: { text: "4 ကီလို အပြည့်" },
+        }
+
+  - id: money-float
+    chapter: ငွေကို int နဲ့ ထားတာ
+    narration: >-
+      [[mark:board-money]] ဒါဆို ငွေကိုလည်း float64 နဲ့ ထားရင် ပိုကောင်းမလား လို့ မေးစရာ ရှိပါတယ်။
+      [[mark:draw-float]] board ပေါ်က program က variable နှစ်ခုထဲမှာ သုည ဒသမ တစ်နဲ့ သုည ဒသမ နှစ်ကို
+      ထည့်ပြီး ပေါင်းထားပါတယ်။ အဖြေက သုည ဒသမ သုံး ဖြစ်ရမှာပေမဲ့၊ output မှာ နောက်က ဂဏန်း အများကြီး
+      ပါလာပါတယ်။ ဘာကြောင့်လဲဆိုတော့ ကွန်ပျူတာက ဒသမ ကိန်းတွေကို အမြဲ အတိအကျ မှတ်ထားနိုင်တာ မဟုတ်ဘဲ၊
+      အနီးစပ်ဆုံး တန်ဖိုးနဲ့ မှတ်ထားလို့ပါ။ [[mark:float-ok]] ချိန်တာ တိုင်းတာ လို အလုပ်တွေမှာ ဒီလောက် သေးတဲ့
+      ကွာခြားချက်က ပြဿနာ မရှိပေမဲ့၊ ငွေစာရင်းမှာတော့ တစ်ကျပ်မှ မလွဲရပါဘူး။ [[mark:draw-money]] ဒါကြောင့်
+      ငွေကို ကျပ် အပြည့်နဲ့ int မှာ ထားပြီး၊ ပိဿာ ကီလို လို တိုင်းတာတွေကိုမှ float64 နဲ့ ထားပါတယ်။
+      [[mark:draw-minmax]] နောက်ဆုံး တစ်ခု အနေနဲ့၊ Go မှာ ဂဏန်း အများထဲက အငယ်ဆုံးကို ရှာပေးတဲ့ min နဲ့
+      အကြီးဆုံးကို ရှာပေးတဲ့ max ဆိုတာ ပါပြီးသား ရှိပါတယ်။ ဥပမာအားဖြင့် ဆိုင် သုံးဆိုင်ရဲ့ ဈေးကို
+      ထည့်ပေးရင် ဈေး အသက်သာဆုံးနဲ့ ဈေး အကြီးဆုံးကို ချက်ချင်း ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Min and max",
+          url: "https://go.dev/ref/spec#Min_and_max",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-money } }
+      - {
+          id: board-money,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-float,
+          type: whiteboard.apply,
+          at: { mark: draw-float },
+          upsertIds: [f-code, f-l1, f-l2, f-out, f-out-line],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-money,
+          type: whiteboard.apply,
+          at: { mark: draw-money },
+          upsertIds: [f-int-box, f-int, f-flt],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-minmax,
+          type: whiteboard.apply,
+          at: { mark: draw-minmax },
+          upsertIds: [f-min, f-max],
+          drawMs: 2000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program မှာ လစာကို တစ်သိန်းနဲ့ စားပြီး၊
+      အဖြေကို float64 ပြောင်းပြီးမှ print ထုတ်ထားပါတယ်။ [[mark:quiz-line]] float64 ပြောင်းထားလို့ output မှာ
+      ၁၇ ဒသမ ငါး ထွက်မလား၊ ဒါမှမဟုတ် ၁၇ ပဲ ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခ၊ ၁၇ ပဲ ထွက်တာပါ။ ဘာကြောင့်လဲဆိုတော့ conversion ထဲမှာ ရှိတဲ့ စားတာကို
+      Go က အရင် တွက်လို့ပါ။ ကိန်းပြည့် နှစ်ခုကို စားတာ ဖြစ်လို့ အဲဒီ အချိန်မှာတင် ၁၇ ဖြစ်ပြီး ဒသမ
+      ပျောက်သွားပါပြီ။ ပြီးမှ ၁၇ ကို float64 ပြောင်းတော့ ၁၇ ပဲ ရပါတယ်။ ၁၇ ဒသမ ငါး လိုချင်ရင်တော့ မစားခင်
+      ကတည်းက ပြောင်းထားရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Conversions",
+          url: "https://go.dev/ref/spec#Conversions",
+        }
+      - {
+          title: "The Go Programming Language Specification — Integer operators",
+          url: "https://go.dev/ref/spec#Integer_operators",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဒီနေ့ ဂဏန်း type နှစ်မျိုးကို တွေ့ခဲ့ပါတယ်။ [[mark:recap-div]]
+      int နှစ်ခုကို စားရင် အဖြေကလည်း int ဖြစ်ပြီး ဒသမ ပြတ်ကျပါတယ်၊ ကျန်တဲ့ အပိုင်းကိုတော့ အကြွင်း ရှာတဲ့
+      သင်္ကေတက ပေးပါတယ်။ [[mark:recap-const]] ဘယ်တော့မှ မပြောင်းတဲ့ ဂဏန်းကို constant နဲ့ နာမည်ပေးထားပါတယ်။
+      [[mark:recap-conv]] int နဲ့ float64 ကို Go က ရောပြီး မတွက်ပေးလို့ conversion ကို ကိုယ်တိုင် ရေးရပါတယ်၊
+      int ပြောင်းရင် ဒသမ ပြတ်သွားတာကိုလည်း သတိထားရပါမယ်။ ငွေကိုတော့ ကျပ် အပြည့်နဲ့ int မှာပဲ ထားပါ။ နောက်
+      lesson မှာတော့ ဂဏန်းနဲ့ စာသားကို ပြေစာ တစ်ကြောင်းလို တစ်ကြောင်းတည်းမှာ ပုံစံကျကျ တွဲထုတ်တာကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Arithmetic operators",
+          url: "https://go.dev/ref/spec#Arithmetic_operators",
+        }
+      - {
+          title: "The Go Programming Language Specification — Conversions",
+          url: "https://go.dev/ref/spec#Conversions",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-div
+        type: editor.select
+        at: { mark: recap-div }
+        target:
+          {
+            file: main.go,
+            text: "\tfmt.Println(salary/lakh, \"သိန်း\")\n\tfmt.Println(salary%lakh, \"ကျပ်\")",
+            occurrence: 1,
+          }
+      - id: recap-const
+        type: editor.select
+        at: { mark: recap-const }
+        target: { file: main.go, text: "const lakh = 100000", occurrence: 1 }
+      - id: recap-conv
+        type: editor.select
+        at: { mark: recap-conv }
+        target: { file: main.go, text: "float64(viss)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
