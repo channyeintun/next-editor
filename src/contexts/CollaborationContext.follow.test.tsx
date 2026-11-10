@@ -2186,3 +2186,84 @@ describe("CollaborationContext replay isolation", () => {
     room.view.unmount();
   });
 });
+
+// The room's socket belongs to the account that opened it. Signing out, or
+// another account signing in in this tab, must end it (and voice, which keys
+// on it) rather than keep the previous account's live session running.
+describe("CollaborationContext account changes", () => {
+  const signedIn = controls.auth;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+    isReplayLoaded = false;
+  });
+
+  afterEach(() => {
+    controls.auth = signedIn;
+  });
+
+  function renderRoom() {
+    let collaboration: ReturnType<typeof useRoom> | null = null;
+    function Probe() {
+      collaboration = useRoom();
+      return null;
+    }
+    const tree = () => (
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>
+    );
+    const view = render(tree());
+    return { view, rerender: () => view.rerender(tree()), collaboration: () => collaboration! };
+  }
+
+  it("leaves the room when the user signs out and rejoins as whoever signs in", async () => {
+    const room = renderRoom();
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const first = controls.providers[0]!;
+
+    controls.auth = {
+      user: null,
+      isSignedIn: false,
+      isLoading: false,
+    } as unknown as typeof signedIn;
+    room.rerender();
+    expect(first.stopped).toBe(true);
+    expect(room.collaboration().provider).toBeNull();
+    expect(controls.providers).toHaveLength(1);
+    expect(room.collaboration().error).toBe("Sign in to join this live room.");
+
+    controls.auth = signedIn;
+    room.rerender();
+    await waitFor(() => expect(controls.providers).toHaveLength(2));
+    expect(room.collaboration().provider).toBe(controls.providers[1]);
+    expect(room.collaboration().error).not.toBe("Sign in to join this live room.");
+    room.view.unmount();
+  });
+
+  it("starts a new session when another account signs in, and keeps it for the same one", async () => {
+    const room = renderRoom();
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const first = controls.providers[0]!;
+
+    // A refetch returns the same account as a new object: nothing changes.
+    controls.auth = { ...signedIn, user: { ...signedIn.user } };
+    room.rerender();
+    expect(first.stopped).toBe(false);
+    expect(controls.providers).toHaveLength(1);
+
+    controls.auth = {
+      ...signedIn,
+      user: { ...signedIn.user, id: "10000000-0000-4000-8000-000000000009", username: "other" },
+    };
+    room.rerender();
+    await waitFor(() => expect(controls.providers).toHaveLength(2));
+    expect(first.stopped).toBe(true);
+    expect(room.collaboration().provider).toBe(controls.providers[1]);
+    room.view.unmount();
+  });
+});

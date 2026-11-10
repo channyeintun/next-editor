@@ -174,6 +174,8 @@ interface CollaborationContextValue {
 
 const CollaborationContext = createContext<CollaborationContextValue | null>(null);
 
+const ROOM_SIGN_IN_HINT = "Sign in to join this live room.";
+
 const collaborationApi: CollaborationRoomApi = {
   getRoom: getCollaborationRoom,
 };
@@ -200,6 +202,10 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const { user, isSignedIn, isLoading: isAuthLoading } = useAuth();
   const userRef = useRef(user);
   userRef.current = user;
+  // The room's session belongs to the account that opened it: signing out, or
+  // another account signing in in this tab, ends it (and voice, which keys on
+  // it). A refetch that returns the same account keeps it.
+  const userId = user?.id ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const roomId = searchParams.get("room");
   const inviteToken = searchParams.get("invite");
@@ -444,7 +450,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [resetRoster, resetTeaching, stopFollowing]);
 
   useEffect(() => {
-    if (!roomId || inviteToken) {
+    if (!roomId || inviteToken || !userId) {
       providerGenerationRef.current += 1;
       resetRoomScopedState();
       setProvider(null);
@@ -586,8 +592,17 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     resetRoomScopedState,
     roomId,
     slidesStore,
+    userId,
     whiteboardStore,
   ]);
+
+  // A room link opened signed out, or a sign-out inside a room, has no session
+  // to join with; say why instead of showing nothing.
+  const needsSignInToJoin = Boolean(roomId) && !inviteToken && !isAuthLoading && !userId;
+  useEffect(() => {
+    if (needsSignInToJoin) setLocalError(ROOM_SIGN_IN_HINT);
+    else setLocalError((current) => (current === ROOM_SIGN_IN_HINT ? null : current));
+  }, [needsSignInToJoin]);
 
   useEffect(() => {
     if (!provider) {
