@@ -1,0 +1,1281 @@
+# Go course, lesson 34: capstone part 2, riders and the day's report (Burmese).
+#
+# Start state (COURSE-KIT 3.4-3.10): nine files. The seven of lesson 33 as its final texts
+# (receipt.go's formatKyat without the Myanmar digits line), never edited here; main.go holds the
+# whole day's eight parcels (`today`), `accepted` and an empty main, without imports; riders.go and
+# report.go hold only `package main`.
+# Edits, all insert-only (final files = probe 33-three):
+#   1. riders.go: imports, CashBag (mu beside total) and its pointer-receiver Add; deliverAll (a
+#      jobs channel, `riders` goroutines with wg.Go, close, Wait);
+#   2. main.go: imports, then the day: accepted parcels, a CashBag, two riders, elapsed time and cash
+#      -> run-1: `400ms 34000 ကျပ်`;
+#   3. report.go: printReport (two counting maps, the cities sorted by count then code, the top three,
+#      the busiest hour); main.go: `printReport(sent)` -> run-2: the report;
+#   4. main.go: `riders++` under `riders := 2` -> run-3: 300ms, the same cash and report.
+# Boards: (M) lesson 33's program map with riders.go and report.go added in the fourth column;
+# (C) the course on one page; (Q) the quiz (four riders: 200ms, not 175ms).
+# Built by build.py from template.yaml.in; fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts
+# <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-34-capstone-riders
+  title: "Go course 34: Capstone ၂၊ rider တွေနဲ့ နေ့စဉ် report"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Nine files: the explorer is part of the lesson.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        // today is the whole day's parcels, in the order they were handed in.
+        var today = []Parcel{
+        	{Code: "MDY-0001", To: "MDY", WeightKg: 2.5, At: at(9, 10)},
+        	{Code: "NPT-0001", To: "NPT", WeightKg: 1, At: at(9, 40)},
+        	{Code: "TGI-0001", To: "TGI", WeightKg: 22, At: at(10, 5)},
+        	{Code: "YGN-0001", To: "YGN", WeightKg: 0.5, At: at(10, 30)},
+        	{Code: "MDY-0002", To: "MDY", WeightKg: 4, At: at(11, 15)},
+        	{Code: "MLM-0001", To: "MLM", WeightKg: 3, At: at(11, 20)},
+        	{Code: "MDY-0003", To: "MDY", WeightKg: 1.5, At: at(11, 45)},
+        	{Code: "YGN-0002", To: "YGN", WeightKg: 2, At: at(14, 0)},
+        }
+
+        // accepted keeps the parcels that pass checkParcel.
+        func accepted(parcels []Parcel) []Parcel {
+        	var ok []Parcel
+        	for _, p := range parcels {
+        		if checkParcel(p) == nil {
+        			ok = append(ok, p)
+        		}
+        	}
+        	return ok
+        }
+
+        func main() {
+        }
+      parcel.go: |
+        package main
+
+        import "time"
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string    // tracking code: "MDY-0001"
+        	To       string    // city code: "MDY"
+        	WeightKg float64   // weight in kilograms
+        	At       time.Time // when it was handed in, in Myanmar Time
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+      fees.go: |
+        package main
+
+        // perKg is added for every whole kilogram.
+        const perKg = 500
+
+        // maxWeightKg is the heaviest parcel the service takes.
+        const maxWeightKg = 20.0
+
+        // baseFees is the fee to each city before weight, in kyats.
+        var baseFees = map[string]int{
+        	"YGN": 2000,
+        	"BGO": 3000,
+        	"NPT": 4000,
+        	"MLM": 4500,
+        	"MDY": 5000,
+        	"TGI": 6000,
+        }
+
+        // Fee is the parcel's price: the city's base fee plus perKg for every whole kilogram.
+        func (p Parcel) Fee() int {
+        	return baseFees[p.To] + int(p.WeightKg)*perKg
+        }
+      receipt.go: |
+        package main
+
+        import "fmt"
+
+        // formatKyat shows an amount of money: 1500 → "1500 ကျပ်".
+        func formatKyat(amount int) string {
+        	digits := fmt.Sprint(amount)
+        	return digits + " ကျပ်"
+        }
+
+        // printReceipt prints one line for a parcel: time, code, fee, city.
+        func printReceipt(p Parcel) {
+        	fmt.Println(p.At.Format("15:04"), p.Code, formatKyat(p.Fee()), cityNames[p.To])
+        }
+      digits.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strconv"
+        )
+
+        // toMyanmarDigits writes n with Myanmar digits: 1500 → "၁၅၀၀".
+        func toMyanmarDigits(n int) string {
+        	digits := []rune(strconv.Itoa(n))
+        	for i, r := range digits {
+        		if r >= '0' && r <= '9' {
+        			digits[i] = r - '0' + '၀'
+        		}
+        	}
+        	return string(digits)
+        }
+
+        // fromMyanmarDigits reads Myanmar digits: "၁၅၀၀" → 1500.
+        func fromMyanmarDigits(s string) (int, error) {
+        	n := 0
+        	for _, r := range s {
+        		if r < '၀' || r > '၉' {
+        			return 0, fmt.Errorf("%q is not a Myanmar digit", r)
+        		}
+        		n = n*10 + int(r-'၀')
+        	}
+        	return n, nil
+        }
+      clock.go: |
+        package main
+
+        import "time"
+
+        // mmt is Myanmar Time: UTC+06:30, no daylight saving.
+        var mmt = time.FixedZone("MMT", 6*60*60+30*60)
+
+        // at is hour:minute on the course's day, Friday 2026-04-17, in Myanmar Time.
+        func at(hour, minute int) time.Time {
+        	return time.Date(2026, time.April, 17, hour, minute, 0, 0, mmt)
+        }
+      errors.go: |
+        package main
+
+        import (
+        	"errors"
+        	"fmt"
+        )
+
+        // ErrUnknownCity means the parcel's city code is not one the service sends to.
+        var ErrUnknownCity = errors.New("unknown city")
+
+        // OverweightError means the parcel is heavier than maxWeightKg.
+        type OverweightError struct {
+        	Code     string
+        	WeightKg float64
+        }
+
+        func (e *OverweightError) Error() string {
+        	return fmt.Sprintf("%s: %v kg is over %v kg", e.Code, e.WeightKg, maxWeightKg)
+        }
+
+        // checkParcel says why a parcel cannot be sent, or nil when it can.
+        func checkParcel(p Parcel) error {
+        	if _, ok := cityNames[p.To]; !ok {
+        		return fmt.Errorf("%s: %w", p.Code, ErrUnknownCity)
+        	}
+        	if p.WeightKg > maxWeightKg {
+        		return &OverweightError{Code: p.Code, WeightKg: p.WeightKg}
+        	}
+        	return nil
+        }
+      riders.go: |
+        package main
+      report.go: |
+        package main
+  whiteboardAssets:
+    # Board M: lesson 33's program map (same layout), riders.go and report.go added in column 4.
+    - {
+        id: m-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Program ရဲ့ ဖိုင် ကိုးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: m-main-box,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 825,
+        height: 65,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-main,
+        kind: text,
+        x: 290,
+        y: 237,
+        width: 600,
+        height: 40,
+        text: "main.go · တစ်နေ့လုံးရဲ့ အလုပ် အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 347,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 557,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 767,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-receipt-box,
+        kind: rectangle,
+        x: 270,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-receipt,
+        kind: text,
+        x: 282,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "receipt.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-receipt-l,
+        kind: text,
+        x: 282,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 09",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-errors-box,
+        kind: rectangle,
+        x: 480,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-errors,
+        kind: text,
+        x: 492,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "errors.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-errors-l,
+        kind: text,
+        x: 492,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 23",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-clock-box,
+        kind: rectangle,
+        x: 690,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-clock,
+        kind: text,
+        x: 702,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "clock.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-clock-l,
+        kind: text,
+        x: 702,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 28",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-digits-box,
+        kind: rectangle,
+        x: 270,
+        y: 465,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-digits,
+        kind: text,
+        x: 282,
+        y: 473,
+        width: 175,
+        height: 40,
+        text: "digits.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-digits-l,
+        kind: text,
+        x: 282,
+        y: 515,
+        width: 175,
+        height: 40,
+        text: "lesson 15",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-parcel-box,
+        kind: rectangle,
+        x: 480,
+        y: 465,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-parcel,
+        kind: text,
+        x: 492,
+        y: 473,
+        width: 175,
+        height: 40,
+        text: "parcel.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-parcel-l,
+        kind: text,
+        x: 492,
+        y: 515,
+        width: 175,
+        height: 40,
+        text: "lesson 16",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-fees-box,
+        kind: rectangle,
+        x: 690,
+        y: 465,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-fees,
+        kind: text,
+        x: 702,
+        y: 473,
+        width: 175,
+        height: 40,
+        text: "fees.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-fees-l,
+        kind: text,
+        x: 702,
+        y: 515,
+        width: 175,
+        height: 40,
+        text: "lesson 18",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-same,
+        kind: text,
+        x: 270,
+        y: 590,
+        width: 600,
+        height: 40,
+        text: "ဒီ ခြောက်ခု · တစ်ကြောင်းမှ မပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # today's two files, in the column lesson 33 left free; the short arrow = "then" (main calls
+    # riders first, then report)
+    - {
+        id: m-a4,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 977,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-riders-box,
+        kind: rectangle,
+        x: 900,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-riders,
+        kind: text,
+        x: 912,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "riders.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-riders-l,
+        kind: text,
+        x: 912,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 34",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-then,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 977,
+        y: 440,
+        width: 40,
+        height: 35,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-report-box,
+        kind: rectangle,
+        x: 900,
+        y: 480,
+        width: 195,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-report,
+        kind: text,
+        x: 912,
+        y: 486,
+        width: 175,
+        height: 40,
+        text: "report.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-report-l,
+        kind: text,
+        x: 912,
+        y: 526,
+        width: 175,
+        height: 40,
+        text: "lesson 34",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: the course on one page.
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "Course တစ်ခုလုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-m1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 790,
+        height: 40,
+        text: "01–14 · အခြေခံ၊ slice၊ map၊ မြန်မာ စာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-m2,
+        kind: text,
+        x: 300,
+        y: 305,
+        width: 790,
+        height: 40,
+        text: "15–20 · struct၊ method၊ interface",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-m3,
+        kind: text,
+        x: 300,
+        y: 370,
+        width: 790,
+        height: 40,
+        text: "21–26 · error၊ closure၊ generics",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-m4,
+        kind: text,
+        x: 300,
+        y: 435,
+        width: 790,
+        height: 40,
+        text: "27–31 · အချိန်၊ goroutine၊ channel၊ mutex",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-m5-box,
+        kind: rectangle,
+        x: 280,
+        y: 500,
+        width: 700,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-m5,
+        kind: text,
+        x: 300,
+        y: 515,
+        width: 660,
+        height: 40,
+        text: "32–33 · capstone · ဖိုင် ကိုးခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (seven parcels, 100 ms a delivery, four riders).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 800,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 740,
+        height: 40,
+        text: "ပါဆယ် 7 ခု · တစ်ခု ပို့ရင် 100ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 740,
+        height: 40,
+        text: "riders := 4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-ask,
+        kind: text,
+        x: 285,
+        y: 380,
+        width: 780,
+        height: 40,
+        text: "ကြာချိန်က",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 285,
+        y: 440,
+        width: 400,
+        height: 40,
+        text: "က · 200ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 285,
+        y: 500,
+        width: 400,
+        height: 40,
+        text: "ခ · 175ms",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 430,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7134
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "400ms 34000 ကျပ်\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "400ms 34000 ကျပ်\n3 မန္တလေး\n2 ရန်ကုန်\n1 မော်လမြိုင်\n11 နာရီမှာ အများဆုံး\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "300ms 34000 ကျပ်\n3 မန္တလေး\n2 ရန်ကုန်\n1 မော်လမြိုင်\n11 နာရီမှာ အများဆုံး\n"
+
+scenes:
+  - id: recall
+    chapter: Capstone ၂၊ rider တွေနဲ့ report
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ ဖိုင် ခုနစ်ခုရှိတဲ့ program နဲ့ မနက်ပိုင်း ပါဆယ်တွေရဲ့ ပို့ခကို တွက်ပြီး ပြေစာတွေ
+      ထုတ်ခဲ့ပါတယ်။ ဒီနေ့ capstone ရဲ့ ဒုတိယပိုင်းမှာတော့ တစ်နေ့လုံးရဲ့ ပါဆယ်တွေကို rider တွေက တစ်ပြိုင်နက်
+      ပို့မယ်၊ ကောက်ခံတဲ့ ငွေကို မပျောက်အောင် စုမယ်၊ နောက်ဆုံး တစ်နေ့တာ report တစ်ခု ထုတ်ပါမယ်။
+      [[mark:plan]] အရေးကြီးတာက အလုပ်လုပ်နေပြီးသား ဖိုင် ခြောက်ခုကို တစ်ကြောင်းမှ မပြင်ဘဲ၊ ဖိုင် အသစ် နှစ်ခု
+      ထည့်ပြီး main ကနေ ခေါ်ရုံနဲ့ ဒါတွေကို ရအောင် လုပ်မှာပါ။ [[mark:sel-today]] main ဖိုင်ထဲမှာ ဒီ တစ်ခါတော့ တစ်နေ့လုံး လက်ခံထားတဲ့
+      ပါဆယ် ရှစ်ခု ရှိပါတယ်။ မနက်က လေးခုအပြင်၊ ဆယ့်တစ်နာရီကျော်မှာ မန္တလေး နှစ်ခုနဲ့ မော်လမြိုင် တစ်ခု၊
+      နေ့လယ် နှစ်နာရီမှာ ရန်ကုန် တစ်ခု ထပ်ရောက်လာပါတယ်။ [[mark:sel-accepted]] အောက်က function က
+      ပါဆယ်တွေထဲက စစ်လို့ အောင်တဲ့ ပါဆယ်တွေကိုပဲ slice အသစ် တစ်ခုထဲ စုပေးပါတယ်။ ပြီးခဲ့တဲ့ lesson က
+      ပါဆယ် စစ်တဲ့ function ကိုပဲ ပြန်သုံးထားလို့၊ တောင်ကြီး ပါဆယ် ထွက်သွားပြီး ပါဆယ် ခုနစ်ခုပဲ ကျန်မှာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Appending to and copying slices",
+          url: "https://go.dev/ref/spec#Appending_and_copying_slices",
+        }
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-today
+        type: editor.select
+        at: { mark: sel-today }
+        target: { file: main.go, text: "var today = []Parcel{", occurrence: 1 }
+      - id: sel-accepted
+        type: editor.select
+        at: { mark: sel-accepted }
+        target: { file: main.go, text: "func accepted(parcels []Parcel) []Parcel {", occurrence: 1 }
+
+  - id: map
+    chapter: ဖိုင် ကိုးခု
+    narration: >-
+      [[mark:board-map]] ပြီးခဲ့တဲ့ lesson က ဖိုင် ပုံကို ပြန်ဆွဲကြည့်ရအောင်။ [[mark:draw-old]] main ဖိုင်က
+      အပေါ်ဆုံးမှာ ရှိပြီး၊ သူ ခေါ်တဲ့ receipt၊ errors၊ clock ဖိုင်တွေက အလယ်တန်းမှာ၊ ဖိုင် တိုင်း သုံးတဲ့
+      digits၊ parcel၊ fees ဖိုင်တွေက အောက်တန်းမှာ ရှိပါတယ်။ [[mark:draw-same]] main ရဲ့ အောက်က ဒီ ဖိုင်
+      ခြောက်ခုကို ဒီနေ့ တစ်ကြောင်းမှ မပြင်ပါဘူး။ [[mark:draw-riders]] ညာဘက်ဆုံးမှာ ဖိုင် အသစ် နှစ်ခု ထပ်ထည့်ပါမယ်။ riders
+      ဖိုင်က rider တွေကို တစ်ပြိုင်နက် ထွက်ခိုင်းပြီး ငွေ စုတဲ့ နေရာပါ။ lesson နှစ်ဆယ့်ကိုးကနေ သုံးဆယ့်နှစ်အထိ
+      လေ့လာခဲ့တဲ့ goroutine၊ channel နဲ့ mutex တွေ ဒီထဲမှာ ပါမှာပါ။ [[mark:draw-report]] report ဖိုင်ကတော့
+      ပို့ပြီးတဲ့ ပါဆယ်တွေကို ရေတွက်ပြီး တစ်နေ့တာ အကျဉ်းချုပ်ကို ထုတ်ပေးပါတယ်။ main က rider တွေကို အရင်
+      ထွက်ခိုင်းပြီးမှ report ကို ခေါ်မှာ ဖြစ်လို့၊ ကြားက မြှားလေးက အဲဒီ အစဉ်ကို ပြတာပါ။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - {
+          id: board-map,
+          type: whiteboard.apply,
+          at: { mark: board-map, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-old,
+          type: whiteboard.apply,
+          at: { mark: draw-old },
+          upsertIds:
+            [
+              m-main-box,
+              m-main,
+              m-a1,
+              m-a2,
+              m-a3,
+              m-receipt-box,
+              m-receipt,
+              m-receipt-l,
+              m-errors-box,
+              m-errors,
+              m-errors-l,
+              m-clock-box,
+              m-clock,
+              m-clock-l,
+              m-digits-box,
+              m-digits,
+              m-digits-l,
+              m-parcel-box,
+              m-parcel,
+              m-parcel-l,
+              m-fees-box,
+              m-fees,
+              m-fees-l,
+            ],
+          drawMs: 5000,
+        }
+      - {
+          id: draw-same,
+          type: whiteboard.apply,
+          at: { mark: draw-same },
+          upsertIds: [m-same],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-riders,
+          type: whiteboard.apply,
+          at: { mark: draw-riders },
+          upsertIds: [m-a4, m-riders-box, m-riders, m-riders-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-report,
+          type: whiteboard.apply,
+          at: { mark: draw-report },
+          upsertIds: [m-then, m-report-box, m-report, m-report-l],
+          drawMs: 1800,
+        }
+
+  - id: cash-bag
+    chapter: Cash bag နဲ့ mutex
+    narration: >-
+      [[mark:close-map]] riders ဖိုင်ကနေ စရေးရအောင်။ [[mark:type-bag]] ပထမဆုံး rider တွေ ကောက်လာတဲ့ ငွေကို
+      စုမယ့် CashBag struct ကို ရေးပါမယ်။ struct ထဲမှာ ငွေ စုစုပေါင်းနဲ့ အတူ mutex တစ်ခု ပါပါတယ်။ lesson
+      သုံးဆယ့်နှစ်မှာ ပြောခဲ့သလို mutex ကို သူ ကာကွယ်ရမယ့် တန်ဖိုးရဲ့ ဘေးမှာပဲ ထားတာပါ။ [[mark:sel-add]]
+      ငွေ ထည့်တဲ့ method မှာ pointer receiver ကို သုံးထားပါတယ်၊ ဒါမှ မိတ္တူထဲ မဟုတ်ဘဲ တကယ့် အိတ်ထဲကို ငွေ
+      ရောက်မှာပါ။ [[mark:sel-lock]] method ရဲ့ အစမှာ lock လုပ်ပြီး၊ ပြီးခါနီးမှ unlock လုပ်ဖို့ defer နဲ့
+      ချိန်းထားပါတယ်။ ငွေ သေတ္တာ သော့ တစ်ချောင်းတည်း ရှိသလိုပဲ၊ တစ်ကြိမ်မှာ rider တစ်ယောက်ပဲ ငွေ ထည့်ခွင့်
+      ရပါတယ်။ ဒါကြောင့် goroutine အများက တစ်ပြိုင်နက် ခေါ်လည်း ငွေ မပျောက်ပါဘူး။
+    sources:
+      - { title: "sync package — Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+      - {
+          title: "Go FAQ — Should I define methods on values or pointers?",
+          url: "https://go.dev/doc/faq#methods_on_values_or_pointers",
+        }
+    actions:
+      - {
+          id: close-map,
+          type: whiteboard.apply,
+          at: { mark: close-map },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-riders, type: workspace.openFile, at: { mark: type-bag }, path: riders.go }
+      - id: type-bag
+        type: editor.type
+        at: { afterAction: open-riders }
+        target: { file: riders.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport (\n\t\"sync\"\n\t\"time\"\n)\n\n// CashBag is the day's cash from every rider; mu guards total.\ntype CashBag struct {\n\tmu    sync.Mutex\n\ttotal int\n}\n\n// Add puts one parcel's fee into the bag; safe to call from many goroutines.\nfunc (b *CashBag) Add(amount int) {\n\tb.mu.Lock()\n\tdefer b.mu.Unlock()\n\tb.total += amount\n}\n"
+        cadence: line-by-line
+      - id: sel-add
+        type: editor.select
+        at: { mark: sel-add }
+        target: { file: riders.go, text: "func (b *CashBag) Add(amount int) {", occurrence: 1 }
+      - id: sel-lock
+        type: editor.select
+        at: { mark: sel-lock }
+        target: { file: riders.go, text: "\tb.mu.Lock()\n\tdefer b.mu.Unlock()\n", occurrence: 1 }
+
+  - id: deliver
+    chapter: Rider အဖွဲ့
+    narration: >-
+      [[mark:type-deliver]] အောက်မှာ rider တွေကို အတူတူ ထွက်ခိုင်းမယ့် function ကို ရေးပါမယ်။ ပါဆယ် စာရင်း၊
+      rider အရေအတွက်နဲ့ cash bag ရဲ့ pointer ကို ယူပါတယ်။ lesson သုံးဆယ့်တစ်က rider အဖွဲ့ ပုံစံနဲ့
+      အတူတူပါပဲ၊ ဒီ တစ်ခါတော့ ပါဆယ် နံပါတ် အစား ပါဆယ် ကိုယ်တိုင်ကို လက်လွှဲပြီး၊ ရလဒ်ကိုလည်း slice ထဲ
+      မထည့်ဘဲ cash bag ထဲမှာ စုပါတယ်။ [[mark:sel-jobs]] ပထမ line က ပါဆယ်တွေကို
+      လက်လွှဲပေးမယ့် channel ပါ၊ လက်လွှဲ ကောင်တာ တစ်ခုလိုပါပဲ။ [[mark:sel-workers]] ပြီးတော့ rider
+      အရေအတွက်အတိုင်း goroutine တွေကို wait group နဲ့ စပါတယ်။ rider တစ်ယောက်စီက channel ထဲကနေ နောက်
+      ပါဆယ်ကို ယူ၊ ပို့ပြီးရင် ပို့ခကို cash bag ထဲ ထည့်ပါတယ်။ ပို့တာ တစ်ခါကို မီလီစက္ကန့် ၁၀၀ လို့
+      ထားထားပါတယ်။ [[mark:sel-send]] အောက်ပိုင်းမှာ ပါဆယ် တစ်ခုချင်းကို channel ထဲ ပို့ပြီး၊ ကုန်သွားရင် close
+      လုပ်ပါတယ်။ close လုပ်ပြီး ပါဆယ် ကုန်သွားတော့ rider တွေရဲ့ loop တွေ ပြီးသွားပါတယ်။ wait group ကတော့ rider အားလုံး
+      ပြန်မရောက်မချင်း ဒီ function ကို မပြီးသေးအောင် ထိန်းထားပေးပါတယ်။
+    sources:
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+    actions:
+      - id: type-deliver
+        type: editor.type
+        at: { mark: type-deliver }
+        target: { file: riders.go, after: "\tb.total += amount\n}\n", occurrence: 1 }
+        text: "\n// deliverAll sends the riders out together; each takes the next parcel from jobs.\nfunc deliverAll(parcels []Parcel, riders int, bag *CashBag) {\n\tjobs := make(chan Parcel)\n\tvar wg sync.WaitGroup\n\tfor range riders {\n\t\twg.Go(func() {\n\t\t\tfor p := range jobs {\n\t\t\t\ttime.Sleep(100 * time.Millisecond) // one delivery\n\t\t\t\tbag.Add(p.Fee())\n\t\t\t}\n\t\t})\n\t}\n\tfor _, p := range parcels {\n\t\tjobs <- p\n\t}\n\tclose(jobs)\n\twg.Wait()\n}\n"
+        cadence: line-by-line
+      - id: sel-jobs
+        type: editor.select
+        at: { mark: sel-jobs }
+        target: { file: riders.go, text: "\tjobs := make(chan Parcel)\n", occurrence: 1 }
+      - id: sel-workers
+        type: editor.select
+        at: { mark: sel-workers }
+        target:
+          {
+            file: riders.go,
+            text: "\tfor range riders {\n\t\twg.Go(func() {\n\t\t\tfor p := range jobs {\n\t\t\t\ttime.Sleep(100 * time.Millisecond) // one delivery\n\t\t\t\tbag.Add(p.Fee())\n\t\t\t}\n\t\t})\n\t}\n",
+            occurrence: 1,
+          }
+      - id: sel-send
+        type: editor.select
+        at: { mark: sel-send }
+        target:
+          {
+            file: riders.go,
+            text: "\tfor _, p := range parcels {\n\t\tjobs <- p\n\t}\n\tclose(jobs)\n\twg.Wait()\n",
+            occurrence: 1,
+          }
+
+  - id: day
+    chapter: တစ်နေ့လုံး ပို့ကြည့်ရအောင်
+    narration: >-
+      [[mark:back-main]] ဒါဆို main function ထဲမှာ ဒီ အပိုင်းတွေကို ချိတ်ဆက်ရအောင်။ [[mark:type-imports]] fmt
+      နဲ့ time package နှစ်ခုကို import လုပ်ပါမယ်။ [[mark:type-main]] ပြီးတော့ စစ်လို့ အောင်တဲ့ ပါဆယ်တွေကို
+      ယူ၊ zero value နဲ့ စတဲ့ cash bag တစ်ခု လုပ်၊ အချိန်ကို မှတ်ပြီး rider နှစ်ယောက်နဲ့ ပို့ခိုင်းပါမယ်။
+      နောက်ဆုံး line က ဘယ်လောက် ကြာလဲ ဆိုတာနဲ့ အိတ်ထဲက ငွေ စုစုပေါင်းကို ထုတ်ပြပါတယ်။ [[mark:sel-pass]]
+      cash bag ကို pointer နဲ့ ပေးလိုက်တာ သတိထားပါ။ ဒါမှ function ထဲမှာ ထည့်တဲ့ ငွေက main ထဲက အိတ်ထဲကို
+      ရောက်မှာပါ။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Address operators",
+          url: "https://go.dev/ref/spec#Address_operators",
+        }
+      - { title: "time package — Duration", url: "https://pkg.go.dev/time#Duration" }
+    actions:
+      - { id: back-main, type: workspace.openFile, at: { mark: back-main }, path: main.go }
+      - id: type-imports
+        type: editor.type
+        at: { mark: type-imports }
+        target: { file: main.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n"
+        cadence: line-by-line
+      - id: type-main
+        type: editor.type
+        at: { mark: type-main }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tsent := accepted(today)\n\tvar bag CashBag\n\tstart := time.Now()\n\triders := 2\n\tdeliverAll(sent, riders, &bag)\n\tfmt.Println(time.Since(start).Round(100*time.Millisecond), formatKyat(bag.total))\n"
+        cadence: line-by-line
+      - id: sel-pass
+        type: editor.select
+        at: { mark: sel-pass }
+        target: { file: main.go, text: "\tdeliverAll(sent, riders, &bag)\n", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "400ms 34000 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-bag,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: riders.go,
+          contains: "func (b *CashBag) Add(amount int) {\n\tb.mu.Lock()\n\tdefer b.mu.Unlock()\n",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-r1]] output မှာ စာကြောင်း တစ်ကြောင်း ထွက်လာပါတယ်။ ရှေ့ဆုံးက မီလီစက္ကန့် ၄၀၀ ကြာတယ်လို့
+      ပြောတာပါ။ ပါဆယ် ခုနစ်ခုကို rider နှစ်ယောက်က ခွဲပို့တော့ တစ်ယောက်က လေးခု ပို့ရလို့၊ ပို့တာ လေးကြိမ်စာ
+      ကြာတာပါ။ နောက်က ၃၄၀၀၀ ကျပ်ကတော့ ပါဆယ် ခုနစ်ခုလုံးရဲ့ ပို့ခကို ပေါင်းထားတာပါ။ goroutine နှစ်ခုက
+      တစ်ပြိုင်နက် ငွေ ထည့်ခဲ့ပေမဲ့ mutex ရှိလို့ တစ်ကျပ်မှ မပျောက်ပါဘူး။ [[mark:digits-note]] ငွေကို ဒီနေ့ English ဂဏန်းနဲ့ ပြထားတာကတော့၊ ပြီးခဲ့တဲ့ lesson က မြန်မာ ဂဏန်း line ကို receipt ဖိုင်မှာ ဒီ တစ်ခါ မထည့်ထားလို့ပါ။
+    sources:
+      - { title: "sync package — Mutex", url: "https://pkg.go.dev/sync#Mutex" }
+    actions:
+      - {
+          id: point-r1,
+          type: console.point,
+          at: { mark: point-r1 },
+          target: { text: "400ms 34000 ကျပ်" },
+        }
+
+  - id: report
+    chapter: နေ့စဉ် report
+    narration: >-
+      [[mark:collapse-1]] ဒါဆို report ဖိုင်ကို ရေးရအောင်။ [[mark:type-count]] ဒီ function က ပို့ပြီးတဲ့
+      ပါဆယ်တွေကို ယူပြီး map နှစ်ခုနဲ့ ရေတွက်ပါတယ်။ ပထမ map က မြို့ တစ်မြို့စီမှာ ပါဆယ် ဘယ်နှစ်ခုလဲ၊ ဒုတိယ map
+      က လက်ခံတဲ့ နာရီ တစ်ခုစီမှာ ဘယ်နှစ်ခုလဲ ဆိုတာပါ။ map ထဲမှာ မရှိသေးတဲ့ key ကို ဖတ်ရင် zero value ဖြစ်တဲ့
+      သုည ရလို့၊ ပေါင်းဖို့ ဘာမှ ကြိုပြင်စရာ မလိုပါဘူး။ [[mark:type-sort]] နောက်တစ်ပိုင်းက မြို့တွေကို
+      စီတာပါ။ map ထဲက key တွေကို slice ထဲ စုပြီး၊ ပါဆယ် အများဆုံး မြို့ကို ရှေ့ဆုံးမှာ ထားပါတယ်။ အရေအတွက်
+      တူရင်တော့ မြို့ code ရဲ့ အက္ခရာ အစဉ်နဲ့ စီပါတယ်။ map ရဲ့ အစဉ်က run တိုင်း မတူနိုင်လို့၊ ဒီလို အမြဲ
+      တူတဲ့ စည်းကမ်း ထားမှ report က run တိုင်း တူမှာပါ။ ပြီးတော့ ရှေ့ဆုံး မြို့ သုံးမြို့ကိုပဲ ထုတ်ပြပါတယ်။
+      [[mark:type-hour]] နောက်ဆုံး အပိုင်းက ပါဆယ် အများဆုံး လက်ခံခဲ့တဲ့ နာရီကို ရှာတာပါ။ နာရီတွေကို
+      အစဉ်လိုက် စီပြီးမှ လျှောက်လို့၊ အရေအတွက် တူတဲ့ နာရီ ရှိရင်လည်း စောတဲ့ နာရီကို အမြဲ ရွေးပါတယ်။
+      [[mark:type-call]] main ထဲမှာတော့ ငွေ ထုတ်ပြတဲ့ line ရဲ့ အောက်မှာ report ကို ခေါ်ပါမယ်။
+      [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+      - { title: "slices package — SortFunc", url: "https://pkg.go.dev/slices#SortFunc" }
+      - { title: "slices package — Collect", url: "https://pkg.go.dev/slices#Collect" }
+      - { title: "strings package — Compare", url: "https://pkg.go.dev/strings#Compare" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - { id: open-report, type: workspace.openFile, at: { mark: type-count }, path: report.go }
+      - id: type-count
+        type: editor.type
+        at: { afterAction: open-report }
+        target: { file: report.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport (\n\t\"fmt\"\n\t\"maps\"\n\t\"slices\"\n\t\"strings\"\n)\n\n// printReport prints the day: the three busiest cities, then the busiest hour.\nfunc printReport(parcels []Parcel) {\n\tperCity := map[string]int{}\n\tperHour := map[int]int{}\n\tfor _, p := range parcels {\n\t\tperCity[p.To]++\n\t\tperHour[p.At.Hour()]++\n\t}\n"
+        cadence: line-by-line
+      - id: type-sort
+        type: editor.type
+        at: { mark: type-sort }
+        target: { file: report.go, after: "\t\tperHour[p.At.Hour()]++\n\t}\n", occurrence: 1 }
+        text: "\tcodes := slices.Collect(maps.Keys(perCity))\n\tslices.SortFunc(codes, func(a, b string) int {\n\t\tif perCity[a] != perCity[b] {\n\t\t\treturn perCity[b] - perCity[a]\n\t\t}\n\t\treturn strings.Compare(a, b)\n\t})\n\tfor _, code := range codes[:min(3, len(codes))] {\n\t\tfmt.Println(perCity[code], cityNames[code])\n\t}\n"
+        cadence: line-by-line
+      - id: type-hour
+        type: editor.type
+        at: { mark: type-hour }
+        target:
+          {
+            file: report.go,
+            after: "\t\tfmt.Println(perCity[code], cityNames[code])\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\tbusiest := 0\n\tfor _, h := range slices.Sorted(maps.Keys(perHour)) {\n\t\tif perHour[h] > perHour[busiest] {\n\t\t\tbusiest = h\n\t\t}\n\t}\n\tfmt.Println(busiest, \"နာရီမှာ အများဆုံး\")\n}\n"
+        cadence: line-by-line
+      - { id: open-main-2, type: workspace.openFile, at: { mark: type-call }, path: main.go }
+      - id: type-call
+        type: editor.type
+        at: { afterAction: open-main-2 }
+        target: { file: main.go, after: "formatKyat(bag.total))\n", occurrence: 1 }
+        text: "\tprintReport(sent)\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "11 နာရီမှာ အများဆုံး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-sort,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: report.go,
+          contains: "\t\treturn strings.Compare(a, b)\n",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-mdy]] ဒီ တစ်ခါတော့ report ပါ ထွက်လာပါပြီ။ ပထမ မြို့က မန္တလေးပါ၊ ပါဆယ် သုံးခုနဲ့
+      အများဆုံးပါ။ [[mark:point-ygn]] ဒုတိယက ရန်ကုန် နှစ်ခုပါ။ [[mark:point-mlm]] တတိယမှာ မော်လမြိုင်
+      တစ်ခု ပါပါတယ်။ နေပြည်တော်မှာလည်း တစ်ခု ရှိပေမဲ့ မပါလာတာက၊ အရေအတွက် တူရင် မြို့ code နဲ့ စီတဲ့
+      စည်းကမ်းအရ မော်လမြိုင်က အရင် ရောက်လို့ပါ။ [[mark:point-hour]] နောက်ဆုံး စာကြောင်းကတော့ မနက်
+      ဆယ့်တစ်နာရီမှာ ပါဆယ် အများဆုံး လက်ခံခဲ့တယ်လို့ ပြောတာပါ၊ အဲဒီ တစ်နာရီအတွင်းမှာ ပါဆယ် သုံးခု
+      ရောက်ခဲ့ပါတယ်။
+    sources:
+      - { title: "slices package — SortFunc", url: "https://pkg.go.dev/slices#SortFunc" }
+      - { title: "time package — Time.Hour", url: "https://pkg.go.dev/time#Time.Hour" }
+    actions:
+      - {
+          id: point-mdy,
+          type: console.point,
+          at: { mark: point-mdy },
+          target: { text: "3 မန္တလေး" },
+        }
+      - { id: point-ygn, type: console.point, at: { mark: point-ygn }, target: { text: "2 ရန်ကုန်" } }
+      - {
+          id: point-mlm,
+          type: console.point,
+          at: { mark: point-mlm },
+          target: { text: "1 မော်လမြိုင်" },
+        }
+      - {
+          id: point-hour,
+          type: console.point,
+          at: { mark: point-hour },
+          target: { text: "11 နာရီမှာ အများဆုံး" },
+        }
+
+  - id: more-riders
+    chapter: Rider တစ်ယောက် ထပ်ထည့်ရင်
+    narration: >-
+      [[mark:collapse-2]] နောက်ဆုံး ပြောင်းလဲမှု တစ်ခု လုပ်ကြည့်ရအောင်။ ပါဆယ် များလာလို့ rider တစ်ယောက်
+      ထပ်ခေါ်တယ် ဆိုပါစို့။ [[mark:type-more]] rider အရေအတွက်ရဲ့ အောက်မှာ တစ်ယောက် တိုးတဲ့ line တစ်ကြောင်း
+      ထည့်ပါမယ်။ program ရဲ့ ဖွဲ့စည်းပုံ ကောင်းရင် ဒီလို ပြောင်းလဲမှုက တခြား ဘယ်နေရာကိုမှ မထိသင့်ပါဘူး။
+      [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — IncDec statements",
+          url: "https://go.dev/ref/spec#IncDec_statements",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-more
+        type: editor.type
+        at: { mark: type-more }
+        target: { file: main.go, after: "\triders := 2\n", occurrence: 1 }
+        text: "\triders++\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "300ms 34000 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-more,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\triders := 2\n\triders++\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-300]] ကြာချိန်က မီလီစက္ကန့် ၃၀၀ ဖြစ်သွားပါပြီ။ rider သုံးယောက်ဆိုတော့ အများဆုံး ပို့ရတဲ့
+      rider က သုံးခုပဲ ပို့ရလို့ပါ။ ငွေကတော့ ၃၄၀၀၀ ကျပ် အတူတူပါပဲ။ [[mark:point-same]] report ကလည်း
+      တစ်လုံးမှ မပြောင်းပါဘူး။ rider တွေက ဘယ် ပါဆယ်ကို ယူယူ၊ ငွေကို mutex နဲ့ စုပြီး report ကို main ကမှ
+      ထုတ်လို့ ရလဒ်က အမြဲ တူနေတာပါ။ line တစ်ကြောင်း ပြောင်းလိုက်ပေမဲ့ program က ပြောင်းလဲမှုကို ခံနိုင်ခဲ့ပါတယ်။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - {
+          id: point-300,
+          type: console.point,
+          at: { mark: point-300 },
+          target: { text: "300ms 34000 ကျပ်" },
+        }
+      - {
+          id: point-same,
+          type: console.point,
+          at: { mark: point-same },
+          target: { text: "11 နာရီမှာ အများဆုံး" },
+        }
+
+  - id: course
+    chapter: Course တစ်ခုလုံး
+    narration: >-
+      [[mark:board-course]] ဒီ program ထဲမှာ ဘယ် lesson တွေ ပါလဲ ပြန်ကြည့်ရအောင်။ [[mark:draw-m1]] ပထမ အပိုင်း သုံးပိုင်းက variable၊ loop၊ function၊ slice၊ map နဲ့ မြန်မာ စာ လို အခြေခံတွေပါ။ [[mark:draw-m2]]
+      ပြီးတော့ struct၊ method၊ interface လို ကိုယ်ပိုင် type တွေ၊ [[mark:draw-m3]] error၊ closure နဲ့
+      generics တွေ၊ [[mark:draw-m4]] နောက်ဆုံး အချိန်၊ goroutine၊ channel နဲ့ mutex တွေ ရောက်လာပါတယ်။
+      [[mark:draw-m5]] ဒီ capstone က အဲဒါ အားလုံးကို ဖိုင် ကိုးခုထဲမှာ ပေါင်းထားတာပါ။ ဖိုင် တစ်ခုစီက
+      အလုပ် တစ်ခုစီကို ယူထားလို့၊ rider တွေ ထပ်ထည့်တာ၊ report ထပ်ထည့်တာ လို ပြောင်းလဲမှုတိုင်းက ဖိုင်
+      တစ်ခု နှစ်ခုကိုပဲ ထိပါတယ်။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-course } }
+      - {
+          id: board-course,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-m1,
+          type: whiteboard.apply,
+          at: { mark: draw-m1 },
+          upsertIds: [c-m1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m2,
+          type: whiteboard.apply,
+          at: { mark: draw-m2 },
+          upsertIds: [c-m2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m3,
+          type: whiteboard.apply,
+          at: { mark: draw-m3 },
+          upsertIds: [c-m3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m4,
+          type: whiteboard.apply,
+          at: { mark: draw-m4 },
+          upsertIds: [c-m4],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m5,
+          type: whiteboard.apply,
+          at: { mark: draw-m5 },
+          upsertIds: [c-m5-box, c-m5],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ပါဆယ် ခုနစ်ခု ရှိပြီး၊ ပါဆယ် တစ်ခု ပို့တာ မီလီစက္ကန့် ၁၀၀
+      ကြာပါတယ်။ [[mark:quiz-ask]] rider လေးယောက်နဲ့ ပို့ရင် ကြာချိန်က ဘယ်လောက် ထွက်မလဲ။ က၊ မီလီစက္ကန့် ၂၀၀
+      လား၊ ဒါမှမဟုတ် ခ၊ ပါဆယ် ခုနစ်ခုကို လေးယောက်နဲ့ ညီညီ ခွဲထားတဲ့ ၁၇၅ လား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
+      အဖြေကတော့ က၊ မီလီစက္ကန့် ၂၀၀ ပါ။ ဘာကြောင့်လဲဆိုတော့ rider တစ်ယောက်က ပါဆယ် တစ်ခုကို တစ်ဝက်ပဲ
+      ပို့လို့ မရလို့ပါ။ ပထမ အကြိမ်မှာ လေးယောက်လုံး တစ်ခုစီ ပို့ပြီး၊ ကျန်တဲ့ သုံးခုအတွက် ဒုတိယ အကြိမ် ထပ်ပို့ရတော့
+      အကြိမ် နှစ်ကြိမ်စာ ကြာပါတယ်။
+    sources:
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2],
+        }
+      - {
+          id: quiz-ask,
+          type: whiteboard.apply,
+          at: { mark: quiz-ask },
+          upsertIds: [q-ask, q-a, q-b],
+          drawMs: 1500,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဒီနေ့ အလုပ်လုပ်နေပြီးသား program ထဲကို၊ [[mark:recap-deliver]]
+      ဖိုင် ခြောက်ခုကို မပြင်ဘဲ ဖိုင် အသစ် နှစ်ခုနဲ့ rider တွေ တစ်ပြိုင်နက် ပို့တာကို ထည့်ခဲ့ပါတယ်။ goroutine
+      အများက မျှသုံးတဲ့ ငွေကို mutex က ကာကွယ်ပေးပါတယ်။ [[mark:recap-report]] report မှာတော့ map နဲ့
+      ရေတွက်ပြီး အမြဲ တူတဲ့ စည်းကမ်းနဲ့ စီလို့၊ run တိုင်း အတူတူ ထွက်ပါတယ်။ [[mark:recap-riders]] rider
+      တစ်ယောက် တိုးလိုက်တော့ အချိန် လျော့သွားပေမဲ့ ရလဒ်က မပြောင်းခဲ့ပါဘူး။ ဒါနဲ့ ဒီ course ရဲ့ program ကို
+      အပြီးသတ်ပါပြီ။ နောက် lesson မှာတော့ Go ကို ကိုယ့် ကွန်ပျူတာပေါ်မှာ ဘယ်လို သုံးမလဲ ဆိုတာနဲ့၊ တကယ့် Go
+      project တွေမှာ code ကို ဘယ်လို test လုပ်လဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-deliver
+        type: editor.select
+        at: { mark: recap-deliver }
+        target: { file: main.go, text: "\tdeliverAll(sent, riders, &bag)\n", occurrence: 1 }
+      - id: recap-report
+        type: editor.select
+        at: { mark: recap-report }
+        target: { file: main.go, text: "\tprintReport(sent)\n", occurrence: 1 }
+      - id: recap-riders
+        type: editor.select
+        at: { mark: recap-riders }
+        target: { file: main.go, text: "\triders++\n", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
