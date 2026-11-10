@@ -26,6 +26,7 @@ import { LANDING_DOCUMENT_URLS, serveAppShell, serveLandingDocument } from "./ss
 import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
 import { serveLearnGalleryDocument } from "./ssr/learnGalleryRoute";
 import { serveStaticFile } from "./staticAssets";
+import { localDevHostGuard } from "./localDevHost";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -47,6 +48,10 @@ app.use("*", async (c, next) => {
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
   c.res = response;
 });
+
+// Refuses a DNS-rebinding Host on the local wrangler dev listener
+// (localDevHost.ts); production's PUBLIC_URL host passes untouched.
+app.use("*", localDevHostGuard);
 
 // One structured, queryable log line per API/media request (Workers Logs
 // indexes the object's fields). The X-POSTHOG-* headers are stamped on

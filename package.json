@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vp dev",
     "start": "vp dev",
-    "dev:worker": "wrangler dev --config infra/wrangler.toml --port 8787",
+    "dev:worker": "wrangler dev --config infra/wrangler.toml --port 8787 --infer-origin-from-routes=false",
     "dev:all": "bun run dev & bun run dev:worker & wait",
     "d1:migrate:local": "wrangler d1 migrations apply next-editor-tube --local --config infra/wrangler.toml",
     "build": "bun run typecheck && vp build",
