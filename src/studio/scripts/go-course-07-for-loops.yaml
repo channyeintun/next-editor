@@ -1,0 +1,1103 @@
+# Go course, lesson 07: for loops (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. `for day := range 3` printing day -> run-1: 0 / 1 / 2;
+#   2. daily and saved above the loop, `saved += daily` inside it, `+1, saved` into the Println
+#      -> run-2: 1 5000 / 2 10000 / 3 15000;
+#   3. below the loop: goal, days, `saved = 0`, a condition loop `for saved < goal` and a Println
+#      of the days and the money; then `if days%7 == 0 { continue }` after `days++`
+#      -> run-3 adds 69 ရက် 300000 ကျပ်.
+# Boards: (L) a loop is a running track, the round number starts at 0; (G) the condition is a
+# gate, continue goes back to it, break leaves; (F) the forms of for; (Q) quiz (break instead
+# of continue).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-07-for-loops
+  title: "Go course 07: for loop နဲ့ ထပ်ခါထပ်ခါ လုပ်တာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board L: a loop is a running track; the round number starts at zero.
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Loop · ထပ်ခါထပ်ခါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-track,
+        kind: ellipse,
+        x: 300,
+        y: 250,
+        width: 430,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-body,
+        kind: text,
+        x: 385,
+        y: 355,
+        width: 270,
+        height: 40,
+        text: "fmt.Println(day)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-c0,
+        kind: text,
+        x: 790,
+        y: 255,
+        width: 200,
+        height: 40,
+        text: "day = 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-c1,
+        kind: text,
+        x: 790,
+        y: 310,
+        width: 200,
+        height: 40,
+        text: "day = 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-c2,
+        kind: text,
+        x: 790,
+        y: 365,
+        width: 200,
+        height: 40,
+        text: "day = 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-zero,
+        kind: freedraw,
+        stroke: circle,
+        x: 770,
+        y: 245,
+        width: 160,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-stop,
+        kind: text,
+        x: 790,
+        y: 440,
+        width: 300,
+        height: 40,
+        text: "3 ခေါက် ပြီး → ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-stop-box,
+        kind: rectangle,
+        x: 775,
+        y: 425,
+        width: 300,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-note,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 520,
+        height: 40,
+        text: "အခေါက် နံပါတ် · သုညကနေ စ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-note-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 600,
+        width: 440,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    # Board G: the condition is a gate; continue goes back to it, break leaves the loop.
+    - {
+        id: g-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "condition က တံခါး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: g-gate-box,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 330,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-gate,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 290,
+        height: 40,
+        text: "saved < goal ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-true,
+        kind: text,
+        x: 640,
+        y: 222,
+        width: 90,
+        height: 40,
+        text: "true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 630,
+        y: 260,
+        width: 110,
+        height: 30,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g-body-box,
+        kind: rectangle,
+        x: 750,
+        y: 240,
+        width: 320,
+        height: 70,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-body,
+        kind: text,
+        x: 770,
+        y: 255,
+        width: 280,
+        height: 40,
+        text: "တစ်ရက်စာ စု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-back,
+        kind: text,
+        x: 750,
+        y: 322,
+        width: 330,
+        height: 40,
+        text: "ပြီးရင် တံခါးဆီ ပြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-false,
+        kind: text,
+        x: 470,
+        y: 330,
+        width: 100,
+        height: 40,
+        text: "false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-d1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 430,
+        y: 318,
+        width: 30,
+        height: 70,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: g-exit-box,
+        kind: rectangle,
+        x: 290,
+        y: 400,
+        width: 330,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-exit,
+        kind: text,
+        x: 310,
+        y: 415,
+        width: 290,
+        height: 40,
+        text: "loop ပြီး → print",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-cont-box,
+        kind: rectangle,
+        x: 680,
+        y: 400,
+        width: 400,
+        height: 115,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-cont1,
+        kind: text,
+        x: 700,
+        y: 410,
+        width: 200,
+        height: 40,
+        text: "continue",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-cont2,
+        kind: text,
+        x: 700,
+        y: 458,
+        width: 360,
+        height: 40,
+        text: "ကျန်တာ ကျော်၊ တံခါးဆီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-brk-box,
+        kind: rectangle,
+        x: 290,
+        y: 545,
+        width: 790,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-brk1,
+        kind: text,
+        x: 310,
+        y: 563,
+        width: 120,
+        height: 40,
+        text: "break",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: g-brk2,
+        kind: text,
+        x: 450,
+        y: 563,
+        width: 560,
+        height: 40,
+        text: "loop တစ်ခုလုံးက ချက်ချင်း ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board F: the forms of for.
+    - {
+        id: fm-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "for ရေးပုံ မျိုးစုံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: fm-box,
+        kind: rectangle,
+        x: 285,
+        y: 232,
+        width: 450,
+        height: 286,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: fm-c1,
+        kind: text,
+        x: 305,
+        y: 248,
+        width: 420,
+        height: 40,
+        text: "for day := range 3 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-m1,
+        kind: text,
+        x: 760,
+        y: 248,
+        width: 320,
+        height: 40,
+        text: "အခေါက် သိရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-c2,
+        kind: text,
+        x: 305,
+        y: 318,
+        width: 420,
+        height: 40,
+        text: "for i := 0; i < 3; i++ {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-m2,
+        kind: text,
+        x: 760,
+        y: 318,
+        width: 320,
+        height: 40,
+        text: "စ · ရပ် · တိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-c3,
+        kind: text,
+        x: 305,
+        y: 388,
+        width: 420,
+        height: 40,
+        text: "for saved < goal {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-m3,
+        kind: text,
+        x: 760,
+        y: 388,
+        width: 320,
+        height: 40,
+        text: "true နေသရွေ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-c4,
+        kind: text,
+        x: 305,
+        y: 458,
+        width: 420,
+        height: 40,
+        text: "for {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-m4,
+        kind: text,
+        x: 760,
+        y: 458,
+        width: 320,
+        height: 40,
+        text: "break မှ ရပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: fm-one,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 620,
+        height: 40,
+        text: "keyword က for တစ်ခုတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (break where continue was).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 228,
+        width: 520,
+        height: 300,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 240,
+        width: 400,
+        height: 40,
+        text: "for saved < goal {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 280,
+        width: 300,
+        height: 40,
+        text: "    days++",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 305,
+        y: 320,
+        width: 420,
+        height: 40,
+        text: "    if days%7 == 0 {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 305,
+        y: 360,
+        width: 300,
+        height: 40,
+        text: "        break",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l5,
+        kind: text,
+        x: 305,
+        y: 400,
+        width: 200,
+        height: 40,
+        text: "    }",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l6,
+        kind: text,
+        x: 305,
+        y: 440,
+        width: 400,
+        height: 40,
+        text: "    saved += daily",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l7,
+        kind: text,
+        x: 305,
+        y: 480,
+        width: 200,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 360,
+        y: 352,
+        width: 170,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 550,
+        width: 480,
+        height: 40,
+        text: "က · 69 ရက် 300000 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 600,
+        width: 480,
+        height: 40,
+        text: "ခ · 7 ရက် 30000 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 800,
+        y: 590,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7107
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "0\n1\n2\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "1 5000\n2 10000\n3 15000\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "1 5000\n2 10000\n3 15000\n69 ရက် 300000 ကျပ်\n"
+
+scenes:
+  - id: recall
+    chapter: Loop ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ if နဲ့ condition ကို စစ်ပြီး လမ်း တစ်ခုကို ရွေးခဲ့ပါတယ်။ ဒါပေမဲ့ ရွေးလိုက်တဲ့ လမ်းက
+      တစ်ခါပဲ run ပါတယ်။ ဒီနေ့တော့ အလုပ် တစ်ခုကို ထပ်ခါထပ်ခါ လုပ်ခိုင်းကြည့်ပါမယ်။ ဥပမာ ကျောင်းသား
+      အောင်အောင် က ဖုန်းအသစ် တစ်လုံး ဝယ်ဖို့ တစ်ရက်ကို ငါးထောင် ကျပ် စုနေတယ် ဆိုပါစို့။ ဖုန်းဖိုးက သုံးသိန်း
+      ဖြစ်လို့ ရက် ဘယ်လောက် ကြာမလဲ သိချင်ပါတယ်။ [[mark:why-loop]] ရက်တိုင်း အတွက် print ထုတ်တဲ့ line
+      တစ်ကြောင်းစီ ရေးမယ် ဆိုရင် line ခြောက်ဆယ်လောက် ရေးရမှာပါ။ ဒီလို တူညီတဲ့ အလုပ်ကို ထပ်ခါထပ်ခါ လုပ်ဖို့
+      loop ကို သုံးပါတယ်။ [[mark:board-loop]] loop ကို ပြေးလမ်း တစ်ခုလို မြင်ကြည့်ပါ။ [[mark:draw-track]]
+      ပြေးလမ်းကို တစ်ခေါက် ပြေးတိုင်း အထဲက code ကို တစ်ခါ run ပါတယ်။ ဒီလို တစ်ခါ run တာကို အခေါက် လို့
+      ခေါ်ပါမယ်။ [[mark:draw-count]] ညာဘက်မှာ အခေါက် နံပါတ်တွေ ရှိပါတယ်။ သတိထားရမှာက Go မှာ ဒီ နံပါတ်က
+      တစ်ကနေ မစဘဲ သုညကနေ စပါတယ်။ ဒါကြောင့် သုံးခေါက် ပြေးရင် သုည၊ တစ်၊ နှစ် ဆိုပြီး ရပါတယ်။
+      [[mark:draw-stop]] သုံးခေါက် ပြည့်ရင်တော့ loop ကနေ ထွက်ပြီး၊ အောက်က code ကို ဆက် run ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements",
+          url: "https://go.dev/ref/spec#For_statements",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-loop,
+          type: whiteboard.apply,
+          at: { mark: board-loop },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-track,
+          type: whiteboard.apply,
+          at: { mark: draw-track },
+          upsertIds: [l-track, l-body],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-count,
+          type: whiteboard.apply,
+          at: { mark: draw-count },
+          upsertIds: [l-c0, l-c1, l-c2, l-zero, l-note, l-note-line],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-stop,
+          type: whiteboard.apply,
+          at: { mark: draw-stop },
+          upsertIds: [l-stop-box, l-stop],
+          drawMs: 1200,
+        }
+
+  - id: range
+    chapter: range နဲ့ အခေါက် ရေတွက်တာ
+    narration: >-
+      [[mark:close-loop]] ဒါဆို loop ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-range]] for ဆိုတဲ့ keyword နဲ့ loop
+      ကို စပါတယ်။ range နဲ့ သုံး ကို တွဲပေးထားတာက သုံးခေါက် လုပ်ပါ လို့ ပြောတာ ဖြစ်ပြီး၊ အခေါက်တိုင်းမှာ
+      အခေါက် နံပါတ်ကို day ဆိုတဲ့ variable ထဲ ထည့်ပေးပါတယ်။ တွန့်ကွင်း ထဲက code ကတော့ အခေါက်တိုင်း
+      run မယ့် အပိုင်းပါ၊ ဒီမှာ day ကို print ထုတ်ကြည့်ပါမယ်။ day ဆိုတဲ့ variable က loop
+      ထဲမှာပဲ ရှိပြီး၊ loop ပြီးသွားရင် မရှိတော့ပါဘူး။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: close-loop,
+          type: whiteboard.apply,
+          at: { mark: close-loop },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-range
+        type: editor.type
+        at: { mark: type-range }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tfor day := range 3 {\n\t\tfmt.Println(day)\n\t}\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "2",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-range,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\tfor day := range 3 {\n",
+        }
+
+  - id: from-zero
+    narration: >-
+      [[mark:point-zero]] ပထမ စာကြောင်းမှာ သုည ထွက်လာပါတယ်။ ပထမ အခေါက်ရဲ့ နံပါတ်က တစ် မဟုတ်ဘဲ သုည
+      ဖြစ်နေတာကို သတိထားပါ။ [[mark:point-two]] နောက်ဆုံး စာကြောင်းကတော့ နှစ် ပါ။ သုံးခေါက် run ပေမဲ့
+      နောက်ဆုံး နံပါတ်က သုံး မဟုတ်ဘဲ နှစ် ဖြစ်ပါတယ်။ သုညကနေ စ ရေတွက်တဲ့အတွက် နောက်ဆုံး နံပါတ်က အခေါက်
+      အရေအတွက်ထက် အမြဲ တစ် လျော့ပါတယ်။ ဒါပေမဲ့ လူတွေကတော့ ပထမ ရက်၊ ဒုတိယ ရက် ဆိုပြီး တစ်ကနေ
+      ရေတွက်ကြပါတယ်။ ဒါကြောင့် လူကို ပြတဲ့ အခါ နံပါတ်ကို တစ် ပေါင်းပြီး ပြပါမယ်။ နောက်ပိုင်း lesson တွေမှာ စာရင်းထဲက နေရာ
+      နံပါတ်တွေကလည်း ဒီလိုပဲ သုညကနေ စတာကို တွေ့ရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - { id: point-zero, type: console.point, at: { mark: point-zero }, target: { text: "0" } }
+      - { id: point-two, type: console.point, at: { mark: point-two }, target: { text: "2" } }
+
+  - id: accumulate
+    chapter: ပေါင်းထည့်သွားတဲ့ variable
+    narration: >-
+      [[mark:collapse-1]] အခု ရက်တိုင်း စုမိတဲ့ ငွေကို ပေါင်းကြည့်ရအောင်။ [[mark:type-vars]] loop ရဲ့ အပေါ်မှာ
+      variable နှစ်ခု ကြေညာပါမယ်။ တစ်ရက် စုတဲ့ ငွေ ငါးထောင်နဲ့၊ စုစုပေါင်း ငွေကို မှတ်ထားမယ့် saved ပါ။ saved
+      က သုညနဲ့ စပါတယ်။ [[mark:type-add]] loop ထဲမှာတော့ အခေါက်တိုင်း saved ထဲကို တစ်ရက်စာ ငွေကို
+      ထပ်ပေါင်းထည့်ပါမယ်။ ဒီ line က saved ထဲမှာ ရှိပြီးသား တန်ဖိုးပေါ်ကို ငါးထောင် ပေါင်းပြီး၊ ရလာတဲ့ အဖြေကို saved ထဲ ပြန်ထည့်တာပါ။ ပြီးခဲ့တဲ့ lesson
+      တွေက ရှိပြီးသား box ထဲ တန်ဖိုး ပြန်ထည့်တာကို တိုအောင် ရေးတဲ့ ပုံစံ ဖြစ်ပါတယ်။
+      [[mark:type-plus]] print ထုတ်တဲ့ line မှာလည်း ရက် နံပါတ်ကို တစ် ပေါင်းပြီး၊ saved ကိုပါ ထည့်ပြပါမယ်။
+      [[mark:sel-saved]] ဒီနေရာမှာ အရေးကြီးတာက saved ကို loop ရဲ့ အပြင်မှာ ကြေညာထားတာပါ။ loop ထဲမှာ
+      ကြေညာခဲ့ရင် အခေါက်တိုင်း သုညကနေ ပြန်စမှာ ဖြစ်လို့၊ ပေါင်းထားတာတွေကို မှတ်မိမှာ မဟုတ်ပါဘူး။ ဒီလို
+      အခေါက်တိုင်း ပေါင်းထည့်သွားတဲ့ variable မျိုးကို accumulator လို့ ခေါ်ကြပါတယ်။ [[mark:run-2]] ကဲ၊
+      ထပ်ပြီး run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Blocks",
+          url: "https://go.dev/ref/spec#Blocks",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-vars
+        type: editor.type
+        at: { mark: type-vars }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tdaily := 5000\n\tsaved := 0\n"
+        cadence: line-by-line
+      - id: type-add
+        type: editor.type
+        at: { mark: type-add }
+        target: { file: main.go, after: "range 3 {\n", occurrence: 1 }
+        text: "\t\tsaved += daily\n"
+        cadence: line-by-line
+      - id: type-plus
+        type: editor.type
+        at: { mark: type-plus }
+        target: { file: main.go, after: "fmt.Println(day", occurrence: 1 }
+        text: "+1, saved"
+      - id: sel-saved
+        type: editor.select
+        at: { mark: sel-saved }
+        target: { file: main.go, text: "saved := 0", occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "3 15000",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-plus,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "fmt.Println(day+1, saved)",
+        }
+
+  - id: growing
+    narration: >-
+      [[mark:point-day1]] ပထမ စာကြောင်းမှာ တစ် နဲ့ ငါးထောင် ပါ။ ရက် နံပါတ်က တစ်ကနေ စသွားပြီး၊ ပထမ ရက်မှာ
+      ငါးထောင် စုမိပါတယ်။ [[mark:point-day3]] နောက်ဆုံး စာကြောင်းမှာတော့ သုံး နဲ့ တစ်သောင်းငါးထောင် ပါ။ saved
+      က အခေါက်တိုင်း ငါးထောင်စီ တိုးလာတာကို တွေ့ရပါတယ်၊ loop ရဲ့ အပြင်မှာ ရှိနေလို့ အရင် အခေါက်တွေရဲ့
+      ငွေကို မှတ်ထားနိုင်တာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: point-day1,
+          type: console.point,
+          at: { mark: point-day1 },
+          target: { text: "1 5000" },
+        }
+      - {
+          id: point-day3,
+          type: console.point,
+          at: { mark: point-day3 },
+          target: { text: "3 15000" },
+        }
+
+  - id: condition
+    chapter: condition နဲ့ loop
+    narration: >-
+      [[mark:collapse-2]] ဒါပေမဲ့ တကယ် သိချင်တာက သုံးသိန်း ပြည့်ဖို့ ရက် ဘယ်လောက် ကြာမလဲ ဆိုတာပါ။ ဒီ တစ်ခါမှာ
+      ဘယ်နှစ်ခေါက် လိုမလဲ ကြိုမသိပါဘူး။ ဒါကြောင့် range အစား condition တစ်ခုကို သုံးပါမယ်။ [[mark:type-goal]]
+      ပထမ loop ရဲ့ အောက်မှာ ဖုန်းဖိုးနဲ့ ရက် ရေတွက်မယ့် variable ကို ကြေညာပြီး၊ saved ထဲကိုလည်း သုညကို
+      ပြန်ထည့်ပါမယ်။ saved က ရှိပြီးသား box ဖြစ်လို့ box အသစ် မလုပ်ဘဲ၊ အစကနေ ပြန်စအောင်
+      သုညကိုပဲ ပြန်ထည့်တာပါ။ [[mark:cond-line]] ပြီးတော့ for ရဲ့ နောက်မှာ စုထားတဲ့ ငွေက ဖုန်းဖိုးထက် နည်းနေသေးလား ဆိုတဲ့ condition ကို
+      ရေးပါတယ်။ အထဲမှာ ရက်ကို တစ် တိုးပြီး ငွေ ပေါင်းထည့်ပါမယ်။ loop ပြီးမှ ရက်နဲ့ ငွေကို print ထုတ်ပါမယ်။ ရက်ကို
+      တစ် တိုးတဲ့ line ကတော့ variable ကို တစ် ပေါင်းပေးတဲ့ အတိုဆုံး ရေးပုံပါ။
+      [[mark:board-gate]] ဒီ loop ကို ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-gate]] အခေါက် တိုင်း မစခင် တံခါးမှာ
+      condition ကို အရင် စစ်ပါတယ်။ true ဆိုရင် အထဲဝင်ပြီး တစ်ရက်စာ စုပါတယ်၊ ပြီးရင် တံခါးဆီ ပြန်လာပြီး ထပ်စစ်ပါတယ်။
+      [[mark:draw-exit]] condition က false ဖြစ်သွားတဲ့ အချိန်၊ ဆိုလိုတာက ငွေ ပြည့်သွားတဲ့ အချိန်မှာတော့ loop
+      ကနေ ထွက်ပြီး အောက်က print ကို ရောက်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with single condition",
+          url: "https://go.dev/ref/spec#For_condition",
+        }
+      - {
+          title: "The Go Programming Language Specification — IncDec statements",
+          url: "https://go.dev/ref/spec#IncDec_statements",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-goal
+        type: editor.type
+        at: { mark: type-goal }
+        target: { file: main.go, after: "\t\tfmt.Println(day+1, saved)\n\t}\n", occurrence: 1 }
+        text: "\tgoal := 300000\n\tdays := 0\n\tsaved = 0\n\tfor saved < goal {\n\t\tdays++\n\t\tsaved += daily\n\t}\n\tfmt.Println(days, \"ရက်\", saved, \"ကျပ်\")\n"
+        cadence: line-by-line
+      - {
+          id: board-gate,
+          type: whiteboard.apply,
+          at: { mark: board-gate },
+          open: true,
+          clear: true,
+          upsertIds: [g-title],
+        }
+      - {
+          id: draw-gate,
+          type: whiteboard.apply,
+          at: { mark: draw-gate },
+          upsertIds: [g-gate-box, g-gate, g-true, g-a1, g-body-box, g-body, g-back],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-exit,
+          type: whiteboard.apply,
+          at: { mark: draw-exit },
+          upsertIds: [g-false, g-d1, g-exit-box, g-exit],
+          drawMs: 1800,
+        }
+
+  - id: skip
+    chapter: continue နဲ့ break
+    narration: >-
+      [[mark:draw-continue]] ဒါပေမဲ့ အောင်အောင် က ခုနစ်ရက် တစ်ခါ ငွေ မစုဘဲ နားပါတယ်။ အဲဒီ ရက်မှာ loop ရဲ့
+      ကျန်တဲ့ အပိုင်းကို ကျော်ပြီး တံခါးဆီ ချက်ချင်း ပြန်သွားချင်ပါတယ်။ ဒါကို continue နဲ့ ရေးပါတယ်။
+      [[mark:draw-break]] continue နဲ့ ဆင်တူတဲ့ break ဆိုတာလည်း ရှိပါတယ်။ break ကတော့ ဒီ အခေါက်ကို
+      ကျော်တာ မဟုတ်ဘဲ၊ loop တစ်ခုလုံးကနေ ချက်ချင်း ထွက်သွားတာပါ။ [[mark:close-gate]] ဒါဆို continue ကို
+      ထည့်ရေးကြည့်ရအောင်။ [[mark:type-continue]] ရက်ကို တစ် တိုးပြီးတဲ့ နောက်မှာ if တစ်ခု ထည့်ပါမယ်။ ရက်ကို
+      ခုနစ်နဲ့ စားလို့ ကျန်တာ သုည ဖြစ်ရင်၊ ဆိုလိုတာက ခုနစ်ရက်မြောက်၊ တစ်ဆယ့်လေးရက်မြောက် လို ရက်တွေမှာ continue
+      လုပ်ပါမယ်။ ဒါကြောင့် အဲဒီ ရက်တွေမှာ ငွေ ပေါင်းတဲ့ line ကို မရောက်တော့ပါဘူး။ continue ကို if
+      ထဲမှာ ရေးထားပေမဲ့၊ သူ ကျော်တာက if ကို မဟုတ်ဘဲ သူ့ကို ဝိုင်းထားတဲ့ loop ရဲ့ ဒီ အခေါက်ပါ။ [[mark:run-3]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Continue statements",
+          url: "https://go.dev/ref/spec#Continue_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Break statements",
+          url: "https://go.dev/ref/spec#Break_statements",
+        }
+    actions:
+      - {
+          id: draw-continue,
+          type: whiteboard.apply,
+          at: { mark: draw-continue },
+          upsertIds: [g-cont-box, g-cont1, g-cont2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-break,
+          type: whiteboard.apply,
+          at: { mark: draw-break },
+          upsertIds: [g-brk-box, g-brk1, g-brk2],
+          drawMs: 1800,
+        }
+      - {
+          id: close-gate,
+          type: whiteboard.apply,
+          at: { mark: close-gate },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-continue
+        type: editor.type
+        at: { mark: type-continue }
+        target: { file: main.go, after: "\t\tdays++\n", occurrence: 1 }
+        text: "\t\tif days%7 == 0 {\n\t\t\tcontinue\n\t\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "69 ရက် 300000 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-continue,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tif days%7 == 0 {\n\t\t\tcontinue\n",
+        }
+
+  - id: goal-reached
+    narration: >-
+      [[mark:point-goal]] နောက်ဆုံး စာကြောင်းမှာ ခြောက်ဆယ့်ကိုး ရက်၊ သုံးသိန်း ကျပ် လို့ ထွက်လာပါတယ်။ တစ်ရက်ကို
+      ငါးထောင်နဲ့ သုံးသိန်း ပြည့်ဖို့ ငွေ စုတဲ့ ရက် ခြောက်ဆယ် လိုပါတယ်။ ဒါပေမဲ့ ခုနစ်ရက် တစ်ခါ နားတဲ့ ရက်
+      ကိုးရက် ပါလာလို့၊ စုစုပေါင်း ခြောက်ဆယ့်ကိုး ရက် ကြာတာပါ။ condition loop က ငွေ ပြည့်တာနဲ့ ရပ်သွားလို့
+      သုံးသိန်းထက်လည်း ပိုမစုပါဘူး။ အပေါ်က စာကြောင်း သုံးကြောင်းကတော့ ပထမ loop ရဲ့ output ပါ။ [[mark:forever]] condition
+      loop မှာ သတိထားရမှာ တစ်ခု ရှိပါတယ်။ loop ထဲမှာ condition ကို ပြောင်းစေမယ့် အလုပ် ပါရပါမယ်။ ဥပမာ ငွေ
+      ပေါင်းတဲ့ line ကို မေ့ကျန်ခဲ့ရင် saved က ဘယ်တော့မှ မတိုးတော့လို့ condition က အမြဲ true ဖြစ်နေပြီး၊ loop
+      က ဘယ်တော့မှ မပြီးတော့ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with single condition",
+          url: "https://go.dev/ref/spec#For_condition",
+        }
+      - {
+          title: "The Go Programming Language Specification — Continue statements",
+          url: "https://go.dev/ref/spec#Continue_statements",
+        }
+    actions:
+      - {
+          id: point-goal,
+          type: console.point,
+          at: { mark: point-goal },
+          target: { text: "69 ရက် 300000 ကျပ်" },
+        }
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: forever } }
+
+  - id: forms
+    narration: >-
+      [[mark:board-forms]] Go မှာ loop အတွက် keyword က for တစ်ခုတည်းပဲ ရှိပြီး၊ ရေးပုံကတော့ ကွဲပါတယ်။
+      [[mark:draw-f1]] ပထမ ပုံစံက ဒီနေ့ အစမှာ ရေးခဲ့တဲ့ range ပုံစံပါ၊ ဘယ်နှစ်ခေါက် လုပ်ရမလဲ သိတဲ့ အခါ
+      သုံးပါတယ်။ [[mark:draw-f2]] ဒုတိယ ပုံစံမှာတော့ စမယ့် တန်ဖိုး၊ ဆက်လုပ်မလား စစ်မယ့် condition နဲ့ အခေါက်တိုင်း တိုးမယ့်
+      အပိုင်း ဆိုပြီး သုံးပိုင်း ပါပါတယ်။ ဒီ ဥပမာမှာ range ပုံစံလိုပဲ သုည၊ တစ်၊ နှစ် ကို ပေးပေမဲ့၊ အခေါက်တိုင်း
+      နှစ် တိုးတာ လို ကိုယ်လိုသလို ပြင်ရေးလို့ ရပါတယ်။ တခြားသူတွေ ရေးထားတဲ့ code ထဲမှာ ဒီ ပုံစံကို အများကြီး
+      တွေ့ရပါလိမ့်မယ်။ [[mark:draw-f3]] တတိယ ပုံစံက ခုနက ရေးခဲ့တဲ့ condition ပုံစံပါ။ [[mark:draw-f4]]
+      condition လုံးဝ မပါရင်တော့ loop က ဘယ်တော့မှ မရပ်တော့လို့၊ အထဲမှာ break နဲ့ ထွက်ပေးရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with for clause",
+          url: "https://go.dev/ref/spec#For_clause",
+        }
+      - {
+          title: "The Go Programming Language Specification — For statements",
+          url: "https://go.dev/ref/spec#For_statements",
+        }
+    actions:
+      - {
+          id: board-forms,
+          type: whiteboard.apply,
+          at: { mark: board-forms },
+          open: true,
+          clear: true,
+          upsertIds: [fm-title, fm-box, fm-one],
+        }
+      - {
+          id: draw-f1,
+          type: whiteboard.apply,
+          at: { mark: draw-f1 },
+          upsertIds: [fm-c1, fm-m1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f2,
+          type: whiteboard.apply,
+          at: { mark: draw-f2 },
+          upsertIds: [fm-c2, fm-m2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f3,
+          type: whiteboard.apply,
+          at: { mark: draw-f3 },
+          upsertIds: [fm-c3, fm-m3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f4,
+          type: whiteboard.apply,
+          at: { mark: draw-f4 },
+          upsertIds: [fm-c4, fm-m4],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က loop က ခုနက ရေးခဲ့တဲ့ loop နဲ့ အတူတူပါပဲ၊
+      [[mark:quiz-line]] ဒါပေမဲ့ continue နေရာမှာ break ဖြစ်နေပါတယ်။ loop ပြီးလို့ ရက်နဲ့ ငွေကို print ထုတ်ရင် က
+      ထွက်မလား၊ ခ ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊
+      ခုနစ် ရက်နဲ့ သုံးသောင်း ကျပ် ပါ။ ဘာကြောင့်လဲဆိုတော့ ခုနစ်ရက်မြောက် ရောက်တာနဲ့ break က loop
+      တစ်ခုလုံးကနေ ထွက်သွားလို့ပါ။ အဲဒီ အချိန်မှာ ငွေ စုခဲ့တဲ့ ရက်က ခြောက်ရက်ပဲ ရှိသေးလို့ သုံးသောင်းပဲ
+      ရှိပါတယ်။ continue က တစ်ရက်ကိုပဲ ကျော်ပြီး ဆက်သွားပေမဲ့၊ break ကတော့ နောက် ရက်တွေကိုပါ
+      ဆက်မလုပ်တော့ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Break statements",
+          url: "https://go.dev/ref/spec#Break_statements",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-l5, q-l6, q-l7, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-range]] range နဲ့ loop က သုညကနေ စ ရေတွက်ပြီး၊
+      ပေးထားတဲ့ အခေါက် အရေအတွက် အတိုင်း run ပါတယ်။ [[mark:recap-saved]] အခေါက်တိုင်း ပေါင်းထည့်ချင်တဲ့
+      variable ကို loop ရဲ့ အပြင်မှာ ကြေညာရပါတယ်။ [[mark:recap-cond]] ဘယ်နှစ်ခေါက် လိုမလဲ မသိရင်တော့
+      condition နဲ့ loop ကို သုံးပြီး၊ continue က အခေါက် တစ်ခုကို ကျော်ပြီး၊ break ကတော့ loop ကနေ ထွက်ပါတယ်။ နောက်
+      lesson မှာတော့ တန်ဖိုး တစ်ခုကို ကြည့်ပြီး ဖြစ်နိုင်တဲ့ လမ်း အများကြီးထဲက တစ်ခုကို ရွေးပေးတဲ့ switch
+      အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements",
+          url: "https://go.dev/ref/spec#For_statements",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-range
+        type: editor.select
+        at: { mark: recap-range }
+        target: { file: main.go, text: "for day := range 3", occurrence: 1 }
+      - id: recap-saved
+        type: editor.select
+        at: { mark: recap-saved }
+        target: { file: main.go, text: "saved := 0", occurrence: 1 }
+      - id: recap-cond
+        type: editor.select
+        at: { mark: recap-cond }
+        target: { file: main.go, text: "for saved < goal", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
