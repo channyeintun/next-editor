@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { findSlidWindowOverlap } from "./terminalOutputOverlap";
 import { registerXtermTerminal, unregisterXtermTerminal } from "./xtermRegistry";
 import { createXtermCellAnchor } from "./xtermCellAnchor";
+import { enableMyanmarText } from "./xtermMyanmar";
 import {
   registerCursorCellAnchor,
   unregisterCursorCellAnchor,
@@ -69,6 +70,12 @@ const PASSIVE_TERMINAL_THEME = {
   cursorAccent: "transparent",
 } as const;
 
+// Myanmar fonts follow the monospace ones, so Burmese output is drawn in the
+// same font on every system; the cell grid is still the monospace font's.
+const TERMINAL_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", "Noto Sans Myanmar", "Myanmar Text", "Myanmar Sangam MN", monospace';
+const TERMINAL_FONT_SIZE = 13;
+
 /** Keys held down on the way to a chord; they keep a pending Escape alive. */
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
 
@@ -120,9 +127,11 @@ function XtermTerminal({
       convertEol: true,
       cursorBlink: interactive,
       disableStdin: !interactive,
-      fontFamily:
-        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-      fontSize: 13,
+      // The Myanmar width provider and cluster joiner (passive output only)
+      // are proposed API.
+      allowProposedApi: !interactive,
+      fontFamily: TERMINAL_FONT_FAMILY,
+      fontSize: TERMINAL_FONT_SIZE,
       lineHeight: 1.5,
       scrollback: 2000,
       // The DOM renderer hides its rows from assistive technology; this mode
@@ -142,6 +151,11 @@ function XtermTerminal({
 
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    // Burmese program output is shaped as text instead of cell by cell. A shell
+    // keeps xterm's own widths: the programs in it lay out the line by them.
+    const myanmarText = interactive
+      ? null
+      : enableMyanmarText(terminal, { family: TERMINAL_FONT_FAMILY, size: TERMINAL_FONT_SIZE });
     if (!interactive) {
       terminal.textarea?.setAttribute("aria-label", label);
     }
@@ -200,6 +214,7 @@ function XtermTerminal({
       unregisterCursorCellAnchor(container, cellAnchor);
       cellAnchor.dispose();
       unregisterXtermTerminal(container, terminal);
+      myanmarText?.dispose();
       dataDisposable.dispose();
       scrollDisposable.dispose();
       resizeObserver.disconnect();

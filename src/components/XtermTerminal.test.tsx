@@ -23,7 +23,24 @@ const xterm = vi.hoisted(() => {
       FakeTerminal.instances.push(this);
     }
 
+    /** The Unicode versions registered, and the one made active. */
+    unicode = {
+      registered: [] as string[],
+      activeVersion: "6",
+      register(provider: { version: string }) {
+        this.registered.push(provider.version);
+      },
+    };
+    joiners = 0;
+
     loadAddon() {}
+    registerCharacterJoiner() {
+      this.joiners += 1;
+      return this.joiners;
+    }
+    deregisterCharacterJoiner() {
+      this.joiners -= 1;
+    }
     open(parent: HTMLElement) {
       parent.append(this.textarea);
     }
@@ -234,6 +251,30 @@ describe("XtermTerminal", () => {
       expect(options.theme).toMatchObject({ background: "#15191f", brightBlack: "#90a1b9" });
     },
   );
+
+  it("shapes Burmese in passive output and leaves the shell at xterm's widths", () => {
+    const view = render(
+      <XtermTerminal sessionId="run-1" output="" interactive={false} label="Runner output" />,
+    );
+    const passive = xterm.FakeTerminal.instances.at(-1)!;
+
+    expect(passive.options.allowProposedApi).toBe(true);
+    expect(passive.unicode.registered).toEqual(["6-myanmar"]);
+    expect(passive.unicode.activeVersion).toBe("6-myanmar");
+    expect(passive.joiners).toBe(1);
+    // Burmese falls back to a Myanmar font after the monospace ones.
+    expect(String(passive.options.fontFamily)).toMatch(/monospace.*"Noto Sans Myanmar"/);
+    view.unmount();
+    expect(passive.joiners).toBe(0);
+
+    render(<XtermTerminal sessionId="shell-1" output="" interactive label="Terminal" />);
+    const shell = xterm.FakeTerminal.instances.at(-1)!;
+
+    expect(shell.options.allowProposedApi).toBe(false);
+    expect(shell.unicode.registered).toEqual([]);
+    expect(shell.unicode.activeVersion).toBe("6");
+    expect(shell.joiners).toBe(0);
+  });
 
   it("reports a scroll to the onScroll passed after the terminal was built", () => {
     const firstOnScroll = vi.fn<(line: number) => void>();
