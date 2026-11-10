@@ -2,7 +2,10 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Y from "yjs";
 import { createStarterHtmlCssWorkspace } from "../starters/htmlCss";
 import {
+  assertCollaborationProjectStructure,
+  CollaborationProjectController,
   getCollaborationNodes,
+  MAX_COLLABORATION_PROJECT_NODES,
   projectCollaborationDocument,
   seedCollaborationProject,
 } from "./projectDocument";
@@ -138,5 +141,116 @@ describe("collaboration projection of hostile trees", () => {
       "untitled~abcdefgh~2",
     );
     expect(projection.nodeIdByPath.size).toBe(projection.pathByNodeId.size);
+  });
+
+  it("projects a folder chain far deeper than any workspace in linear work", () => {
+    const doc = seededDoc();
+    const nodes = getCollaborationNodes(doc);
+    // As deep as the room's node limit allows.
+    const depth = MAX_COLLABORATION_PROJECT_NODES - nodes.size;
+    doc.transact(() => {
+      for (let index = 0; index < depth; index += 1) {
+        // Only kind and parentId: a chain node needs nothing else.
+        const node = new Y.Map<unknown>();
+        node.set("kind", "folder");
+        node.set("parentId", index === 0 ? null : `chain-${index - 1}`);
+        nodes.set(`chain-${index}`, node);
+      }
+    });
+    // Nothing in the room's per-update check looks at the tree's shape.
+    expect(() => assertCollaborationProjectStructure(doc)).not.toThrow();
+
+    // The projection walked to the root again from every node (about d^2/2
+    // steps) and then recursed once per level, so a chain this deep threw
+    // RangeError for every member, on every join and every later change.
+    const startedAt = performance.now();
+    const projection = projectCollaborationDocument(doc);
+    expect(performance.now() - startedAt).toBeLessThan(2_000);
+
+    // Every node is still in the workspace: what lies past the depth limit is
+    // moved, a level at a time, into the recovery folder.
+    for (let index = 0; index < depth; index += 1) {
+      expect(projection.pathByNodeId.has(`chain-${index}`)).toBe(true);
+    }
+    const allPaths = [...projection.pathByNodeId.values()];
+    expect(Math.max(...allPaths.map((path) => path.split("/").length))).toBeLessThanOrEqual(64);
+    expect(projection.nodeIdByPath.size).toBe(projection.pathByNodeId.size);
+    expect(projection.recoveryFolderPath).toBe("Recovered items");
+    expect(projection.issues.some((issue) => issue.kind === "depth-limit")).toBe(true);
+
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc));
+    expect(Array.from(projectCollaborationDocument(peer).pathByNodeId.entries()).sort()).toEqual(
+      Array.from(projection.pathByNodeId.entries()).sort(),
+    );
+  }, 30_000);
+
+  it("bounds every projected name and path, however long the stored names are", () => {
+    const doc = seededDoc();
+    const nodes = getCollaborationNodes(doc);
+    doc.transact(() => {
+      const huge = new Y.Map<unknown>();
+      huge.set("kind", "file");
+      huge.set("name", `${"a".repeat(100_000)}.txt`);
+      nodes.set("huge-name", huge);
+      // 40 levels of 250-character names: within the depth limit, but a path
+      // of about 10,000 characters if nothing moved part of it.
+      for (let index = 0; index < 40; index += 1) {
+        const node = new Y.Map<unknown>();
+        node.set("kind", "folder");
+        node.set("name", `${String(index).padStart(3, "0")}${"b".repeat(247)}`);
+        node.set("parentId", index === 0 ? null : `long-${index - 1}`);
+        nodes.set(`long-${index}`, node);
+      }
+    });
+
+    const projection = projectCollaborationDocument(doc);
+
+    const hugePath = projection.pathByNodeId.get("huge-name") ?? "";
+    expect(hugePath.length).toBeGreaterThan(0);
+    expect(Array.from(hugePath).length).toBeLessThanOrEqual(255);
+    for (let index = 0; index < 40; index += 1) {
+      expect(projection.pathByNodeId.has(`long-${index}`)).toBe(true);
+    }
+    for (const path of projection.pathByNodeId.values()) {
+      expect(path.length).toBeLessThanOrEqual(4096);
+    }
+  });
+
+  it("refuses a document with more nodes than a room holds, and creating past it", () => {
+    const doc = seededDoc();
+    const nodes = getCollaborationNodes(doc);
+    const seeded = nodes.size;
+    doc.transact(() => {
+      for (let index = seeded; index < MAX_COLLABORATION_PROJECT_NODES; index += 1) {
+        const node = new Y.Map<unknown>();
+        node.set("kind", "folder");
+        node.set("deleted", true);
+        nodes.set(`filler-${index}`, node);
+      }
+    });
+    expect(() => assertCollaborationProjectStructure(doc)).not.toThrow();
+
+    const controller = new CollaborationProjectController(doc, { canWrite: () => true });
+    expect(() => controller.createFile("one-too-many.txt", "")).toThrow(/at most/i);
+    expect(() => controller.createFolder("one-too-many")).toThrow(/at most/i);
+    expect(nodes.size).toBe(MAX_COLLABORATION_PROJECT_NODES);
+
+    // A peer that skips the controller is refused by the room's update check.
+    const extra = new Y.Map<unknown>();
+    extra.set("kind", "file");
+    nodes.set("one-past-the-limit", extra);
+    expect(() => assertCollaborationProjectStructure(doc)).toThrow(/at most/i);
+  });
+
+  it("refuses to start a room from a workspace past the node limit", () => {
+    const project = createStarterHtmlCssWorkspace();
+    const files = { ...project.files };
+    for (let index = 0; index <= MAX_COLLABORATION_PROJECT_NODES; index += 1) {
+      const path = `many/file-${index}.txt`;
+      files[path] = { path, name: `file-${index}.txt`, language: "plaintext", content: "" };
+    }
+
+    expect(() => seedCollaborationProject(new Y.Doc(), { ...project, files })).toThrow(/at most/i);
   });
 });

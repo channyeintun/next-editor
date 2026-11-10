@@ -29,6 +29,24 @@ export const COLLABORATION_PROJECT_NODES = "nodes";
 export const COLLABORATION_PROJECT_TEXTS = "texts";
 export const COLLABORATION_RECOVERY_FOLDER_NAME = "Recovered items";
 
+/**
+ * The most file and folder nodes a room's project holds, deleted ones
+ * included (a delete only marks its node). Every member projects every node on
+ * each join and tree change, so this bounds that work. A workspace import stops
+ * at half as many entries, which leaves room for a session's own churn.
+ */
+export const MAX_COLLABORATION_PROJECT_NODES = 20_000;
+
+// What the projection makes of any tree, so that no tree a peer writes makes
+// a path too long to handle. A node deeper than MAX_COLLABORATION_TREE_DEPTH
+// levels, or whose path could pass MAX_COLLABORATION_PATH_CHARS characters, is
+// shown in the recovery folder instead, and a node name is cut to
+// MAX_COLLABORATION_NODE_NAME_CHARS code points. No real project comes near
+// these; a workspace import refuses paths past the same depth and length.
+const MAX_COLLABORATION_TREE_DEPTH = 64;
+const MAX_COLLABORATION_PATH_CHARS = 4096;
+const MAX_COLLABORATION_NODE_NAME_CHARS = 255;
+
 export const COLLABORATION_ORIGIN = {
   seed: "collaboration-seed",
   teachingSeed: "collaboration-teaching-seed",
@@ -57,7 +75,13 @@ interface CollaborationNodeSnapshot {
 
 export interface CollaborationProjectionIssue {
   nodeId: string;
-  kind: "invalid-parent" | "parent-cycle" | "name-collision" | "missing-text" | "missing-asset";
+  kind:
+    | "invalid-parent"
+    | "parent-cycle"
+    | "depth-limit"
+    | "name-collision"
+    | "missing-text"
+    | "missing-asset";
 }
 
 export interface CollaborationProjectProjection {
@@ -101,6 +125,20 @@ export function getCollaborationMetadata(doc: Y.Doc): Y.Map<unknown> {
 
 export function getCollaborationNodes(doc: Y.Doc): Y.Map<Y.Map<unknown>> {
   return getOrCreateChildMap(getCollaborationProjectRoot(doc), COLLABORATION_PROJECT_NODES);
+}
+
+/**
+ * How many node entries `nodes` has ever held, at no cost: Yjs keeps an entry
+ * for every key it has seen, and nothing here removes a node key (a delete only
+ * marks the node). `size` would walk every entry, on every update the room
+ * checks.
+ */
+function collaborationNodeEntryCount<T>(nodes: Y.Map<T>): number {
+  return nodes._map.size;
+}
+
+function nodeLimitMessage(): string {
+  return `A live room holds at most ${MAX_COLLABORATION_PROJECT_NODES.toLocaleString("en-US")} files and folders.`;
 }
 
 export function getCollaborationTexts(doc: Y.Doc): Y.Map<Y.Text> {
@@ -183,6 +221,10 @@ export function seedCollaborationProject(
       `Binary asset ${unsupportedAsset.path} must be uploaded before a collaboration room is created`,
     );
   }
+  const folderPaths = sortedFolderPaths(project);
+  if (folderPaths.length + Object.keys(project.files).length > MAX_COLLABORATION_PROJECT_NODES) {
+    throw new CollaborationProjectError(nodeLimitMessage());
+  }
 
   doc.transact(() => {
     root.set("schemaVersion", COLLABORATION_DOCUMENT_SCHEMA_VERSION);
@@ -193,7 +235,7 @@ export function seedCollaborationProject(
     metadata.set("lessonType", project.lessonType);
 
     let order = 0;
-    for (const path of sortedFolderPaths(project)) {
+    for (const path of folderPaths) {
       const { parentPath, name } = splitPath(path);
       const id = idFactory();
       pathIds.set(path, id);
@@ -296,7 +338,8 @@ const EMPTY_OR_DOT_NODE_NAMES = new Set(["", ".", ".."]);
 
 /**
  * A peer's node name as one path segment that parseWorkspacePath keeps as is,
- * by its own rules for reserved names and control characters.
+ * by its own rules for reserved names and control characters, and no longer
+ * than MAX_COLLABORATION_NODE_NAME_CHARS code points.
  */
 function safeNodeName(node: CollaborationNodeSnapshot): string {
   const withoutControls = Array.from(node.name.trim())
@@ -304,7 +347,9 @@ function safeNodeName(node: CollaborationNodeSnapshot): string {
       (character) =>
         !isWorkspacePathControlCharacter(character) && character !== "/" && character !== "\\",
     )
-    .join("");
+    .slice(0, MAX_COLLABORATION_NODE_NAME_CHARS)
+    .join("")
+    .trimEnd();
   if (
     EMPTY_OR_DOT_NODE_NAMES.has(withoutControls) ||
     isReservedWorkspacePathSegment(withoutControls)
@@ -338,22 +383,29 @@ function effectiveParents(
   }
 
   // Parent edges have out-degree one, so walking from every node is enough to
-  // find each cycle. Breaking the greatest stable ID produces the same tree in
-  // every client regardless of update arrival order.
-  const repairedCycles = new Set<string>();
+  // find each cycle. A walk stops at a node an earlier walk settled (its chain
+  // reaches the root or the recovery folder by then), so each node is walked
+  // once and a deep chain costs linear, not quadratic, work. Breaking the
+  // greatest stable ID produces the same tree in every client regardless of
+  // update arrival order.
+  const settled = new Set<string>();
   for (const startId of nodes.keys()) {
     const seenAt = new Map<string, number>();
     const path: string[] = [];
     let current: string | undefined = startId;
-    while (current && current !== ROOT_PARENT && current !== RECOVERY_PARENT) {
+    while (
+      current &&
+      current !== ROOT_PARENT &&
+      current !== RECOVERY_PARENT &&
+      !settled.has(current)
+    ) {
       const cycleStart = seenAt.get(current);
       if (cycleStart !== undefined) {
         const cycle = path.slice(cycleStart);
         const breakId = cycle.sort((left, right) => left.localeCompare(right)).at(-1);
-        if (breakId && !repairedCycles.has(breakId)) {
+        if (breakId) {
           result.set(breakId, RECOVERY_PARENT);
           issues.push({ nodeId: breakId, kind: "parent-cycle" });
-          repairedCycles.add(breakId);
         }
         break;
       }
@@ -361,9 +413,57 @@ function effectiveParents(
       path.push(current);
       current = result.get(current);
     }
+    for (const id of path) settled.add(id);
   }
 
   return result;
+}
+
+// What namesByNode can add to a base name: "~" and a stable-ID suffix of up to
+// 32 characters, then "~" and a number.
+const MAX_COLLISION_SUFFIX_CHARS = 1 + 32 + 1 + 10;
+// The longer of the two names the recovery folder can take.
+const MAX_RECOVERY_PATH_CHARS = `${COLLABORATION_RECOVERY_FOLDER_NAME}~system`.length;
+
+/**
+ * Moves every node that would sit deeper than MAX_COLLABORATION_TREE_DEPTH
+ * levels, or whose path could pass MAX_COLLABORATION_PATH_CHARS characters,
+ * into the recovery folder, where its own subtree continues. Top down over the
+ * repaired (acyclic) parents, so the result depends only on the tree, and a
+ * path's length is bounded from its base names before namesByNode suffixes
+ * them. Every later step, the recursive visit included, then stays shallow.
+ */
+function limitTreeDepth(
+  parents: Map<string, string>,
+  baseNames: ReadonlyMap<string, string>,
+  issues: CollaborationProjectionIssue[],
+): void {
+  const childIds = new Map<string, string[]>();
+  for (const [id, parentId] of parents) {
+    const siblings = childIds.get(parentId);
+    if (siblings) siblings.push(id);
+    else childIds.set(parentId, [id]);
+  }
+
+  const queue = [
+    { id: ROOT_PARENT, depth: 0, pathChars: 0 },
+    { id: RECOVERY_PARENT, depth: 1, pathChars: MAX_RECOVERY_PATH_CHARS },
+  ];
+  for (let index = 0; index < queue.length; index += 1) {
+    const parent = queue[index];
+    for (const id of childIds.get(parent.id) ?? []) {
+      const nameChars = (baseNames.get(id)?.length ?? 0) + MAX_COLLISION_SUFFIX_CHARS;
+      const depth = parent.depth + 1;
+      const pathChars = parent.pathChars + (parent.depth > 0 ? 1 : 0) + nameChars;
+      if (depth <= MAX_COLLABORATION_TREE_DEPTH && pathChars <= MAX_COLLABORATION_PATH_CHARS) {
+        queue.push({ id, depth, pathChars });
+        continue;
+      }
+      parents.set(id, RECOVERY_PARENT);
+      issues.push({ nodeId: id, kind: "depth-limit" });
+      queue.push({ id, depth: 2, pathChars: MAX_RECOVERY_PATH_CHARS + 1 + nameChars });
+    }
+  }
 }
 
 function shortStableId(id: string, length: number): string {
@@ -390,13 +490,12 @@ function nameCollisions(names: ReadonlyMap<string, string>): string[][] {
 
 function namesByNode(
   children: readonly CollaborationNodeSnapshot[],
+  baseNames: ReadonlyMap<string, string>,
   issues: CollaborationProjectionIssue[],
 ): Map<string, string> {
-  const baseById = new Map<string, string>();
   const byBase = new Map<string, CollaborationNodeSnapshot[]>();
   for (const child of children) {
-    const name = safeNodeName(child);
-    baseById.set(child.id, name);
+    const name = baseNames.get(child.id) ?? safeNodeName(child);
     const group = byBase.get(name);
     if (group) group.push(child);
     else byBase.set(name, [child]);
@@ -417,7 +516,7 @@ function namesByNode(
   for (let suffixLength = 10; suffixLength <= 32 && collisions.length > 0; suffixLength += 2) {
     for (const ids of collisions) {
       for (const id of ids.slice(1)) {
-        result.set(id, `${baseById.get(id) ?? ""}~${shortStableId(id, suffixLength)}`);
+        result.set(id, `${baseNames.get(id) ?? ""}~${shortStableId(id, suffixLength)}`);
       }
     }
     collisions = nameCollisions(result);
@@ -467,6 +566,10 @@ function namesByNode(
  *
  * Neither is something a legitimate client ever does — the schema version is
  * written once at seed time and the child maps are only ever created as maps.
+ *
+ * It also caps the node count at MAX_COLLABORATION_PROJECT_NODES, in constant
+ * time. The tree's shape needs no check here: the projection repairs any shape
+ * (cycles, depth, colliding names) in time linear in the node count.
  */
 export function assertCollaborationProjectStructure(doc: Y.Doc): void {
   const root = getCollaborationProjectRoot(doc);
@@ -488,6 +591,16 @@ export function assertCollaborationProjectStructure(doc: Y.Doc): void {
       throw new CollaborationProjectError(`Collaboration project "${key}" must be a map`);
     }
   }
+
+  // Every member projects every node on each join and tree change, and no
+  // shape check here could keep that cheap for an unbounded count.
+  const nodes = root.get(COLLABORATION_PROJECT_NODES);
+  if (
+    nodes instanceof Y.Map &&
+    collaborationNodeEntryCount(nodes) > MAX_COLLABORATION_PROJECT_NODES
+  ) {
+    throw new CollaborationProjectError(nodeLimitMessage());
+  }
 }
 
 export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectProjection {
@@ -507,7 +620,10 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
   }
 
   const issues: CollaborationProjectionIssue[] = [];
+  const baseNames = new Map<string, string>();
+  for (const node of nodes.values()) baseNames.set(node.id, safeNodeName(node));
   const parents = effectiveParents(nodes, issues);
+  limitTreeDepth(parents, baseNames, issues);
   const children = new Map<string, CollaborationNodeSnapshot[]>();
   for (const node of nodes.values()) {
     const parent = parents.get(node.id) ?? RECOVERY_PARENT;
@@ -531,7 +647,9 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
   const recoveryChildren = children.get(RECOVERY_PARENT) ?? [];
   let recoveryPath = COLLABORATION_RECOVERY_FOLDER_NAME;
   const rootNames = new Set(
-    (children.get(ROOT_PARENT) ?? []).map((node) => safeNodeName(node).toLocaleLowerCase()),
+    (children.get(ROOT_PARENT) ?? []).map((node) =>
+      (baseNames.get(node.id) ?? "").toLocaleLowerCase(),
+    ),
   );
   if (rootNames.has(recoveryPath.toLocaleLowerCase())) {
     recoveryPath = `${COLLABORATION_RECOVERY_FOLDER_NAME}~system`;
@@ -540,9 +658,9 @@ export function projectCollaborationDocument(doc: Y.Doc): CollaborationProjectPr
 
   const visit = (parentId: string, parentPath: string) => {
     const siblings = children.get(parentId) ?? [];
-    const resolvedNames = namesByNode(siblings, issues);
+    const resolvedNames = namesByNode(siblings, baseNames, issues);
     for (const node of siblings) {
-      const name = resolvedNames.get(node.id) ?? safeNodeName(node);
+      const name = resolvedNames.get(node.id) ?? baseNames.get(node.id) ?? safeNodeName(node);
       const path = parentPath ? `${parentPath}/${name}` : name;
       nodeIdByPath.set(path, node.id);
       pathByNodeId.set(node.id, path);
@@ -823,6 +941,14 @@ export class CollaborationProjectController {
     this.assertWritable();
     if (encoding !== "utf-8" && !asset) {
       throw new CollaborationProjectError("Binary collaboration assets must be uploaded first");
+    }
+    // The room refuses the update that passes the limit and drops this
+    // member's connection, so say so before writing it.
+    if (
+      collaborationNodeEntryCount(getCollaborationNodes(this.doc)) >=
+      MAX_COLLABORATION_PROJECT_NODES
+    ) {
+      throw new CollaborationProjectError(nodeLimitMessage());
     }
     const normalized = parseWorkspacePath(path);
     const projection = this.project();
