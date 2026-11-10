@@ -29,6 +29,9 @@ let whiteboardState: ReturnType<typeof makeWhiteboardState>;
 let whiteboardStore: WhiteboardStoreInstance;
 let excalidrawOnChange: (elements: unknown[], appState: unknown, files: unknown) => void;
 let excalidrawInitialData: unknown;
+let excalidrawOnLinkOpen:
+  | ((element: { link: string | null }, event: CustomEvent) => void)
+  | undefined;
 // When set, the mocked canvas reports this view from its commit phase, the way
 // Excalidraw's componentDidUpdate calls onChange before the panel's effects run.
 let viewReportedOnCommit: WhiteboardView | null = null;
@@ -55,14 +58,17 @@ vi.mock("@excalidraw/excalidraw", async () => {
       excalidrawAPI,
       onChange,
       initialData,
+      onLinkOpen,
     }: {
       excalidrawAPI: (api: unknown) => void;
       onChange: typeof excalidrawOnChange;
       initialData: unknown;
+      onLinkOpen?: typeof excalidrawOnLinkOpen;
     }) => {
       excalidrawAPI(excalidrawApi);
       excalidrawOnChange = onChange;
       excalidrawInitialData = initialData;
+      excalidrawOnLinkOpen = onLinkOpen;
       useLayoutEffect(() => {
         if (!viewReportedOnCommit) return;
         const { scrollX, scrollY, zoom } = viewReportedOnCommit;
@@ -753,5 +759,83 @@ describe("WhiteboardPanel text alternative", () => {
     view.rerender(<WhiteboardPanel />);
 
     expect(screen.getByRole("listitem")).toHaveTextContent("Stack");
+  });
+});
+
+describe("WhiteboardPanel element links", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    canvasElements = [];
+    usesPlaybackModel = true;
+    isInPlaybackSession = true;
+    whiteboardState = makeWhiteboardState("external");
+    whiteboardStore = createWhiteboardStore();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The event Excalidraw hands onLinkOpen; preventing it skips Excalidraw's own opening.
+  function openLink(link: string) {
+    const event = new CustomEvent("excalidraw-link", {
+      cancelable: true,
+      detail: { nativeEvent: new MouseEvent("click") },
+    });
+    expect(excalidrawOnLinkOpen).toBeTypeOf("function");
+    excalidrawOnLinkOpen?.({ link }, event);
+    return event;
+  }
+
+  it("opens every link outside this exact origin in a new tab with no opener", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(<WhiteboardPanel />);
+    const origin = window.location.origin;
+
+    // Excalidraw opens each of these in the app's own tab: a protocol-relative URL
+    // starts with "/", and the others contain this origin somewhere.
+    for (const link of [
+      "//elsewhere.example/page",
+      "/\\elsewhere.example/page",
+      `https://elsewhere.example/?from=${origin}`,
+      `${origin}@elsewhere.example/page`,
+      "https://elsewhere.example/page",
+    ]) {
+      open.mockClear();
+      const event = openLink(link);
+      expect(event.defaultPrevented).toBe(true);
+      expect(open).toHaveBeenCalledExactlyOnceWith(
+        new URL(link, window.location.href).href,
+        "_blank",
+        "noopener,noreferrer",
+      );
+    }
+  });
+
+  it("leaves a link to this app's own origin to Excalidraw, which opens it in this tab", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(<WhiteboardPanel />);
+
+    for (const link of ["/learn", `${window.location.origin}/code`]) {
+      const event = openLink(link);
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens nothing for a link that is not a web or mail address", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    render(<WhiteboardPanel />);
+
+    // Excalidraw rewrites a script URL to about:blank before onLinkOpen sees it.
+    for (const link of [
+      "about:blank",
+      "data:text/html,dummy",
+      `blob:${window.location.origin}/00000000-0000-4000-8000-000000000000`,
+    ]) {
+      const event = openLink(link);
+      expect(event.defaultPrevented).toBe(true);
+    }
+    expect(open).not.toHaveBeenCalled();
   });
 });

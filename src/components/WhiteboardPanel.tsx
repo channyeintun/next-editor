@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
 import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI, ExcalidrawProps } from "@excalidraw/excalidraw/types";
 import type { AppState, BinaryFiles, NormalizedZoomValue } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
@@ -38,6 +38,28 @@ function toExcalidrawElements(
     return fitted === element ? { ...element } : fitted;
   }) as unknown as OrderedExcalidrawElement[];
 }
+
+const LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+
+// An element's link is written by whoever drew the board: a lesson's author or a
+// room peer. Excalidraw opens a link in the app's own tab whenever it contains
+// this origin anywhere or starts with "/", which includes "//elsewhere.example".
+// Only a URL whose origin is exactly this app's is left to Excalidraw (it stays
+// in this tab). Every other web or mail link opens in a new tab with no opener,
+// and anything else opens nothing.
+const openWhiteboardLink: NonNullable<ExcalidrawProps["onLinkOpen"]> = (element, event) => {
+  let url: URL;
+  try {
+    url = new URL(element.link ?? "", window.location.href);
+  } catch {
+    event.preventDefault();
+    return;
+  }
+  const isWebOrMail = LINK_PROTOCOLS.has(url.protocol);
+  if (isWebOrMail && url.origin === window.location.origin) return;
+  event.preventDefault();
+  if (isWebOrMail) window.open(url.href, "_blank", "noopener,noreferrer");
+};
 
 // Something being drawn, dragged, resized, rotated, selected by a box or typed:
 // replacing the scene now would interrupt it. (Not cursorButton: a right-click
@@ -319,6 +341,7 @@ export default function WhiteboardPanel() {
             theme="dark"
             viewModeEnabled={contentReadOnly}
             UIOptions={UI_OPTIONS}
+            onLinkOpen={openWhiteboardLink}
             initialData={{
               elements: toExcalidrawElements(scene.elements),
               appState: { ...toExcalidrawView(initialView), zenModeEnabled: true },
