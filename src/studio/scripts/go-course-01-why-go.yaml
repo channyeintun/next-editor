@@ -1,0 +1,1682 @@
+# Go course, lesson 01: why Go? (Burmese; the course's first lesson, mostly whiteboard).
+#
+# Start state: a finished two-file program is pinned (main.go sends three riders out at once with
+# a wait group; delivery.go holds the riders and deliver). Nothing is typed: the lesson shows the
+# program at the start, explains why Go exists on boards, then runs it once as a taste and says
+# lesson 29 will explain every line.
+# Boards: (H) where Go came from: 2007, 2009, 2012, today, the three designers' names, the three
+# problems; (C) what Go chose; (U) where Go is used; (T) honest trade-offs; (F) why Go is a good
+# first language; (Q) the quiz (a fourth rider); (M) the course map, 00 + seven modules.
+# Run: run-1 = the pinned program (four lines; finish order = ride times; 300ms in all).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-01-why-go
+  title: "Go course 01: ဘာကြောင့် Go လဲ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Two files: the explorer shows the learner the program has two parts.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"sync"
+        	"time"
+        )
+
+        func main() {
+        	start := time.Now()
+        	var wg sync.WaitGroup
+        	for _, r := range riders {
+        		wg.Go(func() { deliver(r) })
+        	}
+        	wg.Wait()
+        	fmt.Println(time.Since(start).Round(100*time.Millisecond), "မှာ အားလုံး ပြီးပြီ")
+        }
+      delivery.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"time"
+        )
+
+        // rider is one motorbike rider in Yangon and how long the ride takes.
+        type rider struct {
+        	name string
+        	ride time.Duration
+        }
+
+        // riders are the three riders who go out together.
+        var riders = []rider{
+        	{"လှလှ", 300 * time.Millisecond},
+        	{"အောင်အောင်", 100 * time.Millisecond},
+        	{"မောင်မောင်", 200 * time.Millisecond},
+        }
+
+        // deliver rides for r.ride, then says the parcel arrived.
+        func deliver(r rider) {
+        	time.Sleep(r.ride)
+        	fmt.Println(r.ride, r.name, "ပါဆယ် ပို့ပြီး")
+        }
+  whiteboardAssets:
+    # Board H: where Go came from — a timeline, the designers, the three problems.
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "Go ဘယ်က လာလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: h-b1, kind: rectangle, x: 270, y: 235, width: 195, height: 100, strokeColor: "#6741d9" }
+    - {
+        id: h-y1,
+        kind: text,
+        x: 285,
+        y: 245,
+        width: 140,
+        height: 40,
+        text: "2007",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-l1,
+        kind: text,
+        x: 282,
+        y: 288,
+        width: 180,
+        height: 40,
+        text: "Google",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: h-b2, kind: rectangle, x: 480, y: 235, width: 195, height: 100, strokeColor: "#6741d9" }
+    - {
+        id: h-y2,
+        kind: text,
+        x: 495,
+        y: 245,
+        width: 140,
+        height: 40,
+        text: "2009",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-l2,
+        kind: text,
+        x: 490,
+        y: 288,
+        width: 180,
+        height: 40,
+        text: "open source",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: h-b3, kind: rectangle, x: 690, y: 235, width: 195, height: 100, strokeColor: "#6741d9" }
+    - {
+        id: h-y3,
+        kind: text,
+        x: 705,
+        y: 245,
+        width: 140,
+        height: 40,
+        text: "2012",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-l3,
+        kind: text,
+        x: 705,
+        y: 288,
+        width: 140,
+        height: 40,
+        text: "Go 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: h-b4, kind: rectangle, x: 900, y: 235, width: 195, height: 100, strokeColor: "#6741d9" }
+    - {
+        id: h-y4,
+        kind: text,
+        x: 915,
+        y: 245,
+        width: 140,
+        height: 40,
+        text: "2026",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-l4,
+        kind: text,
+        x: 915,
+        y: 288,
+        width: 140,
+        height: 40,
+        text: "Go 1.27",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 270,
+        y: 340,
+        width: 825,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: h-names,
+        kind: text,
+        x: 270,
+        y: 385,
+        width: 800,
+        height: 40,
+        text: "Robert Griesemer · Rob Pike · Ken Thompson",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: h-p1, kind: rectangle, x: 270, y: 455, width: 255, height: 150, strokeColor: "#f08c00" }
+    - {
+        id: h-p1a,
+        kind: text,
+        x: 285,
+        y: 470,
+        width: 225,
+        height: 40,
+        text: "program ကြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-p1b,
+        kind: text,
+        x: 285,
+        y: 515,
+        width: 225,
+        height: 40,
+        text: "code သန်းချီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-p1c,
+        kind: text,
+        x: 285,
+        y: 560,
+        width: 225,
+        height: 40,
+        text: "45 မိနစ် ကြာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: h-p2, kind: rectangle, x: 545, y: 455, width: 255, height: 150, strokeColor: "#f08c00" }
+    - {
+        id: h-p2a,
+        kind: text,
+        x: 560,
+        y: 470,
+        width: 225,
+        height: 40,
+        text: "CPU core အများ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-p2b,
+        kind: text,
+        x: 560,
+        y: 515,
+        width: 225,
+        height: 40,
+        text: "စက် အများ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-p2c,
+        kind: text,
+        x: 560,
+        y: 560,
+        width: 225,
+        height: 40,
+        text: "network နဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: h-p3, kind: rectangle, x: 820, y: 455, width: 255, height: 150, strokeColor: "#f08c00" }
+    - {
+        id: h-p3a,
+        kind: text,
+        x: 835,
+        y: 470,
+        width: 225,
+        height: 40,
+        text: "ဘာသာစကား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-p3b,
+        kind: text,
+        x: 835,
+        y: 515,
+        width: 225,
+        height: 40,
+        text: "ရှုပ်ထွေးလာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: what Go chose (left: small and plain; right: built in).
+    - {
+        id: c-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "Go ရွေးခဲ့တာတွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-left,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 400,
+        height: 370,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-small,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 360,
+        height: 40,
+        text: "keyword 25 လုံးပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fmt,
+        kind: text,
+        x: 290,
+        y: 340,
+        width: 360,
+        height: 40,
+        text: "gofmt · ပုံစံ တစ်မျိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-fast,
+        kind: text,
+        x: 290,
+        y: 425,
+        width: 360,
+        height: 40,
+        text: "compile မြန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-bin,
+        kind: text,
+        x: 290,
+        y: 510,
+        width: 360,
+        height: 40,
+        text: "ဖိုင် တစ်ခုတည်း ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-right,
+        kind: rectangle,
+        x: 690,
+        y: 235,
+        width: 400,
+        height: 370,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-conc,
+        kind: text,
+        x: 710,
+        y: 255,
+        width: 360,
+        height: 40,
+        text: "goroutine · channel",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-conc-ring,
+        kind: freedraw,
+        stroke: circle,
+        x: 700,
+        y: 242,
+        width: 330,
+        height: 66,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-std,
+        kind: text,
+        x: 710,
+        y: 340,
+        width: 360,
+        height: 40,
+        text: "standard library ကြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-gc,
+        kind: text,
+        x: 710,
+        y: 425,
+        width: 360,
+        height: 40,
+        text: "memory ကို Go က ရှင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-go1,
+        kind: text,
+        x: 710,
+        y: 510,
+        width: 360,
+        height: 40,
+        text: "Go 1 ကတိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-go1b,
+        kind: text,
+        x: 710,
+        y: 552,
+        width: 360,
+        height: 40,
+        text: "code ဟောင်း ဆက် run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board U: where Go is used — four areas, two projects, companies with case studies.
+    - {
+        id: u-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Go ကို ဘယ်မှာ သုံးလဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: u-a1, kind: rectangle, x: 270, y: 235, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: u-a1t,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 375,
+        height: 40,
+        text: "cloud · network service",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: u-a2, kind: rectangle, x: 690, y: 235, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: u-a2t,
+        kind: text,
+        x: 710,
+        y: 250,
+        width: 360,
+        height: 40,
+        text: "command line tool",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: u-a3, kind: rectangle, x: 270, y: 320, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: u-a3t,
+        kind: text,
+        x: 290,
+        y: 335,
+        width: 360,
+        height: 40,
+        text: "web backend",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: u-a4, kind: rectangle, x: 690, y: 320, width: 400, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: u-a4t,
+        kind: text,
+        x: 710,
+        y: 335,
+        width: 360,
+        height: 40,
+        text: "DevOps · SRE",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-proj,
+        kind: rectangle,
+        x: 270,
+        y: 415,
+        width: 820,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: u-projt,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 780,
+        height: 40,
+        text: "Docker · Kubernetes · Go နဲ့ ရေးထားတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: u-co, kind: rectangle, x: 270, y: 505, width: 820, height: 110, strokeColor: "#1971c2" }
+    - {
+        id: u-co1,
+        kind: text,
+        x: 290,
+        y: 515,
+        width: 780,
+        height: 40,
+        text: "Google · Cloudflare · Dropbox",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: u-co2,
+        kind: text,
+        x: 290,
+        y: 562,
+        width: 780,
+        height: 40,
+        text: "Netflix · PayPal · Uber",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: honest trade-offs.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Go ရဲ့ အားနည်းချက်တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-not,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 400,
+        height: 210,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-n1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 360,
+        height: 40,
+        text: "ဖုန်း program",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-n2,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 360,
+        height: 40,
+        text: "web page မျက်နှာစာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-n3,
+        kind: text,
+        x: 290,
+        y: 380,
+        width: 360,
+        height: 40,
+        text: "data science · AI",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-code,
+        kind: rectangle,
+        x: 690,
+        y: 235,
+        width: 400,
+        height: 160,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-c1,
+        kind: text,
+        x: 710,
+        y: 248,
+        width: 360,
+        height: 40,
+        text: "if err != nil {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-c2,
+        kind: text,
+        x: 750,
+        y: 295,
+        width: 320,
+        height: 40,
+        text: "return err",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-c3,
+        kind: text,
+        x: 710,
+        y: 342,
+        width: 360,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-err,
+        kind: text,
+        x: 700,
+        y: 405,
+        width: 390,
+        height: 40,
+        text: "error စစ်တာ ရှည်နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-few,
+        kind: rectangle,
+        x: 270,
+        y: 490,
+        width: 820,
+        height: 120,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-few1,
+        kind: text,
+        x: 290,
+        y: 505,
+        width: 780,
+        height: 40,
+        text: "feature နည်း · တမင် ရွေးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-few2,
+        kind: text,
+        x: 290,
+        y: 555,
+        width: 780,
+        height: 40,
+        text: "generics · 2022 ကျမှ ပါလာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board F: why Go is a good first language.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "ပထမဆုံး ဘာသာစကား အဖြစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-k1,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 240,
+        width: 45,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-1,
+        kind: text,
+        x: 345,
+        y: 240,
+        width: 700,
+        height: 40,
+        text: "သေးပြီး ပုံစံ တစ်မျိုးတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k2,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 310,
+        width: 45,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-2,
+        kind: text,
+        x: 345,
+        y: 310,
+        width: 700,
+        height: 40,
+        text: "run မလုပ်ခင် compiler က စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k3,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 380,
+        width: 45,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-3,
+        kind: text,
+        x: 345,
+        y: 380,
+        width: 700,
+        height: 40,
+        text: "error က ဖိုင်နဲ့ line ကို ပြ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k4,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 450,
+        width: 45,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-4,
+        kind: text,
+        x: 345,
+        y: 450,
+        width: 700,
+        height: 40,
+        text: "တခြား ဘာသာစကားမှာလည်း အသုံးဝင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-k5,
+        kind: freedraw,
+        stroke: check,
+        x: 280,
+        y: 520,
+        width: 45,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-5,
+        kind: text,
+        x: 345,
+        y: 520,
+        width: 700,
+        height: 40,
+        text: "lesson ထဲမှာပဲ run လို့ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz — a fourth rider with a 400 ms ride.
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 440,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 820,
+        height: 225,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 290,
+        y: 248,
+        width: 780,
+        height: 40,
+        text: '{"လှလှ", 300 * time.Millisecond},',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 290,
+        y: 298,
+        width: 780,
+        height: 40,
+        text: '{"အောင်အောင်", 100 * time.Millisecond},',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 290,
+        y: 348,
+        width: 780,
+        height: 40,
+        text: '{"မောင်မောင်", 200 * time.Millisecond},',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 290,
+        y: 398,
+        width: 780,
+        height: 40,
+        text: '{"rider အသစ်", 400 * time.Millisecond},',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-new,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 432,
+        width: 560,
+        height: 20,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 495,
+        width: 640,
+        height: 40,
+        text: "က · 400ms မှာ အားလုံး ပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 555,
+        width: 640,
+        height: 40,
+        text: "ခ · 1000ms မှာ အားလုံး ပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 960,
+        y: 485,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    # Board M: the course map — lesson 01 and the seven modules; how to learn.
+    - {
+        id: m-title,
+        kind: text,
+        x: 300,
+        y: 158,
+        width: 500,
+        height: 50,
+        text: "Course လမ်းကြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: m-0,
+        kind: text,
+        x: 295,
+        y: 218,
+        width: 560,
+        height: 40,
+        text: "01 · ဘာကြောင့် Go လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-today,
+        kind: freedraw,
+        stroke: circle,
+        x: 280,
+        y: 210,
+        width: 360,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-1,
+        kind: text,
+        x: 295,
+        y: 268,
+        width: 560,
+        height: 40,
+        text: "1 · ပထမ program တွေ · 02–05",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-2,
+        kind: text,
+        x: 295,
+        y: 318,
+        width: 560,
+        height: 40,
+        text: "2 · if၊ loop၊ function · 06–10",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-3,
+        kind: text,
+        x: 295,
+        y: 368,
+        width: 560,
+        height: 40,
+        text: "3 · slice၊ map၊ မြန်မာစာ · 11–15",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-parcel,
+        kind: rectangle,
+        x: 280,
+        y: 410,
+        width: 600,
+        height: 205,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-4,
+        kind: text,
+        x: 295,
+        y: 418,
+        width: 560,
+        height: 40,
+        text: "4 · ကိုယ်ပိုင် type · 16–21",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-5,
+        kind: text,
+        x: 295,
+        y: 468,
+        width: 560,
+        height: 40,
+        text: "5 · error နဲ့ function · 22–27",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-6,
+        kind: text,
+        x: 295,
+        y: 518,
+        width: 560,
+        height: 40,
+        text: "6 · အချိန်နဲ့ goroutine · 28–32",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-7,
+        kind: text,
+        x: 295,
+        y: 568,
+        width: 560,
+        height: 40,
+        text: "7 · capstone · ကိုယ့်ကွန်ပျူတာ · 33–35",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-how,
+        kind: rectangle,
+        x: 910,
+        y: 285,
+        width: 180,
+        height: 270,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-how1,
+        kind: text,
+        x: 930,
+        y: 300,
+        width: 140,
+        height: 40,
+        text: "pause",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-how-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 975,
+        y: 345,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-how2,
+        kind: text,
+        x: 930,
+        y: 395,
+        width: 140,
+        height: 40,
+        text: "ပြင်ရေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-how-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 975,
+        y: 440,
+        width: 30,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-how3,
+        kind: text,
+        x: 930,
+        y: 490,
+        width: 140,
+        height: 40,
+        text: "run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7101
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    result:
+      status: success
+      exitCode: 0
+      output: "100ms အောင်အောင် ပါဆယ် ပို့ပြီး\n200ms မောင်မောင် ပါဆယ် ပို့ပြီး\n300ms လှလှ ပါဆယ် ပို့ပြီး\n300ms မှာ အားလုံး ပြီးပြီ\n"
+
+scenes:
+  - id: welcome
+    chapter: Go course ကို ကြိုဆိုပါတယ်
+    narration: >-
+      မင်္ဂလာပါ ခင်ဗျာ။ Go course ကို ကြိုဆိုပါတယ်။ ဒီ course ကို programming တစ်ခါမှ မရေးဖူးသေးတဲ့
+      သူတွေအတွက် မြန်မာလို ပြင်ဆင်ထားတာပါ။ စာ တစ်ကြောင်း ထုတ်ပြတဲ့ program လေးကနေ စပြီး၊ အလုပ်
+      အများကြီးကို တစ်ပြိုင်နက် လုပ်တဲ့ program တွေအထိ တစ်ဆင့်ချင်း သွားကြပါမယ်၊ ဥပမာ တွေကိုလည်း
+      ကိုယ်တို့ နေ့စဉ် ဘဝထဲက ယူထားပါတယ်။ [[mark:why-first]] ဒါပေမဲ့ code မရေးခင်မှာ မေးခွန်း တစ်ခုကို
+      အရင် ဖြေကြည့်ချင်ပါတယ်၊ ဘာကြောင့် Go ကို လေ့လာသင့်တာလဲ ဆိုတဲ့ မေးခွန်းပါ။ programming ဘာသာစကား
+      တစ်ခုကို တတ်ဖို့ လပေါင်းများစွာ အချိန်ပေးရမှာ ဖြစ်လို့၊ သူ့ကို ဘာကြောင့် ဖန်တီးခဲ့လဲ၊ ဘာမှာ
+      အသုံးဝင်ပြီး ဘာမှာ အားနည်းလဲ ဆိုတာ အရင် သိထားသင့်ပါတယ်။ [[mark:hook]] screen ပေါ်က program ကို
+      အခု ဖတ်လို့ မရသေးတာ ပုံမှန်ပါပဲ။ lesson အဆုံးနားမှာ ဒီ program ကို run ကြည့်ပြီး၊ Go ရဲ့
+      အားသာချက် တစ်ခုကို ကိုယ်တိုင် မြင်ရပါမယ်။
+    sources:
+      - { title: "Go FAQ — What is the purpose of the project?", url: "https://go.dev/doc/faq" }
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: history
+    chapter: Go ဘယ်က လာလဲ
+    narration: >-
+      [[mark:board-history]] အရင်ဆုံး Go ဘယ်က လာလဲ ဆိုတာ ကြည့်ရအောင်။ [[mark:draw-2007]] Go ကို
+      ၂၀၀၇ ခုနှစ်မှာ Google က engineer သုံးယောက် စပြီး ဒီဇိုင်းဆွဲခဲ့တာပါ။ [[mark:draw-names]] သူတို့
+      သုံးယောက်ရဲ့ နာမည်ကို board ပေါ်မှာ ရေးထားပေးပါတယ်။ [[mark:draw-2009]] ၂၀၀၉ ခုနှစ်၊ နိုဝင်ဘာလမှာတော့
+      Go ကို open source အဖြစ် လူတိုင်းအတွက် ဖွင့်ပေးခဲ့ပါတယ်။ open source ဆိုတာ code ကို ဘယ်သူမဆို
+      ကြည့်လို့၊ သုံးလို့ ရအောင် ဖွင့်ထားတာကို ပြောတာပါ။ [[mark:draw-2012]] ၂၀၁၂ ခုနှစ်မှာ Go version
+      တစ် ထွက်လာပြီး၊ [[mark:draw-today]] အဲဒီကတည်းက ဒီနေ့အထိ version အသစ်တွေ ပုံမှန် ထွက်နေပါတယ်။
+    sources:
+      - { title: "Go FAQ — What is the history of the project?", url: "https://go.dev/doc/faq" }
+      - { title: "Release History", url: "https://go.dev/doc/devel/release" }
+    actions:
+      - {
+          id: board-history,
+          type: whiteboard.apply,
+          at: { mark: board-history, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-2007,
+          type: whiteboard.apply,
+          at: { mark: draw-2007 },
+          upsertIds: [h-b1, h-y1, h-l1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-names,
+          type: whiteboard.apply,
+          at: { mark: draw-names },
+          upsertIds: [h-names],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-2009,
+          type: whiteboard.apply,
+          at: { mark: draw-2009 },
+          upsertIds: [h-b2, h-y2, h-l2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-2012,
+          type: whiteboard.apply,
+          at: { mark: draw-2012 },
+          upsertIds: [h-b3, h-y3, h-l3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-today,
+          type: whiteboard.apply,
+          at: { mark: draw-today },
+          upsertIds: [h-b4, h-y4, h-l4, h-arrow],
+          drawMs: 1800,
+        }
+
+  - id: problems
+    narration: >-
+      [[mark:draw-problems]] ဒါဆို ဘာကြောင့် ဘာသာစကား အသစ် လိုခဲ့တာလဲ။ အဲဒီတုန်းက Google မှာ ပြဿနာ
+      သုံးခု ရှိနေလို့ပါ။ [[mark:draw-p1]] ပထမ တစ်ခုက program တွေ အရမ်း ကြီးလာတာပါ။ code line
+      သန်းပေါင်း ဆယ်ချီ ရှိပြီး၊ programmer ရာနဲ့ချီ၊ ထောင်နဲ့ချီက နေ့တိုင်း ပြင်နေကြပါတယ်။
+      ကိုယ်ရေးတဲ့ code ကို ကွန်ပျူတာ run လို့ရတဲ့ program အဖြစ် ပြောင်းတာကို compile လုပ်တယ်လို့
+      ခေါ်ပါတယ်။ ၂၀၀၇ ခုနှစ်က program ကြီး တစ်ခုကို အဲဒီလို ပြောင်းဖို့ မိနစ် ၄၅ လောက် ကြာခဲ့ပါတယ်။
+      ပြောလေ့ရှိတဲ့ ဇာတ်လမ်းအရ Go ကို စဉ်းစားမိတာကိုက အဲဒီလို compile တစ်ခု ပြီးတာကို မျှော်နေတုန်းမှာ
+      ဖြစ်တယ်လို့ ဆိုပါတယ်။ [[mark:draw-p2]] ဒုတိယ တစ်ခုက ကွန်ပျူတာတွေ ပြောင်းလာတာပါ။ CPU တစ်ခုထဲမှာ
+      အလုပ်ကို တစ်ပြိုင်နက် လုပ်နိုင်တဲ့ core တွေ အများကြီး ပါလာပြီး၊ program တွေကလည်း network နဲ့
+      ချိတ်ထားတဲ့ ကွန်ပျူတာ အများကြီးပေါ်မှာ run ရပါတယ်။ [[mark:draw-p3]] တတိယ တစ်ခုကတော့ ဘာသာစကားတွေ
+      ရှုပ်ထွေးလာတာပါ။ compile မြန်တာ၊ run မြန်တာ၊ ရေးရ လွယ်ကူတာ ဆိုတဲ့ သုံးခုကို ဘာသာစကား
+      တစ်ခုတည်းမှာ အတူ မရနိုင်ခဲ့လို့၊ Go က အဲဒီ သုံးခုလုံးကို ရအောင် ကြိုးစားခဲ့တာပါ။
+    sources:
+      - {
+          title: "Go at Google: Language Design in the Service of Software Engineering",
+          url: "https://go.dev/talks/2012/splash.article",
+        }
+      - { title: "Go FAQ — Why did you create a new language?", url: "https://go.dev/doc/faq" }
+    actions:
+      - {
+          id: draw-problems,
+          type: whiteboard.apply,
+          at: { mark: draw-problems },
+          upsertIds: [h-p1, h-p2, h-p3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p1,
+          type: whiteboard.apply,
+          at: { mark: draw-p1 },
+          upsertIds: [h-p1a, h-p1b, h-p1c],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-p2,
+          type: whiteboard.apply,
+          at: { mark: draw-p2 },
+          upsertIds: [h-p2a, h-p2b, h-p2c],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-p3,
+          type: whiteboard.apply,
+          at: { mark: draw-p3 },
+          upsertIds: [h-p3a, h-p3b],
+          drawMs: 2400,
+        }
+
+  - id: choices
+    chapter: Go ရွေးခဲ့တဲ့ လမ်း
+    narration: >-
+      [[mark:board-choices]] ဒီ ပြဿနာတွေအတွက် Go က ဘာတွေ ရွေးခဲ့လဲ ကြည့်ရအောင်။ [[mark:draw-small]]
+      ပထမ တစ်ခုက ဘာသာစကားကို သေးသေးလေး ထားတာပါ။ ဘာသာစကားက သီးသန့် သုံးထားတဲ့ keyword လို့ ခေါ်တဲ့
+      စကားလုံး ၂၅ လုံးပဲ ရှိလို့၊ မှတ်ရမယ့် စည်းမျဉ်း နည်းပြီး တခြားသူ ရေးတဲ့ code ကိုလည်း ဖတ်ရတာ
+      ရှင်းပါတယ်။ [[mark:draw-fmt]] ဒုတိယ တစ်ခုက gofmt ဆိုတဲ့ tool ပါ၊ code ကို ပုံစံ တစ်မျိုးတည်း
+      ညှိပေးလို့ ဘယ်သူ ရေးရေး Go code တွေက တူတူပဲ မြင်ရပါတယ်။ [[mark:draw-fast]] တတိယ တစ်ခုက compile
+      မြန်တာပါ၊ program ကြီးကြီးကိုတောင် စက္ကန့် အနည်းငယ်အတွင်း compile လုပ်နိုင်ဖို့ ရည်ရွယ်ထားပါတယ်။
+      [[mark:draw-bin]] ပြီးတော့ compile လုပ်ပြီးရင် run ဖို့ လိုတာတွေ ပါပြီးသား ဖိုင် တစ်ခုတည်း
+      ရလို့၊ အဲဒီ ဖိုင်ကို တခြား ကွန်ပျူတာဆီ ယူသွားပြီး run ရတာ လွယ်ကူပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Keywords",
+          url: "https://go.dev/ref/spec#Keywords",
+        }
+      - { title: "Go FAQ — style guide, build speed, binary size", url: "https://go.dev/doc/faq" }
+    actions:
+      - {
+          id: board-choices,
+          type: whiteboard.apply,
+          at: { mark: board-choices, offsetMs: -300 },
+          clear: true,
+          upsertIds: [c-title, c-left, c-right],
+        }
+      - {
+          id: draw-small,
+          type: whiteboard.apply,
+          at: { mark: draw-small },
+          upsertIds: [c-small],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-fmt,
+          type: whiteboard.apply,
+          at: { mark: draw-fmt },
+          upsertIds: [c-fmt],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-fast,
+          type: whiteboard.apply,
+          at: { mark: draw-fast },
+          upsertIds: [c-fast],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-bin,
+          type: whiteboard.apply,
+          at: { mark: draw-bin },
+          upsertIds: [c-bin],
+          drawMs: 1200,
+        }
+
+  - id: built-in
+    narration: >-
+      [[mark:draw-conc]] ညာဘက်ကတော့ Go ထဲမှာ ပါပြီးသား အရာတွေပါ။ အရေးအကြီးဆုံးက အလုပ် အများကြီးကို
+      တစ်ပြိုင်နက် လုပ်တာကို ဘာသာစကား ထဲမှာကိုက ထည့်ထားတာပါ။ တစ်ပြိုင်နက် run နေတဲ့ function ကို
+      goroutine လို့ ခေါ်ပြီး၊ goroutine တွေကြား တန်ဖိုး လွှဲပေးတဲ့ လမ်းကို channel လို့ ခေါ်ပါတယ်။
+      [[mark:draw-std]] Go နဲ့ အတူ ပါလာတဲ့ အသင့်သုံး code အစုတွေကို standard library လို့ ခေါ်ပြီး၊
+      စာသား၊ အချိန်၊ network လို အလုပ်တွေအတွက် လိုတာ အများကြီး ပါပြီးသားပါ။ [[mark:draw-gc]] program
+      သုံးပြီးသွားတဲ့ memory ဆိုတဲ့ မှတ်ဉာဏ် နေရာတွေကိုလည်း Go က အလိုအလျောက် ပြန်ရှင်းပေးပါတယ်။
+      [[mark:draw-go1]] နောက်ဆုံးက Go version တစ်ရဲ့ ကတိပါ။ အဲဒီ စည်းမျဉ်းအတိုင်း ရေးထားတဲ့ program
+      တွေကို version အသစ်တွေမှာလည်း မပြင်ဘဲ ဆက် compile လုပ်လို့၊ ဆက် run လို့ ရအောင် ရည်ရွယ်ထားပါတယ်။
+    sources:
+      - {
+          title: "Go FAQ — Why goroutines instead of threads? Why do garbage collection?",
+          url: "https://go.dev/doc/faq",
+        }
+      - { title: "Go 1 and the Future of Go Programs", url: "https://go.dev/doc/go1compat" }
+      - { title: "Standard library", url: "https://pkg.go.dev/std" }
+    actions:
+      - {
+          id: draw-conc,
+          type: whiteboard.apply,
+          at: { mark: draw-conc },
+          upsertIds: [c-conc, c-conc-ring],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-std,
+          type: whiteboard.apply,
+          at: { mark: draw-std },
+          upsertIds: [c-std],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-gc,
+          type: whiteboard.apply,
+          at: { mark: draw-gc },
+          upsertIds: [c-gc],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-go1,
+          type: whiteboard.apply,
+          at: { mark: draw-go1 },
+          upsertIds: [c-go1, c-go1b],
+          drawMs: 1600,
+        }
+
+  - id: uses
+    chapter: Go ကို ဘယ်မှာ သုံးလဲ
+    narration: >-
+      [[mark:board-uses]] ဒါဆို ဒီနေ့ Go ကို ဘယ်မှာ သုံးနေကြလဲ။ [[mark:draw-areas]] အဓိက နယ်ပယ် လေးခု
+      ရှိပါတယ်။ cloud နဲ့ network service တွေ၊ စာ ရိုက်ပြီး ခိုင်းရတဲ့ command line tool တွေ၊ web ရဲ့
+      နောက်ကွယ်က backend တွေ၊ ပြီးတော့ system တွေ ရပ်မသွားအောင် ထိန်းတဲ့ DevOps နဲ့ SRE အလုပ်တွေပါ။
+      [[mark:draw-projects]] cloud ပေါ်မှာ program တွေ run ဖို့ အများကြီး သုံးကြတဲ့ Docker နဲ့
+      Kubernetes ကိုလည်း Go နဲ့ ရေးထားပါတယ်။ [[mark:draw-companies]] Google ကိုယ်တိုင် Go ကို
+      အများကြီး သုံးပြီး၊ Cloudflare၊ Dropbox၊ Netflix၊ PayPal၊ Uber လို ကုမ္ပဏီတွေကလည်း Go ကို ဘယ်လို
+      သုံးလဲ ဆိုတဲ့ case study တွေကို ထုတ်ပြထားပါတယ်။ ဒါကြောင့် Go တတ်ရင် backend၊ cloud၊ DevOps လို
+      အလုပ်တွေမှာ အထူး အသုံးဝင်ပါတယ်။
+    sources:
+      - { title: "Use Cases", url: "https://go.dev/solutions/use-cases" }
+      - { title: "Case Studies", url: "https://go.dev/solutions/case-studies" }
+      - {
+          title: "Go FAQ — Is Google using Go internally? What other companies use Go?",
+          url: "https://go.dev/doc/faq",
+        }
+    actions:
+      - {
+          id: board-uses,
+          type: whiteboard.apply,
+          at: { mark: board-uses, offsetMs: -300 },
+          clear: true,
+          upsertIds: [u-title],
+        }
+      - {
+          id: draw-areas,
+          type: whiteboard.apply,
+          at: { mark: draw-areas },
+          upsertIds: [u-a1, u-a1t, u-a2, u-a2t, u-a3, u-a3t, u-a4, u-a4t],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-projects,
+          type: whiteboard.apply,
+          at: { mark: draw-projects },
+          upsertIds: [u-proj, u-projt],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-companies,
+          type: whiteboard.apply,
+          at: { mark: draw-companies },
+          upsertIds: [u-co, u-co1, u-co2],
+          drawMs: 2400,
+        }
+
+  - id: trade-offs
+    chapter: Go ရဲ့ အားနည်းချက်တွေ
+    narration: >-
+      [[mark:board-trade]] ကောင်းတာချည်း ပြောရင် မမျှတပါဘူး၊ အားနည်းချက်တွေကိုလည်း ရိုးရိုးသားသား
+      ကြည့်ရအောင်။ [[mark:draw-notfor]] ပထမ တစ်ခုက Go ဟာ နေရာတိုင်းအတွက် အကောင်းဆုံး မဟုတ်တာပါ။
+      ဖုန်းထဲက program တွေ၊ web page မှာ ကိုယ် မြင်ရ၊ နှိပ်ရတဲ့ မျက်နှာစာ၊ data science နဲ့ AI လို
+      အလုပ်တွေမှာတော့ တခြား ဘာသာစကားတွေကို ပိုသုံးကြပါတယ်။ [[mark:draw-err]] ဒုတိယ တစ်ခုက error
+      ကိုင်တွယ်ပုံပါ။ Go မှာ function တစ်ခု အလုပ် မပြီးမြောက်ရင် အကြောင်းပြချက်ကို error ဆိုတဲ့
+      တန်ဖိုး အဖြစ် ပြန်ပေးပြီး၊ ခေါ်တဲ့ဘက်က board ပေါ်ကလို ကိုယ်တိုင် စစ်ရပါတယ်။
+      [[mark:draw-err-long]] ဒီလို စစ်တာ အကြိမ်ကြိမ် ပါလာလို့ ရှည်တယ်လို့ ခံစားရနိုင်ပြီး၊ Go အဖွဲ့ရဲ့
+      နှစ်စဉ် survey တွေမှာ user တွေ အများဆုံး ညည်းတဲ့ အချက်လည်း ဖြစ်ပါတယ်။ ဒါပေမဲ့ ဘယ်နေရာမှာ
+      မှားနိုင်လဲ ဆိုတာ code ထဲမှာ မြင်သာနေတာကတော့ Go က တမင် ရွေးခဲ့တာပါ။ [[mark:draw-few]] တတိယ
+      တစ်ခုကတော့ feature နည်းတာပါ။ ဥပမာ တန်ဖိုး အမျိုးအစား မျိုးစုံအတွက် function တစ်ခုတည်း
+      ရေးလို့ရတဲ့ generics ကို Go version တစ် ထွက်ပြီး ဆယ်နှစ်နီးပါး ကြာမှ ထည့်ခဲ့ပါတယ်။ feature တစ်ခု
+      ထည့်တိုင်း ဘာသာစကားက ပိုရှုပ်လာလို့ သေသေချာချာ စဉ်းစားပြီးမှ ထည့်တာပါ။
+    sources:
+      - { title: "Use Cases", url: "https://go.dev/solutions/use-cases" }
+      - {
+          title: "Go FAQ — Why does Go not have exceptions? Why does Go not have feature X?",
+          url: "https://go.dev/doc/faq",
+        }
+      - {
+          title: "[ On | No ] syntactic support for error handling",
+          url: "https://go.dev/blog/error-syntax",
+        }
+      - { title: "Release History", url: "https://go.dev/doc/devel/release" }
+    actions:
+      - {
+          id: board-trade,
+          type: whiteboard.apply,
+          at: { mark: board-trade, offsetMs: -300 },
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-notfor,
+          type: whiteboard.apply,
+          at: { mark: draw-notfor },
+          upsertIds: [t-not, t-n1, t-n2, t-n3],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-err,
+          type: whiteboard.apply,
+          at: { mark: draw-err },
+          upsertIds: [t-code, t-c1, t-c2, t-c3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-err-long,
+          type: whiteboard.apply,
+          at: { mark: draw-err-long },
+          upsertIds: [t-err],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-few,
+          type: whiteboard.apply,
+          at: { mark: draw-few },
+          upsertIds: [t-few, t-few1, t-few2],
+          drawMs: 2200,
+        }
+
+  - id: first-language
+    chapter: ပထမဆုံး ဘာသာစကား အဖြစ်
+    narration: >-
+      [[mark:board-first]] ဒါဆို programming ကို အခုမှ စလေ့လာမယ့် သူအတွက် Go က ဘာကြောင့် ကောင်းလဲ။
+      [[mark:draw-f1]] ပထမက ခုနက ပြောခဲ့သလို ဘာသာစကား သေးပြီး ရေးပုံ တစ်မျိုးတည်း ဖြစ်တာပါ။
+      [[mark:draw-f2]] ဒုတိယက compiler ဆိုတဲ့ Go ရဲ့ စစ်ဆေးသူက run မလုပ်ခင်ကတည်းက code တစ်ခုလုံးကို
+      စစ်ပေးတာပါ၊ နာမည်ပေးပြီး မသုံးဘဲ ထားခဲ့တဲ့ variable တစ်ခု ရှိရင်တောင် bug ဖြစ်နိုင်လို့
+      လက်မခံပါဘူး။ [[mark:draw-f3]] တတိယက error message တွေက ဘယ်ဖိုင်၊ ဘယ် line မှာလဲ ဆိုတာ ပြပေးတာပါ၊
+      နောက် lesson မှာတင် တွေ့ရပါမယ်။ [[mark:draw-f4]] စတုတ္ထက variable၊ loop၊ function လို အခြေခံတွေက
+      တခြား ဘာသာစကားတွေမှာလည်း ရှိလို့ ဆက် အသုံးဝင်တာပါ။ [[mark:draw-f5]] နောက်ဆုံးကတော့ program
+      အားလုံးကို lesson ထဲမှာပဲ run လို့ ရတာပါ။
+    sources:
+      - {
+          title: "Go FAQ — Can I stop these complaints about my unused variable/import?",
+          url: "https://go.dev/doc/faq",
+        }
+      - {
+          title: "Go FAQ — What are the guiding principles in the design?",
+          url: "https://go.dev/doc/faq",
+        }
+    actions:
+      - {
+          id: board-first,
+          type: whiteboard.apply,
+          at: { mark: board-first, offsetMs: -300 },
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f1,
+          type: whiteboard.apply,
+          at: { mark: draw-f1 },
+          upsertIds: [f-k1, f-1],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f2,
+          type: whiteboard.apply,
+          at: { mark: draw-f2 },
+          upsertIds: [f-k2, f-2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f3,
+          type: whiteboard.apply,
+          at: { mark: draw-f3 },
+          upsertIds: [f-k3, f-3],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f4,
+          type: whiteboard.apply,
+          at: { mark: draw-f4 },
+          upsertIds: [f-k4, f-4],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f5,
+          type: whiteboard.apply,
+          at: { mark: draw-f5 },
+          upsertIds: [f-k5, f-5],
+          drawMs: 1400,
+        }
+
+  - id: taste
+    chapter: Go ကို မြည်းကြည့်ရအောင်
+    narration: >-
+      [[mark:close-first]] ဒါဆို lesson အစက program ကို ပြန်ကြည့်ရအောင်။ ဒီ program မှာ ဖိုင် နှစ်ခု
+      ပါပါတယ်။ [[mark:open-delivery]] delivery ဖိုင်ထဲမှာ ရန်ကုန်မြို့ထဲ ပါဆယ် ပို့တဲ့ rider သုံးယောက်
+      ရှိပါတယ်။ rider လှလှ က မီလီစက္ကန့် ၃၀၀၊ rider အောင်အောင် က ၁၀၀၊ rider မောင်မောင် က ၂၀၀ ကြာပြီး၊
+      မီလီစက္ကန့် ၁၀၀ က ခရီး တိုတို တစ်ခုကို ကိုယ်စားပြုပါတယ်။ [[mark:open-main]] main ဖိုင်ကတော့
+      rider တွေကို ထွက်ခိုင်းပြီး၊ အားလုံး ပို့ပြီးမှ ကြာချိန်ကို ထုတ်ပြပါတယ်။ [[mark:sel-go]] အဓိကက
+      ဒီ line ပါ၊ rider တစ်ယောက်စီကို goroutine တစ်ခုစီနဲ့ တစ်ပြိုင်နက် ထွက်ခိုင်းတာပါ။ line
+      တစ်ကြောင်းချင်းကို ဒီနေ့ မရှင်းတော့ပါဘူး၊ lesson ၂၉ ရောက်တဲ့အခါ ဒီ program ထဲက line တိုင်းကို
+      နားလည်သွားမှာပါ။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+      - {
+          title: "The Go Programming Language Specification — Go statements",
+          url: "https://go.dev/ref/spec#Go_statements",
+        }
+    actions:
+      - {
+          id: close-first,
+          type: whiteboard.apply,
+          at: { mark: close-first },
+          open: false,
+          upsertIds: [],
+        }
+      - {
+          id: open-delivery,
+          type: workspace.openFile,
+          at: { mark: open-delivery },
+          path: delivery.go,
+        }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: sel-go
+        type: editor.select
+        at: { mark: sel-go }
+        target: { file: main.go, text: "wg.Go(func() { deliver(r) })", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "300ms မှာ အားလုံး ပြီးပြီ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-go,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "wg.Go(func() { deliver(r) })",
+        }
+
+  - id: read-run
+    narration: >-
+      [[mark:point-first]] ပထမ စာကြောင်းမှာ အောင်အောင် အရင် ရောက်ပါတယ်၊ စာရင်းထဲမှာ ဒုတိယ ဖြစ်ပေမဲ့
+      သူ့ ခရီးက အတိုဆုံးမို့ပါ။ [[mark:point-hla]] လှလှ ကတော့ မီလီစက္ကန့် ၃၀၀ မှာ နောက်ဆုံးမှ
+      ရောက်ပါတယ်။ [[mark:point-total]] အရေးကြီးတာက နောက်ဆုံး စာကြောင်းပါ။ အားလုံး ပြီးဖို့ မီလီစက္ကန့်
+      ၃၀၀ ပဲ ကြာပါတယ်။ rider တစ်ယောက်တည်းက တစ်ခုပြီးမှ တစ်ခု ပို့ရင် ကြာချိန်တွေ ပေါင်းပြီး
+      မီလီစက္ကန့် ၆၀၀ ကြာမှာပါ။ တစ်ပြိုင်နက် သွားတော့ အကြာဆုံး တစ်ယောက်စာပဲ ကြာတာပါ၊ ဒါဟာ ခုနက
+      ပြောခဲ့တဲ့ Go ရဲ့ အားသာချက်ပါ။
+    sources:
+      - { title: "sync package — WaitGroup", url: "https://pkg.go.dev/sync#WaitGroup" }
+    actions:
+      - {
+          id: point-first,
+          type: console.point,
+          at: { mark: point-first },
+          target: { text: "100ms အောင်အောင်" },
+        }
+      - {
+          id: point-hla,
+          type: console.point,
+          at: { mark: point-hla },
+          target: { text: "300ms လှလှ" },
+        }
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "မှာ အားလုံး ပြီးပြီ" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ [[mark:quiz-new]] rider စာရင်းထဲကို rider အသစ် တစ်ယောက်
+      ထပ်ထည့်တယ် ဆိုပါစို့၊ သူ့ ခရီးက မီလီစက္ကန့် ၄၀၀ ကြာပါတယ်။ program ကို ထပ် run ရင် အားလုံး
+      ပြီးဖို့ ဘယ်လောက် ကြာမလဲ။ board ပေါ်က အဖြေ နှစ်ခုထဲက ဘယ်ဟာလဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ မီလီစက္ကန့် ၄၀၀ ပါ။ ဘာကြောင့်လဲဆိုတော့ rider
+      လေးယောက်လုံး တစ်ပြိုင်နက် ထွက်ကြတာ ဖြစ်လို့၊ ကြာချိန်တွေ ပေါင်းတာ မဟုတ်ဘဲ အကြာဆုံး တစ်ယောက်ရဲ့
+      ကြာချိန်ပဲ ကြာလို့ပါ။
+    sources:
+      - { title: "sync package — WaitGroup.Wait", url: "https://pkg.go.dev/sync#WaitGroup.Wait" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-a, q-b],
+        }
+      - {
+          id: quiz-new,
+          type: whiteboard.apply,
+          at: { mark: quiz-new },
+          upsertIds: [q-new],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: course-map
+    chapter: Course ရဲ့ လမ်းကြောင်း
+    narration: >-
+      [[mark:board-map]] နောက်ဆုံးအနေနဲ့ course ရဲ့ လမ်းကြောင်းကို ကြည့်ရအောင်။ ဒီ lesson က course ရဲ့ ပထမဆုံး lesson ပါ၊ နောက်မှာ အပိုင်း ခုနစ်ပိုင်း ရှိပါတယ်။ [[mark:draw-m1]] ပထမ အပိုင်း သုံးပိုင်းမှာ
+      program ရေးတာ၊ ဆုံးဖြတ်တာ၊ loop၊ function၊ slice၊ map တွေနဲ့ မြန်မာစာကို မှန်မှန်ကန်ကန်
+      ကိုင်တွယ်ပုံကို လေ့လာပါမယ်။ [[mark:draw-m4]] စတုတ္ထ အပိုင်းကစပြီး ရန်ကုန်က ပါဆယ်ပို့ ဝန်ဆောင်မှု
+      တစ်ခုအတွက် program တစ်ခုကို တဖြည်းဖြည်း တည်ဆောက်ပြီး၊ ကိုယ်ပိုင် type၊ error၊ အချိန်နဲ့
+      goroutine တွေကို အဲဒီ program နဲ့ပဲ လေ့လာပါမယ်။ နောက်ဆုံး အပိုင်းမှာတော့ ဖိုင် အများကြီး ပါတဲ့
+      program တစ်ခုကို ပြီးအောင် ရေးပြီး၊ ကိုယ့် ကွန်ပျူတာပေါ်မှာ Go သုံးပုံနဲ့ အဆုံးသတ်ပါမယ်။
+      [[mark:draw-how]] lesson တိုင်းမှာ ကြည့်ရုံ မဟုတ်ဘဲ pause လုပ်ပြီး code ကို ကိုယ်တိုင်
+      ပြင်ရေးကြည့်ပါ၊ ပြီးရင် run ပြီး ဘာပြောင်းသွားလဲ ကြည့်ပါ။
+    sources:
+      - {
+          title: "Tutorial: Get started with Go",
+          url: "https://go.dev/doc/tutorial/getting-started",
+        }
+    actions:
+      - {
+          id: board-map,
+          type: whiteboard.apply,
+          at: { mark: board-map, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [m-title, m-0, m-today],
+        }
+      - {
+          id: draw-m1,
+          type: whiteboard.apply,
+          at: { mark: draw-m1 },
+          upsertIds: [m-1, m-2, m-3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-m4,
+          type: whiteboard.apply,
+          at: { mark: draw-m4 },
+          upsertIds: [m-parcel, m-4, m-5, m-6, m-7],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-how,
+          type: whiteboard.apply,
+          at: { mark: draw-how },
+          upsertIds: [m-how, m-how1, m-how-a1, m-how2, m-how-a2, m-how3],
+          drawMs: 2400,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-map]] ဒါဆို ပြန်ချုပ်ရရင်၊ Go ကို program ကြီးတွေ၊ programmer အများကြီးနဲ့
+      ကွန်ပျူတာ အများကြီးအတွက် ရှင်းပြီး မြန်တဲ့ ဘာသာစကား ဖြစ်အောင် ဖန်တီးခဲ့တာပါ။ [[mark:recap-go]]
+      ဘာသာစကား သေးတာ၊ ရေးပုံ တစ်မျိုးတည်း ဖြစ်တာ၊ ဒီ line လို တစ်ပြိုင်နက် လုပ်တာကို ဘာသာစကား
+      ထဲမှာကိုက ထည့်ထားတာက သူ့ရဲ့ အဓိက ရွေးချယ်မှုတွေပါ။ နောက် lesson မှာတော့ ပထမဆုံး Go program ကို
+      ကိုယ်တိုင် ရေးပြီး၊ compile နဲ့ run ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Go FAQ", url: "https://go.dev/doc/faq" }
+    actions:
+      - {
+          id: close-map,
+          type: whiteboard.apply,
+          at: { mark: close-map },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-go
+        type: editor.select
+        at: { mark: recap-go }
+        target: { file: main.go, text: "wg.Go(func() { deliver(r) })", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
