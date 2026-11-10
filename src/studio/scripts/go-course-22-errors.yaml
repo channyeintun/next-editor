@@ -1,0 +1,1030 @@
+# Go course, lesson 22: errors are values (Burmese).
+#
+# Start state: main.go (an import block holding "fmt", an empty main), parcel.go (Parcel and
+# cityNames, COURSE-KIT §3.4), digits.go (only `package main`). Edits, all insert-only:
+#   1. cityName(code) (string, error) above main, and a loop over "MDY" and "MDX" that checks err
+#      and continues -> run-1: MDY မန္တလေး / error: unknown city "MDX";
+#   2. "strconv" into the import block, then Atoi on the COD amount "၁၅၀၀၀" with both results
+#      printed -> run-2 adds 0 strconv.Atoi: parsing "၁၅၀၀၀": invalid syntax;
+#   3. digits.go: import "fmt" and the error-returning fromMyanmarDigits (COURSE-KIT §3.3), then in
+#      main the fallback when Atoi fails, the check with an early return and the amount
+#      -> run-3 adds 15000 ကျပ်.
+# Boards: (N) the rider comes back with the parcel delivered or a note: a result and an error;
+# (Z) an ignored error: the COD becomes 0 kyats, silently; (P) error vs panic; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-22-errors
+  title: "Go course 22: Error ဆိုတာ တန်ဖိုးတစ်ခုပါ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Three files of one program: the explorer is part of the lesson.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        }
+      parcel.go: |
+        package main
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string  // tracking code: "MDY-0001"
+        	To       string  // city code: "MDY"
+        	WeightKg float64 // weight in kilograms
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+      digits.go: |
+        package main
+  whiteboardAssets:
+    # Board N: the rider's note — a result and an error.
+    - {
+        id: n-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Error ဆိုတာ တန်ဖိုး တစ်ခုပါ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: n-rider-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 250,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-rider,
+        kind: text,
+        x: 305,
+        y: 265,
+        width: 210,
+        height: 40,
+        text: "rider ပြန်လာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-arrow-ok,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 545,
+        y: 243,
+        width: 65,
+        height: 25,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: n-arrow-err,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 545,
+        y: 333,
+        width: 65,
+        height: 25,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-ok-box,
+        kind: rectangle,
+        x: 620,
+        y: 220,
+        width: 460,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: n-ok,
+        kind: text,
+        x: 640,
+        y: 235,
+        width: 420,
+        height: 40,
+        text: "ပို့ပြီးပြီ · error က nil",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-err-box,
+        kind: rectangle,
+        x: 620,
+        y: 310,
+        width: 460,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-err,
+        kind: text,
+        x: 640,
+        y: 325,
+        width: 420,
+        height: 40,
+        text: "မှတ်စု · ဘာကြောင့် မပို့နိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-sig,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 760,
+        height: 40,
+        text: "func cityName(code string) (string, error)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-last,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 40,
+        text: "error · နောက်ဆုံး result",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-read,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 760,
+        height: 40,
+        text: "မှတ်စုကို အရင် ဖတ် · err ကို အရင် စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-read-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 600,
+        width: 620,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    # Board Z: an ignored error.
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "error ကို မစစ်ရင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: z-code-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 640,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-code,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 600,
+        height: 40,
+        text: 'cod, _ := strconv.Atoi("၁၅၀၀၀")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 322,
+        width: 30,
+        height: 45,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-cod-box,
+        kind: rectangle,
+        x: 285,
+        y: 372,
+        width: 780,
+        height: 70,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: z-cod,
+        kind: text,
+        x: 305,
+        y: 387,
+        width: 740,
+        height: 40,
+        text: "cod က 0 · rider က 0 ကျပ် ကောက်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-silent,
+        kind: text,
+        x: 300,
+        y: 465,
+        width: 780,
+        height: 40,
+        text: "panic မဖြစ် · compile error မရှိ · ဘယ်သူမှ မသိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-rule-box,
+        kind: rectangle,
+        x: 285,
+        y: 535,
+        width: 780,
+        height: 75,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-rule,
+        kind: text,
+        x: 305,
+        y: 552,
+        width: 740,
+        height: 40,
+        text: "err ကို အရင် စစ်၊ nil ဖြစ်မှ တန်ဖိုးကို သုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board P: error vs panic.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "error နဲ့ panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-e-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 395,
+        height: 340,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-e-name,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 350,
+        height: 40,
+        text: "error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-e1,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 355,
+        height: 40,
+        text: "ကြိုသိတဲ့ ပြဿနာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-e2,
+        kind: text,
+        x: 305,
+        y: 370,
+        width: 355,
+        height: 40,
+        text: "code မှား · ဂဏန်း မှား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-e3,
+        kind: text,
+        x: 305,
+        y: 430,
+        width: 355,
+        height: 40,
+        text: "တန်ဖိုး · ကိုယ်က စစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-e4,
+        kind: text,
+        x: 305,
+        y: 500,
+        width: 355,
+        height: 40,
+        text: "rider ရဲ့ မှတ်စု",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-p-box,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 395,
+        height: 340,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-p-name,
+        kind: text,
+        x: 720,
+        y: 250,
+        width: 350,
+        height: 40,
+        text: "panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-p1,
+        kind: text,
+        x: 720,
+        y: 310,
+        width: 355,
+        height: 40,
+        text: "bug",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-p2,
+        kind: text,
+        x: 720,
+        y: 370,
+        width: 355,
+        height: 40,
+        text: "index out of range",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-p3,
+        kind: text,
+        x: 720,
+        y: 430,
+        width: 355,
+        height: 40,
+        text: "program ရပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-p4,
+        kind: text,
+        x: 720,
+        y: 500,
+        width: 355,
+        height: 40,
+        text: "ဆိုင်ကယ် ပျက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (the letter ဝ typed for the digit ၀).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 520,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-code,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 480,
+        height: 40,
+        text: 'input := "၁၅ဝဝ"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-note,
+        kind: text,
+        x: 300,
+        y: 340,
+        width: 600,
+        height: 40,
+        text: "ဝ က ဗျည်း · ၀ က သုည",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 500,
+        height: 40,
+        text: "က · 1115 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 640,
+        height: 40,
+        text: "ခ · error: 'ဝ' is not a Myanmar digit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 960,
+        y: 485,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7122
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "MDY မန္တလေး\nerror: unknown city \"MDX\"\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "MDY မန္တလေး\nerror: unknown city \"MDX\"\n0 strconv.Atoi: parsing \"၁၅၀၀၀\": invalid syntax\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "MDY မန္တလေး\nerror: unknown city \"MDX\"\n0 strconv.Atoi: parsing \"၁၅၀၀၀\": invalid syntax\n15000 ကျပ်\n"
+
+scenes:
+  - id: recall
+    chapter: Error ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ any ထဲက type ကို မှားယူရင် program က panic ဖြစ်ပြီး ရပ်သွားတာနဲ့၊ ok နဲ့
+      အရင် မေးရင် ဘေးကင်းတယ် ဆိုတာကို မြင်ခဲ့ပါတယ်။ ဒီနေ့ကစပြီး bug မဟုတ်ဘဲ ကြိုသိထားလို့ရတဲ့
+      ပြဿနာတွေကို ဘယ်လို ကိုင်တွယ်မလဲ ဆိုတာ လေ့လာပါမယ်။ [[mark:today]] ဥပမာ ပါဆယ်ပို့ ဝန်ဆောင်မှုရဲ့ ကောင်တာက
+      ဝန်ထမ်းက မြို့ code ကို စာလုံး တစ်လုံး မှားရိုက်မိတာ၊ ဒါမှမဟုတ် ငွေ ပမာဏကို မြန်မာ ဂဏန်းနဲ့
+      ရိုက်ထည့်တာ မျိုးပါ။ ဒါတွေက code ထဲက bug မဟုတ်ပါဘူး၊ နေ့တိုင်း ကြုံနိုင်တဲ့ အခြေအနေတွေပါ။
+      [[mark:board-note]] rider တစ်ယောက် ပါဆယ် ပို့ဖို့ ထွက်သွားတယ် ဆိုပါစို့။ [[mark:draw-back]] ပြန်လာတဲ့အခါ
+      ပါဆယ်ကို ပို့ပြီးပြီ ဆိုတဲ့ သတင်း၊ ဒါမှမဟုတ် ဘာကြောင့် မပို့နိုင်ခဲ့လဲ ဆိုတဲ့ မှတ်စု တစ်စောင်ကို
+      ယူလာပါတယ်။ ကိုယ်က အရင်ဆုံး မှတ်စု ပါမပါ ကြည့်ရပါတယ်။ [[mark:draw-sig]] Go မှာလည်း ဒီအတိုင်းပါပဲ။
+      အလုပ် မအောင်မြင်နိုင်တဲ့ function က အဖြေနဲ့အတူ error ကို နောက်ဆုံး result အနေနဲ့ ပြန်ပေးပါတယ်။
+      error ဆိုတာ function က အလုပ် မပြီးမြောက်တဲ့အခါ အကြောင်းပြချက်နဲ့ ပြန်ပေးတဲ့ တန်ဖိုး တစ်ခုပါ။
+      [[mark:draw-read]] အလုပ် အဆင်ပြေရင်တော့ error နေရာမှာ nil ကို ပြန်ပေးပါတယ်။ nil ဆိုတာ ဘာကိုမှ
+      မညွှန်ရသေးတဲ့ အခြေအနေ ဖြစ်ပြီး၊ ဒီမှာတော့ မှတ်စု မပါဘူး၊ error မရှိဘူး လို့ ဆိုလိုတာပါ။
+    sources:
+      - {
+          title: "The Go Blog — Error handling and Go",
+          url: "https://go.dev/blog/error-handling-and-go",
+        }
+      - { title: "errors package", url: "https://pkg.go.dev/errors" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-note,
+          type: whiteboard.apply,
+          at: { mark: board-note },
+          open: true,
+          clear: true,
+          upsertIds: [n-title, n-rider-box, n-rider],
+        }
+      - {
+          id: draw-back,
+          type: whiteboard.apply,
+          at: { mark: draw-back },
+          upsertIds: [n-arrow-ok, n-ok-box, n-ok, n-arrow-err, n-err-box, n-err],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-sig,
+          type: whiteboard.apply,
+          at: { mark: draw-sig },
+          upsertIds: [n-sig, n-last],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-read,
+          type: whiteboard.apply,
+          at: { mark: draw-read },
+          upsertIds: [n-read, n-read-line],
+          drawMs: 1600,
+        }
+
+  - id: city-name
+    chapter: Error ပြန်ပေးတဲ့ function
+    narration: >-
+      [[mark:close-note]] ဒါဆို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:open-parcel]] parcel ဖိုင်မှာ ပါဆယ်ရဲ့ struct နဲ့၊
+      [[mark:sel-cities]] ကိုယ်တို့ ပို့ပေးတဲ့ မြို့တွေကို code နဲ့ ရှာလို့ရတဲ့ map ရှိပြီးသားပါ။ [[mark:open-main-1]] main
+      ဖိုင်မှာ မြို့ code တစ်ခု ပေးရင် မြို့ရဲ့ မြန်မာ နာမည်ကို ပြန်ပေးမယ့် function တစ်ခု ရေးပါမယ်။
+      [[mark:type-city]] code က map ထဲမှာ မရှိရင်တော့ နာမည် အစား error ကို ပြန်ပေးပါမယ်။ map ထဲမှာ ရှိမရှိ
+      ok နဲ့ မေးတာကတော့ map lesson မှာ မြင်ခဲ့တဲ့ ပုံစံပါပဲ။ [[mark:sel-results]] result နေရာကို ကြည့်ပါ။ string
+      နဲ့ error နှစ်ခု ပြန်ပေးမယ်လို့ ကတိပေးထားပါတယ်။ error ကို နောက်ဆုံး result အဖြစ် ထားတာ Go မှာ
+      အားလုံး လိုက်နာကြတဲ့ ထုံးစံ ဖြစ်ပြီး၊ error ကိုယ်တိုင်ကလည်း Go ထဲမှာ ပါပြီးသား type တစ်ခုပါ။
+      [[mark:sel-errorf]] map ထဲမှာ မတွေ့ရင် ဒီ line က စာသား အလွတ်နဲ့ error ကို ပြန်ပေးပါတယ်။ error ကို fmt
+      package ရဲ့ Errorf နဲ့ လုပ်ထားတာပါ။ Printf လိုပဲ နေရာလွတ် ထည့်လို့ရလို့ မှားနေတဲ့ code ကို quote
+      ထဲ ထည့်ပြီး error စာမှာ ပြပေးပါတယ်။ [[mark:new-note]] စာ ပြောင်းစရာ မလိုတဲ့ error ဆိုရင်တော့ errors package
+      ရဲ့ New နဲ့ လုပ်လို့လည်း ရပါတယ်။ error စာကို English စာလုံး အသေးနဲ့ တိုတို ရေးတာကလည်း ထုံးစံပါ၊
+      ဘာကြောင့်လဲဆိုတော့ တခြား စာတွေရဲ့ နောက်မှာ ဆက်ပြီး ပေါ်လေ့ရှိလို့ပါ။ [[mark:sel-nil]] တွေ့ရင်တော့
+      နာမည်နဲ့ nil ကို ပြန်ပေးပါတယ်၊ error မရှိဘူး ဆိုတဲ့ သဘောပါ။
+    sources:
+      - {
+          title: "The Go Blog — Error handling and Go",
+          url: "https://go.dev/blog/error-handling-and-go",
+        }
+      - {
+          title: "Go Code Review Comments — Error Strings",
+          url: "https://go.dev/wiki/CodeReviewComments",
+        }
+    actions:
+      - {
+          id: close-note,
+          type: whiteboard.apply,
+          at: { mark: close-note },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-parcel, type: workspace.openFile, at: { mark: open-parcel }, path: parcel.go }
+      - id: sel-cities
+        type: editor.select
+        at: { mark: sel-cities }
+        target: { file: parcel.go, text: "var cityNames = map[string]string{", occurrence: 1 }
+      - { id: open-main-1, type: workspace.openFile, at: { mark: open-main-1 }, path: main.go }
+      - id: type-city
+        type: editor.type
+        at: { mark: type-city }
+        target: { file: main.go, after: "\t\"fmt\"\n)\n", occurrence: 1 }
+        text: "\n// cityName gives a city's Burmese name, or an error for an unknown code.\nfunc cityName(code string) (string, error) {\n\tname, ok := cityNames[code]\n\tif !ok {\n\t\treturn \"\", fmt.Errorf(\"unknown city %q\", code)\n\t}\n\treturn name, nil\n}\n"
+        cadence: line-by-line
+      - id: sel-results
+        type: editor.select
+        at: { mark: sel-results }
+        target: { file: main.go, text: "(string, error)", occurrence: 1 }
+      - id: sel-errorf
+        type: editor.select
+        at: { mark: sel-errorf }
+        target:
+          { file: main.go, text: 'return "", fmt.Errorf("unknown city %q", code)', occurrence: 1 }
+      - id: sel-nil
+        type: editor.select
+        at: { mark: sel-nil }
+        target: { file: main.go, text: "return name, nil", occurrence: 1 }
+
+  - id: loop
+    narration: >-
+      [[mark:type-loop]] main ထဲမှာတော့ မန္တလေးရဲ့ code နဲ့၊ ဝန်ထမ်း မှားရိုက်မိတဲ့ code တစ်ခုကို loop နဲ့
+      လျှောက်ပြီး ဒီ function ကို ခေါ်ပါမယ်။ result နှစ်ခု ပြန်လာလို့ နာမည်နဲ့ err ဆိုတဲ့ box နှစ်ခုနဲ့
+      လက်ခံပါတယ်။ [[mark:sel-check]] လက်ခံပြီးတာနဲ့ ဒီ if က error ရှိမရှိ ချက်ချင်း စစ်ပါတယ်၊ rider ရဲ့
+      မှတ်စုကို အရင် ဖတ်တာနဲ့ အတူတူပါ။ error ရှိရင် print ထုတ်ပြီး၊ ဒီ code အတွက် ရှေ့ မဆက်တော့ဘဲ
+      နောက် အခေါက်ကို ကျော်သွားပါတယ်။ error မရှိမှသာ code နဲ့ မြို့ နာမည်ကို ထုတ်ပြပါတယ်။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Blog — Error handling and Go",
+          url: "https://go.dev/blog/error-handling-and-go",
+        }
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tfor _, code := range []string{\"MDY\", \"MDX\"} {\n\t\tname, err := cityName(code)\n\t\tif err != nil {\n\t\t\tfmt.Println(\"error:\", err)\n\t\t\tcontinue\n\t\t}\n\t\tfmt.Println(code, name)\n\t}\n"
+        cadence: line-by-line
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target:
+          {
+            file: main.go,
+            text: "if err != nil {\n\t\t\tfmt.Println(\"error:\", err)\n\t\t\tcontinue\n\t\t}",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "unknown city",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-city,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "func cityName(code string) (string, error) {",
+        }
+
+  - id: read-1
+    chapter: Error က တန်ဖိုး တစ်ခုပဲ
+    narration: >-
+      [[mark:point-mdy]] ပထမ စာကြောင်းမှာ မန္တလေးရဲ့ code နဲ့ မြို့ နာမည် ထွက်လာပါတယ်။ map ထဲမှာ တွေ့လို့
+      error က nil ဖြစ်ခဲ့တာပါ။ [[mark:point-mdx]] ဒုတိယ စာကြောင်းကတော့ ကိုယ်တိုင် ရေးထားတဲ့ error ပါ။ ဒီ code
+      နဲ့ မြို့ မရှိဘူး လို့ ပြောပြီး၊ မှားရိုက်ထားတဲ့ code ကိုလည်း quote ထဲမှာ ပြပေးပါတယ်။ သတိထားရမှာက
+      program က panic မဖြစ်ဘဲ အဆုံးထိ run သွားတာပါ။ error က program ကို ရပ်စေတာ မဟုတ်ပါဘူး၊ ကိုယ်က
+      လက်ခံပြီး ဘာဆက်လုပ်မလဲ ဆုံးဖြတ်ရတဲ့ တန်ဖိုး တစ်ခုပဲ ဖြစ်ပါတယ်။
+    sources:
+      - { title: "fmt package — Errorf", url: "https://pkg.go.dev/fmt#Errorf" }
+    actions:
+      - {
+          id: point-mdy,
+          type: console.point,
+          at: { mark: point-mdy },
+          target: { text: "MDY မန္တလေး" },
+        }
+      - {
+          id: point-mdx,
+          type: console.point,
+          at: { mark: point-mdx },
+          target: { text: 'error: unknown city "MDX"' },
+        }
+
+  - id: atoi
+    chapter: မြန်မာ ဂဏန်းနဲ့ strconv
+    narration: >-
+      [[mark:collapse-1]] နောက်ထပ် ပြဿနာ တစ်ခုကို ကြည့်ရအောင်။ ကောင်တာက ဝန်ထမ်းက ပါဆယ် တစ်ခုရဲ့
+      အိမ်ရောက်ငွေချေ ပမာဏကို မြန်မာ ဂဏန်းနဲ့ တစ်သောင်းငါးထောင် လို့ ရိုက်ထည့်လိုက်တယ် ဆိုပါစို့။
+      အိမ်ရောက်ငွေချေ ဆိုတာ လက်ခံသူက rider ကို ပစ္စည်းဖိုး ပေးရတဲ့ ငွေပါ။ ရိုက်ထည့်တဲ့ အရာက အမြဲ စာသား
+      ဖြစ်လို့ int ပြောင်းဖို့ လိုပါတယ်။ [[mark:type-strconv]] စာသားနဲ့ ဂဏန်းကြား ပြောင်းပေးတဲ့ strconv package
+      ကို import block ထဲ ထည့်ပါမယ်။ [[mark:type-atoi]] အဲဒီ package ရဲ့ Atoi က စာသား တစ်ခုကို ယူပြီး int နဲ့
+      error နှစ်ခု ပြန်ပေးပါတယ်။ ဒီ တစ်ခါမှာ ဘာတွေ ပြန်ပေးလဲ သိရအောင် result နှစ်ခုလုံးကို print ထုတ်
+      ကြည့်ပါမယ်။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - { title: "strconv package — Atoi", url: "https://pkg.go.dev/strconv#Atoi" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-strconv
+        type: editor.type
+        at: { mark: type-strconv }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"strconv\"\n"
+      - id: type-atoi
+        type: editor.type
+        at: { mark: type-atoi }
+        target: { file: main.go, after: "\t\tfmt.Println(code, name)\n\t}\n", occurrence: 1 }
+        text: "\tinput := \"၁၅၀၀၀\"\n\tcod, err := strconv.Atoi(input)\n\tfmt.Println(cod, err)\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "invalid syntax",
+          timeoutMs: 8000,
+        }
+
+  - id: read-2
+    chapter: Error ကို မစစ်ရင်
+    narration: >-
+      [[mark:point-atoi]] တတိယ စာကြောင်းကို ကြည့်ပါ။ ရှေ့ဆုံးမှာ သုည၊ နောက်မှာ error စာ ပါပါတယ်။ ဒီ error က
+      ပြောနေတာကတော့ strconv က မြန်မာ ဂဏန်းကို ဂဏန်းအဖြစ် မဖတ်တတ်ဘူး ဆိုတာပါ။ Atoi က English
+      ဂဏန်းတွေကိုပဲ ဖတ်ပါတယ်။ [[mark:zero]] ဒါဆို သုည က ဘာလဲ။ error ပြန်ပေးတဲ့အခါ ကျန်တဲ့ result က int ရဲ့
+      zero value ဖြစ်တဲ့ သုည ပါ၊ တကယ့် အဖြေ မဟုတ်ပါဘူး။ [[mark:board-zero]] error ကို မစစ်ဘဲ ဒီ သုည ကို
+      ယုံလိုက်ရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။ [[mark:draw-ignore]] error ကို underscore နဲ့ ပစ်ပြီး ဂဏန်းကိုပဲ
+      ယူလိုက်ရင်၊ rider က လက်ခံသူဆီကနေ သုည ကျပ် ကောက်ရမယ် ဆိုပြီး ထွက်သွားမှာပါ။ [[mark:draw-silent]]
+      ပိုဆိုးတာက panic လည်း မဖြစ်၊ compile error လည်း မရှိလို့ ဘယ်သူမှ သတိမထားမိတာပါ။ ကျပ် တစ်သောင်းငါးထောင်
+      တိတ်တိတ်လေး ဆုံးရှုံးသွားမှာပါ။ [[mark:draw-rule]] ဒါကြောင့် စည်းကမ်းက ရှင်းပါတယ်။ error ကို အရင် စစ်ပါ၊
+      error က nil ဖြစ်မှသာ ကျန်တဲ့ result ကို သုံးပါ။
+    sources:
+      - { title: "strconv package — Atoi", url: "https://pkg.go.dev/strconv#Atoi" }
+      - {
+          title: "Go Code Review Comments — Handle Errors",
+          url: "https://go.dev/wiki/CodeReviewComments",
+        }
+    actions:
+      - {
+          id: point-atoi,
+          type: console.point,
+          at: { mark: point-atoi },
+          target: { text: "0 strconv.Atoi: parsing" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-zero } }
+      - {
+          id: board-zero,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+        }
+      - {
+          id: draw-ignore,
+          type: whiteboard.apply,
+          at: { mark: draw-ignore },
+          upsertIds: [z-code-box, z-code, z-arrow, z-cod-box, z-cod],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-silent,
+          type: whiteboard.apply,
+          at: { mark: draw-silent },
+          upsertIds: [z-silent],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [z-rule-box, z-rule],
+          drawMs: 1500,
+        }
+
+  - id: digits
+    chapter: ကိုယ်ပိုင် error ပြန်ပေးတာ
+    narration: >-
+      [[mark:close-zero]] ဒါဆို Atoi ဖတ်မရတဲ့အခါ မြန်မာ ဂဏန်းကို ကိုယ်တိုင် ဖတ်ပေးရအောင်။ standard library
+      lesson မှာ ရေးခဲ့တဲ့ function က ဂဏန်း မဟုတ်တာ တွေ့ရင် အနှုတ် တစ် ကို ပြန်ပေးခဲ့ပါတယ်။ ဒါပေမဲ့ အနှုတ်
+      တစ် ဆိုတာလည်း ဂဏန်း တစ်ခုပဲ ဖြစ်လို့ ပေါင်းမိ နှုတ်မိရင် ဘယ်သူမှ မသိနိုင်ပါဘူး။ [[mark:open-digits]]
+      ဒါကြောင့် digits ဖိုင်ထဲမှာ error ပြန်ပေးတဲ့ ပုံစံနဲ့ ပြန်ရေးပါမယ်။ [[mark:type-digits]] ဒီဖိုင်မှာ package
+      main တစ်ကြောင်းပဲ ရှိသေးလို့၊ error စာ လုပ်ဖို့ fmt ကို import လုပ်ပြီးမှ function ကို ရေးပါတယ်။
+      စာလုံး တစ်လုံးချင်း လျှောက်ပြီး ဂဏန်း တစ်လုံးချင်း ပေါင်းတဲ့ နည်းကတော့ အရင်အတိုင်းပါပဲ။
+      [[mark:sel-digit-err]] မြန်မာ ဂဏန်း မဟုတ်တဲ့ စာလုံး တွေ့ရင်တော့ အနှုတ် တစ် အစား သုညနဲ့ error ကို
+      ပြန်ပေးပါတယ်။ error စာထဲမှာ ဘယ် စာလုံးကြောင့်လဲ ဆိုတာကိုလည်း ထည့်ပေးထားပါတယ်။
+      [[mark:sel-digit-ok]] အဆုံးထိ ဖတ်ပြီးရင်တော့ ဂဏန်းနဲ့ nil ကို ပြန်ပေးပါတယ်။
+    sources:
+      - {
+          title: "The Go Blog — Error handling and Go",
+          url: "https://go.dev/blog/error-handling-and-go",
+        }
+      - { title: "fmt package — Errorf", url: "https://pkg.go.dev/fmt#Errorf" }
+    actions:
+      - {
+          id: close-zero,
+          type: whiteboard.apply,
+          at: { mark: close-zero },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-digits, type: workspace.openFile, at: { mark: open-digits }, path: digits.go }
+      - id: type-digits
+        type: editor.type
+        at: { mark: type-digits }
+        target: { file: digits.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport \"fmt\"\n\n// fromMyanmarDigits reads Myanmar digits: \"၁၅၀၀\" → 1500.\nfunc fromMyanmarDigits(s string) (int, error) {\n\tn := 0\n\tfor _, r := range s {\n\t\tif r < '၀' || r > '၉' {\n\t\t\treturn 0, fmt.Errorf(\"%q is not a Myanmar digit\", r)\n\t\t}\n\t\tn = n*10 + int(r-'၀')\n\t}\n\treturn n, nil\n}\n"
+        cadence: line-by-line
+      - id: sel-digit-err
+        type: editor.select
+        at: { mark: sel-digit-err }
+        target:
+          {
+            file: digits.go,
+            text: 'return 0, fmt.Errorf("%q is not a Myanmar digit", r)',
+            occurrence: 1,
+          }
+      - id: sel-digit-ok
+        type: editor.select
+        at: { mark: sel-digit-ok }
+        target: { file: digits.go, text: "return n, nil", occurrence: 1 }
+
+  - id: fallback
+    narration: >-
+      [[mark:open-main-2]] main ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-fallback]] Atoi က error ပေးရင် အဲဒီ input ကို
+      ကိုယ့် function နဲ့ ထပ်ဖတ်ကြည့်ပါမယ်။ ဒီ line မှာ box အသစ် မလုပ်ဘဲ၊ ရှိပြီးသား box နှစ်ခုထဲကို ထည့်ရုံပဲ
+      ထည့်ထားတာ သတိထားပါ။ [[mark:type-check]] ပြီးတော့ error ကို ထပ်စစ်ပါတယ်။ ဒီ တစ်ခါ error ရှိနေသေးရင်
+      print ထုတ်ပြီး main ကနေ ချက်ချင်း ပြန်ထွက်ပါတယ်။ error ကို အရင် ကိုင်တွယ်ပြီး စောစော ပြန်ထွက်တော့၊
+      အောက်ဆုံး line ကို ရောက်လာတာနဲ့ ငွေ ပမာဏက မှန်တဲ့ ဂဏန်း ဖြစ်ကြောင်း သေချာပါတယ်။ [[mark:run-3]] ကဲ၊
+      run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Go Code Review Comments — Indent Error Flow",
+          url: "https://go.dev/wiki/CodeReviewComments",
+        }
+    actions:
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-fallback
+        type: editor.type
+        at: { mark: type-fallback }
+        target: { file: main.go, after: "\tfmt.Println(cod, err)\n", occurrence: 1 }
+        text: "\tif err != nil {\n\t\tcod, err = fromMyanmarDigits(input)\n\t}\n"
+        cadence: line-by-line
+      - id: type-check
+        type: editor.type
+        at: { mark: type-check }
+        target:
+          { file: main.go, after: "\t\tcod, err = fromMyanmarDigits(input)\n\t}\n", occurrence: 1 }
+        text: "\tif err != nil {\n\t\tfmt.Println(\"error:\", err)\n\t\treturn\n\t}\n\tfmt.Println(cod, \"ကျပ်\")\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "15000 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-digits,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: digits.go,
+          contains: "func fromMyanmarDigits(s string) (int, error) {",
+        }
+      - {
+          id: expect-file-return,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tfmt.Println(\"error:\", err)\n\t\treturn\n",
+        }
+
+  - id: read-3
+    chapter: Error နဲ့ panic
+    narration: >-
+      [[mark:point-cod]] နောက်ဆုံး စာကြောင်းမှာ တစ်သောင်းငါးထောင် ကျပ် ထွက်လာပါပြီ။ Atoi မဖတ်တတ်တဲ့
+      input ကို ကိုယ့် function က ဖတ်ပေးလိုက်တာပါ။ error နှစ်ခု ကြုံခဲ့ပေမဲ့ program က တစ်ခါမှ မရပ်ဘဲ၊
+      ပြဿနာ တစ်ခုချင်းကို ကိုင်တွယ်သွားပါတယ်။ [[mark:board-panic]] ဒါဆို error နဲ့ panic ဘယ်လို ကွာလဲ။
+      [[mark:draw-error-side]] error ကတော့ ကြိုသိထားလို့ရတဲ့ ပြဿနာပါ။ code မှားရိုက်တာ၊ ဂဏန်း ပုံစံ မှားတာ လို
+      အရာတွေကို function က တန်ဖိုး တစ်ခု အနေနဲ့ ပြန်ပြောပြီး၊ ခေါ်တဲ့သူက ဘာဆက်လုပ်မလဲ ဆုံးဖြတ်ပါတယ်။
+      rider ရဲ့ မှတ်စုလိုပါပဲ။ [[mark:draw-panic-side]] panic ကတော့ bug ကြောင့် ဖြစ်တာပါ။ slice ရဲ့ အပြင်က
+      index ကို ယူတာ၊ any ထဲက type ကို မှားယူတာ လို code ထဲမှာ ရေးမှားထားတဲ့ နေရာကြောင့် program
+      တစ်ခုလုံး ရပ်သွားတာပါ။ လမ်းမှာ ဆိုင်ကယ် ပျက်သွားတာနဲ့ တူပါတယ်။ ဒါကြောင့် ကြိုမြင်နိုင်တဲ့ ပြဿနာ
+      အတွက် panic ကို မသုံးဘဲ error ကို ပြန်ပေးပါ။
+    sources:
+      - { title: "Effective Go — Errors", url: "https://go.dev/doc/effective_go#errors" }
+      - {
+          title: "Go Code Review Comments — Don't Panic",
+          url: "https://go.dev/wiki/CodeReviewComments",
+        }
+    actions:
+      - {
+          id: point-cod,
+          type: console.point,
+          at: { mark: point-cod },
+          target: { text: "15000 ကျပ်" },
+        }
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-panic } }
+      - {
+          id: board-panic,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-error-side,
+          type: whiteboard.apply,
+          at: { mark: draw-error-side },
+          upsertIds: [p-e-box, p-e-name, p-e1, p-e2, p-e3, p-e4],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-panic-side,
+          type: whiteboard.apply,
+          at: { mark: draw-panic-side },
+          upsertIds: [p-p-box, p-p-name, p-p1, p-p2, p-p3, p-p4],
+          drawMs: 2600,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီ တစ်ခါ ဝန်ထမ်းက တစ်ထောင့်ငါးရာ လို့ ရိုက်တဲ့အခါ မြန်မာ သုည အစား
+      ဗျည်း ဝ ကို နှစ်လုံး ရိုက်မိတယ် ဆိုပါစို့။ ကျန်တဲ့ code အားလုံးကတော့ အတူတူပါပဲ။ [[mark:quiz-options]] ဒါဆို
+      နောက်ဆုံး စာကြောင်းက တစ်ထောင့်တစ်ရာ့တစ်ဆယ့်ငါး ကျပ် ဖြစ်မလား၊ ဝ က မြန်မာ ဂဏန်း မဟုတ်ဘူး ဆိုတဲ့
+      error ဖြစ်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ error ပါ။
+      ဘာကြောင့်လဲဆိုတော့ ကိုယ့် function က စာလုံးတိုင်းကို ဂဏန်း ဟုတ်မဟုတ် စစ်ပြီး၊ ဝ ကို တွေ့တာနဲ့ error
+      ကို ပြန်ပေးလို့ပါ။ main က အဲဒီ error ကို စစ်ပြီး print ထုတ်ပြီး ပြန်ထွက်သွားလို့၊ ကျပ် ပါတဲ့ စာကြောင်းကို
+      ဘယ်တော့မှ မရောက်ပါဘူး။ ငွေ မှားကောက်မယ့် အစား ပြဿနာကို ချက်ချင်း မြင်ရတာပါ။
+    sources:
+      - {
+          title: "The Go Blog — Error handling and Go",
+          url: "https://go.dev/blog/error-handling-and-go",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code-box, q-code, q-note],
+        }
+      - {
+          id: quiz-options,
+          type: whiteboard.apply,
+          at: { mark: quiz-options },
+          upsertIds: [q-a, q-b],
+          drawMs: 1500,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-results]] Go မှာ error က panic မဟုတ်ဘဲ၊ function က
+      နောက်ဆုံး result အနေနဲ့ ပြန်ပေးတဲ့ သာမန် တန်ဖိုး တစ်ခုပါ။ အဆင်ပြေရင် nil ပါ။ [[mark:recap-check]]
+      ခေါ်ပြီးတာနဲ့ error ကို အရင် စစ်ပြီး၊ ရှိရင် ကိုင်တွယ်ပြီး စောစော ပြန်ထွက်ပါ။ [[mark:recap-zero]] error
+      ရှိနေချိန်မှာ ကျန်တဲ့ result က zero value ပဲ ဖြစ်လို့ မသုံးပါနဲ့။ နောက် lesson မှာတော့ error ထဲကို
+      အချက်အလက် ပိုထည့်ဖို့ error ကို ထုပ်တာနဲ့၊ ကိုယ်ပိုင် error type တွေ အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Blog — Error handling and Go",
+          url: "https://go.dev/blog/error-handling-and-go",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-results
+        type: editor.select
+        at: { mark: recap-results }
+        target: { file: main.go, text: "(string, error)", occurrence: 1 }
+      - id: recap-check
+        type: editor.select
+        at: { mark: recap-check }
+        target:
+          {
+            file: main.go,
+            text: "if err != nil {\n\t\tfmt.Println(\"error:\", err)\n\t\treturn\n\t}",
+            occurrence: 1,
+          }
+      - id: recap-zero
+        type: editor.select
+        at: { mark: recap-zero }
+        target: { file: main.go, text: "cod, err := strconv.Atoi(input)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
