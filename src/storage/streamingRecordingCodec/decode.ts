@@ -21,6 +21,7 @@ import {
 } from "../../core/src/machine/recordingAssembly";
 import {
   decodeRecords,
+  chargeInflationBudget,
   createInflationBudget,
   type InflationBudget,
   decodeWorkspaceAssetPayload,
@@ -103,7 +104,7 @@ interface DecodedStream {
   /** The header's metadata. */
   readonly meta: RecordingStreamMeta;
   readonly formatVersion: number;
-  /** MAX_INFLATED_SEGMENT_BYTES bounds each segment; this bounds their sum. */
+  /** MAX_INFLATED_SEGMENT_BYTES bounds each segment; this bounds what the stream decodes to. */
   readonly budget: InflationBudget;
   /** Decoded records per track, each in stream (timeline) order. */
   readonly records: RecordingTracks;
@@ -128,11 +129,18 @@ interface DecodedStream {
   maxSegmentTimeMs: number;
 }
 
-function createDecodedStream(meta: RecordingStreamMeta, formatVersion: number): DecodedStream {
+function createDecodedStream(
+  meta: RecordingStreamMeta,
+  formatVersion: number,
+  headerDecodedCost: number,
+): DecodedStream {
+  // The header's metadata is decoded like any segment's records, so it spends the same budget.
+  const budget = createInflationBudget();
+  chargeInflationBudget(budget, headerDecodedCost);
   return {
     meta,
     formatVersion,
-    budget: createInflationBudget(),
+    budget,
     records: createEmptyRecordingTracks(),
     workspaceAssets: [],
     workspaceAssetIds: new Set(),
@@ -477,8 +485,8 @@ export function decodeRecordingStream(bytes: Uint8Array): DecodedRecording {
   if (bytes.byteLength > MAX_STREAM_BYTES) {
     throw new Error("Invalid SCR3 stream: recording exceeds the size limit");
   }
-  const { meta, headerEnd, formatVersion } = parseHeader(bytes);
-  const stream = createDecodedStream(meta, formatVersion);
+  const { meta, headerEnd, formatVersion, decodedCost } = parseHeader(bytes);
+  const stream = createDecodedStream(meta, formatVersion, decodedCost);
   const progress = ingestSegmentRegion(
     stream,
     bytes,
@@ -616,8 +624,8 @@ export function createStreamingRecordingReader(): StreamingRecordingReader {
     const metaEnd = HEADER_PREFIX_SIZE + metaLength;
     if (metaEnd > retainedLength) return; // header not fully downloaded yet
 
-    const { meta, formatVersion } = parseHeader(buffer.subarray(0, metaEnd));
-    stream = createDecodedStream(meta, formatVersion);
+    const { meta, formatVersion, decodedCost } = parseHeader(buffer.subarray(0, metaEnd));
+    stream = createDecodedStream(meta, formatVersion, decodedCost);
     deliveredDuration = meta.duration;
     discardPrefix(metaEnd);
   };

@@ -11,7 +11,7 @@ import { SEGMENT_KIND } from "./format";
 vi.mock("./format", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./format")>()),
   MAX_STREAM_BYTES: 64 * 1024,
-  MAX_INFLATED_STREAM_BYTES: 64 * 1024,
+  MAX_INFLATED_STREAM_BYTES: 256 * 1024,
   MAX_DECODED_RECORDS: 1_000,
 }));
 
@@ -65,13 +65,13 @@ describe("SCR3 writer read limits", () => {
     );
   });
 
-  it("refuses records that would inflate past a reader's stream budget", () => {
+  it("refuses records that would decode past a reader's stream budget", () => {
     const writer = createStreamingRecordingWriter();
     writer.writeHeader(meta);
-    // Repetitive text deflates to almost nothing, so only the inflated size can trip.
+    // Repetitive text deflates to almost nothing, so only the decoded size can trip.
     const chatEvent = (timestamp: number) => ({
       timestamp,
-      event: { k: "draft", text: "a".repeat(40 * 1024) },
+      event: { k: "draft", text: "a".repeat(160 * 1024) },
     });
     writer.appendEventSegment(SEGMENT_KIND.chat, [chatEvent(0)]);
 

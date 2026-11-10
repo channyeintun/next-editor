@@ -20,6 +20,7 @@ import { recordPerformanceMetric, startPerformanceSpan } from "../../utils/perfo
 import type { MediaSpan } from "../../core/src/utils/mediaSpans";
 import type { RecordingChapter } from "../../core/src/types";
 import { RECORDING_SCHEMA_VERSION } from "../../core/src/utils/deltaTypes";
+import { measureMsgpackDecodedCost, MSGPACK_MAX_DEPTH } from "./msgpackBounds";
 
 // ============================================================================
 // SCR3 — append-only, seekable, range-loadable recording stream container.
@@ -231,9 +232,10 @@ export function concatChunks(parts: Uint8Array[], totalLength?: number): Uint8Ar
  * msgpack's default maxDepth of 100 rejected any preview more than ~45 elements deep and
  * the take could not be saved. Browsers' HTML parsers stop nesting at 512 levels; this
  * covers that plus the record wrapper, and stays well below the few thousand levels at
- * which the recursive encoder would exhaust the call stack. The decoder has no depth limit.
+ * which the recursive encoder would exhaust the call stack. Readers refuse anything deeper
+ * (msgpackBounds.ts), so the two share one limit.
  */
-const MSGPACK_ENCODE_OPTIONS = { ignoreUndefined: true, maxDepth: 1_100 } as const;
+const MSGPACK_ENCODE_OPTIONS = { ignoreUndefined: true, maxDepth: MSGPACK_MAX_DEPTH } as const;
 
 const UNREADABLE_RECORDING_ERROR = "UnreadableRecordingError";
 
@@ -273,8 +275,8 @@ export function formatMiB(bytes: number): string {
 interface EncodedRecords {
   /** deflate(msgpack(records)), the segment payload. */
   payload: Uint8Array;
-  /** What the payload inflates back to; readers charge it to the stream's budget. */
-  inflatedByteLength: number;
+  /** What decoding the payload costs a reader, which charges it to the stream's budget. */
+  decodedCost: number;
 }
 
 export function encodeRecords(records: ReadonlyArray<unknown>): EncodedRecords {
@@ -293,7 +295,7 @@ export function encodeRecords(records: ReadonlyArray<unknown>): EncodedRecords {
       );
     }
     recordPerformanceMetric("recording.segment_compressed", payload.byteLength, "bytes");
-    return { payload, inflatedByteLength: packed.byteLength };
+    return { payload, decodedCost: measureMsgpackDecodedCost(packed) };
   } finally {
     endEncodeSpan();
   }
@@ -391,7 +393,7 @@ export function decodeWorkspaceAssetPayload(payload: Uint8Array): WorkspaceRecor
 }
 
 /**
- * Running total of inflated bytes for ONE stream.
+ * Running total of decoded bytes for ONE stream.
  *
  * MAX_INFLATED_SEGMENT_BYTES bounds a single segment, but nothing bounded the
  * sum: a stream may hold many segments, and the only stream-level limits are on
@@ -400,6 +402,14 @@ export function decodeWorkspaceAssetPayload(payload: Uint8Array): WorkspaceRecor
  * — inflated to roughly 1.9 GB of retained records, and the record cap never
  * tripped because each segment held a single huge record. Decoding starts
  * automatically from a `?url=` link, so that was a tab kill with no interaction.
+ *
+ * Inflated bytes alone still let a small stream decode to a huge heap, because
+ * what a record costs in memory is not what it costs on the wire. A one-byte
+ * empty array or map decodes to a whole JavaScript object, and a dedup marker a
+ * few bytes long is rebuilt into a full copy of earlier content. So the budget is
+ * charged with decoded cost: the inflated bytes plus a fixed cost per decoded
+ * value (msgpackBounds.ts), the header's metadata included, plus whatever the
+ * dedup markers expand to (workspaceEventDedup.ts, previewPatchDedup.ts).
  *
  * The ceiling is deliberately far above any real recording (8× a single
  * segment's cap) so this only ever fires on a stream engineered to blow memory.
@@ -414,6 +424,14 @@ export function createInflationBudget(
   maxBytes: number = MAX_INFLATED_STREAM_BYTES,
 ): InflationBudget {
   return { remaining: maxBytes };
+}
+
+/** Debits `bytes` of decoded cost, refusing the stream that has none left to spend. */
+export function chargeInflationBudget(budget: InflationBudget, bytes: number): void {
+  if (bytes > budget.remaining) {
+    throw new Error("Invalid SCR3 stream: stream exceeds the decoded size limit");
+  }
+  budget.remaining -= bytes;
 }
 
 function boundedUnzlib(payload: Uint8Array, maxBytes: number, label: string): Uint8Array {
@@ -447,8 +465,10 @@ export function decodeRecords<T>(payload: Uint8Array, budget?: InflationBudget):
     ? Math.min(MAX_INFLATED_SEGMENT_BYTES, budget.remaining)
     : MAX_INFLATED_SEGMENT_BYTES;
   const inflated = boundedUnzlib(payload, limit, budget ? "stream" : "segment");
+  // Measured, and charged, before the decoder allocates anything for the records.
+  const decodedCost = measureMsgpackDecodedCost(inflated);
   if (budget) {
-    budget.remaining -= inflated.byteLength;
+    chargeInflationBudget(budget, decodedCost);
   }
   const decoded = msgpackDecode(inflated);
   if (!Array.isArray(decoded)) return [];
@@ -475,7 +495,17 @@ export function readLastRecordTimestamp(records: ReadonlyArray<unknown>): number
 // Header / segment / footer primitives (the byte layout itself)
 // ----------------------------------------------------------------------------
 
+interface EncodedHeader {
+  chunk: Uint8Array;
+  /** What decoding the metadata costs a reader, which charges it to the stream's budget. */
+  decodedCost: number;
+}
+
 export function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint8Array {
+  return encodeHeader(meta, flags).chunk;
+}
+
+export function encodeHeader(meta: RecordingStreamMeta, flags: number): EncodedHeader {
   const packedMeta = msgpackEncode(meta, MSGPACK_ENCODE_OPTIONS);
   const metaBytes = zlibSync(packedMeta);
   if (
@@ -493,7 +523,7 @@ export function buildHeaderChunk(meta: RecordingStreamMeta, flags: number): Uint
   view.setUint16(6, flags, true);
   view.setUint32(8, metaBytes.length, true);
   chunk.set(metaBytes, HEADER_PREFIX_SIZE);
-  return chunk;
+  return { chunk, decodedCost: measureMsgpackDecodedCost(packedMeta) };
 }
 
 export function buildSegmentChunk(
@@ -588,6 +618,8 @@ export function parseHeader(bytes: Uint8Array): {
   meta: RecordingStreamMeta;
   headerEnd: number;
   formatVersion: number;
+  /** What decoding the metadata cost; the stream's budget starts this much lower. */
+  decodedCost: number;
 } {
   if (!isStreamingRecording(bytes)) {
     throw new Error("Invalid SCR3 stream: bad magic number");
@@ -606,13 +638,15 @@ export function parseHeader(bytes: Uint8Array): {
   if (metaLength === 0 || metaLength > MAX_COMPRESSED_META_BYTES || metaEnd > bytes.length) {
     throw new Error("Invalid SCR3 stream: bad header length");
   }
-  const meta = readRecordingStreamMeta(
-    msgpackDecode(
-      boundedUnzlib(bytes.subarray(metaStart, metaEnd), MAX_INFLATED_META_BYTES, "header"),
-    ),
-    "header metadata",
+  const inflated = boundedUnzlib(
+    bytes.subarray(metaStart, metaEnd),
+    MAX_INFLATED_META_BYTES,
+    "header",
   );
-  return { meta, headerEnd: metaEnd, formatVersion };
+  // Measured before the decoder allocates anything for the metadata.
+  const decodedCost = measureMsgpackDecodedCost(inflated);
+  const meta = readRecordingStreamMeta(msgpackDecode(inflated), "header metadata");
+  return { meta, headerEnd: metaEnd, formatVersion, decodedCost };
 }
 
 export function findFooterStart(bytes: Uint8Array, headerEnd: number): number | null {

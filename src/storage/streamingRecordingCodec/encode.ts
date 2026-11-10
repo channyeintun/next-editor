@@ -15,10 +15,10 @@ import {
 } from "../../shared/recordingMediaFiles";
 import {
   buildFooterChunk,
-  buildHeaderChunk,
   buildSegmentChunk,
   clampU32,
   concatChunks,
+  encodeHeader,
   encodeRecords,
   encodeWorkspaceAssetPayload,
   FLAG_HAS_AUDIO,
@@ -87,7 +87,7 @@ export interface StreamingRecordingWriter {
 
 /** What a reader charges one segment against the whole stream's limits. */
 interface SegmentReadCost {
-  inflatedByteLength: number;
+  decodedCost: number;
   recordCount: number;
 }
 
@@ -98,7 +98,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
   let pendingLength = 0;
   // Running totals of what a reader will charge this stream, so the writer refuses the
   // segment that would cross a read limit instead of writing a file nobody can open.
-  let inflatedByteLength = 0;
+  let decodedCost = 0;
   let recordCount = 0;
   let hasDrained = false;
   let headerWritten = false;
@@ -151,7 +151,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     cost: SegmentReadCost,
     options: StreamingSegmentAppendOptions,
   ): void => {
-    if (inflatedByteLength + cost.inflatedByteLength > MAX_INFLATED_STREAM_BYTES) {
+    if (decodedCost + cost.decodedCost > MAX_INFLATED_STREAM_BYTES) {
       refuseUnreadableRecording(
         `its records would exceed ${formatMiB(MAX_INFLATED_STREAM_BYTES)} once decoded`,
       );
@@ -179,7 +179,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     );
 
     index.push({ kind, byteOffset, firstTimestampMs: startTimeMs, firstFrameIndex });
-    inflatedByteLength += cost.inflatedByteLength;
+    decodedCost += cost.decodedCost;
     recordCount += cost.recordCount;
 
     if (kind === SEGMENT_KIND.frames) {
@@ -191,7 +191,9 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     writeHeader(meta) {
       if (headerWritten) throw new Error("SCR3 header already written");
       const flags = (meta.audioType ? FLAG_HAS_AUDIO : 0) | (meta.cameraType ? FLAG_HAS_CAMERA : 0);
-      pushChunk(buildHeaderChunk(meta, flags));
+      const header = encodeHeader(meta, flags);
+      pushChunk(header.chunk);
+      decodedCost += header.decodedCost;
       headerMeta = meta;
       stripWorkspaceEvents = createWorkspaceEventContentStripper(meta.workspaceSnapshot);
       headerWritten = true;
@@ -203,7 +205,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
       // are keyframe-bounded and range-loadable, so the carry must not cross a
       // segment boundary) — see framePreviewContentDedup.ts.
       const encoded = encodeRecords(stripFramePreviewContent(frames));
-      const cost = { inflatedByteLength: encoded.inflatedByteLength, recordCount: frames.length };
+      const cost = { decodedCost: encoded.decodedCost, recordCount: frames.length };
       appendSegment(SEGMENT_KIND.frames, encoded.payload, cost, {
         startTimeMs: options?.startTimeMs ?? frames[0].timestamp,
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(frames),
@@ -223,7 +225,7 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
             ? stripPreviewPatchAdds(records)
             : records;
       const encoded = encodeRecords(streamRecords);
-      const cost = { inflatedByteLength: encoded.inflatedByteLength, recordCount: records.length };
+      const cost = { decodedCost: encoded.decodedCost, recordCount: records.length };
       appendSegment(kind, encoded.payload, cost, {
         startTimeMs: options?.startTimeMs ?? readRecordTimestamp(records[0]),
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(records),
@@ -234,8 +236,8 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     },
     appendWorkspaceAssetSegment(asset, options) {
       ensureWritable();
-      // Raw bytes: a reader inflates nothing and counts the asset as one record.
-      const cost = { inflatedByteLength: 0, recordCount: 1 };
+      // Raw bytes: a reader decodes nothing and counts the asset as one record.
+      const cost = { decodedCost: 0, recordCount: 1 };
       appendSegment(SEGMENT_KIND.workspaceAsset, encodeWorkspaceAssetPayload(asset), cost, {
         startTimeMs: options?.startTimeMs ?? 0,
         endTimeMs: options?.endTimeMs ?? options?.startTimeMs ?? 0,
