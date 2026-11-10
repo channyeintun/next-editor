@@ -52,6 +52,20 @@ describe("shouldSendPostHogEvent", () => {
       blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
       recordBody: false,
       recordHeaders: false,
+      maskCapturedNetworkRequestFn: expect.any(Function),
+    });
+  });
+
+  it("records replay URLs without their query or fragment", () => {
+    const mask = POSTHOG_REPLAY_PRIVACY_OPTIONS.session_recording.maskCapturedNetworkRequestFn;
+    const timing = { entryType: "resource", startTime: 1, duration: 5 };
+
+    expect(
+      mask({ ...timing, name: "https://next-editor.example.com/code?invite=SENTINEL#SENTINEL" }),
+    ).toEqual({ ...timing, name: "https://next-editor.example.com/code" });
+    expect(mask({ ...timing, name: "https://next-editor.example.com/learn" })).toEqual({
+      ...timing,
+      name: "https://next-editor.example.com/learn",
     });
   });
 
@@ -182,6 +196,42 @@ describe("shouldSendPostHogEvent", () => {
         },
       }),
     ).toBeNull();
+  });
+
+  it("keeps analytics events but cuts the query and fragment off every URL in them", () => {
+    const secret = "SENTINEL_INVITE_TOKEN";
+    const sanitized = sanitizePostHogEvent({
+      event: "$pageview",
+      properties: {
+        $current_url: `https://next-editor.example.com/code?invite=${secret}#${secret}`,
+        $session_entry_url: `https://next-editor.example.com/code?invite=${secret}`,
+        $pathname: "/code",
+        $referrer: "$direct",
+        $set: { $current_url: `https://next-editor.example.com/code?invite=${secret}` },
+        title: "Next Editor",
+      },
+      $set_once: {
+        $initial_current_url: `https://next-editor.example.com/code?invite=${secret}`,
+        $initial_referrer: `https://referrer.example/search?q=${secret}`,
+      },
+    });
+
+    expect(JSON.stringify(sanitized)).not.toContain(secret);
+    expect(sanitized).toEqual({
+      event: "$pageview",
+      properties: {
+        $current_url: "https://next-editor.example.com/code",
+        $session_entry_url: "https://next-editor.example.com/code",
+        $pathname: "/code",
+        $referrer: "$direct",
+        $set: { $current_url: "https://next-editor.example.com/code" },
+        title: "Next Editor",
+      },
+      $set_once: {
+        $initial_current_url: "https://next-editor.example.com/code",
+        $initial_referrer: "https://referrer.example/search",
+      },
+    });
   });
 
   it("does not filter non-exception analytics events", () => {

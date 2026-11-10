@@ -24,6 +24,12 @@ export const POSTHOG_REPLAY_PRIVACY_OPTIONS = {
     blockSelector: POSTHOG_SENSITIVE_SURFACE_SELECTOR,
     recordBody: false,
     recordHeaders: false,
+    // Replay records the page URL (and each captured request's) through this
+    // hook, so it loses its query and fragment there, as event URLs do.
+    maskCapturedNetworkRequestFn: (request) => ({
+      ...request,
+      name: withoutUrlQuery(request.name),
+    }),
   },
 } satisfies Partial<PostHogConfig>;
 
@@ -37,7 +43,7 @@ export type PostHogEvent = {
 const SAFE_EXCEPTION_TYPE_PATTERN = /^[A-Za-z_$][\w$.-]{0,127}$/;
 const SENSITIVE_EXCEPTION_PROPERTY_PATTERN =
   /(?:breadcrumb|console|command|message|error|stack|fingerprint|token|secret|authorization|cookie|credential|password|headers?|request[_-]?(?:body|data)|response[_-]?(?:body|data)|source[_-]?(?:code|line))/i;
-const URL_EXCEPTION_PROPERTY_PATTERN = /(?:url|uri|href|referrer|pathname)$/i;
+const URL_PROPERTY_PATTERN = /(?:url|uri|href|referrer|pathname)$/i;
 
 function containsWebContainerPreviewOrigin(value: unknown, seen = new Set<object>()): boolean {
   if (typeof value === "string") {
@@ -84,6 +90,36 @@ function sanitizeTelemetryUrl(value: unknown): string | undefined {
   } catch {
     return value.replace(/[?#].*$/, "").slice(0, 1024);
   }
+}
+
+/**
+ * A URL with its query and fragment cut off; any other string is returned as
+ * is (PostHog writes "$direct" where there is no referrer). Queries carry
+ * authored values and credentials: a lesson URL in ?url=, a room invitation's
+ * bearer token in ?invite=, which docs/observability-privacy.md classes as
+ * Secret. Paths stay for navigation analytics.
+ */
+export function withoutUrlQuery(value: string): string {
+  const end = value.search(/[?#]/);
+  return end === -1 ? value : value.slice(0, end);
+}
+
+function isPropertyRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** The properties with every URL-valued one (and those in a nested $set/$set_once) query-free. */
+function withoutUrlQueries(properties: Record<string, unknown>): Record<string, unknown> {
+  const stripped: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    stripped[key] =
+      (key === "$set" || key === "$set_once") && isPropertyRecord(value)
+        ? withoutUrlQueries(value)
+        : typeof value === "string" && URL_PROPERTY_PATTERN.test(key)
+          ? withoutUrlQuery(value)
+          : value;
+  }
+  return stripped;
 }
 
 function sanitizeExceptionFrame(value: unknown): Record<string, unknown> | null {
@@ -146,6 +182,12 @@ function sanitizeExceptionList(value: unknown): Record<string, unknown>[] {
  * breadcrumbs, commands, and request/response bodies from application errors.
  * This is separate from session-replay DOM blocking: exception autocapture does
  * not honor `blockSelector` for Error objects.
+ *
+ * Every other event keeps its properties, but no URL in them keeps a query or
+ * fragment. PostHog copies location.href into $current_url, into the session's
+ * $session_entry_url (sent with every later event of the session, after the
+ * page has dropped the query) and into first-visit person properties, so an
+ * invitee's /code?invite=<token> would otherwise reach the analytics project.
  */
 export function sanitizePostHogEvent<T extends PostHogEvent>(
   event: T | null | undefined,
@@ -155,7 +197,11 @@ export function sanitizePostHogEvent<T extends PostHogEvent>(
   }
 
   if (event.event !== "$exception") {
-    return event;
+    const sanitized = { ...event };
+    if (event.properties) sanitized.properties = withoutUrlQueries(event.properties);
+    if (event.$set) sanitized.$set = withoutUrlQueries(event.$set);
+    if (event.$set_once) sanitized.$set_once = withoutUrlQueries(event.$set_once);
+    return sanitized;
   }
 
   const properties = { ...event.properties };
@@ -164,7 +210,7 @@ export function sanitizePostHogEvent<T extends PostHogEvent>(
   for (const key of Object.keys(properties)) {
     if (SENSITIVE_EXCEPTION_PROPERTY_PATTERN.test(key)) {
       delete properties[key];
-    } else if (URL_EXCEPTION_PROPERTY_PATTERN.test(key)) {
+    } else if (URL_PROPERTY_PATTERN.test(key)) {
       properties[key] = sanitizeTelemetryUrl(properties[key]);
     }
   }
