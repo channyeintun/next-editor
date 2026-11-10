@@ -30,23 +30,22 @@ import {
 
 // The user's stored AthanLab key on its way to AthanLab: the checks a route
 // clears before sending it (storedKeyAccess), never sending a key AthanLab
-// rejected again (invalidateStoredKey), and the per-user first-contact lease
-// that keeps concurrent requests carrying a revoked key from each costing a
-// failed authentication (firstContact).
+// rejected again (invalidateStoredKey), and the per-user key lease every call
+// with it is made under, which keeps concurrent requests carrying a revoked
+// key from each costing a failed authentication (withKeyLease).
 
 export type SignedInContext = Context<SignedInEnv>;
 
 export const PROVIDER: CredentialProvider = "athanlab";
 
-// The first-contact lease (see firstContact). A holder releases it as soon as
-// AthanLab has answered; one that never does (a stalled or cancelled request)
-// frees the key once the lease lapses — LEASE_MARGIN_MS past the timeout of
-// the one attempt it guards, so a live first attempt is never outlived by its
-// lease. Others re-check every FIRST_CONTACT_POLL_MS for up to
-// FIRST_CONTACT_WAIT_MS, then give up.
+// The key lease (see withKeyLease). A holder releases it as soon as AthanLab
+// has answered; one that never does (a stalled or cancelled request) frees the
+// key once the lease lapses — LEASE_MARGIN_MS past the timeout of the attempt
+// it guards, so a live attempt is never outlived by its lease. Others re-check
+// every LEASE_POLL_MS for up to LEASE_WAIT_MS, then give up.
 const LEASE_MARGIN_MS = 5_000;
-const FIRST_CONTACT_POLL_MS = 200;
-const FIRST_CONTACT_WAIT_MS = 5_000;
+const LEASE_POLL_MS = 200;
+const LEASE_WAIT_MS = 5_000;
 const KEY_BUSY_RETRY_SECONDS = 2;
 
 const KEY_MISSING = "Connect your AthanLab API key first";
@@ -106,20 +105,20 @@ async function invalidateStoredKey(db: D1Database, key: StoredKey) {
 }
 
 /**
- * Wait for the first-contact lease on the stored key. Returns its token, or
- * the response when the key turned out invalid or gone while waiting (without
- * AthanLab hearing of it), when the lease stayed taken for
- * FIRST_CONTACT_WAIT_MS, or when D1 failed (the lease is a safety gate, so
- * that refuses the request rather than skipping it).
+ * Wait for the key lease on the stored key. Returns its token, or the response
+ * when the key turned out invalid, replaced or gone (without AthanLab hearing
+ * of it), when the lease stayed taken for LEASE_WAIT_MS, or when D1 failed
+ * (the lease is a safety gate, so that refuses the request rather than
+ * skipping it).
  */
-async function acquireFirstContact(
+async function acquireKeyLease(
   c: SignedInContext,
   key: StoredKey,
   leaseMs: number,
 ): Promise<string | Response> {
   const db = c.env.DB;
   const token = crypto.randomUUID();
-  const giveUpAt = Date.now() + FIRST_CONTACT_WAIT_MS;
+  const giveUpAt = Date.now() + LEASE_WAIT_MS;
   try {
     for (let waited = false; ; waited = true) {
       const now = Date.now();
@@ -129,7 +128,7 @@ async function acquireFirstContact(
         // breaker then speaks for AthanLab until the block ends.
         const { blockedUntil } = await readBreaker(db);
         if (blockedUntil <= Date.now()) return token;
-        await releaseFirstContact(db, key, token);
+        await releaseKeyLease(db, key, token);
         return authBlocked(c, blockedUntil);
       }
       const row = await getProviderCredential(db, key.userId, PROVIDER);
@@ -143,7 +142,7 @@ async function acquireFirstContact(
       if (Date.now() >= giveUpAt) {
         return retryLater(c, "key_busy", KEY_BUSY, KEY_BUSY_RETRY_SECONDS);
       }
-      await sleep(FIRST_CONTACT_POLL_MS);
+      await sleep(LEASE_POLL_MS);
     }
   } catch {
     console.error("AthanLab key lease could not be taken");
@@ -152,7 +151,7 @@ async function acquireFirstContact(
 }
 
 /** A D1 failure is logged: the lease then lapses by itself. */
-async function releaseFirstContact(db: D1Database, key: StoredKey, token: string) {
+async function releaseKeyLease(db: D1Database, key: StoredKey, token: string) {
   try {
     await releaseCredentialProbe(db, key.userId, PROVIDER, token);
   } catch {
@@ -165,34 +164,36 @@ function isUnauthorized(outcome: { kind: string; error?: AthanLabError | null })
 }
 
 /**
- * Make a request's first AthanLab call with the stored key — and only that
- * call — under the user's first-contact lease (user_provider_credentials
- * probe_token/probe_until), released as soon as AthanLab has answered it. A
- * 401 marks the key invalid before the lease is released, so a request
- * waiting for the lease then answers key_invalid without sending the key.
- * However many requests carry a key AthanLab has just revoked, one of them
- * meets the 401 and the rest never send it — even when the user replaces the
- * key meanwhile, since the lease belongs to one sealed key (its iv). The
- * lease outlives the first attempt (`attemptTimeoutMs` + LEASE_MARGIN_MS); only
- * a synthesis's first submit still retrying transient failures past that lets
- * the next request try as well, and AthanLab answering those attempts at all
- * means the key was still accepted. A request already past its first call (a
- * synthesis polling its job) is not held back.
+ * Make one AthanLab call with the stored key — every call: a route's only
+ * one, and each of a synthesis's submits, polls and downloads — under the
+ * user's key lease (user_provider_credentials probe_token/probe_until),
+ * released as soon as AthanLab has answered it. Taking the lease re-checks
+ * the row, so a key that was invalidated, replaced or deleted since this
+ * request decrypted it is never sent again; and a 401 marks the key invalid
+ * before the lease is released, so a request waiting for the lease then
+ * answers key_invalid without sending the key. However many requests carry a
+ * key AthanLab has just revoked, at whatever stage they are, one of them meets
+ * the 401 and the rest never send it — even when the user replaces the key
+ * meanwhile, since the lease belongs to one sealed key (its iv). The lease
+ * outlives the call's first attempt (`attemptTimeoutMs` + LEASE_MARGIN_MS);
+ * only a call still retrying transient failures past that lets the next
+ * request try as well, and AthanLab answering those attempts at all means the
+ * key was still accepted.
  */
-export async function firstContact<T extends { kind: string }>(
+export async function withKeyLease<T extends { kind: string }>(
   c: SignedInContext,
   key: StoredKey,
   attemptTimeoutMs: number,
   call: () => Promise<T>,
 ): Promise<T | Response> {
-  const token = await acquireFirstContact(c, key, attemptTimeoutMs + LEASE_MARGIN_MS);
+  const token = await acquireKeyLease(c, key, attemptTimeoutMs + LEASE_MARGIN_MS);
   if (token instanceof Response) return token;
   try {
     const outcome = await call();
     if (isUnauthorized(outcome)) await invalidateStoredKey(c.env.DB, key);
     return outcome;
   } finally {
-    await releaseFirstContact(c.env.DB, key, token);
+    await releaseKeyLease(c.env.DB, key, token);
   }
 }
 

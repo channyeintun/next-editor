@@ -27,11 +27,13 @@ import {
 } from "./client";
 import { MAX_JSON_BYTES } from "./json";
 import { failure, logUpstream, stillProcessing, type ErrorCode } from "./responses";
-import { firstContact, outcomeFailure, type SignedInContext, type StoredKey } from "./storedKey";
+import { outcomeFailure, withKeyLease, type SignedInContext, type StoredKey } from "./storedKey";
 
 // Speaking one dialog (POST /api/studio/tts/athanlab): submit the job, poll it
 // within this request's deadline and subrequest budget, and stream its WAV
-// back.
+// back. Every one of those calls is made under the user's key lease
+// (withKeyLease), so a key revoked while many syntheses are polling costs one
+// failed authentication, not one per synthesis.
 
 const MAX_TTS_REQUEST_BYTES = 64 * 1024;
 const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
@@ -118,6 +120,8 @@ type PollResult =
   | { kind: "finished"; job: SpeechJob }
   | { kind: "still_processing" }
   | { kind: "unexpected" }
+  /** The key lease refused the poll: the answer to send back as it is. */
+  | { kind: "refused"; response: Response }
   | Exclude<PhaseOutcome, { kind: "ok" | "out_of_budget" }>;
 
 /**
@@ -126,6 +130,8 @@ type PollResult =
  * is left running for the browser's next request to re-attach to.
  */
 async function pollJob(
+  c: SignedInContext,
+  key: StoredKey,
   context: RetryContext,
   jobId: string,
   firstWaitMs: number,
@@ -141,17 +147,20 @@ async function pollJob(
     }
     await sleep(waitMs);
 
-    const outcome = await requestJsonWithRetries(
-      context,
-      {
-        method: "GET",
-        path: `/speech/${jobId}`,
-        accept: "application/json",
-        timeoutMs: POLL_TIMEOUT_MS,
-      },
-      DOWNLOAD_RESERVE,
-      MAX_JSON_BYTES,
+    const outcome = await withKeyLease(c, key, POLL_TIMEOUT_MS, () =>
+      requestJsonWithRetries(
+        context,
+        {
+          method: "GET",
+          path: `/speech/${jobId}`,
+          accept: "application/json",
+          timeoutMs: POLL_TIMEOUT_MS,
+        },
+        DOWNLOAD_RESERVE,
+        MAX_JSON_BYTES,
+      ),
     );
+    if (outcome instanceof Response) return { kind: "refused", response: outcome };
     if (outcome.kind === "out_of_budget") return { kind: "still_processing" };
     if (outcome.kind !== "ok") return outcome;
     const job = speechJobOf(outcome.payload, context.apiKey);
@@ -178,12 +187,15 @@ async function downloadAudio(
   context: RetryContext,
   jobId: string,
 ): Promise<DownloadResult> {
-  const outcome = await requestWithRetries(context, {
-    method: "GET",
-    path: `/speech/${jobId}/audio?format=wav`,
-    accept: "audio/wav",
-    timeoutMs: DOWNLOAD_HEADERS_TIMEOUT_MS,
-  });
+  const outcome = await withKeyLease(c, key, DOWNLOAD_HEADERS_TIMEOUT_MS, () =>
+    requestWithRetries(context, {
+      method: "GET",
+      path: `/speech/${jobId}/audio?format=wav`,
+      accept: "audio/wav",
+      timeoutMs: DOWNLOAD_HEADERS_TIMEOUT_MS,
+    }),
+  );
+  if (outcome instanceof Response) return { kind: "failed", response: outcome };
   if (outcome.kind === "rejected" && outcome.error.code === "audio_expired") {
     logUpstream("download", outcome.error);
     return { kind: "expired", error: outcome.error };
@@ -297,10 +309,8 @@ export async function synthesize(
         DOWNLOAD_RESERVE,
         MAX_JSON_BYTES,
       );
-    // The first submit, transient retries included, is this request's first
-    // contact; later submits, polls and downloads follow an answer.
-    const submitted =
-      attempt === 0 ? await firstContact(c, key, SUBMIT_TIMEOUT_MS, submit) : await submit();
+    // Each submit, transient retries included, is made under the key lease.
+    const submitted = await withKeyLease(c, key, SUBMIT_TIMEOUT_MS, submit);
     if (submitted instanceof Response) return submitted;
     if (submitted.kind !== "ok") {
       if (
@@ -335,10 +345,12 @@ export async function synthesize(
         retryAfterSeconds === null
           ? DEFAULT_FIRST_POLL_MS
           : Math.max(MIN_FIRST_POLL_MS, retryAfterSeconds * 1000);
-      const polled = await pollJob(context, job.id, firstWaitMs);
+      const polled = await pollJob(c, key, context, job.id, firstWaitMs);
       switch (polled.kind) {
         case "still_processing":
           return stillProcessing(c);
+        case "refused":
+          return polled.response;
         case "unexpected":
           console.error("AthanLab returned an unexpected job while polling");
           return failure(

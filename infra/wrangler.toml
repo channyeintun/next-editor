@@ -209,9 +209,9 @@ simple = { limit = 5, period = 60 }
 
 # Every route that sends a stored AthanLab key: voices, voice samples, usage,
 # and synthesis (one per dialog attempt; each stays far below AthanLab's own
-# 60 writes and 600 reads per key per minute). Separately, each request makes
-# its first AthanLab call under a per-user lease in D1, so concurrent requests
-# with a revoked key do not each cost a failed sign-in.
+# 60 writes and 600 reads per key per minute). Separately, every AthanLab call
+# with a stored key is made under a per-user lease in D1, so concurrent
+# requests with a revoked key do not each cost a failed sign-in.
 [[ratelimits]]
 name = "ATHANLAB_API_RATE_LIMITER"
 namespace_id = "7109"

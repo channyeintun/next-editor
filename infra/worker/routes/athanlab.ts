@@ -36,7 +36,7 @@ import {
   keyChecksPaused,
   notConfigured,
 } from "../athanlab/responses";
-import { PROVIDER, firstContact, outcomeFailure, storedKeyAccess } from "../athanlab/storedKey";
+import { PROVIDER, outcomeFailure, storedKeyAccess, withKeyLease } from "../athanlab/storedKey";
 import { readTtsRequest, synthesize } from "../athanlab/synthesis";
 import { verifyApiKey, type KeyCheck, type KeyQuote } from "../athanlab/verifyKey";
 
@@ -47,9 +47,9 @@ import { verifyApiKey, type KeyCheck, type KeyQuote } from "../athanlab/verifyKe
 // route in studio.ts. The browser never sees a stored key again after pasting
 // it: every AthanLab call happens here (see athanlab/client.ts), a key
 // AthanLab has rejected is never sent again (see invalidateStoredKey), and
-// each request's first call with a stored key is made under a per-user lease,
-// so concurrent requests carrying a revoked key do not each cost a failed
-// authentication (see firstContact; both in athanlab/storedKey.ts). This file
+// every call with a stored key is made under a per-user lease, so concurrent
+// requests carrying a revoked key do not each cost a failed authentication
+// (see withKeyLease; both in athanlab/storedKey.ts). This file
 // wires the routes; the key check (athanlab/verifyKey.ts), synthesis
 // (athanlab/synthesis.ts) and the JSON answers (athanlab/responses.ts) live
 // with the rest of the athanlab/ folder.
@@ -231,7 +231,7 @@ athanlabRoute.get("/voices", requireUser, async (c) => {
   const key = await storedKeyAccess(c, vault);
   if (key instanceof Response) return key;
 
-  const outcome = await firstContact(c, key, READ_TIMEOUT_MS, () =>
+  const outcome = await withKeyLease(c, key, READ_TIMEOUT_MS, () =>
     requestOnce(key.apiKey, readJsonGet("/voices")),
   );
   if (outcome instanceof Response) return outcome;
@@ -306,7 +306,7 @@ athanlabRoute.get("/voices/:id/sample", requireUser, async (c) => {
   const key = await storedKeyAccess(c, vault);
   if (key instanceof Response) return key;
 
-  const outcome = await firstContact(c, key, READ_TIMEOUT_MS, () =>
+  const outcome = await withKeyLease(c, key, READ_TIMEOUT_MS, () =>
     requestOnce(key.apiKey, readJsonGet(`/voices/${encodeURIComponent(voiceId)}/preview`)),
   );
   if (outcome instanceof Response) return outcome;
@@ -373,7 +373,7 @@ athanlabRoute.get("/usage", requireUser, async (c) => {
   const key = await storedKeyAccess(c, vault);
   if (key instanceof Response) return key;
 
-  const outcome = await firstContact(c, key, READ_TIMEOUT_MS, () =>
+  const outcome = await withKeyLease(c, key, READ_TIMEOUT_MS, () =>
     requestOnce(key.apiKey, readJsonGet("/usage")),
   );
   if (outcome instanceof Response) return outcome;

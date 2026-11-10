@@ -19,7 +19,7 @@ export interface ProviderCredentialRow {
   key_hint: string;
   /** epoch ms of the provider's 401; null while the key is usable. */
   invalidated_at: number | null;
-  /** The first-contact lease holder's random id; null while nobody holds it. */
+  /** The key lease holder's random id; null while nobody holds it. */
   probe_token: string | null;
   /** epoch ms the lease lapses if its holder never releases it. */
   probe_until: number | null;
@@ -53,7 +53,7 @@ export async function getProviderCredential(
 /**
  * Store a newly verified key, replacing any earlier one. The row keeps its
  * original created_at, and a replacement clears invalidated_at and any
- * first-contact lease: the new key is the one the provider just accepted, and
+ * key lease: the new key is the one the provider just accepted, and
  * a lease taken for the old key says nothing about it.
  */
 export async function putProviderCredential(
@@ -111,8 +111,8 @@ export async function invalidateProviderCredential(
 }
 
 /**
- * Take the first-contact lease on a usable stored key: the right to be the
- * one request that sends it until the provider has answered. Succeeds only
+ * Take the key lease on a usable stored key: the right to be the one request
+ * that sends it until the provider has answered. Succeeds only
  * when nobody holds a live lease (a lease past `probe_until` is taken over, so
  * a holder that died frees the key by itself), the key has not been
  * invalidated, and the stored key is still the one the caller decrypted (`iv`

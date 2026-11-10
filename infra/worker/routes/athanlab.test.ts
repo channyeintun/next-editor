@@ -1856,7 +1856,46 @@ describe("POST /api/studio/tts/athanlab", () => {
     expect(breakerRow()?.failures).toBe(1);
   });
 
-  it("holds the key's lease through the first submit, retries included, and not while polling", async () => {
+  it("sends a key revoked mid-synthesis once, however many requests are polling with it", async () => {
+    // Each request used to poll with the key it decrypted without asking D1
+    // again, so every in-flight synthesis met its own 401.
+    let revoked = false;
+    let polls = 0;
+    const rejectedKeys: (string | null)[] = [];
+    const athanlab = stubAthanLab({
+      [SUBMIT]: accepted("processing", { retryAfter: "1" }),
+      [POLL]: (request) => {
+        polls++;
+        if (!revoked) return polled("processing")();
+        rejectedKeys.push(request.headers.get("X-API-Key"));
+        return athanlabError(401, "invalid_api_key")(request);
+      },
+    });
+    const env = await readyEnv();
+
+    const pending: Promise<Response>[] = [];
+    for (let index = 0; index < 20; index++) {
+      pending.push(Promise.resolve(postTts(env)));
+      await vi.waitFor(() => expect(submits(athanlab.calls)).toHaveLength(index + 1));
+    }
+    // Every request has polled its job at least once: all of them hold the key.
+    await vi.waitFor(() => expect(polls).toBeGreaterThanOrEqual(20), { timeout: 8_000 });
+    revoked = true;
+    const responses = await Promise.all(pending);
+
+    expect(rejectedKeys).toEqual([API_KEY]);
+    expect(breakerRow()?.failures).toBe(1);
+    for (const response of responses) {
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code: "key_invalid" });
+    }
+    expect(credentialRow()).toMatchObject({
+      invalidated_at: expect.any(Number),
+      probe_token: null,
+    });
+  }, 20_000);
+
+  it("holds the key's lease through each call, retries included, and not between calls", async () => {
     const leaseAt: Record<string, unknown> = {};
     const athanlab = stubAthanLab({
       [SUBMIT]: [
@@ -1873,7 +1912,10 @@ describe("POST /api/studio/tts/athanlab", () => {
         leaseAt.poll = credentialRow()?.probe_token;
         return polled("succeeded")();
       },
-      [DOWNLOAD]: wav(),
+      [DOWNLOAD]: (request) => {
+        leaseAt.download = credentialRow()?.probe_token;
+        return wav()(request);
+      },
     });
 
     const response = await settle(async () => postTts(await readyEnv()));
@@ -1882,7 +1924,43 @@ describe("POST /api/studio/tts/athanlab", () => {
     expect(athanlab.calls).toHaveLength(4);
     expect(leaseAt.firstAttempt).toEqual(expect.any(String));
     expect(leaseAt.retry).toBe(leaseAt.firstAttempt);
-    expect(leaseAt.poll).toBeNull();
+    // A lease of its own for each later call, each released once answered.
+    expect(leaseAt.poll).toEqual(expect.any(String));
+    expect(leaseAt.poll).not.toBe(leaseAt.firstAttempt);
+    expect(leaseAt.download).toEqual(expect.any(String));
+    expect(leaseAt.download).not.toBe(leaseAt.poll);
+    expect(credentialRow()).toMatchObject({ probe_token: null, probe_until: null });
+  });
+
+  it("stops polling, without sending the key, once the user disconnects or replaces it", async () => {
+    for (const change of ["disconnect", "replace"] as const) {
+      let polls = 0;
+      const env = await readyEnv();
+      const athanlab = stubAthanLab({
+        [SUBMIT]: accepted("processing"),
+        [POLL]: async () => {
+          polls++;
+          // The user acts while this request's job is still processing.
+          if (change === "disconnect") {
+            database.sqlite.prepare("DELETE FROM user_provider_credentials").run();
+          } else {
+            await storeKey(env, OTHER_KEY);
+          }
+          return polled("processing")();
+        },
+      });
+
+      const response = await settle(() => postTts(env));
+
+      expect(await response.json()).toMatchObject({
+        code: change === "disconnect" ? "key_missing" : "key_busy",
+      });
+      expect(polls).toBe(1);
+      expect(athanlab.calls).toHaveLength(2);
+      for (const request of athanlab.calls) {
+        expect(request.headers.get("X-API-Key")).toBe(API_KEY);
+      }
+    }
   });
 
   it("asks again for a poll whose body stalls after the headers", async () => {
