@@ -218,14 +218,22 @@ export function createStreamingRecordingWriter(): StreamingRecordingWriter {
     appendEventSegment(kind, records, options) {
       ensureWritable();
       if (records.length === 0) return;
+      // What a reader is charged for rebuilding this segment's dedup markers.
+      let hydratedCost = 0;
+      const chargeHydration = (bytes: number): void => {
+        hydratedCost += bytes;
+      };
       const streamRecords =
         kind === SEGMENT_KIND.workspace
-          ? stripWorkspaceEvents(records)
+          ? stripWorkspaceEvents(records, chargeHydration)
           : kind === SEGMENT_KIND.previewPatch
-            ? stripPreviewPatchAdds(records)
+            ? stripPreviewPatchAdds(records, chargeHydration)
             : records;
       const encoded = encodeRecords(streamRecords);
-      const cost = { decodedCost: encoded.decodedCost, recordCount: records.length };
+      const cost = {
+        decodedCost: encoded.decodedCost + hydratedCost,
+        recordCount: records.length,
+      };
       appendSegment(kind, encoded.payload, cost, {
         startTimeMs: options?.startTimeMs ?? readRecordTimestamp(records[0]),
         endTimeMs: options?.endTimeMs ?? readLastRecordTimestamp(records),

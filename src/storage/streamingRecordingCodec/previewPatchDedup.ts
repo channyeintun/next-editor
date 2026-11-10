@@ -27,6 +27,14 @@ import {
 // ONLY inside the stream: in-memory `Recording` objects never carry it, and a
 // decode(encode(x)) round-trip reproduces `x` exactly.
 //
+// A marker's size on the wire says nothing about what it is rebuilt into: the
+// clone is as large as the template, which any number of later markers may name.
+// So a marker must carry exactly one id per template node, which ties its
+// encoded size to its clone, and each clone is charged to the stream's decoded
+// budget (format.ts) through the `charge` callback. The stripper reports the
+// same charge for every marker it writes, so the writer knows what its stream
+// will cost a reader.
+//
 // Symmetry contract: strippers and hydrators must observe added nodes in the
 // same order. The writer funnels previewPatch records through
 // `StreamingRecordingWriter.appendEventSegment` in stream order, and both
@@ -35,6 +43,23 @@ import {
 // lockstep: every non-marker dedupable node in the stream is a first occurrence,
 // and both sides append it to their template list at the same index.
 // ============================================================================
+
+/**
+ * What one cloned node is charged to the decoded budget: the node object and its
+ * share of the `childNodes` array. Everything else a clone holds is shared with
+ * the template.
+ */
+const HYDRATED_NODE_COST_BYTES = 64;
+
+/** Reports decoded bytes to whoever keeps the stream's budget; a reader's throws when it is spent. */
+type ChargeDecodedCost = (bytes: number) => void;
+
+/** An id-stripped added node, kept for the stream's life so later markers can name it. */
+interface DedupTemplate {
+  node: Record<string, unknown>;
+  /** Nodes in the subtree: the ids a marker must carry, and the nodes a clone allocates. */
+  nodeCount: number;
+}
 
 /** Stream-only shape: replaces a mutation add's `node` whose content repeats. */
 interface DedupAddMarker {
@@ -165,13 +190,17 @@ function mapMutationAdds(
 /**
  * Stateful stripper for one encode pass. Feed previewPatch records in stream
  * order; returns copies with repeated added-node content replaced by the
- * `dedupTemplate` marker. Never mutates its input.
+ * `dedupTemplate` marker. Never mutates its input. `charge` is told what a reader
+ * will charge for rebuilding each marker.
  */
-export function createPreviewAddNodeStripper(): (records: ReadonlyArray<unknown>) => unknown[] {
+export function createPreviewAddNodeStripper(): (
+  records: ReadonlyArray<unknown>,
+  charge?: ChargeDecodedCost,
+) => unknown[] {
   const templateIndexBySignature = new Map<string, number>();
   let templateCount = 0;
 
-  return (records) =>
+  return (records, charge) =>
     records.map((record) =>
       mapMutationAdds(record, (add) => {
         const node = add.node;
@@ -187,6 +216,7 @@ export function createPreviewAddNodeStripper(): (records: ReadonlyArray<unknown>
         const templateIndex = templateIndexBySignature.get(signature);
         if (templateIndex !== undefined) {
           const marker: DedupAddMarker = { dedupTemplate: templateIndex, dedupIds: ids };
+          charge?.(ids.length * HYDRATED_NODE_COST_BYTES);
           return { ...add, node: marker };
         }
 
@@ -203,23 +233,39 @@ export function createPreviewAddNodeStripper(): (records: ReadonlyArray<unknown>
  * is a first occurrence, mirroring the stripper) and resolves markers by
  * cloning the referenced template with its recorded ids re-applied. A marker
  * pointing at an unknown template (foreign or corrupt stream) is left as-is
- * rather than throwing, matching the codec's tolerant-decode posture.
+ * rather than throwing, matching the codec's tolerant-decode posture. A marker
+ * whose id list does not fit its template is refused: no writer produces one,
+ * and it would clone the template for the price of an empty list.
+ *
+ * Each clone is reported to `charge` before it is made. The template list only
+ * grows on `commit`, so a call that throws, or whose segment is refused, leaves
+ * the hydrator as it was.
  */
 export function createPreviewAddNodeHydrator(): (
   records: PreviewDomPatchBatch[],
-) => PreviewDomPatchBatch[] {
-  const templates: Record<string, unknown>[] = [];
+  charge?: ChargeDecodedCost,
+) => { records: PreviewDomPatchBatch[]; commit: () => void } {
+  const templates: DedupTemplate[] = [];
 
-  return (records) =>
-    records.map((record) =>
+  return (records, charge) => {
+    // Templates first seen in this call. Markers later in the same call may name them.
+    const staged: DedupTemplate[] = [];
+    const templateAt = (index: number): DedupTemplate | undefined =>
+      index < templates.length ? templates[index] : staged[index - templates.length];
+
+    const hydrated = records.map((record) =>
       mapMutationAdds(record, (add) => {
         const node = add.node;
         if (isDedupAddMarker(node)) {
-          const template = templates[node.dedupTemplate];
+          const template = templateAt(node.dedupTemplate);
           if (!template) {
             return add;
           }
-          return { ...add, node: applyNodeIds(template, node.dedupIds, { index: 0 }) };
+          if (node.dedupIds.length !== template.nodeCount) {
+            throw new Error("Invalid SCR3 stream: preview dedup marker does not fit its template");
+          }
+          charge?.(template.nodeCount * HYDRATED_NODE_COST_BYTES);
+          return { ...add, node: applyNodeIds(template.node, node.dedupIds, { index: 0 }) };
         }
 
         if (!isRecord(node)) {
@@ -229,8 +275,16 @@ export function createPreviewAddNodeHydrator(): (
         if (!collectNodeIds(node, ids)) {
           return add;
         }
-        templates.push(canonicalizeNode(node));
+        staged.push({ node: canonicalizeNode(node), nodeCount: ids.length });
         return add;
       }),
     ) as PreviewDomPatchBatch[];
+
+    return {
+      records: hydrated,
+      commit: () => {
+        for (const template of staged) templates.push(template);
+      },
+    };
+  };
 }

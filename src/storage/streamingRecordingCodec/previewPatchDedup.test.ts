@@ -153,7 +153,7 @@ describe("preview patch added-node dedup", () => {
     );
 
     // Hydrating the stripped records in the same order restores the originals.
-    expect(createPreviewAddNodeHydrator()(stripped)).toEqual(PATCH_BATCHES);
+    expect(createPreviewAddNodeHydrator()(stripped).records).toEqual(PATCH_BATCHES);
   });
 
   it("does not mutate the recording being encoded", async () => {

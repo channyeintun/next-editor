@@ -119,10 +119,11 @@ interface DecodedStream {
   /**
    * Stream-order carries that mirror the writer's strippers: segments arrive in encode
    * order, so one carry per stream resolves every dedup marker (see
-   * workspaceEventDedup.ts and previewPatchDedup.ts).
+   * workspaceEventDedup.ts and previewPatchDedup.ts). Each call stages its result and
+   * moves the carry only when the segment commits.
    */
-  readonly hydrateWorkspaceEvents: (events: WorkspaceRecordingEvent[]) => WorkspaceRecordingEvent[];
-  readonly hydratePreviewPatchBatches: (batches: PreviewDomPatchBatch[]) => PreviewDomPatchBatch[];
+  readonly hydrateWorkspaceEvents: ReturnType<typeof createWorkspaceEventContentHydrator>;
+  readonly hydratePreviewPatchBatches: ReturnType<typeof createPreviewAddNodeHydrator>;
   /** Segments accepted so far, including skipped unknown kinds; the footer must agree. */
   segmentCount: number;
   recordCount: number;
@@ -155,7 +156,10 @@ function createDecodedStream(
   };
 }
 
-/** A decoded segment waiting to be applied: `commit` only appends, so it cannot throw. */
+/**
+ * A decoded segment waiting to be applied: `commit` only appends and moves the dedup
+ * carries on, so it cannot throw.
+ */
 interface PendingSegment {
   recordCount: number;
   commit(): void;
@@ -163,8 +167,9 @@ interface PendingSegment {
 
 /**
  * Decodes one segment's payload without touching the stream. Every step that can
- * throw runs here, and inflation is charged to `budget`, a copy of the stream's, so a
- * throw (a partial footer misread as a segment, or genuine corruption) leaves the
+ * throw runs here, and what the segment decodes to (its records, and whatever its
+ * dedup markers are rebuilt into) is charged to `budget`, a copy of the stream's, so
+ * a throw (a partial footer misread as a segment, or genuine corruption) leaves the
  * records, the dedup carries, the counters and the stream's budget as they were.
  */
 function decodeSegment(
@@ -203,19 +208,30 @@ function decodeSegment(
       );
     case SEGMENT_KIND.previewPatch: {
       const batches = decodeRecords<PreviewDomPatchBatch>(payload, budget);
-      // Hydration advances the template list, so it runs at commit.
+      // A marker is rebuilt into a clone far larger than itself, so each is charged here.
+      const hydrated = stream.hydratePreviewPatchBatches(batches, (bytes) =>
+        chargeInflationBudget(budget, bytes),
+      );
       return {
         recordCount: batches.length,
-        commit: () =>
-          appendAll(records.previewPatchBatches, stream.hydratePreviewPatchBatches(batches)),
+        commit: () => {
+          hydrated.commit();
+          appendAll(records.previewPatchBatches, hydrated.records);
+        },
       };
     }
     case SEGMENT_KIND.workspace: {
       const events = decodeRecords<WorkspaceRecordingEvent>(payload, budget);
-      // Hydration advances the carried file contents, so it runs at commit.
+      // A splice is rebuilt into the whole file it edits, so each is charged here.
+      const hydrated = stream.hydrateWorkspaceEvents(events, (bytes) =>
+        chargeInflationBudget(budget, bytes),
+      );
       return {
         recordCount: events.length,
-        commit: () => appendAll(records.workspaceEvents, stream.hydrateWorkspaceEvents(events)),
+        commit: () => {
+          hydrated.commit();
+          appendAll(records.workspaceEvents, hydrated.records);
+        },
       };
     }
     case SEGMENT_KIND.workspaceAsset: {

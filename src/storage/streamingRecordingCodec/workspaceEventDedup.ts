@@ -30,6 +30,14 @@ import { findCommonAffixLengths } from "../../core/src/utils/stringAffix";
 // seed the first workspace event stored every file a second time. Version 4
 // and older streams were written without a seed and are hydrated without one.
 //
+// A splice marker is a few bytes however large the file it rebuilds, and every
+// rebuilt file is a fresh string its event keeps. So each rebuilt content is
+// charged to the stream's decoded budget (format.ts) through the `charge`
+// callback, as the full content it replaces would have been. The stripper
+// reports the same charge for every splice it writes, so the writer knows what
+// its stream will cost a reader. An unchanged file shares its string and costs
+// nothing.
+//
 // Symmetry contract: strippers and hydrators must observe events in the same
 // order. The writer funnels workspace records through
 // `StreamingRecordingWriter.appendEventSegment` in stream order, and both
@@ -45,6 +53,22 @@ type DedupedWorkspaceFile = WorkspaceFile & {
   contentUnchanged?: boolean;
   contentSplice?: ContentSplice;
 };
+
+/** Reports decoded bytes to whoever keeps the stream's budget; a reader's throws when it is spent. */
+type ChargeDecodedCost = (bytes: number) => void;
+
+/** A stream is untrusted: only a splice of this shape is certain to rebuild a string. */
+function isContentSplice(value: unknown): value is ContentSplice {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    Number.isInteger(value[0]) &&
+    value[0] >= 0 &&
+    Number.isInteger(value[1]) &&
+    value[1] >= 0 &&
+    typeof value[2] === "string"
+  );
+}
 
 /** A splice header costs a few msgpack bytes; below this saving, keep the full text. */
 const MIN_SPLICE_SAVING_CHARS = 16;
@@ -119,13 +143,14 @@ function mapEventFiles(
  * returns copies with repeated file contents replaced by the stream-only markers.
  * Never mutates its input (events are live app state). `seed` is the header's
  * `workspaceSnapshot` — the reader must seed its hydrator with the same one.
+ * `charge` is told what a reader will charge for rebuilding each splice.
  */
 export function createWorkspaceEventContentStripper(
   seed?: WorkspaceRecordingSnapshot,
-): (events: ReadonlyArray<unknown>) => unknown[] {
+): (events: ReadonlyArray<unknown>, charge?: ChargeDecodedCost) => unknown[] {
   const lastContentByPath = createContentCarry(seed);
 
-  return (events) =>
+  return (events, charge) =>
     events.map((record) =>
       mapEventFiles(record as WorkspaceEventRecord, (path, file) => {
         if (file.encoding === "asset" || file.content === "") {
@@ -139,7 +164,9 @@ export function createWorkspaceEventContentStripper(
 
         lastContentByPath.set(path, file.content);
         const splice = previous === undefined ? null : createContentSplice(previous, file.content);
-        return splice ? { ...file, content: "", contentSplice: splice } : file;
+        if (!splice) return file;
+        charge?.(file.content.length);
+        return { ...file, content: "", contentSplice: splice };
       }),
     );
 }
@@ -148,14 +175,26 @@ export function createWorkspaceEventContentStripper(
  * Stateful hydrator for one decode pass. Feed decoded workspace events in stream
  * order; resolves the markers by carrying contents forward and strips them so the
  * in-memory event matches what was originally encoded.
+ *
+ * Each rebuilt content is reported to `charge` as it is made. The carry only
+ * moves on `commit`, so a call that throws, or whose segment is refused, leaves
+ * the hydrator as it was.
  */
 export function createWorkspaceEventContentHydrator(
   seed?: WorkspaceRecordingSnapshot,
-): (events: WorkspaceRecordingEvent[]) => WorkspaceRecordingEvent[] {
+): (
+  events: WorkspaceRecordingEvent[],
+  charge?: ChargeDecodedCost,
+) => { records: WorkspaceRecordingEvent[]; commit: () => void } {
   const lastContentByPath = createContentCarry(seed);
 
-  return (events) =>
-    events.map((event) =>
+  return (events, charge) => {
+    // Contents this call moved on. Later events in the same call build on them.
+    const staged = new Map<string, string>();
+    const lastContent = (path: string): string | undefined =>
+      staged.get(path) ?? lastContentByPath.get(path);
+
+    const hydrated = events.map((event) =>
       mapEventFiles(event, (path, file) => {
         if (file.contentUnchanged) {
           if (file.encoding === "asset") {
@@ -163,26 +202,38 @@ export function createWorkspaceEventContentHydrator(
             return rest;
           }
           const { contentUnchanged: _contentUnchanged, ...rest } = file;
-          return { ...rest, content: lastContentByPath.get(path) ?? "" };
+          return { ...rest, content: lastContent(path) ?? "" };
         }
 
         if (file.contentSplice && file.encoding !== "asset") {
-          const previous = lastContentByPath.get(path);
+          const previous = lastContent(path);
           if (previous === undefined) {
             throw new Error(
               `Invalid SCR3 stream: workspace content splice for ${path} has no base`,
             );
           }
           const { contentSplice, ...rest } = file;
+          if (!isContentSplice(contentSplice)) {
+            throw new Error(`Invalid SCR3 stream: malformed workspace content splice for ${path}`);
+          }
           const content = applyContentSplice(previous, contentSplice);
-          lastContentByPath.set(path, content);
+          charge?.(content.length);
+          staged.set(path, content);
           return { ...rest, content };
         }
 
         if (typeof file.content === "string" && file.content !== "") {
-          lastContentByPath.set(path, file.content);
+          staged.set(path, file.content);
         }
         return file;
       }),
     ) as WorkspaceRecordingEvent[];
+
+    return {
+      records: hydrated,
+      commit: () => {
+        for (const [path, content] of staged) lastContentByPath.set(path, content);
+      },
+    };
+  };
 }

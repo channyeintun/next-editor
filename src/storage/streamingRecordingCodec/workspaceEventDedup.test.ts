@@ -217,7 +217,7 @@ describe("workspace event content dedup", () => {
     // seeded hydrator would still resolve it, but the reader must not rely on a
     // header snapshot a v4 writer never matched against.
     const stripped = createWorkspaceEventContentStripper()(EVENTS) as WorkspaceRecordingEvent[];
-    expect(createWorkspaceEventContentHydrator()(stripped)).toEqual(EVENTS);
+    expect(createWorkspaceEventContentHydrator()(stripped).records).toEqual(EVENTS);
   });
 
   it("rejects a splice with no base instead of inventing content", () => {
