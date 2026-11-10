@@ -1,0 +1,1041 @@
+# Go course, lesson 31: select and a team of workers (Burmese).
+#
+# Start state: parcel.go and fees.go pinned exactly as COURSE-KIT §3.4 (probe 30-pool-2); main.go
+# with the import block (fmt, sync, time) and the six parcels of the morning.
+# Edits, all insert-only (final state: probes/probe.ts `final`):
+#   1. start, a `jobs` channel of parcel indexes, a `fees` slice with one slot per parcel; a wait
+#      group, `riders := 2` and that many riders started with wg.Go, each ranging over jobs, 100 ms
+#      a delivery, writing fees[i]; main sends every index, closes jobs, waits, prints fees and the
+#      elapsed time -> run-1: [6000 4500 2000 4500 5000 8000] / 300ms ကြာ (probe 30-pool-2);
+#   2. `riders++` under `riders := 2` -> run-2: same fees, 200ms ကြာ (probe 30-riders-var);
+#   3. a late parcel's word (a goroutine that sends on `done` after one second) and a `select` on
+#      done and time.After(500ms) -> run-3 adds 500ms ကျော်ပြီ၊ ဖုန်းဆက်မေးမယ် (probe 30-timeout).
+# Boards: (P) the rail of parcel slips (jobs), riders taking the next slip, one pigeon-hole per
+# parcel number (fees); (T) select = the desk watching the hand-over counter and the wall clock;
+# (Q) the quiz (the word comes after 300 ms; probe `quiz`).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-31-select-and-workers
+  title: "Go course 31: select နဲ့ rider အဖွဲ့"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Three files: the explorer shows main.go beside the pinned parcel.go and fees.go.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n\t\"time\"\n)\n\nfunc main() {\n\tparcels := []Parcel{\n\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1},\n\t\t{Code: \"YGN-0001\", To: \"YGN\", WeightKg: 0.5},\n\t\t{Code: \"BGO-0001\", To: \"BGO\", WeightKg: 3},\n\t\t{Code: \"MLM-0001\", To: \"MLM\", WeightKg: 1.5},\n\t\t{Code: \"TGI-0001\", To: \"TGI\", WeightKg: 4},\n\t}\n}\n"
+      parcel.go: "package main\n\n// Parcel is one parcel handed in at the counter.\ntype Parcel struct {\n\tCode     string  // tracking code: \"MDY-0001\"\n\tTo       string  // city code: \"MDY\"\n\tWeightKg float64 // weight in kilograms\n}\n\n// cityNames holds the cities the service sends to, by code.\nvar cityNames = map[string]string{\n\t\"YGN\": \"ရန်ကုန်\",\n\t\"BGO\": \"ပဲခူး\",\n\t\"NPT\": \"နေပြည်တော်\",\n\t\"MLM\": \"မော်လမြိုင်\",\n\t\"MDY\": \"မန္တလေး\",\n\t\"TGI\": \"တောင်ကြီး\",\n}\n"
+      fees.go: "package main\n\n// perKg is added for every whole kilogram.\nconst perKg = 500\n\n// maxWeightKg is the heaviest parcel the service takes.\nconst maxWeightKg = 20.0\n\n// baseFees is the fee to each city before weight, in kyats.\nvar baseFees = map[string]int{\n\t\"YGN\": 2000,\n\t\"BGO\": 3000,\n\t\"NPT\": 4000,\n\t\"MLM\": 4500,\n\t\"MDY\": 5000,\n\t\"TGI\": 6000,\n}\n\n// Fee is the parcel's price: the city's base fee plus perKg for every whole kilogram.\nfunc (p Parcel) Fee() int {\n\treturn baseFees[p.To] + int(p.WeightKg)*perKg\n}\n"
+  whiteboardAssets:
+    # Board P: a rail of parcel slips, riders taking the next one, a pigeon-hole per parcel.
+    - {
+        id: p-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 460,
+        height: 50,
+        text: "Rider အဖွဲ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-jobs,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 90,
+        height: 40,
+        text: "jobs",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: p-j0, kind: rectangle, x: 400, y: 235, width: 90, height: 65, strokeColor: "#1971c2" }
+    - { id: p-j1, kind: rectangle, x: 505, y: 235, width: 90, height: 65, strokeColor: "#1971c2" }
+    - { id: p-j2, kind: rectangle, x: 610, y: 235, width: 90, height: 65, strokeColor: "#1971c2" }
+    - { id: p-j3, kind: rectangle, x: 715, y: 235, width: 90, height: 65, strokeColor: "#1971c2" }
+    - { id: p-j4, kind: rectangle, x: 820, y: 235, width: 90, height: 65, strokeColor: "#1971c2" }
+    - { id: p-j5, kind: rectangle, x: 925, y: 235, width: 90, height: 65, strokeColor: "#1971c2" }
+    - {
+        id: p-j0-t,
+        kind: text,
+        x: 435,
+        y: 250,
+        width: 25,
+        height: 40,
+        text: "0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-j1-t,
+        kind: text,
+        x: 540,
+        y: 250,
+        width: 25,
+        height: 40,
+        text: "1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-j2-t,
+        kind: text,
+        x: 645,
+        y: 250,
+        width: 25,
+        height: 40,
+        text: "2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-j3-t,
+        kind: text,
+        x: 750,
+        y: 250,
+        width: 25,
+        height: 40,
+        text: "3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-j4-t,
+        kind: text,
+        x: 855,
+        y: 250,
+        width: 25,
+        height: 40,
+        text: "4",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-j5-t,
+        kind: text,
+        x: 960,
+        y: 250,
+        width: 25,
+        height: 40,
+        text: "5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-arrow1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 480,
+        y: 310,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: p-arrow2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 730,
+        y: 310,
+        width: 40,
+        height: 50,
+        strokeColor: "#1e1e1e",
+      }
+    - { id: p-r1, kind: ellipse, x: 400, y: 365, width: 200, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: p-r1-t,
+        kind: text,
+        x: 460,
+        y: 380,
+        width: 90,
+        height: 40,
+        text: "rider",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: p-r2, kind: ellipse, x: 650, y: 365, width: 200, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: p-r2-t,
+        kind: text,
+        x: 710,
+        y: 380,
+        width: 90,
+        height: 40,
+        text: "rider",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-take,
+        kind: text,
+        x: 870,
+        y: 380,
+        width: 215,
+        height: 40,
+        text: "နောက်တစ်ခု ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-fees,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 90,
+        height: 40,
+        text: "fees",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: p-f0, kind: rectangle, x: 400, y: 465, width: 95, height: 65, strokeColor: "#f08c00" }
+    - { id: p-f1, kind: rectangle, x: 505, y: 465, width: 95, height: 65, strokeColor: "#f08c00" }
+    - { id: p-f2, kind: rectangle, x: 610, y: 465, width: 95, height: 65, strokeColor: "#f08c00" }
+    - { id: p-f3, kind: rectangle, x: 715, y: 465, width: 95, height: 65, strokeColor: "#f08c00" }
+    - { id: p-f4, kind: rectangle, x: 820, y: 465, width: 95, height: 65, strokeColor: "#f08c00" }
+    - { id: p-f5, kind: rectangle, x: 925, y: 465, width: 95, height: 65, strokeColor: "#f08c00" }
+    - {
+        id: p-f0-t,
+        kind: text,
+        x: 410,
+        y: 480,
+        width: 75,
+        height: 40,
+        text: "6000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-f1-t,
+        kind: text,
+        x: 515,
+        y: 480,
+        width: 75,
+        height: 40,
+        text: "4500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-f2-t,
+        kind: text,
+        x: 620,
+        y: 480,
+        width: 75,
+        height: 40,
+        text: "2000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-f3-t,
+        kind: text,
+        x: 725,
+        y: 480,
+        width: 75,
+        height: 40,
+        text: "4500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-f4-t,
+        kind: text,
+        x: 830,
+        y: 480,
+        width: 75,
+        height: 40,
+        text: "5000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-f5-t,
+        kind: text,
+        x: 935,
+        y: 480,
+        width: 75,
+        height: 40,
+        text: "8000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-own,
+        kind: text,
+        x: 290,
+        y: 565,
+        width: 760,
+        height: 40,
+        text: "fees[i] · ပါဆယ် တစ်ခုစီရဲ့ ကိုယ်ပိုင် အကွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: select watches the hand-over counter and the wall clock.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "select · ဘယ်ဟာ အရင်လဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-done,
+        kind: rectangle,
+        x: 290,
+        y: 245,
+        width: 370,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-done-t,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 330,
+        height: 40,
+        text: "done",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-done-s,
+        kind: text,
+        x: 310,
+        y: 298,
+        width: 330,
+        height: 40,
+        text: "ပါဆယ် ရောက်ကြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-clock,
+        kind: rectangle,
+        x: 710,
+        y: 245,
+        width: 380,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-clock-t,
+        kind: text,
+        x: 730,
+        y: 255,
+        width: 340,
+        height: 40,
+        text: "time.After(500ms)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-clock-s,
+        kind: text,
+        x: 730,
+        y: 298,
+        width: 340,
+        height: 40,
+        text: "နံရံက နာရီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 455,
+        y: 355,
+        width: 40,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-arrow2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 880,
+        y: 355,
+        width: 40,
+        height: 55,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: t-select,
+        kind: rectangle,
+        x: 290,
+        y: 420,
+        width: 800,
+        height: 90,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-select-t,
+        kind: text,
+        x: 310,
+        y: 445,
+        width: 720,
+        height: 40,
+        text: "select · အရင် အဆင်သင့် ဖြစ်တဲ့ဘက်ကို ယူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-late,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 760,
+        height: 40,
+        text: "နာရီ အရင်မြည် · ဖုန်းဆက်မေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-late-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 585,
+        width: 430,
+        height: 12,
+        strokeColor: "#e03131",
+      }
+    # Board Q: the quiz (probe `quiz`: the word comes after 300 ms, before the 500 ms limit).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 810,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 640,
+        height: 40,
+        text: "time.Sleep(300 * time.Millisecond)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: "case code := <-done:",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 740,
+        height: 40,
+        text: "case <-time.After(500 * time.Millisecond):",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 470,
+        y: 240,
+        width: 90,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 600,
+        height: 40,
+        text: "က · TGI-0002 ရောက်ပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 600,
+        height: 40,
+        text: "ခ · ဖုန်းဆက်မေးမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 700,
+        y: 450,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7131
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "[6000 4500 2000 4500 5000 8000]\n300ms ကြာ\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "[6000 4500 2000 4500 5000 8000]\n200ms ကြာ\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "[6000 4500 2000 4500 5000 8000]\n200ms ကြာ\n500ms ကျော်ပြီ၊ ဖုန်းဆက်မေးမယ်\n"
+
+scenes:
+  - id: recall
+    chapter: Rider အဖွဲ့
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ ကောင်တာက ဝန်ထမ်းဟာ channel ကနေ ပါဆယ် code တွေကို rider တစ်ယောက်ဆီ လွှဲပေးတာ၊
+      ပို့စရာ ကုန်ရင် close လုပ်ပြီး rider က range နဲ့ တစ်ခုချင်း ယူတာကို လေ့လာခဲ့ပါတယ်။ ဒီနေ့ နောက်တစ်ဆင့်
+      တက်ပါမယ်။ [[mark:sel-parcels]] ဒီမနက် ပါဆယ် ခြောက်ခု ရှိပါတယ်။ rider တစ်ယောက်တည်းဆိုရင် တစ်ခုပြီးမှ
+      တစ်ခု ပို့ရလို့ ကြာပါတယ်။ ဒါကြောင့် rider အဖွဲ့ တစ်ဖွဲ့က ပါဆယ်တွေကို ခွဲယူပြီး တစ်ပြိုင်နက် ပို့ကြမှာပါ။
+      [[mark:open-fees]] ပါဆယ် တစ်ခုစီရဲ့ ပို့ခကို fees ဖိုင်ထဲက ဒီ Fee method က တွက်ပေးပါတယ်။
+      [[mark:sel-fee]] မြို့ရဲ့ အခြေခံ ခ ပေါ်မှာ ကီလို အပြည့် တစ်ကီလိုတိုင်းအတွက် ကျပ် ငါးရာ ပေါင်းတာပါ။ [[mark:open-main-2]]
+      ဒီနေ့ program က rider အဖွဲ့နဲ့ ပါဆယ် ခြောက်ခုလုံးရဲ့ ပို့ခကို တွက်ပြီး၊ ဘယ်လောက် ကြာလဲ ဆိုတာကိုပါ
+      ထုတ်ပြပါမယ်။ နောက်ဆုံးမှာ အချိန် ကန့်သတ်ပြီး မျှော်တဲ့ select ကိုလည်း လေ့လာပါမယ်။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-parcels
+        type: editor.select
+        at: { mark: sel-parcels }
+        target: { file: main.go, text: "\tparcels := []Parcel{", occurrence: 1 }
+      - { id: open-fees, type: workspace.openFile, at: { mark: open-fees }, path: fees.go }
+      - id: sel-fee
+        type: editor.select
+        at: { mark: sel-fee }
+        target:
+          { file: fees.go, text: "return baseFees[p.To] + int(p.WeightKg)*perKg", occurrence: 1 }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+
+  - id: pool
+    chapter: Worker pool ဆိုတာ
+    narration: >-
+      [[mark:board-pool]] ဒီ ပုံကို ကြည့်ပါ။ [[mark:draw-jobs]] အပေါ်မှာ ပါဆယ် စာရွက်တွေကို အစဉ်လိုက် ချိတ်ထားတဲ့
+      တန်း တစ်ခု ရှိပါတယ်၊ ဒါက jobs channel ပါ။ စာရွက်ပေါ်မှာ ပါဆယ် တစ်ခုလုံး မဟုတ်ဘဲ ပါဆယ် နံပါတ်ပဲ ပါပါတယ်၊
+      သုညကနေ ငါးအထိပါ။ [[mark:draw-riders]] အောက်က rider တွေက တန်းကနေ နောက်ထပ် စာရွက် တစ်ရွက်ကို ယူ၊
+      အဲဒီ ပါဆယ်ကို ပို့၊ ပြီးရင် နောက်တစ်ရွက် ပြန်ယူ ဆိုပြီး စာရွက် ကုန်တဲ့အထိ လုပ်ပါတယ်။ ဒီလို jobs ထဲက
+      အလုပ်ကို တစ်ခုပြီးတစ်ခု ယူလုပ်တဲ့ goroutine ကို worker လို့ ခေါ်ပြီး၊ worker အဖွဲ့ကို worker pool လို့
+      ခေါ်ပါတယ်။ [[mark:draw-fees]] အောက်ဆုံးမှာတော့ ပါဆယ် နံပါတ် တစ်ခုစီအတွက် အကွက် တစ်ကွက်စီ ရှိပါတယ်။
+      rider က ပါဆယ် နံပါတ် သုံးကို ပို့ရင် ပို့ခကို အကွက် သုံးထဲမှာပဲ ထည့်ပါတယ်။ [[mark:draw-own]] ဒါကြောင့်
+      ဘယ် rider က ဘယ် ပါဆယ်ကို ယူယူ၊ ပို့ခတွေက ပါဆယ် အစဉ်အတိုင်း အမြဲ စီနေမှာပါ။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - {
+          id: board-pool,
+          type: whiteboard.apply,
+          at: { mark: board-pool, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-jobs,
+          type: whiteboard.apply,
+          at: { mark: draw-jobs },
+          upsertIds:
+            [
+              p-jobs,
+              p-j0,
+              p-j0-t,
+              p-j1,
+              p-j1-t,
+              p-j2,
+              p-j2-t,
+              p-j3,
+              p-j3-t,
+              p-j4,
+              p-j4-t,
+              p-j5,
+              p-j5-t,
+            ],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-riders,
+          type: whiteboard.apply,
+          at: { mark: draw-riders },
+          upsertIds: [p-arrow1, p-arrow2, p-r1, p-r1-t, p-r2, p-r2-t, p-take],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-fees,
+          type: whiteboard.apply,
+          at: { mark: draw-fees },
+          upsertIds:
+            [
+              p-fees,
+              p-f0,
+              p-f0-t,
+              p-f1,
+              p-f1-t,
+              p-f2,
+              p-f2-t,
+              p-f3,
+              p-f3-t,
+              p-f4,
+              p-f4-t,
+              p-f5,
+              p-f5-t,
+            ],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-own,
+          type: whiteboard.apply,
+          at: { mark: draw-own },
+          upsertIds: [p-own],
+          drawMs: 1400,
+        }
+
+  - id: jobs
+    narration: >-
+      [[mark:close-pool]] ဒါဆို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-jobs]] ပါဆယ်တွေရဲ့ အောက်မှာ အချိန်
+      တိုင်းဖို့ start ကို မှတ်ပြီး၊ ပါဆယ် နံပါတ်တွေကို လွှဲပေးမယ့် jobs channel နဲ့၊ ပါဆယ် အရေအတွက်အတိုင်း
+      အကွက် ပါတဲ့ fees slice ကို ဖန်တီးပါမယ်။ [[mark:sel-jobs]] jobs က int တွေကို လွှဲပေးတဲ့ channel ပါ။
+      ပါဆယ် struct ကို မပို့ဘဲ နံပါတ်ကိုပဲ ပို့တာက၊ rider က အဖြေကို ဘယ် အကွက်ထဲ ထည့်ရမလဲ သိဖို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Making slices, maps and channels",
+          url: "https://go.dev/ref/spec#Making_slices_maps_and_channels",
+        }
+    actions:
+      - {
+          id: close-pool,
+          type: whiteboard.apply,
+          at: { mark: close-pool },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-jobs
+        type: editor.type
+        at: { mark: type-jobs }
+        target:
+          {
+            file: main.go,
+            after: "\t\t{Code: \"TGI-0001\", To: \"TGI\", WeightKg: 4},\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\tstart := time.Now()\n\tjobs := make(chan int)\n\tfees := make([]int, len(parcels))\n"
+        cadence: line-by-line
+      - id: sel-jobs
+        type: editor.select
+        at: { mark: sel-jobs }
+        target: { file: main.go, text: "jobs := make(chan int)", occurrence: 1 }
+
+  - id: workers
+    chapter: Rider တွေကို စ လွှတ်တာ
+    narration: >-
+      [[mark:type-riders]] ပြီးတော့ wait group တစ်ခု ထားပြီး၊ riders ဆိုတဲ့ variable ထဲမှာ နှစ် လို့
+      ထည့်ထားပါမယ်။ ပြီးရင် rider အရေအတွက်အတိုင်း loop လုပ်ပြီး၊ rider တစ်ယောက်စီအတွက် goroutine တစ်ခုစီကို
+      wait group နဲ့ စ လွှတ်ပါမယ်။ ဒီတစ်ခါ rider အရေအတွက်ကို
+      variable ထဲ ထည့်ထားတာက နောက်မှ ပြောင်းကြည့်ချင်လို့ပါ။ [[mark:type-work]] rider တစ်ယောက်ရဲ့
+      အလုပ်ကတော့ jobs channel ထဲက ပါဆယ် နံပါတ်တွေကို range နဲ့ တစ်ခုချင်း ယူတာပါ။ နံပါတ် တစ်ခု ရလာတိုင်း
+      မီလီစက္ကန့် တစ်ရာ ကြာအောင် ပို့ပြီး၊ အဲဒီ ပါဆယ်ရဲ့ ပို့ခကို သူ့ နံပါတ် အကွက်ထဲ ထည့်ပါတယ်။ မီလီစက္ကန့် တစ်ရာက ခရီး တစ်ခေါက်ကို
+      ကိုယ်စားပြုတာပါ။ [[mark:sel-slot]] ဒီ line ကို သတိထားပါ။ rider တွေက output ကို ကိုယ်တိုင် မထုတ်ပြဘဲ
+      ကိုယ့် အကွက်ထဲမှာပဲ ရေးပါတယ်။ rider တွေကိုယ်တိုင် ထုတ်ပြရင် ဘယ်သူ အရင် ပြီးလဲ ဆိုတဲ့ အစဉ်က run
+      တိုင်း ပြောင်းနိုင်လို့ပါ။ ပါဆယ် တစ်ခုစီမှာ ကိုယ်ပိုင် အကွက် ရှိလို့ rider နှစ်ယောက် တစ်နေရာတည်းကို
+      ဘယ်တော့မှ မရေးပါဘူး။
+    sources:
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - id: type-riders
+        type: editor.type
+        at: { mark: type-riders }
+        target: { file: main.go, after: "\tfees := make([]int, len(parcels))\n", occurrence: 1 }
+        text: "\tvar wg sync.WaitGroup\n\triders := 2\n\tfor range riders {\n\t\twg.Go(func() {\n\t\t})\n\t}\n"
+        cadence: line-by-line
+      - id: type-work
+        type: editor.type
+        at: { mark: type-work }
+        target: { file: main.go, after: "\t\twg.Go(func() {\n", occurrence: 1 }
+        text: "\t\t\tfor i := range jobs {\n\t\t\t\ttime.Sleep(100 * time.Millisecond)\n\t\t\t\tfees[i] = parcels[i].Fee()\n\t\t\t}\n"
+        cadence: line-by-line
+      - id: sel-slot
+        type: editor.select
+        at: { mark: sel-slot }
+        target: { file: main.go, text: "fees[i] = parcels[i].Fee()", occurrence: 1 }
+
+  - id: dispatch
+    narration: >-
+      [[mark:type-dispatch]] အခု main က ကောင်တာက ဝန်ထမ်း အလုပ်ကို လုပ်ပါမယ်။ ပါဆယ် နံပါတ်တွေကို jobs
+      ထဲ တစ်ခုချင်း ပို့ပြီး၊ ကုန်ရင် close လုပ်ပါတယ်။ ပြီးတော့ wait group နဲ့ rider အားလုံး ပြန်ရောက်တဲ့အထိ
+      စောင့်ပါတယ်။ close မလုပ်ရင် rider တွေရဲ့ range loop က ဘယ်တော့မှ မဆုံးလို့ goroutine တွေလည်း မပြီးနိုင်ပါဘူး။
+      [[mark:type-print]] နောက်ဆုံးမှာ ပို့ခ အကွက်တွေကို တစ်ခါတည်း ထုတ်ပြပြီး၊ ကြာချိန်ကို မီလီစက္ကန့် တစ်ရာ
+      ပြည့်အထိ ဝိုင်းပြီး ထုတ်ပြပါမယ်။ rider နှစ်ယောက်နဲ့ ပါဆယ် ခြောက်ခုဆိုရင် ဘယ်လောက် ကြာမလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Close",
+          url: "https://go.dev/ref/spec#Close",
+        }
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+    actions:
+      - id: type-dispatch
+        type: editor.type
+        at: { mark: type-dispatch }
+        target: { file: main.go, after: "\t\t})\n\t}\n", occurrence: 1 }
+        text: "\tfor i := range parcels {\n\t\tjobs <- i\n\t}\n\tclose(jobs)\n\twg.Wait()\n"
+        cadence: line-by-line
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target: { file: main.go, after: "\twg.Wait()\n", occurrence: 1 }
+        text: "\tfmt.Println(fees)\n\tfmt.Println(time.Since(start).Round(100*time.Millisecond), \"ကြာ\")\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "300ms ကြာ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-pool,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\t\t\tfor i := range jobs {\n",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-fees]] ပထမ စာကြောင်းမှာ ပို့ခ ခြောက်ခု ထွက်လာပါတယ်။ ပထမ ၆၀၀၀ က မန္တလေးကို ပို့မယ့်
+      နှစ်ကီလိုခွဲ ပါဆယ်ရဲ့ ခ ဖြစ်ပြီး၊ နောက်ဆုံး ၈၀၀၀ က တောင်ကြီး ပါဆယ်ရဲ့ ခ ပါ။ ပါဆယ် စာရင်းရဲ့ အစဉ်အတိုင်း
+      အတိအကျ စီနေပါတယ်။ [[mark:point-time]] ဒုတိယ စာကြောင်းက မီလီစက္ကန့် သုံးရာ ကြာတယ်လို့ ပြပါတယ်။
+      rider နှစ်ယောက်က တစ်ခေါက်မှာ တစ်ယောက် တစ်ခုစီ ပို့လို့၊ ပါဆယ် ခြောက်ခုအတွက် သုံးခေါက် ပို့ရပါတယ်။ ပါဆယ်
+      တိုင်း မီလီစက္ကန့် တစ်ရာ ကြာအောင် ထားထားလို့၊ ဘယ် rider က ဘယ် ပါဆယ်ကို ယူယူ ကြာချိန်က အမြဲ တူပါတယ်။
+    sources:
+      - { title: "sync package — WaitGroup.Go", url: "https://pkg.go.dev/sync#WaitGroup.Go" }
+    actions:
+      - {
+          id: point-fees,
+          type: console.point,
+          at: { mark: point-fees },
+          target: { text: "[6000 4500 2000 4500 5000 8000]" },
+        }
+      - {
+          id: point-time,
+          type: console.point,
+          at: { mark: point-time },
+          target: { text: "300ms ကြာ" },
+        }
+
+  - id: more-riders
+    chapter: Rider ထပ်တိုးရင်
+    narration: >-
+      [[mark:collapse-1]] rider တစ်ယောက် ထပ်ခေါ်ကြည့်ရအောင်။ [[mark:type-more]] riders ကို နှစ်လို့
+      ထားတဲ့ line ရဲ့ အောက်မှာ တစ် တိုးတဲ့ line တစ်ကြောင်း ထည့်ပါမယ်။ ဒါဆို rider သုံးယောက် ဖြစ်သွားပါပြီ။
+      ကျန်တဲ့ code ကို ဘာမှ ပြင်စရာ မလိုပါဘူး။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။ [[mark:point-fees-2]]
+      ပို့ခတွေက အရင်အတိုင်း ပါဆယ် အစဉ်နဲ့ အတိအကျ တူပါတယ်။ [[mark:point-time-2]] ကြာချိန်ကတော့ မီလီစက္ကန့်
+      နှစ်ရာ ဖြစ်သွားပါပြီ၊ rider သုံးယောက်က အခေါက် နှစ်ခေါက်နဲ့ ပြီးသွားလို့ပါ။ rider ခြောက်ယောက် ထားရင်တော့
+      တစ်ခေါက်တည်းနဲ့ မီလီစက္ကန့် တစ်ရာပဲ ကြာမှာပါ။ ဆိုလိုတာက rider များလေ၊ အဖြေ မပြောင်းဘဲ အချိန် တိုလေ ပါ။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-more
+        type: editor.type
+        at: { mark: type-more }
+        target: { file: main.go, after: "\triders := 2\n", occurrence: 1 }
+        text: "\triders++\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "200ms ကြာ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-more,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\triders := 2\n\triders++\n",
+        }
+      - {
+          id: point-fees-2,
+          type: console.point,
+          at: { mark: point-fees-2 },
+          target: { text: "[6000 4500 2000 4500 5000 8000]" },
+        }
+      - {
+          id: point-time-2,
+          type: console.point,
+          at: { mark: point-time-2 },
+          target: { text: "200ms ကြာ" },
+        }
+
+  - id: select-board
+    chapter: select နဲ့ အချိန် ကန့်သတ်တာ
+    narration: >-
+      [[mark:board-select]] အခု ပြဿနာ နောက်တစ်ခုပါ။ တောင်ကြီးကို ပို့လိုက်တဲ့ ပါဆယ် တစ်ခု ရောက်ကြောင်း
+      သတင်းကို ကောင်တာက မျှော်နေပါတယ်။ ဒါပေမဲ့ အမြဲတမ်း မမျှော်ချင်ပါဘူး၊ အချိန် ကျော်သွားရင် ဖုန်းဆက်
+      မေးချင်ပါတယ်။ [[mark:draw-two]] ဒီမှာ မျှော်စရာ နှစ်ခု ရှိပါတယ်။ ဘယ်ဘက်က done channel က ပါဆယ်
+      ရောက်ကြောင်း သတင်းပါ။ ညာဘက်ကတော့ time package ထဲက After ပါ၊ သူက channel တစ်ခုကို ပြန်ပေးပြီး
+      ပေးထားတဲ့ အချိန် ပြည့်တဲ့အခါ အဲဒီ channel ထဲကို တစ်ခါ ပို့ပေးပါတယ်။ နံရံက နာရီ တစ်လုံးလိုပါပဲ။
+      [[mark:draw-select]] select က channel အများကို တစ်ပြိုင်နက် မျှော်ပြီး၊ အရင် အဆင်သင့် ဖြစ်တဲ့ ဘက်ကို
+      ယူပါတယ်။ နှစ်ဘက်လုံး တစ်ပြိုင်နက် အဆင်သင့် ဖြစ်နေရင်တော့ Go က တစ်ဘက်ကို ကျပန်း ရွေးပါတယ်။ [[mark:draw-late]] သတင်းက အရင် ရောက်ရင် ရောက်ပြီလို့ ပြောပြီး၊ နာရီက အရင် မြည်ရင်တော့
+      အချိန် ကျော်ပြီ၊ ဖုန်းဆက်မေးမယ် လို့ ပြောပါမယ်။ ဒီလို ကန့်သတ်ထားတဲ့ အချိန် ကျော်သွားတာကို timeout လို့
+      ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Select statements",
+          url: "https://go.dev/ref/spec#Select_statements",
+        }
+      - { title: "time package — After", url: "https://pkg.go.dev/time#After" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-select } }
+      - {
+          id: board-select,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-two,
+          type: whiteboard.apply,
+          at: { mark: draw-two },
+          upsertIds: [t-done, t-done-t, t-done-s, t-clock, t-clock-t, t-clock-s],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-select,
+          type: whiteboard.apply,
+          at: { mark: draw-select },
+          upsertIds: [t-arrow1, t-arrow2, t-select, t-select-t],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-late,
+          type: whiteboard.apply,
+          at: { mark: draw-late },
+          upsertIds: [t-late, t-late-line],
+          drawMs: 1400,
+        }
+
+  - id: select-code
+    narration: >-
+      [[mark:close-select]] code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-late]] ကြာချိန် ထုတ်ပြတဲ့ line ရဲ့ အောက်မှာ
+      done ဆိုတဲ့ channel တစ်ခုနဲ့၊ တစ်စက္ကန့် ကြာမှ တောင်ကြီး ပါဆယ် ရောက်ကြောင်း done ထဲ ပို့မယ့် goroutine
+      တစ်ခုကို ထည့်ပါမယ်။ ဒါက နောက်ကျနေတဲ့ ပါဆယ်ပါ။ done ကို နေရာ တစ်ခု ပါတဲ့ channel အဖြစ် လုပ်ထားတာက၊ ကိုယ်က မမျှော်တော့ရင်တောင်
+      နောက်ကျမှ သတင်း ပို့တဲ့ goroutine က အဲဒီ line မှာ အမြဲ ရပ်မနေအောင်ပါ။ [[mark:type-select]] ပြီးတော့ select ကို ရေးပါမယ်။ ပထမ
+      case က done ကနေ code ရလာရင် ရောက်ပြီလို့ ထုတ်ပြပါတယ်။ ဒုတိယ case ကတော့ မီလီစက္ကန့် ငါးရာ ပြည့်ရင်
+      ဖုန်းဆက်မေးမယ် လို့ ထုတ်ပြပါတယ်။ [[mark:sel-after]] ဒီ အချိန်ကို ကိုယ်က ဘယ်လောက် စောင့်နိုင်လဲ ဆိုတဲ့
+      ကန့်သတ်ချက်လို့ မြင်ကြည့်ပါ။ ပါဆယ်က တစ်စက္ကန့် ကြာမှာ ဖြစ်ပြီး၊ ကန့်သတ်ချိန်က မီလီစက္ကန့် ငါးရာပါ။
+      [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Select statements",
+          url: "https://go.dev/ref/spec#Select_statements",
+        }
+      - { title: "time package — After", url: "https://pkg.go.dev/time#After" }
+    actions:
+      - {
+          id: close-select,
+          type: whiteboard.apply,
+          at: { mark: close-select },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-late
+        type: editor.type
+        at: { mark: type-late }
+        target: { file: main.go, after: "\"ကြာ\")\n", occurrence: 1 }
+        text: "\n\tdone := make(chan string, 1)\n\tgo func() {\n\t\ttime.Sleep(time.Second)\n\t\tdone <- \"TGI-0002\"\n\t}()\n"
+        cadence: line-by-line
+      - id: type-select
+        type: editor.type
+        at: { mark: type-select }
+        target: { file: main.go, after: "\t\tdone <- \"TGI-0002\"\n\t}()\n", occurrence: 1 }
+        text: "\tselect {\n\tcase code := <-done:\n\t\tfmt.Println(code, \"ရောက်ပြီ\")\n\tcase <-time.After(500 * time.Millisecond):\n\t\tfmt.Println(\"500ms ကျော်ပြီ၊ ဖုန်းဆက်မေးမယ်\")\n\t}\n"
+        cadence: line-by-line
+      - id: sel-after
+        type: editor.select
+        at: { mark: sel-after }
+        target: { file: main.go, text: "time.After(500 * time.Millisecond)", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "ဖုန်းဆက်မေးမယ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-select,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tcase <-time.After(500 * time.Millisecond):\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-late]] နောက်ဆုံး စာကြောင်းမှာ မီလီစက္ကန့် ငါးရာ ကျော်ပြီ၊ ဖုန်းဆက်မေးမယ် ဆိုတဲ့ စာ
+      ထွက်လာပါတယ်။ ပါဆယ်ရဲ့ သတင်းက တစ်စက္ကန့်မှ ရောက်မှာ ဖြစ်ပြီး နာရီက မီလီစက္ကန့် ငါးရာမှာ ပို့လိုက်လို့၊
+      select က အရင် အဆင်သင့် ဖြစ်တဲ့ နာရီ ဘက်ကို ယူလိုက်တာပါ။ ရောက်ပြီ ဆိုတဲ့ စာ မထွက်တာကိုလည်း သတိထားပါ၊
+      select က case တစ်ခုတည်းကိုပဲ လုပ်ပါတယ်။ [[mark:point-time-3]] အပေါ်က ကြာချိန်ကတော့ အရင်အတိုင်း
+      မီလီစက္ကန့် နှစ်ရာပါ၊ select က အဲဒီ line ပြီးမှ စလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Select statements",
+          url: "https://go.dev/ref/spec#Select_statements",
+        }
+    actions:
+      - {
+          id: point-late,
+          type: console.point,
+          at: { mark: point-late },
+          target: { text: "500ms ကျော်ပြီ၊ ဖုန်းဆက်မေးမယ်" },
+        }
+      - {
+          id: point-time-3,
+          type: console.point,
+          at: { mark: point-time-3 },
+          target: { text: "200ms ကြာ" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ [[mark:quiz-sleep]] နောက်ကျနေတဲ့ ပါဆယ်ကို တစ်စက္ကန့် မဟုတ်ဘဲ
+      မီလီစက္ကန့် သုံးရာပဲ ကြာအောင် ပြောင်းလိုက်တယ် ဆိုပါစို့။ ကန့်သတ်ချိန်ကတော့ မီလီစက္ကန့် ငါးရာ
+      အတိုင်းပါ။ ဒီတစ်ခါ နောက်ဆုံး စာကြောင်းမှာ ရောက်ပြီလို့ ထွက်မလား၊ ဖုန်းဆက်မေးမယ် လို့ ထွက်မလား။
+      lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ တောင်ကြီး ပါဆယ် ရောက်ပြီလို့
+      ထွက်တာပါ။ ဘာကြောင့်လဲဆိုတော့ done channel က မီလီစက္ကန့် သုံးရာမှာ အဆင်သင့် ဖြစ်ပြီး၊ နာရီက ငါးရာ
+      မပြည့်သေးခင် ဖြစ်လို့ select က done ဘက်ကို အရင် ယူလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Select statements",
+          url: "https://go.dev/ref/spec#Select_statements",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-sleep,
+          type: whiteboard.apply,
+          at: { mark: quiz-sleep },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-pool]] worker pool မှာ အလုပ်တွေကို jobs channel
+      ထဲ ပို့ပြီး၊ worker goroutine အများက range နဲ့ နောက်တစ်ခုကို ယူလုပ်ကြပါတယ်။ worker များလေ အချိန် တိုလေ
+      ပါ။ [[mark:recap-slot]] အဖြေကို worker တွေကိုယ်တိုင် မထုတ်ပြဘဲ index အလိုက် ကိုယ်ပိုင် အကွက်ထဲ ထည့်ပြီး
+      main က တစ်ခါတည်း ထုတ်ပြတဲ့အတွက် output အစဉ်က အမြဲ တူပါတယ်။ [[mark:recap-select]] select က channel
+      အများကို တစ်ပြိုင်နက် မျှော်ပြီး အရင် အဆင်သင့် ဖြစ်တဲ့ ဘက်ကို ယူပါတယ်၊ time package ရဲ့ After နဲ့ တွဲရင်
+      အချိန် ကန့်သတ်ပြီး မျှော်လို့ ရပါတယ်။ နောက် lesson မှာတော့ rider နှစ်ယောက်က စုစုပေါင်း ငွေ တစ်ခုတည်းထဲ
+      တစ်ပြိုင်နက် ပေါင်းထည့်ရင် ဘာဖြစ်လဲ၊ ဘယ်လို ဘေးကင်းကင်း မျှသုံးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-pool
+        type: editor.select
+        at: { mark: recap-pool }
+        target: { file: main.go, text: "\t\t\tfor i := range jobs {", occurrence: 1 }
+      - id: recap-slot
+        type: editor.select
+        at: { mark: recap-slot }
+        target: { file: main.go, text: "fees[i] = parcels[i].Fee()", occurrence: 1 }
+      - id: recap-select
+        type: editor.select
+        at: { mark: recap-select }
+        target: { file: main.go, text: "\tselect {", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
