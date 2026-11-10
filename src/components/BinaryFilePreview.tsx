@@ -17,6 +17,37 @@ interface BinaryFilePreviewProps {
   file: WorkspaceFile;
 }
 
+// Raster image types; SVG is not one, since an SVG document runs scripts.
+const RASTER_IMAGE_TYPES: ReadonlySet<string> = new Set([
+  "image/png",
+  "image/apng",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "image/tiff",
+]);
+const PLAYABLE_MEDIA_TYPE = /^(?:video|audio)\/[a-z0-9][a-z0-9!#$&^_.+-]*$/;
+
+/**
+ * The type an asset's object URL carries. That URL belongs to the app's origin,
+ * and a tab opened on it (Open image in new tab, a middle click on Download)
+ * renders it as its type. The declared type comes from whoever made the asset:
+ * a lesson's .ne, a room peer, an importer or a browser's File.type. So only a
+ * raster image, video or audio type is kept, and every other one (SVG, HTML,
+ * XML, an empty or unknown type) becomes application/octet-stream, which a tab
+ * downloads instead of rendering.
+ */
+function getAssetObjectUrlType(mimeType: string): string {
+  const essence = mimeType.split(";", 1)[0].trim().toLowerCase();
+  return RASTER_IMAGE_TYPES.has(essence) || PLAYABLE_MEDIA_TYPE.test(essence)
+    ? essence
+    : "application/octet-stream";
+}
+
 /** What the last Retry press led to; "" until the reader presses Retry. */
 type RetryOutcome = "" | "retrying" | "failed" | "loaded";
 
@@ -48,7 +79,14 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
   const descriptorMimeType = descriptor?.mimeType;
   const descriptorSize = descriptor?.size;
   const mimeType = descriptor?.mimeType ?? getWorkspaceFileMimeType(file.path);
-  const mediaKind = getWorkspaceMediaKind(file.path);
+  const pathMediaKind = getWorkspaceMediaKind(file.path);
+  const objectUrlType = descriptorMimeType ? getAssetObjectUrlType(descriptorMimeType) : null;
+  // An asset is shown inline only when its object URL keeps a type of the kind
+  // its path names; a legacy base64 file is a data: URL, which has no origin.
+  const mediaKind =
+    objectUrlType === null || objectUrlType.startsWith(`${pathMediaKind}/`)
+      ? pathMediaKind
+      : "other";
   const [loadedAsset, setLoadedAsset] = useState<{ assetId: string; url: string } | null>(null);
   const [unavailableAssetId, setUnavailableAssetId] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -68,6 +106,7 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
 
   useEffect(() => {
     if (!assetId || !descriptorMimeType || descriptorSize === undefined) return;
+    const urlType = getAssetObjectUrlType(descriptorMimeType);
 
     let disposed = false;
     let currentUrl: string | null = null;
@@ -82,7 +121,9 @@ const BinaryFilePreview: React.FC<BinaryFilePreviewProps> = ({ file }) => {
         .then((blob) => {
           if (disposed) return;
           if (currentUrl) URL.revokeObjectURL(currentUrl);
-          const nextUrl = URL.createObjectURL(blob);
+          const nextUrl = URL.createObjectURL(
+            blob.type === urlType ? blob : blob.slice(0, blob.size, urlType),
+          );
           currentUrl = nextUrl;
           setLoadedAsset({ assetId, url: nextUrl });
           setUnavailableAssetId(null);

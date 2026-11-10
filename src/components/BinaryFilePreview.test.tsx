@@ -113,3 +113,63 @@ describe("BinaryFilePreview retry status", () => {
     elsewhere.remove();
   });
 });
+
+describe("BinaryFilePreview object URL type", () => {
+  function asset(path: string, mimeType: string): WorkspaceAssetFile {
+    const name = path.split("/").at(-1) ?? path;
+    return {
+      path,
+      name,
+      language: "plaintext",
+      encoding: "asset",
+      content: { kind: "asset", assetId: `id-${name}`, mimeType, size: 4 },
+    };
+  }
+
+  /** The types of every Blob the preview turned into an app-origin object URL. */
+  function objectUrlTypes(): string[] {
+    return vi.mocked(URL.createObjectURL).mock.calls.map(([blob]) => (blob as Blob).type);
+  }
+
+  // The declared type comes from whoever made the asset (a lesson's .ne, a room
+  // peer, an importer). Opened in a tab, a blob URL renders as that type on the
+  // app's origin, so a scriptable type must never reach one.
+  it.each([
+    ["notes.bin", "text/html"],
+    ["logo.svg", "image/svg+xml"],
+    ["diagram.png", "image/svg+xml"],
+    ["page.xhtml", "application/xhtml+xml"],
+    ["feed.xml", "text/xml"],
+    ["clip.mp4", "video/mp4é"],
+  ])("serves %s declared as %s as a download only", async (path, mimeType) => {
+    const file = asset(path, mimeType);
+    assets.getBlob.mockResolvedValueOnce(new Blob(["<b>"], { type: mimeType }));
+    const { container } = render(<BinaryFilePreview file={file} />);
+
+    const link = await screen.findByRole("link", { name: `Download ${file.name}` });
+    expect(objectUrlTypes()).toEqual(["application/octet-stream"]);
+    expect(link).toHaveAttribute("href", "blob:photo");
+    expect(container.querySelector("img, video, audio")).toBeNull();
+  });
+
+  it("keeps a raster image's type and shows it inline", async () => {
+    assets.getBlob.mockResolvedValueOnce(new Blob(["png!"], { type: "image/png" }));
+    render(<BinaryFilePreview file={photo} />);
+
+    expect(await screen.findByRole("img", { name: "photo.png" })).toHaveAttribute(
+      "src",
+      "blob:photo",
+    );
+    expect(objectUrlTypes()).toEqual(["image/png"]);
+  });
+
+  it("keeps a video's type and plays it inline", async () => {
+    const clip = asset("media/clip.mp4", "video/mp4");
+    assets.getBlob.mockResolvedValueOnce(new Blob(["mp4!"], { type: "video/mp4" }));
+    const { container } = render(<BinaryFilePreview file={clip} />);
+
+    await screen.findByRole("link", { name: "Download clip.mp4" });
+    expect(container.querySelector("video")).toHaveAttribute("src", "blob:photo");
+    expect(objectUrlTypes()).toEqual(["video/mp4"]);
+  });
+});
