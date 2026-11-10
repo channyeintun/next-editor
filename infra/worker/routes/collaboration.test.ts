@@ -16,7 +16,10 @@ import {
 } from "../../db/collaborationQueries";
 import { getCurrentUser } from "../auth/session";
 import { publishCollaborationMaintenanceJob } from "../collaboration/qstash";
-import { notifyCollaborationRoomControl } from "../collaboration/roomDurableObject";
+import {
+  forwardCollaborationWebSocket,
+  notifyCollaborationRoomControl,
+} from "../collaboration/roomDurableObject";
 import type { Env } from "../env";
 import { collaborationRoute } from "./collaboration";
 
@@ -44,6 +47,10 @@ vi.mock("../collaboration/qstash", async (importOriginal) => ({
 vi.mock("../collaboration/roomDurableObject", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../collaboration/roomDurableObject")>()),
   notifyCollaborationRoomControl: vi.fn<typeof notifyCollaborationRoomControl>(),
+  // undici cannot build a 101 response, so the forwarded upgrade answers 204.
+  forwardCollaborationWebSocket: vi.fn<typeof forwardCollaborationWebSocket>(
+    async () => new Response(null, { status: 204 }),
+  ),
 }));
 
 const ROOM_ID = "10000000-0000-4000-8000-000000000001";
@@ -430,5 +437,62 @@ describe("small JSON bodies", () => {
 
     // Parsed and rejected by the token schema, as before.
     expect(response.status).toBe(400);
+  });
+});
+
+describe("GET /rooms/:roomId/websocket", () => {
+  const EDITOR_ID = "20000000-0000-4000-8000-000000000002";
+  const SOCKET_QUERY =
+    "sessionId=30000000-0000-4000-8000-000000000001" +
+    "&attemptId=40000000-0000-4000-8000-000000000001&binaryProtocolVersion=3";
+
+  function upgrade(origin: string | null) {
+    return collaborationRoute.request(
+      `https://nexteditor.dev/rooms/${ROOM_ID}/websocket?${SOCKET_QUERY}`,
+      {
+        method: "GET",
+        headers: { Upgrade: "websocket", ...(origin === null ? {} : { Origin: origin }) },
+      },
+      { DB: {}, COLLABORATION_ROOMS: {}, PUBLIC_URL: "https://nexteditor.dev" } as unknown as Env,
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(getCurrentUser).mockResolvedValue({
+      id: EDITOR_ID,
+      username: "dummy-editor",
+      name: "Dummy Editor",
+      avatar_url: null,
+    } as never);
+    vi.mocked(getCollaborationRoomAccess).mockResolvedValue({
+      ...ownerAccess(),
+      member_role: "editor",
+    });
+  });
+
+  // Browsers apply no CORS to WebSockets and the session cookie is ambient,
+  // so a socket opened from another origin, or from a sandboxed frame (whose
+  // Origin is "null"), would otherwise read and write the room as whoever is
+  // signed in. The voice socket has always refused these.
+  it.each(["null", "https://attacker.test"])(
+    "refuses an upgrade from Origin %s before it reads the session",
+    async (origin) => {
+      const response = await upgrade(origin);
+
+      expect(response.status).toBe(403);
+      expect(forwardCollaborationWebSocket).not.toHaveBeenCalled();
+      expect(getCurrentUser).not.toHaveBeenCalled();
+    },
+  );
+
+  it("forwards an upgrade from the app's own origin with the member's session", async () => {
+    const response = await upgrade("https://nexteditor.dev");
+
+    expect(response.status).toBe(204);
+    expect(forwardCollaborationWebSocket).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ roomId: ROOM_ID, userId: EDITOR_ID, role: "editor" }),
+    );
   });
 });

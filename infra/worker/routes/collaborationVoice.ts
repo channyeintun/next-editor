@@ -16,32 +16,12 @@ import {
   type CanonicalVoiceSession,
 } from "../collaboration/voiceDurableObject";
 import type { Env } from "../env";
+import { isAllowedCollaborationOrigin } from "./collaborationTransportAuth";
 
 // The room-scoped voice gateway: availability, the voice WebSocket and the SFU
 // proxy. Voice fails closed on its own flag, Origin policy and D1 membership
 // while the document endpoints carry on. Mounted on collaborationRoute.
 export const collaborationVoiceRoute = new Hono<{ Bindings: Env }>();
-
-// Origins allowed to open voice transports. Browsers always send Origin on
-// WebSocket upgrades and on non-GET fetches; a mismatch is rejected. Local
-// development uses the Vite proxy, so loopback origins are also accepted.
-function isAllowedVoiceOrigin<E extends { Bindings: Env }>(c: Context<E>): boolean {
-  const origin = c.req.header("Origin");
-  if (!origin) return c.req.method === "GET";
-  try {
-    const parsed = new URL(origin);
-    const requestUrl = new URL(c.req.url);
-    const requestIsLoopback =
-      requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
-    if (requestIsLoopback && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")) {
-      return true;
-    }
-    if (origin === new URL(c.env.PUBLIC_URL).origin) return true;
-    return origin === requestUrl.origin;
-  } catch {
-    return false;
-  }
-}
 
 // Loads the caller's canonical voice identity for an active room, or maps the
 // failure to a sanitized response. Voice must fail closed while the document
@@ -53,7 +33,7 @@ async function resolveVoiceAccess<E extends { Bindings: Env }>(
   if (!isVoiceChatEnabled(c.env)) {
     return { ok: false, response: c.json({ error: "voice chat unavailable" }, 503) };
   }
-  if (!isAllowedVoiceOrigin(c)) {
+  if (!isAllowedCollaborationOrigin(c)) {
     return { ok: false, response: c.json({ error: "unauthorized" }, 403) };
   }
   const user = await getCurrentUser(c);

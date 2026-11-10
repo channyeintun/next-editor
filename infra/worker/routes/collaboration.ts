@@ -61,6 +61,7 @@ import {
   scheduleAuditEvent,
   scheduleClosedRoomCleanup,
 } from "./collaborationSideEffects";
+import { isAllowedCollaborationOrigin } from "./collaborationTransportAuth";
 import { collaborationVoiceRoute } from "./collaborationVoice";
 
 const MAX_CREATE_ROOM_REQUEST_BYTES = MAX_ENCODED_YJS_SNAPSHOT_LENGTH + 2 * 1024;
@@ -624,6 +625,9 @@ collaborationRoute.get("/rooms/:roomId/websocket", async (c) => {
   if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") {
     return c.json({ error: "expected WebSocket upgrade" }, 426);
   }
+  // The voice socket's Origin rule: the session cookie alone does not show
+  // that the app itself opened this socket.
+  if (!isAllowedCollaborationOrigin(c)) return c.json({ error: "unauthorized" }, 403);
   const user = await getCurrentUser(c);
   if (!user) return c.json({ error: "not signed in" }, 401);
   const roomId = collaborationIdSchema.safeParse(c.req.param("roomId"));
