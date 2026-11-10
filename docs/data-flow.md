@@ -205,12 +205,20 @@ mutes stretches of a finished recording through `applyRecordingEdit` (`src/core/
 A stretch is selected by dragging across the narration's waveform, or without a pointer by seeking
 and pressing "Start at playhead" and "End at playhead"; the selected range is announced as a status.
 
-- A cut span is collapsed into `CUT_WINDOW_MS` at its start on every track, in order, and what
-  follows moves earlier, so no change inside it is lost. The editor frames inside a cut are
-  squashed into one keyframe of their final state, so text typed and deleted there leaves no
-  trace. The preview's rrweb stamps are first re-based onto recorded time so the cut applies to
-  them directly, by the same lead replay uses (`getRrwebReplayLead`,
-  `src/core/src/utils/previewReplayLead.ts`).
+- A cut span is collapsed into `CUT_WINDOW_MS` at its start on every track, and what follows
+  moves earlier. What a track did inside the span is squashed into its state at the span's end
+  wherever the track can state one: the editor frames into one keyframe, the pointer into its
+  last position, and the workspace, runtime, chat and whiteboard events into one event each
+  (`src/core/src/recordingCutSquash.ts`: the last workspace snapshot with the editor's final
+  text, a runtime checkpoint, a chat checkpoint, the net whiteboard delta). On those tracks,
+  what was typed, pasted or drawn and removed again inside the cut leaves no trace in the file.
+- The preview's tracks cannot be squashed: rrweb segments are a log of DOM mutations and preview
+  events a log of panel and API-client actions, with no event that states a whole state. Every
+  one inside a cut is kept, in order, and applied in the cut's one instant, so what the preview
+  rendered there is never shown but is still in the saved `.ne`. The camera's file likewise
+  keeps the footage of a cut span, which playback skips. The preview's rrweb stamps are first
+  re-based onto recorded time so the cut applies to them directly, by the same lead replay uses
+  (`getRrwebReplayLead`, `src/core/src/utils/previewReplayLead.ts`).
 - Caption cues said inside a cut are dropped and those across one are shortened. A cue with word
   timings (a studio render's) also loses the words cut from the narration: its text is rebuilt
   from the words left by the producer's own join rule (`captionTextFromWords`,

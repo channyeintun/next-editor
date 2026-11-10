@@ -1,4 +1,10 @@
-import type { CaptionCue, CaptionTrack, CursorRecordingEvent, Recording } from "./types";
+import type {
+  CaptionCue,
+  CaptionTrack,
+  CursorRecordingEvent,
+  EditorFrame,
+  Recording,
+} from "./types";
 import type { PreviewDomPatchBatch, PreviewInitialDocument } from "./preview";
 import { createKeyframe, reconstructFrameAtIndex } from "./utils/frameDelta";
 import type { DeltaFrame } from "./utils/deltaTypes";
@@ -11,19 +17,38 @@ import {
 import { hasAudioEdit, type AudioEdit } from "./utils/audioEditSpec";
 import { captionTextFromWords } from "./utils/captionCues";
 import { getRrwebReplayLead } from "./utils/previewReplayLead";
+import {
+  squashChatEvents,
+  squashRuntimeEvents,
+  squashWhiteboardEvents,
+  squashWorkspaceEvents,
+} from "./recordingCutSquash";
 
 // ============================================================================
 // Cutting and muting a finished recording.
 //
 // A recording's tracks are logs of changes, so a cut cannot simply delete what
 // falls inside it: the code typed during a cut span is still in the file after
-// it. Instead a cut span is collapsed into CUT_WINDOW_MS at its start. Every
-// change inside it is kept, in order, and applied in that one instant, and
-// everything after it moves earlier. The editor frames inside a cut are then
-// squashed into one keyframe of their final state, so text typed and deleted
-// within the cut leaves no trace in the file. The narration is cut for real (a
-// pending audio edit, applied when the recording loads), and the camera is
-// mapped around the cut the way it is around a retake's.
+// it. Instead a cut span is collapsed into CUT_WINDOW_MS at its start, and
+// everything after it moves earlier. What each track did inside the span is
+// then squashed into its state at the span's end, wherever the track can state
+// one: the editor frames into one keyframe, the pointer into its last position,
+// and the workspace, runtime, chat and whiteboard events into one event each
+// (recordingCutSquash.ts). On those tracks, what was typed, pasted or drawn and
+// then removed again within the cut leaves no trace in the file.
+//
+// The preview is the exception. Its rrweb segments are a log of DOM mutations
+// and its events a log of panel and API-client actions, and neither has an
+// event that states a whole state, so dropping one would break every later one.
+// Every preview change inside a cut is kept, in order, and applied in that one
+// instant: a viewer never sees it, but what the preview rendered, or a request
+// the API client sent, inside a cut is still in the saved file. Slide events
+// are kept the same way; they hold no content.
+//
+// The narration is cut for real (a pending audio edit, applied when the
+// recording loads), and the camera is mapped around the cut the way it is
+// around a retake's: its file keeps the footage of the span, and playback
+// skips it.
 // ============================================================================
 
 /**
@@ -65,8 +90,17 @@ const isInsideCut = (time: number, cuts: readonly MediaSpan[]) =>
 const cutIndexOf = (time: number, cuts: readonly MediaSpan[]) =>
   cuts.findIndex((cut) => time > cut.start && time <= cut.end);
 
-function editFrames(frames: readonly DeltaFrame[], cuts: readonly MediaSpan[]): DeltaFrame[] {
+/**
+ * The edited frames, and the editor's state at each cut's last frame, by cut index
+ * and on the recording's own clock: what the workspace squash writes into the file
+ * that frame belongs to.
+ */
+function editFrames(
+  frames: readonly DeltaFrame[],
+  cuts: readonly MediaSpan[],
+): { frames: DeltaFrame[]; lastFrameByCut: Map<number, EditorFrame> } {
   const edited: DeltaFrame[] = [];
+  const lastFrameByCut = new Map<number, EditorFrame>();
   frames.forEach((frame, index) => {
     const cut = cutIndexOf(frame.timestamp, cuts);
     if (cut < 0) {
@@ -79,12 +113,13 @@ function editFrames(frames: readonly DeltaFrame[], cuts: readonly MediaSpan[]): 
     if (next && cutIndexOf(next.timestamp, cuts) === cut) return;
     const state = reconstructFrameAtIndex(frames, index);
     if (state) {
+      lastFrameByCut.set(cut, state);
       edited.push(
         createKeyframe({ ...state, timestamp: mapTimeThroughCuts(state.timestamp, cuts) }),
       );
     }
   });
-  return edited;
+  return { frames: edited, lastFrameByCut };
 }
 
 function editCursorEvents(
@@ -212,7 +247,8 @@ export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): R
     recording.previewPatchBatches,
     validCuts,
   );
-  const frames = editFrames(recording.frames, validCuts);
+  const { frames, lastFrameByCut } = editFrames(recording.frames, validCuts);
+  const cutOf = (time: number) => cutIndexOf(time, validCuts);
 
   // The narration loses each cut span but its last CUT_WINDOW_MS, which is what the
   // timeline keeps of it, so the two stay in step past every cut.
@@ -246,13 +282,26 @@ export function applyRecordingEdit(recording: Recording, edit: RecordingEdit): R
     previewEvents: retimeByTimestamp(recording.previewEvents, validCuts),
     previewInitialDocuments: preview.initialDocuments,
     previewPatchBatches: preview.patchBatches,
-    workspaceEvents: retimeByTimestamp(recording.workspaceEvents, validCuts),
-    runtimeEvents: retimeByTimestamp(recording.runtimeEvents, validCuts),
+    workspaceEvents: retimeByTimestamp(
+      recording.workspaceEvents &&
+        squashWorkspaceEvents(recording.workspaceEvents, cutOf, (cut) => lastFrameByCut.get(cut)),
+      validCuts,
+    ),
+    runtimeEvents: retimeByTimestamp(
+      recording.runtimeEvents && squashRuntimeEvents(recording.runtimeEvents, cutOf),
+      validCuts,
+    ),
     cursorEvents: recording.cursorEvents
       ? editCursorEvents(recording.cursorEvents, validCuts)
       : undefined,
-    whiteboardEvents: retimeByTimestamp(recording.whiteboardEvents, validCuts),
-    chatEvents: retimeByTimestamp(recording.chatEvents, validCuts),
+    whiteboardEvents: retimeByTimestamp(
+      recording.whiteboardEvents && squashWhiteboardEvents(recording.whiteboardEvents, cutOf),
+      validCuts,
+    ),
+    chatEvents: retimeByTimestamp(
+      recording.chatEvents && squashChatEvents(recording.chatEvents, cutOf),
+      validCuts,
+    ),
     captions: editCaptions(recording.captions, validCuts),
     // A chapter inside a cut starts where the cut now is.
     chapters: recording.chapters?.map((chapter) => ({
