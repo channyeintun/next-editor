@@ -9,6 +9,7 @@ import {
   updateLesson,
 } from "../../db/queries";
 import type { LessonRow } from "../../db/types";
+import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 
 vi.mock("../auth/session", () => ({
   getCurrentUser: vi.fn<() => Promise<unknown>>(),
@@ -32,7 +33,10 @@ vi.mock("../../db/slug", () => ({
 const LESSON_ID = "4f0c2a5e-8c1b-4d0e-9a57-0b1f9d3e2c71";
 const VICTIM_ID = "9b2d7c1e-3a4f-4e5b-8c6d-7e8f9a0b1c2d";
 
-const env = { DB: {} as D1Database } as never;
+const env = {
+  DB: {} as D1Database,
+  CONTENT_CREATE_RATE_LIMITER: countingRateLimiter(Infinity),
+} as never;
 
 function lessonRow(id: string): LessonRow {
   return {
@@ -54,11 +58,11 @@ function lessonRow(id: string): LessonRow {
   };
 }
 
-function createLesson(body: Record<string, unknown>) {
+function createLesson(body: Record<string, unknown>, routeEnv: unknown = env) {
   return lessonsRoute.request(
     "https://nexteditor.dev/",
     { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } },
-    env,
+    routeEnv as never,
   );
 }
 
@@ -182,6 +186,85 @@ describe("lessonsRoute lesson ids", () => {
 
     expect(response.status).toBe(404);
     expect(updateLesson).not.toHaveBeenCalled();
+  });
+});
+
+describe("lessonsRoute create bounds", () => {
+  // One free account used to be able to create rows as fast as it could send
+  // them, each up to the whole request body, in the D1 database every user shares.
+  it("refuses a new lesson id longer than a UUID needs", async () => {
+    const longId = "a".repeat(65);
+
+    const refused = await createLesson({
+      id: longId,
+      title: "Flood",
+      ne: `lessons/${longId}/a.ne`,
+    });
+    expect(refused.status).toBe(400);
+    expect(insertDraftLesson).not.toHaveBeenCalled();
+
+    const longest = "a".repeat(64);
+    expect(
+      (await createLesson({ id: longest, title: "Fine", ne: `lessons/${longest}/a.ne` })).status,
+    ).toBe(201);
+  });
+
+  it("refuses media filenames longer than the client ever names them", async () => {
+    const longName = `${"a".repeat(126)}.ne`;
+
+    for (const body of [
+      { ne: `lessons/${LESSON_ID}/${longName}` },
+      { ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`, thumbnail: `lessons/${LESSON_ID}/${longName}` },
+    ]) {
+      const response = await createLesson({ id: LESSON_ID, title: "Flood", ...body });
+      expect(response.status).toBe(400);
+    }
+    expect(insertDraftLesson).not.toHaveBeenCalled();
+  });
+
+  it("charges each create to the user's budget, and fails closed without one", async () => {
+    const body = { id: LESSON_ID, title: "A lesson", ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne` };
+    const limiter = countingRateLimiter(1);
+    const limitedEnv = { DB: {} as D1Database, CONTENT_CREATE_RATE_LIMITER: limiter };
+
+    expect((await createLesson(body, limitedEnv)).status).toBe(201);
+    const refused = await createLesson(body, limitedEnv);
+    expect(refused.status).toBe(429);
+    expect(limiter.keys).toEqual(["user:user-1", "user:user-1"]);
+
+    const refusing = { DB: {} as D1Database, CONTENT_CREATE_RATE_LIMITER: refusingRateLimiter() };
+    expect((await createLesson(body, refusing)).status).toBe(429);
+    expect((await createLesson(body, { DB: {} as D1Database })).status).toBe(503);
+    expect(insertDraftLesson).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 403, not the 409 that means already uploaded, once the owner holds the most lessons", async () => {
+    vi.mocked(insertDraftLesson).mockResolvedValueOnce(null);
+
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "You can keep at most 2000 lessons; delete one to add another",
+    });
+  });
+
+  it("still answers a retry of a create that landed, even at the cap", async () => {
+    vi.mocked(insertDraftLesson).mockResolvedValueOnce(null);
+    vi.mocked(getOwnedLessonById).mockResolvedValueOnce(lessonRow(LESSON_ID));
+
+    const response = await createLesson({
+      id: LESSON_ID,
+      title: "A lesson",
+      ne: `lessons/${LESSON_ID}/${LESSON_ID}.ne`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: LESSON_ID });
   });
 });
 

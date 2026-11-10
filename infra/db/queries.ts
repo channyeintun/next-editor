@@ -1,4 +1,5 @@
 import { firstFreeCandidate } from "./firstFreeCandidate";
+import { MAX_LESSONS_PER_OWNER, MAX_LIVE_SESSIONS_PER_USER } from "./ownerLimits";
 import type { LessonRow, SessionRow, UserRow } from "./types";
 import { isUniqueViolation } from "./uniqueViolation";
 
@@ -210,8 +211,10 @@ export async function createSession(
   };
   // Opportunistic cleanup: sweep this user's own expired sessions on every new
   // sign-in so the table doesn't grow unbounded (there's no separate cron for
-  // this yet). Bounded to this user's rows only, so it stays cheap, and batched
-  // with the INSERT so sign-in pays one round trip for both.
+  // this yet), and end the oldest live ones past MAX_LIVE_SESSIONS_PER_USER, so
+  // repeated sign-ins cannot pile up 30-day rows either. Bounded to this user's
+  // rows only, so it stays cheap, and batched with the INSERT so sign-in pays
+  // one round trip for all three.
   await db.batch([
     db.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").bind(userId, now),
     ...(options.replaces
@@ -220,6 +223,13 @@ export async function createSession(
     db
       .prepare("INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
       .bind(session.id, session.user_id, session.created_at, session.expires_at),
+    db
+      .prepare(
+        `DELETE FROM sessions WHERE user_id = ?1 AND id <> ?2 AND id NOT IN (
+           SELECT id FROM sessions WHERE user_id = ?1 AND id <> ?2
+           ORDER BY created_at DESC, id DESC LIMIT ?3)`,
+      )
+      .bind(userId, session.id, MAX_LIVE_SESSIONS_PER_USER - 1),
   ]);
   return session;
 }
@@ -348,17 +358,23 @@ export interface InsertDraftLessonParams {
   authorUrl: string | null;
 }
 
+/**
+ * Insert a new draft, or answer null when its owner already holds
+ * MAX_LESSONS_PER_OWNER lessons: the count is checked inside the INSERT, so
+ * concurrent creates cannot pass it together.
+ */
 export async function insertDraftLesson(
   db: D1Database,
   params: InsertDraftLessonParams,
-): Promise<LessonRow> {
+): Promise<LessonRow | null> {
   const now = Date.now();
   const row = await db
     .prepare(
       `INSERT INTO lessons
          (id, slug, owner_id, title, description, thumbnail, ne, duration, tags,
           author, author_url, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'draft', ?12, ?13
+       WHERE (SELECT COUNT(*) FROM lessons WHERE owner_id = ?3) < ?14
        RETURNING *`,
     )
     .bind(
@@ -375,12 +391,10 @@ export async function insertDraftLesson(
       params.authorUrl,
       now,
       now,
+      MAX_LESSONS_PER_OWNER,
     )
     .first<LessonRow>();
-  if (!row) {
-    throw new Error("insertDraftLesson: INSERT ... RETURNING produced no row");
-  }
-  return row;
+  return row ?? null;
 }
 
 export interface UpdateLessonParams {

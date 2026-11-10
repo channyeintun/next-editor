@@ -4,6 +4,7 @@ import type {
   PlaylistRowWithCount,
   PlaylistRowWithMembership,
 } from "./types";
+import { MAX_PLAYLISTS_PER_OWNER } from "./ownerLimits";
 import { ownerCondition, type AuthorRef } from "./queries";
 import { isUniqueViolation } from "./uniqueViolation";
 
@@ -35,23 +36,35 @@ export interface InsertPlaylistParams {
   description: string | null;
 }
 
+/**
+ * Insert a new playlist, or answer null when its owner already holds
+ * MAX_PLAYLISTS_PER_OWNER: the count is checked inside the INSERT, so
+ * concurrent creates cannot pass it together.
+ */
 export async function insertPlaylist(
   db: D1Database,
   params: InsertPlaylistParams,
-): Promise<PlaylistRow> {
+): Promise<PlaylistRow | null> {
   const now = Date.now();
   const row = await db
     .prepare(
       `INSERT INTO playlists (id, slug, owner_id, title, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+       WHERE (SELECT COUNT(*) FROM playlists WHERE owner_id = ?3) < ?8
        RETURNING *`,
     )
-    .bind(params.id, params.slug, params.ownerId, params.title, params.description, now, now)
+    .bind(
+      params.id,
+      params.slug,
+      params.ownerId,
+      params.title,
+      params.description,
+      now,
+      now,
+      MAX_PLAYLISTS_PER_OWNER,
+    )
     .first<PlaylistRow>();
-  if (!row) {
-    throw new Error("insertPlaylist: INSERT ... RETURNING produced no row");
-  }
-  return row;
+  return row ?? null;
 }
 
 export interface PlaylistWithLessons {

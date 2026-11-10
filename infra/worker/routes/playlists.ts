@@ -28,7 +28,9 @@ import {
   MAX_SLUG_INSERT_ATTEMPTS,
   slugifyTitle,
 } from "../../db/slug";
+import { MAX_PLAYLISTS_PER_OWNER } from "../../db/ownerLimits";
 import { requireUser } from "../auth/requireUser";
+import { chargeUserWriteBudget } from "../rateLimit";
 import { metadataTextError } from "../../lessons/metadataLimits";
 import { MAX_LESSONS_PER_ADD } from "../../lessons/playlistLimits";
 
@@ -50,6 +52,13 @@ interface CreatePlaylistBody {
 
 playlistsRoute.post("/", requireUser, async (c) => {
   const user = c.get("user");
+  const limited = await chargeUserWriteBudget(
+    c,
+    c.env.CONTENT_CREATE_RATE_LIMITER,
+    user.id,
+    "Playlist creation",
+  );
+  if (limited) return limited;
 
   const read = await readJsonWithLimit(c.req.raw, MAX_PLAYLIST_REQUEST_BYTES);
   if (read.status === "too-large") {
@@ -77,6 +86,14 @@ playlistsRoute.post("/", requireUser, async (c) => {
         title,
         description,
       });
+      if (!row) {
+        return c.json(
+          {
+            error: `You can keep at most ${MAX_PLAYLISTS_PER_OWNER} playlists; delete one to add another`,
+          },
+          403,
+        );
+      }
       return c.json(
         playlistRowToOwnedPlaylist({ ...row, lesson_count: 0, first_lesson_thumbnail: null }),
         201,

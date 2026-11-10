@@ -59,6 +59,14 @@ export const LESSON_MEDIA_FILENAME_PATTERN = `[\\w-]+\\.(${LESSON_MEDIA_EXTENSIO
 
 const LESSON_MEDIA_FILENAME_RE = new RegExp(`^${LESSON_MEDIA_FILENAME_PATTERN}$`);
 
+/**
+ * The longest lesson media filename, extension included. The client's names
+ * are "<id>.ne", "<id>-thumbnail-<ms>.<ext>" and the like, well under this; a
+ * name is stored on the lesson row (its `ne` and `thumbnail`) and in an R2
+ * key, so an unbounded one would be bounded only by the request body.
+ */
+export const MAX_LESSON_MEDIA_FILENAME_CHARS = 128;
+
 export function isLessonMediaFilename(value: string): boolean {
-  return LESSON_MEDIA_FILENAME_RE.test(value);
+  return value.length <= MAX_LESSON_MEDIA_FILENAME_CHARS && LESSON_MEDIA_FILENAME_RE.test(value);
 }

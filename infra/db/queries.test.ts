@@ -1,8 +1,10 @@
 // @vitest-environment node
 import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { MAX_LESSONS_PER_OWNER, MAX_LIVE_SESSIONS_PER_USER } from "./ownerLimits";
 import {
   createSession,
+  insertDraftLesson,
   listPublishedLessons,
   type UpsertUserParams,
   upsertUserByGoogleSub,
@@ -468,5 +470,75 @@ describe("createSession", () => {
     });
     expect(session.expires_at - session.created_at).toBe(30 * 24 * 60 * 60 * 1000);
     expect(batch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps at most MAX_LIVE_SESSIONS_PER_USER live sessions, ending the oldest", async () => {
+    const { db, sqlite } = openSqliteD1();
+    insertUser(sqlite, "user-1", "ada");
+    insertUser(sqlite, "user-2", "grace");
+    const insertSession = sqlite.prepare(
+      "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+    );
+    // More live sessions than the cap, as repeated sign-ins used to pile up.
+    for (let index = 0; index < MAX_LIVE_SESSIONS_PER_USER + 5; index++) {
+      insertSession.run(`old-${index}`, "user-1", index, Number.MAX_SAFE_INTEGER);
+    }
+    insertSession.run("someone-elses", "user-2", 0, Number.MAX_SAFE_INTEGER);
+
+    const session = await createSession(db, "user-1");
+
+    const ids = sqlite
+      .prepare("SELECT id FROM sessions WHERE user_id = 'user-1' ORDER BY created_at")
+      .all()
+      .map((row) => row.id);
+    expect(ids).toHaveLength(MAX_LIVE_SESSIONS_PER_USER);
+    expect(ids.at(-1)).toBe(session.id);
+    // The newest of the earlier sessions stay signed in; the oldest are ended.
+    expect(ids[0]).toBe(`old-${6}`);
+    expect(sqlite.prepare("SELECT id FROM sessions WHERE user_id = 'user-2'").all()).toHaveLength(
+      1,
+    );
+  });
+});
+
+describe("insertDraftLesson", () => {
+  function draft(id: string, ownerId = "owner") {
+    return {
+      id,
+      slug: `slug-${id}`,
+      ownerId,
+      title: "Flood",
+      description: null,
+      thumbnail: null,
+      ne: `media/lessons/${id}/${id}.ne`,
+      duration: null,
+      tags: null,
+      author: null,
+      authorUrl: null,
+    };
+  }
+
+  it("refuses a lesson past MAX_LESSONS_PER_OWNER, inside the INSERT", async () => {
+    const { db, sqlite } = openSqliteD1();
+    insertUser(sqlite, "owner", "owner");
+    insertUser(sqlite, "other", "other");
+    const insert = sqlite.prepare(
+      `INSERT INTO lessons (id, slug, owner_id, title, ne, created_at, updated_at)
+       VALUES (?, ?, 'owner', 'Flood', ?, 0, 0)`,
+    );
+    for (let index = 0; index < MAX_LESSONS_PER_OWNER - 1; index++) {
+      insert.run(`seed-${index}`, `seed-${index}`, `media/lessons/seed-${index}/x.ne`);
+    }
+
+    expect(await insertDraftLesson(db, draft("last"))).toMatchObject({ id: "last" });
+    expect(await insertDraftLesson(db, draft("one-too-many"))).toBeNull();
+    const count = sqlite
+      .prepare("SELECT COUNT(*) AS n FROM lessons WHERE owner_id = 'owner'")
+      .get();
+    expect(count).toEqual({ n: MAX_LESSONS_PER_OWNER });
+    // The cap is per owner.
+    expect(await insertDraftLesson(db, draft("elsewhere", "other"))).toMatchObject({
+      owner_id: "other",
+    });
   });
 });

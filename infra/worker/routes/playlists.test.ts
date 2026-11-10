@@ -11,6 +11,7 @@ import {
   type PlaylistWithLessons,
 } from "../../db/playlistQueries";
 import type { LessonRow, PlaylistRow } from "../../db/types";
+import { countingRateLimiter } from "../testing/rateLimit";
 
 vi.mock("../auth/session", () => ({
   getCurrentUser: vi.fn<() => Promise<unknown>>(),
@@ -32,7 +33,10 @@ vi.mock("../../db/slug", () => ({
   slugifyTitle: (title: string, fallback: string) => title || fallback,
 }));
 
-const env = { DB: {} as D1Database } as never;
+const env = {
+  DB: {} as D1Database,
+  CONTENT_CREATE_RATE_LIMITER: countingRateLimiter(Infinity),
+} as never;
 
 function send(method: "POST" | "PATCH", path: string, body: Record<string, unknown>) {
   return playlistsRoute.request(
@@ -54,6 +58,42 @@ beforeEach(() => {
     created_at: 1,
     updated_at: 1,
   }));
+});
+
+describe("playlistsRoute create bounds", () => {
+  function create(routeEnv: unknown) {
+    return playlistsRoute.request(
+      "https://nexteditor.dev/",
+      {
+        method: "POST",
+        body: JSON.stringify({ title: "Flood" }),
+        headers: { "content-type": "application/json" },
+      },
+      routeEnv as never,
+    );
+  }
+
+  it("charges each create to the user's budget, and fails closed without one", async () => {
+    const limiter = countingRateLimiter(1);
+    const limitedEnv = { DB: {} as D1Database, CONTENT_CREATE_RATE_LIMITER: limiter };
+
+    expect((await create(limitedEnv)).status).toBe(201);
+    expect((await create(limitedEnv)).status).toBe(429);
+    expect(limiter.keys).toEqual(["user:user-1", "user:user-1"]);
+    expect((await create({ DB: {} as D1Database })).status).toBe(503);
+    expect(insertPlaylist).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 403 once the owner holds the most playlists one may keep", async () => {
+    vi.mocked(insertPlaylist).mockResolvedValueOnce(null);
+
+    const response = await create(env);
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "You can keep at most 200 playlists; delete one to add another",
+    });
+  });
 });
 
 describe("playlistsRoute text limits", () => {

@@ -145,8 +145,9 @@ binding = "CACHE"
 # `period` may only be 10 or 60 seconds; keep 60, because the routes' 429 says
 # "retry in a minute". `namespace_id` names the counter across the whole
 # Cloudflare account: never reuse one for a different budget, and keep this
-# 7101-7110 block (playgrounds 7101-7107, AthanLab 7108-7109, /api/proxy 7110)
-# clear of other Workers' ids, or they would share counters.
+# 7101-7111 block (playgrounds 7101-7107, AthanLab 7108-7109, /api/proxy 7110,
+# signed-in writes to shared storage 7111) clear of other Workers' ids, or they
+# would share counters.
 [[ratelimits]]
 name = "GO_RUN_RATE_LIMITER"
 namespace_id = "7101"
@@ -227,6 +228,16 @@ simple = { limit = 30, period = 60 }
 name = "PROXY_RATE_LIMITER"
 namespace_id = "7110"
 simple = { limit = 120, period = 60 }
+
+# Creating lessons and playlists (POST /api/lessons, POST /api/playlists),
+# keyed "user:<id>": every user shares one D1 database, so one account must
+# not be able to create rows as fast as it can send requests. An author makes
+# one per upload; a refusal answers 429, a missing binding 503. How many rows
+# one owner may hold at all is capped in D1 (infra/db/ownerLimits.ts).
+[[ratelimits]]
+name = "CONTENT_CREATE_RATE_LIMITER"
+namespace_id = "7111"
+simple = { limit = 20, period = 60 }
 
 # One hibernating WebSocket coordinator per live-collaboration room. Every room
 # keeps its durable Yjs log in this object's SQLite storage.

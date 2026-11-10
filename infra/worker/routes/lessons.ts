@@ -17,14 +17,16 @@ import {
   MAX_SLUG_INSERT_ATTEMPTS,
   slugifyTitle,
 } from "../../db/slug";
+import { MAX_LESSONS_PER_OWNER } from "../../db/ownerLimits";
 import { isUniqueViolation } from "../../db/uniqueViolation";
 import { lessonRowToOwnedLesson } from "../../db/types";
 import { requireUser } from "../auth/requireUser";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
 import { metadataTextError } from "../../lessons/metadataLimits";
 import { findPublishedLessonBySlug, readPublishedLessonsPage } from "../lessonCatalog";
-import { isLessonId, LESSON_ID_PATTERN } from "../lessonIds";
+import { isNewLessonId, LESSON_ID_PATTERN } from "../lessonIds";
 import { isLessonMediaFilename } from "../lessonMediaFiles";
+import { chargeUserWriteBudget } from "../rateLimit";
 
 // Well above the largest lesson metadata metadataLimits.ts allows (a
 // 10,000-character description is at most ~60 KB of JSON).
@@ -96,13 +98,20 @@ interface CreateLessonBody {
 
 lessonsRoute.post("/", requireUser, async (c) => {
   const user = c.get("user");
+  const limited = await chargeUserWriteBudget(
+    c,
+    c.env.CONTENT_CREATE_RATE_LIMITER,
+    user.id,
+    "Lesson creation",
+  );
+  if (limited) return limited;
 
   const read = await readJsonWithLimit(c.req.raw, MAX_LESSON_REQUEST_BYTES);
   if (read.status === "too-large") {
     return c.json({ error: "request body is too large" }, 413);
   }
   const body = read.status === "ok" ? (read.value as CreateLessonBody | null) : null;
-  if (!body || !isLessonId(body.id)) {
+  if (!body || !isNewLessonId(body.id)) {
     return c.json({ error: "a lesson id is required" }, 400);
   }
   const title = typeof body.title === "string" ? body.title.trim() : "";
@@ -147,7 +156,18 @@ lessonsRoute.post("/", requireUser, async (c) => {
         author: user.name,
         authorUrl: `/learn/@${user.username}`,
       });
-      return c.json(lessonRowToOwnedLesson(row), 201);
+      if (row) return c.json(lessonRowToOwnedLesson(row), 201);
+      // The owner already holds MAX_LESSONS_PER_OWNER lessons. A retry of a
+      // create that landed is still answered with its row, as below. Not a
+      // 409: the upload modal reads that as "already uploaded".
+      const existing = await getOwnedLessonById(c.env.DB, body.id, user.id);
+      if (existing) return c.json(lessonRowToOwnedLesson(existing), 200);
+      return c.json(
+        {
+          error: `You can keep at most ${MAX_LESSONS_PER_OWNER} lessons; delete one to add another`,
+        },
+        403,
+      );
     } catch (error) {
       // Two concurrent creates with the same title both passed
       // generateUniqueSlug's read and raced to INSERT — retry picks the next

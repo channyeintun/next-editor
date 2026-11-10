@@ -6,9 +6,11 @@ import {
   deletePlaylist,
   getOwnedPlaylistLessons,
   getPlaylistBySlug,
+  insertPlaylist,
   removeLessonFromPlaylist,
   reorderPlaylistLessons,
 } from "./playlistQueries";
+import { MAX_PLAYLISTS_PER_OWNER } from "./ownerLimits";
 import { openSqliteD1 } from "./testing";
 
 /**
@@ -169,5 +171,38 @@ describe("getPlaylistBySlug", () => {
 
   it("answers null for an unknown slug", async () => {
     await expect(getPlaylistBySlug(createDb(), "nope")).resolves.toBeNull();
+  });
+});
+
+describe("insertPlaylist", () => {
+  it("refuses a playlist past MAX_PLAYLISTS_PER_OWNER, inside the INSERT", async () => {
+    const { db, sqlite } = openSqliteD1();
+    sqlite.exec(`
+      INSERT INTO users (id, google_sub, email, username, created_at) VALUES
+        ('owner', 'google-owner', 'owner@example.com', 'owner', 0),
+        ('other', 'google-other', 'other@example.com', 'other', 0);
+    `);
+    const insert = sqlite.prepare(
+      "INSERT INTO playlists (id, slug, owner_id, title, created_at, updated_at) VALUES (?, ?, 'owner', 'Flood', 0, 0)",
+    );
+    for (let index = 0; index < MAX_PLAYLISTS_PER_OWNER - 1; index++) {
+      insert.run(`seed-${index}`, `seed-${index}`);
+    }
+    const params = (id: string, ownerId = "owner") => ({
+      id,
+      slug: `slug-${id}`,
+      ownerId,
+      title: "Flood",
+      description: "က".repeat(10_000),
+    });
+
+    expect(await insertPlaylist(db, params("last"))).toMatchObject({ id: "last" });
+    expect(await insertPlaylist(db, params("one-too-many"))).toBeNull();
+    expect(
+      sqlite.prepare("SELECT COUNT(*) AS n FROM playlists WHERE owner_id = 'owner'").get(),
+    ).toEqual({ n: MAX_PLAYLISTS_PER_OWNER });
+    expect(await insertPlaylist(db, params("elsewhere", "other"))).toMatchObject({
+      owner_id: "other",
+    });
   });
 });

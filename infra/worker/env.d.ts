@@ -61,6 +61,10 @@ export interface Env {
   // Per-caller budget for the generic /api/proxy (routes/proxy.ts), keyed like
   // the playground budgets. A missing binding fails closed with a 502.
   PROXY_RATE_LIMITER?: RateLimit;
+  // Per-user budgets for the routes that write to shared storage, keyed
+  // "user:<id>" (chargeUserWriteBudget in rateLimit.ts): creating lessons and
+  // playlists. A missing binding fails closed with a 503.
+  CONTENT_CREATE_RATE_LIMITER?: RateLimit;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   // Workers KV result cache for the playground routes (infra/worker/cache.ts).
