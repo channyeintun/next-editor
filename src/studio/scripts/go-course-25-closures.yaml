@@ -1,0 +1,761 @@
+# Go course, lesson 25: closures — functions as values (Burmese).
+#
+# Start state: parcel.go pinned with the canonical Parcel and cityNames (COURSE-KIT §3.4); main.go
+# with `package main`, an import block holding only "fmt" ("cmp" and "slices" arrive as single
+# inserted lines in sorted position at run-2) and an empty `func main`.
+# Edits, all insert-only (canonical final state: probe 24-closures):
+#   1. codeMaker (the outer function with its counter, then the returned closure), two makers and
+#      one Println calling them -> run-1: MDY-0001 MDY-0002 NPT-0001 MDY-0003;
+#   2. three parcels, slices.SortFunc with a cmp.Compare function by weight, a Println of the
+#      first and last codes (+ "cmp", "slices") -> run-2 adds YGN-0001 MDY-0001;
+#   3. a slice of functions built in a loop (each prints its round's i), then a loop calling them
+#      -> run-3 adds 0 1 2.
+# Boards: (B) each function carries a small bag of the variables it captured: nextMDY and nextNPT
+# with their own counters; after run-3 three small bags, one i per round; (Q) the quiz (a second
+# variable holding the same function shares its counter; probe `quiz`).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-25-closures
+  title: "Go course 25: Closure ဆိုတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Two files: the explorer shows main.go and the pinned parcel.go.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: "package main\n\nimport (\n\t\"fmt\"\n)\n\nfunc main() {\n}\n"
+      parcel.go: "package main\n\n// Parcel is one parcel handed in at the counter.\ntype Parcel struct {\n\tCode     string  // tracking code: \"MDY-0001\"\n\tTo       string  // city code: \"MDY\"\n\tWeightKg float64 // weight in kilograms\n}\n\n// cityNames holds the cities the service sends to, by code.\nvar cityNames = map[string]string{\n\t\"YGN\": \"ရန်ကုန်\",\n\t\"BGO\": \"ပဲခူး\",\n\t\"NPT\": \"နေပြည်တော်\",\n\t\"MLM\": \"မော်လမြိုင်\",\n\t\"MDY\": \"မန္တလေး\",\n\t\"TGI\": \"တောင်ကြီး\",\n}\n"
+  whiteboardAssets:
+    # Board B: a function with a small bag of remembered variables; two makers = two bags.
+    - {
+        id: b-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 420,
+        height: 50,
+        text: "Closure ဆိုတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - { id: b-f1, kind: rectangle, x: 290, y: 235, width: 360, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: b-f1-label,
+        kind: text,
+        x: 320,
+        y: 255,
+        width: 300,
+        height: 40,
+        text: "nextMDY · function",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-bag1, kind: ellipse, x: 320, y: 330, width: 300, height: 130, strokeColor: "#f08c00" }
+    - {
+        id: b-bag1-city,
+        kind: text,
+        x: 375,
+        y: 355,
+        width: 200,
+        height: 40,
+        text: "city = MDY",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-bag1-n,
+        kind: text,
+        x: 375,
+        y: 405,
+        width: 200,
+        height: 40,
+        text: "n = 3",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-f2, kind: rectangle, x: 700, y: 235, width: 360, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: b-f2-label,
+        kind: text,
+        x: 730,
+        y: 255,
+        width: 300,
+        height: 40,
+        text: "nextNPT · function",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-bag2, kind: ellipse, x: 730, y: 330, width: 300, height: 130, strokeColor: "#f08c00" }
+    - {
+        id: b-bag2-city,
+        kind: text,
+        x: 785,
+        y: 355,
+        width: 200,
+        height: 40,
+        text: "city = NPT",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-bag2-n,
+        kind: text,
+        x: 785,
+        y: 405,
+        width: 200,
+        height: 40,
+        text: "n = 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-note,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 760,
+        height: 40,
+        text: "codeMaker တစ်ခါ ခေါ် = အိတ် အသစ် တစ်လုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B, after run-3: one i per round of the loop, so one bag each.
+    - {
+        id: b-loop,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 300,
+        height: 40,
+        text: "အခေါက်တိုင်း i အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-i0, kind: ellipse, x: 620, y: 550, width: 140, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: b-i0-label,
+        kind: text,
+        x: 650,
+        y: 565,
+        width: 90,
+        height: 40,
+        text: "i = 0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-i1, kind: ellipse, x: 780, y: 550, width: 140, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: b-i1-label,
+        kind: text,
+        x: 810,
+        y: 565,
+        width: 90,
+        height: 40,
+        text: "i = 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: b-i2, kind: ellipse, x: 940, y: 550, width: 140, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: b-i2-label,
+        kind: text,
+        x: 970,
+        y: 565,
+        width: 90,
+        height: 40,
+        text: "i = 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (probe `quiz`).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 800,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 600,
+        height: 40,
+        text: 'next := codeMaker("MDY")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: "again := next",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 640,
+        height: 40,
+        text: "fmt.Println(next(), again())",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-again,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 335,
+        width: 220,
+        height: 12,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 500,
+        height: 40,
+        text: "က · MDY-0001 MDY-0001",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 520,
+        width: 500,
+        height: 40,
+        text: "ခ · MDY-0001 MDY-0002",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 820,
+        y: 510,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7125
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 MDY-0002 NPT-0001 MDY-0003\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 MDY-0002 NPT-0001 MDY-0003\nYGN-0001 MDY-0001\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "MDY-0001 MDY-0002 NPT-0001 MDY-0003\nYGN-0001 MDY-0001\n0 1 2 \n"
+
+scenes:
+  - id: recall
+    chapter: Function ကို တန်ဖိုး တစ်ခုလို
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ ပါဆယ် တစ်ခုစီရဲ့ အလုပ်ကို function တစ်ခုအဖြစ် ထုပ်ပြီး၊ panic ကို ဖမ်းပေးတဲ့
+      function ဆီ ပေးလိုက်ခဲ့ပါတယ်။ ဆိုလိုတာက Go မှာ function ဆိုတာလည်း ဂဏန်း၊ စာသား တွေလိုပဲ တန်ဖိုး
+      တစ်ခု ဖြစ်ပါတယ်။ variable ထဲ ထည့်ထားလို့ ရတယ်၊ တခြား function ဆီ ပေးလို့ ရတယ်၊ function တစ်ခုက
+      ပြန်ပေးလို့လည်း ရပါတယ်။ ဒီနေ့ အဲဒီ သုံးမျိုးလုံးကို ပါဆယ် ဝန်ဆောင်မှုထဲမှာ သုံးကြည့်ပြီး၊ သူ့ပတ်ဝန်းကျင်က
+      variable တွေကို မှတ်ထားတဲ့ closure ကို လေ့လာပါမယ်။ [[mark:problem]] ပါဆယ် တစ်ခု လက်ခံတိုင်း
+      tracking code တစ်ခု ပေးရပါတယ်။ code မှာ မြို့ code၊ dash၊ ပြီးတော့ အဲဒီ မြို့အတွက် နံပါတ် စဉ်
+      ပါပါတယ်။ မန္တလေး ပါဆယ်တွေက တစ်၊ နှစ်၊ သုံး ဆိုပြီး သူ့ဘာသာ ရေတွက်ရပြီး၊ နေပြည်တော် ပါဆယ်တွေကလည်း
+      တစ်ကနေ သီးခြား စရပါတယ်။ အခုထိ ဒီ code တွေကို ကိုယ်တိုင် လက်နဲ့ ရေးခဲ့ပါတယ်၊ ဒီနေ့ program ကို
+      ထုတ်ပေးခိုင်းကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function types",
+          url: "https://go.dev/ref/spec#Function_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: maker
+    chapter: Function ကို ပြန်ပေးတဲ့ function
+    narration: >-
+      [[mark:type-maker]] code ထုတ်ပေးမယ့် function ကို ရေးပါမယ်။ ဒီ function က မြို့ code တစ်ခုကို
+      ယူပါတယ်။ [[mark:sel-result]] ပြန်ပေးမယ့် type ကို ကြည့်ပါ။ ဒါက စာသား မဟုတ်ပါဘူး၊ စာသား တစ်ခုကို
+      ပြန်ပေးတဲ့ function တစ်ခုပါ။ ဆိုလိုတာက ဒီ function ကို ခေါ်လိုက်ရင် code တစ်ခု မရဘဲ၊ code တွေကို
+      ထုတ်ပေးမယ့် function အသစ် တစ်ခုကို ရမှာပါ။ အထဲမှာ ရေတွက်ဖို့ n ဆိုတဲ့ variable ကို သုညနဲ့ စထားပါတယ်။
+      [[mark:type-inner]] ပြီးတော့ ပြန်ပေးမယ့် function ကို အထဲမှာပဲ နာမည်မပါဘဲ တိုက်ရိုက် ရေးပါမယ်။ သူ့ကို
+      ခေါ်တိုင်း n ကို တစ် တိုးပြီး၊ မြို့ code၊ dash နဲ့ နံပါတ်ကို ပေါင်းထားတဲ့ စာသားကို ပြန်ပေးပါတယ်။
+      [[mark:sel-format]] format ထဲက ဒုတိယ နေရာလွတ်က နံပါတ်ကို ဂဏန်း လေးလုံး ပြည့်အောင် ရှေ့က
+      သုညတွေနဲ့ ဖြည့်ပေးပါတယ်။ [[mark:sel-n]] အရေးကြီးတာကတော့ ဒီ n ပါ။ n က အထဲက function ရဲ့ variable
+      မဟုတ်ပါဘူး၊ အပြင်က function ရဲ့ variable ပါ။ ဒါပေမဲ့ အထဲက function က သူ့ကို သုံးနေပါတယ်။ ဒီလို
+      သူ့ပတ်ဝန်းကျင်က variable တွေကို မှတ်ထားပြီး သုံးတဲ့ function ကို closure လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+      - { title: "fmt package", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - id: type-maker
+        type: editor.type
+        at: { mark: type-maker }
+        target: { file: main.go, after: "\t\"fmt\"\n)\n", occurrence: 1 }
+        text: "\n// codeMaker returns a function that hands out the next tracking code for one city.\nfunc codeMaker(city string) func() string {\n\tn := 0\n}\n"
+        cadence: line-by-line
+      - id: sel-result
+        type: editor.select
+        at: { mark: sel-result }
+        target: { file: main.go, text: "func() string {", occurrence: 1 }
+      - id: type-inner
+        type: editor.type
+        at: { mark: type-inner }
+        target: { file: main.go, after: "\tn := 0\n", occurrence: 1 }
+        text: "\treturn func() string {\n\t\tn++\n\t\treturn fmt.Sprintf(\"%s-%04d\", city, n)\n\t}\n"
+        cadence: line-by-line
+      - id: sel-format
+        type: editor.select
+        at: { mark: sel-format }
+        target: { file: main.go, text: '"%s-%04d"', occurrence: 1 }
+      - id: sel-n
+        type: editor.select
+        at: { mark: sel-n }
+        target: { file: main.go, text: "n++", occurrence: 1 }
+
+  - id: use
+    narration: >-
+      [[mark:type-makers]] အခု main ထဲမှာ မန္တလေး အတွက် တစ်ခု၊ နေပြည်တော် အတွက် တစ်ခု ဆိုပြီး code
+      ထုတ်ပေးမယ့် function နှစ်ခုကို တောင်းပါမယ်။ ရလာတဲ့ function တွေကို variable နှစ်ခုထဲမှာ
+      ထည့်ထားပါတယ်။ ဒါက function ကို variable ထဲ ထည့်ထားတာပါ။ [[mark:type-print]] ပြီးတော့ မန္တလေး
+      function ကို နှစ်ခါ၊ နေပြည်တော် function ကို တစ်ခါ၊ နောက်ဆုံး မန္တလေး function ကို နောက်တစ်ခါ ခေါ်ပြီး
+      code လေးခုကို တစ်ကြောင်းတည်းမှာ ထုတ်ပြပါမယ်။ ဂဏန်းတွေ ဘယ်လို ထွက်လာမလဲ ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - id: type-makers
+        type: editor.type
+        at: { mark: type-makers }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tnextMDY := codeMaker(\"MDY\")\n\tnextNPT := codeMaker(\"NPT\")\n"
+        cadence: line-by-line
+      - id: type-print
+        type: editor.type
+        at: { mark: type-print }
+        target: { file: main.go, after: "\tnextNPT := codeMaker(\"NPT\")\n", occurrence: 1 }
+        text: "\tfmt.Println(nextMDY(), nextMDY(), nextNPT(), nextMDY())\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "MDY-0001 MDY-0002 NPT-0001 MDY-0003",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-maker,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\t\tn++\n\t\treturn fmt.Sprintf(\"%s-%04d\", city, n)\n",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-codes]] output မှာ မန္တလေး ပါဆယ် နံပါတ် တစ်၊ နံပါတ် နှစ်၊ ပြီးတော့ နေပြည်တော် ပါဆယ်
+      နံပါတ် တစ်၊ နောက်ဆုံး မန္တလေး ပါဆယ် နံပါတ် သုံး ထွက်လာပါတယ်။ နံပါတ်တွေ ရှေ့မှာ သုညတွေ ဖြည့်ထားလို့
+      ဂဏန်း လေးလုံး အမြဲ ပြည့်နေပါတယ်။ [[mark:remember-n]] သတိထားရမှာက code ထုတ်ပေးတဲ့ function က main ရဲ့ ပထမ line မှာတင် ပြီးသွားခဲ့ပါပြီ၊
+      ဒါပေမဲ့ n ပျောက်မသွားပါဘူး။ မန္တလေး function ကို ခေါ်တိုင်း သူ့ n က တစ်၊ နှစ်၊ သုံး ဆိုပြီး ဆက်တိုးပါတယ်။
+      နေပြည်တော် function ကတော့ တစ်ကနေ သီးခြား စပါတယ်၊ သူ့မှာ ကိုယ်ပိုင် n တစ်ခု ရှိနေလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - {
+          id: point-codes,
+          type: console.point,
+          at: { mark: point-codes },
+          target: { text: "MDY-0001 MDY-0002 NPT-0001 MDY-0003" },
+        }
+
+  - id: bags
+    chapter: Closure ရဲ့ အိတ်လေး
+    narration: >-
+      [[mark:board-bags]] ဒါကို ပုံနဲ့ ကြည့်ရအောင်။ [[mark:draw-f1]] closure တစ်ခုကို သူ မှတ်ထားတဲ့ variable
+      တွေ ထည့်ထားတဲ့ အိတ်လေး တစ်လုံး လွယ်ထားတဲ့ function လို့ မြင်ကြည့်ပါ။ မန္တလေး function ရဲ့ အိတ်ထဲမှာ
+      မြို့ code နဲ့ n ရှိပြီး၊ n က အခု သုံး ဖြစ်နေပါပြီ။ [[mark:draw-f2]] နေပြည်တော် function မှာတော့ သူ့
+      ကိုယ်ပိုင် အိတ် တစ်လုံး ရှိပြီး၊ အထဲက n က တစ် ပဲ ရှိပါသေးတယ်။ [[mark:draw-note]] ဘာကြောင့် အိတ်
+      နှစ်လုံး ဖြစ်ရလဲဆိုတော့၊ code ထုတ်ပေးတဲ့ function ကို ခေါ်တိုင်း n အသစ် တစ်ခု ဖန်တီးပြီး အိတ် အသစ်
+      တစ်လုံးနဲ့ ပြန်ပေးလို့ပါ။ ဒါကြောင့် function တစ်ခုကို ခေါ်ရင် သူ့ အိတ်ထဲက n ပဲ ပြောင်းပြီး၊ တခြား
+      function ရဲ့ n ကို မထိပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-bags } }
+      - {
+          id: board-bags,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-f1,
+          type: whiteboard.apply,
+          at: { mark: draw-f1 },
+          upsertIds: [b-f1, b-f1-label, b-bag1, b-bag1-city, b-bag1-n],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-f2,
+          type: whiteboard.apply,
+          at: { mark: draw-f2 },
+          upsertIds: [b-f2, b-f2-label, b-bag2, b-bag2-city, b-bag2-n],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: draw-note },
+          upsertIds: [b-note],
+          drawMs: 1400,
+        }
+
+  - id: sort
+    chapter: Function ကို ပေးပို့တာ
+    narration: >-
+      [[mark:close-bags]] နောက်တစ်ခု၊ function ကို တခြား function ဆီ ပေးတာကို ကြည့်ရအောင်။ [[mark:open-parcel]]
+      parcel ဖိုင်ထဲမှာ ပါဆယ် တစ်ခုရဲ့ struct ရှိပါတယ်။ [[mark:sel-weight]] ဒီနေ့ လိုချင်တာက ပါဆယ်တွေကို
+      ဒီ အလေးချိန် field နဲ့ ပေါ့တာကနေ လေးတာ အစဉ်လိုက် စီဖို့ပါ။ [[mark:open-main-2]] main ဖိုင်ကို
+      ပြန်သွားပြီး၊ [[mark:type-parcels]] ပါဆယ် သုံးခု ပါတဲ့ slice တစ်ခု ထည့်ပါမယ်။ ဂဏန်း slice ဆိုရင်
+      ဘယ်ဟာ ငယ်လဲ Go က သိပါတယ်။ ဒါပေမဲ့ ပါဆယ် နှစ်ခုမှာ ဘယ်ဟာက အရင် လာရမလဲ ဆိုတာ Go မသိပါဘူး၊ code
+      နဲ့ စီမလား၊ မြို့နဲ့ စီမလား၊ အလေးချိန်နဲ့ စီမလား။ [[mark:type-sort]] ဒါကြောင့် slices package ထဲက
+      SortFunc ကို slice နဲ့ အတူ နှိုင်းယှဉ်ပေးမယ့် function တစ်ခုကိုပါ ပေးပါတယ်။ [[mark:sel-compare]] ဒီ
+      function က ပါဆယ် နှစ်ခုကို ယူပြီး၊ ပထမ ပါဆယ်က အရင် လာရမယ်ဆိုရင် အနှုတ် ကိန်း၊ တူရင် သုည၊ နောက်မှ
+      လာရမယ်ဆိုရင် အပေါင်း ကိန်း ပြန်ပေးရပါတယ်။ cmp package ထဲက Compare က ဂဏန်း နှစ်ခုအတွက် ဒါကို
+      အတိအကျ လုပ်ပေးပါတယ်။ [[mark:type-imports]] package နှစ်ခု သုံးမှာ ဖြစ်လို့ import ထဲမှာ ထည့်ပါမယ်။
+      ဒါဆို program က ပါဆယ်တွေကို အလေးချိန်နဲ့ စီပြီး၊ အပေါ့ဆုံးနဲ့ အလေးဆုံး ပါဆယ်ရဲ့ code ကို ထုတ်ပြပါမယ်။
+      [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "slices package — SortFunc", url: "https://pkg.go.dev/slices#SortFunc" }
+      - { title: "cmp package — Compare", url: "https://pkg.go.dev/cmp#Compare" }
+    actions:
+      - {
+          id: close-bags,
+          type: whiteboard.apply,
+          at: { mark: close-bags },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-parcel, type: workspace.openFile, at: { mark: open-parcel }, path: parcel.go }
+      - id: sel-weight
+        type: editor.select
+        at: { mark: sel-weight }
+        target: { file: parcel.go, text: "WeightKg float64", occurrence: 1 }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-parcels
+        type: editor.type
+        at: { mark: type-parcels }
+        target: { file: main.go, after: "nextNPT(), nextMDY())\n", occurrence: 1 }
+        text: "\n\tparcels := []Parcel{\n\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1},\n\t\t{Code: \"YGN-0001\", To: \"YGN\", WeightKg: 0.5},\n\t}\n"
+        cadence: line-by-line
+      - id: type-sort
+        type: editor.type
+        at: { mark: type-sort }
+        target: { file: main.go, after: "WeightKg: 0.5},\n\t}\n", occurrence: 1 }
+        text: "\tslices.SortFunc(parcels, func(a, b Parcel) int {\n\t\treturn cmp.Compare(a.WeightKg, b.WeightKg)\n\t})\n\tfmt.Println(parcels[0].Code, parcels[2].Code)\n"
+        cadence: line-by-line
+      - id: sel-compare
+        type: editor.select
+        at: { mark: sel-compare }
+        target:
+          {
+            file: main.go,
+            text: "func(a, b Parcel) int {\n\t\treturn cmp.Compare(a.WeightKg, b.WeightKg)\n\t}",
+            occurrence: 1,
+          }
+      - id: type-imports
+        type: editor.type
+        at: { mark: type-imports }
+        target: { file: main.go, after: "import (\n", occurrence: 1 }
+        text: "\t\"cmp\"\n"
+      - id: type-imports-2
+        type: editor.type
+        at: { afterAction: type-imports }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"slices\"\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "YGN-0001 MDY-0001",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-sort,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\t\treturn cmp.Compare(a.WeightKg, b.WeightKg)\n",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-sorted]] ဒုတိယ စာကြောင်းမှာ ပထမဆုံး ပါဆယ်က ရန်ကုန် ပါဆယ် ဖြစ်ပြီး၊ နောက်ဆုံး ပါဆယ်က မန္တလေး
+      ပါဆယ်ပါ။ ရန်ကုန် ပါဆယ်က ကီလို ဝက်ပဲ ရှိလို့ အပေါ့ဆုံး ဖြစ်ပြီး၊ မန္တလေး ပါဆယ်က နှစ်ကီလိုခွဲ ရှိလို့
+      အလေးဆုံးပါ။ ကိုယ်တို့က စီတဲ့ နည်းကို မရေးခဲ့ပါဘူး၊ ပါဆယ် နှစ်ခုကို ဘယ်လို နှိုင်းယှဉ်ရမလဲ ဆိုတာကိုပဲ
+      function တစ်ခုအဖြစ် ပေးလိုက်တာပါ။ ကျန်တာကို SortFunc က လုပ်ပေးပါတယ်။ [[mark:point-first]] ပထမ
+      စာကြောင်းကတော့ အရင်အတိုင်းပဲ ဖြစ်ပါတယ်။
+    sources:
+      - { title: "slices package — SortFunc", url: "https://pkg.go.dev/slices#SortFunc" }
+    actions:
+      - {
+          id: point-sorted,
+          type: console.point,
+          at: { mark: point-sorted },
+          target: { text: "YGN-0001 MDY-0001" },
+        }
+      - {
+          id: point-first,
+          type: console.point,
+          at: { mark: point-first },
+          target: { text: "MDY-0001 MDY-0002 NPT-0001 MDY-0003" },
+        }
+
+  - id: later
+    chapter: Loop ထဲက closure
+    narration: >-
+      [[mark:collapse-2]] နောက်ဆုံး function တွေကို slice ထဲမှာ စုထားပြီး နောက်မှ run တာကို ကြည့်ရအောင်။
+      ပြီးခဲ့တဲ့ lesson က defer လိုပါပဲ၊ ဒါပေမဲ့ ဒီ တစ်ခါ ဘယ်အချိန် run မလဲ ဆိုတာ ကိုယ်တိုင် ဆုံးဖြတ်တာပါ။
+      [[mark:type-later]] loop က သုံးခေါက် run ပြီး၊ အခေါက်တိုင်းမှာ အဲဒီ အခေါက်ရဲ့ i ကို ထုတ်ပြမယ့်
+      function တစ်ခုကို slice ထဲ ထည့်ပါတယ်။ ဒီ အချိန်မှာ ဘာမှ မထုတ်ပြသေးပါဘူး၊ function တွေကို
+      စုထားရုံပါ။ [[mark:type-call-later]] loop ပြီးမှ slice ထဲက function တွေကို တစ်ခုချင်း ခေါ်ပြီး၊
+      နောက်ဆုံးမှာ line အသစ် တစ်ကြောင်း ဆင်းပေးပါတယ်။ [[mark:sel-closure]] ဒီ function တွေက i ကို
+      မှတ်ထားတဲ့ closure တွေပါ။ ခေါ်တဲ့ အချိန်မှာ loop ပြီးသွားပြီ ဖြစ်လို့၊ သုည၊ တစ်၊ နှစ် ထွက်မလား၊ ဒါမှမဟုတ်
+      ဂဏန်း တစ်ခုတည်းကိုပဲ သုံးခါ ထွက်မလား။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+      - { title: "Fixing For Loops in Go 1.22", url: "https://go.dev/blog/loopvar-preview" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-later
+        type: editor.type
+        at: { mark: type-later }
+        target: { file: main.go, after: "parcels[2].Code)\n", occurrence: 1 }
+        text: "\n\tvar later []func()\n\tfor i := range 3 {\n\t\tlater = append(later, func() { fmt.Print(i, \" \") })\n\t}\n"
+        cadence: line-by-line
+      - id: type-call-later
+        type: editor.type
+        at: { mark: type-call-later }
+        target: { file: main.go, after: "fmt.Print(i, \" \") })\n\t}\n", occurrence: 1 }
+        text: "\tfor _, f := range later {\n\t\tf()\n\t}\n\tfmt.Println()\n"
+        cadence: line-by-line
+      - id: sel-closure
+        type: editor.select
+        at: { mark: sel-closure }
+        target: { file: main.go, text: 'func() { fmt.Print(i, " ") }', occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "0 1 2",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-later,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tlater = append(later, func() { fmt.Print(i, \" \") })\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-rounds]] နောက်ဆုံး စာကြောင်းမှာ သုည၊ တစ်၊ နှစ် ထွက်လာပါတယ်။ ဘာကြောင့်လဲဆိုတော့ loop ရဲ့
+      အခေါက်တိုင်းမှာ i က variable အသစ် တစ်ခုစီ ဖြစ်လို့ပါ။ [[mark:board-rounds]] board ပေါ်မှာ ပြန်ကြည့်ရင်၊
+      [[mark:draw-rounds]] closure တစ်ခုစီက သူ့ အခေါက်ရဲ့ i ကို ကိုယ်ပိုင် အိတ်ထဲမှာ ထည့်ယူသွားပါတယ်။
+      ဒါကြောင့် loop ပြီးသွားတဲ့ နောက်မှ ခေါ်ရင်တောင် ကိုယ့် အခေါက်ရဲ့ ဂဏန်းကို မှန်မှန် ထုတ်ပြပါတယ်။
+      Go ရဲ့ အရင် version တွေမှာတော့ အခေါက်တိုင်း variable တစ်ခုတည်းကို မျှသုံးခဲ့လို့ ဒီ နေရာမှာ bug
+      ဖြစ်ခဲ့ပါတယ်။ အဟောင်း သင်ခန်းစာတွေမှာ ဒီ bug အကြောင်း သတိပေးထားတာ တွေ့ရင်၊ အခု Go မှာ မရှိတော့ဘူး
+      ဆိုတာ မှတ်ထားပါ။
+    sources:
+      - { title: "Fixing For Loops in Go 1.22", url: "https://go.dev/blog/loopvar-preview" }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: point-rounds,
+          type: console.point,
+          at: { mark: point-rounds },
+          target: { text: "0 1 2" },
+        }
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-rounds } }
+      - {
+          id: board-rounds,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          upsertIds: [b-loop],
+        }
+      - {
+          id: draw-rounds,
+          type: whiteboard.apply,
+          at: { mark: draw-rounds },
+          upsertIds: [b-i0, b-i0-label, b-i1, b-i1-label, b-i2, b-i2-label],
+          drawMs: 2000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်မှာ မန္တလေး အတွက် code ထုတ်ပေးမယ့် function တစ်ခုကို
+      တောင်းပြီး variable တစ်ခုထဲ ထည့်ထားပါတယ်။ [[mark:quiz-again]] ပြီးတော့ အဲဒီ variable ကို နောက်
+      variable တစ်ခုထဲ ထပ်ထည့်ပြီး၊ နှစ်ခုလုံးကို တစ်ခါစီ ခေါ်ပါတယ်။ output မှာ က နှစ်ခုလုံး နံပါတ် တစ်
+      ထွက်မလား၊ ခ နံပါတ် တစ် နဲ့ နံပါတ် နှစ် ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခ ပါ။ ဘာကြောင့်လဲဆိုတော့ ဒုတိယ variable ထဲကို ရောက်သွားတာက function
+      အသစ် မဟုတ်ဘဲ ပထမ variable ထဲက function တစ်ခုတည်းပဲ ဖြစ်လို့ပါ။ code ထုတ်ပေးတဲ့ function ကို တစ်ခါပဲ ခေါ်ခဲ့လို့ အိတ်လည်း တစ်လုံးပဲ
+      ရှိပြီး၊ နှစ်ခုလုံးက အဲဒီ n တစ်ခုတည်းကို တိုးပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-again,
+          type: whiteboard.apply,
+          at: { mark: quiz-again },
+          upsertIds: [q-again],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-maker]] Go မှာ function က တန်ဖိုး တစ်ခုပါ၊ function
+      တစ်ခုက function အသစ်ကို ပြန်ပေးနိုင်ပြီး၊ ရလာတဲ့ function ကို variable ထဲ ထည့်ထားလို့ ရပါတယ်။ သူ့
+      ပတ်ဝန်းကျင်က variable တွေကို မှတ်ထားတဲ့ function ကို closure လို့ ခေါ်ပြီး၊ closure တစ်ခုစီမှာ ကိုယ်ပိုင်
+      အိတ် ရှိပါတယ်။ [[mark:recap-sort]] function ကို တခြား function ဆီ ပေးလို့လည်း ရလို့၊ SortFunc ကို
+      ပါဆယ် နှစ်ခု နှိုင်းယှဉ်တဲ့ နည်းကို ပေးပြီး စီခိုင်းခဲ့ပါတယ်။ [[mark:recap-loop]] loop ထဲမှာ ဖန်တီးတဲ့ closure
+      တွေကလည်း ကိုယ့် အခေါက်ရဲ့ variable ကို တစ်ခုစီ မှတ်ထားပါတယ်။ နောက် lesson မှာတော့ ကျပ်ငွေ အတွက်ရော၊
+      ကီလို အတွက်ပါ function တစ်ခုတည်းနဲ့ အလုပ်လုပ်လို့ ရတဲ့ generics ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function literals",
+          url: "https://go.dev/ref/spec#Function_literals",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-maker
+        type: editor.select
+        at: { mark: recap-maker }
+        target:
+          {
+            file: main.go,
+            text: "\treturn func() string {\n\t\tn++\n\t\treturn fmt.Sprintf(\"%s-%04d\", city, n)\n\t}\n",
+            occurrence: 1,
+          }
+      - id: recap-sort
+        type: editor.select
+        at: { mark: recap-sort }
+        target:
+          { file: main.go, text: "slices.SortFunc(parcels, func(a, b Parcel) int {", occurrence: 1 }
+      - id: recap-loop
+        type: editor.select
+        at: { mark: recap-loop }
+        target:
+          {
+            file: main.go,
+            text: 'later = append(later, func() { fmt.Print(i, " ") })',
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
