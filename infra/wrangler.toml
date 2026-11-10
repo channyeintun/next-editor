@@ -199,8 +199,9 @@ simple = { limit = 4, period = 60 }
 # each wrong key counts against AthanLab's failed-auth limit for our whole
 # shared network, so they get a tight budget of their own. Across all users,
 # the D1 breaker in worker/athanlab/breaker.ts admits a check only into one of
-# 8 slots per fixed 5-minute window, taken before AthanLab hears of the key
-# and kept when AthanLab answers 401 (or never answers at all).
+# 8 slots per fixed 5-minute window, at most 2 of them any one user's, taken
+# before AthanLab hears of the key and kept when AthanLab answers 401 (or never
+# answers at all).
 [[ratelimits]]
 name = "ATHANLAB_KEY_RATE_LIMITER"
 namespace_id = "7108"

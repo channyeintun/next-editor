@@ -9,9 +9,13 @@
  * shut AthanLab off for everyone. This module bounds that from our side:
  *
  * - A key check (PUT /key) must first win a slot from reserveKeyCheck: one
- *   conditional upsert that counts the check as a failure in the current
- *   fixed 5-minute window before AthanLab hears of it, and only while the
- *   window holds fewer than KEY_CHECK_PAUSE_FAILURES. A check that ends on a
+ *   transaction that counts the check as a failure in the current fixed
+ *   5-minute window before AthanLab hears of it, and only while the window
+ *   holds fewer than KEY_CHECK_PAUSE_FAILURES and fewer than
+ *   KEY_CHECK_SLOTS_PER_USER of the same user's checks
+ *   (provider_key_check_shares, migrations/0016_athanlab_key_check_shares.sql),
+ *   so one account sending bogus keys cannot take every slot and pause key
+ *   checks for everyone else. A check that ends on a
  *   definite answer other than 401 hands its slot back (refundKeyCheck); one
  *   AthanLab rejects keeps it as the recorded failure, and so does one whose
  *   call threw or timed out, since AthanLab may still have counted that key.
@@ -39,6 +43,9 @@
 const PROVIDER = "athanlab";
 export const AUTH_FAILURE_WINDOW_MS = 5 * 60_000;
 export const KEY_CHECK_PAUSE_FAILURES = 8;
+// One user's share of those slots: it takes several accounts, not one, to fill
+// a window, and someone who pastes a wrong key once still has a try left.
+export const KEY_CHECK_SLOTS_PER_USER = 2;
 // A Worker's clock only moves on I/O, so a request can arrive with a
 // timestamp slightly older than the window a concurrent request just opened.
 // That must not restart the window (it would wipe the slots counted in it);
@@ -54,6 +61,13 @@ const MAX_AUTH_BLOCK_MS = 60 * 60_000;
 // (the caller's now): ?3 is AUTH_FAILURE_WINDOW_MS, ?4 the skew tolerance.
 const WINDOW_ENDED = `(excluded.window_started_at >= provider_auth_breaker.window_started_at + ?3
     OR provider_auth_breaker.window_started_at > excluded.window_started_at + ?4)`;
+// The same test inside reserveKeyCheck's share statement, on the breaker row
+// in scope there: ?4 is the caller's now, ?5 AUTH_FAILURE_WINDOW_MS, ?6 the
+// skew tolerance.
+const SHARE_WINDOW_ENDED = `(?4 >= window_started_at + ?5 OR window_started_at > ?4 + ?6)`;
+// True when this check's share was taken: ?6 is the user, ?7 the reservation.
+const SHARE_TAKEN = `EXISTS (SELECT 1 FROM provider_key_check_shares
+    WHERE provider = ?1 AND user_id = ?6 AND reservation = ?7)`;
 
 export interface BreakerState {
   /** True while the current window already holds too many failed key checks. */
@@ -105,62 +119,116 @@ export type KeyCheckReservation =
   | { kind: "unavailable" };
 
 /**
- * Admit one key check, counting it as a failed authentication before
- * AthanLab hears of it. One upsert decides: a window that has ended restarts
- * at `now` holding this check; otherwise the check is added only while the
- * window holds fewer than KEY_CHECK_PAUSE_FAILURES, and never while AthanLab
- * is blocking us. No returned row means it was refused.
+ * Admit one key check for `userId`, counting it as a failed authentication
+ * before AthanLab hears of it. One transaction decides. The user's share is
+ * taken first, and only while the window this check would be counted in (the
+ * current one, or one starting at `now` once it has ended) holds fewer than
+ * KEY_CHECK_PAUSE_FAILURES, AthanLab is not blocking us, and that window holds
+ * fewer than KEY_CHECK_SLOTS_PER_USER of this user's checks. The global slot
+ * is then taken only for a check whose share was just taken (the share row
+ * names its reservation), under the same conditions. No returned row means it
+ * was refused.
  */
 export async function reserveKeyCheck(
   db: D1Database,
+  userId: string,
   now = Date.now(),
 ): Promise<KeyCheckReservation> {
-  let row: Pick<BreakerRow, "window_started_at" | "failures"> | null;
+  const reservation = crypto.randomUUID();
+  let row: Pick<BreakerRow, "window_started_at" | "failures"> | undefined;
   try {
-    row = await db
-      .prepare(
-        `INSERT INTO provider_auth_breaker (provider, window_started_at, failures, blocked_until)
-         VALUES (?1, ?2, 1, 0)
-         ON CONFLICT(provider) DO UPDATE SET
-           failures = CASE WHEN ${WINDOW_ENDED} THEN 1
-             ELSE provider_auth_breaker.failures + 1 END,
-           window_started_at = CASE WHEN ${WINDOW_ENDED} THEN excluded.window_started_at
-             ELSE provider_auth_breaker.window_started_at END
-         WHERE (${WINDOW_ENDED} OR provider_auth_breaker.failures < ?5)
-           AND provider_auth_breaker.blocked_until <= excluded.window_started_at
-         RETURNING window_started_at, failures`,
-      )
-      .bind(
-        PROVIDER,
-        now,
-        AUTH_FAILURE_WINDOW_MS,
-        CLOCK_SKEW_TOLERANCE_MS,
-        KEY_CHECK_PAUSE_FAILURES,
-      )
-      .first<Pick<BreakerRow, "window_started_at" | "failures">>();
+    const [, slot] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO provider_key_check_shares (provider, user_id, window_started_at, slots, reservation)
+           SELECT ?1, ?2, w.started_at, 1, ?3
+           FROM (SELECT COALESCE(
+             (SELECT CASE WHEN ${SHARE_WINDOW_ENDED} THEN ?4 ELSE window_started_at END
+              FROM provider_auth_breaker WHERE provider = ?1),
+             ?4) AS started_at) AS w
+           WHERE NOT EXISTS (
+             SELECT 1 FROM provider_auth_breaker
+             WHERE provider = ?1
+               AND (blocked_until > ?4 OR (failures >= ?7 AND NOT ${SHARE_WINDOW_ENDED})))
+           ON CONFLICT(provider, user_id) DO UPDATE SET
+             slots = CASE WHEN provider_key_check_shares.window_started_at = excluded.window_started_at
+               THEN provider_key_check_shares.slots + 1 ELSE 1 END,
+             window_started_at = excluded.window_started_at,
+             reservation = excluded.reservation
+           WHERE provider_key_check_shares.window_started_at <> excluded.window_started_at
+             OR provider_key_check_shares.slots < ?8`,
+        )
+        .bind(
+          PROVIDER,
+          userId,
+          reservation,
+          now,
+          AUTH_FAILURE_WINDOW_MS,
+          CLOCK_SKEW_TOLERANCE_MS,
+          KEY_CHECK_PAUSE_FAILURES,
+          KEY_CHECK_SLOTS_PER_USER,
+        ),
+      db
+        .prepare(
+          `INSERT INTO provider_auth_breaker (provider, window_started_at, failures, blocked_until)
+           SELECT ?1, ?2, 1, 0 WHERE ${SHARE_TAKEN}
+           ON CONFLICT(provider) DO UPDATE SET
+             failures = CASE WHEN ${WINDOW_ENDED} THEN 1
+               ELSE provider_auth_breaker.failures + 1 END,
+             window_started_at = CASE WHEN ${WINDOW_ENDED} THEN excluded.window_started_at
+               ELSE provider_auth_breaker.window_started_at END
+           WHERE (${WINDOW_ENDED} OR provider_auth_breaker.failures < ?5)
+             AND provider_auth_breaker.blocked_until <= excluded.window_started_at
+             AND ${SHARE_TAKEN}
+           RETURNING window_started_at, failures`,
+        )
+        .bind(
+          PROVIDER,
+          now,
+          AUTH_FAILURE_WINDOW_MS,
+          CLOCK_SKEW_TOLERANCE_MS,
+          KEY_CHECK_PAUSE_FAILURES,
+          userId,
+          reservation,
+        ),
+    ]);
+    row = slot.results?.[0] as Pick<BreakerRow, "window_started_at" | "failures"> | undefined;
   } catch {
     console.error("AthanLab key check could not be reserved");
     return { kind: "unavailable" };
   }
   if (row) return { kind: "reserved", windowStartedAt: row.window_started_at };
+  // Refused: AthanLab is blocking us, the window is full, or this user already
+  // holds their share of it. The last two answer alike.
   const { blockedUntil } = await readBreaker(db, now);
   return blockedUntil > now ? { kind: "blocked", blockedUntil } : { kind: "paused" };
 }
 
 /**
- * Hand back the slot of a key check that ended without a 401. Only the window
- * it was counted in is touched: once that window has ended, the slot no
- * longer holds anything back.
+ * Hand back the slot of a key check that ended without a 401, and its user's
+ * share of it. Only the window it was counted in is touched: once that window
+ * has ended, the slot no longer holds anything back.
  */
-export async function refundKeyCheck(db: D1Database, windowStartedAt: number): Promise<void> {
+export async function refundKeyCheck(
+  db: D1Database,
+  userId: string,
+  windowStartedAt: number,
+): Promise<void> {
   try {
-    await db
-      .prepare(
-        `UPDATE provider_auth_breaker SET failures = MAX(failures - 1, 0)
-         WHERE provider = ? AND window_started_at = ?`,
-      )
-      .bind(PROVIDER, windowStartedAt)
-      .run();
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE provider_auth_breaker SET failures = MAX(failures - 1, 0)
+           WHERE provider = ? AND window_started_at = ?`,
+        )
+        .bind(PROVIDER, windowStartedAt),
+      db
+        .prepare(
+          `UPDATE provider_key_check_shares SET slots = MAX(slots - 1, 0)
+           WHERE provider = ? AND user_id = ? AND window_started_at = ?`,
+        )
+        .bind(PROVIDER, userId, windowStartedAt),
+    ]);
   } catch {
     console.error("AthanLab key check slot could not be returned");
   }

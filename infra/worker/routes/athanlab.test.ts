@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { putProviderCredential } from "../../db/providerCredentials";
-import { KEY_CHECK_PAUSE_FAILURES } from "../athanlab/breaker";
+import { AUTH_FAILURE_WINDOW_MS, KEY_CHECK_PAUSE_FAILURES } from "../athanlab/breaker";
 import { keyVaultOf, sealApiKey } from "../athanlab/keyVault";
 import { insertSignedInUser, openSqliteD1, type SqliteD1 } from "../../db/testing";
 import type { Env } from "../env";
@@ -732,6 +732,65 @@ describe("PUT /api/studio/athanlab/key", () => {
     expect(codes.filter((code) => code === "invalid_api_key")).toHaveLength(1);
     expect(codes.filter((code) => code === "key_checks_paused")).toHaveLength(19);
     expect(breakerRow()?.failures).toBe(KEY_CHECK_PAUSE_FAILURES);
+  });
+
+  it("keeps one account to a small share of the key-check slots, so others can still connect", async () => {
+    // One account sending well-formed bogus keys used to be able to take all
+    // KEY_CHECK_PAUSE_FAILURES slots and pause key checks for everyone.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(1_000_000);
+    for (const user of ["attacker", "accomplice", "victim"]) {
+      insertSignedInUser(database.sqlite, user, `session-${user}`);
+    }
+    const putAs = (user: string, env: Env, apiKey: string) =>
+      athanlabRoute.request(
+        "https://nexteditor.dev/key",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Cookie: `ne_session=session-${user}` },
+          body: JSON.stringify({ apiKey }),
+        },
+        env,
+      );
+    const codeOf = async (response: Response) =>
+      ((await response.json()) as { code?: string }).code;
+    const bogus = (index: number) => `ak_live_${index.toString(16).padStart(32, "0")}`;
+    const limiter = countingRateLimiter(5);
+    const env = makeEnv({ ATHANLAB_KEY_RATE_LIMITER: limiter });
+    const rejecting = stubAthanLab({ "GET /voices": athanlabError(401, "invalid_api_key") });
+
+    // Five at once, all the per-user limiter allows: only the account's share runs.
+    const burst = await Promise.all([0, 1, 2, 3, 4].map((i) => putAs("attacker", env, bogus(i))));
+    const codes = await Promise.all(burst.map(codeOf));
+    expect(codes.filter((code) => code === "invalid_api_key")).toHaveLength(2);
+    expect(codes.filter((code) => code === "key_checks_paused")).toHaveLength(3);
+    expect(rejecting.calls).toHaveLength(2);
+
+    // A minute on, with a fresh limiter period, the account is still held back…
+    vi.setSystemTime(1_061_000);
+    const nextMinute = makeEnv({ ATHANLAB_KEY_RATE_LIMITER: countingRateLimiter(5) });
+    for (const i of [5, 6, 7]) {
+      expect(await codeOf(await putAs("attacker", nextMinute, bogus(i)))).toBe("key_checks_paused");
+    }
+    // …and a second account gets only its own share.
+    for (const i of [8, 9, 10]) await putAs("accomplice", nextMinute, bogus(i));
+    expect(rejecting.calls).toHaveLength(4);
+    expect(breakerRow()).toMatchObject({ window_started_at: 1_000_000, failures: 4 });
+
+    // Everyone else can still connect a key.
+    const verifying = verifyingAthanLab();
+    expect((await putAs("victim", nextMinute, API_KEY)).status).toBe(200);
+    expect(verifying.calls[0]?.headers.get("X-API-Key")).toBe(API_KEY);
+
+    // The share starts over with the next window.
+    stubAthanLab({ "GET /voices": athanlabError(401, "invalid_api_key") });
+    vi.setSystemTime(1_000_000 + AUTH_FAILURE_WINDOW_MS);
+    const nextWindow = makeEnv({ ATHANLAB_KEY_RATE_LIMITER: countingRateLimiter(5) });
+    expect(await codeOf(await putAs("attacker", nextWindow, bogus(11)))).toBe("invalid_api_key");
+    expect(breakerRow()).toMatchObject({
+      window_started_at: 1_000_000 + AUTH_FAILURE_WINDOW_MS,
+      failures: 1,
+    });
   });
 
   it("holds a key check's slot while it runs, and hands it back unless AthanLab answers 401", async () => {

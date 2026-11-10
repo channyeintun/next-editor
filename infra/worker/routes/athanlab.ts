@@ -132,8 +132,9 @@ athanlabRoute.put("/key", requireUser, async (c) => {
 
   // The check is counted as a failed authentication before AthanLab hears of
   // the key, so concurrent checks cannot all pass a breaker that has room for
-  // one; it gets the slot back only on a definite answer other than 401.
-  const reservation = await reserveKeyCheck(c.env.DB);
+  // one, nor one user take more than their share of it; it gets the slot back
+  // only on a definite answer other than 401.
+  const reservation = await reserveKeyCheck(c.env.DB, userId);
   switch (reservation.kind) {
     case "blocked":
       return authBlocked(c, reservation.blockedUntil);
@@ -148,7 +149,7 @@ athanlabRoute.put("/key", requireUser, async (c) => {
     quote = await verifyApiKey(c, apiKey, check);
   } finally {
     if (!check.unauthorized && !check.uncertain) {
-      await refundKeyCheck(c.env.DB, reservation.windowStartedAt);
+      await refundKeyCheck(c.env.DB, userId, reservation.windowStartedAt);
     }
   }
   if (quote instanceof Response) return quote;
