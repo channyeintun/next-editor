@@ -75,6 +75,12 @@ export interface CollaborationRoomProviderOptions {
   onAwarenessEvent?: (event: CollaborationAwarenessEvent) => void;
   onControlEvent?: (event: CollaborationControlEvent) => void;
   onRejectedLocalChanges?: (message: string) => void;
+  /**
+   * Read at each local document change. While it returns true the change is
+   * kept out of the room: it is already in `doc`, so the document has diverged
+   * from the room (hasDivergedDocument) and sends nothing from then on.
+   */
+  refusesLocalChanges?: () => boolean;
 }
 
 interface PendingUpdate {
@@ -124,6 +130,7 @@ export class CollaborationRoomProvider {
   private readonly onDocumentChange?: CollaborationRoomProviderOptions["onDocumentChange"];
   private readonly onControlEvent?: CollaborationRoomProviderOptions["onControlEvent"];
   private readonly onRejectedLocalChanges?: CollaborationRoomProviderOptions["onRejectedLocalChanges"];
+  private readonly refusesLocalChanges?: CollaborationRoomProviderOptions["refusesLocalChanges"];
 
   private sessionId: string = crypto.randomUUID();
   private attemptId: string = crypto.randomUUID();
@@ -179,6 +186,7 @@ export class CollaborationRoomProvider {
     this.onDocumentChange = options.onDocumentChange;
     this.onControlEvent = options.onControlEvent;
     this.onRejectedLocalChanges = options.onRejectedLocalChanges;
+    this.refusesLocalChanges = options.refusesLocalChanges;
     this.actor = createActor(collaborationMachine);
     this.awarenessChannel = new RoomAwarenessChannel({
       awareness: this.awareness,
@@ -225,10 +233,12 @@ export class CollaborationRoomProvider {
   }
 
   /**
-   * True once local edits were dropped, because the room refused them or because
-   * one change was too large to send. They stay integrated in `doc`, and
-   * reconnect sync only pulls the room's state, so this document can never match
-   * the room again: a retry has to start from a fresh provider, not `retryNow()`.
+   * True once local edits were dropped, because the room refused them, because
+   * one change was too large to send, or because one was made while
+   * `refusesLocalChanges` held. They stay integrated in `doc`, and reconnect
+   * sync only pulls the room's state, so this document can never match the room
+   * again: no later local edit is sent from it (each would build on the dropped
+   * ones), and a retry has to start from a fresh provider, not `retryNow()`.
    */
   get hasDivergedDocument(): boolean {
     return this.hasDroppedLocalChanges;
@@ -306,6 +316,11 @@ export class CollaborationRoomProvider {
 
   private readonly handleDocumentUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === COLLABORATION_ORIGIN.remoteProvider || !this.canWrite) return;
+    if (this.hasDroppedLocalChanges) return;
+    if (this.refusesLocalChanges?.()) {
+      this.hasDroppedLocalChanges = true;
+      return;
+    }
     this.pendingUpdates.push({ update, queuedAt: monotonicNow() });
     this.reportPendingUpdates();
     if (this.batchTimer) return;

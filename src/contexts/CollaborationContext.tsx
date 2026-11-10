@@ -71,6 +71,7 @@ import { useCollaborationInvitation } from "./collaboration/useCollaborationInvi
 import { useCollaborationRoster } from "./collaboration/useCollaborationRoster";
 import { useCollaborationTeaching } from "./collaboration/useCollaborationTeaching";
 import { useCollaborativeWorkspaceActions } from "./collaboration/useCollaborativeWorkspaceActions";
+import { useReplayOwnsWorkspace } from "./collaboration/useReplayOwnsWorkspace";
 import {
   RoomPresenceContext,
   type CollaborationParticipant,
@@ -186,13 +187,14 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   const activeFilePath = useWorkspaceActiveFilePath();
   const baseActionsRef = useRef(baseActions);
   baseActionsRef.current = baseActions;
-  const { usesPlaybackModel, isRecording } = useNextEditorMetadata((m) => ({
-    usesPlaybackModel: m.usesPlaybackModel,
-    isRecording: m.isRecording,
-  }));
+  const isRecording = useNextEditorMetadata((m) => m.isRecording);
+  // While a replay owns the workspace (loading, or loaded in any state, not
+  // only while it uses the playback model) the room neither projects into it
+  // nor takes writes from it, and reprojects once the replay is closed.
+  const { replayOwnsWorkspace, readReplayOwnsWorkspace } = useReplayOwnsWorkspace();
   const { handleSlideEvent, handleWhiteboardEvent } = useNextEditorActions();
-  const playbackRef = useRef(usesPlaybackModel);
-  playbackRef.current = usesPlaybackModel;
+  const playbackRef = useRef(replayOwnsWorkspace);
+  playbackRef.current = replayOwnsWorkspace;
   const isRecordingRef = useRef(isRecording);
   isRecordingRef.current = isRecording;
   const { user, isSignedIn, isLoading: isAuthLoading } = useAuth();
@@ -541,6 +543,11 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       onRejectedLocalChanges: (message) => {
         if (providerGenerationRef.current === providerGeneration) setLocalError(message);
       },
+      // A replay applies its opening frame to the open editor inside the
+      // editor's own transition, before a render can detach the editor's room
+      // binding, so each local change is checked against the editor's state
+      // as it happens.
+      refusesLocalChanges: readReplayOwnsWorkspace,
     });
     resetRoomScopedState();
     providerRef.current = nextProvider;
@@ -574,6 +581,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     invalidateTeachingHydration,
     inviteToken,
     providerEpoch,
+    readReplayOwnsWorkspace,
     refreshRoomDataFor,
     resetRoomScopedState,
     roomId,
@@ -612,7 +620,7 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   // edited, and the next projection would delete them from the container.
   // Declared before the reprojection below so the guard is on before the
   // room's first projection.
-  const liveRoomOwnsWorkspace = provider !== null && !usesPlaybackModel;
+  const liveRoomOwnsWorkspace = provider !== null && !replayOwnsWorkspace;
   useLayoutEffect(() => {
     if (!runtimeActions || !liveRoomOwnsWorkspace) return;
     runtimeActions.setReverseSyncEnabled(false);
@@ -620,7 +628,9 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [liveRoomOwnsWorkspace, runtimeActions]);
 
   useLayoutEffect(() => {
-    if (usesPlaybackModel || !provider) return;
+    // A diverged document is replaced by a fresh one below; projecting it would
+    // show what it kept out of the room.
+    if (replayOwnsWorkspace || !provider || provider.hasDivergedDocument) return;
     try {
       const projection = reprojectCollaborationWorkspace(provider.doc, baseActionsRef.current);
       projectionRef.current = projection;
@@ -630,13 +640,23 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
       // The initial snapshot may not have arrived yet; its transaction callback
       // performs this projection after synchronization.
     }
-  }, [hydrateProjectionAssets, provider, roomId, usesPlaybackModel]);
+  }, [hydrateProjectionAssets, provider, roomId, replayOwnsWorkspace]);
+
+  // A change a replay made while it loaded (its opening frame in the bound
+  // editor) was kept out of the room, so this copy of the room's document can
+  // never match the room again. Once the replay is closed, rejoin with a fresh
+  // copy, as retry does.
+  useEffect(() => {
+    if (!replayOwnsWorkspace && provider?.hasDivergedDocument) {
+      setProviderEpoch((epoch) => epoch + 1);
+    }
+  }, [provider, replayOwnsWorkspace]);
 
   // Keyed on the projection and its slides, which applyTeachingToStores shows.
   useEffect(() => {
-    if (!provider || usesPlaybackModel) return;
+    if (!provider || replayOwnsWorkspace) return;
     applyTeachingToStores(slidesStore, whiteboardStore);
-  }, [provider, slidesStore, teaching, teachingSlides, usesPlaybackModel, whiteboardStore]);
+  }, [provider, replayOwnsWorkspace, slidesStore, teaching, teachingSlides, whiteboardStore]);
 
   // runtimeVersion intentionally makes actor snapshots reactive without
   // putting high-frequency Yjs document content in React state.
@@ -660,7 +680,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
     role &&
     canPublishCollaborationUpdate(role) &&
     isConnectionWritable &&
-    !usesPlaybackModel,
+    !replayOwnsWorkspace &&
+    !provider.hasDivergedDocument,
   );
   const { canWriteRef, collaborativeActions } = useCollaborativeWorkspaceActions({
     baseActions,
@@ -1046,8 +1067,8 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
   }, [followAvailability, stopFollowing]);
 
   useEffect(() => {
-    if (usesPlaybackModel) stopFollowing("playback");
-  }, [stopFollowing, usesPlaybackModel]);
+    if (replayOwnsWorkspace) stopFollowing("playback");
+  }, [replayOwnsWorkspace, stopFollowing]);
 
   useEffect(() => {
     if (!followedParticipantKey) return;

@@ -81,6 +81,13 @@ vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceActiveFilePath: () => project.entryFilePath,
 }));
 let usesPlaybackModel = false;
+const readReplayOwnsWorkspace = () => usesPlaybackModel;
+vi.mock("./collaboration/useReplayOwnsWorkspace", () => ({
+  useReplayOwnsWorkspace: () => ({
+    replayOwnsWorkspace: readReplayOwnsWorkspace(),
+    readReplayOwnsWorkspace,
+  }),
+}));
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorMetadata: (select?: MetadataSelector) =>
     selectMetadata({ usesPlaybackModel, isRecording: false }, select),

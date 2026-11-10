@@ -28,6 +28,7 @@ const controls = vi.hoisted(() => ({
     emitAwareness: (event: Record<string, unknown>) => void;
     setConnectionState: (state: string) => void;
     hasDivergedDocument: boolean;
+    refusesLocalChanges: () => boolean;
     hasPendingUpdates: boolean;
     hasSynced: boolean;
     retries: number;
@@ -37,6 +38,10 @@ const controls = vi.hoisted(() => ({
 
 let usesPlaybackModel = false;
 let isRecording = false;
+// A recording loaded for replay but not playing (the editor's ready state),
+// where usesPlaybackModel is false.
+let isReplayLoaded = false;
+const readReplayOwnsWorkspace = () => usesPlaybackModel || isReplayLoaded;
 
 vi.mock("@next-editor/infra", () => ({
   claimCollaborationInvitation: vi.fn(),
@@ -91,6 +96,7 @@ vi.mock("../collaboration/roomProvider", async () => {
         doc: InstanceType<typeof Y.Doc>,
         transaction: InstanceType<typeof Y.Transaction>,
       ) => void;
+      refusesLocalChanges?: () => boolean;
     };
 
     constructor(options: {
@@ -99,6 +105,7 @@ vi.mock("../collaboration/roomProvider", async () => {
         doc: InstanceType<typeof Y.Doc>,
         transaction: InstanceType<typeof Y.Transaction>,
       ) => void;
+      refusesLocalChanges?: () => boolean;
     }) {
       this.options = options;
       this.doc.on("afterTransaction", (transaction) =>
@@ -119,6 +126,9 @@ vi.mock("../collaboration/roomProvider", async () => {
     }
 
     hasDivergedDocument = false;
+    refusesLocalChanges() {
+      return this.options.refusesLocalChanges?.() ?? false;
+    }
     hasSynced = true;
     retries = 0;
     stopped = false;
@@ -187,6 +197,12 @@ vi.mock("../collaboration/teachingDocument", async (importOriginal) => {
 vi.mock("../hooks/useWorkspace", () => ({
   useWorkspaceActions: () => workspaceActions,
   useWorkspaceActiveFilePath: () => "index.html",
+}));
+vi.mock("./collaboration/useReplayOwnsWorkspace", () => ({
+  useReplayOwnsWorkspace: () => ({
+    replayOwnsWorkspace: readReplayOwnsWorkspace(),
+    readReplayOwnsWorkspace,
+  }),
 }));
 vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorMetadata: (select?: MetadataSelector) =>
@@ -2068,6 +2084,105 @@ describe("CollaborationContext asset retry", () => {
 
     expect(room.collaboration().error).toBe("The asset is unavailable.");
     expect(room.collaboration().canRetryAssets).toBe(false);
+    room.view.unmount();
+  });
+});
+
+// A replay writes its workspace through the workspace's own actions, beneath
+// the room's, and its ready state (loaded, not playing) does not use the
+// playback model. A lesson link opened inside a room (/code?room=…&url=…)
+// put its project in the workspace there while room writes stayed on, so the
+// next whole-file save or bound editor change wrote the lesson's code into the
+// shared document under this member's name.
+describe("CollaborationContext replay isolation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    controls.providers.length = 0;
+    usesPlaybackModel = false;
+    isReplayLoaded = false;
+  });
+
+  function renderRoom() {
+    let collaboration: ReturnType<typeof useRoom> | null = null;
+    let actions: WorkspaceActions | null = null;
+    function Probe() {
+      collaboration = useRoom();
+      actions = useContext(WorkspaceActionsContext);
+      return null;
+    }
+    const tree = () => (
+      <MemoryRouter initialEntries={["/code?room=40000000-0000-4000-8000-000000000001"]}>
+        <Providers>
+          <Probe />
+        </Providers>
+      </MemoryRouter>
+    );
+    const view = render(tree());
+    return {
+      view,
+      rerender: () => view.rerender(tree()),
+      collaboration: () => collaboration!,
+      actions: () => actions!,
+    };
+  }
+
+  it("takes no writes and projects nothing while a replay is loaded, then reprojects", async () => {
+    const room = renderRoom();
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const provider = controls.providers[0]!;
+    act(() => seedCollaborationProject(provider.doc, createStarterHtmlCssWorkspace()));
+    const roomEntry = () => projectCollaborationDocument(provider.doc).project.files["index.html"];
+    const before = roomEntry()?.content;
+    expect(room.collaboration().canWrite).toBe(true);
+    expect(provider.refusesLocalChanges()).toBe(false);
+
+    // The lesson finished loading: its project is in the workspace now.
+    isReplayLoaded = true;
+    room.rerender();
+
+    expect(room.collaboration().canWrite).toBe(false);
+    // Checked at the moment of each write, not only at render.
+    expect(provider.refusesLocalChanges()).toBe(true);
+    act(() => room.actions().updateFileContent("index.html", "<p>from the lesson</p>"));
+    expect(roomEntry()?.content).toBe(before);
+
+    // Neither does the room's own state overwrite the replay meanwhile.
+    const reconciles = vi.mocked(workspaceActions.reconcileExternalProject).mock.calls.length;
+    act(() => room.actions().createFolder("from-the-lesson"));
+    act(() => provider.emitDocumentChange());
+    expect(workspaceActions.reconcileExternalProject).toHaveBeenCalledTimes(reconciles);
+    expect(projectCollaborationDocument(provider.doc).nodeIdByPath.has("from-the-lesson")).toBe(
+      false,
+    );
+
+    // Closing the replay brings the room's project back before writes resume.
+    isReplayLoaded = false;
+    room.rerender();
+    expect(workspaceActions.reconcileExternalProject).toHaveBeenLastCalledWith(
+      projectCollaborationDocument(provider.doc).project,
+    );
+    expect(room.collaboration().canWrite).toBe(true);
+    expect(controls.providers).toHaveLength(1);
+    room.view.unmount();
+  });
+
+  it("rejoins with a fresh document when a replay's write reached this tab's copy", async () => {
+    const room = renderRoom();
+    await waitFor(() => expect(controls.providers).toHaveLength(1));
+    const first = controls.providers[0]!;
+    act(() => seedCollaborationProject(first.doc, createStarterHtmlCssWorkspace()));
+
+    isReplayLoaded = true;
+    room.rerender();
+    // The replay's opening frame landed in the bound editor as it loaded; the
+    // provider kept it out of the room, so this copy no longer matches it.
+    first.hasDivergedDocument = true;
+    isReplayLoaded = false;
+    room.rerender();
+
+    await waitFor(() => expect(controls.providers).toHaveLength(2));
+    expect(first.stopped).toBe(true);
+    expect(room.collaboration().provider).toBe(controls.providers[1]);
     room.view.unmount();
   });
 });

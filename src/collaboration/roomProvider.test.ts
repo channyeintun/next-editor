@@ -1068,4 +1068,36 @@ describe("CollaborationRoomProvider connection lifecycle", () => {
     expect(sentFrames(sockets[0]!).some((frame) => frame.kind === "client-update")).toBe(false);
     provider.stop();
   });
+
+  it("keeps local changes out of the room while it refuses them, and sends none after", async () => {
+    const { sockets, factory } = socketRecorder();
+    let refusing = false;
+    const provider = new CollaborationRoomProvider({
+      roomId: ROOM_ID,
+      api: new FakeApi(),
+      clientId: CLIENT_ID,
+      batchWindowMs: 60_000,
+      webSocketFactory: factory,
+      refusesLocalChanges: () => refusing,
+    });
+    await provider.start();
+    await openAndSync(provider, sockets[0]!, new Y.Doc());
+
+    // A replay writing its opening frame into the bound editor as it loads.
+    refusing = true;
+    provider.doc.getText("source").insert(0, "from the replay");
+    await provider.flushNow();
+    expect(provider.hasPendingUpdates).toBe(false);
+    expect(provider.hasDivergedDocument).toBe(true);
+
+    // The next edit builds on the one kept out, so it cannot be sent either.
+    refusing = false;
+    provider.doc.getText("source").insert(0, "typed later");
+    await provider.flushNow();
+    expect(provider.hasPendingUpdates).toBe(false);
+    expect(sentFrames(sockets[0]!).some((frame) => frame.kind === "client-update")).toBe(false);
+    // The member stays in the room; only this copy of its document is spent.
+    expect(provider.connectionState).toBe("live");
+    provider.stop();
+  });
 });
