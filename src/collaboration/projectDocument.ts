@@ -371,16 +371,35 @@ function shortStableId(id: string, length: number): string {
   return compact.slice(0, Math.min(length, compact.length)) || "node";
 }
 
+/** Each group of ids that `names` gives the same name, its ids in stable order. */
+function nameCollisions(names: ReadonlyMap<string, string>): string[][] {
+  const claimants = new Map<string, string[]>();
+  for (const [id, name] of names) {
+    const ids = claimants.get(name);
+    if (ids) ids.push(id);
+    else claimants.set(name, [id]);
+  }
+  const collisions: string[][] = [];
+  for (const ids of claimants.values()) {
+    if (ids.length < 2) continue;
+    ids.sort((left, right) => left.localeCompare(right));
+    collisions.push(ids);
+  }
+  return collisions;
+}
+
 function namesByNode(
   children: readonly CollaborationNodeSnapshot[],
   issues: CollaborationProjectionIssue[],
 ): Map<string, string> {
+  const baseById = new Map<string, string>();
   const byBase = new Map<string, CollaborationNodeSnapshot[]>();
   for (const child of children) {
     const name = safeNodeName(child);
-    const group = byBase.get(name) ?? [];
-    group.push(child);
-    byBase.set(name, group);
+    baseById.set(child.id, name);
+    const group = byBase.get(name);
+    if (group) group.push(child);
+    else byBase.set(name, [child]);
   }
 
   const result = new Map<string, string>();
@@ -394,20 +413,33 @@ function namesByNode(
 
   // An explicit name can equal another node's generated conflict name. Grow
   // stable-ID suffixes until every sibling name is unique.
-  for (let suffixLength = 10; suffixLength <= 32; suffixLength += 2) {
-    const claimants = new Map<string, string[]>();
-    for (const [id, name] of result) {
-      const ids = claimants.get(name) ?? [];
-      ids.push(id);
-      claimants.set(name, ids);
-    }
-    const collisions = Array.from(claimants.values()).filter((ids) => ids.length > 1);
-    if (collisions.length === 0) break;
+  let collisions = nameCollisions(result);
+  for (let suffixLength = 10; suffixLength <= 32 && collisions.length > 0; suffixLength += 2) {
     for (const ids of collisions) {
-      ids.sort((left, right) => left.localeCompare(right));
       for (const id of ids.slice(1)) {
-        const node = children.find((candidate) => candidate.id === id);
-        if (node) result.set(id, `${safeNodeName(node)}~${shortStableId(id, suffixLength)}`);
+        result.set(id, `${baseById.get(id) ?? ""}~${shortStableId(id, suffixLength)}`);
+      }
+    }
+    collisions = nameCollisions(result);
+  }
+
+  // Ids that differ only in case or hyphens compact to the same suffix at every
+  // length, so the loop above cannot separate them. Number what is left: the
+  // first id keeps its name and the rest take the next free `~2`, `~3`, ...
+  // after it, so every sibling still gets its own path. One counter per name
+  // keeps this linear however many ids collide.
+  if (collisions.length > 0) {
+    const taken = new Set(result.values());
+    const nextNumberByName = new Map<string, number>();
+    for (const ids of collisions) {
+      for (const id of ids.slice(1)) {
+        const name = result.get(id) ?? "";
+        let number = nextNumberByName.get(name) ?? 2;
+        while (taken.has(`${name}~${number}`)) number += 1;
+        const unique = `${name}~${number}`;
+        nextNumberByName.set(name, number + 1);
+        taken.add(unique);
+        result.set(id, unique);
       }
     }
   }
