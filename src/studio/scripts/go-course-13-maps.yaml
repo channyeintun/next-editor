@@ -1,0 +1,978 @@
+# Go course, lesson 13: maps (Burmese).
+#
+# Start state: main.go with a parenthesized import block holding "fmt" and an empty `func main`.
+# Edits, all insert-only:
+#   1. `var dict map[string]string`, `dict["rain"] = "မိုး"` and a Println of `dict["rain"]` ->
+#      run-1: panic `assignment to entry in nil map` (nothing printed before it);
+#   2. `dict = make(map[string]string)` under the var line, then book and school, then
+#      `meaning, ok := dict["snow"]` printed with `%q %v` -> run-2: မိုး / "" false;
+#   3. "maps" and "slices" into the import block, `delete(dict, "school")` and the loop over
+#      `slices.Sorted(maps.Keys(dict))` -> run-3 adds book စာအုပ် / rain မိုး.
+# Boards: (M) a map is a two-column word list (key, value), a key goes straight to its row, no
+# first row; (N) nil map vs make: reading a nil map gives the zero value, writing panics, nil is
+# not empty; (O) range order over a map is not fixed, so sort the keys; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-13-maps
+  title: "Go course 13: Map နဲ့ ရှာတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board M: a map is a two-column word list.
+    - {
+        id: m-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Map = key နဲ့ ရှာတဲ့ စာရင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: m-kh,
+        kind: text,
+        x: 320,
+        y: 235,
+        width: 120,
+        height: 40,
+        text: "key",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-vh,
+        kind: text,
+        x: 600,
+        y: 235,
+        width: 160,
+        height: 40,
+        text: "တန်ဖိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-box,
+        kind: rectangle,
+        x: 290,
+        y: 280,
+        width: 560,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-k1,
+        kind: text,
+        x: 320,
+        y: 295,
+        width: 160,
+        height: 40,
+        text: "rain",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-v1,
+        kind: text,
+        x: 600,
+        y: 295,
+        width: 180,
+        height: 40,
+        text: "မိုး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-k2,
+        kind: text,
+        x: 320,
+        y: 345,
+        width: 160,
+        height: 40,
+        text: "book",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-v2,
+        kind: text,
+        x: 600,
+        y: 345,
+        width: 180,
+        height: 40,
+        text: "စာအုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-k3,
+        kind: text,
+        x: 320,
+        y: 395,
+        width: 160,
+        height: 40,
+        text: "school",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-v3,
+        kind: text,
+        x: 600,
+        y: 395,
+        width: 180,
+        height: 40,
+        text: "ကျောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-ask,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 240,
+        height: 40,
+        text: 'dict["book"]',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 550,
+        y: 500,
+        width: 90,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-ans,
+        kind: text,
+        x: 660,
+        y: 495,
+        width: 180,
+        height: 40,
+        text: "စာအုပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-noorder,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 560,
+        height: 40,
+        text: "ပထမ row ဆိုတာ မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-noorder-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 610,
+        width: 330,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    # Board N: nil map vs make.
+    - {
+        id: n-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "nil map နဲ့ make",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: n-nil-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 395,
+        height: 195,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-nil-head,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 355,
+        height: 40,
+        text: "nil · မလုပ်ရသေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-nil-read,
+        kind: text,
+        x: 305,
+        y: 315,
+        width: 355,
+        height: 40,
+        text: "ဖတ်ရင် → zero value",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-nil-write,
+        kind: text,
+        x: 305,
+        y: 370,
+        width: 355,
+        height: 40,
+        text: "ထည့်ရင် → panic",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-make-box,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 395,
+        height: 195,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: n-make-head,
+        kind: text,
+        x: 720,
+        y: 255,
+        width: 355,
+        height: 40,
+        text: "make → map အလွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-make-rw,
+        kind: text,
+        x: 720,
+        y: 315,
+        width: 355,
+        height: 40,
+        text: "ဖတ် · ထည့် · ဖျက် ရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-code,
+        kind: text,
+        x: 300,
+        y: 475,
+        width: 620,
+        height: 40,
+        text: "dict = make(map[string]string)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-note,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 560,
+        height: 40,
+        text: "nil map ≠ map အလွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: n-note-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 580,
+        width: 360,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    # Board O: no fixed order, so sort the keys.
+    - {
+        id: o-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Map မှာ အစဉ် မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: o-rand-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 810,
+        height: 140,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-run1,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 620,
+        height: 40,
+        text: "range · school book rain",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-run2,
+        kind: text,
+        x: 305,
+        y: 315,
+        width: 620,
+        height: 40,
+        text: "range · rain school book",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-sort-box,
+        kind: rectangle,
+        x: 285,
+        y: 410,
+        width: 810,
+        height: 140,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-sort,
+        kind: text,
+        x: 305,
+        y: 425,
+        width: 620,
+        height: 40,
+        text: "key တွေ sort → book rain school",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: o-recipe,
+        kind: text,
+        x: 305,
+        y: 485,
+        width: 620,
+        height: 40,
+        text: "slices.Sorted(maps.Keys(dict))",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (the same key twice).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 640,
+        height: 210,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 250,
+        width: 590,
+        height: 40,
+        text: "dict := make(map[string]string)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 297,
+        width: 400,
+        height: 40,
+        text: 'dict["rain"] = "မိုး"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 310,
+        y: 344,
+        width: 450,
+        height: 40,
+        text: 'dict["rain"] = "မိုးရွာ"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 310,
+        y: 391,
+        width: 450,
+        height: 40,
+        text: "fmt.Println(len(dict))",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 295,
+        y: 336,
+        width: 380,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 300,
+        height: 40,
+        text: "က · 2",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 540,
+        width: 300,
+        height: 40,
+        text: "ခ · 1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 420,
+        y: 530,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7113
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: runtime-error
+        exitCode: 2
+        output: "panic: assignment to entry in nil map\n\ngoroutine 1 [running]:\nmain.main()\n\t/tmp/sandbox1000000000/src/main.go:9 +0x34\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "မိုး\n\"\" false\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "မိုး\n\"\" false\nbook စာအုပ်\nrain မိုး\n"
+
+scenes:
+  - id: recall
+    chapter: Map ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ slice ကို ဖြတ်ယူရင် ခုံတန်း တစ်ခုတည်းကို မျှသုံးတယ် ဆိုတာနဲ့၊ ကိုယ်ပိုင် copy
+      လိုရင် Clone ကို သုံးရတယ် ဆိုတာကို မြင်ခဲ့ပါတယ်။ slice ထဲက တန်ဖိုးကို ယူချင်ရင် index နံပါတ်ကို
+      သိရပါတယ်။ ဒါပေမဲ့ အမြဲ နံပါတ်နဲ့ ရှာချင်တာ မဟုတ်ပါဘူး။ [[mark:by-word]] ဥပမာ English စကားလုံးတွေရဲ့ မြန်မာ
+      အဓိပ္ပာယ်ကို မှတ်ထားတဲ့ အဘိဓာန် အသေးလေး တစ်ခု လုပ်မယ် ဆိုပါစို့။ rain ရဲ့ အဓိပ္ပာယ်ကို သိချင်ရင်
+      rain ဆိုတဲ့ စကားလုံးနဲ့ပဲ ရှာချင်ပါတယ်၊ ဘယ်နံပါတ်မှာ ရှိလဲ ဆိုတာ မသိပါဘူး။ [[mark:slice-search]] slice
+      ဆိုရင်တော့ အစကနေ တစ်ခုချင်း လိုက်ရှာရမှာပါ။ [[mark:board-map]] ဒီလို အလုပ်အတွက် Go မှာ map ရှိပါတယ်။ map ဆိုတာ key
+      တစ်ခုနဲ့ သူ့ တန်ဖိုးကို ချက်ချင်း ရှာလို့ရတဲ့ စာရင်းပါ။ [[mark:draw-rows]] ကော်လံ နှစ်ခု ပါတဲ့
+      စကားလုံး စာရင်း တစ်ခုလို မြင်ကြည့်ပါ။ ဘယ်ဘက်မှာ key ဖြစ်တဲ့ English စကားလုံး၊ ညာဘက်မှာ သူ့ တန်ဖိုး
+      ဖြစ်တဲ့ မြန်မာ အဓိပ္ပာယ် ရှိပါတယ်။
+      [[mark:draw-ask]] book ဆိုတဲ့ key နဲ့ မေးလိုက်ရင်၊ map က row တွေကို တစ်ခုချင်း မလိုက်ဘဲ book ရဲ့ row
+      ကို တန်းရောက်ပြီး သူ့ အဓိပ္ပာယ်ကို ချက်ချင်း ပြန်ပေးပါတယ်။ [[mark:draw-noorder]] နောက်ထပ်
+      သတိထားရမှာက map မှာ ပထမ row၊ ဒုတိယ row ဆိုတဲ့ အစဉ် မရှိတာပါ။ ဒါကို program ထဲမှာ နောက်မှ ပြန်တွေ့ပါမယ်။
+    sources:
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+      - {
+          title: "The Go Programming Language Specification — Map types",
+          url: "https://go.dev/ref/spec#Map_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-map,
+          type: whiteboard.apply,
+          at: { mark: board-map },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-rows,
+          type: whiteboard.apply,
+          at: { mark: draw-rows },
+          upsertIds: [m-kh, m-vh, m-box, m-k1, m-v1, m-k2, m-v2, m-k3, m-v3],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-ask,
+          type: whiteboard.apply,
+          at: { mark: draw-ask },
+          upsertIds: [m-ask, m-arrow, m-ans],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-noorder,
+          type: whiteboard.apply,
+          at: { mark: draw-noorder },
+          upsertIds: [m-noorder, m-noorder-line],
+          drawMs: 1500,
+        }
+
+  - id: declare
+    chapter: nil map
+    narration: >-
+      [[mark:close-map]] ဒါဆို map ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-nil]] main ထဲမှာ dict ဆိုတဲ့
+      variable ကို var နဲ့ ကြေညာပြီး၊ rain ရဲ့ အဓိပ္ပာယ်ကို ထည့်ပါမယ်။ ပြီးတော့ အဲဒီ အဓိပ္ပာယ်ကို ပြန်ယူပြီး
+      print ထုတ်ပါမယ်။ [[mark:sel-type]] map ရဲ့ type ကို ကြည့်ပါ။ ပထမ တစ်ခုက key ရဲ့ type ဖြစ်ပြီး၊
+      ဒုတိယ တစ်ခုက တန်ဖိုးရဲ့ type ပါ။ English စကားလုံးနဲ့ မြန်မာ စာသားကို ရှာမှာ ဖြစ်လို့ ဒီမှာ နှစ်ခုလုံး
+      string ပါ။ ဥပမာ မြို့ နာမည်ကနေ ကီလိုမီတာကို ရှာချင်ရင်တော့ key က string ဖြစ်ပြီး တန်ဖိုးက int
+      ဖြစ်ပါမယ်။ [[mark:sel-put]] ဒုတိယ line က rain ဆိုတဲ့ key အောက်မှာ မိုး ဆိုတဲ့ တန်ဖိုးကို ထည့်တာပါ။
+      slice မှာ index ရေးတဲ့ နေရာမှာ ဒီ တစ်ခါ key ကို ရေးလိုက်တာပါ။ ပြန်ယူတဲ့အခါမှာလည်း ဒီ ပုံစံအတိုင်း
+      key နဲ့ပဲ ယူပါတယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Map types",
+          url: "https://go.dev/ref/spec#Map_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+    actions:
+      - {
+          id: close-map,
+          type: whiteboard.apply,
+          at: { mark: close-map },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-nil
+        type: editor.type
+        at: { mark: type-nil }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tvar dict map[string]string\n\tdict[\"rain\"] = \"မိုး\"\n\tfmt.Println(dict[\"rain\"])\n"
+        cadence: line-by-line
+      - id: sel-type
+        type: editor.select
+        at: { mark: sel-type }
+        target: { file: main.go, text: "map[string]string", occurrence: 1 }
+      - id: sel-put
+        type: editor.select
+        at: { mark: sel-put }
+        target: { file: main.go, text: 'dict["rain"] = "မိုး"', occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "assignment to entry in nil map",
+          timeoutMs: 8000,
+        }
+
+  - id: nil-panic
+    narration: >-
+      [[mark:point-panic]] program က ဘာမှ မထုတ်ပြဘဲ panic ဖြစ်ပြီး ရပ်သွားပါတယ်။ compile ကတော့
+      လက်ခံသွားပေမဲ့ run နေတုန်း main ဖိုင်ရဲ့ line ကိုး၊ rain ကို ထည့်တဲ့ line မှာ ရပ်သွားတာပါ။ ပထမ
+      စာကြောင်းက ဆိုလိုတာက၊ make မလုပ်ရသေးတဲ့ nil map ထဲကို တန်ဖိုး ထည့်ဖို့ ကြိုးစားလို့ ရပ်သွားတာပါ။
+      [[mark:board-nil]] var နဲ့ map ကို ကြေညာပြီး တန်ဖိုး မပေးရင်၊ map ရဲ့ zero value ဖြစ်တဲ့ nil ကို
+      ရပါတယ်။ nil ဆိုတာ ဘာကိုမှ မညွှန်ရသေးတဲ့ အခြေအနေပါ။ ဆိုလိုတာက dict ဆိုတဲ့ နာမည် ရှိပေမဲ့ စာရင်း
+      ကိုယ်တိုင်ကို မလုပ်ရသေးပါဘူး။ [[mark:draw-nil]] nil map ကနေ ဖတ်တာကတော့ ရပါတယ်၊ ဘာမှ မရှိလို့
+      zero value ကို ပြန်ပေးပါတယ်။ ဒါပေမဲ့ ထည့်ဖို့ ကြိုးစားရင်တော့ ထည့်စရာ စာရင်း မရှိလို့ panic ဖြစ်ပါတယ်။
+      [[mark:draw-make]] ပြင်ဖို့ကတော့ make ကို သုံးပြီး map အလွတ် တစ်ခုကို အရင် လုပ်ပေးရပါတယ်။ map
+      အလွတ် ဆိုတာ စာရင်းက ရှိပြီးသား၊ ဒါပေမဲ့ row တစ်ခုမှ မပါသေးတာပါ။ [[mark:draw-note]] ဒါကြောင့် nil
+      map နဲ့ map အလွတ်က မတူပါဘူး။ map အလွတ်ထဲကိုတော့ ကြိုက်သလောက် ထည့်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+    actions:
+      - {
+          id: point-panic,
+          type: console.point,
+          at: { mark: point-panic },
+          target: { text: "panic: assignment to entry in nil map" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-nil } }
+      - {
+          id: board-nil,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-nil,
+          type: whiteboard.apply,
+          at: { mark: draw-nil },
+          upsertIds: [n-nil-box, n-nil-head, n-nil-read, n-nil-write],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-make,
+          type: whiteboard.apply,
+          at: { mark: draw-make },
+          upsertIds: [n-make-box, n-make-head, n-make-rw, n-code],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: draw-note },
+          upsertIds: [n-note, n-note-line],
+          drawMs: 1200,
+        }
+
+  - id: fix
+    narration: >-
+      [[mark:close-nil]] ဒါဆို ပြင်ကြည့်ရအောင်။ [[mark:type-make]] ကြေညာတဲ့ line ရဲ့ အောက်မှာ make နဲ့ map
+      အလွတ် တစ်ခု လုပ်ပြီး dict ထဲကို ထည့်ပေးလိုက်ပါမယ်။ make အစား map ကို တန်ဖိုးတွေနဲ့ တကွ တစ်ခါတည်း
+      ရေးပြီး လုပ်လို့လည်း ရပါတယ်၊ အဲဒါလည်း nil မဟုတ်တဲ့ map ပါပဲ။ ဒီမှာတော့ ပြင်တာ မြင်သာအောင် line နှစ်ကြောင်း ခွဲထားပေမဲ့၊ ပုံမှန်ဆိုရင် box အသစ် လုပ်တဲ့ သင်္ကေတနဲ့ make ကို တစ်ကြောင်းတည်း ရေးလေ့ ရှိပါတယ်။ [[mark:type-words]] rain ရဲ့ အောက်မှာ book နဲ့
+      school ဆိုတဲ့ စကားလုံး နှစ်လုံးကိုပါ ထပ်ထည့်ပါမယ်။ [[mark:type-snow]] ပြီးတော့ စာရင်းထဲမှာ မရှိတဲ့
+      snow ဆိုတဲ့ စကားလုံးကို ရှာကြည့်ပါမယ်။ [[mark:sel-ok]] ဒီ line မှာ map ကနေ တန်ဖိုး နှစ်ခု
+      ပြန်ယူထားတာကို ကြည့်ပါ။ ပထမ တစ်ခုက အဓိပ္ပာယ်ဖြစ်ပြီး၊ ဒုတိယ တစ်ခုက key ရှိလား မရှိလား ဆိုတဲ့ bool
+      ပါ။ result အများ အကြောင်း lesson မှာ မြင်ခဲ့တဲ့ value နဲ့ ok ပုံစံပါပဲ။ print ထုတ်တဲ့ line မှာတော့
+      အဓိပ္ပာယ်ကို quote နဲ့ တကွ မြင်ရအောင် Printf ကို သုံးထားပါတယ်။ [[mark:run-2]] ကဲ၊ ထပ်ပြီး run
+      ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Making slices, maps and channels",
+          url: "https://go.dev/ref/spec#Making_slices_maps_and_channels",
+        }
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+    actions:
+      - {
+          id: close-nil,
+          type: whiteboard.apply,
+          at: { mark: close-nil },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-make
+        type: editor.type
+        at: { mark: type-make }
+        target: { file: main.go, after: "\tvar dict map[string]string\n", occurrence: 1 }
+        text: "\tdict = make(map[string]string)\n"
+      - id: type-words
+        type: editor.type
+        at: { mark: type-words }
+        target: { file: main.go, after: "\tdict[\"rain\"] = \"မိုး\"\n", occurrence: 1 }
+        text: "\tdict[\"book\"] = \"စာအုပ်\"\n\tdict[\"school\"] = \"ကျောင်း\"\n"
+        cadence: line-by-line
+      - id: type-snow
+        type: editor.type
+        at: { mark: type-snow }
+        target: { file: main.go, after: "\tfmt.Println(dict[\"rain\"])\n", occurrence: 1 }
+        text: "\tmeaning, ok := dict[\"snow\"]\n\tfmt.Printf(\"%q %v\\n\", meaning, ok)\n"
+        cadence: line-by-line
+      - id: sel-ok
+        type: editor.select
+        at: { mark: sel-ok }
+        target: { file: main.go, text: 'meaning, ok := dict["snow"]', occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: '"" false',
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-make,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\tdict = make(map[string]string)\n",
+        }
+
+  - id: missing
+    chapter: Key မရှိရင်
+    narration: >-
+      [[mark:point-rain]] ဒီ တစ်ခါ panic မဖြစ်တော့ဘဲ ပထမ စာကြောင်းမှာ မိုး ထွက်လာပါပြီ။ rain ဆိုတဲ့ key နဲ့
+      ရှာလိုက်တော့ သူ့ တန်ဖိုးကို တန်းရတာပါ။ [[mark:point-snow]] ဒုတိယ စာကြောင်းမှာတော့ quote နှစ်ခုကြားမှာ
+      ဘာမှ မရှိတဲ့ စာသား အလွတ်နဲ့ false ကို တွေ့ရပါတယ်။ snow က စာရင်းထဲမှာ မရှိပေမဲ့ map က panic လည်း
+      မဖြစ်၊ compile error လည်း မပေးပါဘူး။ string ရဲ့ zero value ဖြစ်တဲ့ စာသား အလွတ်ကို ပြန်ပေးလိုက်တာပါ။
+      [[mark:why-ok]] ဒါပေမဲ့ စာသား အလွတ် တစ်ခုတည်းကို ကြည့်ပြီး၊ စကားလုံး မရှိလို့လား၊ အဓိပ္ပာယ် နေရာမှာ စာသား အလွတ် ထည့်ထားလို့လား
+      ဆိုတာ ခွဲမသိနိုင်ပါဘူး။ ဒါကြောင့် ok ကို မေးရတာပါ။ false ဖြစ်နေတော့ snow ဆိုတဲ့ key က စာရင်းထဲမှာ
+      တကယ် မရှိဘူး ဆိုတာ သေချာသွားပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Index expressions",
+          url: "https://go.dev/ref/spec#Index_expressions",
+        }
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+    actions:
+      - { id: point-rain, type: console.point, at: { mark: point-rain }, target: { text: "မိုး" } }
+      - {
+          id: point-snow,
+          type: console.point,
+          at: { mark: point-snow },
+          target: { text: '"" false' },
+        }
+
+  - id: order
+    chapter: Map မှာ အစဉ် မရှိဘူး
+    narration: >-
+      [[mark:board-order]] အခု စာရင်းထဲက စကားလုံး အားလုံးကို ထုတ်ပြချင်တယ် ဆိုပါစို့။ map ကိုလည်း range
+      နဲ့ လျှောက်လို့ ရပါတယ်။ [[mark:draw-random]] ဒါပေမဲ့ map မှာ အစဉ် မရှိတဲ့အတွက်၊ range က key တွေကို
+      ပေးတဲ့ အစဉ်ကို Go က သတ်မှတ်မထားပါဘူး။ run တစ်ခါနဲ့ တစ်ခါ အစဉ် ကွဲနိုင်ပါတယ်။ ဒါကြောင့် output
+      ကို အစဉ် တစ်မျိုးတည်း လိုချင်ရင် map ကို တိုက်ရိုက် range မလုပ်ပါနဲ့။ [[mark:draw-sorted]] အဲဒီအစား
+      key တွေကို အရင် ထုတ်ယူ၊ sort လုပ်ပြီးမှ အဲဒီ အစဉ်အတိုင်း လျှောက်ပါတယ်။ ဒီ ပုံစံကို အခုတော့ ရေးနည်း
+      တစ်ခု အနေနဲ့ပဲ မှတ်ထားပါ၊ ဘယ်လို အလုပ်လုပ်လဲ ဆိုတာ iterator lesson ကျမှ ရှင်းပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+      - { title: "maps package — Keys", url: "https://pkg.go.dev/maps#Keys" }
+      - { title: "slices package — Sorted", url: "https://pkg.go.dev/slices#Sorted" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-order } }
+      - {
+          id: board-order,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [o-title],
+        }
+      - {
+          id: draw-random,
+          type: whiteboard.apply,
+          at: { mark: draw-random },
+          upsertIds: [o-rand-box, o-run1, o-run2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-sorted,
+          type: whiteboard.apply,
+          at: { mark: draw-sorted },
+          upsertIds: [o-sort-box, o-sort, o-recipe],
+          drawMs: 2400,
+        }
+
+  - id: sorted
+    narration: >-
+      [[mark:close-order]] ဒါဆို ရေးကြည့်ရအောင်။ [[mark:type-imports]] အရင်ဆုံး maps နဲ့ slices ဆိုတဲ့
+      package နှစ်ခုကို import block ထဲမှာ ထည့်ပါမယ်။ [[mark:type-delete]] ပြီးတော့ စာရင်းထဲက စကားလုံး
+      တစ်လုံးကို ဖယ်ကြည့်ပါမယ်။ map ထဲက key တစ်ခုကို ဖျက်ချင်ရင် delete ကို သုံးပြီး၊ ဒီမှာ school ကို
+      ဖယ်လိုက်တာပါ။ စာရင်းထဲမှာ မရှိတဲ့ key ကို delete လုပ်ရင်လည်း panic မဖြစ်ပါဘူး၊ ဘာမှ မလုပ်ဘဲ
+      ကျော်သွားတာပါ။ [[mark:type-loop]] နောက်ဆုံးမှာ sort လုပ်ထားတဲ့ key တွေကို လျှောက်ပြီး၊ စကားလုံးနဲ့
+      အဓိပ္ပာယ်ကို တစ်ကြောင်းစီ print ထုတ်ပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Deletion of map elements",
+          url: "https://go.dev/ref/spec#Deletion_of_map_elements",
+        }
+      - { title: "slices package — Sorted", url: "https://pkg.go.dev/slices#Sorted" }
+    actions:
+      - {
+          id: close-order,
+          type: whiteboard.apply,
+          at: { mark: close-order },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-imports
+        type: editor.type
+        at: { mark: type-imports }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"maps\"\n\t\"slices\"\n"
+        cadence: line-by-line
+      - id: type-delete
+        type: editor.type
+        at: { mark: type-delete }
+        target: { file: main.go, after: "\tfmt.Printf(\"%q %v\\n\", meaning, ok)\n", occurrence: 1 }
+        text: "\tdelete(dict, \"school\")\n"
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "\tdelete(dict, \"school\")\n", occurrence: 1 }
+        text: "\tfor _, word := range slices.Sorted(maps.Keys(dict)) {\n\t\tfmt.Println(word, dict[word])\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "book စာအုပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-delete,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tdelete(dict, \"school\")\n",
+        }
+      - {
+          id: expect-file-loop,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "range slices.Sorted(maps.Keys(dict))",
+        }
+
+  - id: read-sorted
+    narration: >-
+      [[mark:point-book]] တတိယ စာကြောင်းမှာ book နဲ့ သူ့ အဓိပ္ပာယ်ကို တွေ့ရပါတယ်။ loop က key တစ်ခုစီကို
+      ယူပြီး၊ အဲဒီ key နဲ့ map ထဲက အဓိပ္ပာယ်ကို ပြန်ရှာပြီးမှ print ထုတ်တာပါ။ [[mark:point-rain2]] နောက်ဆုံး
+      စာကြောင်းမှာတော့ rain နဲ့ မိုး ပါ။ ထည့်ခဲ့တဲ့ အစဉ်မှာ rain က အရင် ဖြစ်ပေမဲ့၊ key တွေကို sort
+      လုပ်ထားလို့ English အက္ခရာ စဉ်အတိုင်း book က အရင် ထွက်လာတာပါ။ ဒီ အစဉ်က ဘယ်နှစ်ခါ run run
+      မပြောင်းပါဘူး။ school ကိုတော့ delete နဲ့ ဖယ်ထားလို့ စာရင်းထဲမှာ မပါတော့ပါဘူး။ [[mark:println-map]]
+      နောက်ထပ် သိထားသင့်တာက၊ map တစ်ခုလုံးကို Println နဲ့ တိုက်ရိုက် print ထုတ်ရင်တော့ fmt က key တွေကို
+      သူ့ဘာသာ sort လုပ်ပြီး ပြပေးတာပါ။ စစ်ကြည့်ဖို့ အဆင်ပြေပေမဲ့၊ ကိုယ့် ပုံစံနဲ့ တစ်ကြောင်းချင်း
+      ထုတ်ချင်ရင်တော့ ခုနက ပုံစံကို သုံးပါ။
+    sources:
+      - { title: "fmt package", url: "https://pkg.go.dev/fmt" }
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+    actions:
+      - {
+          id: point-book,
+          type: console.point,
+          at: { mark: point-book },
+          target: { text: "book စာအုပ်" },
+        }
+      - {
+          id: point-rain2,
+          type: console.point,
+          at: { mark: point-rain2 },
+          target: { text: "rain မိုး" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program မှာ make နဲ့ map အလွတ် တစ်ခု လုပ်ပြီး၊
+      rain ဆိုတဲ့ key ကို မိုး နဲ့ ထည့်ထားပါတယ်။ [[mark:quiz-line]] နောက် line မှာတော့ rain ဆိုတဲ့ key
+      တစ်ခုတည်းကိုပဲ မိုးရွာ လို့ ထပ်ထည့်ထားပါတယ်။ ဒါဆို map ရဲ့ len က နှစ် ဖြစ်မလား၊ တစ် ဖြစ်မလား။ lesson
+      ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ တစ် ပါ။ ဘာကြောင့်လဲဆိုတော့ key
+      တစ်ခုက map ထဲမှာ တစ်ကြိမ်ပဲ ရှိနိုင်လို့ပါ။ ရှိပြီးသား key ကို ထပ်ထည့်ရင် row အသစ် မတိုးဘဲ၊ အဲဒီ row
+      ရဲ့ တန်ဖိုးကို အသစ်နဲ့ အစားထိုးလိုက်တာပါ။ ဒါကြောင့် rain ကို ရှာရင်လည်း မိုးရွာ ကိုပဲ ရပါတော့မယ်။
+    sources:
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ map က key တစ်ခုနဲ့ တန်ဖိုးကို ချက်ချင်း ရှာပေးတဲ့ စာရင်းပါ။
+      [[mark:recap-make]] map ထဲကို ထည့်ဖို့ make နဲ့ အရင် လုပ်ထားရပါတယ်၊ var နဲ့ပဲ ကြေညာထားတဲ့ nil map ထဲကို
+      ထည့်ရင် panic ဖြစ်ပါတယ်။ [[mark:recap-ok]] key မရှိရင် map က zero value ကို ပြန်ပေးလို့၊ တကယ်
+      ရှိမရှိ သိချင်ရင် ok နဲ့ မေးပါ။ [[mark:recap-sorted]] map မှာ အစဉ် မရှိလို့ အစဉ်တကျ ထုတ်ချင်ရင် key
+      တွေကို sort လုပ်ပြီးမှ လျှောက်ပါ။ နောက် lesson မှာတော့ မြန်မာ စာသား တစ်ကြောင်းဟာ နောက်ကွယ်မှာ
+      ဘာတွေနဲ့ ဖွဲ့ထားလဲ ဆိုတာ၊ byte နဲ့ rune အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Go maps in action", url: "https://go.dev/blog/maps" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-make
+        type: editor.select
+        at: { mark: recap-make }
+        target: { file: main.go, text: "dict = make(map[string]string)", occurrence: 1 }
+      - id: recap-ok
+        type: editor.select
+        at: { mark: recap-ok }
+        target: { file: main.go, text: 'meaning, ok := dict["snow"]', occurrence: 1 }
+      - id: recap-sorted
+        type: editor.select
+        at: { mark: recap-sorted }
+        target: { file: main.go, text: "slices.Sorted(maps.Keys(dict))", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
