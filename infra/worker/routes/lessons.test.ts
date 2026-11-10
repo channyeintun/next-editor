@@ -8,6 +8,7 @@ import {
   listPublishedLessons,
   updateLesson,
 } from "../../db/queries";
+import { forgetMediaObject, forgetMediaObjectsUnder } from "../../db/mediaObjects";
 import type { LessonRow } from "../../db/types";
 import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 
@@ -21,6 +22,11 @@ vi.mock("../../db/queries", () => ({
   updateLesson: vi.fn<() => Promise<LessonRow | null>>(),
   getOwnedLessonById: vi.fn<() => Promise<LessonRow | null>>(async () => null),
   deleteLesson: vi.fn<() => Promise<boolean>>(),
+}));
+
+vi.mock("../../db/mediaObjects", () => ({
+  forgetMediaObject: vi.fn<() => Promise<void>>(async () => undefined),
+  forgetMediaObjectsUnder: vi.fn<() => Promise<void>>(async () => undefined),
 }));
 
 vi.mock("../../db/slug", () => ({
@@ -346,10 +352,43 @@ describe("lessonsRoute delete", () => {
     expect(bucket.list).toHaveBeenCalledWith({ prefix: `lessons/${LESSON_ID}/` });
     expect(bucket.delete).toHaveBeenCalledWith([`lessons/${LESSON_ID}/${LESSON_ID}.ne`]);
     expect(getOwnedLessonById).not.toHaveBeenCalled();
+    // The media no longer counts against the owner's storage quota.
+    expect(forgetMediaObjectsUnder).toHaveBeenCalledWith(
+      expect.anything(),
+      `lessons/${LESSON_ID}/`,
+      "user-1",
+    );
   });
 
   // Media removed first and a row that then failed to delete left a lesson,
   // possibly published, whose recording 404s for every viewer.
+  it("forgets a replaced thumbnail's storage once it is deleted", async () => {
+    const bucket = createBucket();
+    vi.mocked(getOwnedLessonById).mockResolvedValueOnce({
+      ...lessonRow(LESSON_ID),
+      thumbnail: `media/lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-1.webp`,
+    });
+    vi.mocked(updateLesson).mockResolvedValueOnce({
+      ...lessonRow(LESSON_ID),
+      thumbnail: `media/lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-2.webp`,
+    });
+
+    const response = await lessonsRoute.request(
+      `https://nexteditor.dev/${LESSON_ID}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ thumbnail: `lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-2.webp` }),
+        headers: { "content-type": "application/json" },
+      },
+      { DB: {} as D1Database, BUCKET: bucket as unknown as R2Bucket } as never,
+    );
+
+    expect(response.status).toBe(200);
+    const previousKey = `lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-1.webp`;
+    expect(bucket.delete).toHaveBeenCalledWith(previousKey);
+    expect(forgetMediaObject).toHaveBeenCalledWith(expect.anything(), previousKey, "user-1");
+  });
+
   it("keeps the media when the row could not be deleted", async () => {
     vi.mocked(deleteLesson).mockRejectedValue(new Error("D1_ERROR: network connection lost"));
     const bucket = createBucket();

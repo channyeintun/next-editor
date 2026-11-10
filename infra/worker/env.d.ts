@@ -63,8 +63,11 @@ export interface Env {
   PROXY_RATE_LIMITER?: RateLimit;
   // Per-user budgets for the routes that write to shared storage, keyed
   // "user:<id>" (chargeUserWriteBudget in rateLimit.ts): creating lessons and
-  // playlists. A missing binding fails closed with a 503.
+  // playlists, uploading lesson media, importing slide images. A missing
+  // binding fails closed with a 503.
   CONTENT_CREATE_RATE_LIMITER?: RateLimit;
+  MEDIA_UPLOAD_RATE_LIMITER?: RateLimit;
+  SLIDE_IMAGE_RATE_LIMITER?: RateLimit;
   REALTIME_SFU_APP_ID?: string;
   REALTIME_SFU_APP_SECRET?: string;
   // Workers KV result cache for the playground routes (infra/worker/cache.ts).

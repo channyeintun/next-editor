@@ -1,7 +1,9 @@
 import { Hono } from "hono";
+import { releaseMediaObject, reserveMediaObject } from "../../db/mediaObjects";
 import type { Env } from "../env";
 import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import { requireUser } from "../auth/requireUser";
+import { chargeUserWriteBudget } from "../rateLimit";
 import { proxyUrl, readProxyBody } from "../../../src/shared/proxy";
 import { isGoogleImageUrl } from "../../../src/shared/googleImageHosts";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
@@ -16,10 +18,15 @@ import { sha256Hex } from "../../../src/shared/sha256Hex";
 // Keys are content-addressed by source URL (slide-images/<sha256(url)>), so
 // the same image imported into any number of decks/lessons is stored once,
 // and re-importing a deck ("Update") is a cheap head() per image: a key that
-// already exists is reused, never rewritten.
+// already exists is reused, never rewritten. The URL is hashed as the URL
+// parser normalizes it, without its fragment (canonicalImageUrl), since that
+// is what is fetched: spelling one image's URL differently must not store it
+// again.
 //
 // Abuse guards: requires a signed-in user (same bar as /api/uploads — a
-// signed-out import falls back to proxy hrefs client-side), only accepts
+// signed-out import falls back to proxy hrefs client-side), charges each
+// request to the user's rate budget (SLIDE_IMAGE_RATE_LIMITER) and each newly
+// stored image to their storage quota (db/mediaObjects.ts), only accepts
 // URLs on Google's image hosts (this is slide-image ingestion, not a general
 // "mirror any URL into our bucket" service), and only stores raster image
 // content types. svg is deliberately excluded for the same reason as in
@@ -47,9 +54,22 @@ export const SLIDE_IMAGE_CONTENT_TYPES: ReadonlySet<string> = new Set([
   "image/bmp",
 ]);
 
+/**
+ * The URL that is actually fetched for `url` (a parsed Google image URL): the
+ * parser's normalized form (host case, default port, dot segments, stray tabs
+ * and newlines), without the fragment, which never leaves the browser.
+ */
+function canonicalImageUrl(url: string): string {
+  const parsed = new URL(url);
+  parsed.hash = "";
+  return parsed.href;
+}
+
 async function keyForUrl(url: string): Promise<string> {
   return `slide-images/${await sha256Hex(url)}`;
 }
+
+type IngestOutcome = { path: string } | { error: string };
 
 interface IngestResult {
   url: string;
@@ -57,37 +77,55 @@ interface IngestResult {
   error?: string;
 }
 
-async function ingestImage(bucket: R2Bucket, url: string): Promise<IngestResult> {
-  if (!isGoogleImageUrl(url)) {
-    return { url, error: "Not a Google-hosted image URL." };
+async function ingestImage(env: Env, userId: string, source: string): Promise<IngestOutcome> {
+  const key = await keyForUrl(source);
+  if (await env.BUCKET.head(key)) {
+    return { path: key };
   }
 
-  const key = await keyForUrl(url);
-  if (await bucket.head(key)) {
-    return { url, path: key };
-  }
-
-  const result = await proxyUrl(url);
+  const result = await proxyUrl(source);
   if (result.status !== 200 || !result.body) {
-    return { url, error: result.error ?? "Upstream fetch failed." };
+    return { error: result.error ?? "Upstream fetch failed." };
   }
 
   const contentType = (result.contentType ?? "").split(";")[0].trim().toLowerCase();
   if (!SLIDE_IMAGE_CONTENT_TYPES.has(contentType)) {
-    return { url, error: `Unsupported content type '${contentType}'.` };
+    return { error: `Unsupported content type '${contentType}'.` };
   }
   let body: Uint8Array;
   try {
     body = await readProxyBody(result.body, MAX_IMAGE_BYTES);
   } catch {
-    return { url, error: "Image too large." };
+    return { error: "Image too large." };
   }
 
-  await bucket.put(key, body, { httpMetadata: { contentType } });
-  return { url, path: key };
+  // Charged to whoever stores the image first. "taken" means another import
+  // stored this same image meanwhile: writing it again costs nobody anything.
+  const reservation = await reserveMediaObject(env.DB, key, userId, body.byteLength);
+  if (reservation.kind === "over_quota") {
+    return { error: "Storage quota reached." };
+  }
+  try {
+    await env.BUCKET.put(key, body, { httpMetadata: { contentType } });
+  } catch (error) {
+    if (reservation.kind === "reserved") {
+      await releaseMediaObject(env.DB, key, userId, reservation.previousBytes);
+    }
+    throw error;
+  }
+  return { path: key };
 }
 
 slideImagesRoute.post("/", requireUser, async (c) => {
+  const user = c.get("user");
+  const limited = await chargeUserWriteBudget(
+    c,
+    c.env.SLIDE_IMAGE_RATE_LIMITER,
+    user.id,
+    "Slide image import",
+  );
+  if (limited) return limited;
+
   const read = await readJsonWithLimit(c.req.raw, MAX_REQUEST_BYTES);
   if (read.status === "too-large") {
     return c.json({ error: "request body is too large" }, 413);
@@ -105,7 +143,23 @@ slideImagesRoute.post("/", requireUser, async (c) => {
     return c.json({ error: `at most ${MAX_URLS_PER_REQUEST} urls per request` }, 400);
   }
 
+  // One result per URL as sent (the client matches them by it), but one
+  // ingest per image actually fetched.
   const unique = [...new Set(urls as string[])];
-  const results = await Promise.all(unique.map((url) => ingestImage(c.env.BUCKET, url)));
+  const ingests = new Map<string, Promise<IngestOutcome>>();
+  const results = await Promise.all(
+    unique.map(async (url): Promise<IngestResult> => {
+      if (!isGoogleImageUrl(url)) {
+        return { url, error: "Not a Google-hosted image URL." };
+      }
+      const source = canonicalImageUrl(url);
+      let ingest = ingests.get(source);
+      if (!ingest) {
+        ingest = ingestImage(c.env, user.id, source);
+        ingests.set(source, ingest);
+      }
+      return { url, ...(await ingest) };
+    }),
+  );
   return c.json({ results });
 });

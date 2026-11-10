@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import { uploadsRoute } from "./uploads";
 import { getCurrentUser } from "../auth/session";
 import { getLessonById } from "../../db/queries";
+import { MAX_MEDIA_BYTES_PER_OWNER } from "../../db/ownerLimits";
+import { insertSignedInUser, openSqliteD1, type SqliteD1 } from "../../db/testing";
 import { MAX_CAPTION_BYTES, MAX_THUMBNAIL_BYTES } from "../../lessons/uploadLimits";
 import { LESSON_MEDIA_EXTENSIONS } from "../lessonMediaFiles";
+import { countingRateLimiter, refusingRateLimiter } from "../testing/rateLimit";
 
 vi.mock("../auth/session", () => ({
   getCurrentUser: vi.fn<() => Promise<{ id: string } | null>>(async () => ({ id: "user-1" })),
@@ -13,11 +16,21 @@ vi.mock("../../db/queries", () => ({
   getLessonById: vi.fn<() => Promise<null>>(async () => null),
 }));
 
+let database: SqliteD1;
+
 function createEnv() {
   const put = vi.fn<() => Promise<undefined>>(async () => undefined);
   const del = vi.fn<() => Promise<undefined>>(async () => undefined);
-  const env = { DB: {} as D1Database, BUCKET: { put, delete: del } as unknown as R2Bucket };
+  const env = {
+    DB: database.db,
+    BUCKET: { put, delete: del } as unknown as R2Bucket,
+    MEDIA_UPLOAD_RATE_LIMITER: countingRateLimiter(Infinity) as RateLimit | undefined,
+  };
   return { env, put, del };
+}
+
+function mediaObjects() {
+  return database.sqlite.prepare("SELECT key, owner_id, bytes FROM media_objects").all();
 }
 
 function putRequest(path: string, byteLength = 6, signal?: AbortSignal): [string, RequestInit] {
@@ -38,6 +51,9 @@ function putRequest(path: string, byteLength = 6, signal?: AbortSignal): [string
 }
 
 beforeEach(() => {
+  database = openSqliteD1();
+  insertSignedInUser(database.sqlite, "user-1", "session-1");
+  insertSignedInUser(database.sqlite, "user-2", "session-2");
   vi.mocked(getCurrentUser).mockResolvedValue({ id: "user-1" } as never);
   vi.mocked(getLessonById).mockResolvedValue(null as never);
 });
@@ -74,6 +90,8 @@ describe("uploadsRoute cancelled uploads", () => {
     expect(logs.error).not.toHaveBeenCalled();
     // A failed put stores nothing, and the key may hold the file being replaced.
     expect(del).not.toHaveBeenCalled();
+    // Nor does it count against the user's storage.
+    expect(mediaObjects()).toEqual([]);
   });
 
   it("answers 499 once the request signal says the browser left", async () => {
@@ -248,5 +266,105 @@ describe("uploadsRoute media filenames", () => {
 
     expect(response.status).toBe(404);
     expect(put).not.toHaveBeenCalled();
+  });
+});
+
+describe("uploadsRoute storage bounds", () => {
+  // Any signed-in user used to be able to store any number of objects under
+  // any number of fresh ids, bounded only per request.
+  it("records each upload against the user's storage, replacing a re-upload's size", async () => {
+    const { env } = createEnv();
+
+    expect((await uploadsRoute.request(...putRequest("/l1/media/l1.ne", 6), env)).status).toBe(200);
+    expect((await uploadsRoute.request(...putRequest("/l1/media/l1.ne", 4), env)).status).toBe(200);
+    expect((await uploadsRoute.request(...putRequest("/l2/media/l2.ne", 5), env)).status).toBe(200);
+
+    expect(mediaObjects()).toEqual([
+      { key: "lessons/l1/l1.ne", owner_id: "user-1", bytes: 4 },
+      { key: "lessons/l2/l2.ne", owner_id: "user-1", bytes: 5 },
+    ]);
+  });
+
+  it("refuses an upload past the user's storage quota, before writing it", async () => {
+    const { env, put } = createEnv();
+    database.sqlite
+      .prepare(
+        "INSERT INTO media_objects (key, owner_id, bytes, created_at, updated_at) VALUES ('lessons/old/old.ne', 'user-1', ?, 0, 0)",
+      )
+      .run(MAX_MEDIA_BYTES_PER_OWNER - 5);
+
+    const response = await uploadsRoute.request(...putRequest("/fresh/media/fresh.ne", 6), env);
+
+    expect(response.status).toBe(507);
+    expect(await response.json()).toEqual({
+      error: "Your storage is full — delete a lesson to make room",
+    });
+    expect(put).not.toHaveBeenCalled();
+    // Another user's quota is their own.
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({ id: "user-2" } as never);
+    expect((await uploadsRoute.request(...putRequest("/other/media/o.ne", 6), env)).status).toBe(
+      200,
+    );
+  });
+
+  it("never lets another user write a key someone else's upload recorded", async () => {
+    const { env, put } = createEnv();
+    await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), env);
+    put.mockClear();
+
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({ id: "user-2" } as never);
+    const response = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), env);
+
+    expect(response.status).toBe(403);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("refuses a fresh id longer than a UUID needs, and a filename past its limit", async () => {
+    const { env, put } = createEnv();
+    const longId = "a".repeat(65);
+
+    const longIdResponse = await uploadsRoute.request(...putRequest(`/${longId}/media/a.ne`), env);
+    const longName = await uploadsRoute.request(
+      ...putRequest(`/l1/media/${"a".repeat(126)}.ne`),
+      env,
+    );
+
+    expect(longIdResponse.status).toBe(400);
+    expect(longName.status).toBe(400);
+    expect(put).not.toHaveBeenCalled();
+    // An existing lesson keeps whatever id it was created with.
+    vi.mocked(getLessonById).mockResolvedValueOnce({ owner_id: "user-1" } as never);
+    expect((await uploadsRoute.request(...putRequest(`/${longId}/media/a.ne`), env)).status).toBe(
+      200,
+    );
+  });
+
+  it("charges each upload to the user's budget, and fails closed without one", async () => {
+    const { env, put } = createEnv();
+    const limiter = countingRateLimiter(1);
+
+    const first = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), {
+      ...env,
+      MEDIA_UPLOAD_RATE_LIMITER: limiter,
+    });
+    const second = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), {
+      ...env,
+      MEDIA_UPLOAD_RATE_LIMITER: limiter,
+    });
+    const refused = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), {
+      ...env,
+      MEDIA_UPLOAD_RATE_LIMITER: refusingRateLimiter(),
+    });
+    const missing = await uploadsRoute.request(...putRequest("/l1/media/l1.ne"), {
+      ...env,
+      MEDIA_UPLOAD_RATE_LIMITER: undefined,
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(429);
+    expect(refused.status).toBe(429);
+    expect(missing.status).toBe(503);
+    expect(limiter.keys).toEqual(["user:user-1", "user:user-1"]);
+    expect(put).toHaveBeenCalledTimes(1);
   });
 });

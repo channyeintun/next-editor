@@ -1,11 +1,17 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Env } from "../env";
+import { releaseMediaObject, reserveMediaObject } from "../../db/mediaObjects";
 import { getLessonById } from "../../db/queries";
 import { requireUser, type SignedInEnv } from "../auth/requireUser";
 import { clientClosedResponse, isClientCancel } from "../clientClosed";
-import { LESSON_ID_PATTERN } from "../lessonIds";
-import { LESSON_MEDIA_CONTENT_TYPES, LESSON_MEDIA_FILENAME_PATTERN } from "../lessonMediaFiles";
+import { isNewLessonId, LESSON_ID_PATTERN } from "../lessonIds";
+import {
+  LESSON_MEDIA_CONTENT_TYPES,
+  LESSON_MEDIA_FILENAME_PATTERN,
+  MAX_LESSON_MEDIA_FILENAME_CHARS,
+} from "../lessonMediaFiles";
+import { chargeUserWriteBudget } from "../rateLimit";
 import {
   MAX_CAPTION_BYTES,
   MAX_MEDIA_BYTES,
@@ -15,7 +21,9 @@ import {
 // Mounted at /api/uploads in worker/index.ts. The client PUTs bytes through
 // this same-origin authenticated Worker route, which streams them into R2
 // without buffering the whole file in memory; no R2 signing keys or presigned
-// upload URLs are exposed to the browser.
+// upload URLs are exposed to the browser. Every user shares the bucket, so each
+// upload is charged to the user's rate budget (MEDIA_UPLOAD_RATE_LIMITER) and,
+// before its bytes are written, to their storage quota (db/mediaObjects.ts).
 export const uploadsRoute = new Hono<{ Bindings: Env }>();
 
 const THUMBNAIL_FILENAME_RE = /\.(?:png|jpe?g|webp)$/i;
@@ -34,8 +42,18 @@ function storedContentTypeFor(filename: string): string {
 
 const handleMediaUpload = async (c: Context<SignedInEnv>) => {
   const user = c.get("user");
+  const limited = await chargeUserWriteBudget(
+    c,
+    c.env.MEDIA_UPLOAD_RATE_LIMITER,
+    user.id,
+    "Media upload",
+  );
+  if (limited) return limited;
 
   const { id, filename } = c.req.param();
+  if (filename.length > MAX_LESSON_MEDIA_FILENAME_CHARS) {
+    return c.json({ error: "filename is too long" }, 400);
+  }
 
   // A lesson row for this id may not exist yet (this is the very first
   // upload before POST /api/lessons creates the draft) — that's fine, any
@@ -46,6 +64,11 @@ const handleMediaUpload = async (c: Context<SignedInEnv>) => {
   const existing = await getLessonById(c.env.DB, id);
   if (existing && existing.owner_id !== user.id) {
     return c.json({ error: "forbidden" }, 403);
+  }
+  // A fresh id is one POST /api/lessons would accept; an existing lesson keeps
+  // whatever id it was created with.
+  if (!existing && !isNewLessonId(id)) {
+    return c.json({ error: "lesson id is too long" }, 400);
   }
 
   if (!c.req.raw.body) {
@@ -69,6 +92,15 @@ const handleMediaUpload = async (c: Context<SignedInEnv>) => {
   }
 
   const key = `lessons/${id}/${filename}`;
+  // Recorded before the bytes are written, so concurrent uploads cannot pass
+  // the quota together. The first uploader of a key under a fresh id owns it.
+  const reservation = await reserveMediaObject(c.env.DB, key, user.id, contentLength);
+  if (reservation.kind === "taken") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  if (reservation.kind === "over_quota") {
+    return c.json({ error: "Your storage is full — delete a lesson to make room" }, 507);
+  }
   try {
     await c.env.BUCKET.put(key, c.req.raw.body, {
       httpMetadata: {
@@ -76,6 +108,12 @@ const handleMediaUpload = async (c: Context<SignedInEnv>) => {
       },
     });
   } catch (error) {
+    // R2 keeps what the key held before: so does the accounting.
+    await releaseMediaObject(c.env.DB, key, user.id, reservation.previousBytes).catch(
+      (releaseError: unknown) => {
+        console.error("Failed to release a media reservation", { key }, releaseError);
+      },
+    );
     // Anything but a cancelled upload stays a logged 500 (Hono's default).
     if (!isClientCancel(c.req.raw, error)) throw error;
     // R2 stores an object only once its put completes, so a cancelled upload

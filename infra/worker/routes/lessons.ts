@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env";
 import { readJsonWithLimit } from "../httpBody";
+import { forgetMediaObject, forgetMediaObjectsUnder } from "../../db/mediaObjects";
 import {
   deleteLesson,
   getOwnedLessonById,
@@ -267,7 +268,9 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
     // Best-effort, same reasoning as the delete-lesson cleanup below: an
     // orphaned R2 object is a minor storage cost, not a correctness problem.
     try {
-      await c.env.BUCKET.delete(previousThumbnail.replace(/^media\//, ""));
+      const previousKey = previousThumbnail.replace(/^media\//, "");
+      await c.env.BUCKET.delete(previousKey);
+      await forgetMediaObject(c.env.DB, previousKey, user.id);
     } catch (error) {
       console.error("Failed to delete superseded thumbnail", { lessonId: id }, error);
     }
@@ -316,6 +319,8 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
     if (listed.objects.length > 0) {
       await c.env.BUCKET.delete(listed.objects.map((object) => object.key));
     }
+    // What the lesson's media counted against its owner's storage quota.
+    await forgetMediaObjectsUnder(c.env.DB, `lessons/${id}/`, user.id);
   } catch (error) {
     console.error("Failed to clean up R2 objects", { lessonId: id }, error);
   }

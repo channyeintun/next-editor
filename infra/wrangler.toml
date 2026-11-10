@@ -145,9 +145,9 @@ binding = "CACHE"
 # `period` may only be 10 or 60 seconds; keep 60, because the routes' 429 says
 # "retry in a minute". `namespace_id` names the counter across the whole
 # Cloudflare account: never reuse one for a different budget, and keep this
-# 7101-7111 block (playgrounds 7101-7107, AthanLab 7108-7109, /api/proxy 7110,
-# signed-in writes to shared storage 7111) clear of other Workers' ids, or they
-# would share counters.
+# 7101-7113 block (playgrounds 7101-7107, AthanLab 7108-7109, /api/proxy 7110,
+# signed-in writes to shared storage 7111-7113) clear of other Workers' ids, or
+# they would share counters.
 [[ratelimits]]
 name = "GO_RUN_RATE_LIMITER"
 namespace_id = "7101"
@@ -238,6 +238,22 @@ simple = { limit = 120, period = 60 }
 name = "CONTENT_CREATE_RATE_LIMITER"
 namespace_id = "7111"
 simple = { limit = 20, period = 60 }
+
+# Lesson media uploads (PUT /api/uploads/:id/media/:filename) and Google
+# Slides image imports (POST /api/slide-images, up to 8 images a request),
+# keyed "user:<id>" like the creates above. An upload is a handful of files,
+# and a deck import sends its images 8 at a time; a refused slide-image chunk
+# falls back to proxy hrefs client-side. How much one user may store at all
+# is capped in D1 (media_objects, infra/db/mediaObjects.ts).
+[[ratelimits]]
+name = "MEDIA_UPLOAD_RATE_LIMITER"
+namespace_id = "7112"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "SLIDE_IMAGE_RATE_LIMITER"
+namespace_id = "7113"
+simple = { limit = 30, period = 60 }
 
 # One hibernating WebSocket coordinator per live-collaboration room. Every room
 # keeps its durable Yjs log in this object's SQLite storage.

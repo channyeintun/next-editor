@@ -17,3 +17,11 @@ export const MAX_PLAYLISTS_PER_OWNER = 200;
  * new sign-in past this ends that user's oldest session.
  */
 export const MAX_LIVE_SESSIONS_PER_USER = 20;
+
+/**
+ * R2 storage one user's lesson uploads and slide-image imports may hold
+ * (media_objects, see mediaObjects.ts): bytes, and objects. A lesson is a
+ * handful of objects (its .ne, audio, camera video, thumbnail, captions).
+ */
+export const MAX_MEDIA_BYTES_PER_OWNER = 25 * 1024 ** 3;
+export const MAX_MEDIA_OBJECTS_PER_OWNER = 20_000;
