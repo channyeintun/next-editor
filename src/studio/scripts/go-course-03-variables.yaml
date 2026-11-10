@@ -1,0 +1,1062 @@
+# Go course, lesson 03: variables and types (Burmese; the second pilot lesson).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. name, age, city with := and a Println of name and city only -> run-1: compile error
+#      `./main.go:7:2: declared and not used: age`;
+#   2. `age, ` into that Println, then phone (a string of digits) and its Println -> run-2:
+#      အောင်အောင် 21 မန္တလေး / 09000111222;
+#   3. `var savings int`, `var isStudent bool` and a Println (zero values), then
+#      `isStudent = true` and the same Println -> run-3 adds 0 false / 0 true.
+# Boards: (V) a variable is a labelled box: label = name, value inside, shape = type, := vs =,
+# the type is fixed; (K) names and numbers in code on the English keyboard, Burmese inside quotes
+# (both errors said, not run); (Z) the three zero values and the three ways to declare; (Q) quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-03-variables
+  title: "Go course 03: Variable နဲ့ type"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board V: a variable is a labelled box.
+    - {
+        id: v-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "Variable = နာမည်တပ်ထားတဲ့ box",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: v-n-label,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 200,
+        height: 40,
+        text: "name",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-a-label,
+        kind: text,
+        x: 580,
+        y: 235,
+        width: 200,
+        height: 40,
+        text: "age",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-c-label,
+        kind: text,
+        x: 860,
+        y: 235,
+        width: 200,
+        height: 40,
+        text: "city",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-n-box,
+        kind: rectangle,
+        x: 290,
+        y: 280,
+        width: 230,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - { id: v-a-box, kind: ellipse, x: 570, y: 280, width: 230, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: v-c-box,
+        kind: rectangle,
+        x: 850,
+        y: 280,
+        width: 230,
+        height: 80,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-n-val,
+        kind: text,
+        x: 310,
+        y: 300,
+        width: 190,
+        height: 40,
+        text: "အောင်အောင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-a-val,
+        kind: text,
+        x: 665,
+        y: 300,
+        width: 50,
+        height: 40,
+        text: "21",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-c-val,
+        kind: text,
+        x: 885,
+        y: 300,
+        width: 160,
+        height: 40,
+        text: "မန္တလေး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-n-type,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 200,
+        height: 40,
+        text: "string",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-a-type,
+        kind: text,
+        x: 580,
+        y: 375,
+        width: 200,
+        height: 40,
+        text: "int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-c-type,
+        kind: text,
+        x: 860,
+        y: 375,
+        width: 200,
+        height: 40,
+        text: "string",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-rules-box,
+        kind: rectangle,
+        x: 285,
+        y: 445,
+        width: 800,
+        height: 125,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: v-new,
+        kind: text,
+        x: 305,
+        y: 460,
+        width: 740,
+        height: 40,
+        text: ":=  box အသစ် လုပ်ပြီး တန်ဖိုး ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-refill,
+        kind: text,
+        x: 305,
+        y: 515,
+        width: 740,
+        height: 40,
+        text: "=  ရှိပြီးသား box ထဲ တန်ဖိုး အသစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-fixed,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 760,
+        height: 40,
+        text: "type က ပုံသေ · int box ထဲ စာသား မရ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: v-fixed-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 625,
+        width: 560,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    # Board K: names and numbers in code use the English keyboard.
+    - {
+        id: k-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Code ထဲက နာမည်နဲ့ ဂဏန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: k-bad-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 370,
+        height: 150,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-bad1,
+        kind: text,
+        x: 310,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "ဈေး := 1500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-bad2,
+        kind: text,
+        x: 310,
+        y: 325,
+        width: 300,
+        height: 40,
+        text: "price := ၁၅၀၀",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-good-box,
+        kind: rectangle,
+        x: 700,
+        y: 240,
+        width: 385,
+        height: 150,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: k-good1,
+        kind: text,
+        x: 725,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "price := 1500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-good2,
+        kind: text,
+        x: 725,
+        y: 325,
+        width: 330,
+        height: 40,
+        text: 'city := "မန္တလေး"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-rule1,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 700,
+        height: 40,
+        text: "နာမည်နဲ့ ဂဏန်း · English keyboard",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-rule2,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 700,
+        height: 40,
+        text: "မြန်မာ စာ · quote ထဲမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: k-err,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 780,
+        height: 40,
+        text: "invalid character U+1031 'ေ' in identifier",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Z: zero values and the three ways to declare.
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "Zero value",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: z-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 600,
+        height: 185,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-int,
+        kind: text,
+        x: 310,
+        y: 250,
+        width: 300,
+        height: 40,
+        text: "int  →  0",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-string,
+        kind: text,
+        x: 310,
+        y: 305,
+        width: 540,
+        height: 40,
+        text: 'string  →  ""  (စာသား အလွတ်)',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-bool,
+        kind: text,
+        x: 310,
+        y: 360,
+        width: 300,
+        height: 40,
+        text: "bool  →  false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-f1,
+        kind: text,
+        x: 300,
+        y: 455,
+        width: 400,
+        height: 40,
+        text: "var savings int",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-f1n,
+        kind: text,
+        x: 740,
+        y: 455,
+        width: 330,
+        height: 40,
+        text: "→ zero value",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-f2,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 400,
+        height: 40,
+        text: 'var city = "မန္တလေး"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-f2n,
+        kind: text,
+        x: 740,
+        y: 510,
+        width: 330,
+        height: 40,
+        text: "→ string",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-f3,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 400,
+        height: 40,
+        text: 'city := "မန္တလေး"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-f3n,
+        kind: text,
+        x: 740,
+        y: 565,
+        width: 330,
+        height: 40,
+        text: "→ string၊ အတိုဆုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (:= twice on the same name).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 500,
+        height: 190,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 255,
+        width: 300,
+        height: 40,
+        text: "age := 21",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 310,
+        width: 300,
+        height: 40,
+        text: "age := 22",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 310,
+        y: 365,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(age)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 355,
+        y: 300,
+        width: 90,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 470,
+        width: 500,
+        height: 40,
+        text: "က · 22 ထွက်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 530,
+        width: 500,
+        height: 40,
+        text: "ခ · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 620,
+        y: 520,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7103
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:7:2: declared and not used: age\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "အောင်အောင် 21 မန္တလေး\n09000111222\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "အောင်အောင် 21 မန္တလေး\n09000111222\n0 false\n0 true\n"
+
+scenes:
+  - id: recall
+    chapter: Variable ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ စာ ထုတ်ပြတဲ့ ပထမဆုံး Go program ကို ရေးခဲ့ပြီး၊ compile နဲ့ run ဘယ်လို ကွာလဲ
+      ဆိုတာ မြင်ခဲ့ပါတယ်။ ဒါပေမဲ့ အဲဒီ program က code ထဲမှာ ရေးထားတဲ့ စာကိုပဲ ထုတ်ပြနိုင်ပြီး၊ ဘာကိုမှ
+      မှတ်မထားနိုင်ပါဘူး။ တကယ့် program တွေမှာတော့ လူတစ်ယောက်ရဲ့ နာမည်၊ အသက်၊ နေတဲ့ မြို့ လို
+      အချက်အလက်တွေကို မှတ်ထားပြီး လိုတဲ့ နေရာမှာ ပြန်သုံးရပါတယ်။ ဒီနေ့ lesson မှာ ကျောင်းသား အောင်အောင်
+      ရဲ့ အချက်အလက်တွေကို program ထဲမှာ မှတ်ထားကြည့်ပါမယ်။ [[mark:board-box]] program က တန်ဖိုး တစ်ခုကို
+      မှတ်ထားချင်ရင် variable ကို သုံးပါတယ်။ variable ဆိုတာ နာမည် တပ်ထားတဲ့ box တစ်ခုလို့ မြင်ကြည့်ပါ။
+      [[mark:draw-label]] box ပေါ်မှာ ကပ်ထားတဲ့ နာမည်က variable ရဲ့ နာမည်ပါ၊ code ထဲမှာ အဲဒီ နာမည်နဲ့ box ကို
+      ပြန်ခေါ်သုံးပါတယ်။ [[mark:draw-value]] box ထဲမှာ ထည့်ထားတာကတော့ တန်ဖိုးပါ။ name ဆိုတဲ့ box ထဲမှာ
+      အောင်အောင် ဆိုတဲ့ စာ၊ age box ထဲမှာ ၂၁၊ city box ထဲမှာ မန္တလေး ရှိပါတယ်။ [[mark:draw-type]] box ရဲ့
+      ပုံစံကတော့ type ပါ။ type ဆိုတာ ဒီ box ထဲကို ဘယ်လို အမျိုးအစား တန်ဖိုး ထည့်လို့ ရလဲ ဆိုတာပါ။ စာသား
+      အတွက် type က string ဖြစ်ပြီး၊ ကိန်းပြည့် အတွက် type က int ဖြစ်ပါတယ်။ ဒါကြောင့် ဒီမှာ age box တစ်ခုပဲ
+      ပုံစံ ကွဲနေတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Variable declarations",
+          url: "https://go.dev/ref/spec#Variable_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — String types",
+          url: "https://go.dev/ref/spec#String_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Numeric types",
+          url: "https://go.dev/ref/spec#Numeric_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-box,
+          type: whiteboard.apply,
+          at: { mark: board-box },
+          open: true,
+          clear: true,
+          upsertIds: [v-title],
+        }
+      - {
+          id: draw-label,
+          type: whiteboard.apply,
+          at: { mark: draw-label },
+          upsertIds: [v-n-label, v-a-label, v-c-label, v-n-box, v-a-box, v-c-box],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-value,
+          type: whiteboard.apply,
+          at: { mark: draw-value },
+          upsertIds: [v-n-val, v-a-val, v-c-val],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-type,
+          type: whiteboard.apply,
+          at: { mark: draw-type },
+          upsertIds: [v-n-type, v-a-type, v-c-type],
+          drawMs: 1200,
+        }
+
+  - id: box-rules
+    narration: >-
+      [[mark:draw-rules]] box နဲ့ ပတ်သက်ပြီး ခွဲသိထားရမယ့် အလုပ် နှစ်ခု ရှိပါတယ်။ ပထမ တစ်ခုက box အသစ်
+      တစ်ခု လုပ်ပြီး တန်ဖိုး ထည့်တာ ဖြစ်ပြီး၊ ဒုတိယ တစ်ခုကတော့ ရှိပြီးသား box ထဲကို တန်ဖိုး အသစ် ပြန်ထည့်တာပါ။
+      code မှာ ဒီ နှစ်ခုကို ရေးပုံ မတူပါဘူး၊ board ပေါ်မှာ ပြထားတဲ့ အတိုင်း သင်္ကေတ ကွဲပါတယ်။
+      [[mark:draw-fixed]] နောက်ထပ် အရေးကြီးတာ တစ်ခုက box ရဲ့ type ကို တစ်ခါ သတ်မှတ်ပြီးရင် နောက်မှ ပြောင်းလို့
+      မရတာပါ။ int box ထဲကို စာသား ထည့်ဖို့ ကြိုးစားရင် compiler က လက်မခံပါဘူး။ ဒါက ကိုယ် မှားထည့်မိတာကို
+      run မလုပ်ခင်ကတည်းက ဖမ်းပေးတာ ဖြစ်လို့ ကောင်းတဲ့ စည်းကမ်းပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Short variable declarations",
+          url: "https://go.dev/ref/spec#Short_variable_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - {
+          id: draw-rules,
+          type: whiteboard.apply,
+          at: { mark: draw-rules },
+          upsertIds: [v-rules-box, v-new, v-refill],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-fixed,
+          type: whiteboard.apply,
+          at: { mark: draw-fixed },
+          upsertIds: [v-fixed, v-fixed-line],
+          drawMs: 1600,
+        }
+
+  - id: declare
+    chapter: Variable ကြေညာတာ
+    narration: >-
+      [[mark:close-box]] ဒါဆို ဒီ box တွေကို code နဲ့ ရေးကြည့်ရအောင်။ main ဖိုင်မှာ fmt ကို import လုပ်ပြီးသား
+      ဖြစ်ပြီး၊ main function ကတော့ အလွတ် ဖြစ်နေပါသေးတယ်။ [[mark:type-vars]] main ထဲမှာ variable သုံးခု
+      ကြေညာပါမယ်။ ကြေညာတယ် ဆိုတာ box အသစ်ကို နာမည်နဲ့ တကွ လုပ်ပေးလိုက်တာပါ။ ပြီးတော့ အောက်ဆုံး line မှာ
+      name နဲ့ city ကို print ထုတ်ပါမယ်။ [[mark:sel-name]] ပထမ line ကို ကြည့်ပါ။ ဘယ်ဘက်က name က box ရဲ့
+      နာမည်ပါ၊ ညာဘက်က အောင်အောင် ကတော့ ထည့်မယ့် တန်ဖိုးပါ။ ကြားထဲက သင်္ကေတက box အသစ် လုပ်ပြီး တန်ဖိုး
+      ထည့်ပါ လို့ ပြောတာပါ။ type ကို ကိုယ်က မရေးပေးထားပေမဲ့၊ တန်ဖိုးက quote ထဲက စာသား ဖြစ်လို့ Go က ဒီ
+      variable ကို string လို့ သိပါတယ်။ [[mark:sel-age]] age ရဲ့ တန်ဖိုးမှာတော့ quote မပါပါဘူး။ ဒါကြောင့်
+      ဒါက စာသား မဟုတ်ဘဲ ဂဏန်း ဖြစ်ပြီး၊ Go က age ကို int လို့ သတ်မှတ်ပါတယ်။ int ဆိုတာ ဒသမ မပါတဲ့
+      ကိန်းပြည့်ပါ။ [[mark:sel-print-two]] print ထုတ်တဲ့ line မှာတော့ name နဲ့ city ကိုပဲ ထည့်ထားပြီး၊ age ကို
+      တမင် မထည့်ထားပါဘူး။ ဒီအတိုင်း run ရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Short variable declarations",
+          url: "https://go.dev/ref/spec#Short_variable_declarations",
+        }
+    actions:
+      - {
+          id: close-box,
+          type: whiteboard.apply,
+          at: { mark: close-box },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-vars
+        type: editor.type
+        at: { mark: type-vars }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tname := \"အောင်အောင်\"\n\tage := 21\n\tcity := \"မန္တလေး\"\n\tfmt.Println(name, city)\n"
+        cadence: line-by-line
+      - id: sel-name
+        type: editor.select
+        at: { mark: sel-name }
+        target: { file: main.go, text: 'name := "အောင်အောင်"', occurrence: 1 }
+      - id: sel-age
+        type: editor.select
+        at: { mark: sel-age }
+        target: { file: main.go, text: "age := 21", occurrence: 1 }
+      - id: sel-print-two
+        type: editor.select
+        at: { mark: sel-print-two }
+        target: { file: main.go, text: "fmt.Println(name, city)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "declared and not used: age",
+          timeoutMs: 8000,
+        }
+
+  - id: unused
+    chapter: မသုံးတဲ့ variable
+    narration: >-
+      [[mark:point-unused]] compile error တစ်ခု ပေါ်လာပါတယ်။ main ဖိုင်ရဲ့ line ခုနစ်မှာ ဖြစ်တာပါ၊ age ကို
+      ကြေညာထားတဲ့ line ပါ။ error က ပြောနေတာက၊ age ကို ကြေညာထားပေမဲ့ ဘယ်နေရာမှာမှ မသုံးထားလို့ Go က
+      လက်မခံပါဘူး ဆိုတာပါ။ compile ကတည်းက ငြင်းတာ ဖြစ်လို့ name နဲ့ city ကိုလည်း ထုတ်မပြသေးပါဘူး။ [[mark:why-strict]] Go က
+      ဘာကြောင့် ဒီလောက် တင်းကျပ်ရလဲ ဆိုတော့၊ box တစ်ခု လုပ်ထားပြီး ဘယ်တော့မှ မသုံးဘူး ဆိုရင် အများအားဖြင့်
+      တစ်ခုခု မေ့ကျန်ခဲ့လို့ ဖြစ်တတ်လို့ပါ။ မသုံးတဲ့ code တွေ ကျန်မနေတော့ program ကလည်း ဖတ်ရ ရှင်းပြီး
+      သပ်ရပ်ပါတယ်။ [[mark:unused-import]] ဒီ စည်းကမ်းက package တွေ အတွက်လည်း အတူတူပါပဲ။ ဥပမာ os ဆိုတဲ့
+      package ကို import လုပ်ထားပြီး ဘယ်မှာမှ မသုံးရင်၊ os package ကို import လုပ်ထားပေမဲ့ မသုံးထားဘူး ဆိုတဲ့
+      compile error ကို ရပါမယ်။
+    sources:
+      - {
+          title: "Go FAQ — Can I stop these complaints about my unused variable/import?",
+          url: "https://go.dev/doc/faq#unused_variables_and_imports",
+        }
+      - {
+          title: "The Go Programming Language Specification — Variable declarations",
+          url: "https://go.dev/ref/spec#Variable_declarations",
+        }
+    actions:
+      - {
+          id: point-unused,
+          type: console.point,
+          at: { mark: point-unused },
+          target: { text: "declared and not used: age" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: unused-import } }
+
+  - id: fix
+    narration: >-
+      [[mark:type-age]] ပြင်ဖို့ကတော့ print ထုတ်တဲ့ line ထဲမှာ name နဲ့ city ကြားကို age ထည့်ပေးလိုက်ရုံပါပဲ။
+      [[mark:type-phone]] ပြီးတော့ ဖုန်းနံပါတ် အတွက် variable တစ်ခုနဲ့၊ အဲဒါကို print ထုတ်တဲ့ line
+      တစ်ကြောင်းကိုပါ ထပ်ထည့်ပါမယ်။ [[mark:sel-phone]] ဖုန်းနံပါတ်ကို ကြည့်ပါ။ ဂဏန်းတွေနဲ့ပဲ ရေးထားပေမဲ့ quote
+      ထဲမှာ ထည့်ထားလို့ ဒါက string ပါ။ တမင် ဒီလို လုပ်ထားတာပါ။ ဖုန်းနံပါတ်ကို ပေါင်းတာ နှုတ်တာ ဘယ်တော့မှ
+      မလုပ်သလို၊ ရှေ့ဆုံးက သုညကိုလည်း ရေးထားတဲ့ အတိုင်း ထားချင်ပါတယ်။ ဒါကြောင့် ဂဏန်း ပါပေမဲ့ တွက်ဖို့ မဟုတ်တဲ့
+      ဖုန်းနံပါတ်၊ မှတ်ပုံတင် နံပါတ် လို အရာတွေကို string အဖြစ် ထားပါတယ်။ [[mark:run-2]] ကဲ၊ ထပ်ပြီး run
+      ကြည့်ရအောင်။ [[mark:point-person]] ဒီ တစ်ခါတော့ compile error မရှိတော့ဘဲ၊ ပထမ စာကြောင်းမှာ
+      အောင်အောင်၊ ၂၁၊ မန္တလေး ဆိုပြီး ထွက်လာပါပြီ။ Println ကို တန်ဖိုး တစ်ခုထက် ပိုပေးရင်၊ တန်ဖိုးတွေကြားမှာ
+      space တစ်ခုစီ ခြားပြီး တစ်ကြောင်းတည်းမှာ ပြပေးပါတယ်။ string နဲ့ int ကို ရောပေးလို့လည်း ရပါတယ်။
+      [[mark:point-phone]] ဒုတိယ စာကြောင်းမှာတော့ ဖုန်းနံပါတ်က ရှေ့ဆုံးက သုည အပါအဝင်၊ ရေးထားတဲ့ အတိုင်း
+      ထွက်လာပါတယ်။
+    sources:
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+      - {
+          title: "The Go Programming Language Specification — String literals",
+          url: "https://go.dev/ref/spec#String_literals",
+        }
+    actions:
+      - id: type-age
+        type: editor.type
+        at: { mark: type-age }
+        target: { file: main.go, after: "fmt.Println(name, ", occurrence: 1 }
+        text: "age, "
+      - id: type-phone
+        type: editor.type
+        at: { mark: type-phone }
+        target: { file: main.go, after: "\tfmt.Println(name, age, city)\n", occurrence: 1 }
+        text: "\tphone := \"09000111222\"\n\tfmt.Println(phone)\n"
+        cadence: line-by-line
+      - id: sel-phone
+        type: editor.select
+        at: { mark: sel-phone }
+        target: { file: main.go, text: '"09000111222"', occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "အောင်အောင် 21 မန္တလေး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-age,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "fmt.Println(name, age, city)",
+        }
+      - {
+          id: point-person,
+          type: console.point,
+          at: { mark: point-person },
+          target: { text: "အောင်အောင် 21 မန္တလေး" },
+        }
+      - {
+          id: point-phone,
+          type: console.point,
+          at: { mark: point-phone },
+          target: { text: "09000111222" },
+        }
+
+  - id: keyboard
+    chapter: Code ထဲက နာမည်နဲ့ ဂဏန်း
+    narration: >-
+      [[mark:board-keyboard]] ဒီနေရာမှာ မြန်မာ keyboard သုံးနေကျ သူတွေ ကြုံရလေ့ရှိတဲ့ ပြဿနာ တစ်ခုကို
+      ပြောချင်ပါတယ်။ [[mark:draw-bad]] variable နာမည်ကို မြန်မာလို ဈေး လို့ ပေးလိုက်ရင် compiler က လက်မခံပါဘူး။
+      ဘာကြောင့်လဲဆိုတော့ မြန်မာ စကားလုံးတွေမှာ ပါတဲ့ သရ သင်္ကေတတွေကို Go က နာမည်ထဲမှာ ထည့်ခွင့်မရှိတဲ့ စာလုံး
+      လို့ ယူဆလို့ပါ။ error ကလည်း နာမည်ထဲမှာ မမှန်တဲ့ စာလုံး ပါနေတယ်လို့ ပြောပါလိမ့်မယ်။ [[mark:digits]] ဂဏန်းမှာလည်း
+      ဒီအတိုင်းပါပဲ။ keyboard က မြန်မာ ဖြစ်နေလို့ တစ်ထောင့်ငါးရာကို မြန်မာ ဂဏန်းနဲ့ ရိုက်မိရင်၊ Go က အဲဒါကို
+      ဂဏန်း လို့ မဖတ်ဘဲ နာမည် တစ်ခု လို့ ထင်ပြီး၊ နာမည်က ဂဏန်းနဲ့ စလို့ မရဘူး ဆိုပြီး ငြင်းပါတယ်။
+      [[mark:draw-good]] ဒါကြောင့် code ထဲက variable နာမည်တွေနဲ့ ဂဏန်းတွေကို English keyboard နဲ့ ရေးပါ။ မြန်မာ
+      စာကတော့ quote ထဲမှာ ကြိုက်သလောက် ရေးလို့ ရပါတယ်၊ ခုနက အောင်အောင် နဲ့ မန္တလေး လိုပါပဲ။ ဒီ course မှာလည်း
+      နာမည်တွေကို အမြဲ English စကားလုံးနဲ့ ပေးသွားမှာ ဖြစ်ပြီး၊ မြန်မာ စာက quote ထဲမှာပဲ ရှိပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Identifiers",
+          url: "https://go.dev/ref/spec#Identifiers",
+        }
+      - {
+          title: "The Go Programming Language Specification — Letters and digits",
+          url: "https://go.dev/ref/spec#Letters_and_digits",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-keyboard } }
+      - {
+          id: board-keyboard,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [k-title],
+        }
+      - {
+          id: draw-bad,
+          type: whiteboard.apply,
+          at: { mark: draw-bad },
+          upsertIds: [k-bad-box, k-bad1, k-bad2, k-err],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-good,
+          type: whiteboard.apply,
+          at: { mark: draw-good },
+          upsertIds: [k-good-box, k-good1, k-good2, k-rule1, k-rule2],
+          drawMs: 3000,
+        }
+
+  - id: zero
+    chapter: Zero value
+    narration: >-
+      [[mark:close-keyboard]] ဒါဆို တန်ဖိုး မထည့်ဘဲ variable ကြေညာရင် ဘာဖြစ်မလဲ ကြည့်ရအောင်။
+      [[mark:type-zero]] အောင်အောင် စုထားတဲ့ ငွေအတွက် savings ဆိုတဲ့ variable နဲ့၊ ကျောင်းသား ဟုတ်မဟုတ်
+      မှတ်ထားမယ့် variable တစ်ခုကို ကြေညာပါမယ်။ ဒီ တစ်ခါမှာ ရေးပုံ ကွာပါတယ်။ ရှေ့ဆုံးမှာ var ဆိုတဲ့ keyword နဲ့
+      စပြီး၊ နာမည်နဲ့ type ကို ရေးထားပေမဲ့ တန်ဖိုး မပေးထားပါဘူး။ [[mark:bool]] ဒုတိယ variable ရဲ့ type က bool ပါ။ bool ဆိုတာ
+      true ဒါမှမဟုတ် false ဆိုတဲ့ တန်ဖိုး နှစ်ခုထဲက တစ်ခုပဲ ထည့်လို့ရတဲ့ type ဖြစ်ပြီး၊ ဟုတ်လား မဟုတ်ဘူးလား
+      ဆိုတဲ့ မေးခွန်းမျိုး အတွက် သုံးပါတယ်။ ပြီးတော့ နှစ်ခုလုံးကို print ထုတ်ပါမယ်။ [[mark:board-zero]] တန်ဖိုး
+      မပေးထားတော့ box ထဲမှာ ဘာရှိမလဲ။ Go မှာ variable အသစ်ကို ကိုယ်က ဘာမှ မထည့်ရသေးခင်၊ Go က ကြိုထည့်ပေးထားတဲ့
+      မူလ တန်ဖိုး တစ်ခု ရှိပါတယ်။ အဲဒါကို zero value လို့ ခေါ်ပါတယ်။ [[mark:draw-zeros]] int ရဲ့ zero value က
+      သုည၊ string ရဲ့ zero value က ဘာမှ မပါတဲ့ စာသား အလွတ်၊ bool ရဲ့ zero value ကတော့ false ပါ။ ဒါကြောင့် Go
+      မှာ တန်ဖိုး လုံးဝ မရှိတဲ့ variable ဆိုတာ မရှိပါဘူး၊ box ထဲမှာ အမြဲ တစ်ခုခု ရှိနေပါတယ်။ [[mark:draw-forms]]
+      variable ကြေညာပုံ သုံးမျိုး ရှိပါတယ်။ var နဲ့ type ပဲ ရေးရင် zero value နဲ့ စပါတယ်။ var နဲ့ တန်ဖိုး ရေးရင်
+      တန်ဖိုးကို ကြည့်ပြီး Go က type ကို သိပါတယ်။ အတိုဆုံး ပုံစံကတော့ ခုနက သုံးခဲ့တဲ့ ပုံစံ ဖြစ်ပြီး၊ function
+      ထဲမှာ အများဆုံး သုံးကြပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — The zero value",
+          url: "https://go.dev/ref/spec#The_zero_value",
+        }
+      - {
+          title: "The Go Programming Language Specification — Boolean types",
+          url: "https://go.dev/ref/spec#Boolean_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Variable declarations",
+          url: "https://go.dev/ref/spec#Variable_declarations",
+        }
+    actions:
+      - {
+          id: close-keyboard,
+          type: whiteboard.apply,
+          at: { mark: close-keyboard },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-zero
+        type: editor.type
+        at: { mark: type-zero }
+        target: { file: main.go, after: "\tfmt.Println(phone)\n", occurrence: 1 }
+        text: "\tvar savings int\n\tvar isStudent bool\n\tfmt.Println(savings, isStudent)\n"
+        cadence: line-by-line
+      - {
+          id: board-zero,
+          type: whiteboard.apply,
+          at: { mark: board-zero },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+        }
+      - {
+          id: draw-zeros,
+          type: whiteboard.apply,
+          at: { mark: draw-zeros },
+          upsertIds: [z-box, z-int, z-string, z-bool],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-forms,
+          type: whiteboard.apply,
+          at: { mark: draw-forms },
+          upsertIds: [z-f1, z-f1n, z-f2, z-f2n, z-f3, z-f3n],
+          drawMs: 3000,
+        }
+
+  - id: refill
+    chapter: တန်ဖိုး အသစ် ပြန်ထည့်တာ
+    narration: >-
+      [[mark:close-zero]] အောင်အောင် က ကျောင်းသား ဖြစ်တဲ့အတွက် အဲဒီ box ထဲကို true ထည့်ပေးရအောင်။
+      [[mark:type-refill]] ဒီ line က box အသစ် မလုပ်ပါဘူး၊ ရှိပြီးသား box ထဲကို တန်ဖိုး အသစ် ပြန်ထည့်တာပါ။
+      ဒါကြောင့် ရှေ့မှာ var မပါသလို၊ box အသစ် လုပ်တဲ့ သင်္ကေတလည်း မသုံးဘဲ၊ ထည့်ရုံ ထည့်တဲ့ သင်္ကေတကိုပဲ
+      သုံးထားပါတယ်။ ပြီးရင် နှစ်ခုလုံးကို ထပ်ပြီး print ထုတ်ပါမယ်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+      [[mark:point-zero]] တတိယ စာကြောင်းမှာ သုည နဲ့ false ကို တွေ့ရပါတယ်။ ကိုယ်က ဘာမှ မထည့်ရသေးတဲ့ အချိန်မှာ
+      print ထုတ်ထားလို့ zero value တွေ ထွက်လာတာပါ။ [[mark:point-true]] နောက်ဆုံး စာကြောင်းမှာတော့ သုည နဲ့
+      true ပါ။ ကျောင်းသား ဟုတ်မဟုတ် box ထဲကို true ပြန်ထည့်ပြီးမှ print ထုတ်ထားလို့ပါ။ box တစ်ခုတည်း
+      ဖြစ်ပေမဲ့ ဘယ်အချိန်မှာ ကြည့်လဲ ဆိုတဲ့ အပေါ် မူတည်ပြီး တန်ဖိုး ကွာသွားတာကို သတိထားကြည့်ပါ။ program က
+      အပေါ်ကနေ အောက်ကို run တာမို့ အဲဒီ line ရောက်မှ တန်ဖိုး ပြောင်းသွားတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — The zero value",
+          url: "https://go.dev/ref/spec#The_zero_value",
+        }
+    actions:
+      - {
+          id: close-zero,
+          type: whiteboard.apply,
+          at: { mark: close-zero },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-refill
+        type: editor.type
+        at: { mark: type-refill }
+        target: { file: main.go, after: "\tfmt.Println(savings, isStudent)\n", occurrence: 1 }
+        text: "\tisStudent = true\n\tfmt.Println(savings, isStudent)\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "0 true",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-refill,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tisStudent = true\n",
+        }
+      - {
+          id: point-zero,
+          type: console.point,
+          at: { mark: point-zero },
+          target: { text: "0 false" },
+        }
+      - {
+          id: point-true,
+          type: console.point,
+          at: { mark: point-true },
+          target: { text: "0 true" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ age ဆိုတဲ့ variable ကို ၂၁ နဲ့ လုပ်ထားပါတယ်။
+      [[mark:quiz-line]] နောက် line မှာတော့ age ကို box အသစ် လုပ်တဲ့ ပုံစံနဲ့ပဲ ၂၂ လို့ ထပ်ရေးထားပါတယ်။ ဒီ
+      program ကို run ရင် ၂၂ ထွက်လာမလား၊ ဒါမှမဟုတ် compile error ရမလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ compile error ရတာပါ။ ဘာကြောင့်လဲဆိုတော့ box အသစ်
+      လုပ်တဲ့ ပုံစံက နာမည် အသစ် တစ်ခု လိုလို့ပါ။ age ဆိုတဲ့ box က အပေါ် line မှာ ရှိပြီးသား ဖြစ်လို့၊ compiler
+      က ဘယ်ဘက်မှာ variable အသစ် တစ်ခုမှ မရှိဘူးလို့ ငြင်းပါတယ်။ age ကို ၂၂ ပြောင်းချင်ရင်တော့ ရှိပြီးသား box
+      ထဲ ထည့်တဲ့ ပုံစံနဲ့ ရေးရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Short variable declarations",
+          url: "https://go.dev/ref/spec#Short_variable_declarations",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ variable ဆိုတာ နာမည် တပ်ထားတဲ့ box တစ်ခုပါ။ type က ဘယ်လို
+      တန်ဖိုး ထည့်လို့ရလဲ ဆိုတာကို ဆုံးဖြတ်ပြီး၊ တစ်ခါ သတ်မှတ်ပြီးရင် မပြောင်းတော့ပါဘူး။ [[mark:recap-new]]
+      box အသစ် လုပ်ဖို့ ဒီ ပုံစံကို သုံးပြီး၊ Go က တန်ဖိုးကို ကြည့်ပြီး type ကို သိပါတယ်။ [[mark:recap-var]]
+      တန်ဖိုး မပေးဘဲ var နဲ့ ကြေညာရင်တော့ zero value နဲ့ စပါတယ်။ [[mark:recap-refill]] ရှိပြီးသား box ထဲကို
+      တန်ဖိုး အသစ် ထည့်ချင်ရင် ဒီ ပုံစံကို သုံးပါတယ်။ ကြေညာထားပြီး မသုံးတဲ့ variable ကိုတော့ Go က compile
+      ကတည်းက လက်မခံပါဘူး။ နောက် lesson မှာတော့ ဒီ variable တွေနဲ့ ပေါင်း နှုတ် မြှောက် စား တွက်တာ၊ လစာကို
+      သိန်းနဲ့ ခွဲကြည့်တာ လို ကိန်းပြည့်နဲ့ ဒသမ ကိန်း အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Variable declarations",
+          url: "https://go.dev/ref/spec#Variable_declarations",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-new
+        type: editor.select
+        at: { mark: recap-new }
+        target: { file: main.go, text: "age := 21", occurrence: 1 }
+      - id: recap-var
+        type: editor.select
+        at: { mark: recap-var }
+        target: { file: main.go, text: "var savings int", occurrence: 1 }
+      - id: recap-refill
+        type: editor.select
+        at: { mark: recap-refill }
+        target: { file: main.go, text: "isStudent = true", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
