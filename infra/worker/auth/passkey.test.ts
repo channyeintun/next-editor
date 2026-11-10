@@ -111,3 +111,45 @@ describe("passkey sign-in challenge", () => {
     expect(verifyAuthenticationResponse).not.toHaveBeenCalled();
   });
 });
+
+describe("passkey relying party", () => {
+  function loginOptions(origin: string, publicUrl: string) {
+    return passkeyRoute.request(
+      `${publicUrl}/login/options`,
+      { method: "POST", headers: { Origin: origin } },
+      { ...(env as object), PUBLIC_URL: publicUrl } as never,
+    );
+  }
+
+  // The Origin header is the client's to choose, so in production it must
+  // not be able to move the ceremony off the deployment's own RP ID.
+  it("keeps production's RP when a request claims a localhost Origin", async () => {
+    const options = await loginOptions("http://localhost:5173", "https://nexteditor.dev");
+    const cookie = options.headers.get("set-cookie")!.split(";")[0]!;
+
+    expect(((await options.json()) as { rpId: string }).rpId).toBe("nexteditor.dev");
+
+    await passkeyRoute.request(
+      "https://nexteditor.dev/login/verify",
+      {
+        method: "POST",
+        headers: { cookie, Origin: "http://localhost:5173", "content-type": "application/json" },
+        body: JSON.stringify({ id: "cred-1", response: {} }),
+      },
+      env,
+    );
+    expect(verifyAuthenticationResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedRPID: "nexteditor.dev",
+        expectedOrigin: "https://nexteditor.dev",
+      }),
+    );
+  });
+
+  // Local dev: the browser may sit on the vite or the wrangler port.
+  it("uses the request's localhost origin when PUBLIC_URL is itself localhost", async () => {
+    const options = await loginOptions("http://localhost:8787", "http://localhost:5173");
+
+    expect(((await options.json()) as { rpId: string }).rpId).toBe("localhost");
+  });
+});

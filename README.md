@@ -242,7 +242,8 @@ bun run dev:all     # both
   `bun run build`, then open http://localhost:8787, which serves `dist/` as production does.
 - The Google redirect sign-in builds its callback URL from `PUBLIC_URL`, which points at
   production. To use it locally, set `PUBLIC_URL` to your local origin in `infra/.dev.vars` and
-  register `<origin>/api/auth/google/callback` on your OAuth client. Passkeys work on `localhost`.
+  register `<origin>/api/auth/google/callback` on your OAuth client. Passkeys work on `localhost`
+  once `PUBLIC_URL` is a localhost origin too.
 - Streamed sample lesson: http://localhost:5173/code?url=/lessons/introduction/introduction.ne
 - Other routes: `/learn`, `/studio`, and `/architecture` (the system diagram).
 

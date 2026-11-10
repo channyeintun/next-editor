@@ -58,22 +58,24 @@ interface ChallengePayload {
   expiresAt: number;
 }
 
-// The WebAuthn Relying Party identity. In production both come from
-// PUBLIC_URL. In local dev the browser is on some localhost port (vite or
-// wrangler) while PUBLIC_URL still points at production, so the request's
-// own Origin header wins for localhost — the one hostname WebAuthn treats
-// as a secure context over plain http. Trusting the header is safe here:
-// a forged "Origin: http://localhost" merely selects rpID "localhost", and
-// assertions are still signature-checked against that rpID and a
-// server-issued challenge, so it buys an attacker nothing.
+// The WebAuthn Relying Party identity, from PUBLIC_URL. The Origin header is
+// the client's to choose, so it never moves a deployment's ceremonies off its
+// own RP ID: only a local deployment (PUBLIC_URL on localhost, set in
+// infra/.dev.vars) takes the request's own localhost origin, because the
+// browser may sit on the vite or the wrangler port. localhost is the one
+// hostname WebAuthn treats as a secure context over plain http.
 function relyingParty<E extends { Bindings: Env }>(
   c: Context<E>,
 ): { rpID: string; expectedOrigin: string } {
+  const publicUrl = new URL(c.env.PUBLIC_URL);
   const requestOrigin = c.req.header("Origin");
-  if (requestOrigin && /^http:\/\/localhost(:\d+)?$/.test(requestOrigin)) {
+  if (
+    publicUrl.hostname === "localhost" &&
+    requestOrigin &&
+    /^http:\/\/localhost(:\d+)?$/.test(requestOrigin)
+  ) {
     return { rpID: "localhost", expectedOrigin: requestOrigin };
   }
-  const publicUrl = new URL(c.env.PUBLIC_URL);
   return { rpID: publicUrl.hostname, expectedOrigin: publicUrl.origin };
 }
 
