@@ -1,0 +1,707 @@
+# Go course, lesson 16: structs (Burmese). Module 4 starts: the parcel service.
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. the Parcel struct type (Code, To, WeightKg, Fee) under the import;
+#   2. one parcel literal with field names, printed with Println and with %+v -> run-1:
+#      {MDY-0001 MDY 2.5 6000} / {Code:MDY-0001 To:MDY WeightKg:2.5 Fee:6000};
+#   3. a []Parcel of two parcels and a fee total in a loop -> run-2 adds 2 10500;
+#   4. Parcel{} printed with %+v -> run-3 adds {Code: To: WeightKg:0 Fee:0}.
+# Boards: (S) a struct type is the empty label form, a value is a filled-in label; a Myanmar name
+# is one field; (Q) quiz (field order in a keyed literal).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-16-structs
+  title: "Go course 16: Struct နဲ့ ကိုယ်ပိုင် type"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board S: the label form (struct type) and a filled-in label (a value).
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 660,
+        height: 50,
+        text: "Struct = ပါဆယ် label ပုံစံ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-form,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 350,
+        height: 250,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-f1,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 300,
+        height: 40,
+        text: "Code  ______",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-f2,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 300,
+        height: 40,
+        text: "To  ______",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-f3,
+        kind: text,
+        x: 305,
+        y: 365,
+        width: 300,
+        height: 40,
+        text: "WeightKg  ____",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-f4,
+        kind: text,
+        x: 305,
+        y: 420,
+        width: 300,
+        height: 40,
+        text: "Fee  ______",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 650,
+        y: 340,
+        width: 70,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-label,
+        kind: rectangle,
+        x: 735,
+        y: 235,
+        width: 350,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-v1,
+        kind: text,
+        x: 755,
+        y: 255,
+        width: 280,
+        height: 40,
+        text: "MDY-0001",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-v2,
+        kind: text,
+        x: 755,
+        y: 310,
+        width: 280,
+        height: 40,
+        text: "MDY",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-v3,
+        kind: text,
+        x: 755,
+        y: 365,
+        width: 280,
+        height: 40,
+        text: "2.5",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-v4,
+        kind: text,
+        x: 755,
+        y: 420,
+        width: 280,
+        height: 40,
+        text: "6000",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-type-cap,
+        kind: text,
+        x: 300,
+        y: 500,
+        width: 330,
+        height: 40,
+        text: "type · ပုံစံ အလွတ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-value-cap,
+        kind: text,
+        x: 750,
+        y: 500,
+        width: 330,
+        height: 40,
+        text: "value · ဖြည့်ပြီး label",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-name,
+        kind: text,
+        x: 300,
+        y: 575,
+        width: 760,
+        height: 40,
+        text: "မြန်မာ နာမည် → Name field တစ်ခုတည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a keyed literal written in another order, two fields left out).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 800,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 760,
+        height: 40,
+        text: 'p := Parcel{To: "NPT", Code: "NPT-0001"}',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(p)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 520,
+        height: 40,
+        text: "က · {NPT NPT-0001 0 0}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 480,
+        width: 520,
+        height: 40,
+        text: "ခ · {NPT-0001 NPT 0 0}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 840,
+        y: 470,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7116
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "{MDY-0001 MDY 2.5 6000}\n{Code:MDY-0001 To:MDY WeightKg:2.5 Fee:6000}\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "{MDY-0001 MDY 2.5 6000}\n{Code:MDY-0001 To:MDY WeightKg:2.5 Fee:6000}\n2 10500\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "{MDY-0001 MDY 2.5 6000}\n{Code:MDY-0001 To:MDY WeightKg:2.5 Fee:6000}\n2 10500\n{Code: To: WeightKg:0 Fee:0}\n"
+
+scenes:
+  - id: recall
+    chapter: Struct ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ standard library ထဲက ကိရိယာတွေကို သုံးပြီး၊ မြန်မာ ဂဏန်းကို နှစ်ဘက်လုံး
+      ပြောင်းကြည့်ခဲ့ပါတယ်။ ဒီ lesson ကစပြီး course ရဲ့ ကျန်တဲ့ အပိုင်း တစ်လျှောက်လုံးမှာ program တစ်ခုကို
+      တဖြည်းဖြည်း ကြီးအောင် တည်ဆောက်သွားပါမယ်။ ရန်ကုန်က ပါဆယ်ပို့ ဝန်ဆောင်မှု တစ်ခုပါ။ တခြား မြို့တွေကို
+      ပို့မယ့် ပါဆယ်ကို ကားဂိတ်ကနေ အဝေးပြေး ကားနဲ့ တင်ပို့ပြီး၊ ရန်ကုန် မြို့ထဲကိုတော့ rider တွေက ဆိုင်ကယ်နဲ့
+      လိုက်ပို့ပေးပါတယ်။ [[mark:problem]] ပါဆယ် တစ်ထုပ်မှာ သိထားရမယ့် အချက် လေးခု ရှိပါတယ်။ tracking code၊
+      ပို့မယ့် မြို့၊ အလေးချိန်နဲ့ ပို့ခ ပါ။ ဒါတွေကို variable လေးခု သီးသီးခြားခြား ထားလို့ ရပေမဲ့၊ ပါဆယ် ဆယ်ထုပ်
+      ရှိလာရင် variable လေးဆယ် ဖြစ်သွားပြီး၊ ဘယ် အလေးချိန်က ဘယ် ပါဆယ်နဲ့ ဆိုင်လဲ ဆိုတာ ရှုပ်ထွေးသွားပါမယ်။
+      ဒါကြောင့် ပါဆယ် တစ်ထုပ်ရဲ့ အချက်တွေကို တစ်စုတည်း ထုပ်ထားနိုင်တဲ့ နည်း တစ်ခု လိုပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Struct types",
+          url: "https://go.dev/ref/spec#Struct_types",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: label-form
+    narration: >-
+      [[mark:board-label]] ကောင်တာမှာ ပါဆယ် လက်ခံတဲ့အခါ ဖြည့်ရတဲ့ label စာရွက်ကို စဉ်းစားကြည့်ပါ။
+      [[mark:draw-form]] စာရွက်ပေါ်မှာ code၊ မြို့၊ အလေးချိန်၊ ပို့ခ ဆိုတဲ့ ကွက်လပ် လေးကွက်ကို ပုံသေ ရိုက်ထားပါတယ်။
+      ဒီ ပုံစံ အလွတ်က Go မှာ struct type တစ်ခုနဲ့ တူပါတယ်။ struct ဆိုတာ အချက်အလက် အများကို နာမည် တစ်ခုအောက်မှာ
+      စုထားတဲ့ type ဖြစ်ပြီး၊ အထဲက အချက် တစ်ခုစီကို field လို့ ခေါ်ပါတယ်။ [[mark:draw-filled]] ကွက်လပ်တွေကို
+      ဖြည့်ပြီး ပါဆယ်ပေါ် ကပ်လိုက်တဲ့ label တစ်ခုကတော့ value တစ်ခုပါ။ ပုံစံ တစ်မျိုးတည်းကနေ ပါဆယ် တစ်ထုပ်စီအတွက်
+      label တစ်ခုစီ ဖြည့်သလိုပဲ၊ struct type တစ်ခုကနေ value အများကြီး လုပ်လို့ ရပါတယ်။ [[mark:draw-name]] နောက်ထပ်
+      သတိထားစရာ တစ်ခုက၊ နောက်ပိုင်းမှာ လက်ခံသူ အောင်အောင် လို လူနာမည်ကို field အဖြစ် ထည့်တဲ့အခါ၊ field တစ်ခုတည်းနဲ့
+      ထားပါ။ English နဲ့ ရေးထားတဲ့ ဥပမာတွေမှာ ပထမ နာမည်နဲ့ မျိုးရိုး နာမည်ကို field နှစ်ခု ခွဲထားလေ့ ရှိပေမဲ့၊ မြန်မာ
+      နာမည်မှာ အဲဒီလို ခွဲစရာ မရှိလို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Struct types",
+          url: "https://go.dev/ref/spec#Struct_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+    actions:
+      - {
+          id: board-label,
+          type: whiteboard.apply,
+          at: { mark: board-label },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-form,
+          type: whiteboard.apply,
+          at: { mark: draw-form },
+          upsertIds: [s-form, s-f1, s-f2, s-f3, s-f4, s-type-cap],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-filled,
+          type: whiteboard.apply,
+          at: { mark: draw-filled },
+          upsertIds: [s-arrow, s-label, s-v1, s-v2, s-v3, s-v4, s-value-cap],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-name,
+          type: whiteboard.apply,
+          at: { mark: draw-name },
+          upsertIds: [s-name],
+          drawMs: 1200,
+        }
+
+  - id: declare
+    chapter: Struct type ကြေညာတာ
+    narration: >-
+      [[mark:close-label]] ဒါဆို ဒီ ပုံစံ အလွတ်ကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-struct]] import line ရဲ့
+      အောက်၊ main function ရဲ့ အပြင်ဘက်မှာ Parcel ဆိုတဲ့ type အသစ် တစ်ခုကို ကြေညာပါမယ်။ အပေါ်ဆုံးက comment
+      line ကတော့ ဒီ type က ဘာလဲ ဆိုတာ လူ ဖတ်ဖို့ ရေးထားတာပါ။ [[mark:sel-type]] ဒီ line ကို ကြည့်ပါ။ type ဆိုတဲ့
+      keyword က ကိုယ်ပိုင် type တစ်ခုကို နာမည်နဲ့ လုပ်မယ်လို့ ပြောတာဖြစ်ပြီး၊ struct ကတော့ အဲဒီ type က field တွေ
+      စုထားတဲ့ ပုံစံ ဖြစ်တယ်လို့ ပြောတာပါ။ ဒါကြောင့် အခုကစပြီး Parcel ဆိုတာ string တို့ int တို့လိုပဲ ကိုယ့် program
+      ထဲမှာ သုံးလို့ရတဲ့ type တစ်ခု ဖြစ်သွားပါပြီ။ [[mark:sel-field]] ကွင်းထဲမှာတော့ field တစ်ခုကို တစ်ကြောင်းစီ
+      ရေးထားပါတယ်။ ဘယ်ဘက်က field ရဲ့ နာမည်၊ ညာဘက်က အဲဒီ field ထဲ ထည့်ရမယ့် type ပါ။ ဥပမာ အလေးချိန်က
+      နှစ်ကီလိုခွဲ လို ဒသမ ပါနိုင်လို့ float64 ဖြစ်ပြီး၊ ပို့ခကတော့ ကျပ် ကိန်းပြည့် ဖြစ်လို့ int ပါ။ [[mark:caps]]
+      field နာမည်တွေကို English စာလုံးကြီး၊ ဆိုလိုတာက A ကနေ Z ထဲက စာလုံးနဲ့ စထားတာကိုလည်း သတိထားမိပါလိမ့်မယ်။ ဒါ ဘာကြောင့် အရေးကြီးလဲ ဆိုတာ
+      lesson ၁၉ မှာ ရှင်းပြပါမယ်။ အခုတော့ field နာမည်ကို စာလုံးကြီးနဲ့ ရေးတယ် လို့ပဲ မှတ်ထားပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Type declarations",
+          url: "https://go.dev/ref/spec#Type_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Struct types",
+          url: "https://go.dev/ref/spec#Struct_types",
+        }
+    actions:
+      - {
+          id: close-label,
+          type: whiteboard.apply,
+          at: { mark: close-label },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-struct
+        type: editor.type
+        at: { mark: type-struct }
+        target: { file: main.go, after: "import \"fmt\"\n", occurrence: 1 }
+        text: "\n// Parcel is one parcel handed in at the counter.\ntype Parcel struct {\n\tCode     string\n\tTo       string\n\tWeightKg float64\n\tFee      int\n}\n"
+        cadence: line-by-line
+      - id: sel-type
+        type: editor.select
+        at: { mark: sel-type }
+        target: { file: main.go, text: "type Parcel struct {", occurrence: 1 }
+      - id: sel-field
+        type: editor.select
+        at: { mark: sel-field }
+        target: { file: main.go, text: "WeightKg float64", occurrence: 1 }
+
+  - id: literal
+    chapter: Struct value လုပ်တာ
+    narration: >-
+      [[mark:type-value]] အခု main ထဲမှာ ပါဆယ် တစ်ထုပ်ရဲ့ label ကို ဖြည့်ပြီး၊ နည်း နှစ်မျိုးနဲ့ print ထုတ်ကြည့်ပါမယ်။
+      [[mark:sel-literal]] ဒီ အပိုင်းကို ကြည့်ပါ။ type နာမည်ရဲ့ နောက်က ကွင်းထဲမှာ field နာမည်နဲ့ တန်ဖိုးကို တစ်တွဲစီ
+      ဖြည့်ထားပါတယ်။ ဒါက မန္တလေးကို ပို့မယ့် ပါဆယ် နံပါတ် တစ် ပါ၊ အလေးချိန် နှစ်ကီလိုခွဲ ရှိပြီး ပို့ခက ၆၀၀၀ ကျပ် ပါ။
+      field နာမည်ကို ရေးပြီး ဖြည့်တာ ဖြစ်လို့ ဘယ် တန်ဖိုးက ဘယ် ကွက်လပ်ထဲ ဝင်မလဲ ဆိုတာ ဖတ်တဲ့သူ ချက်ချင်း
+      သိပါတယ်။ [[mark:typo]] field နာမည်ကို မှားရေးမိရင်လည်း compiler က ဖမ်းပေးပါတယ်။ ဥပမာ To အစား City လို့ ရေးမိရင်၊ Parcel
+      မှာ အဲဒီ နာမည်နဲ့ field မရှိဘူး ဆိုပြီး compile ကတည်းက ငြင်းပါတယ်။ ပို့ခ ကွက်ထဲကို quote ပါတဲ့ စာသား ထည့်ရင်လည်း
+      type မကိုက်လို့ လက်မခံပါဘူး။ ဒီ value ကို p ဆိုတဲ့ variable ထဲမှာ ထည့်ထားပါတယ်။ [[mark:sel-plusv]] ပထမ print line က value ကို
+      ပုံမှန် ပုံစံနဲ့ ထုတ်ပြီး၊ ဒုတိယ line ကတော့ Printf နဲ့ field နာမည်တွေပါ ထည့်ပြခိုင်းတဲ့ နေရာလွတ် တစ်မျိုးကို သုံးထားပါတယ်။ ဒီ နှစ်ခု ဘယ်လို
+      ကွာလဲ ကြည့်ရအောင်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+      - { title: "fmt package — Printing", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - id: type-value
+        type: editor.type
+        at: { mark: type-value }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tp := Parcel{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5, Fee: 6000}\n\tfmt.Println(p)\n\tfmt.Printf(\"%+v\\n\", p)\n"
+        cadence: line-by-line
+      - id: sel-literal
+        type: editor.select
+        at: { mark: sel-literal }
+        target:
+          {
+            file: main.go,
+            text: 'Parcel{Code: "MDY-0001", To: "MDY", WeightKg: 2.5, Fee: 6000}',
+            occurrence: 1,
+          }
+      - id: sel-plusv
+        type: editor.select
+        at: { mark: sel-plusv }
+        target:
+          { file: main.go, text: "\tfmt.Println(p)\n\tfmt.Printf(\"%+v\\n\", p)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "{MDY-0001 MDY 2.5 6000}",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-struct,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "type Parcel struct {\n\tCode     string\n\tTo       string\n\tWeightKg float64\n\tFee      int\n}\n",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-v]] ပထမ စာကြောင်းမှာ field လေးခုရဲ့ တန်ဖိုးတွေကို field နာမည် မပါဘဲ၊ ကွင်းထဲမှာ space ခြားပြီး
+      ပြပါတယ်။ ဒါက တိုပေမဲ့ field များတဲ့ struct မှာ ဘယ် ဂဏန်းက အလေးချိန်လဲ၊ ဘယ်ဟာက ပို့ခလဲ ဆိုတာ ကိုယ်တိုင်
+      မှတ်ထားမှ သိရပါတယ်။ [[mark:point-plusv]] ဒုတိယ စာကြောင်းမှာတော့ တန်ဖိုး တစ်ခုစီရဲ့ ရှေ့မှာ field နာမည်
+      ပါလာပါတယ်။ program က ဘာတွေ ကိုင်ထားလဲ ဆိုတာ စစ်ကြည့်တဲ့အခါ၊ ဒါမှမဟုတ် bug ရှာတဲ့အခါ ဒီ ပုံစံက
+      ဖတ်ရ ပိုရှင်းပါတယ်။
+    sources:
+      - { title: "fmt package — Printing", url: "https://pkg.go.dev/fmt" }
+    actions:
+      - {
+          id: point-v,
+          type: console.point,
+          at: { mark: point-v },
+          target: { text: "{MDY-0001 MDY 2.5 6000}" },
+        }
+      - {
+          id: point-plusv,
+          type: console.point,
+          at: { mark: point-plusv },
+          target: { text: "{Code:MDY-0001 To:MDY WeightKg:2.5 Fee:6000}" },
+        }
+
+  - id: pile
+    chapter: Parcel တွေရဲ့ slice
+    narration: >-
+      [[mark:collapse-1]] ကောင်တာကို တစ်နေ့မှာ ပါဆယ် တစ်ထုပ်တည်း ရောက်လာတာ မဟုတ်ပါဘူး။ lesson ၁၁ မှာ type တူတဲ့
+      တန်ဖိုးတွေကို slice ထဲမှာ စီထားခဲ့သလိုပဲ၊ Parcel value တွေကိုလည်း slice တစ်ခုထဲမှာ စုထားလို့ ရပါတယ်။
+      [[mark:type-slice]] ပါဆယ် နှစ်ထုပ် ပါတဲ့ slice တစ်ခု လုပ်ပြီး၊ loop နဲ့ ပို့ခ စုစုပေါင်းကို တွက်ပါမယ်။ နောက်ဆုံး
+      line မှာ ပါဆယ် အရေအတွက်နဲ့ စုစုပေါင်းကို print ထုတ်ပါမယ်။ [[mark:sel-pile]] ဒီ slice ကို ကြည့်ပါ။ type က
+      Parcel တွေရဲ့ slice ဖြစ်ပြီး၊ ပထမ item က ခုနက ပါဆယ်ပါ။ ဒုတိယ item မှာတော့ type နာမည်ကို ထပ်မရေးတော့ပါဘူး။
+      ဒီ slice ထဲကို Parcel ပဲ ထည့်လို့ရတာ Go က သိပြီးသား ဖြစ်လို့ပါ။ ဒါက နေပြည်တော်ကို ပို့မယ့် တစ်ကီလို ပါဆယ်၊
+      ပို့ခ ၄၅၀၀ ကျပ် ပါ။ [[mark:sel-dot]] loop ထဲက ဒီ line ကို ကြည့်ပါ။ ပါဆယ် value ရဲ့ နောက်မှာ field နာမည်ကို
+      တွဲရေးလိုက်ရင်၊ အဲဒီ field တစ်ခုတည်းကို ဖတ်လို့ ရပါတယ်။ ဒါကြောင့် အခေါက်တိုင်းမှာ ပါဆယ် တစ်ထုပ်ရဲ့ ပို့ခကို
+      ယူပြီး total ထဲ ပေါင်းထည့်သွားပါတယ်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+      - {
+          title: "The Go Programming Language Specification — Selectors",
+          url: "https://go.dev/ref/spec#Selectors",
+        }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-slice
+        type: editor.type
+        at: { mark: type-slice }
+        target: { file: main.go, after: "\tfmt.Printf(\"%+v\\n\", p)\n", occurrence: 1 }
+        text: "\tparcels := []Parcel{\n\t\tp,\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1, Fee: 4500},\n\t}\n\ttotal := 0\n\tfor _, parcel := range parcels {\n\t\ttotal += parcel.Fee\n\t}\n\tfmt.Println(len(parcels), total)\n"
+        cadence: line-by-line
+      - id: sel-pile
+        type: editor.select
+        at: { mark: sel-pile }
+        target:
+          {
+            file: main.go,
+            text: "\tparcels := []Parcel{\n\t\tp,\n\t\t{Code: \"NPT-0001\", To: \"NPT\", WeightKg: 1, Fee: 4500},\n\t}",
+            occurrence: 1,
+          }
+      - id: sel-dot
+        type: editor.select
+        at: { mark: sel-dot }
+        target: { file: main.go, text: "total += parcel.Fee", occurrence: 1 }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "2 10500",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-total,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\t\ttotal += parcel.Fee\n",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-total]] တတိယ စာကြောင်းမှာ နှစ် နဲ့ ၁၀၅၀၀ ကို တွေ့ရပါတယ်။ slice ထဲမှာ ပါဆယ် နှစ်ထုပ် ရှိပြီး၊ ပို့ခ
+      ၆၀၀၀ နဲ့ ၄၅၀၀ ကို ပေါင်းလို့ ၁၀၅၀၀ ကျပ် ရတာပါ။ ပါဆယ် အရေအတွက်ကို len က ပေးပြီး၊ စုစုပေါင်းကိုတော့ loop က
+      field တစ်ခုချင်း ဖတ်ပြီး ပေါင်းပေးခဲ့တာပါ။ ပါဆယ် တစ်ထုပ်ရဲ့ အချက် လေးခုက value တစ်ခုထဲမှာ အတူ
+      ရှိနေလို့၊ slice ထဲမှာ ပါဆယ်တွေ ဘယ်လောက်ပဲ များလာများလာ၊ ဘယ် ပို့ခက ဘယ် ပါဆယ်နဲ့ ဆိုင်လဲ ဆိုတာ
+      ရောမသွားပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "2 10500" },
+        }
+
+  - id: empty
+    chapter: Struct ရဲ့ zero value
+    narration: >-
+      [[mark:collapse-2]] ဒါဆို ကွက်လပ် တစ်ကွက်မှ မဖြည့်ရသေးတဲ့ label အလွတ်က ဘယ်လို ပုံစံ ရှိမလဲ။ [[mark:type-empty]]
+      type နာမည်ရဲ့ နောက်မှာ ကွင်း အလွတ်ကိုပဲ ရေးပြီး Parcel value တစ်ခု လုပ်ပါမယ်။ အဲဒါကို field နာမည်တွေနဲ့ print ထုတ်ကြည့်ပါမယ်။
+      lesson သုံးမှာ variable အသစ်ကို ကိုယ်က ဘာမှ မထည့်ရသေးရင် Go က zero value ကြိုထည့်ပေးထားတယ် ဆိုတာ မြင်ခဲ့ပါတယ်။
+      struct မှာရော ဘာဖြစ်မလဲ ဆိုတာ ကြည့်ရအောင်။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — The zero value",
+          url: "https://go.dev/ref/spec#The_zero_value",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-empty
+        type: editor.type
+        at: { mark: type-empty }
+        target: { file: main.go, after: "\tfmt.Println(len(parcels), total)\n", occurrence: 1 }
+        text: "\tfmt.Printf(\"%+v\\n\", Parcel{})\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "WeightKg:0 Fee:0",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-empty,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tfmt.Printf(\"%+v\\n\", Parcel{})\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-empty]] နောက်ဆုံး စာကြောင်းကို ကြည့်ပါ။ field လေးခုလုံးရဲ့ နာမည် ပါပေမဲ့၊ code နဲ့ မြို့ရဲ့ နောက်မှာ
+      ဘာမှ မရှိပါဘူး။ string ရဲ့ zero value က ဘာမှ မပါတဲ့ စာသား အလွတ် ဖြစ်လို့ပါ။ အလေးချိန်နဲ့ ပို့ခကတော့ သုည ပါ။
+      [[mark:empty-means]] ဆိုလိုတာက ဘာမှ မဖြည့်ထားတဲ့ struct value တစ်ခုမှာ field တိုင်းက သူ့ type ရဲ့ zero value ကို ယူထားပါတယ်။ field
+      တချို့ကိုပဲ ဖြည့်ပြီး ကျန်တာ ချန်ထားခဲ့ရင်လည်း၊ မဖြည့်ခဲ့တဲ့ field တွေက ဒီအတိုင်းပဲ zero value ဖြစ်နေပါမယ်။
+      ဒါကြောင့် Go မှာ ကွက်လပ် ပျောက်နေတဲ့ label ဆိုတာ မရှိပါဘူး၊ ကွက်လပ်တိုင်းမှာ တစ်ခုခု အမြဲ ရှိနေပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — The zero value",
+          url: "https://go.dev/ref/spec#The_zero_value",
+        }
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+    actions:
+      - {
+          id: point-empty,
+          type: console.point,
+          at: { mark: point-empty },
+          target: { text: "{Code: To: WeightKg:0 Fee:0}" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ ပါဆယ် တစ်ထုပ်ကို field နာမည်နဲ့ ဖြည့်ထားပေမဲ့၊
+      မြို့ကို အရင် ရေးပြီး code ကို နောက်မှ ရေးထားပါတယ်။ အလေးချိန်နဲ့ ပို့ခကိုလည်း မဖြည့်ထားပါဘူး။ ဒီ value ကို
+      ပုံမှန် ပုံစံနဲ့ print ထုတ်ရင် က နဲ့ ခ ထဲက ဘယ်ဟာ ထွက်မလဲ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခ ပါ။ ဘာကြောင့်လဲဆိုတော့ field နာမည်နဲ့ ဖြည့်တဲ့အခါ ကိုယ် ရေးတဲ့ အစဉ်က
+      အရေးမကြီးဘဲ၊ တန်ဖိုး တစ်ခုစီက နာမည် တူတဲ့ field ထဲကို ဝင်သွားလို့ပါ။ print ထုတ်တဲ့အခါကတော့ struct type
+      မှာ ကြေညာထားတဲ့ field အစဉ်အတိုင်း အမြဲ ထွက်ပါတယ်။ မဖြည့်ခဲ့တဲ့ နှစ်ကွက်ကတော့ zero value ဖြစ်တဲ့ သုည ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-type]] struct type က ပါဆယ် တစ်ထုပ်ရဲ့ အချက်တွေကို
+      နာမည် တစ်ခုအောက်မှာ စုထားတဲ့ ပုံစံ အလွတ်ပါ။ [[mark:recap-literal]] field နာမည်နဲ့ ဖြည့်ပြီး value လုပ်တဲ့အခါ
+      အစဉ် အရေးမကြီးဘဲ၊ မဖြည့်တဲ့ field က zero value ဖြစ်ပါတယ်။ [[mark:recap-dot]] value ရဲ့ နောက်မှာ field နာမည်ကို တွဲရေးရင် field တစ်ခုကို ဖတ်လို့ ရပြီး၊ Parcel တွေကို slice ထဲ စုပြီး loop နဲ့ လျှောက်လို့လည်း ရပါတယ်။ နောက်
+      lesson မှာတော့ function တစ်ခုက ပါဆယ်ရဲ့ မိတ္တူကို မဟုတ်ဘဲ ပါဆယ် အစစ်ကို ပြောင်းပေးနိုင်အောင် pointer ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Struct types",
+          url: "https://go.dev/ref/spec#Struct_types",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-type
+        type: editor.select
+        at: { mark: recap-type }
+        target: { file: main.go, text: "type Parcel struct {", occurrence: 1 }
+      - id: recap-literal
+        type: editor.select
+        at: { mark: recap-literal }
+        target:
+          {
+            file: main.go,
+            text: 'Parcel{Code: "MDY-0001", To: "MDY", WeightKg: 2.5, Fee: 6000}',
+            occurrence: 1,
+          }
+      - id: recap-dot
+        type: editor.select
+        at: { mark: recap-dot }
+        target: { file: main.go, text: "total += parcel.Fee", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
