@@ -44,6 +44,7 @@ import { readBodyWithLimit } from "../httpBody";
 import { sha256Hex } from "../../../src/shared/sha256Hex";
 import { AppliedMembershipChanges } from "./appliedMembershipChanges";
 import { randomToken } from "./bytes";
+import { PendingUpstreamReleases } from "./pendingUpstreamReleases";
 import type { RoomSqliteStorage } from "./roomSqliteDocumentStore";
 import {
   ACCESS_REVALIDATION_INTERVAL_MS,
@@ -64,6 +65,8 @@ const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
 const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
 const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
 const MAX_PENDING_SFU_REQUESTS_PER_CONNECTION = 4;
+// How soon the object retries an upstream release Realtime did not confirm.
+const UPSTREAM_RELEASE_RETRY_MS = 15_000;
 
 // WebSocket close codes for the voice coordination socket.
 const CLOSE_SUPERSEDED = 4000;
@@ -199,21 +202,24 @@ export async function notifyCollaborationVoiceRoomControl(
 
 // Ephemeral per-room voice coordinator. The roster and the session/track/mid
 // ownership registry live in the hibernating WebSocket attachments so a
-// wake-up can reconstruct them without any storage migration (plan §5.2). The
-// one thing kept in storage is the record of applied membership changes,
-// which must outlive the sockets it closed.
+// wake-up can reconstruct them without any storage migration (plan §5.2). Kept
+// in storage is only what must outlive the sockets it is about: the record of
+// applied membership changes, and the upstream releases not yet confirmed.
 export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
   private roomRevision: number | null = null;
   private readonly connectionQuota = new ConnectionQuota(MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE);
   private readonly sfuRequestQueue = new VoiceSfuRequestQueue();
   private readonly appliedMembership: AppliedMembershipChanges;
   private readonly quietRevalidation = new QuietSocketRevalidation();
+  private readonly pendingReleases: PendingUpstreamReleases;
+  private readonly releasesInFlight = new Map<string, Promise<boolean>>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.appliedMembership = new AppliedMembershipChanges(
       ctx.storage as unknown as RoomSqliteStorage,
     );
+    this.pendingReleases = new PendingUpstreamReleases(ctx.storage as unknown as RoomSqliteStorage);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -232,7 +238,18 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       if (!isCurrentRoom(this.ctx, parsed.data.event.roomId)) {
         return Response.json({ error: "invalid collaboration room" }, { status: 403 });
       }
-      this.applyControl(parsed.data);
+      const released = this.applyControl(parsed.data);
+      // A removal or close is delivered only once Realtime confirms the
+      // retired connections' tracks closed: until then a client that ignores
+      // voice.room-closed keeps the media it negotiated. A refusal fails the
+      // owner's request, and their retry (or the alarm) finishes the release.
+      const confirmed = await Promise.all(released.map((id) => this.releaseUpstream(id)));
+      if (!confirmed.every(Boolean)) {
+        return Response.json(
+          { delivered: false, error: "voice media release is not confirmed" },
+          { status: 503 },
+        );
+      }
       return Response.json({ delivered: true });
     }
     if (url.pathname.startsWith("/sfu/")) {
@@ -502,20 +519,22 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
 
   // Marks the socket as no longer part of the roster, announces the
   // departure, schedules best-effort upstream cleanup, and closes it.
+  // Returns the SFU session whose tracks it queued for release, if any.
   private retireSocket(
     socket: WebSocket,
     attachment: VoiceSocketAttachment,
     closeCode: number,
     closeReason: string,
     notify?: { reason: VoiceRoomClosedReason },
-  ): void {
+  ): string | null {
+    let released: string | null = null;
     if (!attachment.superseded) {
       try {
         this.serializeAttachment(socket, { ...attachment, superseded: true });
       } catch {
         // The socket may already be closing; local state below still runs.
       }
-      this.scheduleUpstreamRelease(attachment);
+      released = this.scheduleUpstreamRelease(attachment);
       this.broadcast(
         {
           type: "voice.participant-left",
@@ -534,20 +553,93 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       });
     }
     if (isOpen(socket)) socket.close(closeCode, closeReason);
+    return released;
   }
 
-  // Cloudflare garbage-collects inactive tracks after ~30s; this close is
-  // only an acceleration and must not block roster cleanup.
-  private scheduleUpstreamRelease(attachment: VoiceSocketAttachment): void {
-    const appId = this.env.REALTIME_SFU_APP_ID;
-    const secret = this.env.REALTIME_SFU_APP_SECRET;
-    if (!appId || !secret || attachment.sfuSessionId === null) return;
+  // Queues the retired connection's tracks for an upstream close that is
+  // retried until Realtime confirms it; it never blocks roster cleanup. The
+  // provider's garbage collection covers only tracks that carry no media, so
+  // it is not a backstop for a pulled track whose publisher is speaking.
+  // Returns the SFU session queued, if any.
+  private scheduleUpstreamRelease(attachment: VoiceSocketAttachment): string | null {
+    if (attachment.sfuSessionId === null) return null;
     const mids = [
       ...(attachment.publishedMid !== null ? [attachment.publishedMid] : []),
       ...attachment.receivingMids,
     ];
-    if (mids.length === 0) return;
-    new RealtimeSfuUpstream(appId, secret).releaseTracks(attachment.sfuSessionId, mids);
+    if (mids.length === 0) return null;
+    this.queueUpstreamRelease(attachment.sfuSessionId, attachment.userId, mids);
+    return attachment.sfuSessionId;
+  }
+
+  private queueUpstreamRelease(
+    sfuSessionId: string,
+    userId: string,
+    mids: readonly string[],
+  ): void {
+    if (!this.sfuUpstream()) return;
+    this.pendingReleases.add(sfuSessionId, userId, mids);
+    // Armed before the first attempt, so an eviction mid-attempt still retries.
+    void this.ctx.storage
+      .getAlarm()
+      .then((scheduledAt) =>
+        scheduledAt === null
+          ? this.ctx.storage.setAlarm(Date.now() + UPSTREAM_RELEASE_RETRY_MS)
+          : undefined,
+      )
+      .catch((error: unknown) => {
+        console.error("collaboration_voice_release_alarm_failed", {
+          roomId: this.ctx.id.name ?? null,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    void this.releaseUpstream(sfuSessionId);
+  }
+
+  private sfuUpstream(): RealtimeSfuUpstream | null {
+    const appId = this.env.REALTIME_SFU_APP_ID;
+    const secret = this.env.REALTIME_SFU_APP_SECRET;
+    return appId && secret ? new RealtimeSfuUpstream(appId, secret) : null;
+  }
+
+  /**
+   * Force-closes what is pending for `sfuSessionId`; true once nothing is
+   * pending for it. Concurrent callers share one attempt.
+   */
+  private releaseUpstream(sfuSessionId: string): Promise<boolean> {
+    const inFlight = this.releasesInFlight.get(sfuSessionId);
+    if (inFlight) return inFlight;
+    const attempt = (async () => {
+      const pending = this.pendingReleases.get(sfuSessionId);
+      if (!pending) return true;
+      const upstream = this.sfuUpstream();
+      const closed = upstream ? await upstream.closeTracks(sfuSessionId, pending.mids) : false;
+      if (closed) {
+        this.pendingReleases.settle(sfuSessionId, pending.mids);
+      } else {
+        console.error("collaboration_voice_release_failed", {
+          roomId: this.ctx.id.name ?? null,
+          mids: pending.mids.length,
+        });
+      }
+      return this.pendingReleases.get(sfuSessionId) === null;
+    })().finally(() => this.releasesInFlight.delete(sfuSessionId));
+    this.releasesInFlight.set(sfuSessionId, attempt);
+    return attempt;
+  }
+
+  async alarm(): Promise<void> {
+    for (const abandoned of this.pendingReleases.expire()) {
+      console.error("collaboration_voice_release_abandoned", {
+        roomId: this.ctx.id.name ?? null,
+        mids: abandoned.mids.length,
+        queuedAt: abandoned.queuedAt,
+      });
+    }
+    await Promise.all(this.pendingReleases.sessionIds().map((id) => this.releaseUpstream(id)));
+    if (this.pendingReleases.sessionIds().length > 0) {
+      await this.ctx.storage.setAlarm(Date.now() + UPSTREAM_RELEASE_RETRY_MS);
+    }
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -710,20 +802,24 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     if (attachment) this.retireSocket(socket, attachment, CLOSE_LEFT, "disconnected");
   }
 
-  private applyControl(command: CollaborationRoomControlCommand): void {
+  // Returns the SFU sessions whose tracks a removal or close queued for release.
+  private applyControl(command: CollaborationRoomControlCommand): string[] {
     const { event } = command;
     this.appliedMembership.record(command);
+    const released: string[] = [];
     if (event.kind === "room-closed") {
       for (const { socket, attachment } of this.activeSockets()) {
-        this.retireSocket(socket, attachment, CLOSE_ROOM_CLOSED, "room closed", {
+        const session = this.retireSocket(socket, attachment, CLOSE_ROOM_CLOSED, "room closed", {
           reason: "room-closed",
         });
+        if (session !== null) released.push(session);
       }
-      return;
+      // A repeated close also finishes releases an earlier one left pending.
+      return [...new Set([...released, ...this.pendingReleases.sessionIds()])];
     }
     // membership-changed
-    if (event.targetUserId === null) return;
-    if (command.targetRole === undefined) return;
+    if (event.targetUserId === null) return released;
+    if (command.targetRole === undefined) return released;
     const targetRole = command.targetRole;
     for (const { socket, attachment } of this.activeSockets()) {
       // D1 roleVersion is room-wide and monotonic; a delayed command must not
@@ -736,12 +832,13 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
       }
       // A removal retires the member's sockets whatever their role version:
       // another member's later change may already have raised it here, and a
-      // repeated removal carries the current one. Nothing else revalidates a
-      // member who stays silent.
+      // repeated removal carries the current one. Otherwise a member who stays
+      // silent is caught only by a broadcast's recheck.
       if (targetRole === null) {
-        this.retireSocket(socket, attachment, CLOSE_REMOVED, "removed from room", {
+        const session = this.retireSocket(socket, attachment, CLOSE_REMOVED, "removed from room", {
           reason: "member-removed",
         });
+        if (session !== null) released.push(session);
         continue;
       }
       if (event.roleVersion <= attachment.roleVersion) continue;
@@ -758,6 +855,12 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
         this.serializeAttachment(socket, { ...attachment, roleVersion: event.roleVersion });
       }
     }
+    // A repeated removal also finishes the member's releases an earlier one
+    // (or their own disconnect) left pending.
+    if (targetRole === null) {
+      return [...new Set([...released, ...this.pendingReleases.sessionIds(event.targetUserId)])];
+    }
+    return released;
   }
 
   private async handleSfuRequest(request: Request, url: URL): Promise<Response> {
@@ -916,6 +1019,8 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
           return current;
         },
         activePublications: () => this.activePublications(),
+        releaseUpstream: (sfuSessionId, mids) =>
+          this.queueUpstreamRelease(sfuSessionId, session.userId, mids),
         nextRevision: () => this.nextRevision(),
         broadcastUpsert: () => this.broadcastUpsert(current),
         logOutcome: (kind, status) => {

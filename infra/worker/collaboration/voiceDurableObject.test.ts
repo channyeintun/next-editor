@@ -59,6 +59,19 @@ const VOICE_ENABLED_ENV = {
   REALTIME_SFU_APP_SECRET: "secret",
 } as unknown as Env;
 
+/** Storage with the alarm the voice object arms for upstream release retries. */
+class VoiceTestStorage extends SqliteTestStorage {
+  alarmAt: number | null = null;
+
+  async getAlarm(): Promise<number | null> {
+    return this.alarmAt;
+  }
+
+  async setAlarm(scheduledAt: number): Promise<void> {
+    this.alarmAt = scheduledAt;
+  }
+}
+
 const openStorages: SqliteTestStorage[] = [];
 
 afterEach(() => {
@@ -103,7 +116,7 @@ function roomAccess(role: CollaborationRole, roleVersion: number): Collaboration
 
 function createVoiceRoom(env: Env = {} as Env) {
   const sockets: FakeWebSocket[] = [];
-  const storage = new SqliteTestStorage();
+  const storage = new VoiceTestStorage();
   openStorages.push(storage);
   const ctx = {
     id: { name: ROOM_ID },
@@ -253,7 +266,7 @@ function createVoiceRoom(env: Env = {} as Env) {
     );
   }
 
-  return { join, control, closeRoom, upgrade, message, sfu };
+  return { join, control, closeRoom, upgrade, message, sfu, instance: room, storage };
 }
 
 describe("CollaborationVoiceRoomDurableObject membership control", () => {
@@ -452,6 +465,121 @@ describe("CollaborationVoiceRoomDurableObject signed-out sessions", () => {
     });
 
     expect(member.closeCode).toBeNull();
+  });
+});
+
+// A removal was acknowledged as delivered before the removed member's SFU
+// tracks were confirmed closed: the close was fire-and-forget, a failure was
+// dropped silently, and the retired socket's attachment, the only record of
+// the session and mids, was gone, so nothing could retry it.
+describe("CollaborationVoiceRoomDurableObject upstream releases", () => {
+  const CLOSE_URL = "https://rtc.live.cloudflare.com/v1/apps/app/sessions/session-a/tracks/close";
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function joinReceiving(room: ReturnType<typeof createVoiceRoom>) {
+    return room.join(MEMBER_ID, 1, {
+      sfuSessionId: "session-a",
+      receivingMids: ["1", "2"],
+      receivingTracks: [
+        { sessionId: "session-p", trackName: "t1", mid: "1" },
+        { sessionId: "session-p", trackName: "t2", mid: "2" },
+      ],
+    });
+  }
+
+  const closed = () => Response.json({ tracks: [{ mid: "1" }, { mid: "2" }] });
+
+  it.each([
+    ["a network failure", () => Promise.reject(new TypeError("network"))],
+    ["a 500", async () => new Response("{}", { status: 500 })],
+    [
+      "a per-track error",
+      async () => Response.json({ tracks: [{ mid: "1", errorCode: "x" }, { mid: "2" }] }),
+    ],
+  ])("does not report a removal delivered after %s, and retries it", async (_label, failure) => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const upstream = vi.spyOn(globalThis, "fetch").mockImplementationOnce(failure);
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = joinReceiving(room);
+
+    const response = await room.control(2, MEMBER_ID, null);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ delivered: false });
+    expect(member.closeCode).toBe(4003);
+    expect(upstream).toHaveBeenCalledOnce();
+    expect(upstream.mock.calls[0][0]).toBe(CLOSE_URL);
+    expect(JSON.parse(String(upstream.mock.calls[0][1]?.body))).toEqual({
+      tracks: [{ mid: "1" }, { mid: "2" }],
+      force: true,
+    });
+    expect(room.storage.alarmAt).not.toBeNull();
+
+    // The owner's retry reaches a session the object still remembers.
+    upstream.mockImplementationOnce(async () => closed());
+    const retry = await room.control(3, MEMBER_ID, null);
+
+    expect(retry.status).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(upstream.mock.calls[1][0]).toBe(CLOSE_URL);
+  });
+
+  it("reports a removal delivered once Realtime confirms the close", async () => {
+    const upstream = vi.spyOn(globalThis, "fetch").mockImplementation(async () => closed());
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    joinReceiving(room);
+
+    const response = await room.control(2, MEMBER_ID, null);
+
+    expect(response.status).toBe(200);
+    expect(upstream).toHaveBeenCalledOnce();
+    // Nothing is left for the alarm to do.
+    await room.instance.alarm();
+    expect(upstream).toHaveBeenCalledOnce();
+  });
+
+  it("retries a release from a socket that closed on its own until it is confirmed", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const upstream = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(() => Promise.reject(new TypeError("network")));
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    const member = joinReceiving(room);
+
+    room.instance.webSocketClose(member as unknown as WebSocket);
+    await settle();
+    expect(upstream).toHaveBeenCalledOnce();
+
+    upstream.mockImplementationOnce(async () => closed());
+    room.storage.alarmAt = null;
+    await room.instance.alarm();
+
+    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(room.storage.alarmAt).toBeNull();
+  });
+
+  it("gives up on a release Realtime never confirms after the retry window", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    const upstream = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => Promise.reject(new TypeError("network")));
+    const room = createVoiceRoom(VOICE_ENABLED_ENV);
+    joinReceiving(room);
+    await room.control(2, MEMBER_ID, null);
+
+    now.mockReturnValue(1_700_000_000_000 + 11 * 60 * 1000);
+    await room.instance.alarm();
+
+    expect(logged).toHaveBeenCalledWith(
+      "collaboration_voice_release_abandoned",
+      expect.objectContaining({ mids: 2 }),
+    );
+    expect(upstream).toHaveBeenCalledOnce();
   });
 });
 

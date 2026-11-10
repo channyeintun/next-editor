@@ -61,6 +61,7 @@ function fakeConnection(
   const outcomes: Array<[string, number]> = [];
   const request = vi.fn<RealtimeSfuUpstream["request"]>();
   const closeUpstreamTracks = vi.fn<RealtimeSfuUpstream["closeTracks"]>(async () => true);
+  const releaseUpstream = vi.fn<VoiceSfuConnection["releaseUpstream"]>();
   const conn: VoiceSfuConnection = {
     upstream: { request, closeTracks: closeUpstreamTracks },
     subpath: options.subpath,
@@ -76,6 +77,7 @@ function fakeConnection(
       return current;
     },
     activePublications: () => options.publications ?? [],
+    releaseUpstream,
     nextRevision: () => ++revision,
     broadcastUpsert: () => {
       upserts.push(current);
@@ -88,6 +90,7 @@ function fakeConnection(
     conn,
     request,
     closeUpstreamTracks,
+    releaseUpstream,
     writes,
     upserts,
     outcomes,
@@ -449,7 +452,10 @@ describe("a connection that stops being live mid-request", () => {
     expect(fake.request).not.toHaveBeenCalled();
   });
 
-  it("push closes the track it just published instead of registering it", async () => {
+  // The retired connection's own release did not include these, and a
+  // one-shot close that failed left them open: they go to the object's
+  // retried release instead.
+  it("push queues the track it just published for release instead of registering it", async () => {
     const fake = tracksNew({});
     fake.request.mockImplementation(async () => {
       fake.goOffline();
@@ -463,11 +469,11 @@ describe("a connection that stops being live mid-request", () => {
       await pushOrPullTracks(fake.conn, SESSION, pushBody("mic-track", "1")),
       fake,
     );
-    expect(fake.closeUpstreamTracks).toHaveBeenCalledWith(SESSION, ["1"]);
+    expect(fake.releaseUpstream).toHaveBeenCalledWith(SESSION, ["1"]);
     expect(fake.upserts).toEqual([]);
   });
 
-  it("pull closes the tracks it just pulled instead of registering them", async () => {
+  it("pull queues the tracks it just pulled for release instead of registering them", async () => {
     const fake = tracksNew({}, [THEIR_MIC]);
     fake.request.mockImplementation(async () => {
       fake.goOffline();
@@ -478,7 +484,7 @@ describe("a connection that stops being live mid-request", () => {
     });
 
     await expectUnauthorized(await pushOrPullTracks(fake.conn, SESSION, pullBody(THEIR_MIC)), fake);
-    expect(fake.closeUpstreamTracks).toHaveBeenCalledWith(SESSION, ["4"]);
+    expect(fake.releaseUpstream).toHaveBeenCalledWith(SESSION, ["4"]);
   });
 
   it("renegotiate does not report success", async () => {

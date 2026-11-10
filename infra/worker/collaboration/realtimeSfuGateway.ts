@@ -343,18 +343,6 @@ export class RealtimeSfuUpstream {
     );
     return [...mids].every((mid) => closedMids.has(mid));
   }
-
-  /**
-   * Force-closes `mids` without waiting for or checking the answer. Not
-   * awaited, and no waitUntil (it has no effect in a Durable Object, which
-   * stays alive for pending I/O anyway); it never rejects.
-   */
-  releaseTracks(sessionId: string, mids: readonly string[]): void {
-    void this.request(`/sessions/${sessionId}/tracks/close`, "PUT", {
-      tracks: mids.map((mid) => ({ mid })),
-      force: true,
-    });
-  }
 }
 
 // Durable Object events may interleave whenever a handler awaits an

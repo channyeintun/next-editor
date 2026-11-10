@@ -518,19 +518,4 @@ describe("RealtimeSfuUpstream", () => {
     await expect(upstream.closeTracks("session-abc", [])).resolves.toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });
-
-  it("releases tracks with a forced close and swallows a failure", async () => {
-    const fetchMock = stubFetch(() => Promise.reject(new TypeError("network down")));
-    const upstream = new RealtimeSfuUpstream("app123", "secret-value");
-
-    expect(() => upstream.releaseTracks("session-abc", ["0", "2"])).not.toThrow();
-    await Promise.resolve();
-    const { url, init } = sentRequest(fetchMock);
-    expect(url).toBe(CLOSE_URL);
-    expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body as string)).toEqual({
-      tracks: [{ mid: "0" }, { mid: "2" }],
-      force: true,
-    });
-  });
 });

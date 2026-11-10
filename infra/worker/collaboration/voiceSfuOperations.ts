@@ -71,6 +71,11 @@ export interface VoiceSfuConnection {
   ): VoiceSfuAttachment | null;
   /** Every live connection's publication in this voice room. */
   activePublications(): ActivePublication[];
+  /**
+   * Queues upstream tracks the room no longer records for a release the
+   * object retries until Realtime confirms it.
+   */
+  releaseUpstream(sfuSessionId: string, mids: readonly string[]): void;
   nextRevision(): number;
   /** Announces the connection's current roster row to the room. */
   broadcastUpsert(): void;
@@ -230,7 +235,9 @@ export async function pushTracks(
       participantRevision: conn.nextRevision(),
     }));
     if (!next) {
-      await conn.upstream.closeTracks(sessionId, [acceptedMid]);
+      // The connection was retired while upstream committed the track, so its
+      // own release did not include it.
+      conn.releaseUpstream(sessionId, [acceptedMid]);
       return unauthorized();
     }
     conn.broadcastUpsert();
@@ -339,7 +346,8 @@ export async function pullTracks(
       return { receivingMids, receivingTracks };
     });
     if (!next) {
-      await conn.upstream.closeTracks(
+      // As for a push: the retired connection's own release missed these.
+      conn.releaseUpstream(
         sessionId,
         additions.map((track) => track.mid),
       );
