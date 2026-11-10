@@ -182,6 +182,9 @@ export default ({ mode }: { mode: string }) => {
       include: [
         "src/**/*.{test,spec}.{ts,tsx}",
         "tube/src/**/*.{test,spec}.{ts,tsx}",
+        // The dev-server plugins and their rules (Node-side; each test file
+        // opts into the node environment).
+        "tube/vite/**/*.{test,spec}.ts",
         // infra/worker/** deliberately excluded: it runs in the Workers runtime,
         // not a browser — that side is tested against real wrangler dev + local
         // D1/R2 (see docs/progress.md), not jsdom.

@@ -58,6 +58,7 @@
     "vite.config.ts",
     "vitest.setup.ts",
     "tube/src",
+    "tube/vite",
     "infra/client",
     "api",
     "scripts"

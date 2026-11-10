@@ -49,6 +49,18 @@ describe("isPubliclyRoutableHost", () => {
     ["fea0::1", false],
     ["febf::1", false],
     ["2001:4860:4860::8888", true],
+    // Names that always mean this machine (or its link), in every spelling
+    // the URL parser keeps: a trailing dot is the same name, and *.localhost
+    // is loopback by definition (RFC 6761).
+    ["localhost.", false],
+    ["localhost..", false],
+    ["LOCALHOST", false],
+    ["app.localhost", false],
+    ["app.localhost.", false],
+    ["my-box.local.", false],
+    ["127.0.0.1.", false],
+    ["notlocalhost", true],
+    ["localhost.example.com", true],
   ])("%s -> %s", (host, expected) => {
     expect(isPubliclyRoutableHost(host)).toBe(expected);
   });
@@ -163,6 +175,62 @@ describe("proxyUrl", () => {
       "https://example.com/image.png",
       expect.objectContaining({ redirect: "manual" }),
     );
+  });
+
+  it.each(["https://localhost./x", "https://app.localhost/x", "https://localhost.:443/x"])(
+    "refuses the loopback name %s before fetching",
+    async (target) => {
+      const fetchMock = vi.fn<() => Promise<Response>>();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await proxyUrl(target);
+      expect(result.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses a redirect to a loopback name", async () => {
+    const fetchMock = vi.fn<() => Promise<Response>>().mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: "https://localhost./secret" }),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await proxyUrl("https://example.com/start");
+    expect(result.status).toBe(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the runtime's resolved-address check about every hop before fetching it", async () => {
+    const fetchMock = vi.fn<() => Promise<Response>>().mockResolvedValueOnce({
+      ok: false,
+      status: 302,
+      headers: new Headers({ location: "https://internal.example/secret" }),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const checkResolvedHost = vi.fn<(hostname: string) => Promise<string | null>>(
+      async (hostname) =>
+        hostname === "internal.example" ? "Host 'internal.example' is not allowed." : null,
+    );
+
+    const result = await proxyUrl("https://example.com/start", { checkResolvedHost });
+    expect(result).toEqual({ status: 400, error: "Host 'internal.example' is not allowed." });
+    expect(checkResolvedHost.mock.calls).toEqual([["example.com"], ["internal.example"]]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats a failed resolved-address check as an upstream failure", async () => {
+    const fetchMock = vi.fn<() => Promise<Response>>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await proxyUrl("https://example.com/x", {
+      checkResolvedHost: async () => {
+        throw new Error("getaddrinfo ENOTFOUND example.com");
+      },
+    });
+    expect(result.status).toBe(502);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("surfaces a 502 when the upstream fetch throws", async () => {

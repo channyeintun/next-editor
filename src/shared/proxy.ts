@@ -2,7 +2,10 @@
 // It intentionally accepts public hosts, so each outbound request must be validated
 // before it is sent and the response body must remain bounded while streaming.
 
-const BLOCKED_HOSTS = new Set(["localhost"]);
+// Names that always mean this machine or its local link, blocked along with
+// every name under them: *.localhost is loopback by definition (RFC 6761), and
+// *.local is mDNS on the local link.
+const BLOCKED_NAME_SUFFIXES = ["localhost", "local"];
 export const MAX_PROXY_REDIRECTS = 5;
 export const MAX_PROXY_RESPONSE_BYTES = 200 * 1024 * 1024;
 // Headers (redirects included) must arrive within PROXY_TIMEOUT_MS. The body then
@@ -33,10 +36,28 @@ function isBlockedIpv4(host: string): boolean {
   );
 }
 
-/** Rejects literal loopback, private, link-local, multicast, and reserved hosts. */
+/** A trailing dot names the same host ("localhost." is localhost), and the URL parser keeps it. */
+function withoutTrailingDots(host: string): string {
+  let end = host.length;
+  while (end > 0 && host[end - 1] === ".") end -= 1;
+  return host.slice(0, end);
+}
+
+function isBlockedName(host: string): boolean {
+  return BLOCKED_NAME_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+}
+
+/**
+ * Rejects literal loopback, private, link-local, multicast, and reserved hosts,
+ * and the names that always mean this machine or its link (localhost, *.localhost,
+ * *.local, with or without a trailing dot). Any other name passes: this is a
+ * string test, and what a name resolves to is checked only where the runtime can
+ * resolve it (ProxyOptions.checkResolvedHost, which the Vite dev server sets).
+ * Classifying a resolved address is this same function's job.
+ */
 export function isPubliclyRoutableHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (BLOCKED_HOSTS.has(host) || host.endsWith(".local")) return false;
+  const host = withoutTrailingDots(hostname.toLowerCase());
+  if (isBlockedName(host)) return false;
   if (isBlockedIpv4(host)) return false;
 
   const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
@@ -138,6 +159,17 @@ function limitBody(
   );
 }
 
+export interface ProxyOptions {
+  /**
+   * Checks what a hostname that passed the string rules resolves to, before each
+   * request (redirect hops included) is sent: an error message refuses the hop
+   * with a 400, and a rejection is an upstream failure (502). Only a runtime that
+   * can resolve names sets it; the Worker cannot, so it relies on the string
+   * rules and the platform's own egress policy.
+   */
+  checkResolvedHost?: (hostname: string) => Promise<string | null>;
+}
+
 export interface ProxyResult {
   status: number;
   body?: ReadableStream<Uint8Array>;
@@ -177,7 +209,10 @@ export async function readProxyBody(
 }
 
 /** Validates and fetches an external URL without buffering its successful response. */
-export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
+export async function proxyUrl(
+  rawUrl: string | null,
+  options: ProxyOptions = {},
+): Promise<ProxyResult> {
   if (!rawUrl) return { status: 400, error: "Missing required 'url' query parameter." };
 
   let url: URL;
@@ -193,6 +228,16 @@ export async function proxyUrl(rawUrl: string | null): Promise<ProxyResult> {
   const timeout = setTimeout(() => abortController.abort(), PROXY_TIMEOUT_MS);
   try {
     for (let redirectCount = 0; redirectCount <= MAX_PROXY_REDIRECTS; redirectCount += 1) {
+      if (options.checkResolvedHost) {
+        let resolvedError: string | null;
+        try {
+          resolvedError = await options.checkResolvedHost(url.hostname);
+        } catch (cause) {
+          return { status: 502, error: `Upstream fetch failed: ${String(cause)}` };
+        }
+        if (resolvedError) return { status: 400, error: resolvedError };
+      }
+
       let response: Response;
       try {
         response = await fetch(url.toString(), {
