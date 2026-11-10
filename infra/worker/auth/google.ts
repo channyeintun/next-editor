@@ -44,6 +44,11 @@ async function pkceChallengeFromVerifier(verifier: string): Promise<string> {
 // newline-separated variants) parsed as a host and sent the victim
 // cross-origin straight after a genuine Google sign-in. Re-serializing from the
 // parser is what makes every one of those forms collapse to a real path.
+//
+// Resolving also removes dot segments, so a same-origin input such as
+// "/.//evil.com" (or "/%2e//", "/..//", "/./\") serializes to the path
+// "//evil.com", which a browser reads back as protocol-relative. The result is
+// therefore checked too: one pass has to be safe on its own.
 export function sanitizeReturnTo(value: string | undefined | null): string {
   if (!value) {
     return "/";
@@ -54,7 +59,8 @@ export function sanitizeReturnTo(value: string | undefined | null): string {
     if (resolved.origin !== placeholder) {
       return "/";
     }
-    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    const path = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    return /^[/\\]{2}/.test(path) ? "/" : path;
   } catch {
     return "/";
   }

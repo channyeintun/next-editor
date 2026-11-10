@@ -28,6 +28,24 @@ describe("sanitizeReturnTo", () => {
     }
   });
 
+  // Dot segments resolve away, so these came out of one pass as the
+  // protocol-relative "//evil.example": safe only because the callback
+  // sanitizes a second time. One pass must already be a same-origin path.
+  it("never returns a protocol-relative path after resolving dot segments", () => {
+    for (const value of [
+      "/.//evil.example",
+      "/%2e//evil.example",
+      "/..//evil.example",
+      "/./\\evil.example",
+      "/a/..//evil.example",
+    ]) {
+      const result = sanitizeReturnTo(value);
+      expect(result).not.toMatch(/^[/\\]{2}/);
+      expect(new URL(result, "https://app.invalid").origin).toBe("https://app.invalid");
+    }
+    expect(sanitizeReturnTo("/.//evil.example")).toBe("/");
+  });
+
   it("falls back to / for empty or unparseable input", () => {
     expect(sanitizeReturnTo(undefined)).toBe("/");
     expect(sanitizeReturnTo(null)).toBe("/");
