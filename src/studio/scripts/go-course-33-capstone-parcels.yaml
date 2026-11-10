@@ -1,0 +1,1109 @@
+# Go course, lesson 33: capstone part 1, pricing the day's parcels (Burmese).
+#
+# Start state (COURSE-KIT 3.4-3.10): seven files. parcel.go (with At), fees.go, digits.go, clock.go
+# and errors.go are pinned complete; receipt.go holds formatKyat only; main.go holds the morning's
+# four parcels (`today`) and an empty main, without an import.
+# Edits, all insert-only (final files = probe 32-n, plus 32-myanmar's line in receipt.go):
+#   1. receipt.go: printReceipt (time, code, fee, city);
+#   2. main.go: import "fmt", then `n := 1` and the loop over today[:n] (check, report and go on,
+#      receipt, total) -> run-1: one receipt and its total;
+#   3. main.go: `n = len(today)` under `n := 1` -> run-2: the whole morning, TGI-0001 refused;
+#   4. receipt.go: `digits = toMyanmarDigits(amount)` in formatKyat -> run-3: every amount on every
+#      line in Myanmar digits (one rule, one home).
+# Boards: (M) the program map: seven files, main.go on top, each labelled with the lesson it came
+# from (lesson 34 adds riders.go and report.go in the fourth column); (Q) the quiz.
+# Built by build.py from template.yaml.in; fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts
+# <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-33-capstone-parcels
+  title: "Go course 33: Capstone ၁၊ ပါဆယ် ဈေးတွက်တာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Seven files: the explorer is part of the lesson.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        // today is the morning's parcels, in the order they were handed in.
+        var today = []Parcel{
+        	{Code: "MDY-0001", To: "MDY", WeightKg: 2.5, At: at(9, 10)},
+        	{Code: "NPT-0001", To: "NPT", WeightKg: 1, At: at(9, 40)},
+        	{Code: "TGI-0001", To: "TGI", WeightKg: 22, At: at(10, 5)},
+        	{Code: "YGN-0001", To: "YGN", WeightKg: 0.5, At: at(10, 30)},
+        }
+
+        func main() {
+        }
+      parcel.go: |
+        package main
+
+        import "time"
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string    // tracking code: "MDY-0001"
+        	To       string    // city code: "MDY"
+        	WeightKg float64   // weight in kilograms
+        	At       time.Time // when it was handed in, in Myanmar Time
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+      fees.go: |
+        package main
+
+        // perKg is added for every whole kilogram.
+        const perKg = 500
+
+        // maxWeightKg is the heaviest parcel the service takes.
+        const maxWeightKg = 20.0
+
+        // baseFees is the fee to each city before weight, in kyats.
+        var baseFees = map[string]int{
+        	"YGN": 2000,
+        	"BGO": 3000,
+        	"NPT": 4000,
+        	"MLM": 4500,
+        	"MDY": 5000,
+        	"TGI": 6000,
+        }
+
+        // Fee is the parcel's price: the city's base fee plus perKg for every whole kilogram.
+        func (p Parcel) Fee() int {
+        	return baseFees[p.To] + int(p.WeightKg)*perKg
+        }
+      receipt.go: |
+        package main
+
+        import "fmt"
+
+        // formatKyat shows an amount of money: 1500 → "1500 ကျပ်".
+        func formatKyat(amount int) string {
+        	digits := fmt.Sprint(amount)
+        	return digits + " ကျပ်"
+        }
+      digits.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strconv"
+        )
+
+        // toMyanmarDigits writes n with Myanmar digits: 1500 → "၁၅၀၀".
+        func toMyanmarDigits(n int) string {
+        	digits := []rune(strconv.Itoa(n))
+        	for i, r := range digits {
+        		if r >= '0' && r <= '9' {
+        			digits[i] = r - '0' + '၀'
+        		}
+        	}
+        	return string(digits)
+        }
+
+        // fromMyanmarDigits reads Myanmar digits: "၁၅၀၀" → 1500.
+        func fromMyanmarDigits(s string) (int, error) {
+        	n := 0
+        	for _, r := range s {
+        		if r < '၀' || r > '၉' {
+        			return 0, fmt.Errorf("%q is not a Myanmar digit", r)
+        		}
+        		n = n*10 + int(r-'၀')
+        	}
+        	return n, nil
+        }
+      clock.go: |
+        package main
+
+        import "time"
+
+        // mmt is Myanmar Time: UTC+06:30, no daylight saving.
+        var mmt = time.FixedZone("MMT", 6*60*60+30*60)
+
+        // at is hour:minute on the course's day, Friday 2026-04-17, in Myanmar Time.
+        func at(hour, minute int) time.Time {
+        	return time.Date(2026, time.April, 17, hour, minute, 0, 0, mmt)
+        }
+      errors.go: |
+        package main
+
+        import (
+        	"errors"
+        	"fmt"
+        )
+
+        // ErrUnknownCity means the parcel's city code is not one the service sends to.
+        var ErrUnknownCity = errors.New("unknown city")
+
+        // OverweightError means the parcel is heavier than maxWeightKg.
+        type OverweightError struct {
+        	Code     string
+        	WeightKg float64
+        }
+
+        func (e *OverweightError) Error() string {
+        	return fmt.Sprintf("%s: %v kg is over %v kg", e.Code, e.WeightKg, maxWeightKg)
+        }
+
+        // checkParcel says why a parcel cannot be sent, or nil when it can.
+        func checkParcel(p Parcel) error {
+        	if _, ok := cityNames[p.To]; !ok {
+        		return fmt.Errorf("%s: %w", p.Code, ErrUnknownCity)
+        	}
+        	if p.WeightKg > maxWeightKg {
+        		return &OverweightError{Code: p.Code, WeightKg: p.WeightKg}
+        	}
+        	return nil
+        }
+  whiteboardAssets:
+    # Board M: the program map. main.go on top; row 2 = what main calls; row 3 = what every file uses.
+    # Column 4 (x 900) is left for lesson 34's riders.go and report.go.
+    - {
+        id: m-title,
+        kind: text,
+        x: 300,
+        y: 160,
+        width: 600,
+        height: 50,
+        text: "Program ရဲ့ ဖိုင် ခုနစ်ခု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: m-main-box,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 825,
+        height: 65,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-main,
+        kind: text,
+        x: 290,
+        y: 237,
+        width: 600,
+        height: 40,
+        text: "main.go · ဒီနေ့ ရေးမယ့် အလုပ် အစဉ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 347,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 557,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 767,
+        y: 295,
+        width: 40,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: m-receipt-box,
+        kind: rectangle,
+        x: 270,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-receipt,
+        kind: text,
+        x: 282,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "receipt.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-receipt-l,
+        kind: text,
+        x: 282,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 09",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-errors-box,
+        kind: rectangle,
+        x: 480,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-errors,
+        kind: text,
+        x: 492,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "errors.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-errors-l,
+        kind: text,
+        x: 492,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 23",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-clock-box,
+        kind: rectangle,
+        x: 690,
+        y: 340,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-clock,
+        kind: text,
+        x: 702,
+        y: 348,
+        width: 175,
+        height: 40,
+        text: "clock.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-clock-l,
+        kind: text,
+        x: 702,
+        y: 390,
+        width: 175,
+        height: 40,
+        text: "lesson 28",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-row2,
+        kind: text,
+        x: 905,
+        y: 368,
+        width: 190,
+        height: 40,
+        text: "main က ခေါ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-digits-box,
+        kind: rectangle,
+        x: 270,
+        y: 465,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-digits,
+        kind: text,
+        x: 282,
+        y: 473,
+        width: 175,
+        height: 40,
+        text: "digits.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-digits-l,
+        kind: text,
+        x: 282,
+        y: 515,
+        width: 175,
+        height: 40,
+        text: "lesson 15",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-parcel-box,
+        kind: rectangle,
+        x: 480,
+        y: 465,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-parcel,
+        kind: text,
+        x: 492,
+        y: 473,
+        width: 175,
+        height: 40,
+        text: "parcel.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-parcel-l,
+        kind: text,
+        x: 492,
+        y: 515,
+        width: 175,
+        height: 40,
+        text: "lesson 16",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-fees-box,
+        kind: rectangle,
+        x: 690,
+        y: 465,
+        width: 195,
+        height: 95,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-fees,
+        kind: text,
+        x: 702,
+        y: 473,
+        width: 175,
+        height: 40,
+        text: "fees.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-fees-l,
+        kind: text,
+        x: 702,
+        y: 515,
+        width: 175,
+        height: 40,
+        text: "lesson 18",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-row3,
+        kind: text,
+        x: 905,
+        y: 493,
+        width: 190,
+        height: 40,
+        text: "အားလုံး သုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: m-reuse,
+        kind: text,
+        x: 270,
+        y: 585,
+        width: 820,
+        height: 40,
+        text: "အသစ် နည်းနည်း · ကျန်တာ အရင် lesson တွေက",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (Myanmar digits in printReceipt only: what does the total line show?).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 800,
+        height: 165,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 248,
+        width: 740,
+        height: 40,
+        text: "printReceipt ထဲမှာပဲ ပြောင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 298,
+        width: 740,
+        height: 40,
+        text: "toMyanmarDigits(p.Fee())",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 348,
+        width: 740,
+        height: 40,
+        text: "formatKyat · မပြင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-ask,
+        kind: text,
+        x: 285,
+        y: 420,
+        width: 780,
+        height: 40,
+        text: "စုစုပေါင်း စာကြောင်းက",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 285,
+        y: 480,
+        width: 560,
+        height: 40,
+        text: "က · ၁၂၅၀၀ ကျပ် စုစုပေါင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 285,
+        y: 540,
+        width: 560,
+        height: 40,
+        text: "ခ · 12500 ကျပ် စုစုပေါင်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 880,
+        y: 530,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7133
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "09:10 MDY-0001 6000 ကျပ် မန္တလေး\n6000 ကျပ် စုစုပေါင်း\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "09:10 MDY-0001 6000 ကျပ် မန္တလေး\n09:40 NPT-0001 4500 ကျပ် နေပြည်တော်\nerror: TGI-0001: 22 kg is over 20 kg\n10:30 YGN-0001 2000 ကျပ် ရန်ကုန်\n12500 ကျပ် စုစုပေါင်း\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "09:10 MDY-0001 ၆၀၀၀ ကျပ် မန္တလေး\n09:40 NPT-0001 ၄၅၀၀ ကျပ် နေပြည်တော်\nerror: TGI-0001: 22 kg is over 20 kg\n10:30 YGN-0001 ၂၀၀၀ ကျပ် ရန်ကုန်\n၁၂၅၀၀ ကျပ် စုစုပေါင်း\n"
+
+scenes:
+  - id: recall
+    chapter: Capstone ၁၊ ပါဆယ် ဈေးတွက်တာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ rider နှစ်ယောက်က ငွေ စုစုပေါင်း တစ်ခုတည်းကို တစ်ပြိုင်နက် ပေါင်းတဲ့အခါ ငွေ
+      ပျောက်သွားတာကို mutex နဲ့ ကာကွယ်ခဲ့ပါတယ်။ ဒီနေ့ကစပြီး lesson နှစ်ခုမှာ၊ course တစ်ခုလုံး
+      လေ့လာခဲ့တာတွေကို ပေါင်းပြီး program အပြည့်အစုံ တစ်ခု ရေးပါမယ်။ ဒါကို capstone လို့ ခေါ်ပါတယ်။
+      [[mark:today-plan]] ပါဆယ် ဝန်ဆောင်မှုရဲ့ တစ်နေ့တာ အလုပ်ကို ကူညီပေးမယ့် program ပါ။ ဒီနေ့ ပထမပိုင်းမှာတော့ မနက်ပိုင်း
+      လက်ခံထားတဲ့ ပါဆယ်တွေရဲ့ ပို့ခကို တွက်မယ်၊ ပို့လို့ မရတဲ့ ပါဆယ်ကို အကြောင်းပြချက်နဲ့ ငြင်းမယ်၊ ပြီးတော့
+      ပြေစာတွေ ထုတ်ပါမယ်။ [[mark:sel-today]] main ဖိုင်ထဲမှာ ဒီနေ့ မနက် ကောင်တာမှာ လက်ခံထားတဲ့ ပါဆယ်
+      လေးခုရဲ့ slice ရှိပါတယ်။ ပါဆယ် တစ်ခုစီမှာ code၊ ပို့မယ့် မြို့၊ အလေးချိန်နဲ့ လက်ခံတဲ့ အချိန် ပါပါတယ်။
+      အချိန်တွေက ၂၀၂၆ ခုနှစ်၊ ဧပြီလ ၁၇ ရက်၊ သောကြာနေ့ရဲ့ မြန်မာစံတော်ချိန်ပါ၊ ဥပမာ ပထမ ပါဆယ်ကို မနက်
+      ကိုးနာရီ ဆယ်မိနစ်မှာ လက်ခံထားတာပါ။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+      - { title: "time package — Date", url: "https://pkg.go.dev/time#Date" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-today
+        type: editor.select
+        at: { mark: sel-today }
+        target: { file: main.go, text: "var today = []Parcel{", occurrence: 1 }
+
+  - id: map
+    chapter: ဖိုင် ခုနစ်ခု
+    narration: >-
+      [[mark:board-map]] ဒီ program မှာ ဖိုင် ခုနစ်ခု ရှိပါတယ်။ ဖိုင် အများကြီးပါတဲ့ program တစ်ခုကို
+      စဖတ်တဲ့အခါ၊ ဖိုင် တစ်ခုစီ ဘာလုပ်လဲ၊ ဘယ်ဖိုင်က ဘယ်ဖိုင်ကို ခေါ်လဲ ဆိုတာကို ပုံ တစ်ခုနဲ့ အရင် ဆွဲကြည့်ရင်
+      လမ်း မပျောက်တော့ပါဘူး။ [[mark:draw-main]] အပေါ်ဆုံးမှာ main ဖိုင်ပါ။ ဒီနေ့ ကိုယ်တို့ ရေးမယ့် ဖိုင်ဖြစ်ပြီး၊
+      တစ်နေ့တာ အလုပ် အစဉ်ကို ဒီမှာ ရေးပါမယ်။ [[mark:draw-called]] main က တိုက်ရိုက် ခေါ်မယ့် ဖိုင် သုံးခု
+      ရှိပါတယ်။ receipt ဖိုင်က ပြေစာ ပုံစံပါ၊ ငွေကို ကျပ်နဲ့ ပြတဲ့ function က lesson ကိုးကတည်းက ပါလာတာပါ။
+      errors ဖိုင်က ပါဆယ်ကို ပို့လို့ ရမရ စစ်ပြီး error ပြန်ပေးတဲ့ lesson နှစ်ဆယ့်သုံးက code ပါ။ clock
+      ဖိုင်ကတော့ lesson နှစ်ဆယ့်ရှစ်က မြန်မာစံတော်ချိန်ပါ။ [[mark:draw-base]] အောက်ဆုံး တန်းမှာတော့ ဖိုင်
+      တိုင်းက ပြန်သုံးတဲ့ အခြေခံ ဖိုင်တွေ ရှိပါတယ်။ digits ဖိုင်က lesson ဆယ့်ငါးက မြန်မာ ဂဏန်း function
+      တွေ၊ parcel ဖိုင်က Parcel struct နဲ့ မြို့ နာမည်တွေ၊ fees ဖိုင်ကတော့ ပို့ခ စည်းကမ်းပါ။
+      [[mark:draw-reuse]] ဆိုလိုတာက ဒီနေ့ အသစ် ရေးရမှာ နည်းနည်းလေးပဲ ရှိပြီး၊ ကျန်တာ အားလုံးကို အရင်
+      lesson တွေကနေ ပြန်သုံးတာပါ။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+      - {
+          title: "The Go Programming Language Specification — Packages",
+          url: "https://go.dev/ref/spec#Packages",
+        }
+    actions:
+      - {
+          id: board-map,
+          type: whiteboard.apply,
+          at: { mark: board-map, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-main,
+          type: whiteboard.apply,
+          at: { mark: draw-main },
+          upsertIds: [m-main-box, m-main],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-called,
+          type: whiteboard.apply,
+          at: { mark: draw-called },
+          upsertIds:
+            [
+              m-a1,
+              m-a2,
+              m-a3,
+              m-receipt-box,
+              m-receipt,
+              m-receipt-l,
+              m-errors-box,
+              m-errors,
+              m-errors-l,
+              m-clock-box,
+              m-clock,
+              m-clock-l,
+              m-row2,
+            ],
+          drawMs: 4500,
+        }
+      - {
+          id: draw-base,
+          type: whiteboard.apply,
+          at: { mark: draw-base },
+          upsertIds:
+            [
+              m-digits-box,
+              m-digits,
+              m-digits-l,
+              m-parcel-box,
+              m-parcel,
+              m-parcel-l,
+              m-fees-box,
+              m-fees,
+              m-fees-l,
+              m-row3,
+            ],
+          drawMs: 4000,
+        }
+      - {
+          id: draw-reuse,
+          type: whiteboard.apply,
+          at: { mark: draw-reuse },
+          upsertIds: [m-reuse],
+          drawMs: 1500,
+        }
+
+  - id: tour
+    chapter: Code ထဲမှာ လမ်းရှာတာ
+    narration: >-
+      [[mark:close-map]] ပုံကို ကြည့်ပြီးပြီ ဆိုတော့ code ထဲမှာ လမ်း လိုက်ရှာကြည့်ရအောင်။ [[mark:open-errors]]
+      errors ဖိုင်ကို ဖွင့်ပါမယ်။ [[mark:sel-check]] ဒီ function က ပါဆယ် တစ်ခုကို ယူပြီး၊ ပို့လို့ မရရင်
+      ဘာကြောင့်လဲ ဆိုတဲ့ error ကို ပြန်ပေးပါတယ်၊ ပို့လို့ ရရင်တော့ nil ကို ပြန်ပေးပါတယ်။ [[mark:sel-city]]
+      ပထမ စစ်တာက မြို့ပါ။ မြို့ code ကို မသိရင် နာမည်ပေးထားတဲ့ error ကို ပါဆယ် code နဲ့ wrap လုပ်ပြီး
+      ပြန်ပေးပါတယ်။ [[mark:sel-weight]] ဒုတိယ စစ်တာက အလေးချိန်ပါ။ နှစ်ဆယ်ကီလိုထက် လေးရင် ကိုယ်ပိုင် error
+      type ထဲမှာ ပါဆယ် code နဲ့ အလေးချိန်ကို ထည့်ပြီး ပြန်ပေးပါတယ်။ ဒီ function က error ကို ကိုယ်တိုင်
+      ထုတ်မပြဘဲ ပြန်ပေးရုံပဲ ပေးတာကို သတိထားပါ၊ ဘာလုပ်မလဲ ဆိုတာကို ခေါ်တဲ့ဘက်က ဆုံးဖြတ်ပါတယ်။
+      [[mark:open-fees]] fees ဖိုင်ကိုလည်း ကြည့်ရအောင်။ [[mark:sel-fee]] ပို့ခကို ဒီ method တစ်ခုတည်းက
+      တွက်ပါတယ်၊ မြို့ရဲ့ အခြေခံ ပို့ခ ပေါ်မှာ ကီလို အပြည့် တစ်ကီလိုတိုင်း ၅၀၀ ပေါင်းတာပါ။ code ထဲမှာ မသိတဲ့
+      နာမည် တစ်ခု တွေ့ရင်၊ အဲဒီ နာမည်ကို ရေးထားတဲ့ ဖိုင်ကို ရှာပြီး ဒီလို လိုက်ဖတ်ပါ။ ဒါဆို program
+      အကြီးကြီး တစ်ခုကိုလည်း တစ်ပိုင်းချင်း နားလည်လာပါတယ်။
+    sources:
+      - { title: "Working with Errors in Go 1.13", url: "https://go.dev/blog/go1.13-errors" }
+      - {
+          title: "The Go Programming Language Specification — Method declarations",
+          url: "https://go.dev/ref/spec#Method_declarations",
+        }
+    actions:
+      - {
+          id: close-map,
+          type: whiteboard.apply,
+          at: { mark: close-map },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-errors, type: workspace.openFile, at: { mark: open-errors }, path: errors.go }
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target: { file: errors.go, text: "func checkParcel(p Parcel) error {", occurrence: 1 }
+      - id: sel-city
+        type: editor.select
+        at: { mark: sel-city }
+        target:
+          {
+            file: errors.go,
+            text: "\tif _, ok := cityNames[p.To]; !ok {\n\t\treturn fmt.Errorf(\"%s: %w\", p.Code, ErrUnknownCity)\n\t}\n",
+            occurrence: 1,
+          }
+      - id: sel-weight
+        type: editor.select
+        at: { mark: sel-weight }
+        target:
+          {
+            file: errors.go,
+            text: "\tif p.WeightKg > maxWeightKg {\n\t\treturn &OverweightError{Code: p.Code, WeightKg: p.WeightKg}\n\t}\n",
+            occurrence: 1,
+          }
+      - { id: open-fees, type: workspace.openFile, at: { mark: open-fees }, path: fees.go }
+      - id: sel-fee
+        type: editor.select
+        at: { mark: sel-fee }
+        target:
+          {
+            file: fees.go,
+            text: "func (p Parcel) Fee() int {\n\treturn baseFees[p.To] + int(p.WeightKg)*perKg\n}",
+            occurrence: 1,
+          }
+
+  - id: receipt
+    chapter: ပြေစာ ထုတ်တဲ့ function
+    narration: >-
+      [[mark:open-receipt]] ဒါဆို receipt ဖိုင်ကနေ စရေးရအောင်။ ဒီမှာ ငွေကို ကျပ်နဲ့ ပြတဲ့ function က
+      ရှိပြီးသားပါ။ [[mark:type-receipt]] အောက်မှာ ပါဆယ် တစ်ခုအတွက် ပြေစာ တစ်ကြောင်း ထုတ်တဲ့ function ကို
+      ရေးပါမယ်။ lesson ဆယ့်ကိုးက function နဲ့ အတူတူပါပဲ၊ ဒီ တစ်ခါတော့ ရှေ့ဆုံးမှာ လက်ခံတဲ့ အချိန်ကို
+      ထည့်ထားပါတယ်။ [[mark:sel-format]] အချိန်ကို နာရီနဲ့ မိနစ် ပုံစံ ပြဖို့ lesson နှစ်ဆယ့်ရှစ်က နမူနာ
+      အချိန် ပုံစံကို သုံးထားပါတယ်။ နောက်မှာ ပါဆယ် code၊ ကျပ်နဲ့ ပြထားတဲ့ ပို့ခ၊ မြို့ နာမည်တို့
+      လိုက်လာပါတယ်။ ပို့ခကို ဒီမှာ ပြန်မတွက်ဘဲ fees ဖိုင်က method ကို ခေါ်တာ၊ ငွေ ပုံစံကိုလည်း ပြန်မရေးဘဲ
+      အပေါ်က function ကို ခေါ်တာကို သတိထားပါ။
+    sources:
+      - { title: "time package — Time.Format", url: "https://pkg.go.dev/time#Time.Format" }
+      - { title: "fmt package — Println", url: "https://pkg.go.dev/fmt#Println" }
+    actions:
+      - { id: open-receipt, type: workspace.openFile, at: { mark: open-receipt }, path: receipt.go }
+      - id: type-receipt
+        type: editor.type
+        at: { mark: type-receipt }
+        target: { file: receipt.go, after: "\treturn digits + \" ကျပ်\"\n}\n", occurrence: 1 }
+        text: "\n// printReceipt prints one line for a parcel: time, code, fee, city.\nfunc printReceipt(p Parcel) {\n\tfmt.Println(p.At.Format(\"15:04\"), p.Code, formatKyat(p.Fee()), cityNames[p.To])\n}\n"
+        cadence: line-by-line
+      - id: sel-format
+        type: editor.select
+        at: { mark: sel-format }
+        target: { file: receipt.go, text: 'p.At.Format("15:04")', occurrence: 1 }
+
+  - id: loop
+    chapter: Error တွေ တစ်နေရာတည်း ရောက်လာတာ
+    narration: >-
+      [[mark:back-main]] main ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-import]] စုစုပေါင်းနဲ့ error တွေကို ထုတ်ပြဖို့
+      fmt package ကို import လုပ်ပါမယ်။ [[mark:type-loop]] ပြီးတော့ main function ထဲမှာ ပါဆယ် တစ်ခုချင်းကို
+      လျှောက်မယ့် loop ကို ရေးပါမယ်။ အားလုံးကို တစ်ခါတည်း မလုပ်ခင် ပါဆယ် တစ်ခုနဲ့ အရင် စမ်းကြည့်ချင်လို့၊
+      ဘယ်နှစ်ခု လုပ်မလဲ ဆိုတဲ့ variable ကို တစ်နဲ့ စထားပြီး slice ရဲ့ ရှေ့ဆုံး အပိုင်းကိုပဲ လျှောက်ပါမယ်။ loop
+      ထဲမှာ ပါဆယ်ကို အရင်ဆုံး စစ်ပါတယ်။ error ပါလာရင် output မှာ ထုတ်ပြပြီး၊ ဒီ ပါဆယ်ကို ကျော်ပြီး နောက်
+      အခေါက်ကို ဆက်သွားပါတယ်။ [[mark:type-rest]] error မရှိရင်တော့ ပြေစာ ထုတ်ပြီး ပို့ခကို စုစုပေါင်းထဲ
+      ပေါင်းပါတယ်။ loop ပြီးရင် စုစုပေါင်းကို ကျပ်နဲ့ ပြပါမယ်။ စစ်မယ်၊ ငြင်းမယ်၊ ပြေစာ ထုတ်မယ်၊ ပေါင်းမယ်
+      ဆိုတဲ့ လိုအပ်ချက် တစ်ခုစီက code ထဲမှာ line တစ်ကြောင်းစီ ဖြစ်သွားတာကို ကြည့်ပါ။ [[mark:sel-err]] ဒီ
+      အပိုင်းက ဒီနေ့ရဲ့ အဓိက အချက်ပါ။ error တွေ ဘယ်ဖိုင်က လာလာ၊ နောက်ဆုံး ဒီ တစ်နေရာတည်းကို
+      ရောက်လာပြီး ဘာလုပ်မလဲ ဆိုတာကို ဒီမှာပဲ ဆုံးဖြတ်ပါတယ်။ ပါဆယ် တစ်ခု မှားနေလို့ တစ်နေ့လုံး အလုပ်
+      မရပ်သွားဘဲ၊ ကျန်တဲ့ ပါဆယ်တွေကို ဆက်လုပ်ပါတယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "Effective Go — Errors", url: "https://go.dev/doc/effective_go#errors" }
+      - {
+          title: "The Go Programming Language Specification — Continue statements",
+          url: "https://go.dev/ref/spec#Continue_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Slice expressions",
+          url: "https://go.dev/ref/spec#Slice_expressions",
+        }
+    actions:
+      - { id: back-main, type: workspace.openFile, at: { mark: back-main }, path: main.go }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: main.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport \"fmt\"\n"
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tn := 1\n\ttotal := 0\n\tfor _, p := range today[:n] {\n\t\tif err := checkParcel(p); err != nil {\n\t\t\tfmt.Println(\"error:\", err)\n\t\t\tcontinue\n\t\t}\n"
+        cadence: line-by-line
+      - id: type-rest
+        type: editor.type
+        at: { mark: type-rest }
+        target: { file: main.go, after: "\t\t\tcontinue\n\t\t}\n", occurrence: 1 }
+        text: "\t\tprintReceipt(p)\n\t\ttotal += p.Fee()\n\t}\n\tfmt.Println(formatKyat(total), \"စုစုပေါင်း\")\n"
+        cadence: line-by-line
+      - id: sel-err
+        type: editor.select
+        at: { mark: sel-err }
+        target:
+          {
+            file: main.go,
+            text: "\t\tif err := checkParcel(p); err != nil {\n\t\t\tfmt.Println(\"error:\", err)\n\t\t\tcontinue\n\t\t}\n",
+            occurrence: 1,
+          }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "6000 ကျပ် စုစုပေါင်း",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-r1]] ပထမ ပါဆယ် တစ်ခုအတွက် ပြေစာ ထွက်လာပါပြီ။ မနက် ကိုးနာရီ ဆယ်မိနစ်မှာ လက်ခံထားတဲ့
+      မန္တလေး ပါဆယ်ပါ၊ နှစ်ကီလိုခွဲ ရှိပေမဲ့ ကီလို အပြည့် နှစ်ခုပဲ တွက်လို့ ၅၀၀၀ ပေါ်မှာ ၁၀၀၀ တိုးပြီး ၆၀၀၀ ကျပ် ရပါတယ်။ [[mark:point-t1]] အောက်က
+      စုစုပေါင်းကလည်း ၆၀၀၀ ကျပ်ပဲ ဖြစ်ပါတယ်။ ဖိုင် ခုနစ်ခုလုံး ပေါင်းပြီး အလုပ်လုပ်သွားတာကို ဒီ စာကြောင်း
+      နှစ်ကြောင်းက ပြနေပါတယ်။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - {
+          id: point-r1,
+          type: console.point,
+          at: { mark: point-r1 },
+          target: { text: "09:10 MDY-0001 6000 ကျပ် မန္တလေး" },
+        }
+      - {
+          id: point-t1,
+          type: console.point,
+          at: { mark: point-t1 },
+          target: { text: "6000 ကျပ် စုစုပေါင်း" },
+        }
+
+  - id: morning
+    chapter: မနက်ပိုင်း တစ်ခုလုံး
+    narration: >-
+      [[mark:collapse-1]] ပါဆယ် တစ်ခုနဲ့ မှန်ပြီ ဆိုတော့ မနက်ပိုင်း ပါဆယ် အားလုံးကို လုပ်ကြည့်ရအောင်။
+      [[mark:type-n]] ဘယ်နှစ်ခု လုပ်မလဲ ဆိုတဲ့ variable ရဲ့ အောက်မှာ၊ ပါဆယ် အားလုံးရဲ့ အရေအတွက်ကို ထည့်တဲ့ line တစ်ကြောင်း ထပ်ထည့်ပါမယ်။ ဒီ
+      course မှာ လုပ်ခဲ့သလိုပဲ၊ input ကို ပြောင်းချင်ရင် တန်ဖိုး အသစ်ကို line အသစ် တစ်ကြောင်းနဲ့ ထည့်တာပါ။
+      မနက်ပိုင်း ပါဆယ်တွေထဲမှာ တောင်ကြီးကို ပို့မယ့် ပါဆယ် တစ်ခုက နှစ်ဆယ့်နှစ်ကီလို ရှိနေပါတယ်။ ဘာဖြစ်မလဲ
+      ကြည့်ရအောင်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-n
+        type: editor.type
+        at: { mark: type-n }
+        target: { file: main.go, after: "\tn := 1\n", occurrence: 1 }
+        text: "\tn = len(today)\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "12500 ကျပ် စုစုပေါင်း",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-n,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\tn := 1\n\tn = len(today)\n",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-npt]] ဒီ တစ်ခါတော့ စာကြောင်း ငါးကြောင်း ထွက်လာပါတယ်။ ဒုတိယ စာကြောင်းက နေပြည်တော်
+      ပါဆယ်ပါ၊ အခြေခံ ၄၀၀၀ ပေါ်မှာ တစ်ကီလိုစာ ၅၀၀ တိုးလို့ ၄၅၀၀ ကျပ် ဖြစ်ပါတယ်။ [[mark:point-tgi]] တတိယ စာကြောင်းကတော့
+      ပြေစာ မဟုတ်ဘဲ error ပါ။ တောင်ကြီး ပါဆယ်က နှစ်ဆယ့်နှစ်ကီလို ရှိလို့၊ လက်ခံတဲ့ အများဆုံး နှစ်ဆယ်ကီလိုကို
+      ကျော်နေတယ်လို့ ပါဆယ် code နဲ့ အတူ ပြောနေတာပါ။ ဒါ panic မဟုတ်ပါဘူး၊ errors ဖိုင်က ပြန်ပေးတဲ့ error ကို
+      main က ဖတ်ပြီး ထုတ်ပြလိုက်တာပါ။ [[mark:point-ygn]] ပြီးတော့ loop က မရပ်ဘဲ ဆက်သွားလို့၊ မနက်
+      ဆယ်နာရီခွဲက ရန်ကုန် ပါဆယ်ရဲ့ ပြေစာ ၂၀၀၀ ကျပ်လည်း ထွက်လာပါတယ်။ [[mark:point-total]] စုစုပေါင်းက
+      ၁၂၅၀၀ ကျပ်ပါ။ ငြင်းလိုက်တဲ့ ပါဆယ်ရဲ့ ပို့ခ မပါတာ မှန်ပါတယ်၊ ဘာကြောင့်လဲဆိုတော့ error ရှိရင် ပေါင်းတဲ့
+      line ကို မရောက်ခင် နောက် အခေါက်ကို ကျော်သွားလို့ပါ။
+    sources:
+      - { title: "Effective Go — Errors", url: "https://go.dev/doc/effective_go#errors" }
+    actions:
+      - {
+          id: point-npt,
+          type: console.point,
+          at: { mark: point-npt },
+          target: { text: "09:40 NPT-0001 4500 ကျပ် နေပြည်တော်" },
+        }
+      - {
+          id: point-tgi,
+          type: console.point,
+          at: { mark: point-tgi },
+          target: { text: "error: TGI-0001: 22 kg is over 20 kg" },
+        }
+      - {
+          id: point-ygn,
+          type: console.point,
+          at: { mark: point-ygn },
+          target: { text: "10:30 YGN-0001 2000 ကျပ် ရန်ကုန်" },
+        }
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "12500 ကျပ် စုစုပေါင်း" },
+        }
+
+  - id: myanmar
+    chapter: စည်းကမ်း တစ်ခု၊ နေရာ တစ်ခု
+    narration: >-
+      [[mark:collapse-2]] အခု ပြေစာ ပေါ်က ငွေ ပမာဏတွေကို မြန်မာ ဂဏန်းနဲ့ ပြချင်တယ် ဆိုပါစို့။ ပြေစာ ပေါ်မှာ
+      ရော၊ စုစုပေါင်းမှာ ရော ငွေ ပါတဲ့ နေရာ အများကြီး ရှိပေမဲ့၊ ငွေ အားလုံးက ငွေ ပုံစံ function တစ်ခုတည်းကို
+      ဖြတ်သွားတာ ဖြစ်လို့ အဲဒီ တစ်နေရာကိုပဲ ပြင်ရုံပါ။ [[mark:open-receipt-2]] အဲဒီ function က receipt ဖိုင်ထဲမှာပါ။
+      [[mark:type-mm]] ဂဏန်းကို စာသား ပြောင်းတဲ့ line ရဲ့ အောက်မှာ၊ digits ဖိုင်က မြန်မာ ဂဏန်း function ကို
+      ခေါ်တဲ့ line တစ်ကြောင်း ထည့်ပါမယ်။ lesson ဆယ့်ငါးမှာ ရေးခဲ့တဲ့ function ကို ဒီမှာ ပြန်သုံးတာပါ။
+      [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function declarations",
+          url: "https://go.dev/ref/spec#Function_declarations",
+        }
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - {
+          id: open-receipt-2,
+          type: workspace.openFile,
+          at: { mark: open-receipt-2 },
+          path: receipt.go,
+        }
+      - id: type-mm
+        type: editor.type
+        at: { mark: type-mm }
+        target: { file: receipt.go, after: "\tdigits := fmt.Sprint(amount)\n", occurrence: 1 }
+        text: "\tdigits = toMyanmarDigits(amount)\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "၁၂၅၀၀ ကျပ် စုစုပေါင်း",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-mm,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: receipt.go,
+          contains: "\tdigits := fmt.Sprint(amount)\n\tdigits = toMyanmarDigits(amount)\n\treturn digits + \" ကျပ်\"\n",
+        }
+      - {
+          id: expect-file-receipt,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: receipt.go,
+          contains: "\tfmt.Println(p.At.Format(\"15:04\"), p.Code, formatKyat(p.Fee()), cityNames[p.To])\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-mm1]] ပထမ ပြေစာမှာ ပို့ခကို မြန်မာ ဂဏန်းနဲ့ ပြနေပါပြီ။ [[mark:point-mm-total]] စုစုပေါင်းလည်း
+      မြန်မာ ဂဏန်းနဲ့ ထွက်လာပါတယ်။ line တစ်ကြောင်း ထည့်ရုံနဲ့ ငွေ ပါတဲ့ နေရာ အားလုံး တစ်ပြိုင်နက်
+      ပြောင်းသွားတာပါ။ စည်းကမ်း တစ်ခုကို နေရာ တစ်ခုတည်းမှာ ထားတာရဲ့ အကျိုးပါ။ [[mark:point-mm-err]] error
+      စာကြောင်းကတော့ မပြောင်းပါဘူး။ ဘာကြောင့်လဲဆိုတော့ ကီလိုက ငွေ မဟုတ်တဲ့အတွက် ငွေ ပုံစံ function ကို
+      မဖြတ်သွားလို့ပါ။ error စာတွေကိုတော့ standard library ရဲ့ error တွေနဲ့ တစ်ပုံစံတည်း ဖြစ်အောင် English
+      နဲ့ပဲ ထားပါတယ်။
+    sources:
+      - { title: "Go Code Review Comments", url: "https://go.dev/wiki/CodeReviewComments" }
+    actions:
+      - {
+          id: point-mm1,
+          type: console.point,
+          at: { mark: point-mm1 },
+          target: { text: "09:10 MDY-0001 ၆၀၀၀ ကျပ် မန္တလေး" },
+        }
+      - {
+          id: point-mm-total,
+          type: console.point,
+          at: { mark: point-mm-total },
+          target: { text: "၁၂၅၀၀ ကျပ် စုစုပေါင်း" },
+        }
+      - {
+          id: point-mm-err,
+          type: console.point,
+          at: { mark: point-mm-err },
+          target: { text: "error: TGI-0001: 22 kg is over 20 kg" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ငွေ ပုံစံ function ကို မပြင်ဘဲ၊ ပြေစာ ထုတ်တဲ့ function ထဲမှာပဲ
+      ပို့ခကို မြန်မာ ဂဏန်း ပြောင်းလိုက်တယ် ဆိုပါစို့။ ပြေစာ ပေါ်က ပို့ခတွေကတော့ မြန်မာ ဂဏန်း ဖြစ်သွားမှာပါ။
+      [[mark:quiz-ask]] ဒါဆို အောက်ဆုံးက စုစုပေါင်း စာကြောင်းက ဘယ်လို ထွက်မလဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ စုစုပေါင်းက English ဂဏန်းနဲ့ပဲ ကျန်နေမှာပါ။
+      ဘာကြောင့်လဲဆိုတော့ စုစုပေါင်းကို main က ငွေ ပုံစံ function နဲ့ တိုက်ရိုက် ထုတ်တာ ဖြစ်ပြီး၊ ပြေစာ
+      function ကို မဖြတ်သွားလို့ပါ။ စည်းကမ်း တစ်ခုကို နေရာ နှစ်ခုမှာ ခွဲရေးရင်၊ ဒီလို တစ်နေရာ ပြောင်းပြီး
+      တစ်နေရာ ကျန်ခဲ့တတ်ပါတယ်။
+    sources:
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3],
+        }
+      - {
+          id: quiz-ask,
+          type: whiteboard.apply,
+          at: { mark: quiz-ask },
+          upsertIds: [q-ask, q-a, q-b],
+          drawMs: 1500,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဖိုင် အများကြီးပါတဲ့ program ကို ဖတ်တဲ့အခါ ဖိုင် တစ်ခုစီရဲ့
+      အလုပ်နဲ့ ဘယ်ဖိုင်က ဘယ်ဖိုင်ကို ခေါ်လဲ ဆိုတာကို ပုံ အရင် ဆွဲကြည့်ပြီး၊ မသိတဲ့ နာမည်ကို သူ့ဖိုင်အထိ
+      လိုက်ရှာပါတယ်။ [[mark:recap-mm]] ငွေ ပုံစံ စည်းကမ်းကို နေရာ တစ်ခုတည်းမှာ ထားလို့၊ line တစ်ကြောင်း
+      ထည့်ရုံနဲ့ ငွေ အားလုံး မြန်မာ ဂဏန်း ဖြစ်သွားပါတယ်။ [[mark:recap-main]] error တွေကိုတော့ တခြား ဖိုင်တွေက
+      ပြန်ပေးရုံပဲ ပေးပြီး၊ [[mark:recap-err]] main ထဲက ဒီ တစ်နေရာမှာ ဘာလုပ်မလဲ ဆုံးဖြတ်ပါတယ်။ ဒါကြောင့်
+      ပါဆယ် တစ်ခု မှားနေလည်း တစ်နေ့လုံး အလုပ် မရပ်ပါဘူး။ ဒီနေ့ အသစ် ရေးခဲ့တာ line နည်းနည်းပဲ ရှိပြီး၊ ကျန်တာ
+      အားလုံး အရင် lesson တွေက code ပါ။ နောက် lesson မှာတော့ rider တွေက တစ်နေ့လုံးရဲ့ ပါဆယ်တွေကို
+      တစ်ပြိုင်နက် ပို့ပြီး၊ တစ်နေ့တာ report ထုတ်တာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Effective Go — Errors", url: "https://go.dev/doc/effective_go#errors" }
+      - {
+          title: "How to Write Go Code — Code organization",
+          url: "https://go.dev/doc/code#code-organization",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-mm
+        type: editor.select
+        at: { mark: recap-mm }
+        target: { file: receipt.go, text: "\tdigits = toMyanmarDigits(amount)\n", occurrence: 1 }
+      - { id: recap-main, type: workspace.openFile, at: { mark: recap-main }, path: main.go }
+      - id: recap-err
+        type: editor.select
+        at: { mark: recap-err }
+        target:
+          {
+            file: main.go,
+            text: "\t\tif err := checkParcel(p); err != nil {\n\t\t\tfmt.Println(\"error:\", err)\n\t\t\tcontinue\n\t\t}\n",
+            occurrence: 1,
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
