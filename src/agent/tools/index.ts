@@ -1,5 +1,10 @@
 import type { Tool } from "@openrouter/agent";
 import type { WorkspaceExecutionKind } from "../../types/lessonTypes";
+import {
+  areWorkspaceBoundariesEqual,
+  getWorkspaceBoundary,
+  type WorkspaceBoundary,
+} from "../../stores/workspaceStore";
 import type { ToolContext } from "../types";
 import { makeReadTool } from "./read";
 import { makeWriteTool } from "./write";
@@ -43,6 +48,10 @@ export function codingToolNamesFor(executionKind: WorkspaceExecutionKind): strin
 /** What a tool reports to the model instead of acting, once the run was stopped. */
 export const ABORTED_TOOL_OUTPUT = "The run was stopped before this tool ran; nothing was changed.";
 
+/** What a tool reports instead of acting on a workspace that replaced the run's. */
+export const WORKSPACE_REPLACED_TOOL_OUTPUT =
+  "The workspace this run started on was replaced by another project; nothing was changed.";
+
 /**
  * Refuse every tool call once the run is aborted.
  *
@@ -53,8 +62,14 @@ export const ABORTED_TOOL_OUTPUT = "The run was stopped before this tool ran; no
  * from writing files the transcript never records. Applied to every tool rather
  * than just the mutating ones so a tool added later inherits it, and so a stopped
  * run stops spending on side effects at all.
+ *
+ * Also refuse a call on a workspace other than `runWorkspace`, the one the run
+ * started on. The store is shared and mutable: a lesson, recording or import
+ * loaded during the run replaces its project in place, and a write steered by the
+ * old project's files would land in the new one. The session aborts the run when
+ * that happens; this check holds even for a tool set used without the session.
  */
-function guardToolOnAbort(ctx: ToolContext, tool: Tool): Tool {
+function guardToolOnAbort(ctx: ToolContext, runWorkspace: WorkspaceBoundary, tool: Tool): Tool {
   // `tool()` returns a fresh plain `{ type, function }` object per call (tools are
   // built per run, never shared), so wrapping in place cannot leak across runs.
   const fn = (tool as { function?: { execute?: (...args: never[]) => unknown } }).function;
@@ -62,19 +77,33 @@ function guardToolOnAbort(ctx: ToolContext, tool: Tool): Tool {
   if (!fn || typeof execute !== "function") {
     return tool;
   }
-  fn.execute = (...args: never[]) =>
-    ctx.signal.aborted ? ABORTED_TOOL_OUTPUT : execute.apply(fn, args);
+  fn.execute = (...args: never[]) => {
+    if (ctx.signal.aborted) {
+      return ABORTED_TOOL_OUTPUT;
+    }
+    if (
+      !areWorkspaceBoundariesEqual(
+        runWorkspace,
+        getWorkspaceBoundary(ctx.workspace.getSnapshot().context),
+      )
+    ) {
+      return WORKSPACE_REPLACED_TOOL_OUTPUT;
+    }
+    return execute.apply(fn, args);
+  };
   return tool;
 }
 
 /**
- * Builds the coding tool set for a run. Each tool's `execute` closes over
- * `ctx` (workspace store, abort signal, confirmation gate), so tools are created
- * per run rather than shared as singletons — that's what lets the `bash` tool
- * await the user's confirmation inline inside its own `execute`.
+ * Builds the coding tool set for a run, bound to the workspace the store holds
+ * now. Each tool's `execute` closes over `ctx` (workspace store, abort signal,
+ * confirmation gate), so tools are created per run rather than shared as
+ * singletons — that's what lets the `bash` tool await the user's confirmation
+ * inline inside its own `execute`.
  */
 export function createCodingTools(ctx: ToolContext, executionKind: WorkspaceExecutionKind): Tool[] {
+  const runWorkspace = getWorkspaceBoundary(ctx.workspace.getSnapshot().context);
   return codingToolDefinitionsFor(executionKind).map(([, createTool]) =>
-    guardToolOnAbort(ctx, createTool(ctx) as unknown as Tool),
+    guardToolOnAbort(ctx, runWorkspace, createTool(ctx) as unknown as Tool),
   );
 }

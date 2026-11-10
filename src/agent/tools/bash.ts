@@ -14,6 +14,11 @@ import {
   runSerializedWebContainerTask,
 } from "../../runtime/webcontainer/sharedContainer";
 import { getProject } from "./workspaceFs";
+import {
+  areWorkspaceBoundariesEqual,
+  getWorkspaceBoundary,
+  type WorkspaceBoundary,
+} from "../../stores/workspaceStore";
 import type { WorkspaceFile, WorkspaceProject } from "../../types/workspace";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -116,6 +121,7 @@ async function foldContainerChangesIntoStore(
   ctx: ToolContext,
   instance: WebContainer,
   commandBaseProject: WorkspaceProject,
+  commandWorkspace: WorkspaceBoundary,
 ): Promise<void> {
   const projectAtReadStart = getProject(ctx.workspace);
 
@@ -126,8 +132,15 @@ async function foldContainerChangesIntoStore(
   const containerProject = await readWorkspaceProject(instance, projectAtReadStart);
   const currentProject = getProject(ctx.workspace);
 
-  if (!currentProject || currentProject.id !== commandBaseProject.id) {
-    // The user replaced the whole workspace while the command was running.
+  if (
+    !currentProject ||
+    !areWorkspaceBoundariesEqual(
+      commandWorkspace,
+      getWorkspaceBoundary(ctx.workspace.getSnapshot().context),
+    )
+  ) {
+    // The user replaced the whole workspace while the command was running: a
+    // project with another id, or a load (a next lesson keeps the starter's id).
     // Its pending forward mount is authoritative; never leak old-project files
     // into the replacement.
     syncedProject = containerProject;
@@ -253,6 +266,7 @@ async function runCommand(
     }
 
     const project = getProject(ctx.workspace);
+    const commandWorkspace = getWorkspaceBoundary(ctx.workspace.getSnapshot().context);
 
     if (!project) {
       return "No workspace loaded.";
@@ -338,7 +352,7 @@ async function runCommand(
           void reader.cancel().catch(() => {});
         }
 
-        await foldContainerChangesIntoStore(ctx, instance, project);
+        await foldContainerChangesIntoStore(ctx, instance, project, commandWorkspace);
 
         if (aborted) {
           return "Command aborted.";

@@ -231,6 +231,39 @@ describe("bash tool", () => {
     expect(getProject(store)?.files["generated.txt"].content).toBe("shell output");
   });
 
+  // A next lesson made from the same starter loads in place under the same id.
+  // The command ran on the old one's files, so none of its changes belong here.
+  it("folds nothing into a workspace loaded under the same id while it ran", async () => {
+    support.isWebContainerRuntimeSupported.mockReturnValue(true);
+    const store = makeStore([makeFile("index.html", "lesson A")]);
+    const deferredExit: { resolve: ((exitCode: number) => void) | null } = { resolve: null };
+    const process = createFakeProcess(["done"], 0);
+    Object.defineProperty(process, "exit", {
+      value: new Promise<number>((resolve) => {
+        deferredExit.resolve = resolve;
+      }),
+    });
+    const instance = makeFakeInstance(process);
+    support.getOrBootSharedWebContainer.mockResolvedValue(instance);
+    support.readWorkspaceProject.mockResolvedValue(
+      makeProject([makeFile("index.html", "lesson A"), makeFile("planted.cjs", "from lesson A")]),
+    );
+
+    const command = run(makeCtx(store))({ command: "touch planted.cjs" });
+    await vi.waitFor(() => expect(instance.spawn).toHaveBeenCalledTimes(1));
+    const lessonB = makeProject([makeFile("index.html", "lesson B")]);
+    store.trigger.loadProject({
+      project: lessonB,
+      activeFilePath: "index.html",
+      savedSnapshot: { activeFilePath: "index.html", project: lessonB },
+    });
+    deferredExit.resolve?.(0);
+    await command;
+
+    expect(getProject(store)?.files["planted.cjs"]).toBeUndefined();
+    expect(getProject(store)?.files["index.html"]?.content).toBe("lesson B");
+  });
+
   it("preserves an editor edit made during the final runtime scan", async () => {
     support.isWebContainerRuntimeSupported.mockReturnValue(true);
     const store = makeStore([makeFile("index.html", "before")]);

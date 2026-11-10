@@ -2,7 +2,11 @@ import { createStore } from "@xstate/store-react";
 import { getAgentStore, type AgentWorkspaceScope } from "./agentStore";
 import { createChatRecorder, type ChatEventHandler } from "./chatRecording";
 import type { AgentModelId, AgentObservers, ToolConfirmationRequest } from "./types";
-import { selectWorkspaceLoadVersion, type WorkspaceStoreInstance } from "../stores/workspaceStore";
+import {
+  areWorkspaceBoundariesEqual,
+  getWorkspaceBoundary,
+  type WorkspaceStoreInstance,
+} from "../stores/workspaceStore";
 import type { ChatImage } from "../types/chat";
 import { formatAgentError } from "./agentError";
 
@@ -108,17 +112,35 @@ function settlePendingConfirmations(approved: boolean): void {
 }
 
 function getWorkspaceScope(workspace: WorkspaceStoreInstance): AgentWorkspaceScope {
-  return {
-    workspace,
-    loadVersion: selectWorkspaceLoadVersion(workspace.getSnapshot().context),
-  };
+  return { workspace, ...getWorkspaceBoundary(workspace.getSnapshot().context) };
 }
 
 function areWorkspaceScopesEqual(
   left: AgentWorkspaceScope | null,
   right: AgentWorkspaceScope,
 ): boolean {
-  return left?.workspace === right.workspace && left.loadVersion === right.loadVersion;
+  return left?.workspace === right.workspace && areWorkspaceBoundariesEqual(left, right);
+}
+
+/**
+ * Stops the run `controller` drives as soon as the workspace leaves `scope`: a
+ * load, or a project swapped in under another id. The run's prompt, AGENTS.md and
+ * history came from the workspace it started on, so its next tool calls must not
+ * act on the one that replaced it. Watched here rather than by the agent panel,
+ * which is not mounted while another dock tab is open. Returns the unsubscribe.
+ */
+function stopRunWhenWorkspaceLeaves(
+  scope: AgentWorkspaceScope,
+  controller: AbortController,
+): () => void {
+  const stopIfReplaced = () => {
+    if (!areWorkspaceScopesEqual(scope, getWorkspaceScope(scope.workspace))) {
+      controller.abort();
+    }
+  };
+  const subscription = scope.workspace.subscribe(stopIfReplaced);
+  stopIfReplaced();
+  return () => subscription.unsubscribe();
 }
 
 function isCurrentWorkspaceScope(scope: AgentWorkspaceScope): boolean {
@@ -128,7 +150,9 @@ function isCurrentWorkspaceScope(scope: AgentWorkspaceScope): boolean {
 /**
  * Bind the singleton conversation to one concrete workspace load. A replacement
  * aborts the old run, clears its transcript/retry, and prevents late deltas from
- * leaking into the newly loaded workspace.
+ * leaking into the newly loaded workspace. A run also stops by itself the moment
+ * its workspace is replaced (stopRunWhenWorkspaceLeaves); this is what clears
+ * the transcript, from the panel or the next Send or Retry.
  */
 export function synchronizeAgentWorkspace(workspace: WorkspaceStoreInstance): boolean {
   const agentStore = getAgentStore();
@@ -219,6 +243,7 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
 
   const controller = new AbortController();
   abortController = controller;
+  const stopWatchingWorkspace = stopRunWhenWorkspaceLeaves(workspaceScope, controller);
   agentSessionStore.trigger.setRunning({ isRunning: true });
 
   const history = agentStore.getSnapshot().context.items;
@@ -272,6 +297,7 @@ async function runAgentRun(options: StartAgentRunOptions): Promise<void> {
     };
     agentSessionStore.trigger.setCanRetry({ canRetry: true });
   } finally {
+    stopWatchingWorkspace();
     if (abortController === controller) {
       abortController = null;
     }

@@ -23,7 +23,10 @@ vi.mock("../../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({ handleChatEvent: () => {} }),
   useNextEditorMetadata: (select?: MetadataSelector) => selectMetadata(metadata, select),
 }));
-vi.mock("../../hooks/useWorkspace", () => ({ useWorkspaceLoadVersion: () => 0 }));
+vi.mock("../../hooks/useWorkspace", () => ({
+  useWorkspaceLoadVersion: () => 0,
+  useWorkspaceProjectId: () => "test",
+}));
 vi.mock("../../contexts/PreviewAdapterHandleContext", () => ({
   usePreviewAdapterHandle: () => ({
     livePreviewInspectionGetter: { current: null },

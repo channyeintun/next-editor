@@ -32,7 +32,7 @@ import {
   MAX_CHAT_IMAGES,
 } from "../../agent/imageAttachments";
 import { useNextEditorActions, useNextEditorMetadata } from "../../hooks/useNextEditorContext";
-import { useWorkspaceLoadVersion } from "../../hooks/useWorkspace";
+import { useWorkspaceLoadVersion, useWorkspaceProjectId } from "../../hooks/useWorkspace";
 import { isImeComposingKey } from "../../utils/keyboardPlatform";
 import { createChatCheckpoint } from "../../agent/chatRecording";
 import { dockContentSizeClassName } from "../terminalPanel/runtimeDockHelpers";
@@ -76,7 +76,10 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     isPlaying: m.isPlaying,
     isRecording: m.isRecording,
   }));
+  // With the load version, the workspace boundary the conversation is bound to: a
+  // zip import or starter swap changes the project id without a load.
   const workspaceLoadVersion = useWorkspaceLoadVersion();
+  const workspaceProjectId = useWorkspaceProjectId();
 
   const liveItems = useSelector(agentStore, (s) => selectItems(s.context));
   const liveStatus = useSelector(agentStore, (s) => selectStatus(s.context));
@@ -121,7 +124,7 @@ function AgentPanel({ isFullHeight = false }: { isFullHeight?: boolean }) {
     if (synchronizeAgentWorkspace(workspaceStore)) {
       handleChatEvent({ k: "reset" });
     }
-  }, [handleChatEvent, isReplayActive, workspaceLoadVersion, workspaceStore]);
+  }, [handleChatEvent, isReplayActive, workspaceLoadVersion, workspaceProjectId, workspaceStore]);
 
   // Seed recording with the complete conversation that is already visible.
   // Subsequent changes are captured as deltas.
