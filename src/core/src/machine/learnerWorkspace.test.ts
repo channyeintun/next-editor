@@ -258,6 +258,47 @@ describe("editorMachine learner workspace", () => {
     actor.stop();
   });
 
+  // The timeline sends no TICK once it is paused or stopped. If one arrived all the same,
+  // the replay cursors are reset here, so applying it would replay every preview event
+  // from the start and write the recorded frame over the viewer's edits.
+  it.each([
+    { state: "paused", handOver: { type: "PAUSE" } },
+    { state: "ended", handOver: { type: "FINISHED" } },
+  ] as const)("ignores a stray tick while $state", async ({ state, handOver }) => {
+    const previewStates: unknown[] = [];
+    const actor = createActor(editorMachine, {
+      input: {
+        editorRef: { current: null },
+        applyPreviewState: (previewState) => {
+          previewStates.push(previewState);
+        },
+      },
+    }).start();
+    actor.send({
+      type: "LOAD_RECORDING",
+      recording: {
+        ...createRecording(),
+        previewEvents: [
+          { type: "preview_open", timestamp: 0, size: "small", content: "<p>page</p>" },
+          { type: "preview_refresh", timestamp: 100, size: "small", content: "<p>page</p>" },
+        ],
+      },
+    });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    actor.send({ type: "TICK", currentTime: 600 });
+    actor.send(handOver);
+    const playhead = actor.getSnapshot().context.timeline.currentTime;
+    previewStates.length = 0;
+
+    actor.send({ type: "TICK", currentTime: 700 });
+
+    expect(actor.getSnapshot().matches({ playback: state })).toBe(true);
+    expect(actor.getSnapshot().context.timeline.currentTime).toBe(playhead);
+    expect(previewStates).toEqual([]);
+    actor.stop();
+  });
+
   it("restores from playback by pausing first", async () => {
     const { actor, content } = await setup();
     actor.send({ type: "PLAY" });

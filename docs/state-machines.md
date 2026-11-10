@@ -243,7 +243,7 @@ recorder the finalize watchdog overtook, as `playback`'s `UNLOAD` and `LOAD_RECO
 
 Playback is a compound state with `ready`, `playing`, `paused`, and `ended` substates. It invokes the `timeline` child actor (`timelineActor`) for the whole compound state's lifetime.
 
-The parent `playback` state also handles `APPEND_RECORDING_DELTA`, `EXTEND_RECORDING`, `TICK`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `WORKSPACE_EVENT`, `STOP`, `UNLOAD`, `PRESERVE_LEARNER_WORKSPACE`, `RESTORE_LEARNER_WORKSPACE`, and `LOAD_RECORDING` (re-entering `loading` for an unrelated file import while a recording is open) — which is what makes copy-bounded progressive streaming and mid-session recording swaps possible. `playing`, `paused` and `ended` override some of these (`WORKSPACE_EVENT` pauses `playing`; `paused` has its own `TICK`; `paused` and `ended` have their own `SEEK`).
+The parent `playback` state also handles `APPEND_RECORDING_DELTA`, `EXTEND_RECORDING`, `TICK`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `WORKSPACE_EVENT`, `STOP`, `UNLOAD`, `PRESERVE_LEARNER_WORKSPACE`, `RESTORE_LEARNER_WORKSPACE`, and `LOAD_RECORDING` (re-entering `loading` for an unrelated file import while a recording is open) — which is what makes copy-bounded progressive streaming and mid-session recording swaps possible. `playing`, `paused` and `ended` override some of these (`WORKSPACE_EVENT` pauses `playing`; `paused` and `ended` take a stray `TICK` and do nothing with it, since the viewer owns the workspace there; `paused` and `ended` have their own `SEEK`).
 
 ## Playback Substates
 

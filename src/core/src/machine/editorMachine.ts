@@ -948,11 +948,12 @@ export const editorMachine = setup({
         paused: {
           entry: [...SYNC_PAUSED_WORKSPACE_ACTIONS],
           on: {
-            // The timeline is paused, so no TICK is expected here. Handling one keeps a
-            // stray tick from bubbling up to playback.TICK, which would move the playhead.
-            TICK: {
-              actions: ["applyReplayStateAtTime"],
-            },
+            // The timeline is paused, so no TICK is expected here. Taking one and doing
+            // nothing keeps a stray tick from bubbling up to playback.TICK. The viewer owns
+            // the workspace and the replay cursors are reset (detachPlaybackWorkspace), so
+            // applying it would write the recorded frame over their edits and replay every
+            // preview and slide event from the start.
+            TICK: {},
             SEEK: {
               actions: [...SEEK_WHILE_HANDED_OVER_ACTIONS],
             },
@@ -974,6 +975,8 @@ export const editorMachine = setup({
         ended: {
           entry: [...SYNC_PAUSED_WORKSPACE_ACTIONS],
           on: {
+            // As in `paused`: the timeline has stopped and the viewer owns the workspace.
+            TICK: {},
             SEEK: {
               actions: [...SEEK_WHILE_HANDED_OVER_ACTIONS],
             },
