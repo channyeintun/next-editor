@@ -23,9 +23,34 @@ export function isWorkspacePathControlCharacter(character: string): boolean {
   return codePoint <= 0x1f || codePoint === 0x7f;
 }
 
+// By code unit, allocating nothing: every control character is a single unit, and
+// the ancestor walks parse the same path once per level.
 function containsWorkspacePathControlCharacter(value: string): boolean {
-  return Array.from(value).some(isWorkspacePathControlCharacter);
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    if (codeUnit <= 0x1f || codeUnit === 0x7f) return true;
+  }
+  return false;
 }
+
+/**
+ * Upper bounds on one workspace path, enforced by {@link parseWorkspacePath} so
+ * that every producer of paths is held to them: a zip import, a recording's
+ * workspace snapshots, a restored project, a runtime file event.
+ *
+ * A path costs only its own length wherever it comes from, so `a/a/…/a/f` at
+ * depth 16,000 fits in a few hundred deflated bytes of a zip or a `.ne` file.
+ * Everything that walks a path's ancestors (the folder list, the
+ * file-versus-directory checks) then does work quadratic in its depth, and keeps
+ * every ancestor prefix: one such path froze the tab for seconds, and a deeper
+ * one exhausted its memory. No real project comes anywhere near either bound
+ * (Windows' own MAX_PATH is 260).
+ */
+export const MAX_WORKSPACE_PATH_CHARS = 4096;
+export const MAX_WORKSPACE_PATH_DEPTH = 64;
+
+/** How much of an over-long path an error keeps, so the error is not over-long too. */
+const QUOTED_PATH_CHARS = 80;
 
 export class WorkspacePathError extends Error {
   readonly input: string;
@@ -34,6 +59,14 @@ export class WorkspacePathError extends Error {
     super(message);
     this.name = "WorkspacePathError";
     this.input = input;
+  }
+}
+
+/** A path longer or deeper than any workspace path may be. */
+export class WorkspacePathLimitError extends WorkspacePathError {
+  constructor(message: string, input: string) {
+    super(message, input.slice(0, QUOTED_PATH_CHARS));
+    this.name = "WorkspacePathLimitError";
   }
 }
 
@@ -46,7 +79,8 @@ interface ParseWorkspacePathOptions {
  *
  * Leading separators are treated as workspace-root-relative for backwards compatibility.
  * Dot segments are resolved, while traversal above the workspace root, control characters,
- * and names that are unsafe as JavaScript record keys are rejected.
+ * names that are unsafe as JavaScript record keys, and paths past the length and depth
+ * bounds are rejected.
  */
 export function parseWorkspacePath(
   path: string,
@@ -57,6 +91,13 @@ export function parseWorkspacePath(
   }
 
   const input = path;
+  // Checked on the raw path, before any work proportional to its length.
+  if (input.length > MAX_WORKSPACE_PATH_CHARS) {
+    throw new WorkspacePathLimitError(
+      `Workspace path is longer than ${MAX_WORKSPACE_PATH_CHARS} characters`,
+      input,
+    );
+  }
   const normalizedSeparators = input.trim().replace(/\\/g, "/").replace(/^\/+/, "");
 
   // Repeated separators inside a path are canonicalized, but a trailing
@@ -90,6 +131,12 @@ export function parseWorkspacePath(
     }
 
     segments.push(segment);
+    if (segments.length > MAX_WORKSPACE_PATH_DEPTH) {
+      throw new WorkspacePathLimitError(
+        `Workspace path is nested deeper than ${MAX_WORKSPACE_PATH_DEPTH} levels`,
+        input,
+      );
+    }
   }
 
   const normalizedPath = segments.join("/");
@@ -126,11 +173,13 @@ export function getWorkspaceBaseName(path: string): string {
   return segments[segments.length - 1] || normalizedPath;
 }
 
+/** The text before a canonical path's last separator: its parent, or "" at the root. */
+function parentOfCanonicalPath(canonicalPath: string): string {
+  return canonicalPath.slice(0, Math.max(0, canonicalPath.lastIndexOf("/")));
+}
+
 export function getParentWorkspacePath(path: string): string {
-  const normalizedPath = normalizeWorkspacePath(path);
-  const segments = normalizedPath.split("/");
-  segments.pop();
-  return segments.join("/");
+  return parentOfCanonicalPath(normalizeWorkspacePath(path));
 }
 
 export function joinWorkspacePath(parentPath: string, name: string): string {
@@ -157,9 +206,11 @@ export function collectWorkspaceFolders(
   const addFolderPath = (folderPath: string) => {
     let currentPath = normalizeWorkspaceFolderPath(folderPath);
 
-    while (currentPath) {
+    // The path is canonical from here on, so its parent is the text before its last
+    // separator, and a folder already collected brought every ancestor with it.
+    while (currentPath && !folders.has(currentPath)) {
       folders.add(currentPath);
-      currentPath = getParentWorkspacePath(currentPath);
+      currentPath = parentOfCanonicalPath(currentPath);
     }
   };
 
