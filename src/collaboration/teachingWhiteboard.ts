@@ -5,6 +5,7 @@ import {
   type WhiteboardElementJSON,
   type WhiteboardEvent,
 } from "../core/src/whiteboard";
+import type { WhiteboardElementType } from "../core/src/whiteboardElementTypes";
 import { MAX_COLLABORATION_WHITEBOARD_COORDINATE } from "./protocol";
 import {
   COLLABORATION_ORIGIN,
@@ -99,11 +100,14 @@ const collaborationWhiteboardElementBaseSchema = z
     locked: z.boolean(),
   })
   .passthrough();
-const collaborationWhiteboardElementSchema = z.discriminatedUnion("type", [
-  collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("rectangle") }),
-  collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("diamond") }),
-  collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("ellipse") }),
-  collaborationWhiteboardElementBaseSchema.extend({
+// One schema per type the whiteboard holds. The keys must be exactly the shared
+// WHITEBOARD_ELEMENT_TYPES, so the room accepts the same element types the
+// canvas renders (no image, iframe, embeddable or magic frame).
+const collaborationWhiteboardElementSchemas = {
+  rectangle: collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("rectangle") }),
+  diamond: collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("diamond") }),
+  ellipse: collaborationWhiteboardElementBaseSchema.extend({ type: z.literal("ellipse") }),
+  text: collaborationWhiteboardElementBaseSchema.extend({
     type: z.literal("text"),
     fontSize: z.number().finite().positive().max(10_000),
     fontFamily: z.number().int().positive().max(100),
@@ -115,7 +119,7 @@ const collaborationWhiteboardElementSchema = z.discriminatedUnion("type", [
     autoResize: z.boolean(),
     lineHeight: z.number().finite().positive().max(100),
   }),
-  collaborationWhiteboardElementBaseSchema.extend({
+  line: collaborationWhiteboardElementBaseSchema.extend({
     type: z.literal("line"),
     points: z.array(whiteboardPointSchema).max(20_000),
     lastCommittedPoint: whiteboardPointSchema.nullable(),
@@ -124,7 +128,7 @@ const collaborationWhiteboardElementSchema = z.discriminatedUnion("type", [
     startArrowhead: whiteboardArrowheadSchema,
     endArrowhead: whiteboardArrowheadSchema,
   }),
-  collaborationWhiteboardElementBaseSchema.extend({
+  arrow: collaborationWhiteboardElementBaseSchema.extend({
     type: z.literal("arrow"),
     points: z.array(whiteboardPointSchema).max(20_000),
     lastCommittedPoint: whiteboardPointSchema.nullable(),
@@ -134,18 +138,27 @@ const collaborationWhiteboardElementSchema = z.discriminatedUnion("type", [
     endArrowhead: whiteboardArrowheadSchema,
     elbowed: z.boolean(),
   }),
-  collaborationWhiteboardElementBaseSchema.extend({
+  freedraw: collaborationWhiteboardElementBaseSchema.extend({
     type: z.literal("freedraw"),
     points: z.array(whiteboardPointSchema).max(20_000),
     pressures: z.array(z.number().finite().min(0).max(1)).max(20_000),
     simulatePressure: z.boolean(),
     lastCommittedPoint: whiteboardPointSchema.nullable(),
   }),
-  collaborationWhiteboardElementBaseSchema.extend({
+  frame: collaborationWhiteboardElementBaseSchema.extend({
     type: z.literal("frame"),
     name: z.string().max(512).nullable(),
   }),
-]);
+} satisfies { [Type in WhiteboardElementType]: z.ZodType<{ type: Type }> };
+type CollaborationWhiteboardElementSchema =
+  (typeof collaborationWhiteboardElementSchemas)[WhiteboardElementType];
+const collaborationWhiteboardElementSchema = z.discriminatedUnion(
+  "type",
+  Object.values(collaborationWhiteboardElementSchemas) as [
+    CollaborationWhiteboardElementSchema,
+    ...CollaborationWhiteboardElementSchema[],
+  ],
+);
 
 const textEncoder = new TextEncoder();
 

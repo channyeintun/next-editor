@@ -210,6 +210,47 @@ describe("WhiteboardPanel scene projection", () => {
     expect(getSceneElementsIncludingDeleted).not.toHaveBeenCalled();
     expect(whiteboardState.markCanvasSynced).not.toHaveBeenCalled();
   });
+
+  it("never hands Excalidraw an iframe, embeddable, image or magic frame from a scene", async () => {
+    // A lesson's whiteboard track can carry any element object. Excalidraw renders an
+    // iframe element's customData HTML in a frame that runs scripts.
+    const frameLike = ["iframe", "embeddable", "image", "magicframe"].map((type) => ({
+      ...element(`unsafe-${type}`, []),
+      type,
+      customData: { generationData: { status: "done", html: "<script>dummy()</script>" } },
+    }));
+    const stroke = element("stroke", [[0, 0]]);
+    whiteboardState = makeWhiteboardState("external", [
+      frameLike[0],
+      stroke,
+      ...frameLike.slice(1),
+    ]);
+    usesPlaybackModel = true;
+    isInPlaybackSession = true;
+
+    const view = render(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(1));
+
+    const initialIds = (
+      excalidrawInitialData as { elements: WhiteboardElementJSON[] }
+    ).elements.map((given) => given.id);
+    expect(initialIds).toEqual(["stroke"]);
+    const sceneIds = (
+      updateScene.mock.calls[0][0] as { elements: WhiteboardElementJSON[] }
+    ).elements.map((given) => given.id);
+    expect(sceneIds).toEqual(["stroke"]);
+
+    // A room or restored scene takes the same path once the lesson is not playing.
+    usesPlaybackModel = false;
+    isInPlaybackSession = false;
+    whiteboardState = makeWhiteboardState("external", [...frameLike, stroke]);
+    view.rerender(<WhiteboardPanel />);
+    await waitFor(() => expect(updateScene).toHaveBeenCalledTimes(2));
+    const editIds = (
+      updateScene.mock.calls[1][0] as { elements: WhiteboardElementJSON[] }
+    ).elements.map((given) => given.id);
+    expect(editIds).toEqual(["stroke"]);
+  });
 });
 
 describe("WhiteboardPanel playback viewport", () => {

@@ -8,6 +8,7 @@ import "@excalidraw/excalidraw/index.css";
 import { useWhiteboardContext } from "../contexts/WhiteboardContext";
 import { useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import type { WhiteboardElementJSON, WhiteboardView } from "../core/src/whiteboard";
+import { isAllowedWhiteboardElement } from "../core/src/whiteboardElementTypes";
 import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { planWhiteboardCanvasView } from "../stores/whiteboardStore";
@@ -25,10 +26,14 @@ const UI_OPTIONS = { tools: { image: false } };
 // and the replay fold cache, so hand Excalidraw per-element copies to keep the
 // recorded data pristine. Text is sized to its glyphs on this machine on the way
 // in (see whiteboardTextFit), so a stored width that is too narrow never clips it.
+// Every scene reaches the canvas through here (a replayed lesson, a room, a
+// restored store), so this is where element types the whiteboard does not hold
+// are dropped: Excalidraw would render an iframe element's HTML as a frame that
+// runs scripts (see whiteboardElementTypes).
 function toExcalidrawElements(
   elements: readonly WhiteboardElementJSON[],
 ): OrderedExcalidrawElement[] {
-  return elements.map((element) => {
+  return elements.filter(isAllowedWhiteboardElement).map((element) => {
     const fitted = fitTextElement(element);
     return fitted === element ? { ...element } : fitted;
   }) as unknown as OrderedExcalidrawElement[];
