@@ -1,0 +1,955 @@
+# Go course, lesson 15: the standard toolkit and Myanmar digits (Burmese).
+#
+# Start state: main.go with `package main`, an import block holding only "fmt" (strings, strconv,
+# unicode and slices arrive as single inserted lines in sorted position) and an empty `func main`.
+# Edits, all insert-only:
+#   1. strings.Fields on a Burmese weather sentence (+ "strings"), the canonical toMyanmarDigits
+#      (+ "strconv") and a call with 1500 -> run-1: 3 ရန်ကုန်မှာ / ၁၅၀၀;
+#   2. the canonical unguarded fromMyanmarDigits, a call on "၁၅၀၀" and on "၁၅ဝဝ" (the letter ဝ),
+#      and unicode.IsDigit on the digit and the letter (+ "unicode") -> run-2 adds 1500 1115 /
+#      true false;
+#   3. the guard (return -1) and its doc-comment words, then a slice of phone bills sorted and maxed
+#      (+ "slices") -> run-3: 1500 -1 and [8500 9800 12000 15000] 15000 (5 lines).
+# Boards: (T) the standard library's packages and the tools this lesson uses or names; (D) two rows
+# of ten digits, the same distance from each zero, r - '0' + '၀'; (W) the letter ဝ vs the digit ၀
+# (-35, how 1115 comes out, no error at all); (Q) the quiz (English digits into the guarded reader).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-15-toolkit
+  title: "Go course 15: Standard library ထဲက ကိရိယာတွေ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board T: the standard library.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "Standard library",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-sub,
+        kind: text,
+        x: 300,
+        y: 225,
+        width: 700,
+        height: 40,
+        text: "Go နဲ့ အတူ ပါလာတဲ့ package တွေ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-box,
+        kind: rectangle,
+        x: 285,
+        y: 280,
+        width: 800,
+        height: 235,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-strings,
+        kind: text,
+        x: 305,
+        y: 295,
+        width: 740,
+        height: 40,
+        text: "strings · Fields  Contains  Split  Join",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-strconv,
+        kind: text,
+        x: 305,
+        y: 350,
+        width: 740,
+        height: 40,
+        text: "strconv · Itoa",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-unicode,
+        kind: text,
+        x: 305,
+        y: 405,
+        width: 740,
+        height: 40,
+        text: "unicode · IsDigit",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-slices,
+        kind: text,
+        x: 305,
+        y: 460,
+        width: 740,
+        height: 40,
+        text: "slices · Sort  Max  Index  Contains",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-rule,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 760,
+        height: 40,
+        text: "loop မရေးခင် ကိရိယာ ရှိမရှိ အရင် ရှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-rule-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 600,
+        width: 560,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    # Board D: two rows of ten digits.
+    - {
+        id: d-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "ဂဏန်း နှစ်စု",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-row1-box,
+        kind: rectangle,
+        x: 285,
+        y: 245,
+        width: 620,
+        height: 65,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-row1,
+        kind: text,
+        x: 305,
+        y: 258,
+        width: 560,
+        height: 40,
+        text: "0 1 2 3 4 5 6 7 8 9",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-row1-cp,
+        kind: text,
+        x: 930,
+        y: 258,
+        width: 150,
+        height: 40,
+        text: "U+0030",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-row2-box,
+        kind: rectangle,
+        x: 285,
+        y: 365,
+        width: 620,
+        height: 65,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-row2,
+        kind: text,
+        x: 305,
+        y: 378,
+        width: 560,
+        height: 40,
+        text: "၀ ၁ ၂ ၃ ၄ ၅ ၆ ၇ ၈ ၉",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-row2-cp,
+        kind: text,
+        x: 930,
+        y: 378,
+        width: 150,
+        height: 40,
+        text: "U+1040",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-same,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 780,
+        height: 40,
+        text: "သုညကနေ အကွာအဝေး တူ · 7 ↔ ၇",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-rule-box,
+        kind: rectangle,
+        x: 285,
+        y: 530,
+        width: 520,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-rule,
+        kind: text,
+        x: 305,
+        y: 545,
+        width: 460,
+        height: 40,
+        text: "r - '0' + '၀'",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board W: the letter ဝ is not the digit ၀.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 500,
+        height: 50,
+        text: "ဝ နဲ့ ၀ မတူ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-letter-box,
+        kind: rectangle,
+        x: 285,
+        y: 245,
+        width: 380,
+        height: 120,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-letter,
+        kind: text,
+        x: 305,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "ဝ · ဗျည်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-letter-cp,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 200,
+        height: 40,
+        text: "U+101D",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-digit-box,
+        kind: rectangle,
+        x: 705,
+        y: 245,
+        width: 380,
+        height: 120,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-digit,
+        kind: text,
+        x: 725,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: "၀ · ဂဏန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-digit-cp,
+        kind: text,
+        x: 725,
+        y: 310,
+        width: 200,
+        height: 40,
+        text: "U+1040",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-diff,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 500,
+        height: 40,
+        text: "'ဝ' - '၀' = -35",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-steps,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 780,
+        height: 40,
+        text: "1 → 15 → 115 → 1115",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-note-box,
+        kind: rectangle,
+        x: 285,
+        y: 530,
+        width: 800,
+        height: 70,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-note,
+        kind: text,
+        x: 305,
+        y: 545,
+        width: 740,
+        height: 40,
+        text: "compile error မရှိ · panic မရှိ · ဂဏန်း မှား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (English digits into the guarded reader).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 560,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 265,
+        width: 500,
+        height: 40,
+        text: 'fromMyanmarDigits("1500")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 380,
+        width: 220,
+        height: 40,
+        text: "က · 1500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 220,
+        height: 40,
+        text: "ခ · -1",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 480,
+        y: 430,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7115
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "3 ရန်ကုန်မှာ\n၁၅၀၀\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "3 ရန်ကုန်မှာ\n၁၅၀၀\n1500 1115\ntrue false\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "3 ရန်ကုန်မှာ\n၁၅၀၀\n1500 -1\ntrue false\n[8500 9800 12000 15000] 15000\n"
+
+scenes:
+  - id: recall
+    chapter: Standard library
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ မြန်မာ စာသား တစ်ခုထဲမှာ byte တွေ၊ rune တွေ ဘယ်လို ရှိလဲ ဆိုတာ ကြည့်ခဲ့ပါတယ်။
+      ဒီနေ့မှာတော့ အဲဒီ အသိကို သုံးပြီး မြန်မာ စာသားနဲ့ မြန်မာ ဂဏန်းတွေကို တကယ် ကိုင်တွယ်ကြည့်ပါမယ်။
+      [[mark:board-tools]] အလုပ်တိုင်းအတွက် loop ကို ကိုယ်တိုင် အမြဲ ရေးနေစရာ မလိုပါဘူး။ Go မှာ standard
+      library လို့ ခေါ်တဲ့၊ Go နဲ့ အတူ ပါလာတဲ့ package တွေ ရှိပါတယ်။ [[mark:draw-tools]] စာသားအတွက် strings
+      package၊ စာနဲ့ ဂဏန်း ပြောင်းဖို့ strconv package၊ စာလုံး တစ်လုံးချင်း စစ်ဖို့ unicode package၊ slice
+      တွေအတွက် slices package စတာတွေ ရှိပြီး၊ package တစ်ခုစီမှာ အသုံးများတဲ့ function တွေ ပါပါတယ်။
+      ဥပမာ slices package မှာ sort လုပ်တာ၊ အကြီးဆုံး ရှာတာ အပြင်၊ တန်ဖိုး တစ်ခု ဘယ်နေရာမှာ ရှိလဲ ရှာတာ၊
+      ပါမပါ စစ်တာ လို function တွေလည်း ရှိပါတယ်။ [[mark:draw-rule]] ဒါကြောင့် loop တစ်ခု မရေးခင်၊ ဒီ
+      အလုပ်အတွက် ကိရိယာ ရှိပြီးသားလား ဆိုတာ အရင် ရှာကြည့်တာက Go ရေးတဲ့ သူတွေရဲ့ အကျင့်ပါ။
+    sources:
+      - { title: "Go standard library", url: "https://pkg.go.dev/std" }
+      - { title: "slices package", url: "https://pkg.go.dev/slices" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-tools,
+          type: whiteboard.apply,
+          at: { mark: board-tools },
+          open: true,
+          clear: true,
+          upsertIds: [t-title, t-sub],
+        }
+      - {
+          id: draw-tools,
+          type: whiteboard.apply,
+          at: { mark: draw-tools },
+          upsertIds: [t-box, t-strings, t-strconv, t-unicode, t-slices],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [t-rule, t-rule-line],
+          drawMs: 1400,
+        }
+
+  - id: fields
+    chapter: စာကြောင်းကို ခွဲတာ
+    narration: >-
+      [[mark:close-tools]] ပထမဆုံး strings package နဲ့ စကြည့်ရအောင်။ မိုးလေဝသ သတင်း စာကြောင်း တစ်ကြောင်းကို
+      အပိုင်းတွေ ခွဲချင်တယ် ဆိုပါစို့။ [[mark:type-fields]] ဒီ line က မနက်ဖြန် ရန်ကုန်မှာ မိုးရွာမယ် ဆိုတဲ့
+      စာကြောင်းကို space နေရာတွေမှာ ခွဲပြီး၊ အပိုင်းတွေကို slice တစ်ခု အဖြစ် ပြန်ပေးပါတယ်။ အောက်က line
+      မှာတော့ အပိုင်း ဘယ်နှစ်ခု ရလဲ ဆိုတာနဲ့ ဒုတိယ အပိုင်းကို print ထုတ်ပါမယ်။ [[mark:type-strings]] strings
+      package ကို သုံးမှာ ဖြစ်လို့ import block ထဲ ထည့်ပေးရပါမယ်။ [[mark:phrases]] ဒီနေရာမှာ မြန်မာ စာအတွက်
+      သတိထားစရာ တစ်ခု ရှိပါတယ်။ English မှာ space က စကားလုံးတွေကို ခြားပေမဲ့၊ မြန်မာ စာမှာတော့ စကားလုံးတိုင်း
+      ကြားမှာ space မခြားဘဲ၊ စကားစု တစ်ခုနဲ့ တစ်ခုကြားမှာပဲ ခြားကြပါတယ်။ ဒါကြောင့် ဒီ function က မြန်မာ စာကို
+      စကားလုံး တစ်လုံးချင်း မခွဲပေးဘဲ၊ space ကြားက စကားစု တစ်ခုချင်း ခွဲပေးမှာပါ။
+    sources:
+      - { title: "strings package — Fields", url: "https://pkg.go.dev/strings#Fields" }
+      - {
+          title: "The Go Programming Language Specification — Import declarations",
+          url: "https://go.dev/ref/spec#Import_declarations",
+        }
+    actions:
+      - {
+          id: close-tools,
+          type: whiteboard.apply,
+          at: { mark: close-tools },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-fields
+        type: editor.type
+        at: { mark: type-fields }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tparts := strings.Fields(\"မနက်ဖြန် ရန်ကုန်မှာ မိုးရွာမယ်\")\n\tfmt.Println(len(parts), parts[1])\n"
+        cadence: line-by-line
+      - id: type-strings
+        type: editor.type
+        at: { mark: type-strings }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"strings\"\n"
+
+  - id: digits-board
+    chapter: မြန်မာ ဂဏန်း ပြောင်းတာ
+    narration: >-
+      [[mark:board-digits]] နောက်တစ်ခုက ဂဏန်းပါ။ ပြေစာ၊ ကြော်ငြာ လို နေရာတွေမှာ ငွေပမာဏကို မြန်မာ ဂဏန်းနဲ့
+      ပြချင်တာ များပါတယ်။ ဒါပေမဲ့ int ကို print ထုတ်ရင် English ဂဏန်းနဲ့ပဲ ထွက်ပါတယ်။ [[mark:draw-rows]]
+      Unicode မှာ English ဂဏန်း ဆယ်လုံးကို သုညကနေ ကိုးအထိ နံပါတ် ဘေးချင်းကပ် စီထားပြီး၊ မြန်မာ ဂဏန်း
+      ဆယ်လုံးကိုလည်း မြန်မာ သုညကနေ ကိုးအထိ ဘေးချင်းကပ် စီထားပါတယ်။ [[mark:draw-same]] ဒါကြောင့်
+      ဂဏန်း တစ်လုံးဟာ သူ့အစုရဲ့ သုည ကနေ ဘယ်လောက် ဝေးလဲ ဆိုတဲ့ အကွာအဝေးက အစု နှစ်ခုလုံးမှာ တူပါတယ်။
+      ဥပမာ English ခုနစ် က English သုည ကနေ ခုနစ်နေရာ ဝေးပြီး၊ မြန်မာ ခုနစ် ကလည်း မြန်မာ သုည ကနေ ခုနစ်နေရာ
+      ဝေးပါတယ်။ [[mark:draw-shift]] ဒါဆို English ဂဏန်း တစ်လုံးကနေ English သုည ကို နှုတ်လိုက်ရင် အကွာအဝေး ရပါတယ်။ အဲဒီ အကွာအဝေးကို မြန်မာ သုည နဲ့ ပေါင်းလိုက်ရင် မြန်မာ ဂဏန်း ရပါပြီ။ rune တွေက Unicode နံပါတ်တွေ
+      ဖြစ်လို့ ဒီလို ပေါင်းနှုတ် လုပ်လို့ ရတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Rune literals",
+          url: "https://go.dev/ref/spec#Rune_literals",
+        }
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - {
+          id: board-digits,
+          type: whiteboard.apply,
+          at: { mark: board-digits },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-rows,
+          type: whiteboard.apply,
+          at: { mark: draw-rows },
+          upsertIds: [d-row1-box, d-row1, d-row1-cp, d-row2-box, d-row2, d-row2-cp],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-same,
+          type: whiteboard.apply,
+          at: { mark: draw-same },
+          upsertIds: [d-same],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-shift,
+          type: whiteboard.apply,
+          at: { mark: draw-shift },
+          upsertIds: [d-rule-box, d-rule],
+          drawMs: 1200,
+        }
+
+  - id: to-digits
+    narration: >-
+      [[mark:close-digits]] အဲဒီ နည်းအတိုင်း function တစ်ခု ရေးကြည့်ရအောင်။ [[mark:type-to]] main ရဲ့ အပေါ်မှာ
+      ကိန်းပြည့် တစ်ခုကို ယူပြီး၊ မြန်မာ ဂဏန်းနဲ့ ရေးထားတဲ့ string ကို ပြန်ပေးတဲ့ function ကို ထည့်ပါမယ်။
+      [[mark:sel-itoa]] ပထမ line မှာ strconv package ထဲက function နဲ့ ကိန်းပြည့်ကို စာသား အဖြစ် အရင် ပြောင်းပြီး၊
+      ပြီးခဲ့တဲ့ lesson ကလို rune slice အဖြစ် ပြောင်းထားပါတယ်။ [[mark:sel-shift]] loop က rune တစ်လုံးချင်း
+      ကြည့်ပြီး၊ English ဂဏန်း ဖြစ်ရင် board ပေါ်က နည်းနဲ့ မြန်မာ ဂဏန်းကို ပြောင်းထည့်ပါတယ်။ နောက်ဆုံးမှာ
+      rune slice ကို string ပြန်ပြောင်းပြီး ပြန်ပေးပါတယ်။ [[mark:type-strconv]] strconv ကို import block ထဲ
+      ထည့်ပြီး၊ [[mark:type-to-call]] main ထဲမှာ တစ်ထောင့်ငါးရာကို ပြောင်းကြည့်ပါမယ်။ [[mark:run-1]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - { title: "strconv package — Itoa", url: "https://pkg.go.dev/strconv#Itoa" }
+      - {
+          title: "The Go Programming Language Specification — Conversions to and from a string type",
+          url: "https://go.dev/ref/spec#Conversions_to_and_from_a_string_type",
+        }
+    actions:
+      - {
+          id: close-digits,
+          type: whiteboard.apply,
+          at: { mark: close-digits },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-to
+        type: editor.type
+        at: { mark: type-to }
+        target: { file: main.go, after: ")\n\n", occurrence: 1 }
+        text: "// toMyanmarDigits writes n with Myanmar digits: 1500 → \"၁၅၀၀\".\nfunc toMyanmarDigits(n int) string {\n\tdigits := []rune(strconv.Itoa(n))\n\tfor i, r := range digits {\n\t\tif r >= '0' && r <= '9' {\n\t\t\tdigits[i] = r - '0' + '၀'\n\t\t}\n\t}\n\treturn string(digits)\n}\n\n"
+        cadence: line-by-line
+      - id: sel-itoa
+        type: editor.select
+        at: { mark: sel-itoa }
+        target: { file: main.go, text: "[]rune(strconv.Itoa(n))", occurrence: 1 }
+      - id: sel-shift
+        type: editor.select
+        at: { mark: sel-shift }
+        target: { file: main.go, text: "digits[i] = r - '0' + '၀'", occurrence: 1 }
+      - id: type-strconv
+        type: editor.type
+        at: { mark: type-strconv }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"strconv\"\n"
+      - id: type-to-call
+        type: editor.type
+        at: { mark: type-to-call }
+        target: { file: main.go, after: "\tfmt.Println(len(parts), parts[1])\n", occurrence: 1 }
+        text: "\tfmt.Println(toMyanmarDigits(1500))\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "3 ရန်ကုန်မှာ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-shift,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\t\t\tdigits[i] = r - '0' + '၀'\n",
+        }
+
+  - id: read-to
+    narration: >-
+      [[mark:point-fields]] ပထမ စာကြောင်းမှာ သုံး နဲ့ ရန်ကုန်မှာ ထွက်လာပါတယ်။ space နှစ်နေရာမှာ ခွဲလို့ အပိုင်း
+      သုံးခု ရပြီး၊ ဒုတိယ အပိုင်းက ရန်ကုန် ဆိုတဲ့ စကားလုံး တစ်လုံးတည်း မဟုတ်ဘဲ ရန်ကုန်မှာ ဆိုတဲ့ စကားစု
+      တစ်ခုလုံးပါ။ မြန်မာ စာကို စကားလုံး တစ်လုံးချင်း ခွဲဖို့ဆိုရင် space တစ်ခုတည်းနဲ့ မလုံလောက်ဘူး ဆိုတာ
+      သတိထားပါ။ [[mark:point-digits]] ဒုတိယ စာကြောင်းမှာတော့ တစ်ထောင့်ငါးရာက မြန်မာ ဂဏန်းနဲ့ ထွက်လာပါပြီ။
+      ဒီ function ကို နောက်ပိုင်း lesson တွေမှာ ငွေပမာဏတွေကို မြန်မာ ဂဏန်းနဲ့ ပြဖို့ ပြန်သုံးသွားပါမယ်။
+    sources:
+      - { title: "strings package — Fields", url: "https://pkg.go.dev/strings#Fields" }
+    actions:
+      - {
+          id: point-fields,
+          type: console.point,
+          at: { mark: point-fields },
+          target: { text: "3 ရန်ကုန်မှာ" },
+        }
+      - {
+          id: point-digits,
+          type: console.point,
+          at: { mark: point-digits },
+          target: { text: "၁၅၀၀" },
+        }
+
+  - id: from-digits
+    chapter: မြန်မာ ဂဏန်းကို ပြန်ဖတ်တာ
+    narration: >-
+      [[mark:collapse-to]] အခု ပြောင်းပြန် အလုပ်ကို ကြည့်ရအောင်။ ကောင်တာက ဝန်ထမ်း တစ်ယောက်က ငွေပမာဏကို
+      မြန်မာ ဂဏန်းနဲ့ ရိုက်ထည့်တယ် ဆိုပါစို့။ program က အဲဒါကို ပေါင်းနှုတ် လုပ်လို့ရတဲ့ int အဖြစ် ပြန်ဖတ်ရပါမယ်။
+      [[mark:type-from]] ဒီ function က string ထဲက rune တွေကို တစ်လုံးချင်း လျှောက်ပါတယ်။ [[mark:sel-digit]] rune
+      တစ်လုံးကနေ မြန်မာ သုည ကို နှုတ်လိုက်ရင် အဲဒီ ဂဏန်းရဲ့ တန်ဖိုး ရပါတယ်။ ရှိပြီးသား တန်ဖိုးကို ဆယ်နဲ့ မြှောက်ပြီး
+      ဒီ ဂဏန်းကို ပေါင်းတာက၊ ဂဏန်း တစ်လုံးကို ညာဘက်မှာ ထပ်ရေးသလိုပါပဲ။ [[mark:type-from-calls]] main ထဲမှာ
+      ဂဏန်း နှစ်ခုကို ဖတ်ကြည့်ပါမယ်။ ဒုတိယ တစ်ခုက ဝန်ထမ်းတွေ ရိုက်မိတတ်တဲ့ ပုံစံပါ၊ မျက်စိနဲ့ ကြည့်ရင်
+      ပထမ တစ်ခုနဲ့ အတူတူပါပဲ။ [[mark:type-isdigit]] ပြီးတော့ သုည နဲ့ တူတဲ့ စာလုံး နှစ်လုံးကို ဂဏန်း ဟုတ်လား
+      လို့ unicode package ကို မေးကြည့်ပါမယ်။ [[mark:type-unicode]] unicode package ကိုလည်း import block ထဲ
+      ထည့်ပါမယ်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "unicode package — IsDigit", url: "https://pkg.go.dev/unicode#IsDigit" }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-to } }
+      - id: type-from
+        type: editor.type
+        at: { mark: type-from }
+        target: { file: main.go, after: "\treturn string(digits)\n}\n\n", occurrence: 1 }
+        text: "// fromMyanmarDigits reads Myanmar digits: \"၁၅၀၀\" → 1500.\nfunc fromMyanmarDigits(s string) int {\n\tn := 0\n\tfor _, r := range s {\n\t\tn = n*10 + int(r-'၀')\n\t}\n\treturn n\n}\n\n"
+        cadence: line-by-line
+      - id: sel-digit
+        type: editor.select
+        at: { mark: sel-digit }
+        target: { file: main.go, text: "n = n*10 + int(r-'၀')", occurrence: 1 }
+      - id: type-from-calls
+        type: editor.type
+        at: { mark: type-from-calls }
+        target: { file: main.go, after: "\tfmt.Println(toMyanmarDigits(1500))\n", occurrence: 1 }
+        text: "\tfmt.Println(fromMyanmarDigits(\"၁၅၀၀\"), fromMyanmarDigits(\"၁၅ဝဝ\"))\n"
+        cadence: line-by-line
+      - id: type-isdigit
+        type: editor.type
+        at: { mark: type-isdigit }
+        target: { file: main.go, after: "fromMyanmarDigits(\"၁၅ဝဝ\"))\n", occurrence: 1 }
+        text: "\tfmt.Println(unicode.IsDigit('၀'), unicode.IsDigit('ဝ'))\n"
+        cadence: line-by-line
+      - id: type-unicode
+        type: editor.type
+        at: { mark: type-unicode }
+        target: { file: main.go, after: "\t\"strings\"\n", occurrence: 1 }
+        text: "\t\"unicode\"\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "1500 1115",
+          timeoutMs: 8000,
+        }
+
+  - id: read-from
+    chapter: ဝ နဲ့ ၀
+    narration: >-
+      [[mark:point-from]] တတိယ စာကြောင်းကို ကြည့်ပါ။ ပထမ တစ်ခုက တစ်ထောင့်ငါးရာ မှန်မှန် ရပေမဲ့၊ ဒုတိယ
+      တစ်ခုကတော့ တစ်ထောင့်တစ်ရာ့ တစ်ဆယ့်ငါး ဖြစ်နေပါတယ်။ [[mark:point-isdigit]] နောက်ဆုံး စာကြောင်းက
+      အကြောင်းရင်းကို ပြပါတယ်။ ပထမ စာလုံးကို ဂဏန်း လို့ ဖြေပေမဲ့၊ ဒုတိယ စာလုံးကိုတော့ ဂဏန်း မဟုတ်ဘူး လို့
+      ဖြေပါတယ်။ [[mark:board-trap]] ဒုတိယ string ထဲမှာ သုည လို့ ထင်ရတဲ့ စာလုံး နှစ်လုံးက တကယ်တော့ ဝ ဆိုတဲ့
+      ဗျည်း ဖြစ်နေလို့ပါ။ [[mark:draw-pair]] မျက်စိနဲ့ ကြည့်ရင် မြန်မာ သုည နဲ့ ဗျည်း ဝ က တူပေမဲ့၊ Unicode
+      မှာတော့ ဝ က ဗျည်းတွေကြားမှာ ရှိပြီး သုည က ဂဏန်းတွေကြားမှာ ရှိတဲ့၊ မတူတဲ့ rune နှစ်လုံးပါ။
+      [[mark:draw-diff]] ဝ ကနေ မြန်မာ သုည ကို နှုတ်ရင် သုည မရဘဲ အနှုတ် သုံးဆယ့်ငါး ရပါတယ်။ [[mark:draw-steps]]
+      ဒါကြောင့် ဆယ့်ငါး အထိ မှန်နေပြီး၊ ဝ တစ်လုံး ရောက်တိုင်း ဆယ်နဲ့ မြှောက်ပြီး သုံးဆယ့်ငါး နှုတ်သွားလို့
+      နောက်ဆုံးမှာ တစ်ထောင့်တစ်ရာ့ တစ်ဆယ့်ငါး ရတာပါ။ [[mark:draw-note]] ဒီ bug ရဲ့ အန္တရာယ် အရှိဆုံး အချက်က၊ compile error လည်း မရှိ၊ panic လည်း မဖြစ်ဘဲ၊ ဂဏန်း မှား တစ်ခု တိတ်တိတ်လေး ထွက်လာတာပါ။ ငွေပမာဏ ဆိုရင်
+      သုံးရာ ရှစ်ဆယ့်ငါး ကျပ် လျော့သွားမှာပါ။
+    sources:
+      - { title: "unicode package — IsDigit", url: "https://pkg.go.dev/unicode#IsDigit" }
+      - { title: "Strings, bytes, runes and characters in Go", url: "https://go.dev/blog/strings" }
+    actions:
+      - {
+          id: point-from,
+          type: console.point,
+          at: { mark: point-from },
+          target: { text: "1500 1115" },
+        }
+      - {
+          id: point-isdigit,
+          type: console.point,
+          at: { mark: point-isdigit },
+          target: { text: "true false" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-trap } }
+      - {
+          id: board-trap,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-pair,
+          type: whiteboard.apply,
+          at: { mark: draw-pair },
+          upsertIds: [w-letter-box, w-letter, w-letter-cp, w-digit-box, w-digit, w-digit-cp],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-diff,
+          type: whiteboard.apply,
+          at: { mark: draw-diff },
+          upsertIds: [w-diff],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-steps,
+          type: whiteboard.apply,
+          at: { mark: draw-steps },
+          upsertIds: [w-steps],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: draw-note },
+          upsertIds: [w-note-box, w-note],
+          drawMs: 1200,
+        }
+
+  - id: guard
+    narration: >-
+      [[mark:close-trap]] ဒါကို ကာကွယ်ဖို့ function ထဲမှာ စစ်ပေးရပါမယ်။ [[mark:type-guard]] rune တစ်လုံးက မြန်မာ
+      သုည နဲ့ ကိုး ကြားမှာ မရှိရင်၊ ဂဏန်း မဟုတ်တော့လို့ ဆက်မတွက်ဘဲ အနှုတ် တစ် ကို ပြန်ပေးလိုက်ပါမယ်။
+      [[mark:type-comment]] function ရဲ့ အပေါ်က comment မှာလည်း ဒီ အချက်ကို ထပ်ရေးထားပါမယ်။ [[mark:stand-in]]
+      အနှုတ် တစ် ဆိုတာ ဒီ function အတွက် ဂဏန်း မဟုတ်ဘူး လို့ ပြောတဲ့ အမှတ်အသား တစ်ခုပါ။ ငွေပမာဏက အနှုတ်
+      မဖြစ်နိုင်လို့ ဒီနေရာမှာ အဆင်ပြေပါတယ်။ ဒါပေမဲ့ ဒါက ယာယီ နည်းလမ်းပါ၊ Go မှာ အလုပ် မအောင်မြင်တာကို
+      ပြောပြတဲ့ တကယ့် နည်းလမ်းကို lesson နှစ်ဆယ့်နှစ်မှာ တွေ့ရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Comparison operators",
+          url: "https://go.dev/ref/spec#Comparison_operators",
+        }
+    actions:
+      - {
+          id: close-trap,
+          type: whiteboard.apply,
+          at: { mark: close-trap },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-guard
+        type: editor.type
+        at: { mark: type-guard }
+        target: { file: main.go, after: "\tfor _, r := range s {\n", occurrence: 1 }
+        text: "\t\tif r < '၀' || r > '၉' {\n\t\t\treturn -1\n\t\t}\n"
+        cadence: line-by-line
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: 'reads Myanmar digits: "၁၅၀၀" → 1500', occurrence: 1 }
+        text: ", or -1 when s holds anything else"
+        cadence: fast-explainer
+
+  - id: bills
+    chapter: Slice အတွက် ကိရိယာ
+    narration: >-
+      [[mark:type-slices]] နောက်ဆုံး ကိရိယာ အစုကတော့ slices package ပါ၊ သူ့ကိုလည်း import block ထဲ ထည့်ပါမယ်။ [[mark:type-bills]] ပြီးတော့ လေးလစာ ဖုန်းဘေလ်တွေကို slice တစ်ခုထဲ ထည့်ပါမယ်။ [[mark:sel-sort]] ဒီ line က slice ကို အငယ်ကနေ အကြီး sort
+      လုပ်ပေးပါတယ်။ sort လုပ်ထားတဲ့ slice အသစ်ကို ပြန်ပေးတာ မဟုတ်ဘဲ၊ ရှိပြီးသား slice ကိုပဲ နေရာ ပြန်စီပေးတာပါ။
+      [[mark:sel-max]] ပြီးတော့ ဒီ function က အကြီးဆုံး ဘေလ်ကို ရှာပေးပါတယ်။ ဒီ အလုပ် နှစ်ခုလုံးအတွက် loop
+      တစ်ခုမှ ကိုယ်တိုင် မရေးရပါဘူး။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "slices package", url: "https://pkg.go.dev/slices" }
+    actions:
+      - id: type-slices
+        type: editor.type
+        at: { mark: type-slices }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"slices\"\n"
+      - id: type-bills
+        type: editor.type
+        at: { mark: type-bills }
+        target: { file: main.go, after: "unicode.IsDigit('ဝ'))\n", occurrence: 1 }
+        text: "\tbills := []int{12000, 8500, 15000, 9800}\n\tslices.Sort(bills)\n\tfmt.Println(bills, slices.Max(bills))\n"
+        cadence: line-by-line
+      - id: sel-sort
+        type: editor.select
+        at: { mark: sel-sort }
+        target: { file: main.go, text: "slices.Sort(bills)", occurrence: 1 }
+      - id: sel-max
+        type: editor.select
+        at: { mark: sel-max }
+        target: { file: main.go, text: "slices.Max(bills)", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "1500 -1",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-guard,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tif r < '၀' || r > '၉' {\n\t\t\treturn -1\n",
+        }
+
+  - id: read-bills
+    narration: >-
+      [[mark:point-guard]] တတိယ စာကြောင်းမှာ ဒီတစ်ခါ တစ်ထောင့်ငါးရာ နဲ့ အနှုတ် တစ် ထွက်လာပါပြီ။ ဗျည်း ဝ ပါတဲ့
+      စာကို ဂဏန်း အမှား အဖြစ် မဖတ်တော့ဘဲ၊ ဂဏန်း မဟုတ်ဘူး လို့ ပြောနိုင်သွားပါပြီ။ [[mark:point-bills]]
+      နောက်ဆုံး စာကြောင်းမှာ ဘေလ်တွေကို အငယ်ကနေ အကြီး စီထားပြီး၊ အကြီးဆုံးက တစ်သောင်းငါးထောင် ဖြစ်ပါတယ်။
+      sort လုပ်ပြီးမှ print ထုတ်တာမို့ slice ကိုယ်တိုင်က စီပြီးသား ဖြစ်နေတာကို သတိထားကြည့်ပါ။
+    sources:
+      - { title: "slices package", url: "https://pkg.go.dev/slices" }
+    actions:
+      - {
+          id: point-guard,
+          type: console.point,
+          at: { mark: point-guard },
+          target: { text: "1500 -1" },
+        }
+      - {
+          id: point-bills,
+          type: console.point,
+          at: { mark: point-bills },
+          target: { text: "[8500 9800 12000 15000] 15000" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီတစ်ခါ ဝန်ထမ်းက မြန်မာ keyboard မသုံးဘဲ၊ English
+      ဂဏန်းနဲ့ တစ်ထောင့်ငါးရာ လို့ ရိုက်လိုက်တယ် ဆိုပါစို့။ စစ်တာ ထည့်ပြီးတဲ့ ဒီ function က တစ်ထောင့်ငါးရာ
+      ပြန်ပေးမလား၊ အနှုတ် တစ် ပြန်ပေးမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]]
+      အဖြေကတော့ ခ၊ အနှုတ် တစ် ပါ။ ဘာကြောင့်လဲဆိုတော့ English ဂဏန်းတွေက Unicode မှာ မြန်မာ သုည နဲ့ ကိုး
+      ကြားမှာ မရှိလို့ပါ။ ဒီ function က မြန်မာ ဂဏန်းကိုပဲ ဖတ်ဖို့ ရေးထားတာ ဖြစ်လို့၊ ဂဏန်း နှစ်မျိုးလုံး
+      လက်ခံချင်ရင် နောက်ထပ် စစ်ပေးရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Rune literals",
+          url: "https://go.dev/ref/spec#Rune_literals",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-a, q-b],
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ loop မရေးခင် standard library ထဲမှာ ကိရိယာ ရှိမရှိ အရင် ရှာပါ။
+      [[mark:recap-fields]] space နဲ့ ခွဲရင် မြန်မာ စာမှာ စကားလုံး မဟုတ်ဘဲ စကားစု ရပါတယ်။ [[mark:recap-shift]]
+      ဂဏန်း နှစ်စုလုံးက ဘေးချင်းကပ် စီထားလို့၊ အကွာအဝေး တူတာကို သုံးပြီး နှစ်ဘက်လုံး ပြောင်းလို့ ရပါတယ်။
+      [[mark:recap-guard]] ဗျည်း ဝ နဲ့ မြန်မာ သုည ကို ရောမိတတ်လို့ ဂဏန်း ဟုတ်မဟုတ် အမြဲ စစ်ပါ။ နောက် lesson မှာတော့
+      ကိုယ်ပိုင် type တစ်မျိုး ဖြစ်တဲ့ struct အကြောင်းနဲ့၊ course ရဲ့ ကျန်တဲ့ အပိုင်းမှာ တဖြည်းဖြည်း တည်ဆောက်သွားမယ့်
+      ပါဆယ်ပို့ ဝန်ဆောင်မှု program ကို စ လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "strings package — Fields", url: "https://pkg.go.dev/strings#Fields" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-fields
+        type: editor.select
+        at: { mark: recap-fields }
+        target: { file: main.go, text: "strings.Fields", occurrence: 1 }
+      - id: recap-shift
+        type: editor.select
+        at: { mark: recap-shift }
+        target: { file: main.go, text: "r - '0' + '၀'", occurrence: 1 }
+      - id: recap-guard
+        type: editor.select
+        at: { mark: recap-guard }
+        target: { file: main.go, text: "if r < '၀' || r > '၉' {", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
