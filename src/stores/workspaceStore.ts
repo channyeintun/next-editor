@@ -1058,6 +1058,33 @@ export const selectWorkspaceProjectId = (context: WorkspaceState): string =>
 export const selectWorkspaceLoadVersion = (context: WorkspaceState): number =>
   context.workspaceLoadVersion;
 
+/**
+ * Which workspace the store holds: one load (a lesson, an imported recording, a
+ * replayed snapshot: each loadProject) of one project id (a zip import, a starter
+ * swap or a room's project changes the id without a load). Lessons share starter
+ * ids, so the id alone does not tell two authors' projects apart. State that
+ * belongs to the workspace the user acted on, such as an agent run or the runtime's
+ * environment variables, must not carry across a change of it.
+ */
+export interface WorkspaceBoundary {
+  loadVersion: number;
+  projectId: string;
+}
+
+export function getWorkspaceBoundary(context: WorkspaceState): WorkspaceBoundary {
+  return {
+    loadVersion: context.workspaceLoadVersion,
+    projectId: selectWorkspaceProjectId(context),
+  };
+}
+
+export function areWorkspaceBoundariesEqual(
+  left: WorkspaceBoundary | null,
+  right: WorkspaceBoundary,
+): boolean {
+  return left?.loadVersion === right.loadVersion && left.projectId === right.projectId;
+}
+
 export const selectWorkspaceProjectVersion = (context: WorkspaceState): number =>
   context.projectVersion;
 

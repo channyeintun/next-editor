@@ -70,7 +70,8 @@ interface EnvironmentVariablesDialogProps {
 
 /**
  * Edits the runtime's environment variables as `KEY=value` lines. Saving
- * reruns the runner when it is on and the runtime is not busy.
+ * reruns the runner when it is on and the runtime is not busy. The variables
+ * apply to the workspace on screen only (see updateEnvironmentVariables).
  */
 export default function EnvironmentVariablesDialog({
   onClose,
@@ -118,6 +119,11 @@ export default function EnvironmentVariablesDialog({
         <h2 id={titleId} className="text-sm font-medium text-slate-100">
           Edit Environment
         </h2>
+
+        <p className="text-xs leading-5 text-slate-400">
+          These variables apply to this workspace only. Loading another lesson or project clears
+          them, and they are not saved in this browser.
+        </p>
 
         <label className="block">
           <span className="sr-only">Environment variables</span>

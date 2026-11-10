@@ -27,6 +27,11 @@ export interface WebContainerRuntimeActions {
   setActiveTerminalSession: (sessionId: string) => void;
   sendTerminalInput: (input: string) => Promise<void>;
   resizeTerminal: (size: { cols: number; rows: number }) => void;
+  /**
+   * Sets the variables for the workspace on screen. They apply to it alone: a
+   * project loaded after it (a lesson, a recording, an import, a room's project)
+   * runs without them, and they are not kept across visits.
+   */
   updateEnvironmentVariables: (variables: EnvironmentVariables) => void;
   updateRunnerConfig: (config: Partial<RunnerConfig>) => void;
   /** Applies an ephemeral, complete Studio contract without persisting it as a user setting. */
@@ -39,7 +44,8 @@ export interface WebContainerRuntimeActions {
    * writes back into the workspace. CollaborationProvider turns it off while a
    * live room owns the workspace: the room is the project's source of truth and
    * the container only mirrors it (docs/live-collaboration.md), so container
-   * output stays in this browser's container.
+   * output stays in this browser's container. Turning it off also marks the room
+   * as the owner of the workspace, so variables saved before it stop applying.
    */
   setReverseSyncEnabled: (enabled: boolean) => void;
 }
@@ -79,6 +85,7 @@ export interface WebContainerRuntimeMetadata extends Omit<
   keyof WebContainerRuntimeOutput | "activeCommand"
 > {
   isSupported: boolean;
+  /** The variables processes for the workspace on screen get. */
   environmentVariables: EnvironmentVariables;
   runnerConfig: RunnerConfig;
   /** False on /studio: only typed plan actions may start the runtime there. */

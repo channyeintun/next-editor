@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { WebContainer } from "@webcontainer/api";
 import {
   WebContainerRuntimeActionsContext,
@@ -23,9 +23,13 @@ import {
 } from "../runtime/webcontainer/commands";
 import { getRuntimeErrorMessage } from "../runtime/webcontainer/console";
 import {
-  loadStoredEnvironmentVariables,
+  discardLegacyStoredEnvironmentVariables,
+  EMPTY_RUNTIME_ENVIRONMENT,
+  isEnvironmentForAnotherWorkspace,
   normalizeEnvironmentVariables,
-  persistEnvironmentVariables,
+  resolveEnvironmentVariables,
+  type RuntimeEnvironment,
+  type RuntimeWorkspaceScope,
 } from "../runtime/webcontainer/environmentVariables";
 import {
   holdSharedWebContainer,
@@ -35,8 +39,11 @@ import {
   useWorkspaceFileCount,
   useWorkspaceActions,
   useWorkspaceLessonType,
+  useWorkspaceLoadVersion,
   useWorkspaceProjectId,
 } from "../hooks/useWorkspace";
+import { WorkspaceStoreContext } from "./WorkspaceContext";
+import { getWorkspaceBoundary } from "../stores/workspaceStore";
 import type { WorkspaceSyncMutation } from "../stores/workspaceActions";
 import { useWebContainerRuntimeSession } from "./useWebContainerRuntimeSession";
 import { isMobileBrowser } from "../utils/isMobileBrowser";
@@ -71,8 +78,10 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 }) => {
   const { getProject, getWorkspaceRevision, reconcileExternalProject, subscribeWorkspaceSync } =
     useWorkspaceActions();
+  const workspaceStore = useContext(WorkspaceStoreContext);
   const lessonType = useWorkspaceLessonType();
   const projectId = useWorkspaceProjectId();
+  const workspaceLoadVersion = useWorkspaceLoadVersion();
   const fileCount = useWorkspaceFileCount();
   const hasRunInitCommandRef = useRef(false);
   // `hasRunInitCommandRef` only flips AFTER the init command finishes, so it
@@ -99,12 +108,16 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     commandLine: string;
     environmentVariables: EnvironmentVariables;
   } | null>(null);
-  const [environmentVariables, setEnvironmentVariables] = useState<EnvironmentVariables>(
-    loadStoredEnvironmentVariables,
-  );
-  // saveWorkspace reads the current variables through this ref: the editor machine
-  // keeps the first render's save function, whose closure never sees a replaced object.
-  const environmentVariablesRef = useRef(environmentVariables);
+  // The variables and the workspace they were saved in (see RuntimeEnvironment). The
+  // ref is what spawns read, written with the state by every change: the editor
+  // machine keeps the first render's save function, whose closure never sees a
+  // replaced object.
+  const [environment, setEnvironment] = useState<RuntimeEnvironment>(EMPTY_RUNTIME_ENVIRONMENT);
+  const environmentRef = useRef(environment);
+  // A live room owns the workspace while it keeps this runtime's reverse sync off
+  // (CollaborationContext): the project on screen is then the room's.
+  const [liveRoomOwnsWorkspace, setLiveRoomOwnsWorkspace] = useState(false);
+  const liveRoomOwnsWorkspaceRef = useRef(false);
   const [runnerConfig, setRunnerConfig] = useState<RunnerConfig>(DEFAULT_RUNNER_CONFIG);
   const {
     ensureProjectMounted,
@@ -115,7 +128,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     queueProjectSync,
     requestReverseSync,
     resetWorkspaceSync,
-    setReverseSyncEnabled,
+    setReverseSyncEnabled: setWorkspaceReverseSyncEnabled,
   } = useWebContainerWorkspaceSync({
     getProject,
     getWorkspaceRevision,
@@ -159,9 +172,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     terminalSessions,
     writeTerminalInput,
   } = useWebContainerRuntimeSession({
-    // Through the ref, which a save writes at once: the Save of the variables
-    // dialog reruns the runner before this provider renders the new variables.
-    getEnvironmentVariables: () => environmentVariablesRef.current,
+    // Read from the store and the ref when the process spawns: the Save of the
+    // variables dialog reruns the runner before this provider renders the new
+    // variables, and a replayed load reruns it before the effects below drop
+    // variables saved in the workspace it replaced.
+    getEnvironmentVariables: () => getEnvironmentVariablesForSpawn(),
     onTerminalOutput: () => {
       const instance = instanceRef.current;
 
@@ -201,10 +216,33 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   useLayoutEffect(() => {
     lessonTypeRef.current = lessonType;
     runnerConfigRef.current = runnerConfig;
-    environmentVariablesRef.current = environmentVariables;
   });
 
   const isSupported = isWebContainerRuntimeSupported();
+
+  /** The workspace a process started now runs for; null without a workspace store. */
+  const getRuntimeWorkspaceScope = (): RuntimeWorkspaceScope | null =>
+    workspaceStore
+      ? {
+          ...getWorkspaceBoundary(workspaceStore.getSnapshot().context),
+          liveRoom: liveRoomOwnsWorkspaceRef.current,
+        }
+      : null;
+
+  const getEnvironmentVariablesForSpawn = () =>
+    resolveEnvironmentVariables(environmentRef.current, getRuntimeWorkspaceScope());
+
+  const replaceEnvironment = (nextEnvironment: RuntimeEnvironment) => {
+    environmentRef.current = nextEnvironment;
+    setEnvironment(nextEnvironment);
+  };
+
+  /** Forgets variables saved in a workspace that is no longer on screen. */
+  const dropEnvironmentFromAnotherWorkspace = () => {
+    if (isEnvironmentForAnotherWorkspace(environmentRef.current, getRuntimeWorkspaceScope())) {
+      replaceEnvironment(EMPTY_RUNTIME_ENVIRONMENT);
+    }
+  };
 
   const resetRuntime = () => {
     hasRunInitCommandRef.current = false;
@@ -337,9 +375,9 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
 
     const project = getProject();
     const commandLine = resolveRuntimeRunCommand(project, runnerConfig.runCommand);
-    // The variables the runner spawns with, read from the ref as the spawn reads
-    // them, so a save's identity check compares against what actually ran.
-    const spawnedVariables = environmentVariablesRef.current;
+    // The variables the runner spawns with, read as the spawn reads them, so a
+    // save's identity check compares against what actually ran.
+    const spawnedVariables = getEnvironmentVariablesForSpawn();
     // Only a start that is still the current one spawns. A superseded start resolves
     // false, possibly after the newer start recorded its run, so it must not clear that.
     if (await startRunnerProcess(instance, commandLine)) {
@@ -454,7 +492,7 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     if (
       options?.rerunOnlyIfChanged &&
       lastRun &&
-      lastRun.environmentVariables === environmentVariablesRef.current &&
+      lastRun.environmentVariables === getEnvironmentVariablesForSpawn() &&
       lastRun.commandLine ===
         resolveRuntimeRunCommand(project, runnerConfigRef.current.runCommand) &&
       areWorkspaceProjectsEqual(lastRun.project, project)
@@ -508,20 +546,35 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     }));
   };
 
+  /** The variables dialog's Save: they apply to the workspace on screen, and only to it. */
   const updateEnvironmentVariables = (variables: EnvironmentVariables) => {
-    const normalizedVariables = normalizeEnvironmentVariables(variables);
-
-    environmentVariablesRef.current = normalizedVariables;
-    setEnvironmentVariables(normalizedVariables);
-    persistEnvironmentVariables(normalizedVariables);
+    replaceEnvironment({
+      variables: normalizeEnvironmentVariables(variables),
+      scope: getRuntimeWorkspaceScope(),
+    });
   };
 
+  /** The studio's runner contract, set before it loads the project the contract is for. */
   const configureRuntime: WebContainerRuntimeActions["configureRuntime"] = (configuration) => {
-    const normalizedVariables = normalizeEnvironmentVariables(configuration.environmentVariables);
     runnerConfigRef.current = configuration.runnerConfig;
-    environmentVariablesRef.current = normalizedVariables;
     setRunnerConfig(configuration.runnerConfig);
-    setEnvironmentVariables(normalizedVariables);
+    replaceEnvironment({
+      variables: normalizeEnvironmentVariables(configuration.environmentVariables),
+      scope: null,
+    });
+  };
+
+  // Turned off while a live room owns the workspace and back on when it lets go.
+  // Taking over is a workspace change of its own, since the room's project may
+  // carry this project's id; variables saved in the room stay with the room (a
+  // re-run of the room's effect turns the sync on and straight off again).
+  const setReverseSyncEnabled = (enabled: boolean) => {
+    setWorkspaceReverseSyncEnabled(enabled);
+    liveRoomOwnsWorkspaceRef.current = !enabled;
+    setLiveRoomOwnsWorkspace(!enabled);
+    if (!enabled) {
+      dropEnvironmentFromAnotherWorkspace();
+    }
   };
 
   const onLessonTypeChange = useEffectEvent(() => {
@@ -554,6 +607,16 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   useEffect(() => {
     onProjectChange();
   }, [projectId]);
+
+  const onWorkspaceBoundaryChange = useEffectEvent(() => {
+    dropEnvironmentFromAnotherWorkspace();
+  });
+
+  // Spawns already withhold variables saved in another workspace; dropping them
+  // here also keeps them from applying again if a later swap brings that id back.
+  useEffect(() => {
+    onWorkspaceBoundaryChange();
+  }, [projectId, workspaceLoadVersion]);
 
   const onAutoStart = useEffectEvent(() => {
     hasAutoStartedRef.current = true;
@@ -639,6 +702,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
   // claimed; the release then tears down whatever is left, such as a container
   // the agent booted or a boot still in flight once it lands, unless another
   // editor holds the container by then.
+  // Builds before the workspace binding stored the variables for every project.
+  useEffect(() => {
+    discardLegacyStoredEnvironmentVariables();
+  }, []);
+
   useEffect(() => {
     const releaseSharedWebContainer = holdSharedWebContainer();
     return () => {
@@ -672,7 +740,11 @@ export const WebContainerRuntimeProvider: React.FC<WebContainerRuntimeProviderPr
     isSupported,
     errorMessage,
     activeTerminalSessionId,
-    environmentVariables,
+    environmentVariables: resolveEnvironmentVariables(environment, {
+      loadVersion: workspaceLoadVersion,
+      projectId,
+      liveRoom: liveRoomOwnsWorkspace,
+    }),
     runnerConfig,
     ambientStartEnabled: allowAmbientStart,
   };

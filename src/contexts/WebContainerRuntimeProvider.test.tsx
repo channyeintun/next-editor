@@ -736,6 +736,141 @@ describe("WebContainerRuntimeProvider runner control", () => {
     }
   });
 
+  // Variables belong to the workspace they were saved in. A lesson, recording or
+  // room project loaded after that is another author's code: its install, dev
+  // script and shells must not receive them, even under the same starter id.
+  describe("environment variables bound to their workspace", () => {
+    const LEGACY_KEY = "next-editor-runtime-environment";
+
+    function nodeProject(id: string): WorkspaceProject {
+      return {
+        id,
+        name: id,
+        lessonType: "javascript",
+        entryFilePath: "main.js",
+        folders: [],
+        files: {
+          "main.js": createWorkspaceFile("main.js", ""),
+          "package.json": createWorkspaceFile("package.json", '{"scripts":{"dev":"node main.js"}}'),
+        },
+      };
+    }
+
+    async function renderBoundRuntime() {
+      const fakeFs = createFakeFs({ "main.js": "" });
+      const { instance } = createFakeInstance(fakeFs);
+      const { getOrBootSharedWebContainer } =
+        await import("../runtime/webcontainer/sharedContainer");
+      vi.mocked(getOrBootSharedWebContainer).mockResolvedValue(instance);
+      const harness = renderProviders(true);
+      const spawnCalls = () =>
+        vi.mocked(instance.spawn).mock.calls as unknown as [
+          string,
+          string[],
+          { env?: Record<string, string> } | undefined,
+        ][];
+      const optionsFor = (commandLine: string) =>
+        spawnCalls()
+          .filter(([, args]) => args.join(" ") === `-lc ${commandLine}`)
+          .map(([, , options]) => options);
+      const shellOptions = () =>
+        spawnCalls()
+          .filter(([, args]) => !args.includes("-lc"))
+          .map(([, , options]) => options);
+      const load = async (project: WorkspaceProject) => {
+        await act(async () => {
+          harness.workspace.loadProject(project, "main.js");
+          await vi.advanceTimersByTimeAsync(200);
+        });
+      };
+      const saveAndRerun = async (variables: Record<string, string>) => {
+        await act(async () => {
+          harness.runtime.updateEnvironmentVariables(variables);
+          await harness.runtime.rerunRunner();
+          await vi.advanceTimersByTimeAsync(200);
+        });
+      };
+      return { ...harness, instance, optionsFor, shellOptions, load, saveAndRerun };
+    }
+
+    afterEach(() => {
+      window.localStorage.removeItem(LEGACY_KEY);
+    });
+
+    it("ignores and removes variables an older build stored for every project", async () => {
+      window.localStorage.setItem(LEGACY_KEY, JSON.stringify({ DUMMY_SECRET: "stored" }));
+      const { load, optionsFor } = await renderBoundRuntime();
+
+      await load(nodeProject("project-a"));
+
+      expect(optionsFor("pnpm install").length).toBeGreaterThan(0);
+      expect(optionsFor("pnpm dev").length).toBeGreaterThan(0);
+      for (const options of [...optionsFor("pnpm install"), ...optionsFor("pnpm dev")]) {
+        expect(options).toBeUndefined();
+      }
+      expect(window.localStorage.getItem(LEGACY_KEY)).toBeNull();
+    });
+
+    it("keeps variables from a project another author's project replaces", async () => {
+      const { instance, load, optionsFor, shellOptions, runtime, saveAndRerun } =
+        await renderBoundRuntime();
+      await load(nodeProject("project-a"));
+
+      await saveAndRerun({ DUMMY_SECRET: "dummy-1" });
+      expect(optionsFor("pnpm dev").at(-1)).toEqual({ env: { DUMMY_SECRET: "dummy-1" } });
+      // Not kept where every later project, in any tab, would read it back.
+      expect(window.localStorage.getItem(LEGACY_KEY)).toBeNull();
+
+      vi.mocked(instance.spawn).mockClear();
+      await load(nodeProject("project-b"));
+      expect(optionsFor("pnpm install")).toEqual([undefined]);
+      expect(optionsFor("pnpm dev")).toEqual([undefined]);
+
+      await act(async () => {
+        await runtime.startTerminalSession();
+      });
+      expect(shellOptions().length).toBeGreaterThan(0);
+      for (const options of shellOptions()) {
+        expect(options?.env?.DUMMY_SECRET).toBeUndefined();
+      }
+    });
+
+    // Lessons made from one starter share its project id, and a next lesson loads in
+    // place without a runtime reset, so the id alone cannot tell them apart.
+    it("keeps variables from a project loaded under the same id", async () => {
+      const { load, optionsFor, runtime, saveAndRerun } = await renderBoundRuntime();
+      await load(nodeProject("shared-starter-id"));
+      await saveAndRerun({ DUMMY_SECRET: "dummy-1" });
+      expect(optionsFor("pnpm dev").at(-1)).toEqual({ env: { DUMMY_SECRET: "dummy-1" } });
+
+      await load(nodeProject("shared-starter-id"));
+      await act(async () => {
+        await runtime.rerunRunner();
+        await vi.advanceTimersByTimeAsync(200);
+      });
+
+      expect(optionsFor("pnpm dev").at(-1)).toBeUndefined();
+    });
+
+    // A live room projects its own project over the workspace, under whatever id
+    // its creator's project had, without a load.
+    it("keeps variables from a room's project, and gives the room what is saved in it", async () => {
+      const { load, optionsFor, runtime, saveAndRerun } = await renderBoundRuntime();
+      await load(nodeProject("project-a"));
+      await saveAndRerun({ DUMMY_SECRET: "dummy-1" });
+
+      await act(async () => {
+        runtime.setReverseSyncEnabled(false);
+        await runtime.rerunRunner();
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(optionsFor("pnpm dev").at(-1)).toBeUndefined();
+
+      await saveAndRerun({ ROOM_SETTING: "room" });
+      expect(optionsFor("pnpm dev").at(-1)).toEqual({ env: { ROOM_SETTING: "room" } });
+    });
+  });
+
   // Output has a context of its own: the preview controller and the other
   // metadata consumers must not re-render for each chunk a dev server prints.
   it("streams runner output without re-rendering metadata consumers", async () => {

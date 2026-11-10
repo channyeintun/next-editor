@@ -24,9 +24,10 @@ import {
 
 interface UseWebContainerRuntimeSessionOptions {
   /**
-   * The user's variables as they are now, read when a process spawns. A value
-   * from the last render would miss variables saved in the same handler that
-   * reruns the runner, the way the variables dialog's Save does.
+   * The variables for the workspace as it is now, read when a process spawns. A
+   * value from the last render would miss variables saved in the same handler
+   * that reruns the runner, the way the variables dialog's Save does, and keep
+   * variables saved in a workspace a load has just replaced.
    */
   getEnvironmentVariables: () => EnvironmentVariables;
   onTerminalOutput?: () => void;
