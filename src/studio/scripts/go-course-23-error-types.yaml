@@ -1,0 +1,1073 @@
+# Go course, lesson 23: wrapping errors and error types (Burmese).
+#
+# Start state: main.go (an import block holding "fmt"; main with the day's three parcels: a typo
+# city, a 22 kg parcel, a normal one), errors.go (only `package main`), parcel.go and fees.go
+# (COURSE-KIT §3.4). Edits, all insert-only:
+#   1. errors.go: the imports and ErrUnknownCity, then checkParcel with the city check that wraps it
+#      (%w); main.go: "errors" into the import block and a loop with errors.Is -> run-1:
+#      city? MDX-0001: unknown city / TGI-0001 ok (weight not checked yet) / MDY-0001 ok;
+#   2. errors.go: OverweightError and its pointer-receiver Error(), the weight check; main.go: the
+#      errors.AsType branch, checkWeight (returns a nil *OverweightError as error) and its call
+#      -> run-2: … heavy: 2 kg over … error: <nil>;
+#   3. `if oe == nil { return nil }` inserted in checkWeight -> run-3 ends weight ok.
+# errors.go ends as COURSE-KIT §3.6 exactly; checkWeight is the kit's typed-nil function + its fix.
+# Boards: (W) a wrapped error, == vs errors.Is; (A) AsType and the older errors.As;
+# (T) an interface value is (type, value): typed nil; (Q) quiz (%v instead of %w).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-23-error-types
+  title: "Go course 23: Error ကို ထုပ်တာနဲ့ error type"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Four files of one program: the explorer is part of the lesson.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        	parcels := []Parcel{
+        		{Code: "MDX-0001", To: "MDX", WeightKg: 1},
+        		{Code: "TGI-0001", To: "TGI", WeightKg: 22},
+        		{Code: "MDY-0001", To: "MDY", WeightKg: 2.5},
+        	}
+        }
+      errors.go: |
+        package main
+      parcel.go: |
+        package main
+
+        // Parcel is one parcel handed in at the counter.
+        type Parcel struct {
+        	Code     string  // tracking code: "MDY-0001"
+        	To       string  // city code: "MDY"
+        	WeightKg float64 // weight in kilograms
+        }
+
+        // cityNames holds the cities the service sends to, by code.
+        var cityNames = map[string]string{
+        	"YGN": "ရန်ကုန်",
+        	"BGO": "ပဲခူး",
+        	"NPT": "နေပြည်တော်",
+        	"MLM": "မော်လမြိုင်",
+        	"MDY": "မန္တလေး",
+        	"TGI": "တောင်ကြီး",
+        }
+      fees.go: |
+        package main
+
+        // perKg is added for every whole kilogram.
+        const perKg = 500
+
+        // maxWeightKg is the heaviest parcel the service takes.
+        const maxWeightKg = 20.0
+
+        // baseFees is the fee to each city before weight, in kyats.
+        var baseFees = map[string]int{
+        	"YGN": 2000,
+        	"BGO": 3000,
+        	"NPT": 4000,
+        	"MLM": 4500,
+        	"MDY": 5000,
+        	"TGI": 6000,
+        }
+
+        // Fee is the parcel's price: the city's base fee plus perKg for every whole kilogram.
+        func (p Parcel) Fee() int {
+        	return baseFees[p.To] + int(p.WeightKg)*perKg
+        }
+  whiteboardAssets:
+    # Board W: a wrapped error; == sees only the outside, errors.Is looks inside.
+    - {
+        id: w-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Error ကို ထုပ်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: w-outer,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 520,
+        height: 170,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-outer-label,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 300,
+        height: 40,
+        text: "MDX-0001: …",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-inner,
+        kind: rectangle,
+        x: 330,
+        y: 305,
+        width: 420,
+        height: 75,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-inner-label,
+        kind: text,
+        x: 350,
+        y: 322,
+        width: 300,
+        height: 40,
+        text: "unknown city",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-name,
+        kind: text,
+        x: 830,
+        y: 322,
+        width: 260,
+        height: 40,
+        text: "ErrUnknownCity",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-eq,
+        kind: text,
+        x: 300,
+        y: 440,
+        width: 620,
+        height: 40,
+        text: "err == ErrUnknownCity  →  false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-eq-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 478,
+        width: 520,
+        height: 15,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-is,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 720,
+        height: 40,
+        text: "errors.Is(err, ErrUnknownCity)  →  true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: w-is-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 548,
+        width: 620,
+        height: 15,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-note,
+        kind: text,
+        x: 300,
+        y: 585,
+        width: 700,
+        height: 40,
+        text: "Is က အထုပ်ကို ဖြည်ပြီး ရှာတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board A: AsType, and the older errors.As.
+    - {
+        id: a-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Error ထဲက type ကို ပြန်ယူတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: a-new-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 800,
+        height: 125,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-new,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 760,
+        height: 40,
+        text: "oe, ok := errors.AsType[*OverweightError](err)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-new-note,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 600,
+        height: 40,
+        text: "oe.Code · oe.WeightKg",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-old-box,
+        kind: rectangle,
+        x: 285,
+        y: 400,
+        width: 800,
+        height: 185,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-old-head,
+        kind: text,
+        x: 305,
+        y: 415,
+        width: 500,
+        height: 40,
+        text: "အရင် code တွေမှာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-old1,
+        kind: text,
+        x: 305,
+        y: 470,
+        width: 600,
+        height: 40,
+        text: "var oe *OverweightError",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: a-old2,
+        kind: text,
+        x: 305,
+        y: 525,
+        width: 600,
+        height: 40,
+        text: "errors.As(err, &oe)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: an interface value is (type, value).
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Interface = (type, value)",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-nil-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 390,
+        height: 205,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t-nil-code,
+        kind: text,
+        x: 305,
+        y: 255,
+        width: 350,
+        height: 40,
+        text: "return nil",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-nil-pair,
+        kind: text,
+        x: 305,
+        y: 320,
+        width: 350,
+        height: 40,
+        text: "( - , - )",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-nil-res,
+        kind: text,
+        x: 305,
+        y: 385,
+        width: 350,
+        height: 40,
+        text: "== nil → true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-oe-box,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 405,
+        height: 205,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: t-oe-code,
+        kind: text,
+        x: 715,
+        y: 255,
+        width: 360,
+        height: 40,
+        text: "return oe",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-oe-pair,
+        kind: text,
+        x: 700,
+        y: 320,
+        width: 390,
+        height: 40,
+        text: "(*OverweightError, nil)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-oe-res,
+        kind: text,
+        x: 715,
+        y: 385,
+        width: 360,
+        height: 40,
+        text: "== nil → false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-rule,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 780,
+        height: 40,
+        text: "error မရှိရင် nil ကိုပဲ တိုက်ရိုက် return",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-rule-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 535,
+        width: 640,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    # Board Q: the quiz (%v instead of %w).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code-box,
+        kind: rectangle,
+        x: 285,
+        y: 235,
+        width: 760,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 700,
+        height: 40,
+        text: 'err := fmt.Errorf("%v", ErrUnknownCity)',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 305,
+        y: 310,
+        width: 700,
+        height: 40,
+        text: "errors.Is(err, ErrUnknownCity)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 535,
+        y: 240,
+        width: 90,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 400,
+        height: 40,
+        text: "က · true",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 495,
+        width: 400,
+        height: 40,
+        text: "ခ · false",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 480,
+        y: 485,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7123
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "city? MDX-0001: unknown city\nTGI-0001 ok\nMDY-0001 ok\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "city? MDX-0001: unknown city\nheavy: 2 kg over\nMDY-0001 ok\nerror: <nil>\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "city? MDX-0001: unknown city\nheavy: 2 kg over\nMDY-0001 ok\nweight ok\n"
+
+scenes:
+  - id: recall
+    chapter: Error ထဲက အချက်အလက်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ error ဆိုတာ function က နောက်ဆုံး result အနေနဲ့ ပြန်ပေးတဲ့ တန်ဖိုး ဖြစ်ပြီး၊
+      ခေါ်တဲ့သူက အရင် စစ်ရတယ် ဆိုတာ မြင်ခဲ့ပါတယ်။ ဒါပေမဲ့ အဲဒီ error တွေမှာ စာသား တစ်ကြောင်းပဲ
+      ပါပါတယ်။ [[mark:sel-parcels]] ဒီနေ့ ကောင်တာကို ပါဆယ် သုံးခု ရောက်လာပါတယ်။ ပထမ တစ်ခုက မြို့ code
+      မှားနေပြီး၊ ဒုတိယ တစ်ခုက တောင်ကြီးကို ပို့မယ့် နှစ်ဆယ့်နှစ် ကီလို ပါဆယ်ပါ။ ကိုယ်တို့ ဝန်ဆောင်မှုက နှစ်ဆယ်
+      ကီလိုထက် လေးတဲ့ ပါဆယ်ကို လက်မခံပါဘူး။ တတိယ တစ်ခုကတော့ ပုံမှန် ပါဆယ်ပါ။ [[mark:problem]]
+      ပြဿနာ နှစ်မျိုး ကွဲတော့ ဆက်လုပ်ပုံလည်း ကွဲပါတယ်။ မြို့ မှားရင် ပို့သူကို ပြန်မေးရပြီး၊ လေးလွန်းရင်
+      ဘယ်လောက် ပိုနေလဲ ပြောပြရပါတယ်။ ဒါကြောင့် error ရဲ့ စာကို လူက ဖတ်ရုံနဲ့ မလုံလောက်ဘဲ၊ ဘယ်လို
+      error လဲ၊ ဘယ်နှ ကီလို ပိုလဲ ဆိုတာကို code ကလည်း သိဖို့ လိုပါတယ်။ ဒီနေ့ error ကို ထုပ်တာနဲ့
+      ကိုယ်ပိုင် error type ကို လေ့လာပါမယ်။
+    sources:
+      - {
+          title: "The Go Blog — Working with Errors in Go 1.13",
+          url: "https://go.dev/blog/go1.13-errors",
+        }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - id: sel-parcels
+        type: editor.select
+        at: { mark: sel-parcels }
+        target:
+          {
+            file: main.go,
+            text: "{Code: \"MDX-0001\", To: \"MDX\", WeightKg: 1},\n\t\t{Code: \"TGI-0001\", To: \"TGI\", WeightKg: 22},\n\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},",
+            occurrence: 1,
+          }
+
+  - id: named
+    chapter: နာမည်ပေးထားတဲ့ error
+    narration: >-
+      [[mark:open-errors]] error တွေအတွက် errors ဆိုတဲ့ ဖိုင် အသစ် တစ်ခု ရှိပြီး၊ package main တစ်ကြောင်းပဲ
+      ရှိသေးပါတယ်။ [[mark:type-sentinel]] errors နဲ့ fmt package နှစ်ခုကို import လုပ်ပြီး၊ မြို့ မသိတဲ့ error
+      အတွက် နာမည်ပေးထားတဲ့ error တစ်ခုကို ဖိုင်ရဲ့ အပေါ်ဆုံး အဆင့်မှာ ကြေညာပါမယ်။ [[mark:sel-sentinel]]
+      errors package ရဲ့ New နဲ့ error ကို တစ်ခါတည်း လုပ်ပြီး variable ထဲ ထည့်ထားတာပါ။ နာမည်ကို Err နဲ့
+      စတာက Go ရဲ့ ထုံးစံပါ။ program တစ်ခုလုံးမှာ ဒီ error တစ်ခုတည်းပဲ ရှိတာမို့၊ ဘယ်နေရာကမဆို ဒါနဲ့
+      ယှဉ်ပြီး မြို့ မသိတဲ့ error ဟုတ်မဟုတ် မေးလို့ ရပါတယ်။
+    sources:
+      - { title: "errors package — New", url: "https://pkg.go.dev/errors" }
+    actions:
+      - { id: open-errors, type: workspace.openFile, at: { mark: open-errors }, path: errors.go }
+      - id: type-sentinel
+        type: editor.type
+        at: { mark: type-sentinel }
+        target: { file: errors.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\n// ErrUnknownCity means the parcel's city code is not one the service sends to.\nvar ErrUnknownCity = errors.New(\"unknown city\")\n"
+        cadence: line-by-line
+      - id: sel-sentinel
+        type: editor.select
+        at: { mark: sel-sentinel }
+        target:
+          {
+            file: errors.go,
+            text: 'var ErrUnknownCity = errors.New("unknown city")',
+            occurrence: 1,
+          }
+
+  - id: wrap
+    chapter: Error ကို ထုပ်တာ
+    narration: >-
+      [[mark:type-check-city]] အောက်မှာ ပါဆယ် တစ်ခုကို ပို့လို့ ရမရ စစ်ပေးမယ့် function ကို ရေးပါမယ်။ ပို့လို့
+      မရရင် ဘာကြောင့်လဲ ဆိုတဲ့ error ကို၊ ရရင်တော့ nil ကို ပြန်ပေးပါတယ်။ [[mark:sel-short-if]] if ရဲ့ line ကို
+      ကြည့်ပါ။ ပြီးခဲ့တဲ့ lesson မှာ map ကို ok နဲ့ မေးတဲ့ line နဲ့ if ကို နှစ်ကြောင်း ခွဲရေးခဲ့ပါတယ်။ ဒီမှာတော့
+      if ရဲ့ ရှေ့ပိုင်းမှာ map ကို မေးပြီး၊ နောက်ပိုင်းမှာ condition ကို စစ်တာ တစ်ကြောင်းတည်း ရေးထားတာပါ။
+      ဒီလို ကြေညာတဲ့ variable က if ထဲမှာပဲ ရှိပါတယ်။ မြို့ နာမည်ကိုတော့ မလိုလို့ underscore နဲ့ ပစ်ထားပါတယ်။
+      [[mark:sel-wrap]] မြို့ မရှိရင် Errorf နဲ့ error အသစ် လုပ်ပါတယ်။ ဒီ တစ်ခါ ပါဆယ်ရဲ့ code ကို ရှေ့မှာ ထည့်ပြီး၊
+      နာမည်ပေးထားတဲ့ error ကို နောက်က နေရာလွတ်ထဲ ထည့်ပါတယ်။ ဒီ နေရာလွတ်က စာ ထည့်ရုံ နေရာလွတ်
+      မဟုတ်ဘဲ error ကို wrap လုပ်တဲ့ နေရာလွတ်ပါ။ wrap ဆိုတာ error ကို context ထပ်ထည့်ပြီး ထုပ်တာပါ။
+      ပါဆယ်ကို ထုပ်ပိုးပြီး အပြင်မှာ label ကပ်လိုက်သလိုပဲ၊ အထဲမှာ မူရင်း error က ရှိနေဆဲပါ။
+    sources:
+      - { title: "fmt package — Errorf", url: "https://pkg.go.dev/fmt#Errorf" }
+      - {
+          title: "The Go Programming Language Specification — If statements",
+          url: "https://go.dev/ref/spec#If_statements",
+        }
+    actions:
+      - id: type-check-city
+        type: editor.type
+        at: { mark: type-check-city }
+        target:
+          {
+            file: errors.go,
+            after: "var ErrUnknownCity = errors.New(\"unknown city\")\n",
+            occurrence: 1,
+          }
+        text: "\n// checkParcel says why a parcel cannot be sent, or nil when it can.\nfunc checkParcel(p Parcel) error {\n\tif _, ok := cityNames[p.To]; !ok {\n\t\treturn fmt.Errorf(\"%s: %w\", p.Code, ErrUnknownCity)\n\t}\n\treturn nil\n}\n"
+        cadence: line-by-line
+      - id: sel-short-if
+        type: editor.select
+        at: { mark: sel-short-if }
+        target: { file: errors.go, text: "if _, ok := cityNames[p.To]; !ok {", occurrence: 1 }
+      - id: sel-wrap
+        type: editor.select
+        at: { mark: sel-wrap }
+        target:
+          { file: errors.go, text: 'fmt.Errorf("%s: %w", p.Code, ErrUnknownCity)', occurrence: 1 }
+
+  - id: loop
+    narration: >-
+      [[mark:open-main-1]] main ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-errors-import]] errors package ကို import block
+      ထဲ ထည့်ပြီး၊ [[mark:type-loop]] ပါဆယ် တစ်ခုချင်းကို စစ်တဲ့ loop ကို ရေးပါမယ်။ အခေါက်တိုင်းမှာ ခုနက function နဲ့
+      ပါဆယ်ကို စစ်ပြီး ရလာတဲ့ error ကို err ထဲမှာ ထည့်ပါတယ်။ ပြီးတော့ အဲဒီ error က ဘယ်လို error လဲ ဆိုတာ
+      if နဲ့ ခွဲကြည့်ပါတယ်။ [[mark:sel-is]] error ကို
+      တိုက်ရိုက် နှိုင်းယှဉ်မယ့် အစား errors package ရဲ့ Is ကို သုံးထားပါတယ်။ Is က ထုပ်ထားတဲ့ error ကို
+      ဖြည်ကြည့်ပြီး၊ အထဲမှာ မြို့ မသိတဲ့ error ပါမပါ မေးတာပါ။ ပါရင် မြို့ကို ပြန်မေးရမယ်လို့ ပြပြီး၊ error
+      မရှိရင်တော့ ok လို့ ပြပါမယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "errors package — Is", url: "https://pkg.go.dev/errors" }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { mark: open-main-1 }, path: main.go }
+      - id: type-errors-import
+        type: editor.type
+        at: { mark: type-errors-import }
+        target: { file: main.go, after: "import (\n", occurrence: 1 }
+        text: "\t\"errors\"\n"
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target:
+          {
+            file: main.go,
+            after: "\t\t{Code: \"MDY-0001\", To: \"MDY\", WeightKg: 2.5},\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\tfor _, p := range parcels {\n\t\terr := checkParcel(p)\n\t\tif errors.Is(err, ErrUnknownCity) {\n\t\t\tfmt.Println(\"city?\", err)\n\t\t} else if err == nil {\n\t\t\tfmt.Println(p.Code, \"ok\")\n\t\t}\n\t}\n"
+        cadence: line-by-line
+      - id: sel-is
+        type: editor.select
+        at: { mark: sel-is }
+        target: { file: main.go, text: "errors.Is(err, ErrUnknownCity)", occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "city? MDX-0001: unknown city",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    chapter: errors.Is
+    narration: >-
+      [[mark:point-city]] ပထမ စာကြောင်းမှာ error ရဲ့ စာကို ကြည့်ပါ။ ပါဆယ် code ရဲ့ နောက်မှာ နာမည်ပေးထားတဲ့
+      error ရဲ့ စာ ဆက်ပါလာပါတယ်။ wrap လုပ်ရင် စာတွေ ဆက်သွားလို့ ဘယ် ပါဆယ်လဲ ဆိုတာ ချက်ချင်း
+      သိရပါတယ်။ [[mark:point-tgi]] ဒုတိယ စာကြောင်းကတော့ ပြဿနာပါ။ နှစ်ဆယ့်နှစ် ကီလို ပါဆယ်ကို ok လို့
+      ပြနေပါတယ်၊ အလေးချိန်ကို မစစ်ရသေးလို့ပါ။ ဒါကို မကြာခင် ပြင်ပါမယ်။ [[mark:board-wrap]] Is ကို
+      ဘာကြောင့် သုံးရလဲ board ပေါ်မှာ ကြည့်ရအောင်။ [[mark:draw-wrap]] နာမည်ပေးထားတဲ့ error က အထဲမှာ ရှိပြီး၊
+      အပြင်မှာ ပါဆယ် code ပါတဲ့ အထုပ် အသစ် ရှိပါတယ်။ [[mark:draw-eq]] ဒါကြောင့် ရလာတဲ့ error ကို နာမည်ပေးထားတဲ့
+      error နဲ့ တိုက်ရိုက် တူမတူ နှိုင်းယှဉ်ရင် false ရပါတယ်၊ အပြင်က အထုပ်က error အသစ် ဖြစ်နေလို့ပါ။
+      [[mark:draw-is]] Is ကတော့ အထုပ်ကို တစ်ထပ်ချင်း ဖြည်ပြီး အထဲမှာ ရှာလို့ true ရပါတယ်။ ဒါကြောင့် wrap
+      လုပ်ထားနိုင်တဲ့ error ကို စစ်တဲ့အခါ Is ကို သုံးပါ။
+    sources:
+      - {
+          title: "The Go Blog — Working with Errors in Go 1.13",
+          url: "https://go.dev/blog/go1.13-errors",
+        }
+      - { title: "errors package — Is", url: "https://pkg.go.dev/errors" }
+    actions:
+      - {
+          id: point-city,
+          type: console.point,
+          at: { mark: point-city },
+          target: { text: "city? MDX-0001: unknown city" },
+        }
+      - {
+          id: point-tgi,
+          type: console.point,
+          at: { mark: point-tgi },
+          target: { text: "TGI-0001 ok" },
+        }
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-wrap } }
+      - {
+          id: board-wrap,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+        }
+      - {
+          id: draw-wrap,
+          type: whiteboard.apply,
+          at: { mark: draw-wrap },
+          upsertIds: [w-outer, w-outer-label, w-inner, w-inner-label, w-name],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-eq,
+          type: whiteboard.apply,
+          at: { mark: draw-eq },
+          upsertIds: [w-eq, w-eq-line],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-is,
+          type: whiteboard.apply,
+          at: { mark: draw-is },
+          upsertIds: [w-is, w-is-line, w-note],
+          drawMs: 2000,
+        }
+
+  - id: overweight
+    chapter: ကိုယ်ပိုင် error type
+    narration: >-
+      [[mark:close-wrap]] အခု အလေးချိန်အတွက် error ကို လုပ်ရအောင်။ ဒီ error မှာတော့ စာ တစ်ကြောင်းထက်
+      ပိုလိုပါတယ်၊ ဘယ် ပါဆယ်လဲ၊ ဘယ်နှ ကီလိုလဲ ဆိုတဲ့ အချက်တွေကို ခေါ်တဲ့သူက ပြန်ယူသုံးချင်ပါတယ်။
+      [[mark:open-errors-2]] errors ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-overweight]] code နဲ့ အလေးချိန်ကို
+      မှတ်ထားမယ့် struct တစ်ခုနဲ့၊ သူ့ရဲ့ Error ဆိုတဲ့ method ကို ရေးပါမယ်။ field
+      နှစ်ခုက ဘယ် ပါဆယ်လဲ၊ ဘယ်နှ ကီလိုလဲ ဆိုတာကို မှတ်ထားပြီး၊ method ကတော့ အဲဒီ field တွေနဲ့ အများဆုံး
+      ကီလိုကို စာ တစ်ကြောင်းထဲ ထည့်ပေးပါတယ်။ [[mark:sel-error-method]] error ဆိုတာ
+      တကယ်တော့ interface တစ်ခုပါ။ စာသား ပြန်ပေးတဲ့ Error method တစ်ခုပဲ ပါပြီး၊ ဒီ method ရှိတဲ့ ဘယ် type
+      မဆို error ဖြစ်ပါတယ်။ interface lesson မှာ မြင်ခဲ့တဲ့ အလုပ်ခေါ်စာ လိုပါပဲ။ ဒီမှာ receiver က pointer
+      ဖြစ်လို့ struct ရဲ့ pointer က error ဖြစ်ပါတယ်။ [[mark:type-weight-check]] ပြီးတော့ စစ်တဲ့ function ထဲမှာ
+      မြို့ကို စစ်ပြီးနောက်၊ အများဆုံး ကီလိုထက် လေးရင် ဒီ struct ကို field နှစ်ခုနဲ့ ဖြည့်ပြီး သူ့ရဲ့ address ကို
+      error အဖြစ် ပြန်ပေးပါမယ်။ အဆုံးထိ ရောက်လာမှ nil ကို ပြန်ပေးပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Errors",
+          url: "https://go.dev/ref/spec#Errors",
+        }
+      - { title: "Effective Go — Errors", url: "https://go.dev/doc/effective_go#errors" }
+    actions:
+      - {
+          id: close-wrap,
+          type: whiteboard.apply,
+          at: { mark: close-wrap },
+          open: false,
+          upsertIds: [],
+        }
+      - {
+          id: open-errors-2,
+          type: workspace.openFile,
+          at: { mark: open-errors-2 },
+          path: errors.go,
+        }
+      - id: type-overweight
+        type: editor.type
+        at: { mark: type-overweight }
+        target:
+          {
+            file: errors.go,
+            after: "var ErrUnknownCity = errors.New(\"unknown city\")\n",
+            occurrence: 1,
+          }
+        text: "\n// OverweightError means the parcel is heavier than maxWeightKg.\ntype OverweightError struct {\n\tCode     string\n\tWeightKg float64\n}\n\nfunc (e *OverweightError) Error() string {\n\treturn fmt.Sprintf(\"%s: %v kg is over %v kg\", e.Code, e.WeightKg, maxWeightKg)\n}\n"
+        cadence: line-by-line
+      - id: sel-error-method
+        type: editor.select
+        at: { mark: sel-error-method }
+        target:
+          { file: errors.go, text: "func (e *OverweightError) Error() string {", occurrence: 1 }
+      - id: type-weight-check
+        type: editor.type
+        at: { mark: type-weight-check }
+        target:
+          {
+            file: errors.go,
+            after: "\t\treturn fmt.Errorf(\"%s: %w\", p.Code, ErrUnknownCity)\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\tif p.WeightKg > maxWeightKg {\n\t\treturn &OverweightError{Code: p.Code, WeightKg: p.WeightKg}\n\t}\n"
+        cadence: line-by-line
+
+  - id: astype
+    chapter: AsType နဲ့ ပြန်ယူတာ
+    narration: >-
+      [[mark:open-main-2]] main ဖိုင်ကို ပြန်သွားပါမယ်။ [[mark:type-astype]] loop ထဲမှာ Is ရဲ့ နောက်က အပိုင်း
+      အသစ် တစ်ခု ထည့်ပါမယ်။ [[mark:sel-astype]] errors package ရဲ့ AsType ကို ကိုယ် ရှာချင်တဲ့ type နဲ့ တွဲပြီး
+      ခေါ်ရပါတယ်၊ ဒီမှာတော့ OverweightError ရဲ့ pointer ပါ။ AsType က အထုပ်တွေထဲမှာ ဒီ type ရဲ့ error ကို
+      ရှာပြီး၊ တွေ့ရင် သူ့ type အတိုင်း ပြန်ပေးပြီး ok က true ဖြစ်ပါတယ်။ ဒါကြောင့် အောက်က line မှာ field ကို
+      တိုက်ရိုက် ယူပြီး၊ ပါဆယ်ရဲ့ အလေးချိန်ထဲက အများဆုံး ကီလိုကို နှုတ်ပြီး ဘယ်လောက် ပိုလဲ ပြပါတယ်။
+      [[mark:board-astype]] AsType က Go ရဲ့ နောက်ပိုင်း version တွေမှာမှ ပါလာတာပါ။ [[mark:draw-old]] အရင် code
+      တွေမှာတော့ variable ကို အရင် ကြေညာပြီး၊ သူ့ address ကို errors package ရဲ့ As ကို ပေးတဲ့ ပုံစံကို
+      တွေ့ရပါမယ်။ အလုပ်ကတော့ အတူတူပါပဲ၊ ဒါပေမဲ့ AsType မှာ type ကို compiler က စစ်ပေးလို့ ပိုစိတ်ချရပါတယ်။
+    sources:
+      - { title: "errors package — AsType", url: "https://pkg.go.dev/errors" }
+      - { title: "Go 1.26 Release Notes", url: "https://go.dev/doc/go1.26" }
+    actions:
+      - { id: open-main-2, type: workspace.openFile, at: { mark: open-main-2 }, path: main.go }
+      - id: type-astype
+        type: editor.type
+        at: { mark: type-astype }
+        target: { file: main.go, after: "\t\t\tfmt.Println(\"city?\", err)\n\t\t} ", occurrence: 1 }
+        text: "else if oe, ok := errors.AsType[*OverweightError](err); ok {\n\t\t\tfmt.Println(\"heavy:\", oe.WeightKg-maxWeightKg, \"kg over\")\n\t\t} "
+        cadence: line-by-line
+      - id: sel-astype
+        type: editor.select
+        at: { mark: sel-astype }
+        target: { file: main.go, text: "errors.AsType[*OverweightError](err)", occurrence: 1 }
+      - {
+          id: board-astype,
+          type: whiteboard.apply,
+          at: { mark: board-astype },
+          open: true,
+          clear: true,
+          upsertIds: [a-title, a-new-box, a-new, a-new-note],
+        }
+      - {
+          id: draw-old,
+          type: whiteboard.apply,
+          at: { mark: draw-old },
+          upsertIds: [a-old-box, a-old-head, a-old1, a-old2],
+          drawMs: 2400,
+        }
+
+  - id: typed-nil
+    chapter: nil မဟုတ်တဲ့ nil
+    narration: >-
+      [[mark:close-astype]] error ရေးတဲ့အခါ သတိထားရမယ့် ထောင်ချောက် တစ်ခု ရှိပါတယ်။ [[mark:type-checkweight]]
+      main ဖိုင်ရဲ့ အပေါ်မှာ အလေးချိန်ကိုပဲ စစ်တဲ့ function တစ်ခုကို နည်းနည်း ကွဲတဲ့ ပုံစံနဲ့ ရေးကြည့်ပါမယ်။
+      [[mark:sel-var-oe]] OverweightError ရဲ့ pointer variable ကို ကြေညာထားပြီး၊ သူ့ရဲ့ zero value က nil ပါ။
+      [[mark:sel-return-oe]] လေးလွန်းမှသာ အဲဒီ variable ထဲ ထည့်ပြီး၊ အဆုံးမှာ variable ကို ပြန်ပေးပါတယ်။
+      ကြည့်ရတာ ပြဿနာ မရှိသလိုပါပဲ။ [[mark:type-call]] main ရဲ့ အဆုံးမှာ နှစ်ကီလိုခွဲပဲ ရှိတဲ့ မန္တလေး ပါဆယ်ကို
+      ဒီ function နဲ့ စစ်ပါမယ်။ error ရှိရင် print ထုတ်ပြီး ပြန်ထွက်ပါမယ်၊ မရှိရင် အလေးချိန် အဆင်ပြေတယ်လို့
+      ပြပါမယ်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "Go FAQ — Why is my nil error value not equal to nil?",
+          url: "https://go.dev/doc/faq#nil_error",
+        }
+    actions:
+      - {
+          id: close-astype,
+          type: whiteboard.apply,
+          at: { mark: close-astype },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-checkweight
+        type: editor.type
+        at: { mark: type-checkweight }
+        target: { file: main.go, after: "\t\"fmt\"\n)\n", occurrence: 1 }
+        text: "\n// checkWeight says when a parcel is too heavy.\nfunc checkWeight(p Parcel) error {\n\tvar oe *OverweightError\n\tif p.WeightKg > maxWeightKg {\n\t\toe = &OverweightError{Code: p.Code, WeightKg: p.WeightKg}\n\t}\n\treturn oe\n}\n"
+        cadence: line-by-line
+      - id: sel-var-oe
+        type: editor.select
+        at: { mark: sel-var-oe }
+        target: { file: main.go, text: "var oe *OverweightError", occurrence: 1 }
+      - id: sel-return-oe
+        type: editor.select
+        at: { mark: sel-return-oe }
+        target: { file: main.go, text: "return oe", occurrence: 1 }
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target:
+          { file: main.go, after: "\t\t\tfmt.Println(p.Code, \"ok\")\n\t\t}\n\t}\n", occurrence: 1 }
+        text: "\tif err := checkWeight(parcels[2]); err != nil {\n\t\tfmt.Println(\"error:\", err)\n\t\treturn\n\t}\n\tfmt.Println(\"weight ok\")\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "heavy: 2 kg over",
+          timeoutMs: 8000,
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-heavy]] ဒုတိယ စာကြောင်းမှာ တောင်ကြီး ပါဆယ်က နှစ် ကီလို ပိုနေတယ်လို့ ပြပါပြီ။ ဒီ နှစ်
+      ဆိုတဲ့ ဂဏန်းကို error စာထဲကနေ ဖြတ်ယူတာ မဟုတ်ဘဲ၊ error ရဲ့ field ကနေ တိုက်ရိုက် တွက်ထားတာပါ။
+      [[mark:point-nil]] ဒါပေမဲ့ နောက်ဆုံး စာကြောင်းကို ကြည့်ပါ။ နှစ်ကီလိုခွဲ ပါဆယ်က လေးလွန်းတာ မဟုတ်ပါဘူး။
+      ဒါတောင်မှ error ရှိတယ် ဆိုတဲ့ if ထဲကို ရောက်သွားပြီး၊ error နေရာမှာ nil လို့ ပြနေပါတယ်။ error မရှိပါဘဲ
+      error ရှိတယ်လို့ ပြနေတာပါ၊ type ပါတဲ့ nil ဖြစ်နေလို့ပါ။ [[mark:board-typed-nil]] any lesson မှာ မြင်ခဲ့တဲ့
+      interface value နဲ့ ပြန်ကြည့်ရအောင်။ interface value တစ်ခုထဲမှာ type နဲ့ တန်ဖိုး နှစ်ခု ပါပါတယ်။
+      [[mark:draw-real-nil]] nil ကိုပဲ တိုက်ရိုက် ပြန်ပေးရင် type ရော တန်ဖိုးပါ မရှိလို့ error က တကယ် nil ဖြစ်ပါတယ်။
+      [[mark:draw-typed]] nil pointer variable ကို ပြန်ပေးရင်တော့ တန်ဖိုးက nil ဖြစ်ပေမဲ့၊ type နေရာမှာ
+      OverweightError ရဲ့ pointer ဆိုတာ ရှိနေပါတယ်။ အထဲမှာ တစ်ခုခု ရှိနေတော့ interface က nil မဟုတ်တော့ပါဘူး။
+      [[mark:draw-rule]] ဒါကြောင့် error မရှိတဲ့အခါ pointer variable ကို မပြန်ပေးဘဲ nil ကိုပဲ တိုက်ရိုက်
+      ပြန်ပေးပါ။
+    sources:
+      - {
+          title: "Go FAQ — Why is my nil error value not equal to nil?",
+          url: "https://go.dev/doc/faq#nil_error",
+        }
+    actions:
+      - {
+          id: point-heavy,
+          type: console.point,
+          at: { mark: point-heavy },
+          target: { text: "heavy: 2 kg over" },
+        }
+      - {
+          id: point-nil,
+          type: console.point,
+          at: { mark: point-nil },
+          target: { text: "error: <nil>" },
+        }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: board-typed-nil } }
+      - {
+          id: board-typed-nil,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-2 },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-real-nil,
+          type: whiteboard.apply,
+          at: { mark: draw-real-nil },
+          upsertIds: [t-nil-box, t-nil-code, t-nil-pair, t-nil-res],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-typed,
+          type: whiteboard.apply,
+          at: { mark: draw-typed },
+          upsertIds: [t-oe-box, t-oe-code, t-oe-pair, t-oe-res],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [t-rule, t-rule-line],
+          drawMs: 1500,
+        }
+
+  - id: fix
+    narration: >-
+      [[mark:close-typed]] ဒါဆို ပြင်ကြည့်ရအောင်။ [[mark:type-fix]] variable က nil ဖြစ်နေရင် nil ကို တိုက်ရိုက်
+      ပြန်ပေးတဲ့ စစ်ချက် တစ်ခုကို နောက်ဆုံး return ရဲ့ ရှေ့မှာ ထည့်ပါမယ်။ ဒီ nil က type မပါတဲ့ တကယ့် nil ပါ။
+      [[mark:run-3]] ကဲ၊ ထပ်ပြီး run ကြည့်ရအောင်။ [[mark:point-ok]] နောက်ဆုံး စာကြောင်းမှာ အလေးချိန်
+      အဆင်ပြေတယ်လို့ ထွက်လာပါပြီ။ ဒီ ထောင်ချောက်က compile error လည်း မပေး၊ vet ကလည်း သတိမပေးတဲ့ bug
+      မျိုးပါ။ errors ဖိုင်က စစ်တဲ့ function မှာတော့ ဒီ ပြဿနာ မရှိပါဘူး၊ error ရှိတဲ့ နေရာမှာ address ကို
+      တိုက်ရိုက် ပြန်ပေးပြီး၊ မရှိရင် nil ကို ပြန်ပေးထားလို့ပါ။
+    sources:
+      - {
+          title: "Go FAQ — Why is my nil error value not equal to nil?",
+          url: "https://go.dev/doc/faq#nil_error",
+        }
+    actions:
+      - {
+          id: close-typed,
+          type: whiteboard.apply,
+          at: { mark: close-typed },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        target:
+          {
+            file: main.go,
+            after: "\t\toe = &OverweightError{Code: p.Code, WeightKg: p.WeightKg}\n\t}\n",
+            occurrence: 1,
+          }
+        text: "\tif oe == nil {\n\t\treturn nil\n\t}\n"
+        cadence: line-by-line
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "weight ok",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-errors,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: errors.go,
+          contains: "func (e *OverweightError) Error() string {",
+        }
+      - {
+          id: expect-file-fix,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tif oe == nil {\n\t\treturn nil\n\t}\n",
+        }
+      - { id: point-ok, type: console.point, at: { mark: point-ok }, target: { text: "weight ok" } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ နာမည်ပေးထားတဲ့ error ကို Errorf နဲ့
+      ထည့်ထားပေမဲ့၊ wrap လုပ်တဲ့ နေရာလွတ် အစား တန်ဖိုးကို စာအဖြစ် ထည့်တဲ့ သာမန် နေရာလွတ်ကို သုံးမိထားပါတယ်။
+      [[mark:quiz-line]] ဒါဆို Is က true ပြန်ပေးမလား၊ false ပြန်ပေးမလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ false ပါ။ ဘာကြောင့်လဲဆိုတော့ သာမန် နေရာလွတ်က error
+      ရဲ့ စာကိုပဲ ကူးထည့်ပြီး၊ error ကိုယ်တိုင်ကို အထဲမှာ မထုပ်ထားလို့ပါ။ print ထုတ်ရင် စာက အတူတူပဲ ဖြစ်ပေမဲ့၊
+      Is အတွက်တော့ ဖြည်ကြည့်စရာ အထုပ် မရှိပါဘူး။ ဒါကြောင့် error ကို ထုပ်ချင်ရင် wrap လုပ်တဲ့ နေရာလွတ်ကို
+      သုံးရပါတယ်။
+    sources:
+      - { title: "fmt package — Errorf", url: "https://pkg.go.dev/fmt#Errorf" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code-box, q-l1, q-l2],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark, q-a, q-b],
+          drawMs: 1500,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-is]] Errorf နဲ့ wrap လုပ်ရင် context ပါတဲ့ error အသစ်
+      ရပြီး၊ Is က အထုပ်ကို ဖြည်ပြီး နာမည်ပေးထားတဲ့ error ကို ရှာပေးပါတယ်။ [[mark:recap-astype]] ကိုယ်ပိုင်
+      error type ဆိုတာ Error method ရှိတဲ့ struct ဖြစ်ပြီး၊ AsType နဲ့ field တွေနဲ့ အတူ ပြန်ယူလို့ ရပါတယ်။
+      [[mark:recap-nil]] error မရှိရင်တော့ nil ကိုပဲ တိုက်ရိုက် ပြန်ပေးပါ။ နောက် lesson မှာတော့ function
+      ဘယ်လိုပဲ ပြီးပြီး နောက်ဆုံးမှာ လုပ်ရမယ့် အလုပ်တွေအတွက် defer နဲ့၊ တကယ် panic ဖြစ်လာရင် ဘာလုပ်မလဲ
+      ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Blog — Working with Errors in Go 1.13",
+          url: "https://go.dev/blog/go1.13-errors",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-is
+        type: editor.select
+        at: { mark: recap-is }
+        target: { file: main.go, text: "errors.Is(err, ErrUnknownCity)", occurrence: 1 }
+      - id: recap-astype
+        type: editor.select
+        at: { mark: recap-astype }
+        target: { file: main.go, text: "errors.AsType[*OverweightError](err)", occurrence: 1 }
+      - id: recap-nil
+        type: editor.select
+        at: { mark: recap-nil }
+        target: { file: main.go, text: "if oe == nil {\n\t\treturn nil\n\t}", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
