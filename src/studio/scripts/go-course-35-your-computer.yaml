@@ -1,0 +1,954 @@
+# Go course, lesson 35: Go on your own computer (Burmese; the last lesson).
+#
+# Start state: digits.go (canonical from lesson 22: toMyanmarDigits, fromMyanmarDigits with an
+# error) and main.go with only `import "fmt"` and an empty main.
+# Edits, all insert-only:
+#   1. a table of checks (in, want) and a loop that prints ok / FAIL -> run-1: three ok lines;
+#   2. a case written with the letter ဝ for the digit zero -> run-2: FAIL ၁၅ဝဝ: got 0, want 1500;
+#   3. the look-alike rule at the top of fromMyanmarDigits's loop -> run-3: four ok lines.
+# Boards (the main content): (F) a folder on your own computer, go.mod and the commands;
+# (T) the same check as digits_test.go and go test; (S) what to learn next; (Q) the quiz.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-35-your-computer
+  title: "Go course 35: ကိုယ့်ကွန်ပျူတာပေါ်မှာ Go"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Two files: the explorer shows both, as on your own computer.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+      digits.go: |
+        package main
+
+        import (
+        	"fmt"
+        	"strconv"
+        )
+
+        // toMyanmarDigits writes n with Myanmar digits: 1500 → "၁၅၀၀".
+        func toMyanmarDigits(n int) string {
+        	digits := []rune(strconv.Itoa(n))
+        	for i, r := range digits {
+        		if r >= '0' && r <= '9' {
+        			digits[i] = r - '0' + '၀'
+        		}
+        	}
+        	return string(digits)
+        }
+
+        // fromMyanmarDigits reads Myanmar digits: "၁၅၀၀" → 1500.
+        func fromMyanmarDigits(s string) (int, error) {
+        	n := 0
+        	for _, r := range s {
+        		if r < '၀' || r > '၉' {
+        			return 0, fmt.Errorf("%q is not a Myanmar digit", r)
+        		}
+        		n = n*10 + int(r-'၀')
+        	}
+        	return n, nil
+        }
+  whiteboardAssets:
+    # Board F: Go on your own computer: get Go, a folder with go.mod, the commands.
+    - {
+        id: f-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "ကိုယ့်ကွန်ပျူတာပေါ်မှာ Go",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-get,
+        kind: text,
+        x: 280,
+        y: 232,
+        width: 560,
+        height: 40,
+        text: "1 · go.dev/dl ကနေ Go ကို ထည့်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-ver,
+        kind: text,
+        x: 280,
+        y: 280,
+        width: 560,
+        height: 40,
+        text: "2 · go version",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-folder,
+        kind: rectangle,
+        x: 280,
+        y: 335,
+        width: 360,
+        height: 215,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-fname,
+        kind: text,
+        x: 300,
+        y: 345,
+        width: 220,
+        height: 40,
+        text: "parcels",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-gomod,
+        kind: text,
+        x: 320,
+        y: 395,
+        width: 200,
+        height: 40,
+        text: "go.mod",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-main,
+        kind: text,
+        x: 320,
+        y: 440,
+        width: 200,
+        height: 40,
+        text: "main.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-dig,
+        kind: text,
+        x: 320,
+        y: 485,
+        width: 220,
+        height: 40,
+        text: "digits.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-c1,
+        kind: text,
+        x: 680,
+        y: 345,
+        width: 410,
+        height: 40,
+        text: "go mod init parcels",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-c2,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 410,
+        height: 40,
+        text: "go run .",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-c3,
+        kind: text,
+        x: 680,
+        y: 455,
+        width: 410,
+        height: 40,
+        text: "go build",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-c4,
+        kind: text,
+        x: 680,
+        y: 510,
+        width: 410,
+        height: 40,
+        text: "gofmt · go vet",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - { id: f-std, kind: rectangle, x: 270, y: 570, width: 820, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: f-std-t,
+        kind: text,
+        x: 290,
+        y: 585,
+        width: 780,
+        height: 40,
+        text: "standard library ပဲ · ထပ်ယူစရာ မလို",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board T: the same check as a real test file and go test.
+    - {
+        id: t-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "Test ဖိုင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: t-code,
+        kind: rectangle,
+        x: 280,
+        y: 225,
+        width: 810,
+        height: 245,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-l1,
+        kind: text,
+        x: 300,
+        y: 235,
+        width: 400,
+        height: 40,
+        text: "digits_test.go",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-l2,
+        kind: text,
+        x: 300,
+        y: 285,
+        width: 780,
+        height: 40,
+        text: "func TestFromMyanmarDigits(t *testing.T) {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-l3,
+        kind: text,
+        x: 300,
+        y: 330,
+        width: 700,
+        height: 40,
+        text: "    // the checks table and the loop",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-l4,
+        kind: text,
+        x: 300,
+        y: 375,
+        width: 780,
+        height: 40,
+        text: '    t.Errorf("%s: got %d, want %d", …)',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-l5,
+        kind: text,
+        x: 300,
+        y: 420,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-run,
+        kind: rectangle,
+        x: 280,
+        y: 495,
+        width: 810,
+        height: 140,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-r1,
+        kind: text,
+        x: 300,
+        y: 510,
+        width: 560,
+        height: 40,
+        text: "go test → ok parcels",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: t-r2,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 560,
+        height: 40,
+        text: "go test -race · go fix",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board S: what to learn next.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 520,
+        height: 50,
+        text: "နောက်ထပ် လေ့လာစရာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-course,
+        kind: rectangle,
+        x: 280,
+        y: 330,
+        width: 260,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-course-t,
+        kind: text,
+        x: 300,
+        y: 365,
+        width: 220,
+        height: 40,
+        text: "ဒီ course",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 550,
+        y: 360,
+        width: 70,
+        height: 50,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-1,
+        kind: text,
+        x: 640,
+        y: 240,
+        width: 440,
+        height: 40,
+        text: "package · module",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-2,
+        kind: text,
+        x: 640,
+        y: 305,
+        width: 440,
+        height: 40,
+        text: "JSON · HTTP",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-3,
+        kind: text,
+        x: 640,
+        y: 370,
+        width: 440,
+        height: 40,
+        text: "ဖိုင် ဖတ်တာ၊ ရေးတာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-4,
+        kind: text,
+        x: 640,
+        y: 435,
+        width: 440,
+        height: 40,
+        text: "context",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-5,
+        kind: text,
+        x: 640,
+        y: 500,
+        width: 440,
+        height: 40,
+        text: "embedding",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (an empty text with want 0).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 300,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 640,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 260,
+        width: 300,
+        height: 40,
+        text: '{"", 0},',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 315,
+        width: 600,
+        height: 40,
+        text: 'fromMyanmarDigits("")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 250,
+        height: 40,
+        text: "က · ok",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 250,
+        height: 40,
+        text: "ခ · FAIL",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 480,
+        y: 420,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7135
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "ok ၀\nok ၁၅၀၀\nok ၂၀၂၆\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "ok ၀\nok ၁၅၀၀\nok ၂၀၂၆\nFAIL ၁၅ဝဝ: got 0, want 1500\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "ok ၀\nok ၁၅၀၀\nok ၂၀၂၆\nok ၁၅ဝဝ\n"
+
+scenes:
+  - id: recall
+    chapter: နောက်ဆုံး lesson
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ rider တွေက တစ်နေ့တာ ပါဆယ်တွေကို တစ်ပြိုင်နက် ပို့ပြီး၊ ငွေ စုစုပေါင်းနဲ့
+      နေ့စဉ် report ကို ထုတ်ခဲ့ပါတယ်။ ဒီနေ့က course ရဲ့ နောက်ဆုံး lesson ပါ။ ကိုယ့် code မှန်မမှန်
+      အလိုအလျောက် စစ်တဲ့ test ဆိုတာ ဘာလဲ၊ ပြီးတော့ ဒီ course က program တွေကို ကိုယ့်ကွန်ပျူတာပေါ်မှာ
+      ဘယ်လို ဆက်ရေးရလဲ ဆိုတာကို ကြည့်ပါမယ်။ [[mark:sel-from]] digits ဖိုင်ထဲမှာ lesson နှစ်ဆယ့်နှစ်ကတည်းက
+      သုံးလာတဲ့ function ရှိပါတယ်။ ကောင်တာက ဝန်ထမ်း မြန်မာ ဂဏန်းနဲ့ ရိုက်ထားတဲ့ စာကို ဂဏန်းအဖြစ်
+      ဖတ်ပေးပြီး၊ မြန်မာ ဂဏန်း မဟုတ်တဲ့ စာလုံး ပါလာရင် error ပြန်ပေးပါတယ်။ [[mark:why-check]] ဒီ function
+      မှန်ကြောင်း ဘယ်လို သေချာအောင် လုပ်မလဲ။ တစ်ခါ run ကြည့်ပြီး မျက်စိနဲ့ စစ်တာထက်၊ စစ်ချင်တဲ့ case တွေကို
+      code အဖြစ် ရေးထားရင် code ပြောင်းတိုင်း ပြန် run ပြီး စစ်လို့ ရပါတယ်။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+    actions:
+      - { id: open-digits, type: workspace.openFile, at: { scene: start }, path: digits.go }
+      - id: sel-from
+        type: editor.select
+        at: { mark: sel-from }
+        target:
+          {
+            file: digits.go,
+            text: "func fromMyanmarDigits(s string) (int, error) {",
+            occurrence: 1,
+          }
+
+  - id: table
+    chapter: Case တွေကို ဇယားနဲ့ ရေးတာ
+    narration: >-
+      [[mark:open-main-1]] ဒါဆို main ဖိုင်မှာ စစ်မယ့် case တွေကို ဇယား တစ်ခုအနေနဲ့ ရေးကြည့်ရအောင်။
+      [[mark:type-table]] case တစ်ခုစီမှာ တန်ဖိုး နှစ်ခု ပါပါတယ်၊ function ကို ပေးမယ့် စာနဲ့ ပြန်ရချင်တဲ့
+      ဂဏန်းပါ။ အဲဒီ နှစ်ခုကို field နှစ်ခုပါတဲ့ struct အဖြစ် ဒီနေရာမှာတင် တိုက်ရိုက် ရေးပြီး၊ struct
+      တွေကို slice တစ်ခုထဲမှာ စီထားတာပါ။ struct ကို နာမည် မပေးတော့တာက ဒီ ဇယားအတွက်ပဲ သုံးမှာ ဖြစ်လို့ပါ။
+      [[mark:sel-cases]] ပထမ case သုံးခုက သုည၊ ၁၅၀၀ နဲ့ ၂၀၂၆ ပါ။ ဆိုလိုတာက ဒီ စာကို ပေးရင် ဒီ ဂဏန်းကို
+      ပြန်ရရမယ်လို့ ကိုယ်က ကြိုပြောထားတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Composite literals",
+          url: "https://go.dev/ref/spec#Composite_literals",
+        }
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+    actions:
+      - { id: open-main-1, type: workspace.openFile, at: { mark: open-main-1 }, path: main.go }
+      - id: type-table
+        type: editor.type
+        at: { mark: type-table }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tchecks := []struct {\n\t\tin   string\n\t\twant int\n\t}{\n\t\t{\"၀\", 0},\n\t\t{\"၁၅၀၀\", 1500},\n\t\t{\"၂၀၂၆\", 2026},\n\t}\n"
+        cadence: line-by-line
+      - id: sel-cases
+        type: editor.select
+        at: { mark: sel-cases }
+        target:
+          {
+            file: main.go,
+            text: "\t\t{\"၀\", 0},\n\t\t{\"၁၅၀၀\", 1500},\n\t\t{\"၂၀၂၆\", 2026},\n",
+            occurrence: 1,
+          }
+
+  - id: loop
+    chapter: ok လား FAIL လား
+    narration: >-
+      [[mark:type-loop]] ပြီးတော့ ဇယားထဲက case တွေကို တစ်ခုချင်း လျှောက်တဲ့ loop ကို ရေးပါမယ်။ အခေါက်တိုင်းမှာ
+      function ကို ခေါ်ပြီး ရလာတဲ့ ဂဏန်းနဲ့ error ကို ယူပါတယ်။ error ပါလာရင်ဖြစ်ဖြစ်၊ ရတဲ့ ဂဏန်းက လိုချင်တဲ့
+      ဂဏန်းနဲ့ မတူရင်ဖြစ်ဖြစ်၊ FAIL ဆိုတဲ့ စကားလုံးနဲ့ အတူ ဘာရပြီး ဘာကို လိုချင်တာလဲ ဆိုတာကို ထုတ်ပြပါတယ်။
+      ပြီးရင် ဒီ အခေါက်ကို ကျော်ပြီး နောက် case ကို ဆက်သွားပါတယ်။ မှန်တဲ့ case အတွက်တော့ ok လို့ပဲ
+      ထုတ်ပြပါတယ်။ [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+      - {
+          title: "The Go Programming Language Specification — Continue statements",
+          url: "https://go.dev/ref/spec#Continue_statements",
+        }
+    actions:
+      - id: type-loop
+        type: editor.type
+        at: { mark: type-loop }
+        target: { file: main.go, after: "\t\t{\"၂၀၂၆\", 2026},\n\t}\n", occurrence: 1 }
+        text: "\tfor _, c := range checks {\n\t\tgot, err := fromMyanmarDigits(c.in)\n\t\tif err != nil || got != c.want {\n\t\t\tfmt.Printf(\"FAIL %s: got %d, want %d\\n\", c.in, got, c.want)\n\t\t\tcontinue\n\t\t}\n\t\tfmt.Println(\"ok\", c.in)\n\t}\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "ok ၂၀၂၆",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-loop,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\t\tfmt.Println(\"ok\", c.in)\n",
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-ok1]] ပထမ စာကြောင်းမှာ သုည အတွက် ok ထွက်ပြီး၊ [[mark:point-ok2]] ဒုတိယ စာကြောင်းမှာ
+      ၁၅၀၀ အတွက်လည်း ok ထွက်ပါတယ်။ [[mark:point-ok3]] တတိယ စာကြောင်းက ၂၀၂၆ ဖြစ်ပြီး ဒါလည်း ok
+      ပါပဲ။ case သုံးခုလုံး ကိုယ် ကြိုပြောထားတဲ့ အတိုင်း ဖြစ်တယ် ဆိုတာကို၊ ကိုယ်တိုင် တစ်ခုချင်း
+      လိုက်ကြည့်စရာ မလိုဘဲ program က ပြောပေးတာပါ။ case တွေကို ဇယားနဲ့ ရေးပြီး loop နဲ့ ရတာနဲ့
+      လိုချင်တာကို နှိုင်းယှဉ်တာက Go programmer တွေ test ရေးတဲ့ ပုံစံ အတိအကျပါပဲ။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+    actions:
+      - { id: point-ok1, type: console.point, at: { mark: point-ok1 }, target: { text: "ok ၀" } }
+      - { id: point-ok2, type: console.point, at: { mark: point-ok2 }, target: { text: "ok ၁၅၀၀" } }
+      - { id: point-ok3, type: console.point, at: { mark: point-ok3 }, target: { text: "ok ၂၀၂၆" } }
+
+  - id: lookalike
+    chapter: ဝ နဲ့ သုည
+    narration: >-
+      [[mark:collapse-1]] ဒါဆို တကယ့် ကောင်တာမှာ ဖြစ်တတ်တဲ့ case တစ်ခု ထပ်ထည့်ကြည့်ရအောင်။ lesson
+      ဆယ့်ငါးမှာ မြင်ခဲ့သလို၊ မြန်မာ ဂဏန်း သုည နဲ့ ဝ ဆိုတဲ့ စာလုံးက မျက်စိနဲ့ ကြည့်ရင် တူပေမဲ့ Unicode မှာ
+      မတူတဲ့ စာလုံး နှစ်လုံးပါ။ အမြန် ရိုက်တဲ့အခါ သုည နေရာမှာ ဝ ကို ရိုက်မိတာ တကယ် ဖြစ်တတ်ပါတယ်။
+      [[mark:type-case]] ဒါကြောင့် ၁၅၀၀ ကို သုည နေရာမှာ ဝ နှစ်လုံးနဲ့ ရိုက်ထားတဲ့ case တစ်ခု ထည့်ပါမယ်။
+      ကိုယ် လိုချင်တာကတော့ ၁၅၀၀ ပါပဲ။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Rune literals",
+          url: "https://go.dev/ref/spec#Rune_literals",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-case
+        type: editor.type
+        at: { mark: type-case }
+        target: { file: main.go, after: "\t\t{\"၂၀၂၆\", 2026},\n", occurrence: 1 }
+        text: "\t\t{\"၁၅ဝဝ\", 1500},\n"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "FAIL ၁၅ဝဝ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-case,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\t\t{\"၁၅ဝဝ\", 1500},\n",
+        }
+
+  - id: read-2
+    chapter: Check က bug ကို ဖမ်းတယ်
+    narration: >-
+      [[mark:point-fail]] နောက်ဆုံး စာကြောင်းမှာ FAIL ထွက်လာပါတယ်။ ၁၅၀၀ ကို လိုချင်ပေမဲ့ သုည ရနေတယ်လို့
+      ပြောပါတယ်။ ဘာကြောင့် သုည လဲဆိုတော့ function က ဝ ကို မြန်မာ ဂဏန်း မဟုတ်ဘူးလို့ error ပြန်ပေးပြီး၊
+      ဂဏန်း နေရာမှာ သုည ကို ပြန်ပေးလို့ပါ။ [[mark:point-old]] အပေါ်က case သုံးခုကတော့ ok ဖြစ်နေတုန်းပါ။
+      [[mark:decide]] ဒါဆို ဘာလုပ်မလဲ။ ဒါကို code ရဲ့ bug လို့ ယူမလား၊ ရိုက်တဲ့သူ မှားတာလို့ ယူမလား ဆိုတာ
+      ဆုံးဖြတ်ရပါမယ်။ လူတွေ တကယ် ဒီလို ရိုက်ကြပြီး ဆိုလိုရင်းကလည်း ရှင်းနေတဲ့အတွက်၊ ကိုယ်တို့ program က
+      လက်ခံပေးဖို့ ဆုံးဖြတ်ပါမယ်။ ဒါဟာ program ဘယ်လို အလုပ်လုပ်သင့်လဲ ဆိုတဲ့ ဆုံးဖြတ်ချက်ပါ။ အဲဒါကို case
+      တစ်ခုအဖြစ် အရင် ရေးထားတော့၊ ပြင်ပြီးတာနဲ့ မှန်မမှန် ချက်ချင်း သိနိုင်ပါတယ်။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+    actions:
+      - {
+          id: point-fail,
+          type: console.point,
+          at: { mark: point-fail },
+          target: { text: "FAIL ၁၅ဝဝ: got 0, want 1500" },
+        }
+      - { id: point-old, type: console.point, at: { mark: point-old }, target: { text: "ok ၂၀၂၆" } }
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: decide } }
+
+  - id: fix
+    chapter: ဆုံးဖြတ်ချက်ကို code အဖြစ် ရေးတာ
+    narration: >-
+      [[mark:open-digits-2]] ဒါဆို digits ဖိုင်က function ကို ပြင်ကြည့်ရအောင်။ [[mark:type-rule]] loop ရဲ့
+      အစမှာ၊ စာလုံးက ဝ ဖြစ်နေရင် မြန်မာ ဂဏန်း သုည နဲ့ အရင် လဲပေးပါမယ်။ ပြီးမှ အောက်က စစ်ဆေးချက်က
+      ပုံမှန်အတိုင်း ဆက်စစ်ပါတယ်။ ဒါကြောင့် ဝ ကို သုည လို့ ဖတ်ပေးပြီး၊ တခြား မဆိုင်တဲ့ စာလုံး ပါလာရင်တော့
+      အရင်အတိုင်း error ပြန်ပေးပါတယ်။ [[mark:run-3]] ကဲ၊ ထပ်ပြီး run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: open-digits-2,
+          type: workspace.openFile,
+          at: { mark: open-digits-2 },
+          path: digits.go,
+        }
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        target: { file: digits.go, after: "\tfor _, r := range s {\n", occurrence: 1 }
+        text: "\t\tif r == 'ဝ' {\n\t\t\tr = '၀'\n\t\t}\n"
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "ok ၁၅ဝဝ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-rule,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: digits.go,
+          contains: "\t\tif r == 'ဝ' {\n\t\t\tr = '၀'\n\t\t}\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-fixed]] နောက်ဆုံး စာကြောင်းမှာ ဝ နှစ်လုံးနဲ့ ရိုက်ထားတဲ့ case က ok ဖြစ်သွားပြီး၊ case
+      လေးခုလုံး ok ပါပြီ။ ဒီမှာ အရေးကြီးတာက၊ ဒီ run က ပြင်လိုက်တာဟာ case အသစ်ကို မှန်စေရုံ မကဘဲ အရင် case
+      တွေကိုလည်း မထိခိုက်ဘူး ဆိုတာကို တစ်ခါတည်း သက်သေပြတာပါ။ ဒါကြောင့် test တွေကို ဖျက်မပစ်ဘဲ ထားပြီး၊ code
+      ပြောင်းတိုင်း အကုန်လုံးကို ပြန် run ကြပါတယ်။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+    actions:
+      - {
+          id: point-fixed,
+          type: console.point,
+          at: { mark: point-fixed },
+          target: { text: "ok ၁၅ဝဝ" },
+        }
+
+  - id: computer
+    chapter: ကိုယ့်ကွန်ပျူတာပေါ်မှာ
+    narration: >-
+      [[mark:board-computer]] ဒီ course တစ်ခုလုံးမှာ code ကို lesson ထဲမှာပဲ ရေးပြီး run ခဲ့ပါတယ်။
+      ကိုယ့်ကွန်ပျူတာပေါ်မှာ ဆက်ရေးချင်ရင် ဘာတွေ ပြောင်းလဲ ကြည့်ရအောင်။ [[mark:draw-get]] ပထမဆုံး Go ရဲ့
+      တရားဝင် စာမျက်နှာကနေ ကိုယ့်ကွန်ပျူတာနဲ့ ကိုက်တဲ့ ဖိုင်ကို ယူပြီး Go ကို ထည့်သွင်းရပါတယ်။ Windows
+      ဆိုရင် အဲဒီ ဖိုင်ကို ဖွင့်ပြီး ပြတဲ့အတိုင်း လိုက်လုပ်ရုံပါပဲ။ ပြီးရင် command prompt မှာ go version
+      လို့ ရိုက်ကြည့်ပါ၊ Go ရဲ့ version ကို ပြရင် အဆင်သင့် ဖြစ်ပါပြီ။ [[mark:draw-folder]] နောက်တစ်ဆင့်က
+      project အတွက် folder တစ်ခု လုပ်ပြီး၊ အဲဒီထဲမှာ go mod init နဲ့ module တစ်ခု စတာပါ။ module ဆိုတာ
+      package တွေကို စုထားတဲ့ project တစ်ခုပါ၊ go mod ဖိုင်က module ရဲ့ နာမည်နဲ့ Go version ကို
+      မှတ်ထားပါတယ်။ ပြီးရင် ဒီ course က Go ဖိုင်တွေကို အဲဒီ folder ထဲ ထည့်လိုက်ရုံပါပဲ။
+      [[mark:draw-commands]] go run ကတော့ ဒီမှာ run လိုက်တိုင်း ဖြစ်ခဲ့သလို၊ compile လုပ်ပြီး ချက်ချင်း
+      run ပေးပါတယ်။ go build ကတော့ run လို့ရတဲ့ program ဖိုင် တစ်ခု ထုတ်ပေးလို့၊ Go မရှိတဲ့ အလားတူ
+      ကွန်ပျူတာမှာတောင် အဲဒီ ဖိုင်ကို run လို့ ရပါတယ်။ [[mark:draw-fmt]] ဒီ course မှာ ကိုယ့်အတွက် အလိုလို
+      လုပ်ပေးခဲ့တဲ့ gofmt နဲ့ vet ကိုလည်း ကိုယ်တိုင် run ရပါမယ်။ gofmt က code ကို Go ရဲ့ ပုံစံ တစ်မျိုးတည်း
+      ညှိပေးပြီး၊ vet က မှားနိုင်တဲ့ နေရာတွေကို ထောက်ပြပါတယ်။ [[mark:draw-std]] lesson နှစ်ကနေ
+      သုံးဆယ့်လေးအထိ ရေးခဲ့တဲ့ program တွေက standard library ကိုပဲ သုံးတဲ့အတွက်၊ ဘာမှ မပြင်ဘဲ အဲဒီမှာ
+      run ပါတယ်။ Go ကို ထည့်သွင်းပြီးရင် အင်တာနက်ကနေ ဘာမှ ထပ်ယူစရာ မလိုလို့ mobile data နဲ့ သုံးသူတွေအတွက်
+      အဆင်ပြေပါတယ်။
+    sources:
+      - { title: "Download and install", url: "https://go.dev/doc/install" }
+      - { title: "Tutorial: Create a Go module", url: "https://go.dev/doc/tutorial/create-module" }
+      - { title: "Command go", url: "https://pkg.go.dev/cmd/go" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: board-computer } }
+      - {
+          id: board-computer,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-get,
+          type: whiteboard.apply,
+          at: { mark: draw-get },
+          upsertIds: [f-get, f-ver],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-folder,
+          type: whiteboard.apply,
+          at: { mark: draw-folder },
+          upsertIds: [f-folder, f-fname, f-gomod, f-main, f-dig, f-c1],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-commands,
+          type: whiteboard.apply,
+          at: { mark: draw-commands },
+          upsertIds: [f-c2, f-c3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-fmt,
+          type: whiteboard.apply,
+          at: { mark: draw-fmt },
+          upsertIds: [f-c4],
+          drawMs: 900,
+        }
+      - {
+          id: draw-std,
+          type: whiteboard.apply,
+          at: { mark: draw-std },
+          upsertIds: [f-std, f-std-t],
+          drawMs: 1400,
+        }
+
+  - id: test-file
+    chapter: တကယ့် test ဖိုင်
+    narration: >-
+      [[mark:board-test]] ဒီနေ့ main ထဲမှာ ရေးခဲ့တဲ့ စစ်ဆေးချက်ကို ကိုယ့်ကွန်ပျူတာမှာ တကယ့် test အဖြစ် ဘယ်လို
+      ရေးလဲ ကြည့်ရအောင်။ [[mark:draw-testfile]] test ကို နာမည်ရဲ့ နောက်ဆုံးမှာ test ဆိုတဲ့ စကားလုံး ပါတဲ့
+      ဖိုင် သီးသန့်မှာ ရေးပါတယ်။ function နာမည်ကို Test နဲ့ စရပြီး၊ testing package ရဲ့ T ဆိုတဲ့ type ကို
+      pointer အနေနဲ့ ယူပါတယ်။ အထဲမှာ ဒီနေ့ ဇယားနဲ့ loop ကို ဒီအတိုင်း ရေးနိုင်ပါတယ်။ ကွာတာက FAIL လို့
+      ကိုယ်တိုင် print ထုတ်မယ့်အစား၊ T ရဲ့ method တစ်ခုနဲ့ ဒီ case မှားတယ်လို့ သတင်းပို့တာပါ။
+      [[mark:draw-gotest]] ပြီးရင် go test ကို run လိုက်ရင်၊ Go က test ဖိုင်တွေထဲက Test function တွေကို ရှာပြီး
+      run ပေးပါတယ်။ အားလုံး မှန်ရင် ok လို့ ပြပြီး၊ တစ်ခုခု မှားရင် ဘယ်ဖိုင် ဘယ် line မှာ ဘယ် case မှားလဲ
+      ဆိုတာ ပြပါတယ်။ ဒီ lesson ထဲမှာတော့ test ဖိုင်ကို run လို့ မရလို့ main ထဲမှာ loop နဲ့ ရေးခဲ့တာပါ။
+      [[mark:draw-extra]] go test ကို race detector နဲ့ တွဲ run ရင် lesson သုံးဆယ့်နှစ်က data race လို
+      bug တွေကို ဖမ်းပေးပါတယ်။ go fix ကတော့ code အဟောင်းကို Go ရဲ့ ရေးနည်း အသစ်တွေနဲ့ အလိုအလျောက်
+      ပြင်ပေးတဲ့ tool ပါ။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+      - { title: "Data Race Detector", url: "https://go.dev/doc/articles/race_detector" }
+      - { title: "Go 1.26 Release Notes", url: "https://go.dev/doc/go1.26" }
+    actions:
+      - {
+          id: board-test,
+          type: whiteboard.apply,
+          at: { mark: board-test },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-testfile,
+          type: whiteboard.apply,
+          at: { mark: draw-testfile },
+          upsertIds: [t-code, t-l1, t-l2, t-l3, t-l4, t-l5],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-gotest,
+          type: whiteboard.apply,
+          at: { mark: draw-gotest },
+          upsertIds: [t-run, t-r1],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-extra,
+          type: whiteboard.apply,
+          at: { mark: draw-extra },
+          upsertIds: [t-r2],
+          drawMs: 1000,
+        }
+
+  - id: next-steps
+    chapter: နောက်ထပ် လေ့လာစရာ
+    narration: >-
+      [[mark:board-next]] ဒီ course ပြီးရင် ဘာ ဆက်လေ့လာမလဲ။ [[mark:draw-next]] ပထမ တစ်ခုက ကိုယ်ပိုင်
+      package တွေ ခွဲရေးတာနဲ့၊ တခြားသူတွေ ရေးထားတဲ့ module တွေကို ယူသုံးတာပါ။ ပြီးတော့ JSON နဲ့ HTTP ကို
+      သုံးပြီး အင်တာနက်ပေါ်က program တွေနဲ့ ချိတ်တာ၊ ဖိုင်တွေကို ဖတ်တာ ရေးတာ တို့ ရှိပါတယ်။ [[mark:more-next]] context နဲ့ ကြာနေတဲ့ အလုပ်ကို
+      အချိန်မီ ရပ်ခိုင်းတာ၊ struct တစ်ခုထဲမှာ တခြား struct ကို ထည့်ပြီး ပြန်သုံးတဲ့ embedding တို့လည်း ရှိပါသေးတယ်။
+      ဒီ course မှာ လေ့လာခဲ့တဲ့ type၊ error၊ goroutine နဲ့ channel တွေကို အဲဒီ နေရာ အားလုံးမှာ ဒီအတိုင်းပဲ
+      ပြန်သုံးရမှာပါ။
+    sources:
+      - { title: "Documentation", url: "https://go.dev/doc/" }
+      - { title: "Effective Go — Embedding", url: "https://go.dev/doc/effective_go#embedding" }
+    actions:
+      - {
+          id: board-next,
+          type: whiteboard.apply,
+          at: { mark: board-next },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-next,
+          type: whiteboard.apply,
+          at: { mark: draw-next },
+          upsertIds: [s-course, s-course-t, s-arrow, s-1, s-2, s-3, s-4, s-5],
+          drawMs: 4000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဇယားထဲကို စာသား အလွတ်ကို ပေးပြီး သုည ကို လိုချင်တယ် ဆိုတဲ့ case
+      တစ်ခု ထည့်တယ် ဆိုပါစို့။ ဝ ကို လက်ခံတဲ့ function နဲ့ run ရင် ok ထွက်မလား၊ FAIL ထွက်မလား။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ ok ပါ။ ဘာကြောင့်လဲဆိုတော့ စာသား
+      အလွတ်မှာ စာလုံး တစ်လုံးမှ မပါလို့ loop က တစ်ခေါက်မှ မလည်ဘဲ၊ သုညနဲ့ စထားတဲ့ ဂဏန်းကို error မပါဘဲ
+      ပြန်ပေးလို့ပါ။ စာသား အလွတ်ကို လက်ခံမလား ငြင်းမလား ဆိုတာလည်း ဆုံးဖြတ်ချက် တစ်ခုပါ။ case တစ်ခုအဖြစ်
+      ရေးလိုက်တာနဲ့ အဲဒီ ဆုံးဖြတ်ချက်က code ထဲမှာ ထင်ထင်ရှားရှား ပေါ်လာပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-table]] စစ်ချင်တဲ့ case တွေကို ဇယားနဲ့ ရေးပြီး
+      loop နဲ့ ရတာနဲ့ လိုချင်တာကို နှိုင်းယှဉ်တာက Go test ရဲ့ ပုံစံပါ။ [[mark:recap-rule]] case အသစ်က bug
+      ကို ဖမ်းပေးပြီး၊ ပြင်ပြီးနောက် case အားလုံး ok ဖြစ်တာက ဆုံးဖြတ်ချက်ကို သက်သေပြပါတယ်။
+      ကိုယ့်ကွန်ပျူတာပေါ်မှာတော့ module တစ်ခု လုပ်ပြီး go run၊ go build၊ go test တို့နဲ့ ဆက်ရေးနိုင်ပါတယ်။
+      [[mark:farewell]] ဒီ course မှာ စာ တစ်ကြောင်း ထုတ်ပြတဲ့ program လေးကနေ စပြီး၊ variable၊ function၊
+      ကိုယ်ပိုင် type၊ error၊ goroutine တွေကနေ ဖိုင် အများကြီးပါတဲ့ program တစ်ခုအထိ အတူတူ ရေးခဲ့ကြပါတယ်။
+      ကိုယ့် နေ့စဉ် ဘဝထဲက ပြဿနာ လေးတွေအတွက် program တွေကို Go နဲ့ ဆက်ရေးကြည့်ပါ။ ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
+    sources:
+      - { title: "Tutorial: Add a test", url: "https://go.dev/doc/tutorial/add-a-test" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-main-2, type: workspace.openFile, at: { mark: recap-table }, path: main.go }
+      - id: recap-table-sel
+        type: editor.select
+        at: { afterAction: open-main-2 }
+        target:
+          {
+            file: main.go,
+            text: "\t\t{\"၀\", 0},\n\t\t{\"၁၅၀၀\", 1500},\n\t\t{\"၂၀၂၆\", 2026},\n\t\t{\"၁၅ဝဝ\", 1500},\n",
+            occurrence: 1,
+          }
+      - { id: open-digits-3, type: workspace.openFile, at: { mark: recap-rule }, path: digits.go }
+      - id: recap-rule-sel
+        type: editor.select
+        at: { afterAction: open-digits-3 }
+        target: { file: digits.go, text: "if r == 'ဝ' {\n\t\t\tr = '၀'\n\t\t}", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
