@@ -50,6 +50,7 @@ import {
   encodeHeaderJson,
   isCurrentRoom,
   isOpen,
+  MAX_SOCKETS_PER_USER,
   rateWindowCount,
 } from "./socketSupport";
 
@@ -57,14 +58,6 @@ const VOICE_ORIGIN = "https://collaboration-voice.internal";
 const VOICE_SESSION_HEADER = "X-Collaboration-Voice-Session";
 const VOICE_CONNECTION_HEADER = "X-Voice-Connection";
 const MAX_VOICE_CONNECTIONS_PER_USER_PER_MINUTE = 12;
-/**
- * Concurrent voice sockets one account may hold. Seats are counted per user, so
- * this is not a seat limit — it only stops a single member from growing the
- * socket table (and the fan-out cost of every roster broadcast) without bound.
- * Generous enough for a laptop plus a phone, plus a lingering socket that has
- * not yet been reaped.
- */
-const MAX_VOICE_SOCKETS_PER_USER = 4;
 const MAX_PENDING_SFU_REQUESTS_PER_CONNECTION = 4;
 
 // WebSocket close codes for the voice coordination socket.
@@ -399,7 +392,9 @@ export class CollaborationVoiceRoomDurableObject extends DurableObject<Env> {
     if (occupiedUserIds.size >= capacity) {
       return Response.json({ error: "voice room is full" }, { status: 409 });
     }
-    if (ownConcurrentSockets >= MAX_VOICE_SOCKETS_PER_USER) {
+    // Seats are counted per user, so this is not a seat limit; it bounds the
+    // socket table and the fan-out cost of every roster broadcast.
+    if (ownConcurrentSockets >= MAX_SOCKETS_PER_USER) {
       return Response.json({ error: "too many concurrent voice connections" }, { status: 409 });
     }
 

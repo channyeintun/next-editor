@@ -12,6 +12,16 @@ const WEBSOCKET_OPEN = 1;
  */
 export const ACCESS_REVALIDATION_INTERVAL_MS = 5_000;
 
+/**
+ * Concurrent sockets one account may hold on one room or voice object, beside
+ * the one a reconnect replaces. Every budget those objects keep (sync answers,
+ * awareness and update windows, roster broadcasts) is per socket, so this is
+ * what stops one member multiplying them, and the fan-out cost of every
+ * broadcast, by opening sockets under fresh session IDs. Generous enough for a
+ * laptop plus a phone, plus a lingering socket not yet reaped.
+ */
+export const MAX_SOCKETS_PER_USER = 4;
+
 export function isOpen(socket: WebSocket): boolean {
   return socket.readyState === WEBSOCKET_OPEN;
 }

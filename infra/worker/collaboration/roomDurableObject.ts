@@ -74,6 +74,7 @@ import {
   encodeHeaderJson,
   isCurrentRoom,
   isOpen,
+  MAX_SOCKETS_PER_USER,
   rateWindowCount,
   SocketFrameWindow,
 } from "./socketSupport";
@@ -494,6 +495,20 @@ export class CollaborationRoomDurableObject extends DurableObject<Env> {
         status: 429,
         headers: { "Retry-After": "60" },
       });
+    }
+
+    // Counted before anything is replaced, so a refusal changes nothing. The
+    // session's own previous socket does not count: the reconnect replaces it.
+    let ownConcurrentSockets = 0;
+    for (const existing of this.ctx.getWebSockets(`user:${session.userId}`)) {
+      if (!isOpen(existing)) continue;
+      const attachment = attachmentFor(existing);
+      if (attachment?.userId === session.userId && attachment.sessionId !== session.sessionId) {
+        ownConcurrentSockets += 1;
+      }
+    }
+    if (ownConcurrentSockets >= MAX_SOCKETS_PER_USER) {
+      return new Response("too many concurrent collaboration connections", { status: 409 });
     }
 
     // A socket for the same (userId, sessionId) is this session's previous

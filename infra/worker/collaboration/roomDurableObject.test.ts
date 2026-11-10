@@ -745,6 +745,45 @@ describe("CollaborationRoomDurableObject session reconnects", () => {
   });
 });
 
+// Every budget the room keeps (sync answers, awareness, updates) is per
+// socket, so without a per-member cap one member could multiply them by
+// opening sockets with fresh session IDs.
+describe("CollaborationRoomDurableObject concurrent sockets per member", () => {
+  it("refuses a member's fifth concurrent socket and keeps the four open", async () => {
+    const { upgrade } = await createRoom();
+    const open = [];
+    for (let index = 0; index < 4; index += 1) open.push(await upgrade(MEMBER_ID, uuid()));
+
+    const fifth = await upgrade(MEMBER_ID, uuid());
+
+    expect(open.map(({ response }) => response.status)).toEqual([101, 101, 101, 101]);
+    expect(fifth.response.status).toBe(409);
+    expect(fifth.socket).toBeNull();
+    expect(open.map(({ socket }) => socket!.closeCode)).toEqual([null, null, null, null]);
+  });
+
+  it("still lets a member at the cap reconnect one of their sessions", async () => {
+    const { upgrade } = await createRoom();
+    const sessionIds = [uuid(), uuid(), uuid(), uuid()];
+    const open = [];
+    for (const sessionId of sessionIds) open.push(await upgrade(MEMBER_ID, sessionId));
+
+    const reconnect = await upgrade(MEMBER_ID, sessionIds[0]);
+
+    expect(reconnect.response.status).toBe(101);
+    expect(open[0].socket!.closeCode).toBe(4000);
+  });
+
+  it("counts only the member's own sockets", async () => {
+    const { upgrade } = await createRoom();
+    for (let index = 0; index < 4; index += 1) await upgrade(MEMBER_ID, uuid());
+
+    const peer = await upgrade(PEER_ID, uuid());
+
+    expect(peer.response.status).toBe(101);
+  });
+});
+
 describe("CollaborationRoomDurableObject awareness", () => {
   it("shows a participant again as soon as they republish after a reconnect", async () => {
     const { room, connect } = await createRoom();
