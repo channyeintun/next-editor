@@ -1,0 +1,1082 @@
+# Go course, lesson 08: switch (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and `day := "Friday"` in main.
+# Edits, all insert-only:
+#   1. `switch day {` with the Monday-Thursday cases and the closing brace, then the
+#      Friday-Sunday cases -> run-1: ပူး (one case runs; the cases below it do not);
+#   2. `day = "Fri"` under the first line and a `default` case -> run-2: Fri ဆိုတဲ့ နေ့ မရှိပါ;
+#   3. `, "Fri"` into the Friday case (several values in one case), then `mark := 72` and a
+#      tagless switch on the mark bands -> run-3: ပူး / 72 B.
+# Boards: (D) eight doors (seven days + default), exactly one opens; (B) the mark bands checked
+# from the top; (Q) quiz: the same value in two cases is a compile error.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-08-switch
+  title: "Go course 08: switch နဲ့ ရွေးတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        	day := "Friday"
+        }
+  whiteboardAssets:
+    # Board D: a switch is a row of doors; exactly one opens.
+    - {
+        id: d-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 780,
+        height: 50,
+        text: "switch · တံခါး တစ်ပေါက်ပဲ ဖွင့်တယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: d-mon-box,
+        kind: rectangle,
+        x: 280,
+        y: 240,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-tue-box,
+        kind: rectangle,
+        x: 485,
+        y: 240,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-wed-box,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-thu-box,
+        kind: rectangle,
+        x: 895,
+        y: 240,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-fri-box,
+        kind: rectangle,
+        x: 280,
+        y: 360,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-sat-box,
+        kind: rectangle,
+        x: 485,
+        y: 360,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-sun-box,
+        kind: rectangle,
+        x: 690,
+        y: 360,
+        width: 195,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-mon,
+        kind: text,
+        x: 295,
+        y: 250,
+        width: 165,
+        height: 40,
+        text: "Monday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-tue,
+        kind: text,
+        x: 500,
+        y: 250,
+        width: 165,
+        height: 40,
+        text: "Tuesday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-wed,
+        kind: text,
+        x: 705,
+        y: 250,
+        width: 165,
+        height: 40,
+        text: "Wednesday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-thu,
+        kind: text,
+        x: 910,
+        y: 250,
+        width: 165,
+        height: 40,
+        text: "Thursday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-fri,
+        kind: text,
+        x: 295,
+        y: 370,
+        width: 165,
+        height: 40,
+        text: "Friday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sat,
+        kind: text,
+        x: 500,
+        y: 370,
+        width: 165,
+        height: 40,
+        text: "Saturday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sun,
+        kind: text,
+        x: 705,
+        y: 370,
+        width: 165,
+        height: 40,
+        text: "Sunday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-mon-a,
+        kind: text,
+        x: 295,
+        y: 293,
+        width: 165,
+        height: 40,
+        text: "ကျား",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-tue-a,
+        kind: text,
+        x: 500,
+        y: 293,
+        width: 165,
+        height: 40,
+        text: "ခြင်္သေ့",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-wed-a,
+        kind: text,
+        x: 705,
+        y: 293,
+        width: 165,
+        height: 40,
+        text: "ဆင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-thu-a,
+        kind: text,
+        x: 910,
+        y: 293,
+        width: 165,
+        height: 40,
+        text: "ကြွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-fri-a,
+        kind: text,
+        x: 295,
+        y: 413,
+        width: 165,
+        height: 40,
+        text: "ပူး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sat-a,
+        kind: text,
+        x: 500,
+        y: 413,
+        width: 165,
+        height: 40,
+        text: "နဂါး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-sun-a,
+        kind: text,
+        x: 705,
+        y: 413,
+        width: 165,
+        height: 40,
+        text: "ဂဠုန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-def-box,
+        kind: rectangle,
+        x: 895,
+        y: 360,
+        width: 195,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-def,
+        kind: text,
+        x: 910,
+        y: 370,
+        width: 165,
+        height: 40,
+        text: "default",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-def-a,
+        kind: text,
+        x: 910,
+        y: 413,
+        width: 165,
+        height: 40,
+        text: "ကျန်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-value,
+        kind: text,
+        x: 285,
+        y: 495,
+        width: 400,
+        height: 40,
+        text: "day ထဲမှာ Friday",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: d-pick,
+        kind: freedraw,
+        stroke: circle,
+        x: 268,
+        y: 350,
+        width: 220,
+        height: 120,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-rule,
+        kind: text,
+        x: 285,
+        y: 565,
+        width: 700,
+        height: 40,
+        text: "တစ်ပေါက် ဖွင့်ပြီးရင် switch ပြီးပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board B: a switch with no value checks conditions from the top.
+    - {
+        id: b-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "တန်ဖိုး မပါတဲ့ switch",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: b-a-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 470,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-b-box,
+        kind: rectangle,
+        x: 285,
+        y: 315,
+        width: 470,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-c-box,
+        kind: rectangle,
+        x: 285,
+        y: 390,
+        width: 470,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-a,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 420,
+        height: 40,
+        text: "mark >= 80  →  A",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-b,
+        kind: text,
+        x: 305,
+        y: 325,
+        width: 420,
+        height: 40,
+        text: "mark >= 60  →  B",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-c,
+        kind: text,
+        x: 305,
+        y: 400,
+        width: 420,
+        height: 40,
+        text: "default  →  C",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-order,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 790,
+        y: 245,
+        width: 40,
+        height: 200,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-order-label,
+        kind: text,
+        x: 850,
+        y: 320,
+        width: 230,
+        height: 40,
+        text: "အပေါ်ကနေ အောက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-value,
+        kind: text,
+        x: 285,
+        y: 490,
+        width: 300,
+        height: 40,
+        text: "mark = 72",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: b-pick,
+        kind: freedraw,
+        stroke: circle,
+        x: 270,
+        y: 305,
+        width: 500,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-rule,
+        kind: text,
+        x: 285,
+        y: 560,
+        width: 760,
+        height: 40,
+        text: "ပထမဆုံး true ဖြစ်တဲ့ case ကို run",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (the same value in two cases).
+    - {
+        id: q-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 230,
+        width: 520,
+        height: 310,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 300,
+        height: 40,
+        text: 'day := "Fri"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 282,
+        width: 300,
+        height: 40,
+        text: "switch day {",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 324,
+        width: 420,
+        height: 40,
+        text: 'case "Friday", "Fri":',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l4,
+        kind: text,
+        x: 340,
+        y: 366,
+        width: 340,
+        height: 40,
+        text: 'fmt.Println("ပူး")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l5,
+        kind: text,
+        x: 300,
+        y: 408,
+        width: 300,
+        height: 40,
+        text: 'case "Fri":',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l6,
+        kind: text,
+        x: 340,
+        y: 450,
+        width: 400,
+        height: 40,
+        text: 'fmt.Println("သောကြာ")',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l7,
+        kind: text,
+        x: 300,
+        y: 492,
+        width: 100,
+        height: 40,
+        text: "}",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 290,
+        y: 400,
+        width: 200,
+        height: 56,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 285,
+        y: 555,
+        width: 420,
+        height: 40,
+        text: "က · ပူး ထွက်မယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 285,
+        y: 605,
+        width: 420,
+        height: 40,
+        text: "ခ · compile error",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 600,
+        y: 598,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7108
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "ပူး\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "Fri ဆိုတဲ့ နေ့ မရှိပါ\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "ပူး\n72 B\n"
+
+scenes:
+  - id: recall
+    chapter: switch ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ for loop နဲ့ အလုပ် တစ်ခုကို ထပ်ခါထပ်ခါ လုပ်တာကို လေ့လာခဲ့ပါတယ်။ အဲဒီ မတိုင်ခင်
+      lesson မှာတော့ if နဲ့ else ကို သုံးပြီး လမ်း နှစ်လမ်း သုံးလမ်းထဲက တစ်လမ်းကို ရွေးခဲ့ပါတယ်။ ဒါပေမဲ့ ရွေးစရာက
+      ခုနစ်ခု ရှစ်ခုလောက် ရှိနေရင်ကော ဘယ်လို ရေးမလဲ။ ဒီနေ့ lesson မှာ အဲဒီလို အခြေအနေအတွက် switch ကို
+      လေ့လာပါမယ်။ [[mark:board-doors]] ဥပမာ အနေနဲ့ မြန်မာ ဓလေ့ထဲက မွေးနေ့ တိရစ္ဆာန်ကို ယူကြည့်ရအောင်။
+      ကိုယ် ဘာနေ့ မွေးလဲ ဆိုတာကို ကြည့်ပြီး တိရစ္ဆာန် တစ်ကောင် သတ်မှတ်ကြပါတယ်။ [[mark:draw-doors]] တနင်္လာနေ့ ဆိုရင်
+      ကျား၊ အင်္ဂါနေ့ ခြင်္သေ့၊ ဗုဒ္ဓဟူးနေ့ ဆင်၊ ကြာသပတေးနေ့ ကြွက်၊ သောကြာနေ့ ပူး၊ စနေနေ့ နဂါး၊
+      တနင်္ဂနွေနေ့ ဆိုရင်တော့ ဂဠုန် ဖြစ်ပါတယ်။ ဗုဒ္ဓဟူးနေ့ ညနေပိုင်း မွေးရင် ရာဟု လို့ ခွဲပြောကြတာလည်း
+      ရှိပေမဲ့၊ ဒီနေ့ program မှာတော့ နေ့ရဲ့ နာမည်ကိုပဲ ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Switch statements",
+          url: "https://go.dev/ref/spec#Switch_statements",
+        }
+      - { title: "Effective Go — Switch", url: "https://go.dev/doc/effective_go#switch" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-doors,
+          type: whiteboard.apply,
+          at: { mark: board-doors },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - id: draw-doors
+        type: whiteboard.apply
+        at: { mark: draw-doors }
+        upsertIds:
+          [
+            d-mon-box,
+            d-tue-box,
+            d-wed-box,
+            d-thu-box,
+            d-fri-box,
+            d-sat-box,
+            d-sun-box,
+            d-mon,
+            d-tue,
+            d-wed,
+            d-thu,
+            d-fri,
+            d-sat,
+            d-sun,
+            d-mon-a,
+            d-tue-a,
+            d-wed-a,
+            d-thu-a,
+            d-fri-a,
+            d-sat-a,
+            d-sun-a,
+          ]
+        drawMs: 4000
+
+  - id: doors
+    narration: >-
+      [[mark:draw-default]] board ပေါ်က တံခါး တစ်ပေါက်စီကို case လို့ ခေါ်ပါတယ်။ case တစ်ခုစီမှာ နေ့ နာမည်
+      တစ်ခုစီ ကပ်ထားပြီး၊ နောက်ဆုံး တံခါးကတော့ default ပါ။ အပေါ်က case တစ်ခုနဲ့မှ မကိုက်တဲ့အခါ အဲဒီ
+      တံခါးကို ဖွင့်ပါတယ်။ [[mark:draw-pick]] switch က variable တစ်ခုရဲ့ တန်ဖိုးကို တစ်ခါ ကြည့်ပြီး၊ အဲဒီ
+      တန်ဖိုးနဲ့ ကိုက်တဲ့ တံခါး တစ်ပေါက်တည်းကို ဖွင့်ပေးပါတယ်။ ဥပမာ တန်ဖိုးက Friday ဆိုရင် Friday တံခါးကိုပဲ
+      ဖွင့်ပြီး၊ ကျန်တဲ့ တံခါးတွေကို လုံးဝ မဖွင့်ပါဘူး။ [[mark:draw-rule]] if နဲ့ else ကိုပဲ သုံးပြီး ရေးလည်း
+      ရပါတယ်။ ဒါပေမဲ့ နေ့ ခုနစ်နေ့ အတွက် တူညီတဲ့ နှိုင်းယှဉ်ချက်ကို ခုနစ်ခါ ထပ်ရေးရမှာပါ။ switch ကတော့ ဘာကို
+      ကြည့်မလဲ ဆိုတာကို ထိပ်မှာ တစ်ခါပဲ ရေးပြီး၊ ရွေးစရာတွေကို အောက်မှာ စီထားလို့ ဖတ်ရတာ ပိုရှင်းပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+      - { title: "Effective Go — Switch", url: "https://go.dev/doc/effective_go#switch" }
+    actions:
+      - {
+          id: draw-default,
+          type: whiteboard.apply,
+          at: { mark: draw-default },
+          upsertIds: [d-def-box, d-def, d-def-a],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-pick,
+          type: whiteboard.apply,
+          at: { mark: draw-pick },
+          upsertIds: [d-value, d-pick],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-rule },
+          upsertIds: [d-rule],
+          drawMs: 1200,
+        }
+
+  - id: write
+    chapter: switch ကို ရေးကြည့်ရအောင်
+    narration: >-
+      [[mark:close-doors]] ဒါဆို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:sel-day]] main ထဲမှာ day ဆိုတဲ့ variable
+      ရှိပြီး Friday လို့ ထည့်ထားပါတယ်။ ၂၀၂၆ ခုနှစ်ရဲ့ မြန်မာ နှစ်သစ်ကူးနေ့က သောကြာနေ့ ကျလို့
+      အဲဒီ နေ့ကို ယူထားတာပါ။ နောက်ပိုင်း lesson တစ်ခုမှာတော့ ဒီ နေ့ နာမည်ကို ရက်စွဲကနေ Go က ကိုယ်တိုင် တွက်ပေးတာကို တွေ့ရပါမယ်။
+      [[mark:type-switch-a]] အခု အောက်မှာ switch ကို ရေးပါမယ်။ ထိပ်ဆုံး line မှာ switch ဆိုတဲ့
+      keyword နောက်က day ကို ရေးထားလို့၊ ဒီ switch က day ရဲ့ တန်ဖိုးကို ကြည့်မှာပါ။ အောက်က case တစ်ခုစီမှာ
+      နေ့ နာမည် တစ်ခုကို ရေးပြီး၊ အဲဒီ နေ့နဲ့ ကိုက်ရင် လုပ်ရမယ့် အလုပ်ကို နောက် line မှာ ရေးပါတယ်။ ဒီမှာတော့
+      ကိုက်တဲ့ တိရစ္ဆာန် နာမည်ကို print ထုတ်တာပါ။ [[mark:sel-case]] ပထမ case ကို ကြည့်ပါ။ day ထဲမှာ Monday
+      ရှိရင် ကျား လို့ ထုတ်ပြမယ်လို့ ပြောတာပါ။ case တစ်ခုရဲ့ အလုပ်က နောက် case မရောက်ခင်အထိ ရှိတဲ့ line
+      တွေပါ။ [[mark:type-switch-b]] ကျန်တဲ့ သောကြာ၊ စနေ၊ တနင်္ဂနွေ အတွက် case တွေကိုလည်း အဲဒီ ပုံစံအတိုင်း
+      ဆက်ထည့်ပါမယ်။ ဒါဆို case ခုနစ်ခု ရှိသွားပါပြီ။ day ထဲမှာ Friday ရှိနေတော့ ဘာ ထွက်လာမလဲ ကြည့်ရအောင်။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+    actions:
+      - {
+          id: close-doors,
+          type: whiteboard.apply,
+          at: { mark: close-doors },
+          open: false,
+          upsertIds: [],
+        }
+      - id: sel-day
+        type: editor.select
+        at: { mark: sel-day }
+        target: { file: main.go, text: 'day := "Friday"', occurrence: 1 }
+      - id: type-switch-a
+        type: editor.type
+        at: { mark: type-switch-a }
+        target: { file: main.go, after: "\tday := \"Friday\"\n", occurrence: 1 }
+        text: "\tswitch day {\n\tcase \"Monday\":\n\t\tfmt.Println(\"ကျား\")\n\tcase \"Tuesday\":\n\t\tfmt.Println(\"ခြင်္သေ့\")\n\tcase \"Wednesday\":\n\t\tfmt.Println(\"ဆင်\")\n\tcase \"Thursday\":\n\t\tfmt.Println(\"ကြွက်\")\n\t}\n"
+        cadence: line-by-line
+      - id: sel-case
+        type: editor.select
+        at: { mark: sel-case }
+        target:
+          { file: main.go, text: "\tcase \"Monday\":\n\t\tfmt.Println(\"ကျား\")\n", occurrence: 1 }
+      - id: type-switch-b
+        type: editor.type
+        at: { mark: type-switch-b }
+        target: { file: main.go, after: "\t\tfmt.Println(\"ကြွက်\")\n", occurrence: 1 }
+        text: "\tcase \"Friday\":\n\t\tfmt.Println(\"ပူး\")\n\tcase \"Saturday\":\n\t\tfmt.Println(\"နဂါး\")\n\tcase \"Sunday\":\n\t\tfmt.Println(\"ဂဠုန်\")\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "ပူး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-switch,
+          type: expect.file,
+          at: { afterAction: run-1 },
+          path: main.go,
+          contains: "\tswitch day {\n",
+        }
+
+  - id: one-case
+    chapter: case တစ်ခုပဲ run တယ်
+    narration: >-
+      [[mark:point-1]] output မှာ ပူး ဆိုတဲ့ စာ တစ်ကြောင်းတည်း ထွက်လာပါတယ်။ day ထဲမှာ Friday ရှိလို့ Friday
+      case တစ်ခုတည်း run သွားတာပါ။ [[mark:no-fall]] သတိထားရမှာက Friday case ရဲ့ အောက်မှာ Saturday နဲ့ Sunday
+      case တွေ ရှိနေပေမဲ့၊ နဂါး နဲ့ ဂဠုန် ကို ထုတ်မပြတာပါ။ Go ရဲ့ switch မှာ ကိုက်တဲ့ case တစ်ခုကို run
+      ပြီးတာနဲ့ switch တစ်ခုလုံး ပြီးသွားပါတယ်။ ပြီးခဲ့တဲ့ lesson မှာ loop ကနေ ထွက်ဖို့ break ကို
+      သုံးခဲ့ပေမဲ့၊ switch မှာတော့ break ရေးပေးစရာ မလိုပါဘူး၊ Go က case တစ်ခု ပြီးတာနဲ့ အလိုအလျောက် ထွက်ပေးလို့ပါ။
+    sources:
+      - { title: "Effective Go — Switch", url: "https://go.dev/doc/effective_go#switch" }
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+    actions:
+      - { id: point-1, type: console.point, at: { mark: point-1 }, target: { text: "ပူး" } }
+
+  - id: default
+    chapter: default
+    narration: >-
+      [[mark:collapse-1]] ဒါဆို day ထဲကို ဘယ် case နဲ့မှ မကိုက်တဲ့ တန်ဖိုး ရောက်လာရင် ဘာဖြစ်မလဲ။ ဥပမာ
+      တစ်ယောက်ယောက်က Friday ကို အတိုကောက် ရေးလိုက်တယ် ဆိုပါစို့။ [[mark:type-fri]] ဒီ line က day ထဲကို
+      တန်ဖိုး အသစ် ပြန်ထည့်တာပါ။ switch မတိုင်ခင်မှာ ရှိလို့ switch က ဒီ တန်ဖိုး အသစ်ကို မြင်ရမှာပါ။
+      [[mark:type-default]] ပြီးတော့ switch ရဲ့ အောက်ဆုံးမှာ default ကို ထည့်ပါမယ်။ default ဆိုတာ အပေါ်က case
+      တစ်ခုမှ မကိုက်တဲ့အခါ run မယ့် အပိုင်းပါ။ ဒီမှာတော့ day ထဲက တန်ဖိုးနဲ့အတူ အဲဒီ နေ့ မရှိပါဘူး ဆိုတဲ့ စာကို
+      ထုတ်ပြပါမယ်။ default မပါရင်တော့ ဘယ် case နဲ့မှ မကိုက်တဲ့အခါ switch က ဘာမှ မလုပ်ဘဲ ကျော်သွားမှာပါ။
+      [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+      - {
+          title: "The Go Programming Language Specification — Assignment statements",
+          url: "https://go.dev/ref/spec#Assignment_statements",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-fri
+        type: editor.type
+        at: { mark: type-fri }
+        target: { file: main.go, after: "\tday := \"Friday\"\n", occurrence: 1 }
+        text: "\tday = \"Fri\"\n"
+      - id: type-default
+        type: editor.type
+        at: { mark: type-default }
+        target: { file: main.go, after: "\t\tfmt.Println(\"ဂဠုန်\")\n", occurrence: 1 }
+        text: "\tdefault:\n\t\tfmt.Println(day, \"ဆိုတဲ့ နေ့ မရှိပါ\")\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "Fri ဆိုတဲ့ နေ့ မရှိပါ",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-default,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\tdefault:\n\t\tfmt.Println(day, ",
+        }
+
+  - id: no-match
+    narration: >-
+      [[mark:point-2]] ဒီ တစ်ခါတော့ ပူး မထွက်တော့ဘဲ၊ Fri ဆိုတဲ့ နေ့ မရှိပါ လို့ ထွက်လာပါတယ်။ ကိုယ်တို့ လူတွေ
+      အတွက် Fri နဲ့ Friday က အဓိပ္ပာယ် တူပေမဲ့၊ program အတွက်တော့ စာလုံး မတူလို့ လုံးဝ မတူတဲ့ တန်ဖိုး
+      နှစ်ခုပါ။ ဒါကြောင့် case ခုနစ်ခုထဲက ဘယ်တစ်ခုနဲ့မှ မကိုက်ဘဲ default ကို ရောက်သွားတာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Comparison operators",
+          url: "https://go.dev/ref/spec#Comparison_operators",
+        }
+    actions:
+      - { id: point-2, type: console.point, at: { mark: point-2 }, target: { text: "ဆိုတဲ့ နေ့ မရှိပါ" } }
+
+  - id: many-values
+    chapter: case တစ်ခုမှာ တန်ဖိုး အများ
+    narration: >-
+      [[mark:collapse-2]] ဒါပေမဲ့ လူတွေက Friday ကို အတိုကောက် ရေးလေ့ ရှိတာမို့၊ နှစ်မျိုးလုံးကို လက်ခံချင်ပါတယ်။
+      [[mark:type-short]] ဒါကြောင့် Friday case ထဲကို Fri ကိုပါ ထပ်ထည့်လိုက်ပါမယ်။ [[mark:sel-short]] ဒါဆို
+      ဒီ case က Friday ဒါမှမဟုတ် Fri နှစ်ခုထဲက ဘယ်ဟာ ဖြစ်ဖြစ် ကိုက်ပါတယ်။ case တစ်ခုမှာ တန်ဖိုး တစ်ခုထက်
+      ပိုထည့်လို့ ရတာမို့၊ လုပ်ရမယ့် အလုပ် တူတဲ့ တန်ဖိုးတွေကို ဒီလို စုရေးလို့ ရပါတယ်။ ဥပမာ ကျောင်းပိတ်ရက်
+      ဖြစ်တဲ့ စနေနေ့နဲ့ တနင်္ဂနွေနေ့ကို case တစ်ခုတည်းမှာ ထည့်တာ မျိုးပါ။ ဒီ ပြောင်းလဲမှုကိုတော့ နောက်တစ်ခါ
+      run တဲ့အခါ ကြည့်ပါမယ်။
+    sources:
+      - { title: "Effective Go — Switch", url: "https://go.dev/doc/effective_go#switch" }
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-short
+        type: editor.type
+        at: { mark: type-short }
+        target: { file: main.go, after: 'case "Friday"', occurrence: 1 }
+        text: ', "Fri"'
+      - id: sel-short
+        type: editor.select
+        at: { mark: sel-short }
+        target: { file: main.go, text: 'case "Friday", "Fri":', occurrence: 1 }
+
+  - id: bands
+    chapter: တန်ဖိုး မပါတဲ့ switch
+    narration: >-
+      [[mark:board-bands]] switch မှာ နောက်ထပ် ပုံစံ တစ်မျိုး ရှိပါသေးတယ်။ စာမေးပွဲ အမှတ် ဥပမာကို
+      ပြန်ယူကြည့်ရအောင်။ [[mark:draw-bands]] အမှတ် ရှစ်ဆယ်နဲ့ အထက်ဆိုရင် A၊ ခြောက်ဆယ်နဲ့ အထက်ဆိုရင် B၊
+      ကျန်တာ အားလုံးကတော့ C ပါ။ ဒီမှာ တန်ဖိုး တစ်ခုနဲ့ ကိုက်လား မကိုက်လား စစ်တာ မဟုတ်ဘဲ၊ ကြီးလား ငယ်လား
+      ဆိုတဲ့ condition တွေ ဖြစ်နေပါတယ်။ [[mark:draw-order]] အဲဒီလို အခါမျိုးမှာ switch ရဲ့ နောက်မှာ ဘာမှ
+      မရေးဘဲ၊ case တစ်ခုစီမှာ condition တစ်ခုစီ ရေးလို့ ရပါတယ်။ Go က case တွေကို အပေါ်ကနေ အောက်ကို
+      တစ်ခုချင်း စစ်ပြီး၊ ပထမဆုံး true ဖြစ်တဲ့ case ကို run ပါတယ်။ [[mark:draw-72]] ဥပမာ ခုနစ်ဆယ့်နှစ် မှတ်
+      ဆိုရင် ပထမ condition က false ဖြစ်ပြီး ဒုတိယ condition က true ဖြစ်လို့ B ရပါတယ်။ ဒါက if နဲ့ else if
+      တွေကို ဆက်ရေးတာနဲ့ အတူတူပါပဲ၊ ဒါပေမဲ့ ဖတ်ရတာ ပိုသပ်ရပ်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+      - { title: "Effective Go — Switch", url: "https://go.dev/doc/effective_go#switch" }
+    actions:
+      - {
+          id: board-bands,
+          type: whiteboard.apply,
+          at: { mark: board-bands },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-bands,
+          type: whiteboard.apply,
+          at: { mark: draw-bands },
+          upsertIds: [b-a-box, b-b-box, b-c-box, b-a, b-b, b-c],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-order,
+          type: whiteboard.apply,
+          at: { mark: draw-order },
+          upsertIds: [b-order, b-order-label, b-rule],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-72,
+          type: whiteboard.apply,
+          at: { mark: draw-72 },
+          upsertIds: [b-value, b-pick],
+          drawMs: 1500,
+        }
+
+  - id: write-bands
+    narration: >-
+      [[mark:close-bands]] ဒါကို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-marks]] ပထမ switch ရဲ့ အောက်မှာ အမှတ်ကို
+      ခုနစ်ဆယ့်နှစ် လို့ ထည့်ထားတဲ့ mark variable နဲ့၊ တန်ဖိုး မပါတဲ့ switch တစ်ခုကို ရေးပါမယ်။ case တစ်ခုစီမှာ
+      condition တစ်ခုစီ ရှိပြီး၊ ကိုက်တဲ့ case က အမှတ်နဲ့ အဆင့်ကို ထုတ်ပြပါမယ်။ ဘယ် condition မှ true
+      မဖြစ်ရင်တော့ default က C လို့ ပြပါမယ်။ [[mark:sel-band]] ပထမ case က ရှစ်ဆယ်နဲ့ အထက်ကို စစ်တာပါ။
+      ဒါကို အပေါ်ဆုံးမှာ ထားရပါမယ်။ ဘာကြောင့်လဲဆိုတော့ ရှစ်ဆယ် ပြည့်တဲ့ အမှတ်က ခြောက်ဆယ်ထက်လည်း
+      များတာမို့၊ ခြောက်ဆယ် case က အပေါ်မှာ ရှိနေရင် A ရမယ့်သူကို B လို့ ပြမိမှာ ဖြစ်လို့ပါ။ [[mark:run-3]] ကဲ၊
+      run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Switch statements",
+          url: "https://go.dev/ref/spec#Switch_statements",
+        }
+    actions:
+      - {
+          id: close-bands,
+          type: whiteboard.apply,
+          at: { mark: close-bands },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-marks
+        type: editor.type
+        at: { mark: type-marks }
+        target:
+          { file: main.go, after: "\t\tfmt.Println(day, \"ဆိုတဲ့ နေ့ မရှိပါ\")\n\t}\n", occurrence: 1 }
+        text: "\tmark := 72\n\tswitch {\n\tcase mark >= 80:\n\t\tfmt.Println(mark, \"A\")\n\tcase mark >= 60:\n\t\tfmt.Println(mark, \"B\")\n\tdefault:\n\t\tfmt.Println(mark, \"C\")\n\t}\n"
+        cadence: line-by-line
+      - id: sel-band
+        type: editor.select
+        at: { mark: sel-band }
+        target: { file: main.go, text: "case mark >= 80:", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "72 B",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-short,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tcase \"Friday\", \"Fri\":\n",
+        }
+      - {
+          id: expect-file-tagless,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tswitch {\n\tcase mark >= 80:\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-3a]] ပထမ စာကြောင်းမှာ ပူး ပြန်ထွက်လာပါပြီ။ day ထဲမှာ Fri ပဲ ရှိနေပေမဲ့၊ Friday case က Fri
+      ကိုပါ လက်ခံလို့ပါ။ [[mark:point-3b]] ဒုတိယ စာကြောင်းမှာတော့ ခုနစ်ဆယ့်နှစ် နဲ့ B ကို တွေ့ရပါတယ်။ ရှစ်ဆယ်
+      မပြည့်လို့ ပထမ case ကို ကျော်သွားပြီး၊ ခြောက်ဆယ် ကျော်လို့ ဒုတိယ case မှာ ရပ်သွားတာပါ။ default ကိုတော့
+      မရောက်တော့ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+    actions:
+      - { id: point-3a, type: console.point, at: { mark: point-3a }, target: { text: "ပူး" } }
+      - { id: point-3b, type: console.point, at: { mark: point-3b }, target: { text: "72 B" } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ Friday case ထဲကို Fri ကို ထည့်ထားပြီးသားပါ။
+      [[mark:quiz-line]] အဲဒီ အောက်မှာ Fri အတွက်ပဲ case တစ်ခု ထပ်ရေးထားပြီး၊ သောကြာ လို့ ထုတ်ပြခိုင်းထားပါတယ်။
+      ဒီ program ကို run ရင် ပထမ case က ပူး လို့ ထုတ်ပြမလား၊ ဒါမှမဟုတ် compile error ရမလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ ပါ၊ ဒီ program ကို compiler က လက်မခံပါဘူး။ ဘာကြောင့်လဲဆိုတော့ တန်ဖိုး
+      တစ်ခုတည်းကို case နှစ်ခုမှာ ထပ်ရေးထားရင်၊ အပေါ်က case ကပဲ အမြဲ ကိုက်မှာမို့ အောက်က case က ဘယ်တော့မှ
+      run ခွင့် ရမှာ မဟုတ်လို့ပါ။ ဒါက ရေးမှားထားတာ သေချာသလောက် ဖြစ်လို့၊ compiler က တန်ဖိုး ထပ်နေတယ် ဆိုပြီး
+      run မလုပ်ခင်ကတည်းက ငြင်းပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Expression switches",
+          url: "https://go.dev/ref/spec#Expression_switches",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-l4, q-l5, q-l6, q-l7, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-switch]] switch က variable တစ်ခုရဲ့ တန်ဖိုးကို တစ်ခါ
+      ကြည့်ပြီး ကိုက်တဲ့ case တစ်ခုတည်းကို run ပါတယ်၊ run ပြီးတာနဲ့ switch ပြီးသွားပါတယ်။ [[mark:recap-short]]
+      case တစ်ခုမှာ တန်ဖိုး အများ ထည့်လို့ ရပြီး၊ [[mark:recap-default]] ဘာနဲ့မှ မကိုက်ရင်တော့ default ကို
+      run ပါတယ်။ [[mark:recap-tagless]] switch နောက်မှာ တန်ဖိုး မရေးရင်တော့ case တွေမှာ condition ရေးပြီး၊ if
+      နဲ့ else တွေကို ပိုသပ်ရပ်အောင် ရေးတာ ဖြစ်ပါတယ်။ နောက် lesson မှာတော့ အလုပ် တစ်ခုကို နာမည်ပေးထားပြီး
+      လိုတဲ့အခါ ခေါ်သုံးလို့ရတဲ့ function အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Effective Go — Switch", url: "https://go.dev/doc/effective_go#switch" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-switch
+        type: editor.select
+        at: { mark: recap-switch }
+        target: { file: main.go, text: "switch day {", occurrence: 1 }
+      - id: recap-short
+        type: editor.select
+        at: { mark: recap-short }
+        target: { file: main.go, text: 'case "Friday", "Fri":', occurrence: 1 }
+      - id: recap-default
+        type: editor.select
+        at: { mark: recap-default }
+        target: { file: main.go, text: "default:", occurrence: 1 }
+      - id: recap-tagless
+        type: editor.select
+        at: { mark: recap-tagless }
+        target: { file: main.go, text: "switch {", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
