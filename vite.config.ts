@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { proxyPlugin } from "./tube/vite/proxyPlugin";
 import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
+import { DEV_SERVER_FS_DENY } from "./tube/vite/devServerFsDeny";
 import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
 import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
 import { landingPrerenderPlugin } from "./build/landingPrerenderPlugin";
@@ -357,14 +358,10 @@ export default ({ mode }: { mode: string }) => {
         overlay: true, // Show errors in overlay
       },
       fs: {
-        // Vite's built-in deny list covers `.env*` but this project's Worker
-        // secrets live in `infra/.dev.vars` (GOOGLE_CLIENT_SECRET,
-        // SESSION_SECRET, the QStash signing keys), which is inside the served
-        // root and matches no default pattern — so `GET /infra/.dev.vars` was
-        // served verbatim. Harmless on a stock localhost bind, but a single
-        // unauthenticated request once the dev server is started with `--host`
-        // or on a shared/CI box. Vite merges these with its defaults.
-        deny: [".dev.vars", ".dev.vars.*", "**/.dev.vars", "**/.dev.vars.*"],
+        // Vite's defaults plus the Worker's secrets and local Miniflare state.
+        // This array replaces Vite's own list rather than adding to it, so the
+        // defaults are restated there (tube/vite/devServerFsDeny.ts).
+        deny: DEV_SERVER_FS_DENY,
       },
       // Every route the Worker mounts in infra/worker/index.ts (`bun run
       // dev:worker`, see infra/wrangler.toml), so `bun run dev:all` behaves
