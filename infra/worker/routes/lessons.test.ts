@@ -313,7 +313,9 @@ describe("lessonsRoute gallery pages", () => {
 describe("lessonsRoute delete", () => {
   function createBucket() {
     return {
-      list: vi.fn<() => Promise<{ objects: { key: string }[] }>>(async () => ({
+      list: vi.fn<
+        () => Promise<{ objects: { key: string }[]; truncated?: boolean; cursor?: string }>
+      >(async () => ({
         objects: [{ key: `lessons/${LESSON_ID}/${LESSON_ID}.ne` }],
       })),
       delete: vi.fn<() => Promise<void>>(async () => undefined),
@@ -349,7 +351,11 @@ describe("lessonsRoute delete", () => {
 
     expect(response.status).toBe(200);
     expect(deleteLesson).toHaveBeenCalledWith(expect.anything(), LESSON_ID, "user-1");
-    expect(bucket.list).toHaveBeenCalledWith({ prefix: `lessons/${LESSON_ID}/` });
+    expect(bucket.list).toHaveBeenCalledWith({
+      prefix: `lessons/${LESSON_ID}/`,
+      cursor: undefined,
+      limit: 1000,
+    });
     expect(bucket.delete).toHaveBeenCalledWith([`lessons/${LESSON_ID}/${LESSON_ID}.ne`]);
     expect(getOwnedLessonById).not.toHaveBeenCalled();
     // The media no longer counts against the owner's storage quota.
@@ -387,6 +393,60 @@ describe("lessonsRoute delete", () => {
     const previousKey = `lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-1.webp`;
     expect(bucket.delete).toHaveBeenCalledWith(previousKey);
     expect(forgetMediaObject).toHaveBeenCalledWith(expect.anything(), previousKey, "user-1");
+  });
+
+  it("deletes every page of the lesson's media, not just the first", async () => {
+    vi.mocked(deleteLesson).mockResolvedValue(true);
+    const bucket = createBucket();
+    bucket.list
+      .mockResolvedValueOnce({
+        objects: [{ key: `lessons/${LESSON_ID}/a.ne` }],
+        truncated: true,
+        cursor: "page-2",
+      } as never)
+      .mockResolvedValueOnce({
+        objects: [{ key: `lessons/${LESSON_ID}/b.ogg` }],
+        truncated: false,
+      } as never);
+
+    const response = await deleteRequest(bucket);
+
+    expect(response.status).toBe(200);
+    expect(bucket.list).toHaveBeenNthCalledWith(2, {
+      prefix: `lessons/${LESSON_ID}/`,
+      cursor: "page-2",
+      limit: 1000,
+    });
+    expect(bucket.delete).toHaveBeenNthCalledWith(1, [`lessons/${LESSON_ID}/a.ne`]);
+    expect(bucket.delete).toHaveBeenNthCalledWith(2, [`lessons/${LESSON_ID}/b.ogg`]);
+  });
+
+  it("never deletes a replaced thumbnail that sits outside the lesson's own folder", async () => {
+    // A row written before thumbnails were held to the lesson's own uploads
+    // may name another lesson's key.
+    const bucket = createBucket();
+    vi.mocked(getOwnedLessonById).mockResolvedValueOnce({
+      ...lessonRow(LESSON_ID),
+      thumbnail: `media/lessons/${VICTIM_ID}/${VICTIM_ID}-thumbnail.png`,
+    });
+    vi.mocked(updateLesson).mockResolvedValueOnce({
+      ...lessonRow(LESSON_ID),
+      thumbnail: `media/lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-2.webp`,
+    });
+
+    const response = await lessonsRoute.request(
+      `https://nexteditor.dev/${LESSON_ID}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ thumbnail: `lessons/${LESSON_ID}/${LESSON_ID}-thumbnail-2.webp` }),
+        headers: { "content-type": "application/json" },
+      },
+      { DB: {} as D1Database, BUCKET: bucket as unknown as R2Bucket } as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(bucket.delete).not.toHaveBeenCalled();
+    expect(forgetMediaObject).not.toHaveBeenCalled();
   });
 
   it("keeps the media when the row could not be deleted", async () => {

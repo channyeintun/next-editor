@@ -69,6 +69,27 @@ function isOwnUploadPath(value: string, lessonId: string): boolean {
   return value.startsWith(prefix) && isLessonMediaFilename(value.slice(prefix.length));
 }
 
+// A lesson holds a handful of objects; the per-owner object quota
+// (infra/db/ownerLimits.ts) bounds the rest. Past this many pages the cleanup
+// stops and says so rather than looping without end.
+const MEDIA_DELETE_PAGE_SIZE = 1000;
+const MAX_MEDIA_DELETE_PAGES = 50;
+
+/** Delete every object under a lesson's R2 folder, a listing page at a time. */
+async function deleteLessonMedia(bucket: R2Bucket, lessonId: string): Promise<void> {
+  const prefix = `lessons/${lessonId}/`;
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_MEDIA_DELETE_PAGES; page++) {
+    const listed = await bucket.list({ prefix, cursor, limit: MEDIA_DELETE_PAGE_SIZE });
+    if (listed.objects.length > 0) {
+      await bucket.delete(listed.objects.map((object) => object.key));
+    }
+    if (!listed.truncated) return;
+    cursor = listed.cursor;
+  }
+  throw new Error("lesson media cleanup page limit exceeded");
+}
+
 // Mounted at /api/lessons in worker/index.ts. GET routes are public and
 // published-only — draft rows never reach the public gallery (see
 // docs/cloudflare-architecture.md). Everything else requires the signed-in
@@ -256,10 +277,15 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
     return c.json({ error: "not found" }, 404);
   }
 
+  // Only a key under this lesson's own folder is ever deleted: a row written
+  // before thumbnails were held to isOwnUploadPath may name another lesson's.
+  const previousKey = previousThumbnail?.replace(/^media\//, "") ?? null;
   if (
     previousThumbnail &&
+    previousKey &&
     previousThumbnail !== row.thumbnail &&
-    previousThumbnail !== DEFAULT_THUMBNAIL_PATH
+    previousThumbnail !== DEFAULT_THUMBNAIL_PATH &&
+    isOwnUploadPath(previousKey, id)
   ) {
     // updateLessonThumbnail() (infra/client/library/myLessonsApi.ts) always
     // uploads the replacement to a fresh R2 key (timestamped, to dodge CDN
@@ -268,7 +294,6 @@ lessonsRoute.patch(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
     // Best-effort, same reasoning as the delete-lesson cleanup below: an
     // orphaned R2 object is a minor storage cost, not a correctness problem.
     try {
-      const previousKey = previousThumbnail.replace(/^media\//, "");
       await c.env.BUCKET.delete(previousKey);
       await forgetMediaObject(c.env.DB, previousKey, user.id);
     } catch (error) {
@@ -315,10 +340,7 @@ lessonsRoute.delete(`/:id{${LESSON_ID_PATTERN}}`, requireUser, async (c) => {
   // published, whose media 404s for every viewer. Best-effort, and nothing
   // sweeps what it misses.
   try {
-    const listed = await c.env.BUCKET.list({ prefix: `lessons/${id}/` });
-    if (listed.objects.length > 0) {
-      await c.env.BUCKET.delete(listed.objects.map((object) => object.key));
-    }
+    await deleteLessonMedia(c.env.BUCKET, id);
     // What the lesson's media counted against its owner's storage quota.
     await forgetMediaObjectsUnder(c.env.DB, `lessons/${id}/`, user.id);
   } catch (error) {
