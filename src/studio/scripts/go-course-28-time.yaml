@@ -1,0 +1,816 @@
+# Go course, lesson 28: time and Myanmar Time (Burmese).
+#
+# Start state: main.go with `package main`, an import block holding only "fmt" and an empty
+# `func main`; clock.go holding only `package main`.
+# Edits, all insert-only:
+#   1. clock.go: `import "time"` and `mmt` (time.FixedZone, UTC+06:30), then `at(hour, minute)`
+#      (COURSE-KIT §3.8, exact);
+#   2. main.go: `leave := at(20, 0)`, print it, print it in UTC -> run-1:
+#      2026-04-17 20:00:00 +0630 MMT / 2026-04-17 13:30:00 +0000 UTC;
+#   3. "time" into the import block, `arrive := leave.Add(9 * time.Hour)`, Format + Sub -> run-2
+#      adds 2026-04-18 05:00 9h0m0s;
+#   4. Weekday twice and Before -> run-3 adds Friday Saturday true.
+# Boards: (Z) one instant, two clocks (UTC and MMT), no daylight saving; (L) Go's reference time
+# and the layout; (Q) quiz: a layout written as "20:00" prints 170:00.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-28-time
+  title: "Go course 28: အချိန်နဲ့ မြန်မာစံတော်ချိန်"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # Two files: the explorer shows where at and mmt live.
+    sidebarStartsCollapsed: false
+    files:
+      main.go: |
+        package main
+
+        import (
+        	"fmt"
+        )
+
+        func main() {
+        }
+      clock.go: |
+        package main
+  whiteboardAssets:
+    # Board Z: one instant, two clocks.
+    - {
+        id: z-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 620,
+        height: 50,
+        text: "အချိန် တစ်ခု၊ နာရီ နှစ်လုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: z-line,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 300,
+        y: 245,
+        width: 760,
+        height: 30,
+        strokeColor: "#1971c2",
+      }
+    - { id: z-dot, kind: ellipse, x: 662, y: 243, width: 34, height: 34, strokeColor: "#f08c00" }
+    - {
+        id: z-moment,
+        kind: text,
+        x: 570,
+        y: 292,
+        width: 440,
+        height: 40,
+        text: "ကား ထွက်တဲ့ အခိုက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-down,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 664,
+        y: 340,
+        width: 30,
+        height: 55,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: z-utc-box,
+        kind: rectangle,
+        x: 290,
+        y: 405,
+        width: 370,
+        height: 125,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-utc,
+        kind: text,
+        x: 315,
+        y: 420,
+        width: 300,
+        height: 40,
+        text: "UTC  13:30",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-utc-note,
+        kind: text,
+        x: 315,
+        y: 475,
+        width: 330,
+        height: 40,
+        text: "ကမ္ဘာ့ အခြေခံ နာရီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-mmt-box,
+        kind: rectangle,
+        x: 700,
+        y: 405,
+        width: 390,
+        height: 125,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: z-mmt,
+        kind: text,
+        x: 725,
+        y: 420,
+        width: 300,
+        height: 40,
+        text: "MMT  20:00",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-mmt-note,
+        kind: text,
+        x: 725,
+        y: 475,
+        width: 300,
+        height: 40,
+        text: "UTC+06:30",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: z-dst,
+        kind: text,
+        x: 300,
+        y: 570,
+        width: 780,
+        height: 40,
+        text: "နာရီ ရွှေ့တာ မရှိ · FixedZone နဲ့ ရပြီ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board L: Go's reference time and the layout.
+    - {
+        id: l-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 560,
+        height: 50,
+        text: "Go ရဲ့ နမူနာ အချိန်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: l-ref,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 620,
+        height: 40,
+        text: "01/02 03:04:05PM '06 -0700",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-ref-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 300,
+        y: 275,
+        width: 520,
+        height: 15,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-box,
+        kind: rectangle,
+        x: 285,
+        y: 310,
+        width: 640,
+        height: 165,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-k1,
+        kind: text,
+        x: 310,
+        y: 325,
+        width: 560,
+        height: 40,
+        text: "01 → လ      02 → ရက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-k2,
+        kind: text,
+        x: 310,
+        y: 375,
+        width: 560,
+        height: 40,
+        text: "15 → နာရီ    04 → မိနစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-k3,
+        kind: text,
+        x: 310,
+        y: 425,
+        width: 560,
+        height: 40,
+        text: "2006 → ခုနှစ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-use,
+        kind: text,
+        x: 300,
+        y: 505,
+        width: 420,
+        height: 40,
+        text: '"2006-01-02 15:04"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: l-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 545,
+        width: 30,
+        height: 35,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-out-box,
+        kind: rectangle,
+        x: 285,
+        y: 580,
+        width: 440,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-out,
+        kind: text,
+        x: 300,
+        y: 590,
+        width: 410,
+        height: 40,
+        text: "leave → 2026-04-17 20:00",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a layout written as the wanted time).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 640,
+        height: 140,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 310,
+        y: 260,
+        width: 400,
+        height: 40,
+        text: "leave := at(20, 0)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 310,
+        y: 315,
+        width: 590,
+        height: 40,
+        text: 'fmt.Println(leave.Format("20:00"))',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 715,
+        y: 305,
+        width: 120,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 430,
+        width: 400,
+        height: 40,
+        text: "က · 20:00",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 490,
+        width: 400,
+        height: 40,
+        text: "ခ · 170:00",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 540,
+        y: 480,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7128
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: success
+        exitCode: 0
+        output: "2026-04-17 20:00:00 +0630 MMT\n2026-04-17 13:30:00 +0000 UTC\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "2026-04-17 20:00:00 +0630 MMT\n2026-04-17 13:30:00 +0000 UTC\n2026-04-18 05:00 9h0m0s\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "2026-04-17 20:00:00 +0630 MMT\n2026-04-17 13:30:00 +0000 UTC\n2026-04-18 05:00 9h0m0s\nFriday Saturday true\n"
+
+scenes:
+  - id: recall
+    chapter: အချိန်နဲ့ မြန်မာစံတော်ချိန်
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ iterator က တန်ဖိုးတွေကို loop ဆီ တစ်ခုချင်း လွှဲပေးပြီး၊ loop က break
+      လုပ်တဲ့အခါ ချက်ချင်း ရပ်သွားတာကို မြင်ခဲ့ပါတယ်။ ဒီ lesson ကစပြီး course ရဲ့ အပိုင်း အသစ် ဖြစ်တဲ့ အချိန်နဲ့
+      အလုပ် အများကို တစ်ပြိုင်နက် လုပ်တာ အကြောင်းကို လေ့လာပါမယ်။ ဒီနေ့မှာတော့ အချိန် အကြောင်းပါ။ [[mark:night-bus]] မန္တလေးကို ပို့မယ့် ပါဆယ်တွေကို
+      ရန်ကုန် ကားဂိတ်ကနေ ညကားနဲ့ ပို့တယ် ဆိုပါစို့။ ကားက ည ရှစ်နာရီမှာ ထွက်ပြီး ကိုးနာရီ ကြာတယ်
+      ဆိုရင်၊ ဘယ်နေ့ ဘယ်အချိန်မှာ ရောက်မလဲ။ လက်ခံသူကို ရောက်မယ့် အချိန် ကြိုပြောချင်ရင် ဒါကို
+      တွက်ရပါမယ်။ [[mark:two-types]] Go မှာ ဒီလို တွက်ဖို့ time ဆိုတဲ့ package ပါပြီးသားပါ။ အဲဒီထဲမှာ
+      အဓိက type နှစ်ခု ရှိပါတယ်။ ပထမ တစ်ခုက ပြက္ခဒိန်ပေါ်က ရက်နဲ့ နာရီပေါ်က အချိန် တစ်ခုကို မှတ်ထားတဲ့
+      Time ဖြစ်ပြီး၊ ဒုတိယ တစ်ခုကတော့ ဘယ်လောက် ကြာလဲ ဆိုတဲ့ ကြာချိန်ကို မှတ်တဲ့ Duration ပါ။ ကား
+      ထွက်တဲ့ ည ရှစ်နာရီက Time ဖြစ်ပြီး၊ ကိုးနာရီ ကြာတာကတော့ Duration ပါ။
+    sources:
+      - { title: "time package", url: "https://pkg.go.dev/time" }
+      - { title: "time package — Duration", url: "https://pkg.go.dev/time#Duration" }
+    actions:
+      - { id: open-main-first, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: zone
+    chapter: Time zone ဆိုတာ
+    narration: >-
+      [[mark:board-zone]] ဒါပေမဲ့ အချိန် ဆိုတာ ကမ္ဘာ့ ဘယ်နေရာက နာရီနဲ့ ကြည့်လဲ ဆိုတဲ့ အပေါ်
+      မူတည်ပါတယ်။ [[mark:draw-moment]] ကား ထွက်တဲ့ အခိုက်ကို ဒီ မျဉ်းပေါ်က အမှတ် တစ်ခုလို့
+      မြင်ကြည့်ပါ။ ကမ္ဘာ့ ဘယ်နေရာကပဲ ကြည့်ကြည့် အဲဒီ အခိုက်က တစ်ခုတည်းပါ။ [[mark:draw-clocks]]
+      ကွာတာက နာရီ ဖတ်ပုံပါ။ ကမ္ဘာ တစ်ဝှမ်းမှာ အခြေခံ အဖြစ် သုံးတဲ့ နာရီကို UTC လို့ ခေါ်ပြီး၊
+      ကွန်ပျူတာ စနစ်တွေရဲ့ မှတ်တမ်းတွေမှာ အများအားဖြင့် UTC နဲ့ ရေးပါတယ်။ မြန်မာစံတော်ချိန်ကတော့ UTC ထက်
+      ခြောက်နာရီခွဲ စောပါတယ်။ ဒါကြောင့် ရန်ကုန်မှာ ည ရှစ်နာရီ ဖြစ်နေချိန်မှာ UTC နာရီက နေ့လယ်
+      တစ်နာရီခွဲပဲ ရှိပါသေးတယ်။ ဒီလို ကမ္ဘာ့ နေရာ အလိုက် နာရီ ကွာခြားချက်ကို time zone လို့
+      ခေါ်ပါတယ်။ [[mark:draw-dst]] တချို့ နိုင်ငံတွေမှာ နွေရာသီ ရောက်ရင် နာရီကို တစ်နာရီ ရှေ့တိုးတတ်ပေမဲ့၊
+      မြန်မာမှာ အဲဒီလို မလုပ်ပါဘူး။ တစ်နှစ်လုံး ခြောက်နာရီခွဲ ကွာတာ ပုံသေ ဖြစ်လို့၊ ကွာခြားချက် ပုံသေ
+      ရှိတဲ့ zone တစ်ခုကို ကိုယ်တိုင် လုပ်လိုက်ရုံနဲ့ မှန်ပါတယ်။ ကမ္ဘာ့ မြို့တွေရဲ့ time zone စာရင်းကနေ
+      မြို့နာမည်နဲ့ ရှာယူတဲ့ နည်းလည်း ရှိပေမဲ့၊ ဒီ course မှာတော့ ပုံသေ zone ကိုပဲ သုံးပါမယ်။
+    sources:
+      - { title: "time package — FixedZone", url: "https://pkg.go.dev/time#FixedZone" }
+      - { title: "time package — LoadLocation", url: "https://pkg.go.dev/time#LoadLocation" }
+    actions:
+      - {
+          id: board-zone,
+          type: whiteboard.apply,
+          at: { mark: board-zone },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+        }
+      - {
+          id: draw-moment,
+          type: whiteboard.apply,
+          at: { mark: draw-moment },
+          upsertIds: [z-line, z-dot, z-moment],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-clocks,
+          type: whiteboard.apply,
+          at: { mark: draw-clocks },
+          upsertIds: [z-down, z-utc-box, z-utc, z-utc-note, z-mmt-box, z-mmt, z-mmt-note],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-dst,
+          type: whiteboard.apply,
+          at: { mark: draw-dst },
+          upsertIds: [z-dst],
+          drawMs: 1200,
+        }
+
+  - id: clock-file
+    chapter: clock ဖိုင်
+    narration: >-
+      [[mark:close-zone]] ဒီ zone နဲ့ ဒီ course ရဲ့ နေ့ကို clock ဆိုတဲ့ ဖိုင် အသစ်ထဲမှာ ထားပါမယ်။
+      [[mark:open-clock]] အခု ဒီ ဖိုင်မှာ package main တစ်ကြောင်းပဲ ရှိပါသေးတယ်။ [[mark:type-mmt]] time
+      package ကို import လုပ်ပြီး၊ မြန်မာစံတော်ချိန် အတွက် mmt ဆိုတဲ့ variable တစ်ခု ရေးပါမယ်။
+      [[mark:sel-zone]] ဒီ function က time zone တစ်ခုကို နာမည်နဲ့ ကွာခြားချက် ပေးပြီး လုပ်ပေးပါတယ်။
+      နာမည်က output မှာ ပေါ်မယ့် MMT ဖြစ်ပြီး၊ ကွာခြားချက်ကိုတော့ စက္ကန့်နဲ့ ပေးရပါတယ်။ ဒါကြောင့်
+      ခြောက်နာရီ စာ စက္ကန့်နဲ့ မိနစ် သုံးဆယ် စာ စက္ကန့်ကို ပေါင်းထားတာပါ။ [[mark:type-at]] နောက်တစ်ခုက
+      at ဆိုတဲ့ function ပါ။ နာရီနဲ့ မိနစ်ကို ယူပြီး၊ ဒီ course ရဲ့ နေ့ ဖြစ်တဲ့ ၂၀၂၆ ခုနှစ်၊ ဧပြီလ
+      ၁၇ ရက်၊ သောကြာနေ့ပေါ်က အချိန်ကို ပြန်ပေးပါတယ်။ [[mark:sel-date]] အထဲမှာ ခုနှစ်၊ လ၊ ရက်၊
+      နာရီ၊ မိနစ်၊ စက္ကန့်၊ စက္ကန့်ရဲ့ အပိုင်းလေးတွေ၊ နောက်ဆုံးမှာ time zone ကို အစဉ်လိုက် ပေးပြီး Time
+      တစ်ခု လုပ်ထားပါတယ်။ [[mark:why-at]] ကိုယ့် ကွန်ပျူတာပေါ်မှာဆိုရင် time package ထဲက function
+      တစ်ခုနဲ့ အခုချိန်ကို ယူလို့ ရပါတယ်။ ဒါပေမဲ့ ဒီမှာ run တဲ့ program ရဲ့ နာရီက ပုံသေ ထားထားတာပါ။
+      ဒါကြောင့် ဒီ course မှာ အခုချိန်ကို print မထုတ်ဘဲ၊ at နဲ့ ကိုယ့် နေ့ကို ကိုယ်တိုင် တည်ဆောက်ပြီး
+      သုံးသွားမှာပါ။
+    sources:
+      - { title: "time package — FixedZone", url: "https://pkg.go.dev/time#FixedZone" }
+      - { title: "time package — Date", url: "https://pkg.go.dev/time#Date" }
+    actions:
+      - {
+          id: close-zone,
+          type: whiteboard.apply,
+          at: { mark: close-zone },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: open-clock, type: workspace.openFile, at: { mark: open-clock }, path: clock.go }
+      - id: type-mmt
+        type: editor.type
+        at: { mark: type-mmt }
+        target: { file: clock.go, after: "package main\n", occurrence: 1 }
+        text: "\nimport \"time\"\n\n// mmt is Myanmar Time: UTC+06:30, no daylight saving.\nvar mmt = time.FixedZone(\"MMT\", 6*60*60+30*60)\n"
+        cadence: line-by-line
+      - id: sel-zone
+        type: editor.select
+        at: { mark: sel-zone }
+        target: { file: clock.go, text: 'time.FixedZone("MMT", 6*60*60+30*60)', occurrence: 1 }
+      - id: type-at
+        type: editor.type
+        at: { mark: type-at }
+        target: { file: clock.go, after: "6*60*60+30*60)\n", occurrence: 1 }
+        text: "\n// at is hour:minute on the course's day, Friday 2026-04-17, in Myanmar Time.\nfunc at(hour, minute int) time.Time {\n\treturn time.Date(2026, time.April, 17, hour, minute, 0, 0, mmt)\n}\n"
+        cadence: line-by-line
+      - id: sel-date
+        type: editor.select
+        at: { mark: sel-date }
+        target:
+          {
+            file: clock.go,
+            text: "time.Date(2026, time.April, 17, hour, minute, 0, 0, mmt)",
+            occurrence: 1,
+          }
+
+  - id: first-run
+    narration: >-
+      [[mark:open-main]] ကဲ၊ main ဖိုင်ကို ပြန်သွားပြီး ကား ထွက်ချိန်ကို လုပ်ကြည့်ရအောင်။
+      [[mark:type-leave]] ည ရှစ်နာရီကို leave ဆိုတဲ့ variable ထဲ ထည့်ပြီး၊ ပထမ တစ်ခါ ဒီအတိုင်း print
+      ထုတ်ပါမယ်။ ဒုတိယ တစ်ခါမှာတော့ UTC နဲ့ ပြောင်းပြီး print ထုတ်ပါမယ်။ at က clock ဖိုင်ထဲမှာ
+      ရှိပေမဲ့ package တစ်ခုတည်း ဖြစ်လို့ import မလုပ်ဘဲ ခေါ်လို့ ရပါတယ်။ [[mark:run-1]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - { title: "time package — Time.UTC", url: "https://pkg.go.dev/time#Time.UTC" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { mark: open-main }, path: main.go }
+      - id: type-leave
+        type: editor.type
+        at: { mark: type-leave }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tleave := at(20, 0)\n\tfmt.Println(leave)\n\tfmt.Println(leave.UTC())\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "2026-04-17 13:30:00 +0000 UTC",
+          timeoutMs: 8000,
+        }
+
+  - id: read-1
+    narration: >-
+      [[mark:point-mmt]] ပထမ စာကြောင်းမှာ ရက်စွဲ၊ ည ရှစ်နာရီ၊ ပြီးတော့ UTC ထက် ခြောက်နာရီ သုံးဆယ်မိနစ်
+      စောတယ် ဆိုတဲ့ ကွာခြားချက်နဲ့ MMT ဆိုတဲ့ နာမည်ကို တွေ့ရပါတယ်။ [[mark:point-utc]] ဒုတိယ
+      စာကြောင်းကတော့ အဲဒီ အခိုက်ကိုပဲ UTC နာရီနဲ့ ဖတ်ထားတာပါ။ နေ့လယ် တစ်နာရီခွဲ ဖြစ်ပြီး ကွာခြားချက်က
+      သုည ဖြစ်ပါတယ်။ စာကြောင်း နှစ်ကြောင်း ကွဲနေပေမဲ့ အခိုက် တစ်ခုတည်းပါ၊ board ပေါ်က နာရီ
+      နှစ်လုံးလိုပါပဲ။ ဒါကြောင့် ကွန်ပျူတာ စနစ်ရဲ့ မှတ်တမ်းမှာ နေ့လယ် တစ်နာရီခွဲ လို့ မြင်ရပြီး ကောင်တာက
+      နာရီမှာ ည ရှစ်နာရီ ဖြစ်နေရင်၊ တစ်ခုခု မှားနေတာ မဟုတ်ဘဲ နာရီ ဖတ်ပုံ ကွာနေတာပဲ ဖြစ်ပါတယ်။
+    sources:
+      - { title: "time package — Time.UTC", url: "https://pkg.go.dev/time#Time.UTC" }
+    actions:
+      - {
+          id: point-mmt,
+          type: console.point,
+          at: { mark: point-mmt },
+          target: { text: "2026-04-17 20:00:00 +0630 MMT" },
+        }
+      - {
+          id: point-utc,
+          type: console.point,
+          at: { mark: point-utc },
+          target: { text: "2026-04-17 13:30:00 +0000 UTC" },
+        }
+
+  - id: add
+    chapter: Duration နဲ့ Add
+    narration: >-
+      [[mark:collapse-1]] ကဲ၊ ကား ရောက်မယ့် အချိန်ကို တွက်ကြည့်ရအောင်။ [[mark:type-import]] ဒီ တစ်ခါ main
+      ဖိုင်ကနေ time package ကို တိုက်ရိုက် သုံးမှာ ဖြစ်လို့ import ထဲမှာ ထည့်ပါမယ်။ [[mark:type-arrive]]
+      ပြီးရင် ထွက်ချိန်ကို ကိုးနာရီ ပေါင်းထားတဲ့ ရောက်ချိန်ကို arrive ထဲ ထည့်ပြီး၊ ရောက်ချိန်နဲ့
+      ကြာချိန် နှစ်ခုလုံးကို print ထုတ်ပါမယ်။ [[mark:sel-hours]] ဒီ အပိုင်းကို ကြည့်ပါ။ time package ထဲမှာ တစ်နာရီ၊ တစ်မိနစ် လို
+      ကြာချိန်တွေကို Duration အဖြစ် ကြိုလုပ်ထားပေးပါတယ်။ အဲဒါကို ကိုးနဲ့ မြှောက်ရင် ကိုးနာရီ ဆိုတဲ့
+      Duration ရပါတယ်။ Add က Time တစ်ခုကို Duration ပေါင်းပြီး Time အသစ် ပြန်ပေးပါတယ်။
+      [[mark:sel-sub]] Sub ကတော့ ပြောင်းပြန်ပါ။ Time နှစ်ခုကို နှုတ်ပြီး ကြားက ကြာချိန်ကို Duration
+      အဖြစ် ပြန်ပေးပါတယ်။ ရောက်ချိန်ကနေ ထွက်ချိန်ကို နှုတ်ထားလို့ ကိုးနာရီ ပြန်ရသင့်ပါတယ်။
+    sources:
+      - { title: "time package — Time.Add", url: "https://pkg.go.dev/time#Time.Add" }
+      - { title: "time package — Time.Sub", url: "https://pkg.go.dev/time#Time.Sub" }
+      - { title: "time package — Duration", url: "https://pkg.go.dev/time#Duration" }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: collapse-1 } }
+      - id: type-import
+        type: editor.type
+        at: { mark: type-import }
+        target: { file: main.go, after: "\t\"fmt\"\n", occurrence: 1 }
+        text: "\t\"time\"\n"
+      - id: type-arrive
+        type: editor.type
+        at: { mark: type-arrive }
+        target: { file: main.go, after: "\tfmt.Println(leave.UTC())\n", occurrence: 1 }
+        text: "\tarrive := leave.Add(9 * time.Hour)\n\tfmt.Println(arrive.Format(\"2006-01-02 15:04\"), arrive.Sub(leave))\n"
+        cadence: line-by-line
+      - id: sel-hours
+        type: editor.select
+        at: { mark: sel-hours }
+        target: { file: main.go, text: "9 * time.Hour", occurrence: 1 }
+      - id: sel-sub
+        type: editor.select
+        at: { mark: sel-sub }
+        target: { file: main.go, text: "arrive.Sub(leave)", occurrence: 1 }
+
+  - id: layout
+    chapter: Format ရဲ့ layout
+    narration: >-
+      [[mark:sel-layout]] ရောက်ချိန်ကိုတော့ Format နဲ့ ကိုယ် လိုချင်တဲ့ ပုံစံ ပြောင်းထားပါတယ်။ ဒီ
+      စာသားက ရက်စွဲ တစ်ခုလို ဖြစ်နေပေမဲ့ ကိုယ့် ရက်စွဲ မဟုတ်ပါဘူး။ [[mark:board-layout]] Go မှာ ပုံစံကို
+      ဖော်ပြဖို့ နမူနာ အချိန် တစ်ခုကို သုံးပါတယ်။ [[mark:draw-ref]] အဲဒီ နမူနာ အချိန်ကို board ပေါ်က
+      ပုံစံနဲ့ ရေးရင်၊ လ က တစ်၊ ရက် က နှစ်၊ နာရီ က သုံး၊ မိနစ် က လေး၊ စက္ကန့် က ငါး၊ ခုနှစ် က
+      ခြောက် ဆိုပြီး ဂဏန်းတွေ အစဉ်လိုက် ဖြစ်နေတာကို တွေ့ရပါမယ်။ [[mark:draw-keys]] ဒါကြောင့် ပုံစံထဲက
+      ဂဏန်း တစ်ခုစီမှာ အဓိပ္ပာယ် ရှိပါတယ်။ သုည တစ်က လ၊ သုည နှစ်က ရက်၊ သုည လေးက မိနစ်၊ ၂၀၀၆ က
+      ခုနှစ် ဖြစ်ပါတယ်။ ဆယ့်ငါးကတော့ နေ့လယ် သုံးနာရီကို နှစ်ဆယ့်လေးနာရီ စနစ်နဲ့ ရေးထားတာမို့၊ နာရီကို
+      နှစ်ဆယ့်လေးနာရီ စနစ်နဲ့ ပြပါ လို့ ပြောတာပါ။ [[mark:draw-use]] ဆိုလိုတာက ကိုယ် လိုချင်တဲ့ ပုံစံအတိုင်း
+      နမူနာ အချိန်ကို ရေးပေးလိုက်ရင်၊ Go က ဂဏန်း တစ်ခုစီရဲ့ နေရာမှာ ကိုယ့် Time ရဲ့ တန်ဖိုးကို
+      အစားထိုး ပေးပါတယ်။ ဥပမာ ထွက်ချိန်ကို ဒီ ပုံစံနဲ့ ပြရင် ၁၇ ရက်နေ့၊ နှစ်ဆယ်နာရီ လို့ ထွက်ပါမယ်။
+      [[mark:close-layout]] ဒါဆို ရောက်ချိန်ကို ကြည့်ရအောင်။ [[mark:run-2]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "time package — Time.Format", url: "https://pkg.go.dev/time#Time.Format" }
+      - { title: "time package — Layout", url: "https://pkg.go.dev/time#Layout" }
+    actions:
+      - id: sel-layout
+        type: editor.select
+        at: { mark: sel-layout }
+        target: { file: main.go, text: '"2006-01-02 15:04"', occurrence: 1 }
+      - {
+          id: board-layout,
+          type: whiteboard.apply,
+          at: { mark: board-layout },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-ref,
+          type: whiteboard.apply,
+          at: { mark: draw-ref },
+          upsertIds: [l-ref, l-ref-line],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-keys,
+          type: whiteboard.apply,
+          at: { mark: draw-keys },
+          upsertIds: [l-box, l-k1, l-k2, l-k3],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-use,
+          type: whiteboard.apply,
+          at: { mark: draw-use },
+          upsertIds: [l-use, l-arrow, l-out-box, l-out],
+          drawMs: 2600,
+        }
+      - {
+          id: close-layout,
+          type: whiteboard.apply,
+          at: { mark: close-layout },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "2026-04-18 05:00 9h0m0s",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-arrive,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "arrive := leave.Add(9 * time.Hour)",
+        }
+      - {
+          id: expect-file-at,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: clock.go,
+          contains: "func at(hour, minute int) time.Time {",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-arrive]] ရောက်ချိန်က ၁၈ ရက်နေ့၊ မနက် ငါးနာရီ ပါ။ ည ရှစ်နာရီကို ကိုးနာရီ ပေါင်းတော့
+      ညသန်းခေါင်ကို ကျော်သွားလို့၊ Add က ရက်ကိုပါ တစ်ရက် တိုးပေးလိုက်တာပါ။ ကိုယ်တိုင် နာရီတွေကို
+      ပေါင်းပြီး ရက် ပြောင်းဖို့ မလိုပါဘူး။ ပုံစံထဲမှာ စက္ကန့်နဲ့ time zone ကို မထည့်ခဲ့လို့ အဲဒါတွေလည်း
+      မပါတော့ပါဘူး။ နောက်ဆုံးက ကိုးနာရီ၊ သုည မိနစ်၊ သုည စက္ကန့် ဆိုတာကတော့ Sub က ပြန်ပေးတဲ့
+      Duration ပါ။ Duration ကို print ထုတ်ရင် ဒီလို နာရီ၊ မိနစ်၊ စက္ကန့် ပုံစံနဲ့ ပြပါတယ်။
+    sources:
+      - { title: "time package — Duration.String", url: "https://pkg.go.dev/time#Duration.String" }
+    actions:
+      - {
+          id: point-arrive,
+          type: console.point,
+          at: { mark: point-arrive },
+          target: { text: "2026-04-18 05:00 9h0m0s" },
+        }
+
+  - id: weekday
+    chapter: ဘယ်နေ့လဲ
+    narration: >-
+      [[mark:collapse-2]] နောက်ဆုံး အနေနဲ့ ဘယ်နေ့လဲ ဆိုတာကို မေးကြည့်ရအောင်။ [[mark:type-weekday]] ထွက်တဲ့
+      နေ့နဲ့ ရောက်တဲ့ နေ့ကို print ထုတ်ပြီး၊ မနက် ခြောက်နာရီက ကား ထွက်ချိန်ထက် စောလား ဆိုတာကိုပါ
+      မေးပါမယ်။ [[mark:sel-before]] Before က Time တစ်ခုက နောက် Time တစ်ခုထက် စောလား ဆိုတာကို true
+      ဒါမှမဟုတ် false နဲ့ ဖြေပေးပါတယ်။ မနက် ခြောက်နာရီ ကောင်တာမှာ အပ်ထားတဲ့ ပါဆယ်က ဒီည ကားကို
+      မီလား ဆိုတဲ့ မေးခွန်းပါ။ [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - { title: "time package — Time.Weekday", url: "https://pkg.go.dev/time#Time.Weekday" }
+      - { title: "time package — Time.Before", url: "https://pkg.go.dev/time#Time.Before" }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-weekday
+        type: editor.type
+        at: { mark: type-weekday }
+        target: { file: main.go, after: "arrive.Sub(leave))\n", occurrence: 1 }
+        text: "\tfmt.Println(leave.Weekday(), arrive.Weekday(), at(6, 0).Before(leave))\n"
+        cadence: line-by-line
+      - id: sel-before
+        type: editor.select
+        at: { mark: sel-before }
+        target: { file: main.go, text: "at(6, 0).Before(leave)", occurrence: 1 }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "Friday Saturday true",
+          timeoutMs: 8000,
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-days]] နောက်ဆုံး စာကြောင်းမှာ Friday၊ Saturday နဲ့ true ကို တွေ့ရပါတယ်။ ကား ထွက်တာက
+      သောကြာနေ့ ဖြစ်ပြီး၊ ရောက်တာကတော့ နောက်တစ်နေ့ Saturday ပါ။ Weekday က ပြန်ပေးတဲ့ နေ့ကို print
+      ထုတ်ရင် English နာမည်နဲ့ ထွက်ပါတယ်။ [[mark:animal]] switch lesson မှာ နေ့ နာမည်ကနေ မွေးနေ့ တိရစ္ဆာန်ကို ရွေးခဲ့တာ
+      မှတ်မိမှာပါ။ အဲဒီ program ထဲကို ဒီ နေ့ နာမည်ကို ထည့်ပေးလိုက်ရင် သောကြာနေ့ရဲ့ ပူး ထွက်လာမှာပါ။
+      true ကတော့ မနက် ခြောက်နာရီက ည ရှစ်နာရီ ထက် စောတယ် ဆိုတဲ့ အဖြေ ဖြစ်လို့၊ မနက် အပ်တဲ့ ပါဆယ်က
+      ဒီည ကားနဲ့ လိုက်သွားနိုင်ပါတယ်။
+    sources:
+      - { title: "time package — Weekday", url: "https://pkg.go.dev/time#Weekday" }
+    actions:
+      - {
+          id: point-days,
+          type: console.point,
+          at: { mark: point-days },
+          target: { text: "Friday Saturday true" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ထွက်ချိန်ကို နာရီနဲ့ မိနစ်ပဲ ပြချင်လို့၊ board ပေါ်က code မှာ
+      ပုံစံ နေရာမှာ ကိုယ် ပြချင်တဲ့ ည ရှစ်နာရီကို တိုက်ရိုက် ရေးလိုက်တယ် ဆိုပါစို့။ [[mark:quiz-line]] ဒီ
+      program က က လို ထွက်မလား၊ ခ လို ထွက်မလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခ ပါ။ ဘာကြောင့်လဲဆိုတော့ Go က ပုံစံထဲက ဂဏန်းတွေကို နမူနာ အချိန်နဲ့
+      တိုက်ပြီး ဖတ်လို့ပါ။ နမူနာ အချိန်မှာ နှစ် ဆိုတာ ရက် ဖြစ်လို့၊ ပထမ ဂဏန်း နှစ်ရဲ့ နေရာမှာ ရက် ၁၇ ကို
+      ထည့်လိုက်ပြီး ကျန်တဲ့ အပိုင်းကို ရေးထားတဲ့ အတိုင်း ထားခဲ့တာပါ။ ည ရှစ်နာရီ လို့ ပြချင်ရင် ကိုယ့်
+      အချိန်ကို မရေးဘဲ နမူနာ အချိန်ရဲ့ နာရီနဲ့ မိနစ်ကို ရေးရပါမယ်။
+    sources:
+      - { title: "time package — Layout", url: "https://pkg.go.dev/time#Layout" }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ မြန်မာစံတော်ချိန်က UTC ထက် ခြောက်နာရီခွဲ စောပြီး နာရီ
+      ရွှေ့တာ မရှိလို့၊ ကွာခြားချက် ပုံသေ zone တစ်ခုနဲ့ ဖော်ပြလို့ ရပါတယ်။ [[mark:recap-zone]] အခိုက်
+      တစ်ခုကို zone အမျိုးမျိုးနဲ့ ဖတ်လို့ ရပေမဲ့ အချိန်ကတော့ တစ်ခုတည်းပါ။ [[mark:recap-add]] Time ကို
+      Duration ပေါင်းရင် Time အသစ် ရပြီး၊ Time နှစ်ခုကို နှုတ်ရင် Duration ရပါတယ်။ [[mark:recap-format]]
+      Format ကိုတော့ Go ရဲ့ နမူနာ အချိန်ကို ကိုယ် လိုချင်တဲ့ ပုံစံနဲ့ ရေးပေးရပါတယ်။ နောက် lesson မှာတော့
+      ဒီ ကြာချိန်တွေကို သုံးပြီး၊ rider သုံးယောက်က ပါဆယ်တွေကို တစ်ပြိုင်နက် ပို့တဲ့ goroutine ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "time package", url: "https://pkg.go.dev/time" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-zone
+        type: editor.select
+        at: { mark: recap-zone }
+        target: { file: main.go, text: "leave.UTC()", occurrence: 1 }
+      - id: recap-add
+        type: editor.select
+        at: { mark: recap-add }
+        target: { file: main.go, text: "leave.Add(9 * time.Hour)", occurrence: 1 }
+      - id: recap-format
+        type: editor.select
+        at: { mark: recap-format }
+        target: { file: main.go, text: 'arrive.Format("2006-01-02 15:04")', occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
