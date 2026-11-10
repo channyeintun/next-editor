@@ -182,6 +182,38 @@ First`;
   });
 });
 
+describe("caption tag stripping", () => {
+  function cueText(text: string): string | undefined {
+    return parseVtt(`WEBVTT\n\n00:00.000 --> 00:01.000\n${text}\n`)[0]?.text;
+  }
+
+  it("removes from a < to the first > after it, keeping an empty <>", () => {
+    expect(cueText("a <b>bold</b> c")).toBe("a bold c");
+    expect(cueText("<v Ann>Hi")).toBe("Hi");
+    expect(cueText("x <a<b> y")).toBe("x  y");
+    expect(cueText("<> stays")).toBe("<> stays");
+    expect(cueText("<><i>k</i>")).toBe("<>k");
+    expect(cueText("1 < 2 and 3 > 2")).toBe("1  2");
+    expect(cueText("open < only")).toBe("open < only");
+  });
+
+  // A lesson's sibling .vtt is fetched and parsed on the main thread as soon as it
+  // loads. A run of "<" with no ">" made the tag regex retry from every "<" to the
+  // end of the text, so it cost the square of the run's length.
+  it("strips tags in linear time on a long run of unclosed <", () => {
+    const run = "<".repeat(50_000);
+    for (const parse of [
+      () => parseVtt(`WEBVTT\n\n00:00.000 --> 00:01.000\n${run}\n`),
+      () => parseSrt(`1\n00:00:00,000 --> 00:00:01,000\n${run}\n`),
+    ]) {
+      const started = performance.now();
+      const cues = parse();
+      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(cues).toEqual([{ start: 0, end: 1000, text: run }]);
+    }
+  });
+});
+
 describe("parseSrt", () => {
   it("parses basic SRT with comma milliseconds", () => {
     const srt = `1

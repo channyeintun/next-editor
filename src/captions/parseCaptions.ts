@@ -35,8 +35,27 @@ const TIMESTAMP_LINE =
  */
 const COMMENT_BLOCK = /^(?:NOTE|STYLE)(?=\s|$)/;
 
+/**
+ * Removes every tag: from a "<" to the first ">" after it, with at least one
+ * character between them (the rule /<[^>]+>/g states). A scan rather than that
+ * regex, because on a run of "<" with no ">" the regex retried from every "<"
+ * to the end of the text, which cost the square of the run's length on the
+ * main thread. Each search here starts past the previous one.
+ */
 function stripVttTags(text: string): string {
-  return text.replace(/<[^>]+>/g, "");
+  let stripped = "";
+  let copiedTo = 0;
+  let open = text.indexOf("<");
+  while (open !== -1) {
+    const close = text.indexOf(">", open + 1);
+    if (close === -1) break;
+    if (close > open + 1) {
+      stripped += text.slice(copiedTo, open);
+      copiedTo = close + 1;
+    }
+    open = text.indexOf("<", close + 1);
+  }
+  return stripped + text.slice(copiedTo);
 }
 
 export function parseVtt(text: string): CaptionCue[] {
