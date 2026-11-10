@@ -145,9 +145,9 @@ binding = "CACHE"
 # `period` may only be 10 or 60 seconds; keep 60, because the routes' 429 says
 # "retry in a minute". `namespace_id` names the counter across the whole
 # Cloudflare account: never reuse one for a different budget, and keep this
-# 7101-7113 block (playgrounds 7101-7107, AthanLab 7108-7109, /api/proxy 7110,
-# signed-in writes to shared storage 7111-7113) clear of other Workers' ids, or
-# they would share counters.
+# 7101-7114 block (playgrounds 7101-7107 and 7114, AthanLab 7108-7109,
+# /api/proxy 7110, signed-in writes to shared storage 7111-7113) clear of other
+# Workers' ids, or they would share counters.
 [[ratelimits]]
 name = "GO_RUN_RATE_LIMITER"
 namespace_id = "7101"
@@ -193,6 +193,17 @@ simple = { limit = 6, period = 60 }
 name = "ZIG_UPSTREAM_RATE_LIMITER"
 namespace_id = "7107"
 simple = { limit = 4, period = 60 }
+
+# The whole Worker's Zig calls, charged under one key after the caller's own
+# budget above: per-caller budgets alone let a dual-stack host (an IPv4 and an
+# IPv6 key) or a few addresses together send more than zig-play.dev's 5/minute,
+# after which the upstream refused every other learner on our egress. Past this
+# total a call is refused here as "busy" without reaching the upstream. Like
+# every binding it counts per Cloudflare location.
+[[ratelimits]]
+name = "ZIG_UPSTREAM_TOTAL_RATE_LIMITER"
+namespace_id = "7114"
+simple = { limit = 5, period = 60 }
 
 # AthanLab narration (worker/routes/athanlab.ts), keyed "user:<id>" (every
 # AthanLab route requires sign-in); a refusal answers 429 with

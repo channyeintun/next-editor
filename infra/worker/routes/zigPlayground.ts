@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import type { Env } from "../env";
 import { getCache } from "../cache";
 import {
@@ -53,9 +54,11 @@ import {
 // The upstream also rate-limits at 5 requests per minute per client IP, and
 // /server/run and /server/fmt share that one counter. Runs and formats are
 // therefore charged against a single per-caller budget set below it
-// (ZIG_UPSTREAM_RATE_LIMITER in infra/wrangler.toml), and deterministic
-// outcomes of both are cached, so one lesson's repeated work does not spend
-// the shared budget.
+// (ZIG_UPSTREAM_RATE_LIMITER in infra/wrangler.toml), then against the whole
+// Worker's total (ZIG_UPSTREAM_TOTAL_RATE_LIMITER), since every learner reaches
+// the upstream through this Worker's egress: a few callers' budgets together
+// must not overrun it (see chargeUpstreamCall). Deterministic outcomes of both
+// are cached, so one lesson's repeated work does not spend the shared budget.
 //
 // Privacy invariant: user sources, program output, and diagnostics must never
 // be logged — telemetry is aggregate fields only (see logRun below). Nothing
@@ -262,13 +265,47 @@ const FORMAT_CACHE_KEY_PREFIX = `zp:fmt:${UPSTREAM_ZIG_VERSION}`;
 // distinguishable from the sibling routes' in the Worker log.
 const LOG_LABEL = "Zig Playground";
 
+// The one key the Worker's total upstream budget is charged under.
+const UPSTREAM_TOTAL_KEY = "zig-play.dev";
+
+type UpstreamCharge = "allowed" | "caller-limited" | "busy" | "unavailable";
+
+/**
+ * Charge one upstream call first to the caller's budget (user id, or IP when
+ * signed out) and then to the Worker's total under one key. The total stays
+ * within zig-play.dev's 5/minute per-IP budget, which every learner shares
+ * through this Worker's egress, so callers with several keys (an IPv4 and an
+ * IPv6 address, a few addresses, an address and an account) cannot together
+ * send more than the upstream allows: past it the call is refused here as
+ * "busy", without reaching the upstream. Both counters are per Cloudflare
+ * location. Either binding missing or failing is "unavailable" (fail closed).
+ */
+async function chargeUpstreamCall(c: Context<{ Bindings: Env }>): Promise<UpstreamCharge> {
+  const caller = await checkRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
+    key: await playgroundRateLimitKey(c),
+    label: LOG_LABEL,
+  });
+  if (caller !== "allowed") return caller === "limited" ? "caller-limited" : "unavailable";
+  const total = await checkRateLimit(c.env.ZIG_UPSTREAM_TOTAL_RATE_LIMITER, {
+    key: UPSTREAM_TOTAL_KEY,
+    label: LOG_LABEL,
+  });
+  if (total !== "allowed") return total === "limited" ? "busy" : "unavailable";
+  return "allowed";
+}
+
+const UPSTREAM_BUSY = "the Zig Playground is busy; try again shortly";
+
 // Aggregate telemetry only — never sources, output, or diagnostics text.
+// "worker-busy" is the Worker's own total refusing a call; "upstream-busy"
+// is the upstream's 429.
 function logRun(entry: {
   outcome:
     | ZigPlaygroundRunResult["status"]
     | "upstream-error"
     | "upstream-timeout"
-    | "upstream-busy";
+    | "upstream-busy"
+    | "worker-busy";
   sourceBytes: number;
   cacheHit: boolean;
   durationMs: number;
@@ -277,7 +314,13 @@ function logRun(entry: {
 }
 
 function logFormat(entry: {
-  outcome: "success" | "source-error" | "upstream-error" | "upstream-timeout" | "upstream-busy";
+  outcome:
+    | "success"
+    | "source-error"
+    | "upstream-error"
+    | "upstream-timeout"
+    | "upstream-busy"
+    | "worker-busy";
   sourceBytes: number;
   cacheHit: boolean;
   durationMs: number;
@@ -338,17 +381,23 @@ zigPlaygroundRoute.post("/run", async (c) => {
   }
 
   // Charged only once the request is really going upstream, so re-running
-  // unchanged source never spends a slot a Format may need. The budget, shared
-  // with /format, is ZIG_UPSTREAM_RATE_LIMITER's, set in infra/wrangler.toml.
-  const rateLimitDecision = await checkRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
-    key: await playgroundRateLimitKey(c),
-    label: LOG_LABEL,
-  });
-  if (rateLimitDecision === "limited") {
+  // unchanged source never spends a slot a Format may need. The budgets,
+  // shared with /format, are set in infra/wrangler.toml.
+  const charge = await chargeUpstreamCall(c);
+  if (charge === "caller-limited") {
     return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
   }
-  if (rateLimitDecision === "unavailable") {
+  if (charge === "unavailable") {
     return c.json({ error: "Zig Playground execution policy is unavailable" }, 502);
+  }
+  if (charge === "busy") {
+    logRun({
+      outcome: "worker-busy",
+      sourceBytes,
+      cacheHit: false,
+      durationMs: Date.now() - startedAt,
+    });
+    return c.json({ error: UPSTREAM_BUSY }, 502);
   }
 
   const call = await callUpstream(
@@ -368,11 +417,13 @@ zigPlaygroundRoute.post("/run", async (c) => {
       : c.json({ error: "the Zig Playground service is unavailable" }, 502);
   }
 
-  // Backpressure: our own budget sits below the upstream's per-IP limit, so
-  // reaching that limit means somebody else spent it. Reported as a
-  // 502 rather than a 429, because the client renders a 429 as "Too many runs"
-  // — which blames a learner who pressed Run once. The distinction stays
-  // visible in telemetry through the upstream-busy outcome, matching Haskell.
+  // Backpressure: our own total stays within the upstream's per-IP limit, so
+  // reaching that limit means somebody else spent it (another location, or
+  // another client on the same egress). Reported as a 502 rather than a 429,
+  // because the client renders a 429 as "Too many runs" — which blames a
+  // learner who pressed Run once; the Worker's own total refusing is reported
+  // the same way. The distinction stays visible in telemetry through the
+  // upstream-busy and worker-busy outcomes, matching Haskell.
   if (call.response.status === 429) {
     logRun({
       outcome: "upstream-busy",
@@ -380,7 +431,7 @@ zigPlaygroundRoute.post("/run", async (c) => {
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
+    return c.json({ error: UPSTREAM_BUSY }, 502);
   }
 
   const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);
@@ -466,17 +517,22 @@ zigPlaygroundRoute.post("/format", async (c) => {
     return c.json(cachedFormat);
   }
 
-  // The budget, shared with /run, is ZIG_UPSTREAM_RATE_LIMITER's, set in
-  // infra/wrangler.toml.
-  const rateLimitDecision = await checkRateLimit(c.env.ZIG_UPSTREAM_RATE_LIMITER, {
-    key: await playgroundRateLimitKey(c),
-    label: LOG_LABEL,
-  });
-  if (rateLimitDecision === "limited") {
+  // The budgets, shared with /run, are set in infra/wrangler.toml.
+  const charge = await chargeUpstreamCall(c);
+  if (charge === "caller-limited") {
     return c.json({ error: "rate limit exceeded; retry in a minute" }, 429);
   }
-  if (rateLimitDecision === "unavailable") {
+  if (charge === "unavailable") {
     return c.json({ error: "Zig Playground formatting policy is unavailable" }, 502);
+  }
+  if (charge === "busy") {
+    logFormat({
+      outcome: "worker-busy",
+      sourceBytes: request.sourceBytes,
+      cacheHit: false,
+      durationMs: Date.now() - startedAt,
+    });
+    return c.json({ error: UPSTREAM_BUSY }, 502);
   }
 
   const call = await callUpstream(
@@ -505,7 +561,7 @@ zigPlaygroundRoute.post("/format", async (c) => {
       cacheHit: false,
       durationMs: Date.now() - startedAt,
     });
-    return c.json({ error: "the Zig Playground is busy; try again shortly" }, 502);
+    return c.json({ error: UPSTREAM_BUSY }, 502);
   }
 
   const upstreamBody = await call.readBody(PLAYGROUND_MAX_UPSTREAM_RESPONSE_BYTES);

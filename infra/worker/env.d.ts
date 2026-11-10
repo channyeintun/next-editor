@@ -39,6 +39,10 @@ export interface Env {
   KOTLIN_RUN_RATE_LIMITER?: RateLimit;
   HASKELL_RUN_RATE_LIMITER?: RateLimit;
   ZIG_UPSTREAM_RATE_LIMITER?: RateLimit;
+  // The whole Worker's share of zig-play.dev's per-IP budget, charged under
+  // one key after the caller's own (chargeUpstreamCall in
+  // routes/zigPlayground.ts). Missing, Zig Run and Format fail closed (502).
+  ZIG_UPSTREAM_TOTAL_RATE_LIMITER?: RateLimit;
   // Private Burmese Studio narration. All three values are required and the
   // requesting user must also have studio.burmese-voxcpm2 enabled in D1.
   // The browser never receives these Modal workspace credentials.

@@ -63,6 +63,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     CACHE: memoryKv(),
     ZIG_PLAYGROUND_ENABLED: "true",
     ZIG_UPSTREAM_RATE_LIMITER: countingRateLimiter(Infinity),
+    ZIG_UPSTREAM_TOTAL_RATE_LIMITER: countingRateLimiter(Infinity),
     ...overrides,
   } as Env;
 }
@@ -621,6 +622,70 @@ describe("zigPlaygroundRoute", () => {
     }
 
     expect(statuses).toEqual([200, 200, 200, 200, 429, 429]);
+  });
+
+  it("keeps every caller together within the upstream's shared per-IP budget", async () => {
+    // zig-play.dev allows 5 calls a minute per client IP, and every learner
+    // reaches it through this Worker's egress. Per-caller budgets alone let a
+    // dual-stack host (an IPv4 key and an IPv6 /64 key) or a few addresses
+    // send more than that, so the upstream refused everyone else.
+    let upstreamCalls = 0;
+    const spy = vi.fn<() => Promise<Response>>(async () =>
+      ++upstreamCalls <= 5
+        ? new Response(UPSTREAM_SUCCESS, { status: 200 })
+        : new Response("Too many requests.", { status: 429 }),
+    );
+    vi.stubGlobal("fetch", spy);
+    const total = countingRateLimiter(5);
+    const env = makeEnv({
+      DB: dbWithSessionUser(null),
+      ZIG_UPSTREAM_RATE_LIMITER: countingRateLimiter(4),
+      ZIG_UPSTREAM_TOTAL_RATE_LIMITER: total,
+    });
+    const callers = [
+      ...Array.from({ length: 4 }, () => "198.51.100.1"),
+      ...Array.from({ length: 4 }, () => "2001:db8::1"),
+      "198.51.100.2",
+    ];
+    const responses: Response[] = [];
+    for (const [index, address] of callers.entries()) {
+      responses.push(
+        await runRequest(
+          env,
+          JSON.stringify({ files: [{ path: "main.zig", content: `${SOURCE}// ${index}\n` }] }),
+          { Cookie: "", "CF-Connecting-IP": address },
+        ),
+      );
+    }
+
+    expect(spy).toHaveBeenCalledTimes(5);
+    expect(responses.map((response) => response.status)).toEqual([
+      200, 200, 200, 200, 200, 502, 502, 502, 502,
+    ]);
+    for (const response of responses.slice(5)) {
+      expect(await response.json()).toEqual({
+        error: "the Zig Playground is busy; try again shortly",
+      });
+    }
+    expect(new Set(total.keys)).toEqual(new Set(["zig-play.dev"]));
+  });
+
+  it("charges formats to the Worker's total too, and fails closed without it", async () => {
+    const spy = stubUpstream("pub fn main() void {}\n");
+
+    const refused = await formatRequest(
+      makeEnv({ ZIG_UPSTREAM_TOTAL_RATE_LIMITER: refusingRateLimiter() }),
+    );
+    expect(refused.status).toBe(502);
+    expect(await refused.json()).toEqual({
+      error: "the Zig Playground is busy; try again shortly",
+    });
+    const missing = await runRequest(makeEnv({ ZIG_UPSTREAM_TOTAL_RATE_LIMITER: undefined }));
+    expect(missing.status).toBe(502);
+    expect(await missing.json()).toEqual({
+      error: "Zig Playground execution policy is unavailable",
+    });
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("returns 429 once the per-user budget is spent", async () => {
