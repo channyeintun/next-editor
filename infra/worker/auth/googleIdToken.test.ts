@@ -43,6 +43,7 @@ function defaultPayload(): Record<string, unknown> {
     exp: Math.floor(NOW / 1000) + 3600,
     sub: "google-sub-123",
     email: "user@example.com",
+    email_verified: true,
     name: "Test User",
     picture: "https://example.com/avatar.png",
   };
@@ -75,9 +76,30 @@ describe("verifyGoogleIdToken", () => {
     expect(identity).toEqual({
       sub: "google-sub-123",
       email: "user@example.com",
+      emailVerified: true,
       name: "Test User",
       picture: "https://example.com/avatar.png",
     });
+  });
+
+  // An address Google has not verified may be someone else's, so the sign-in
+  // must be able to tell: only an explicit true (or Google's "true") counts.
+  it.each([
+    [false, false],
+    ["false", false],
+    [undefined, false],
+    ["true", true],
+  ])("reads email_verified %j as %j", async (claim, expected) => {
+    const { privateKey, jwks } = await makeSigningKey();
+    const token = await signToken(privateKey, { ...defaultPayload(), email_verified: claim });
+
+    const identity = await verifyGoogleIdToken(token, {
+      clientId: CLIENT_ID,
+      fetchJwks: async () => jwks,
+      now: NOW,
+    });
+
+    expect(identity.emailVerified).toBe(expected);
   });
 
   it("accepts the bare accounts.google.com issuer variant", async () => {

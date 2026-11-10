@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createSession,
   listPublishedLessons,
+  type UpsertUserParams,
   upsertUserByGoogleSub,
   USERNAME_PATTERN,
 } from "./queries";
@@ -163,13 +164,21 @@ function makeUserDb(taken: string[], onStatement?: (sql: string, sqlite: Databas
   return { db, probes };
 }
 
+/** The account a sign-in that must succeed lands on. */
+async function signedInUser(db: D1Database, params: UpsertUserParams) {
+  const result = await upsertUserByGoogleSub(db, params);
+  if (result.status !== "ok") throw new Error(`sign-in refused: ${result.status}`);
+  return result.user;
+}
+
 describe("upsertUserByGoogleSub", () => {
   it("prefers the bare slug and only suffixes on a real collision", async () => {
     const { db } = makeUserDb(["ada-lovelace"]);
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "sub-ada",
       email: "ada@example.com",
+      emailVerified: true,
       name: "Ada Lovelace",
       avatarUrl: null,
     });
@@ -186,9 +195,10 @@ describe("upsertUserByGoogleSub", () => {
   ])("generates a username the rename rule accepts for %j", async (name, expected) => {
     const { db } = makeUserDb([]);
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: `sub-${name}`,
       email: "someone@example.com",
+      emailVerified: true,
       name,
       avatarUrl: null,
     });
@@ -206,9 +216,10 @@ describe("upsertUserByGoogleSub", () => {
     const taken = ["user", ...Array.from({ length: 60 }, (_, index) => `user-${index + 1}`)];
     const { db, probes } = makeUserDb(taken);
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "sub-1",
       email: "someone@example.com",
+      emailVerified: true,
       name: "မောင်မောင်",
       avatarUrl: null,
     });
@@ -221,9 +232,10 @@ describe("upsertUserByGoogleSub", () => {
   it("gives that cohort the bare base while it is free", async () => {
     const { db } = makeUserDb(["user-1", "user-2", "user-3"]);
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "sub-new",
       email: "someone@example.com",
+      emailVerified: true,
       name: "မောင်မောင်",
       avatarUrl: null,
     });
@@ -236,9 +248,10 @@ describe("upsertUserByGoogleSub", () => {
   it("finds the first free suffix with one lookup", async () => {
     const { db, probes } = makeUserDb(["user", "user-1"]);
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "sub-new",
       email: "someone@example.com",
+      emailVerified: true,
       name: "မောင်မောင်",
       avatarUrl: null,
     });
@@ -258,9 +271,10 @@ describe("upsertUserByGoogleSub", () => {
       insertUser(sqlite, "rival", "user-2");
     });
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "sub-new",
       email: "someone@example.com",
+      emailVerified: true,
       name: "မောင်မောင်",
       avatarUrl: null,
     });
@@ -276,9 +290,10 @@ describe("upsertUserByGoogleSub", () => {
     const { db, sqlite } = openSqliteD1({ onStatement: (sql) => statements.push(sql) });
     insertUser(sqlite, "user-1", "ada");
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "google-user-1",
       email: "ada@new.example.com",
+      emailVerified: true,
       name: "Ada L.",
       avatarUrl: "https://example.com/ada.png",
     });
@@ -307,15 +322,124 @@ describe("upsertUserByGoogleSub", () => {
       },
     });
 
-    const row = await upsertUserByGoogleSub(db, {
+    const row = await signedInUser(db, {
       googleSub: "google-winner",
       email: "ada@example.com",
+      emailVerified: true,
       name: "Ada",
       avatarUrl: null,
     });
 
     expect(row).toMatchObject({ id: "winner", username: "ada" });
     expect(sqlite.prepare("SELECT id FROM users").all()).toEqual([{ id: "winner" }]);
+  });
+});
+
+// users.email is UNIQUE (0001_init.sql) but filled from Google's `email`
+// claim, which Google does not promise is unique per account (sub): an address
+// can move to a new Google account. Accounts are keyed on google_sub, so a
+// collision must neither 500 the sign-in nor touch the other account's row.
+describe("upsertUserByGoogleSub email collisions", () => {
+  function googleUsers(sqlite: DatabaseSync) {
+    return sqlite.prepare("SELECT google_sub, email, name FROM users ORDER BY google_sub").all();
+  }
+
+  it("refuses a new Google identity whose address another account holds", async () => {
+    const { db, sqlite } = openSqliteD1();
+    await upsertUserByGoogleSub(db, {
+      googleSub: "sub-a",
+      email: "shared@example.test",
+      emailVerified: true,
+      name: "A",
+      avatarUrl: null,
+    });
+
+    const result = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-b",
+      email: "shared@example.test",
+      emailVerified: true,
+      name: "B",
+      avatarUrl: null,
+    });
+
+    expect(result).toEqual({ status: "email-in-use" });
+    expect(googleUsers(sqlite)).toEqual([
+      { google_sub: "sub-a", email: "shared@example.test", name: "A" },
+    ]);
+  });
+
+  it("signs a returning user in when their new address belongs to another account", async () => {
+    const { db, sqlite } = openSqliteD1();
+    for (const [googleSub, email] of [
+      ["sub-a", "a@example.test"],
+      ["sub-b", "b@example.test"],
+    ]) {
+      await upsertUserByGoogleSub(db, {
+        googleSub,
+        email,
+        emailVerified: true,
+        name: googleSub,
+        avatarUrl: null,
+      });
+    }
+
+    const result = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-a",
+      email: "b@example.test",
+      emailVerified: true,
+      name: "A renamed",
+      avatarUrl: null,
+    });
+
+    expect(result).toMatchObject({
+      status: "ok",
+      user: { google_sub: "sub-a", email: "a@example.test", name: "A renamed" },
+    });
+    expect(googleUsers(sqlite)).toEqual([
+      { google_sub: "sub-a", email: "a@example.test", name: "A renamed" },
+      { google_sub: "sub-b", email: "b@example.test", name: "sub-b" },
+    ]);
+  });
+
+  // An unverified address could be someone else's: storing it would claim it
+  // in the UNIQUE column and lock its real owner out of signing up.
+  it("never creates an account on an address Google has not verified", async () => {
+    const { db, sqlite } = openSqliteD1();
+
+    const result = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-a",
+      email: "someone-else@example.test",
+      emailVerified: false,
+      name: "A",
+      avatarUrl: null,
+    });
+
+    expect(result).toEqual({ status: "email-unverified" });
+    expect(googleUsers(sqlite)).toEqual([]);
+  });
+
+  it("keeps a returning user's stored address when Google has not verified the new one", async () => {
+    const { db } = openSqliteD1();
+    await upsertUserByGoogleSub(db, {
+      googleSub: "sub-a",
+      email: "a@example.test",
+      emailVerified: true,
+      name: "A",
+      avatarUrl: null,
+    });
+
+    const result = await upsertUserByGoogleSub(db, {
+      googleSub: "sub-a",
+      email: "unverified@example.test",
+      emailVerified: false,
+      name: "A",
+      avatarUrl: "https://example.test/a.png",
+    });
+
+    expect(result).toMatchObject({
+      status: "ok",
+      user: { email: "a@example.test", avatar_url: "https://example.test/a.png" },
+    });
   });
 });
 

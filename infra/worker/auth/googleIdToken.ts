@@ -31,8 +31,39 @@ export interface JwksResponse {
 export interface VerifiedGoogleIdToken {
   sub: string;
   email: string;
+  /** Google's `email_verified` claim: whether the address is proven to be this account's. */
+  emailVerified: boolean;
   name?: string;
   picture?: string;
+}
+
+/** The ID token claims the sign-in reads, as Google names them. */
+export interface GoogleIdTokenClaims {
+  sub?: string;
+  email?: string;
+  email_verified?: boolean | string;
+  name?: string;
+  picture?: string;
+}
+
+/**
+ * The identity both sign-in paths act on, from the claims of a token whose
+ * origin is already trusted (signature-checked for One Tap, fetched from
+ * Google for the redirect callback).
+ */
+export function googleIdentityFromClaims(claims: GoogleIdTokenClaims): VerifiedGoogleIdToken {
+  if (!claims.sub || !claims.email) {
+    throw new Error("id_token is missing sub or email");
+  }
+  return {
+    sub: claims.sub,
+    email: claims.email,
+    // ID tokens carry a boolean; Google's tokeninfo endpoint has used the
+    // string. Anything else, a missing claim included, is unverified.
+    emailVerified: claims.email_verified === true || claims.email_verified === "true",
+    name: claims.name,
+    picture: claims.picture,
+  };
 }
 
 export interface VerifyGoogleIdTokenOptions {
@@ -93,7 +124,7 @@ export async function verifyGoogleIdToken(
   const [headerSegment, payloadSegment, signatureSegment] = segments;
 
   let header: { alg?: string; kid?: string };
-  let payload: Partial<VerifiedGoogleIdToken> & { iss?: string; aud?: string; exp?: number };
+  let payload: GoogleIdTokenClaims & { iss?: string; aud?: string; exp?: number };
   try {
     header = base64UrlDecodeToJson(headerSegment);
     payload = base64UrlDecodeToJson(payloadSegment);
@@ -143,14 +174,5 @@ export async function verifyGoogleIdToken(
   if (typeof payload.exp !== "number" || payload.exp * 1000 < now - CLOCK_SKEW_MS) {
     throw new Error("id_token is expired");
   }
-  if (!payload.sub || !payload.email) {
-    throw new Error("id_token is missing sub or email");
-  }
-
-  return {
-    sub: payload.sub,
-    email: payload.email,
-    name: payload.name,
-    picture: payload.picture,
-  };
+  return googleIdentityFromClaims(payload);
 }

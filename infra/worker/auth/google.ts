@@ -2,11 +2,15 @@ import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
 import type { Env } from "../env";
 import { isJsonObject, readJsonWithLimit } from "../httpBody";
-import { upsertUserByGoogleSub } from "../../db/queries";
+import { upsertUserByGoogleSub, type UpsertUserResult } from "../../db/queries";
 import { userRowToAuthUser } from "../../db/types";
 import { base64UrlDecodeToBytes, base64UrlEncode, randomBase64Url } from "../base64url";
 import { isHttps, startSession } from "./session";
-import { verifyGoogleIdToken, type VerifiedGoogleIdToken } from "./googleIdToken";
+import {
+  googleIdentityFromClaims,
+  verifyGoogleIdToken,
+  type VerifiedGoogleIdToken,
+} from "./googleIdToken";
 
 const HANDSHAKE_COOKIE = "ne_oauth";
 const HANDSHAKE_MAX_AGE_SECONDS = 10 * 60; // just long enough for the Google round trip
@@ -68,7 +72,39 @@ function decodeIdTokenPayload(idToken: string): VerifiedGoogleIdToken {
   if (!payloadSegment) {
     throw new Error("Malformed id_token: missing payload segment");
   }
-  return JSON.parse(new TextDecoder().decode(base64UrlDecodeToBytes(payloadSegment)));
+  return googleIdentityFromClaims(
+    JSON.parse(new TextDecoder().decode(base64UrlDecodeToBytes(payloadSegment))),
+  );
+}
+
+// Why a Google identity gets no account here: both are about users.email,
+// which is UNIQUE, so a new account may only take an address that is its own
+// and still free (see upsertUserByGoogleSub).
+const REFUSED_SIGN_IN: Record<
+  Exclude<UpsertUserResult["status"], "ok">,
+  { status: 403 | 409; message: string }
+> = {
+  "email-in-use": {
+    status: 409,
+    message:
+      "Another Next Editor account already uses this Google account's email address. Sign in with the Google account you used before.",
+  },
+  "email-unverified": {
+    status: 403,
+    message:
+      "Google hasn't verified this account's email address yet. Verify it with Google, then sign in again.",
+  },
+};
+
+/** Creates or refreshes the account for a trusted Google identity. */
+function upsertGoogleUser(db: D1Database, identity: VerifiedGoogleIdToken) {
+  return upsertUserByGoogleSub(db, {
+    googleSub: identity.sub,
+    email: identity.email,
+    emailVerified: identity.emailVerified,
+    name: identity.name ?? null,
+    avatarUrl: identity.picture ?? null,
+  });
 }
 
 // Mounted at /api/auth/google in worker/index.ts.
@@ -101,14 +137,13 @@ googleAuthRoute.post("/onetap", async (c) => {
     return c.json({ error: `Google sign-in failed: ${String(error)}` }, 401);
   }
 
-  const user = await upsertUserByGoogleSub(c.env.DB, {
-    googleSub: identity.sub,
-    email: identity.email,
-    name: identity.name ?? null,
-    avatarUrl: identity.picture ?? null,
-  });
-  await startSession(c, user.id);
-  return c.json({ user: userRowToAuthUser(user) });
+  const result = await upsertGoogleUser(c.env.DB, identity);
+  if (result.status !== "ok") {
+    const refused = REFUSED_SIGN_IN[result.status];
+    return c.json({ error: refused.message }, refused.status);
+  }
+  await startSession(c, result.user.id);
+  return c.json({ user: userRowToAuthUser(result.user) });
 });
 
 googleAuthRoute.get("/login", async (c) => {
@@ -202,14 +237,13 @@ googleAuthRoute.get("/callback", async (c) => {
   } catch {
     return c.text("OAuth error: Google's id_token could not be decoded.", 502);
   }
-  const user = await upsertUserByGoogleSub(c.env.DB, {
-    googleSub: idTokenPayload.sub,
-    email: idTokenPayload.email,
-    name: idTokenPayload.name ?? null,
-    avatarUrl: idTokenPayload.picture ?? null,
-  });
+  const result = await upsertGoogleUser(c.env.DB, idTokenPayload);
+  if (result.status !== "ok") {
+    const refused = REFUSED_SIGN_IN[result.status];
+    return c.text(`Sign-in refused: ${refused.message}`, refused.status);
+  }
 
-  await startSession(c, user.id);
+  await startSession(c, result.user.id);
 
   // Re-sanitized rather than trusted from the handshake cookie: this is the
   // value that actually reaches the browser as a Location header, so it is the

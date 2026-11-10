@@ -13,9 +13,18 @@ function escapeLikePattern(value: string): string {
 export interface UpsertUserParams {
   googleSub: string;
   email: string;
+  /** Whether Google verified `email`. An unverified address is never stored. */
+  emailVerified: boolean;
   name: string | null;
   avatarUrl: string | null;
 }
+
+export type UpsertUserResult =
+  | { status: "ok"; user: UserRow }
+  /** A new Google identity whose address another account already holds. */
+  | { status: "email-in-use" }
+  /** A new Google identity whose address Google has not verified. */
+  | { status: "email-unverified" };
 
 /**
  * The shape of every username issued or chosen today: 3-32 characters of
@@ -79,27 +88,54 @@ async function generateUniqueUsername(db: D1Database, base: string): Promise<str
 // as an error rather than spin forever.
 const MAX_USERNAME_INSERT_ATTEMPTS = 5;
 
+// A returning user's profile refresh, or null when no account has this
+// google_sub. The address is profile data but lives in the UNIQUE users.email,
+// and Google does not promise an address stays with one account (sub): it is
+// refreshed only to one Google verified and no other account holds. Otherwise
+// the account keeps its stored address and the sign-in still succeeds, since
+// accounts are keyed on google_sub.
+async function refreshGoogleProfile(
+  db: D1Database,
+  params: UpsertUserParams,
+): Promise<UserRow | null> {
+  const refresh = (email: string | null) =>
+    db
+      .prepare(
+        `UPDATE users SET email = COALESCE(?, email), name = ?, avatar_url = ?
+         WHERE google_sub = ?
+         RETURNING *`,
+      )
+      .bind(email, params.name, params.avatarUrl, params.googleSub)
+      .first<UserRow>();
+  try {
+    return await refresh(params.emailVerified ? params.email : null);
+  } catch (error) {
+    if (!isUniqueViolation(error, "users.email")) throw error;
+    return refresh(null);
+  }
+}
+
 // Keyed on google_sub (stable across logins); email/name/avatar refresh on
-// every sign-in so profile changes on the Google side propagate here.
+// every sign-in so profile changes on the Google side propagate here (the
+// email only as refreshGoogleProfile allows).
 // username is only assigned here on first sign-in, never touched again by
 // this function afterward — see updateUsername for user-initiated renames.
 // The refresh runs first, as one UPDATE ... RETURNING, so a returning user
 // costs one round trip; only when it matches no row does the INSERT path run
 // (unlike a single INSERT ... ON CONFLICT, that path needs a new user's
 // username looked up for uniqueness before the row exists).
+//
+// A new account takes the address into the UNIQUE users.email, so it must be
+// one Google verified (otherwise anyone could claim someone else's address
+// before they sign up) and one no other account holds. Either refusal is a
+// result the route answers with a 4xx, never a thrown error.
 export async function upsertUserByGoogleSub(
   db: D1Database,
   params: UpsertUserParams,
-): Promise<UserRow> {
-  const existing = await db
-    .prepare(
-      `UPDATE users SET email = ?, name = ?, avatar_url = ?
-       WHERE google_sub = ?
-       RETURNING *`,
-    )
-    .bind(params.email, params.name, params.avatarUrl, params.googleSub)
-    .first<UserRow>();
-  if (existing) return existing;
+): Promise<UpsertUserResult> {
+  const existing = await refreshGoogleProfile(db, params);
+  if (existing) return { status: "ok", user: existing };
+  if (!params.emailVerified) return { status: "email-unverified" };
 
   const base = params.name ?? params.email.split("@")[0];
   for (let attempt = 1; ; attempt++) {
@@ -124,7 +160,7 @@ export async function upsertUserByGoogleSub(
       if (!row) {
         throw new Error("upsertUserByGoogleSub: INSERT ... RETURNING produced no row");
       }
-      return row;
+      return { status: "ok", user: row };
     } catch (error) {
       // Two concurrent first-sign-ins for the same brand-new google_sub (e.g.
       // the OAuth callback opened in two tabs) both find no row to UPDATE above
@@ -134,7 +170,10 @@ export async function upsertUserByGoogleSub(
         .prepare("SELECT * FROM users WHERE google_sub = ?")
         .bind(params.googleSub)
         .first<UserRow>();
-      if (row) return row;
+      if (row) return { status: "ok", user: row };
+
+      // Another account (a different google_sub) holds this address.
+      if (isUniqueViolation(error, "users.email")) return { status: "email-in-use" };
 
       // Not a google_sub race: two concurrent brand-new sign-ins independently
       // generated the same username between generateUniqueUsername's read and
