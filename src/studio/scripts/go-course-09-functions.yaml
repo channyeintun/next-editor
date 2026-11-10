@@ -1,0 +1,1001 @@
+# Go course, lesson 09: functions (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only:
+#   1. taxiFare (its comment, the signature and only the short-ride `if ... return 1500`) above
+#      main, and `fmt.Println(taxiFare(2))` in main -> run-1: compile error
+#      `./main.go:11:1: missing return` (the function's closing brace);
+#   2. the long-ride `return 1500 + (km-2)*700`, then `, taxiFare(8)` into the call -> run-2:
+#      1500 5700;
+#   3. withTax and formatKyat (COURSE-KIT 3.1) and the chained call in main -> run-3 adds
+#      5985 ကျပ်.
+# Boards: (F) main hands 8 to taxiFare and gets 5700 back; (P) the two paths, one without a
+# return; (C) the chain of three calls, innermost first; (Q) quiz: a result nobody keeps.
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-09-functions
+  title: "Go course 09: Function ဆိုတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board F: a call hands an input over and gets an answer back.
+    - {
+        id: f-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 760,
+        height: 50,
+        text: "Function · ခေါ်ပြီး အဖြေ ပြန်ရတယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: f-main-box,
+        kind: rectangle,
+        x: 285,
+        y: 250,
+        width: 220,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-main,
+        kind: text,
+        x: 340,
+        y: 275,
+        width: 120,
+        height: 40,
+        text: "main",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-fn-box,
+        kind: rectangle,
+        x: 735,
+        y: 250,
+        width: 330,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-fn,
+        kind: text,
+        x: 790,
+        y: 275,
+        width: 220,
+        height: 40,
+        text: "taxiFare",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-send,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 525,
+        y: 280,
+        width: 190,
+        height: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-send-label,
+        kind: text,
+        x: 560,
+        y: 320,
+        width: 140,
+        height: 40,
+        text: "km = 8",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-wait,
+        kind: text,
+        x: 285,
+        y: 455,
+        width: 400,
+        height: 40,
+        text: "main · အဖြေ ရမှ ဆက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-back,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 355,
+        width: 30,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-ans-box,
+        kind: rectangle,
+        x: 735,
+        y: 440,
+        width: 330,
+        height: 70,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-ans,
+        kind: text,
+        x: 770,
+        y: 455,
+        width: 260,
+        height: 40,
+        text: "return 5700",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: f-terms,
+        kind: text,
+        x: 285,
+        y: 570,
+        width: 760,
+        height: 40,
+        text: "km · parameter       8 · argument",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board P: every path through a function with a result must return.
+    - {
+        id: p-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "လမ်း နှစ်ခု၊ return တစ်ခုပဲ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: p-fork-box,
+        kind: rectangle,
+        x: 285,
+        y: 250,
+        width: 260,
+        height: 80,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-fork,
+        kind: text,
+        x: 315,
+        y: 270,
+        width: 200,
+        height: 40,
+        text: "km <= 2 ?",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-yes-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 275,
+        width: 150,
+        height: 30,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-yes-box,
+        kind: rectangle,
+        x: 725,
+        y: 250,
+        width: 300,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-yes,
+        kind: text,
+        x: 750,
+        y: 270,
+        width: 250,
+        height: 40,
+        text: "return 1500",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-no-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 345,
+        width: 30,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-no-box,
+        kind: rectangle,
+        x: 285,
+        y: 450,
+        width: 300,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-no,
+        kind: text,
+        x: 310,
+        y: 470,
+        width: 250,
+        height: 40,
+        text: "return မရှိ",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-err,
+        kind: text,
+        x: 625,
+        y: 470,
+        width: 300,
+        height: 40,
+        text: "missing return",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: p-rule,
+        kind: text,
+        x: 285,
+        y: 570,
+        width: 780,
+        height: 40,
+        text: "ဘယ်လမ်းက သွားသွား return နဲ့ ဆုံးရမယ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board C: a call inside a call; the innermost runs first.
+    - {
+        id: c-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 600,
+        height: 50,
+        text: "Function ထဲက function",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: c-1-box,
+        kind: rectangle,
+        x: 285,
+        y: 240,
+        width: 560,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-1,
+        kind: text,
+        x: 305,
+        y: 250,
+        width: 500,
+        height: 40,
+        text: "taxiFare(8)  →  5700",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 550,
+        y: 305,
+        width: 30,
+        height: 45,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-2-box,
+        kind: rectangle,
+        x: 285,
+        y: 355,
+        width: 560,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-2,
+        kind: text,
+        x: 305,
+        y: 365,
+        width: 500,
+        height: 40,
+        text: "withTax(5700)  →  5985",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow-2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 550,
+        y: 420,
+        width: 30,
+        height: 45,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-3-box,
+        kind: rectangle,
+        x: 285,
+        y: 470,
+        width: 560,
+        height: 60,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-3,
+        kind: text,
+        x: 305,
+        y: 480,
+        width: 520,
+        height: 40,
+        text: "formatKyat(5985)  →  5985 ကျပ်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-first,
+        kind: text,
+        x: 870,
+        y: 250,
+        width: 220,
+        height: 40,
+        text: "အတွင်းဆုံး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: c-rule,
+        kind: text,
+        x: 285,
+        y: 570,
+        width: 780,
+        height: 40,
+        text: "အဖြေက နောက် function ရဲ့ argument",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (a result nobody keeps).
+    - {
+        id: q-title,
+        kind: text,
+        x: 285,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 480,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 400,
+        height: 40,
+        text: "fare := taxiFare(8)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: "withTax(fare)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(fare)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-mark,
+        kind: freedraw,
+        stroke: circle,
+        x: 288,
+        y: 290,
+        width: 240,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 285,
+        y: 450,
+        width: 300,
+        height: 40,
+        text: "က · 5700",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 285,
+        y: 510,
+        width: 300,
+        height: 40,
+        text: "ခ · 5985",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 440,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7109
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: compile-error
+        output: ""
+        compileErrors: "./main.go:11:1: missing return\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "1500 5700\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "1500 5700\n5985 ကျပ်\n"
+
+scenes:
+  - id: recall
+    chapter: Function ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ switch နဲ့ ရွေးစရာ အများကြီးထဲက ကိုက်တဲ့ တစ်ခုကို ရွေးတာကို လေ့လာခဲ့ပါတယ်။ အခုထိ
+      ကိုယ်တို့ ရေးခဲ့တဲ့ code အားလုံးက main function ထဲမှာပဲ ရှိနေပါတယ်။ ဒါပေမဲ့ တွက်နည်း တစ်ခုတည်းကို
+      နေရာ အများကြီးမှာ သုံးရမယ် ဆိုရင်၊ အဲဒီ code ကို ထပ်ခါထပ်ခါ ကူးရေးနေရပါမယ်။ တွက်နည်း ပြောင်းတဲ့အခါမှာလည်း
+      နေရာတိုင်းကို လိုက်ပြင်ရပါမယ်။ ဒီနေ့ lesson မှာ အဲဒီ ပြဿနာကို ဖြေရှင်းပေးတဲ့ function ကို ကိုယ်တိုင်
+      ရေးကြည့်ပါမယ်။ [[mark:board-fn]] ဥပမာ အနေနဲ့ တက္ကစီခ တွက်တာကို ယူကြည့်ရအောင်။ ဒီ lesson အတွက်
+      သတ်မှတ်ထားတဲ့ နှုန်းက ပထမ နှစ်ကီလိုမီတာ အထိ ၁၅၀၀ ကျပ်၊ အဲဒီ နောက်ပိုင်း တစ်ကီလိုမီတာ ကို ၇၀၀ ကျပ် ပါ။
+      တကယ့် ဈေးနှုန်း မဟုတ်ဘဲ ဥပမာ သက်သက်ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function declarations",
+          url: "https://go.dev/ref/spec#Function_declarations",
+        }
+      - { title: "Effective Go — Functions", url: "https://go.dev/doc/effective_go#functions" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+      - {
+          id: board-fn,
+          type: whiteboard.apply,
+          at: { mark: board-fn },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+
+  - id: call
+    narration: >-
+      [[mark:draw-boxes]] ပထမဆုံး program ကို ရေးတုန်းက ပြောခဲ့သလို၊ function ဆိုတာ အလုပ် တစ်ခုကို နာမည် ပေးထားပြီး၊ လိုတဲ့အခါ အဲဒီ နာမည်နဲ့ ခေါ်သုံးလို့
+      ရတာပါ။ ဒီမှာ တက္ကစီခ တွက်တဲ့ အလုပ်ကို function တစ်ခု အဖြစ် ရေးပြီး၊ main ကနေ ခေါ်ပါမယ်။
+      [[mark:draw-send]] main က ရှစ်ကီလိုမီတာ ဆိုတဲ့ စာရွက်လေး တစ်ရွက်ကို function ဆီ ပေးလိုက်တယ်လို့
+      မြင်ကြည့်ပါ။ ပေးလိုက်ပြီးတာနဲ့ main က အဖြေ ပြန်ရောက်လာတဲ့ အထိ ရှေ့ မဆက်ပါဘူး။ [[mark:draw-back]] function
+      ကတော့ ရလာတဲ့ ကီလိုမီတာနဲ့ တွက်ပြီး၊ အဖြေ ၅၇၀၀ ကို ပြန်ပေးပါတယ်။ အဲဒီလို အဖြေ ပြန်ပေးတာကို return လို့
+      ခေါ်ပါတယ်။ အဖြေ ရပြီဆိုမှ main က ဆက်လုပ်ပါတယ်။ [[mark:draw-terms]] function က လက်ခံမယ့် input ကို
+      parameter လို့ ခေါ်ပြီး၊ ခေါ်တဲ့အခါ တကယ် ထည့်ပေးလိုက်တဲ့ တန်ဖိုးကို argument လို့ ခေါ်ပါတယ်။ ဒီမှာ
+      ကီလိုမီတာ က parameter ဖြစ်ပြီး ရှစ် က argument ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+      - {
+          title: "The Go Programming Language Specification — Return statements",
+          url: "https://go.dev/ref/spec#Return_statements",
+        }
+    actions:
+      - {
+          id: draw-boxes,
+          type: whiteboard.apply,
+          at: { mark: draw-boxes },
+          upsertIds: [f-main-box, f-main, f-fn-box, f-fn],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-send,
+          type: whiteboard.apply,
+          at: { mark: draw-send },
+          upsertIds: [f-send, f-send-label, f-wait],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-back,
+          type: whiteboard.apply,
+          at: { mark: draw-back },
+          upsertIds: [f-back, f-ans-box, f-ans],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-terms,
+          type: whiteboard.apply,
+          at: { mark: draw-terms },
+          upsertIds: [f-terms],
+          drawMs: 1200,
+        }
+
+  - id: write
+    chapter: Function ရေးကြည့်ရအောင်
+    narration: >-
+      [[mark:close-fn]] ဒါဆို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-fare]] main ရဲ့ အပေါ်မှာ function ကို ရေးပါမယ်။
+      ထိပ်ဆုံးက comment line နှစ်ကြောင်းက ဒီ function ဘာလုပ်လဲ ဆိုတာ လူတွေ ဖတ်ဖို့ ရေးထားတာပါ၊ program က
+      အဲဒီ line တွေကို run မှာ မဟုတ်ပါဘူး။ တွက်နည်း တစ်ခုလုံးကို တစ်ခါတည်း မရေးဘဲ၊ အရင်ဆုံး အတိုဆုံး ခရီး
+      အတွက်ပဲ ရေးပြီး စမ်းကြည့်ပါမယ်။ [[mark:sel-sig]] ဒီ line က function ရဲ့ ခေါင်းစဉ်ပါ။ func ဆိုတဲ့
+      keyword နောက်မှာ function ရဲ့ နာမည် လာပါတယ်။ ကွင်းထဲမှာ km ဆိုတဲ့ parameter ရှိပြီး သူ့ type က int
+      ပါ။ ကွင်းရဲ့ နောက်က int ကတော့ ဒီ function က int တစ်ခု ပြန်ပေးမယ်လို့ ကတိ ပေးထားတာပါ။ [[mark:sel-if]] အထဲမှာ
+      ကီလိုမီတာက နှစ် နဲ့ အောက်ဆိုရင် ၁၅၀၀ ကို return နဲ့ ပြန်ပေးပါတယ်။ return line ကို ရောက်တာနဲ့ function
+      က ချက်ချင်း ပြီးသွားပြီး အဖြေက ခေါ်တဲ့ နေရာကို ပြန်ရောက်ပါတယ်။ [[mark:type-call]] main ထဲမှာတော့
+      နှစ်ကီလိုမီတာ ခရီး အတွက် function ကို ခေါ်ပြီး ရလာတဲ့ အဖြေကို print ထုတ်ပါမယ်။ ဒီ နှစ် က argument ပါ။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function declarations",
+          url: "https://go.dev/ref/spec#Function_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Return statements",
+          url: "https://go.dev/ref/spec#Return_statements",
+        }
+    actions:
+      - { id: close-fn, type: whiteboard.apply, at: { mark: close-fn }, open: false, upsertIds: [] }
+      - id: type-fare
+        type: editor.type
+        at: { mark: type-fare }
+        target: { file: main.go, after: "import \"fmt\"\n\n", occurrence: 1 }
+        text: "// taxiFare is the fare for a ride: 1500 kyats covers the first two kilometres,\n// then 700 kyats for every kilometre after that.\nfunc taxiFare(km int) int {\n\tif km <= 2 {\n\t\treturn 1500\n\t}\n}\n\n"
+        cadence: line-by-line
+      - id: sel-sig
+        type: editor.select
+        at: { mark: sel-sig }
+        target: { file: main.go, text: "func taxiFare(km int) int {", occurrence: 1 }
+      - id: sel-if
+        type: editor.select
+        at: { mark: sel-if }
+        target: { file: main.go, text: "\tif km <= 2 {\n\t\treturn 1500\n\t}\n", occurrence: 1 }
+      - id: type-call
+        type: editor.type
+        at: { mark: type-call }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tfmt.Println(taxiFare(2))\n"
+        cadence: line-by-line
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "missing return",
+          timeoutMs: 8000,
+        }
+
+  - id: missing
+    chapter: missing return
+    narration: >-
+      [[mark:point-failed]] program က ဘာမှ ထုတ်မပြဘဲ compile error တစ်ခု ပေါ်လာပါတယ်။ compile ကတည်းက
+      ငြင်းတာ ဖြစ်လို့ ဘာမှ run မသွားသေးပါဘူး။ [[mark:point-missing]] အရင်ဆုံး ဘယ်နေရာလဲ ကြည့်ရအောင်။ main
+      ဖိုင်ရဲ့ line ဆယ့်တစ်၊ column တစ်မှာ ဖြစ်တာပါ။ အဲဒါက function ကို ပိတ်တဲ့ နောက်ဆုံး line ပါ။ error က
+      ပြောနေတာက၊ တန်ဖိုး ပြန်ပေးမယ်လို့ ကတိပေးထားပေမဲ့ return မပါတဲ့ လမ်း တစ်ခု ကျန်နေပါတယ် ဆိုတာပါ။ ရှာဖွေတဲ့
+      အခါ သုံးဖို့ English လို missing return လို့ မှတ်ထားလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Function declarations",
+          url: "https://go.dev/ref/spec#Function_declarations",
+        }
+      - {
+          title: "The Go Programming Language Specification — Terminating statements",
+          url: "https://go.dev/ref/spec#Terminating_statements",
+        }
+    actions:
+      - {
+          id: point-failed,
+          type: console.point,
+          at: { mark: point-failed },
+          target: { text: "Build failed" },
+        }
+      - {
+          id: point-missing,
+          type: console.point,
+          at: { mark: point-missing },
+          target: { text: "missing return" },
+        }
+
+  - id: paths
+    narration: >-
+      [[mark:board-paths]] ကိုယ်က နှစ်ကီလိုမီတာနဲ့ပဲ ခေါ်ထားတာ ဖြစ်ပေမဲ့ ဘာကြောင့် ငြင်းရတာလဲ။ compiler က
+      ခေါ်ထားတဲ့ argument ကို မကြည့်ဘဲ function တစ်ခုလုံးကို စစ်လို့ပါ။ [[mark:draw-yes]] ကီလိုမီတာက နှစ် နဲ့
+      အောက်ဆိုရင် return ရှိပါတယ်။ [[mark:draw-no]] ဒါပေမဲ့ နှစ်ထက် ကျော်ရင်တော့ if ကို ကျော်ပြီး function
+      အဆုံးကို ရောက်သွားတဲ့အခါ ပြန်ပေးစရာ ဘာမှ မရှိတော့ပါဘူး။ [[mark:draw-path-rule]] ဒါကြောင့် int တစ်ခု
+      ပြန်ပေးမယ်လို့ ကတိ ပေးထားတဲ့ function မှာ ဘယ်လမ်းက သွားသွား return နဲ့ ဆုံးရပါမယ်။ ဒီ စည်းကမ်းကြောင့်
+      ခရီးရှည် အတွက် ရေးဖို့ မေ့ကျန်ခဲ့တာကို compiler က run မလုပ်ခင်ကတည်းက သတိပေးနိုင်တာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Terminating statements",
+          url: "https://go.dev/ref/spec#Terminating_statements",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-paths } }
+      - {
+          id: board-paths,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          clear: true,
+          upsertIds: [p-title, p-fork-box, p-fork],
+        }
+      - {
+          id: draw-yes,
+          type: whiteboard.apply,
+          at: { mark: draw-yes },
+          upsertIds: [p-yes-arrow, p-yes-box, p-yes],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-no,
+          type: whiteboard.apply,
+          at: { mark: draw-no },
+          upsertIds: [p-no-arrow, p-no-box, p-no, p-err],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-path-rule,
+          type: whiteboard.apply,
+          at: { mark: draw-path-rule },
+          upsertIds: [p-rule],
+          drawMs: 1200,
+        }
+
+  - id: fix
+    narration: >-
+      [[mark:close-paths]] ဒါဆို ကျန်နေတဲ့ လမ်းကို ဖြည့်ရအောင်။ [[mark:type-long]] if ရဲ့ အောက်မှာ ခရီးရှည် အတွက်
+      return ကို ထည့်ပါမယ်။ ၁၅၀၀ ကျပ်ပေါ်ကို၊ နှစ်ကီလိုမီတာ ကျော်တဲ့ ကီလိုမီတာ တိုင်းအတွက် ၇၀၀ ကျပ် ပေါင်းတာပါ။
+      [[mark:type-eight]] main မှာလည်း ရှစ်ကီလိုမီတာ ခရီး အတွက် တစ်ခါ ထပ်ခေါ်ပါမယ်။ function ကို တစ်ခါ
+      ရေးထားပြီးရင် ဒီလို argument ပြောင်းပြီး ကြိုက်သလောက် ခေါ်လို့ ရပါတယ်။ [[mark:run-2]] ကဲ၊ ထပ်ပြီး run
+      ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Return statements",
+          url: "https://go.dev/ref/spec#Return_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - {
+          id: close-paths,
+          type: whiteboard.apply,
+          at: { mark: close-paths },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-long
+        type: editor.type
+        at: { mark: type-long }
+        target: { file: main.go, after: "\t\treturn 1500\n\t}\n", occurrence: 1 }
+        text: "\treturn 1500 + (km-2)*700\n"
+        cadence: line-by-line
+      - id: type-eight
+        type: editor.type
+        at: { mark: type-eight }
+        target: { file: main.go, after: "taxiFare(2)", occurrence: 1 }
+        text: ", taxiFare(8)"
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "1500 5700",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-long,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\treturn 1500 + (km-2)*700\n}\n",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-fares]] ဒီ တစ်ခါတော့ compile error မရှိတော့ဘဲ၊ ၁၅၀၀ နဲ့ ၅၇၀၀ ထွက်လာပါပြီ။ နှစ်ကီလိုမီတာ
+      အတွက် ၁၅၀၀ ပါ။ ရှစ်ကီလိုမီတာ အတွက်တော့ နှစ်ကီလိုကို ကျော်တဲ့ ခြောက်ကီလိုမီတာ အတွက် ၄၂၀၀ ကို ၁၅၀၀
+      ပေါ် ပေါင်းလို့ ၅၇၀၀ ရတာပါ။ တွက်နည်းကို တစ်နေရာတည်းမှာ ရေးပြီး နှစ်ခါ ခေါ်ထားတာ ဖြစ်လို့၊ နှုန်း
+      ပြောင်းချင်ရင် function ထဲမှာ တစ်ခါ ပြင်ရုံပါပဲ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+    actions:
+      - {
+          id: point-fares,
+          type: console.point,
+          at: { mark: point-fares },
+          target: { text: "1500 5700" },
+        }
+
+  - id: tax
+    chapter: Function ထဲက function
+    narration: >-
+      [[mark:collapse-2]] တက္ကစီခ ပေါ်မှာ အခွန် ငါး ရာခိုင်နှုန်း ထပ်ထည့်ပြီး၊ ကျပ် ဆိုတဲ့ စာနဲ့ ပြချင်တယ်
+      ဆိုပါစို့။ [[mark:type-tax]] အရင်ဆုံး အခွန် ထည့်ပေးမယ့် function တစ်ခု ရေးပါမယ်။ ပမာဏကို ငါးနဲ့ မြှောက်ပြီး
+      တစ်ရာနဲ့ စားတော့ ငါး ရာခိုင်နှုန်း ရပြီး၊ အဲဒါကို မူလ ပမာဏပေါ်မှာ ပေါင်းပေးပါတယ်။ int နဲ့ int စားတာ ဖြစ်လို့
+      ဒသမ မပါဘဲ ကျပ် အပြည့်နဲ့ပဲ ရပါတယ်။
+      [[mark:type-format]] နောက် function တစ်ခုကတော့ ငွေပမာဏကို ကျပ် ဆိုတဲ့ စာနဲ့ တွဲပြီး စာသား အဖြစ်
+      ပြန်ပေးပါတယ်။ ဒီ တစ်ခါမှာ ကတိ ပေးထားတဲ့ result type က int မဟုတ်ဘဲ string ပါ။ [[mark:sel-sprint]] ဒီ line
+      က ဂဏန်းကို print မထုတ်ဘဲ စာသား အဖြစ် ပြောင်းပေးတာပါ။ နောက် line ကတော့ အဲဒီ စာသားနဲ့ ကျပ် ဆိုတဲ့ စာကို
+      ဆက်ပြီး ပြန်ပေးပါတယ်။ ဒီ course တစ်လျှောက်လုံး ငွေကို ဘယ်လို ပြမလဲ ဆိုတာကို ဒီ function တစ်ခုတည်းက
+      ဆုံးဖြတ်ပါမယ်။ နောက်ပိုင်း မြန်မာ ဂဏန်းနဲ့ ပြချင်တဲ့အခါ ဒီ function ကိုပဲ ပြင်ရုံပါ။
+    sources:
+      - { title: "fmt package — Sprint", url: "https://pkg.go.dev/fmt#Sprint" }
+      - {
+          title: "The Go Programming Language Specification — Function declarations",
+          url: "https://go.dev/ref/spec#Function_declarations",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-tax
+        type: editor.type
+        at: { mark: type-tax }
+        target: { file: main.go, after: "\treturn 1500 + (km-2)*700\n}\n", occurrence: 1 }
+        text: "\n// withTax adds 5 percent tax in whole kyats.\nfunc withTax(amount int) int {\n\treturn amount + amount*5/100\n}\n"
+        cadence: line-by-line
+      - id: type-format
+        type: editor.type
+        at: { mark: type-format }
+        target: { file: main.go, after: "\treturn amount + amount*5/100\n}\n", occurrence: 1 }
+        text: "\n// formatKyat shows an amount of money: 1500 → \"1500 ကျပ်\".\nfunc formatKyat(amount int) string {\n\tdigits := fmt.Sprint(amount)\n\treturn digits + \" ကျပ်\"\n}\n"
+        cadence: line-by-line
+      - id: sel-sprint
+        type: editor.select
+        at: { mark: sel-sprint }
+        target: { file: main.go, text: "digits := fmt.Sprint(amount)", occurrence: 1 }
+
+  - id: chain
+    narration: >-
+      [[mark:type-chain]] main ထဲမှာတော့ function သုံးခုကို တစ်ခုထဲမှာ တစ်ခု ထည့်ပြီး ခေါ်ပါမယ်။ ကြည့်လိုက်ရင်
+      ရှုပ်သလို ရှိပေမဲ့ ဖတ်နည်းကို သိရင် ရှင်းပါတယ်။ [[mark:board-chain]] အတွင်းဆုံးက ခေါ်တာ အရင် run ပါတယ်။
+      [[mark:draw-chain-1]] ရှစ်ကီလိုမီတာ အတွက် တက္ကစီခ ၅၇၀၀ ကို အရင် ရပါတယ်။ [[mark:draw-chain-2]] အဲဒီ အဖြေက
+      အခွန် ထည့်တဲ့ function ရဲ့ argument ဖြစ်သွားပြီး ၅၉၈၅ ပြန်ရပါတယ်။ [[mark:draw-chain-3]] နောက်ဆုံးမှာ
+      ၅၉၈၅ ကို ကျပ် ဆိုတဲ့ စာနဲ့ တွဲပေးပါတယ်။ ဆိုလိုတာက function တစ်ခုရဲ့ အဖြေကို နောက် function တစ်ခုဆီ
+      တန်း ပေးလို့ ရပါတယ်။ function တစ်ခုစီက အလုပ် တစ်ခုစီကိုပဲ လုပ်ပြီး၊ ပေါင်းလိုက်တော့ အလုပ် အကြီးကြီး
+      တစ်ခု ဖြစ်လာတာပါ။ [[mark:close-chain]] ဒါဆို ဒီ အတိုင်း မှန်မမှန် စစ်ကြည့်ရအောင်။ [[mark:run-3]] ကဲ၊ run
+      လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Calls",
+          url: "https://go.dev/ref/spec#Calls",
+        }
+      - {
+          title: "The Go Programming Language Specification — Order of evaluation",
+          url: "https://go.dev/ref/spec#Order_of_evaluation",
+        }
+    actions:
+      - id: type-chain
+        type: editor.type
+        at: { mark: type-chain }
+        target: { file: main.go, after: "taxiFare(8))\n", occurrence: 1 }
+        text: "\tfmt.Println(formatKyat(withTax(taxiFare(8))))\n"
+        cadence: line-by-line
+      - {
+          id: board-chain,
+          type: whiteboard.apply,
+          at: { mark: board-chain },
+          open: true,
+          clear: true,
+          upsertIds: [c-title, c-first],
+        }
+      - {
+          id: draw-chain-1,
+          type: whiteboard.apply,
+          at: { mark: draw-chain-1 },
+          upsertIds: [c-1-box, c-1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-chain-2,
+          type: whiteboard.apply,
+          at: { mark: draw-chain-2 },
+          upsertIds: [c-arrow-1, c-2-box, c-2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-chain-3,
+          type: whiteboard.apply,
+          at: { mark: draw-chain-3 },
+          upsertIds: [c-arrow-2, c-3-box, c-3, c-rule],
+          drawMs: 1500,
+        }
+      - {
+          id: close-chain,
+          type: whiteboard.apply,
+          at: { mark: close-chain },
+          open: false,
+          upsertIds: [],
+        }
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "5985 ကျပ်",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-chain,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\tfmt.Println(formatKyat(withTax(taxiFare(8))))\n",
+        }
+      - {
+          id: expect-file-format,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "func formatKyat(amount int) string {\n\tdigits := fmt.Sprint(amount)\n",
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-total]] ဒုတိယ စာကြောင်းမှာ ၅၉၈၅ ကျပ် ထွက်လာပါပြီ။ ၅၇၀၀ ရဲ့ ငါး ရာခိုင်နှုန်းက ၂၈၅ ဖြစ်လို့
+      ပေါင်းလိုက်တော့ ၅၉၈၅ ရတာပါ။ board ပေါ်မှာ တွက်ခဲ့တဲ့ အဆင့် သုံးဆင့်အတိုင်း အတိအကျ ထွက်လာတာကို
+      တွေ့ရပါတယ်။ ပထမ စာကြောင်းကတော့ ခုနက အတိုင်းပဲ ရှိနေပါတယ်။
+    sources:
+      - { title: "fmt package — Sprint", url: "https://pkg.go.dev/fmt#Sprint" }
+    actions:
+      - {
+          id: point-total,
+          type: console.point,
+          at: { mark: point-total },
+          target: { text: "5985 ကျပ်" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က code မှာ ရှစ်ကီလိုမီတာ အတွက် တက္ကစီခကို fare ဆိုတဲ့
+      variable ထဲမှာ ထည့်ထားပါတယ်။ [[mark:quiz-line]] နောက် line မှာ fare နဲ့ အခွန် ထည့်တဲ့ function ကို ခေါ်ပြီး၊
+      နောက်ဆုံးမှာ fare ကို print ထုတ်ပါတယ်။ ၅၇၀၀ ထွက်မလား၊ ၅၉၈၅ ထွက်မလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ က၊ ၅၇၀၀ ပါ။ ဘာကြောင့်လဲဆိုတော့ function က ၅၉၈၅ ကို
+      ပြန်ပေးပေမဲ့၊ ဒုတိယ line က အဲဒီ အဖြေကို ဘယ် variable ထဲမှာမှ မထည့်ထားလို့ ပျောက်သွားတာပါ။ function က fare ကို
+      ကိုယ်တိုင် မပြင်ပါဘူး၊ အဖြေကိုပဲ ပြန်ပေးတာပါ။ အဖြေကို သုံးချင်ရင် fare ထဲကို ပြန်ထည့်တာ ဒါမှမဟုတ် တခြား
+      variable ထဲ ထည့်တာ လုပ်ရပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Return statements",
+          url: "https://go.dev/ref/spec#Return_statements",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-line,
+          type: whiteboard.apply,
+          at: { mark: quiz-line },
+          upsertIds: [q-mark],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ function ဆိုတာ အလုပ် တစ်ခုကို နာမည်ပေးပြီး တစ်ခါ ရေးထားတာပါ။
+      [[mark:recap-sig]] ခေါင်းစဉ်မှာ parameter တွေနဲ့ ပြန်ပေးမယ့် type ကို ကတိ ပေးထားပါတယ်။ [[mark:recap-return]]
+      return က အဖြေကို ခေါ်တဲ့ နေရာ ပြန်ပို့ပေးပြီး၊ ဘယ်လမ်းက သွားသွား return နဲ့ ဆုံးရပါမယ်။ [[mark:recap-chain]]
+      function တစ်ခုရဲ့ အဖြေကို နောက် function တစ်ခုဆီ တန်း ပေးလို့လည်း ရပါတယ်။ နောက် lesson မှာတော့ အဖြေ
+      တစ်ခုထက် ပိုပြန်ပေးတဲ့ function တွေနဲ့၊ variable နာမည် တစ်ခုကို code ရဲ့ ဘယ်နေရာကနေ မြင်ရလဲ ဆိုတဲ့ scope
+      အကြောင်းကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Effective Go — Functions", url: "https://go.dev/doc/effective_go#functions" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-sig
+        type: editor.select
+        at: { mark: recap-sig }
+        target: { file: main.go, text: "func taxiFare(km int) int {", occurrence: 1 }
+      - id: recap-return
+        type: editor.select
+        at: { mark: recap-return }
+        target: { file: main.go, text: "return 1500 + (km-2)*700", occurrence: 1 }
+      - id: recap-chain
+        type: editor.select
+        at: { mark: recap-chain }
+        target: { file: main.go, text: "formatKyat(withTax(taxiFare(8)))", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
