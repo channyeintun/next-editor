@@ -1,0 +1,1003 @@
+# Go course, lesson 30: channels (Burmese).
+#
+# Start state: main.go with `package main`, `import "fmt"` and an empty `func main`.
+# Edits, all insert-only (final state: probes/probe.ts `final`, output = probe 29-close-range):
+#   1. `parcels := make(chan string)`, one send and a Println, nobody receiving
+#      -> run-1: `fatal error: all goroutines are asleep - deadlock!` at main.go:7 (probe 29-deadlock);
+#   2. a rider goroutine receiving one code above the send, then a `done` channel: the rider sends
+#      true when it has printed, main receives it after the send -> run-2: rider: MDY-0001 / ပို့ပြီး
+#      (probe 29-handover);
+#   3. two more sends and `close(parcels)`; the one-receive line commented out by insertion and a
+#      range loop over the channel in its place (the Println indented into it); a buffered `shelf`
+#      with two places, two sends nobody receives, len and cap into the last Println
+#      -> run-3: three rider lines and `2 2 ပို့ပြီး`.
+# Boards: (H) the hand-over counter: the sender's hand stays out until the rider takes the slip;
+# after run-1 the rider side struck out = deadlock; (S) buffered = a shelf with two places;
+# (Q) the quiz (a shelf with one place, main sends and takes it back itself; probe `quiz`).
+# Fixtures: bun ~/Documents/go-course-work/tools/sim-go.ts <this yaml> --write
+schemaVersion: 1
+
+lesson:
+  slug: go-course-30-channels
+  title: "Go course 30: Channel နဲ့ လက်လွှဲတာ"
+  locale: my-MM
+  workspace:
+    lessonType: go
+    name: Go Course
+    entryFilePath: main.go
+    # One file: an open explorer would be a list of one beside the code.
+    sidebarStartsCollapsed: true
+    files:
+      main.go: |
+        package main
+
+        import "fmt"
+
+        func main() {
+        }
+  whiteboardAssets:
+    # Board H: the hand-over counter (an unbuffered channel).
+    - {
+        id: h-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 640,
+        height: 50,
+        text: "Channel · လက်လွှဲ ကောင်တာ",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: h-main,
+        kind: rectangle,
+        x: 280,
+        y: 250,
+        width: 230,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-main-label,
+        kind: text,
+        x: 340,
+        y: 280,
+        width: 110,
+        height: 40,
+        text: "main",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-arrow1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 520,
+        y: 280,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-chan,
+        kind: rectangle,
+        x: 600,
+        y: 250,
+        width: 230,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: h-chan-label,
+        kind: text,
+        x: 645,
+        y: 280,
+        width: 150,
+        height: 40,
+        text: "channel",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-arrow2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 840,
+        y: 280,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: h-rider,
+        kind: rectangle,
+        x: 920,
+        y: 250,
+        width: 170,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-rider-label,
+        kind: text,
+        x: 965,
+        y: 280,
+        width: 100,
+        height: 40,
+        text: "rider",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-send,
+        kind: text,
+        x: 290,
+        y: 385,
+        width: 700,
+        height: 40,
+        text: "send · တစ်ဖက်က ယူတဲ့အထိ ရှေ့ မဆက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-recv,
+        kind: text,
+        x: 290,
+        y: 445,
+        width: 700,
+        height: 40,
+        text: "receive · တစ်ဖက်က ပို့တဲ့အထိ မျှော်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: h-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 920,
+        y: 250,
+        width: 170,
+        height: 100,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: h-dead,
+        kind: rectangle,
+        x: 280,
+        y: 520,
+        width: 810,
+        height: 90,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: h-dead-label,
+        kind: text,
+        x: 300,
+        y: 545,
+        width: 700,
+        height: 40,
+        text: "ယူမယ့်သူ မရှိ · deadlock",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board S: a buffered channel is a shelf with two places.
+    - {
+        id: s-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 700,
+        height: 50,
+        text: "Buffered · နေရာ နှစ်ခု ပါတဲ့ စင်",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: s-main,
+        kind: rectangle,
+        x: 280,
+        y: 260,
+        width: 200,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-main-label,
+        kind: text,
+        x: 330,
+        y: 290,
+        width: 110,
+        height: 40,
+        text: "main",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 290,
+        width: 70,
+        height: 40,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: s-slot1,
+        kind: rectangle,
+        x: 575,
+        y: 260,
+        width: 200,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-slot2,
+        kind: rectangle,
+        x: 785,
+        y: 260,
+        width: 200,
+        height: 100,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-p1,
+        kind: text,
+        x: 595,
+        y: 290,
+        width: 165,
+        height: 40,
+        text: "BGO-0001",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-p2,
+        kind: text,
+        x: 805,
+        y: 290,
+        width: 165,
+        height: 40,
+        text: "MLM-0001",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-make,
+        kind: text,
+        x: 575,
+        y: 375,
+        width: 450,
+        height: 40,
+        text: "make(chan string, 2)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-ok-box,
+        kind: rectangle,
+        x: 280,
+        y: 440,
+        width: 810,
+        height: 80,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-ok,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 700,
+        height: 40,
+        text: "နေရာလွတ် ရှိရင် · ပို့တာ ချက်ချင်း ပြီး",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: s-full-box,
+        kind: rectangle,
+        x: 280,
+        y: 540,
+        width: 810,
+        height: 80,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-full,
+        kind: text,
+        x: 300,
+        y: 560,
+        width: 700,
+        height: 40,
+        text: "စင် ပြည့်ရင် · နေရာ လွတ်တဲ့အထိ ရှေ့ မဆက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    # Board Q: the quiz (probe `quiz`: prints MDY-0001).
+    - {
+        id: q-title,
+        kind: text,
+        x: 300,
+        y: 165,
+        width: 400,
+        height: 50,
+        text: "မေးခွန်း",
+        strokeColor: "#1e1e1e",
+        fontSize: 36,
+      }
+    - {
+        id: q-code,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 800,
+        height: 175,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        x: 300,
+        y: 250,
+        width: 520,
+        height: 40,
+        text: "ch := make(chan string, 1)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        x: 300,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: 'ch <- "MDY-0001"',
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        x: 300,
+        y: 350,
+        width: 400,
+        height: 40,
+        text: "fmt.Println(<-ch)",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-one,
+        kind: freedraw,
+        stroke: circle,
+        x: 715,
+        y: 240,
+        width: 90,
+        height: 60,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 300,
+        y: 460,
+        width: 500,
+        height: 40,
+        text: "က · deadlock",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 300,
+        y: 525,
+        width: 500,
+        height: 40,
+        text: "ခ · MDY-0001 ထွက်",
+        strokeColor: "#1e1e1e",
+        fontSize: 28,
+      }
+    - {
+        id: q-check,
+        kind: freedraw,
+        stroke: check,
+        x: 640,
+        y: 515,
+        width: 60,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile:
+    # Studio replaces this built-in profile at render time with the Burmese
+    # provider chosen in the render console: AthanLab with the signed-in
+    # user's own API key and voice, or VoxCPM2 when that private feature is
+    # enabled.
+    pocket-alba-v1
+  seed: 7130
+
+runtime:
+  kind: go-playground
+  defaultMode: fixture
+  dockStartsCollapsed: true
+  fixture:
+    latencyMs: 600
+    results:
+      run-1:
+        status: runtime-error
+        exitCode: 2
+        output: "fatal error: all goroutines are asleep - deadlock!\n\ngoroutine 1 [chan send]:\nmain.main()\n\t/tmp/sandbox1000000000/src/main.go:7 +0x34\n"
+      run-2:
+        status: success
+        exitCode: 0
+        output: "rider: MDY-0001\nပို့ပြီး\n"
+      run-3:
+        status: success
+        exitCode: 0
+        output: "rider: MDY-0001\nrider: NPT-0001\nrider: YGN-0001\n2 2 ပို့ပြီး\n"
+
+scenes:
+  - id: recall
+    chapter: Channel ဆိုတာ
+    narration: >-
+      ပြီးခဲ့တဲ့ lesson မှာ rider သုံးယောက်ကို goroutine သုံးခုနဲ့ တစ်ပြိုင်နက် ထွက်ခိုင်းပြီး၊ wait group နဲ့
+      အားလုံး ပြန်ရောက်တဲ့အထိ main ကို ရပ်ထားခဲ့ပါတယ်။ ဒါပေမဲ့ အဲဒီ goroutine တွေက ကိုယ့် စာကြောင်း ကိုယ်
+      ထုတ်ပြရုံပါပဲ၊ တစ်ခုနဲ့ တစ်ခု ဘာမှ လွှဲမပေးခဲ့ပါဘူး။ တကယ့် ပါဆယ် ဝန်ဆောင်မှုမှာတော့ ကောင်တာက
+      ဝန်ထမ်းက ပါဆယ်ကို လက်ခံပြီး၊ ပါဆယ် code ကို rider ဆီ တစ်ခုချင်း လွှဲပေးရပါတယ်။ [[mark:today]] ဒီနေ့
+      lesson မှာ goroutine တစ်ခုကနေ တခြား goroutine တစ်ခုကို တန်ဖိုး လွှဲပေးတဲ့ channel ကို လေ့လာပါမယ်။
+      channel ရဲ့ တစ်ဖက်က တန်ဖိုး ပို့ပြီး၊ နောက်တစ်ဖက်က အဲဒီ တန်ဖိုးကို လက်ခံပါတယ်။
+      ပို့တာနဲ့ လက်ခံတာ ဘယ်လို အလုပ်လုပ်လဲ၊ ဘယ်သူမှ လာမယူရင် ဘာဖြစ်လဲ၊ ပါဆယ် အများကြီး ပို့ပြီးတဲ့အခါ
+      ကုန်ပြီလို့ ဘယ်လို ပြောရမလဲ ဆိုတာတွေကို တစ်ခုချင်း ကြည့်သွားပါမယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - { id: open-main, type: workspace.openFile, at: { scene: start }, path: main.go }
+
+  - id: counter
+    chapter: လက်လွှဲ ကောင်တာ
+    narration: >-
+      [[mark:board-counter]] channel ကို ပါဆယ် ရုံးက လက်လွှဲ ကောင်တာ တစ်ခုလို မြင်ကြည့်ပါ။
+      [[mark:draw-sides]] ဘယ်ဘက်မှာ ကောင်တာက ဝန်ထမ်း နေရာမှာ main ရှိပြီး၊ ညာဘက်မှာ rider goroutine
+      ရှိပါတယ်။ အလယ်က ကောင်တာကတော့ channel ပါ။ [[mark:draw-send]] ဝန်ထမ်းက ပါဆယ် code ရေးထားတဲ့
+      စာရွက်ကို ကောင်တာပေါ် လှမ်းပေးတဲ့အခါ၊ rider က လာယူတဲ့အထိ လက်ကို ဆန့်ထားရပါတယ်။ ဒါကို send
+      လို့ ခေါ်ပြီး၊ တစ်ဖက်က လက်ခံတဲ့အထိ ရှေ့ မဆက်ပါဘူး။ [[mark:draw-recv]] rider ဘက်ကလည်း ဒီလိုပါပဲ၊
+      စာရွက် ရောက်မလာမချင်း ကောင်တာမှာ မျှော်ရပါတယ်၊ ဒါကို receive လို့ ခေါ်ပါတယ်။ [[mark:meet]]
+      ဆိုလိုတာက ပို့တဲ့သူနဲ့ ယူတဲ့သူ နှစ်ယောက်လုံး ကောင်တာမှာ ဆုံမှပဲ လက်လွှဲတာ ဖြစ်ပါတယ်။ ဒီလို
+      နေရာ မပါတဲ့ channel မှာ အရင် ရောက်တဲ့သူက နောက်မှ လာမယ့်သူကို အမြဲ စောင့်ရပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Send statements",
+          url: "https://go.dev/ref/spec#Send_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Receive operator",
+          url: "https://go.dev/ref/spec#Receive_operator",
+        }
+    actions:
+      - {
+          id: board-counter,
+          type: whiteboard.apply,
+          at: { mark: board-counter, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-sides,
+          type: whiteboard.apply,
+          at: { mark: draw-sides },
+          upsertIds:
+            [
+              h-main,
+              h-main-label,
+              h-arrow1,
+              h-chan,
+              h-chan-label,
+              h-arrow2,
+              h-rider,
+              h-rider-label,
+            ],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-send,
+          type: whiteboard.apply,
+          at: { mark: draw-send },
+          upsertIds: [h-send],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-recv,
+          type: whiteboard.apply,
+          at: { mark: draw-recv },
+          upsertIds: [h-recv],
+          drawMs: 1600,
+        }
+
+  - id: first-send
+    chapter: ပထမဆုံး channel
+    narration: >-
+      [[mark:close-counter]] ဒါဆို code နဲ့ ရေးကြည့်ရအောင်။ [[mark:type-make]] main ထဲမှာ parcels ဆိုတဲ့
+      channel တစ်ခုကို make နဲ့ ဖန်တီးပါမယ်။ [[mark:sel-chan]] ဒီ type က string တွေကို လွှဲပေးတဲ့ channel
+      လို့ ဖတ်ပါတယ်။ ဒါကြောင့် ဒီ channel ထဲကို ပါဆယ် code လို စာသားတွေပဲ ပို့လို့ ရပါတယ်။ map လိုပဲ
+      channel ကိုလည်း make နဲ့ အရင် ဖန်တီးမှ သုံးလို့ ရပါတယ်။ [[mark:type-send]] ပြီးတော့ မန္တလေး ပါဆယ်
+      နံပါတ် တစ်ရဲ့ code ကို channel ထဲ ပို့ပါမယ်၊ ပြီးရင် ပို့ပြီး ဆိုတဲ့ စာ တစ်ကြောင်း ထုတ်ပြပါမယ်။
+      [[mark:sel-send]] ဒီ line က code ကို channel ထဲ ပို့တဲ့ line ပါ။ board ပေါ်က ကောင်တာလိုပဲ၊ တစ်ဖက်က
+      လာယူတဲ့အထိ ဒီ line က ရှေ့ မဆက်ပါဘူး။ ဒါပေမဲ့ ဒီ program မှာ လာယူမယ့်သူ ရှိရဲ့လား စဉ်းစားကြည့်ပါ။
+      [[mark:run-1]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Making slices, maps and channels",
+          url: "https://go.dev/ref/spec#Making_slices_maps_and_channels",
+        }
+      - {
+          title: "The Go Programming Language Specification — Send statements",
+          url: "https://go.dev/ref/spec#Send_statements",
+        }
+    actions:
+      - {
+          id: close-counter,
+          type: whiteboard.apply,
+          at: { mark: close-counter },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-make
+        type: editor.type
+        at: { mark: type-make }
+        target: { file: main.go, after: "func main() {\n", occurrence: 1 }
+        text: "\tparcels := make(chan string)\n"
+      - id: sel-chan
+        type: editor.select
+        at: { mark: sel-chan }
+        target: { file: main.go, text: "chan string", occurrence: 1 }
+      - id: type-send
+        type: editor.type
+        at: { mark: type-send }
+        target: { file: main.go, after: "\tparcels := make(chan string)\n", occurrence: 1 }
+        text: "\tparcels <- \"MDY-0001\"\n\tfmt.Println(\"ပို့ပြီး\")\n"
+        cadence: line-by-line
+      - id: sel-send
+        type: editor.select
+        at: { mark: sel-send }
+        target: { file: main.go, text: 'parcels <- "MDY-0001"', occurrence: 1 }
+      - { id: run-1, type: runtime.run, at: { mark: run-1, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-1,
+          type: expect.output,
+          at: { afterAction: run-1 },
+          contains: "all goroutines are asleep - deadlock!",
+          timeoutMs: 8000,
+        }
+
+  - id: deadlock
+    chapter: Deadlock ဆိုတာ
+    narration: >-
+      [[mark:point-dead]] ကြည့်ပါ၊ ပို့ပြီး ဆိုတဲ့ စာ မထွက်လာဘဲ program ရပ်သွားပါတယ်။ compile ကတော့
+      လက်ခံသွားပါတယ်၊ run နေတုန်းမှာ ရပ်သွားတာပါ။ အရင်ဆုံး ဘယ်နေရာလဲ ဆိုတော့၊ အောက်က စာကြောင်းတွေက
+      main ဖိုင်ရဲ့ line ခုနစ်မှာ ရပ်သွားတယ်လို့ ပြပါတယ်၊ channel ထဲ ပို့တဲ့ line ပါ။ [[mark:dead-what]]
+      ပြီးတော့ ပထမ စာကြောင်းက ဘာပြောလဲ ဆိုတော့၊ ဘယ် goroutine မှ ဆက်လုပ်လို့ မရတော့လို့ Go က program ကို
+      ရပ်လိုက်တာပါ။ ဒါကို deadlock လို့ ခေါ်ပါတယ်။ ဆိုလိုတာက အားလုံး တစ်ယောက်ကို တစ်ယောက် မျှော်နေပြီး
+      ဘယ်သူမှ ရှေ့ မဆက်နိုင်တာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Send statements",
+          url: "https://go.dev/ref/spec#Send_statements",
+        }
+    actions:
+      - {
+          id: point-dead,
+          type: console.point,
+          at: { mark: point-dead },
+          target: { text: "fatal error: all goroutines are asleep - deadlock!" },
+        }
+
+  - id: why-dead
+    narration: >-
+      [[mark:board-dead]] ဘာဖြစ်ခဲ့လဲ ဆိုတာ ကောင်တာ ပုံမှာ ပြန်ကြည့်ရအောင်။ [[mark:draw-dead]] ဒီ program
+      မှာ goroutine တစ်ခုပဲ ရှိပါတယ်၊ main ပါ။ ညာဘက်မှာ rider မရှိပါဘူး။ ဒါကြောင့် main က လက်ဆန့်ပြီး
+      အမြဲ မျှော်ရမှာ ဖြစ်လို့၊ ပို့ပြီး ဆိုတဲ့ နောက် line ကို ဘယ်တော့မှ မရောက်ပါဘူး။ Go က ဘယ် goroutine
+      မှ ရှေ့ မဆက်နိုင်တော့ဘူး ဆိုတာ သိတဲ့အတွက်၊ ဘာမှ မလုပ်ဘဲ အမြဲ ရပ်မနေအောင် program ကို ရပ်ပေးလိုက်တာပါ။
+      ဒါကြောင့် ပြင်ဖို့ဆိုရင် ကောင်တာရဲ့ တစ်ဖက်မှာ လာယူမယ့် rider တစ်ယောက် လိုပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+    actions:
+      - { id: collapse-1, type: runtime.collapseDock, at: { mark: board-dead } }
+      - {
+          id: board-dead,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-1 },
+          open: true,
+          upsertIds: [h-title],
+        }
+      - {
+          id: draw-dead,
+          type: whiteboard.apply,
+          at: { mark: draw-dead },
+          upsertIds: [h-strike, h-dead, h-dead-label],
+          drawMs: 2000,
+        }
+
+  - id: rider
+    chapter: Rider goroutine
+    narration: >-
+      [[mark:close-dead]] ဒါဆို rider goroutine တစ်ခု ထည့်ကြည့်ရအောင်။ [[mark:type-rider]] channel ကို
+      ဖန်တီးတဲ့ line ရဲ့ အောက်မှာ go နဲ့ နာမည်မပါတဲ့ function တစ်ခုကို စ run ခိုင်းပါမယ်။ [[mark:sel-recv]]
+      အထဲက ပထမ line က channel ကနေ code တစ်ခုကို လက်ခံတာပါ။ ကောင်တာမှာ စာရွက် ရောက်လာတဲ့အထိ rider က ဒီမှာ
+      မျှော်ပြီး၊ ရလာတဲ့ code ကို code ဆိုတဲ့ variable ထဲ ထည့်ပါတယ်။ ပြီးရင် rider ဆိုတဲ့ စာနဲ့ အတူ အဲဒီ
+      code ကို ထုတ်ပြပါတယ်။ [[mark:why-done]] ဒါပေမဲ့ ပြဿနာ တစ်ခု ကျန်ပါသေးတယ်။ ပြီးခဲ့တဲ့ lesson မှာ
+      တွေ့ခဲ့သလို main ပြီးသွားရင် program တစ်ခုလုံး ပြီးသွားပါတယ်။ main က code ကို လွှဲပြီးတာနဲ့ ထွက်သွားရင်၊
+      rider က စာ မထုတ်ရသေးခင် program ပိတ်သွားနိုင်ပါတယ်။ [[mark:type-done]] ဒါကြောင့် done ဆိုတဲ့
+      channel နောက်တစ်ခု ထည့်ပါမယ်။ [[mark:type-done-send]] rider က အလုပ်ပြီးရင် done ထဲကို true ပို့ပြီး၊
+      [[mark:type-done-wait]] main ကတော့ code ကို ပို့ပြီးတဲ့နောက် done ကနေ လက်ခံပါတယ်။ ဆိုလိုတာက rider
+      က ပြီးပြီလို့ မပြောမချင်း main ရှေ့ မဆက်ပါဘူး။ [[mark:run-2]] ကဲ၊ run ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Go statements",
+          url: "https://go.dev/ref/spec#Go_statements",
+        }
+      - {
+          title: "The Go Programming Language Specification — Receive operator",
+          url: "https://go.dev/ref/spec#Receive_operator",
+        }
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - {
+          id: close-dead,
+          type: whiteboard.apply,
+          at: { mark: close-dead },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-rider
+        type: editor.type
+        at: { mark: type-rider }
+        target: { file: main.go, after: "\tparcels := make(chan string)\n", occurrence: 1 }
+        text: "\tgo func() {\n\t\tcode := <-parcels\n\t\tfmt.Println(\"rider:\", code)\n\t}()\n"
+        cadence: line-by-line
+      - id: sel-recv
+        type: editor.select
+        at: { mark: sel-recv }
+        target: { file: main.go, text: "code := <-parcels", occurrence: 1 }
+      - id: type-done
+        type: editor.type
+        at: { mark: type-done }
+        target: { file: main.go, after: "\tparcels := make(chan string)\n", occurrence: 1 }
+        text: "\tdone := make(chan bool)\n"
+        cadence: line-by-line
+      - id: type-done-send
+        type: editor.type
+        at: { mark: type-done-send }
+        target: { file: main.go, after: "\t\tfmt.Println(\"rider:\", code)\n", occurrence: 1 }
+        text: "\t\tdone <- true\n"
+        cadence: line-by-line
+      - id: type-done-wait
+        type: editor.type
+        at: { mark: type-done-wait }
+        target: { file: main.go, after: "\tparcels <- \"MDY-0001\"\n", occurrence: 1 }
+        text: "\t<-done\n"
+        cadence: line-by-line
+      - { id: run-2, type: runtime.run, at: { mark: run-2, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-2,
+          type: expect.output,
+          at: { afterAction: run-2 },
+          contains: "rider: MDY-0001",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-rider,
+          type: expect.file,
+          at: { afterAction: run-2 },
+          path: main.go,
+          contains: "\t\tdone <- true\n\t}()\n",
+        }
+
+  - id: read-2
+    narration: >-
+      [[mark:point-rider]] ပထမ စာကြောင်းမှာ rider က မန္တလေး ပါဆယ် နံပါတ် တစ်ကို လက်ခံရပြီး ထုတ်ပြပါတယ်။
+      ဒီတစ်ခါ ကောင်တာရဲ့ တစ်ဖက်မှာ ယူမယ့်သူ ရှိလို့ ပို့တာ ပြီးသွားတာပါ။ [[mark:point-sent]] ဒုတိယ
+      စာကြောင်းက main ရဲ့ ပို့ပြီး ဆိုတဲ့ စာပါ။ ဒီ အစဉ်က ဘယ်တော့မှ မပြောင်းပါဘူး။ ဘာကြောင့်လဲဆိုတော့
+      rider က code ကို ထုတ်ပြပြီးမှ done ထဲ ပို့ပြီး၊ main က done ကနေ လက်ခံရမှ ရှေ့ ဆက်လို့ပါ။ ဒါကြောင့်
+      channel က တန်ဖိုး လွှဲပေးရုံ မကဘဲ goroutine နှစ်ခုကို အချိန်ကိုက် တွေ့ဆုံစေတာလည်း ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+    actions:
+      - {
+          id: point-rider,
+          type: console.point,
+          at: { mark: point-rider },
+          target: { text: "rider: MDY-0001" },
+        }
+      - { id: point-sent, type: console.point, at: { mark: point-sent }, target: { text: "ပို့ပြီး" } }
+
+  - id: close-range
+    chapter: close နဲ့ range
+    narration: >-
+      [[mark:collapse-2]] တကယ့် နေ့ တစ်နေ့မှာတော့ ပါဆယ် တစ်ခုတည်း မဟုတ်ပါဘူး။ [[mark:type-more]] မန္တလေး
+      ပါဆယ်ရဲ့ အောက်မှာ နေပြည်တော် ပါဆယ်နဲ့ ရန်ကုန် ပါဆယ်ကို ထပ်ပို့ပြီး၊ နောက်ဆုံးမှာ channel ကို close
+      လုပ်ပါမယ်။ close ဆိုတာ ဒီ channel ထဲကို ဘာမှ ထပ်မပို့တော့ဘူး၊ ဒီနေ့ ပါဆယ် ကုန်ပြီလို့ ပြောတာပါ။
+      [[mark:rider-one]] ဒါပေမဲ့ rider က code တစ်ခုပဲ လက်ခံပါတယ်။ ကျန်တဲ့ နှစ်ခုကို ဘယ်သူမှ မယူရင် main က
+      ဒုတိယ code ကို ပို့တဲ့ line မှာ မျှော်ရင်း deadlock ဖြစ်မှာပါ။ [[mark:type-comment]] ဒါကြောင့် code တစ်ခုပဲ ယူတဲ့ line ကို
+      comment အဖြစ် ပြောင်းပြီး၊ [[mark:type-range]] သူ့ နေရာမှာ channel ပေါ်က range loop တစ်ခု ထည့်ပါမယ်။
+      [[mark:type-indent]] ထုတ်ပြတဲ့ line ကို loop ထဲ ရွှေ့ပြီး loop ကို ပိတ်ပါမယ်။ [[mark:sel-range]]
+      channel ပေါ်က range က code တစ်ခု ရောက်လာတိုင်း loop တစ်ခေါက် လုပ်ပါတယ်။ channel close ဖြစ်ပြီး ကျန်တဲ့
+      code မရှိတော့မှ loop ပြီးသွားပြီး၊ rider က done ထဲ ပို့ပါတယ်။ [[mark:no-close]] close မလုပ်ရင်တော့ rider
+      က နောက် code ကို အမြဲ မျှော်ပြီး၊ main ကလည်း done ကို မျှော်နေမှာ ဖြစ်လို့ နောက်ထပ် deadlock ဖြစ်မှာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Close",
+          url: "https://go.dev/ref/spec#Close",
+        }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - { id: collapse-2, type: runtime.collapseDock, at: { mark: collapse-2 } }
+      - id: type-more
+        type: editor.type
+        at: { mark: type-more }
+        target: { file: main.go, after: "\tparcels <- \"MDY-0001\"\n", occurrence: 1 }
+        text: "\tparcels <- \"NPT-0001\"\n\tparcels <- \"YGN-0001\"\n\tclose(parcels)\n"
+        cadence: line-by-line
+      - id: type-comment
+        type: editor.type
+        at: { mark: type-comment }
+        target: { file: main.go, after: "\tgo func() {\n\t\t", occurrence: 1 }
+        text: "// "
+      - id: type-range
+        type: editor.type
+        at: { mark: type-range }
+        target: { file: main.go, after: "\t\t// code := <-parcels\n", occurrence: 1 }
+        text: "\t\tfor code := range parcels {\n"
+        cadence: line-by-line
+      - id: type-indent
+        type: editor.type
+        at: { mark: type-indent }
+        target: { file: main.go, after: "\t\tfor code := range parcels {\n", occurrence: 1 }
+        text: "\t"
+      - id: type-close-loop
+        type: editor.type
+        at: { afterAction: type-indent }
+        target: { file: main.go, after: "\t\t\tfmt.Println(\"rider:\", code)\n", occurrence: 1 }
+        text: "\t\t}\n"
+        cadence: line-by-line
+      - id: sel-range
+        type: editor.select
+        at: { mark: sel-range }
+        target: { file: main.go, text: "for code := range parcels {", occurrence: 1 }
+
+  - id: shelf
+    chapter: Buffered channel
+    narration: >-
+      [[mark:board-shelf]] နောက်ဆုံး အနေနဲ့ နေရာ ပါတဲ့ channel ကို ကြည့်ရအောင်။ [[mark:draw-shelf]] တစ်ခါတလေ
+      rider က ချက်ချင်း မရောက်သေးပေမဲ့၊ ဝန်ထမ်းက ပါဆယ်တွေကို စင်ပေါ် တင်ထားခဲ့ပြီး တခြား အလုပ် ဆက်လုပ်ချင်ပါတယ်။
+      make လုပ်တဲ့အခါ နံပါတ် တစ်ခု ထပ်ပေးရင် channel ထဲမှာ အဲဒီ အရေအတွက်အထိ နေရာ ရှိပါတယ်။ ဒါကို buffered
+      channel လို့ ခေါ်ပါတယ်၊ နေရာ နှစ်ခု ပါတဲ့ စင်လိုပါပဲ။ [[mark:draw-fill]] စင်ပေါ်မှာ နေရာလွတ် ရှိသရွေ့
+      ပို့တာက ယူမယ့်သူကို မစောင့်ဘဲ ချက်ချင်း ပြီးပါတယ်။ [[mark:draw-full]] စင် ပြည့်သွားမှသာ နောက်ထပ်
+      ပို့တာက နေရာ လွတ်တဲ့အထိ ရှေ့ မဆက်ပါဘူး။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+      - {
+          title: "The Go Programming Language Specification — Making slices, maps and channels",
+          url: "https://go.dev/ref/spec#Making_slices_maps_and_channels",
+        }
+    actions:
+      - {
+          id: board-shelf,
+          type: whiteboard.apply,
+          at: { mark: board-shelf, offsetMs: -300 },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-shelf,
+          type: whiteboard.apply,
+          at: { mark: draw-shelf },
+          upsertIds: [s-main, s-main-label, s-arrow, s-slot1, s-slot2, s-p1, s-p2, s-make],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-fill,
+          type: whiteboard.apply,
+          at: { mark: draw-fill },
+          upsertIds: [s-ok-box, s-ok],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-full,
+          type: whiteboard.apply,
+          at: { mark: draw-full },
+          upsertIds: [s-full-box, s-full],
+          drawMs: 1400,
+        }
+
+  - id: shelf-code
+    narration: >-
+      [[mark:close-shelf]] ဒါကို code နဲ့ စမ်းကြည့်ရအောင်။ [[mark:type-shelf]] done ကနေ လက်ခံတဲ့ line ရဲ့
+      အောက်မှာ နေရာ နှစ်ခု ပါတဲ့ shelf ဆိုတဲ့ channel ကို ဖန်တီးပြီး၊ ပဲခူး ပါဆယ်နဲ့ မော်လမြိုင် ပါဆယ်ကို ပို့ပါမယ်။
+      ဒီ channel ကနေ ဘယ် goroutine ကမှ လာမယူပါဘူး။ [[mark:type-len]] ပြီးတော့ နောက်ဆုံး line မှာ shelf
+      ထဲမှာ အခု ဘယ်နှစ်ခု ရှိလဲ ဆိုတဲ့ len နဲ့၊ နေရာ စုစုပေါင်း ဘယ်လောက် ရှိလဲ ဆိုတဲ့ cap ကို ထည့်ပါမယ်။
+      ယူမယ့်သူ မရှိလို့ deadlock ဖြစ်မလား၊ ဒါမှမဟုတ် အဆုံးထိ run မလား ခန့်မှန်းကြည့်ပါ။
+      [[mark:run-3]] ကဲ၊ run လိုက်ရအောင်။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+    actions:
+      - {
+          id: close-shelf,
+          type: whiteboard.apply,
+          at: { mark: close-shelf },
+          open: false,
+          upsertIds: [],
+        }
+      - id: type-shelf
+        type: editor.type
+        at: { mark: type-shelf }
+        target: { file: main.go, after: "\t<-done\n", occurrence: 1 }
+        text: "\tshelf := make(chan string, 2)\n\tshelf <- \"BGO-0001\"\n\tshelf <- \"MLM-0001\"\n"
+        cadence: line-by-line
+      - id: type-len
+        type: editor.type
+        at: { mark: type-len }
+        target: { file: main.go, after: "\tshelf <- \"MLM-0001\"\n\tfmt.Println(", occurrence: 1 }
+        text: "len(shelf), cap(shelf), "
+      - { id: run-3, type: runtime.run, at: { mark: run-3, offsetMs: 200 }, timeoutMs: 15000 }
+      - {
+          id: expect-3,
+          type: expect.output,
+          at: { afterAction: run-3 },
+          contains: "2 2 ပို့ပြီး",
+          timeoutMs: 8000,
+        }
+      - {
+          id: expect-file-range,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: "\t\tfor code := range parcels {\n\t\t\tfmt.Println(\"rider:\", code)\n\t\t}\n",
+        }
+      - {
+          id: expect-file-shelf,
+          type: expect.file,
+          at: { afterAction: run-3 },
+          path: main.go,
+          contains: 'fmt.Println(len(shelf), cap(shelf), "ပို့ပြီး")',
+        }
+
+  - id: read-3
+    narration: >-
+      [[mark:point-r1]] ပထမ သုံးကြောင်းမှာ rider က မန္တလေး၊ နေပြည်တော်၊ ရန်ကုန် ပါဆယ် code တွေကို ပို့တဲ့
+      အစဉ်အတိုင်း လက်ခံပြီး ထုတ်ပြပါတယ်။ [[mark:point-r3]] code သုံးခု ကုန်သွားပြီး channel close ဖြစ်တော့
+      range loop ပြီးသွားလို့၊ rider က done ထဲ ပို့နိုင်ပြီး main ဆက်သွားနိုင်တာပါ။ [[mark:point-shelf]]
+      နောက်ဆုံး စာကြောင်းမှာ နှစ် နဲ့ နှစ်၊ ပြီးတော့ ပို့ပြီး ဆိုတဲ့ စာ ထွက်လာပါတယ်။ ပထမ နှစ်က shelf ထဲမှာ
+      ပါဆယ် နှစ်ခု ရှိနေတာ၊ ဒုတိယ နှစ်က နေရာ စုစုပေါင်း နှစ်ခု ရှိတာပါ။ ဘယ်သူမှ မယူပေမဲ့ deadlock
+      မဖြစ်ပါဘူး၊ ပို့တဲ့ ပါဆယ် နှစ်ခုလုံးအတွက် စင်ပေါ်မှာ နေရာ ရှိခဲ့လို့ပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Length and capacity",
+          url: "https://go.dev/ref/spec#Length_and_capacity",
+        }
+      - {
+          title: "The Go Programming Language Specification — For statements with range clause",
+          url: "https://go.dev/ref/spec#For_range",
+        }
+    actions:
+      - {
+          id: point-r1,
+          type: console.point,
+          at: { mark: point-r1 },
+          target: { text: "rider: MDY-0001" },
+        }
+      - {
+          id: point-r3,
+          type: console.point,
+          at: { mark: point-r3 },
+          target: { text: "rider: YGN-0001" },
+        }
+      - {
+          id: point-shelf,
+          type: console.point,
+          at: { mark: point-shelf },
+          target: { text: "2 2 ပို့ပြီး" },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >-
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ board ပေါ်က program မှာ goroutine တစ်ခုပဲ ရှိပါတယ်၊ main ပါ။
+      [[mark:quiz-one]] main က နေရာ တစ်ခု ပါတဲ့ channel ထဲကို code တစ်ခု ပို့ပြီး၊ နောက် line မှာ အဲဒီ channel
+      ကနေ ကိုယ်တိုင် ပြန်ယူပြီး ထုတ်ပြပါတယ်။ ဒီ program က deadlock ဖြစ်မလား၊ ဒါမှမဟုတ် code ကို
+      ထုတ်ပြမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။ [[mark:quiz-answer]] အဖြေကတော့ ခ၊ code ကို
+      ထုတ်ပြတာပါ။ ဘာကြောင့်လဲဆိုတော့ channel မှာ နေရာ တစ်ခု ရှိလို့ ပို့တာက ယူမယ့်သူကို မစောင့်ဘဲ ချက်ချင်း
+      ပြီးသွားပြီး၊ main က နောက် line ကို ရောက်လာပြီး ကိုယ်တိုင် ပြန်ယူနိုင်လို့ပါ။ ဒီနေ့ ပထမဆုံး run လို
+      နေရာ မပါတဲ့ channel ဆိုရင်တော့ ပို့တဲ့ line မှာတင် deadlock ဖြစ်မှာပါ။
+    sources:
+      - {
+          title: "The Go Programming Language Specification — Channel types",
+          url: "https://go.dev/ref/spec#Channel_types",
+        }
+    actions:
+      - { id: collapse-3, type: runtime.collapseDock, at: { mark: quiz } }
+      - {
+          id: quiz,
+          type: whiteboard.apply,
+          at: { afterAction: collapse-3 },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-code, q-l1, q-l2, q-l3, q-a, q-b],
+        }
+      - {
+          id: quiz-one,
+          type: whiteboard.apply,
+          at: { mark: quiz-one },
+          upsertIds: [q-one],
+          drawMs: 900,
+        }
+      - {
+          id: quiz-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-check],
+          drawMs: 700,
+        }
+
+  - id: recap
+    chapter: ပြန်ချုပ်ရရင်
+    narration: >-
+      [[mark:close-quiz]] ဒါဆို ပြန်ချုပ်ရရင်၊ [[mark:recap-make]] channel ဆိုတာ goroutine တွေကြား တန်ဖိုး
+      လွှဲပေးတဲ့ လမ်းဖြစ်ပြီး make နဲ့ ဖန်တီးရပါတယ်။ နေရာ မပါတဲ့ channel မှာ ပို့တဲ့သူနဲ့ ယူတဲ့သူ ဆုံမှပဲ
+      လက်လွှဲပြီး၊ ယူမယ့်သူ မရှိရင် deadlock ဖြစ်ပါတယ်။ [[mark:recap-range]] ပါဆယ် အများကြီး ပို့တဲ့အခါ
+      ပို့ပြီးရင် close လုပ်ပြီး၊ လက်ခံတဲ့ ဘက်က range နဲ့ close မဖြစ်မချင်း တစ်ခုချင်း ယူပါတယ်။
+      [[mark:recap-shelf]] make မှာ နံပါတ် ထည့်ပေးရင် စင်လို နေရာ ပါတဲ့ buffered channel ရပြီး၊ စင်
+      မပြည့်သေးသရွေ့ ပို့တာက မစောင့်ပါဘူး။ နောက် lesson မှာတော့ rider အဖွဲ့ တစ်ဖွဲ့လုံးက အလုပ်တွေကို
+      ခွဲယူလုပ်တာနဲ့၊ အချိန် ကန့်သတ်ပြီး မျှော်တဲ့ select ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Effective Go — Concurrency", url: "https://go.dev/doc/effective_go#concurrency" }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: close-quiz },
+          open: false,
+          upsertIds: [],
+        }
+      - id: recap-make
+        type: editor.select
+        at: { mark: recap-make }
+        target: { file: main.go, text: "parcels := make(chan string)", occurrence: 1 }
+      - id: recap-range
+        type: editor.select
+        at: { mark: recap-range }
+        target: { file: main.go, text: "\tclose(parcels)", occurrence: 1 }
+      - id: recap-shelf
+        type: editor.select
+        at: { mark: recap-shelf }
+        target: { file: main.go, text: "shelf := make(chan string, 2)", occurrence: 1 }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
