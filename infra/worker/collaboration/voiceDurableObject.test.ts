@@ -14,7 +14,7 @@ import {
   getCollaborationRoomAccess,
   type CollaborationRoomAccess,
 } from "../../db/collaborationQueries";
-import { getSessionUser } from "../../db/queries";
+import { getLiveSession } from "../../db/queries";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
@@ -26,7 +26,7 @@ vi.mock("../../db/collaborationQueries", () => ({
 }));
 
 vi.mock("../../db/queries", () => ({
-  getSessionUser: vi.fn<typeof getSessionUser>(),
+  getLiveSession: vi.fn<typeof getLiveSession>(),
 }));
 
 stubWebSocketUpgrade(() => new FakeWebSocket());
@@ -85,11 +85,11 @@ function authSessionOf(userId: string): string {
 
 beforeEach(() => {
   vi.mocked(getCollaborationRoomAccess).mockReset();
-  vi.mocked(getSessionUser)
+  vi.mocked(getLiveSession)
     .mockReset()
     .mockImplementation(async (_db, authSessionId) =>
       authSessionId.startsWith("session-of-")
-        ? ({ id: authSessionId.slice("session-of-".length) } as never)
+        ? ({ user: { id: authSessionId.slice("session-of-".length) }, signedInAt: 0 } as never)
         : null,
     );
 });
@@ -430,7 +430,7 @@ describe("CollaborationVoiceRoomDurableObject signed-out sessions", () => {
     const peer = room.join(PEER_ID);
     // The membership is unchanged, as after a sign-out.
     vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
-    vi.mocked(getSessionUser).mockResolvedValue(null);
+    vi.mocked(getLiveSession).mockResolvedValue(null);
 
     await room.message(member, {
       type: "voice.mute-changed",
@@ -439,7 +439,7 @@ describe("CollaborationVoiceRoomDurableObject signed-out sessions", () => {
       muted: false,
     });
 
-    expect(getSessionUser).toHaveBeenCalledWith(expect.anything(), authSessionOf(MEMBER_ID));
+    expect(getLiveSession).toHaveBeenCalledWith(expect.anything(), authSessionOf(MEMBER_ID));
     expect(member.closeCode).toBe(4003);
     expect(peer.messages()).toContainEqual(
       expect.objectContaining({ type: "voice.participant-left" }),

@@ -1,5 +1,5 @@
 import * as z from "zod";
-import { getSessionUser } from "../../db/queries";
+import { getLiveSession } from "../../db/queries";
 
 // Plumbing the room and voice Durable Objects share: their hibernatable
 // sockets, the canonical session the Worker hands them in a header, their
@@ -40,8 +40,8 @@ export async function isAuthSessionCurrent(
   authSessionId: string,
   userId: string,
 ): Promise<boolean> {
-  const user = await getSessionUser(db, authSessionId);
-  return user?.id === userId;
+  const live = await getLiveSession(db, authSessionId);
+  return live?.user.id === userId;
 }
 
 export function isOpen(socket: WebSocket): boolean {

@@ -35,7 +35,7 @@ import {
   getCollaborationRoomAccess,
   type CollaborationRoomAccess,
 } from "../../db/collaborationQueries";
-import { getSessionUser } from "../../db/queries";
+import { getLiveSession } from "../../db/queries";
 import type { Env } from "../env";
 import { FakeWebSocket } from "../testing/fakeWebSocket";
 import { SqliteTestStorage } from "../testing/sqliteStorage";
@@ -52,7 +52,7 @@ vi.mock("../../db/collaborationQueries", () => ({
 }));
 
 vi.mock("../../db/queries", () => ({
-  getSessionUser: vi.fn<typeof getSessionUser>(),
+  getLiveSession: vi.fn<typeof getLiveSession>(),
 }));
 
 vi.stubGlobal(
@@ -143,14 +143,16 @@ function signedInAs(_db: unknown, authSessionId: string) {
   const prefix = "session-of-";
   return Promise.resolve(
     authSessionId.startsWith(prefix)
-      ? ({ id: authSessionId.slice(prefix.length) } as Awaited<ReturnType<typeof getSessionUser>>)
+      ? ({ user: { id: authSessionId.slice(prefix.length) }, signedInAt: 0 } as Awaited<
+          ReturnType<typeof getLiveSession>
+        >)
       : null,
   );
 }
 
 beforeEach(() => {
   vi.mocked(getCollaborationRoomAccess).mockReset();
-  vi.mocked(getSessionUser).mockReset().mockImplementation(signedInAs);
+  vi.mocked(getLiveSession).mockReset().mockImplementation(signedInAs);
 });
 
 /** A room whose durable document starts as `seed` leaves the shared test document. */
@@ -1385,7 +1387,7 @@ describe("CollaborationRoomDurableObject signed-out sessions", () => {
     const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
     // The membership is unchanged, as after a sign-out.
     vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
-    vi.mocked(getSessionUser).mockResolvedValue(null);
+    vi.mocked(getLiveSession).mockResolvedValue(null);
 
     await room.webSocketMessage(member as never, edit("+after-logout"));
     await room.webSocketMessage(
@@ -1393,7 +1395,7 @@ describe("CollaborationRoomDurableObject signed-out sessions", () => {
       toArrayBuffer(encodeCollaborationSyncStep1(new Y.Doc())),
     );
 
-    expect(getSessionUser).toHaveBeenCalledWith(expect.anything(), authSessionOf(MEMBER_ID));
+    expect(getLiveSession).toHaveBeenCalledWith(expect.anything(), authSessionOf(MEMBER_ID));
     expect(acks(member)).toEqual([]);
     expect(errors(member)).toEqual([
       expect.objectContaining({ code: "access-revoked", fatal: true }),
@@ -1407,7 +1409,7 @@ describe("CollaborationRoomDurableObject signed-out sessions", () => {
     const { room, connect, edit } = await createRoom();
     const member = connect(MEMBER_ID, "editor", { accessCheckedAt: 0 });
     vi.mocked(getCollaborationRoomAccess).mockResolvedValue(roomAccess("editor", 1));
-    vi.mocked(getSessionUser).mockResolvedValue({ id: PEER_ID } as never);
+    vi.mocked(getLiveSession).mockResolvedValue({ user: { id: PEER_ID }, signedInAt: 0 } as never);
 
     await room.webSocketMessage(member as never, edit("+nope"));
 
@@ -1421,7 +1423,7 @@ describe("CollaborationRoomDurableObject signed-out sessions", () => {
     vi.mocked(getCollaborationRoomAccess).mockImplementation(async (_db, _room, userId) =>
       roomAccess(userId === MEMBER_ID ? "viewer" : "owner", 1),
     );
-    vi.mocked(getSessionUser).mockImplementation(async (db, authSessionId) =>
+    vi.mocked(getLiveSession).mockImplementation(async (db, authSessionId) =>
       authSessionId === authSessionOf(MEMBER_ID) ? null : signedInAs(db, authSessionId),
     );
 
