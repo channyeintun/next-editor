@@ -18,6 +18,8 @@ import {
   isReservedWorkspacePathSegment,
   isWorkspacePathControlCharacter,
   parseWorkspacePath,
+  MAX_WORKSPACE_PATH_CHARS,
+  MAX_WORKSPACE_PATH_DEPTH,
 } from "../types/workspacePaths";
 import { getWorkspaceFileMimeType, inferLanguageFromPath } from "../types/workspaceFiles";
 import { prepareTextEditEvent, type TextEditEvent } from "../types/textEdit";
@@ -42,9 +44,10 @@ export const MAX_COLLABORATION_PROJECT_NODES = 20_000;
 // levels, or whose path could pass MAX_COLLABORATION_PATH_CHARS characters, is
 // shown in the recovery folder instead, and a node name is cut to
 // MAX_COLLABORATION_NODE_NAME_CHARS code points. No real project comes near
-// these; a workspace import refuses paths past the same depth and length.
-const MAX_COLLABORATION_TREE_DEPTH = 64;
-const MAX_COLLABORATION_PATH_CHARS = 4096;
+// these. The depth and length are the workspace path rule's own
+// (src/types/workspacePaths.ts), so a projected path always parses.
+const MAX_COLLABORATION_TREE_DEPTH = MAX_WORKSPACE_PATH_DEPTH;
+const MAX_COLLABORATION_PATH_CHARS = MAX_WORKSPACE_PATH_CHARS;
 const MAX_COLLABORATION_NODE_NAME_CHARS = 255;
 
 export const COLLABORATION_ORIGIN = {
