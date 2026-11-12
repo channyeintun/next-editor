@@ -1,0 +1,749 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-28-data-systems
+  title: "Architect Path 28: Data system တွေရဲ့ trade-off"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/28-stores.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/28-stores.md: |
+        # ခရီးဖော် ရဲ့ data store တွေ
+
+        | Store | ဘာ သိမ်းလဲ | record / derived | Model |
+        |---|---|---|---|
+
+        ## ဆုံးဖြတ်ချက်
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: data-models
+      contentType: html
+      name: Data model
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Data ရဲ့ ပုံသဏ္ဌာန်ကို ကြည့်ပြီး model ရွေး</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">Relational</span>အပြန်အလှန် ချိတ်ဆက်မှု များတဲ့ data</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term green">Document</span>တစ်ခုလုံး အတူဖတ်တဲ့ ပြည့်စုံတဲ့ အစု</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term violet">Graph</span>ချိတ်ဆက်မှုကို အဆင့်ဆင့် လိုက်ရတဲ့ data</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term orange">Schema</span>ရေးချိန်မှာ စစ်မလား၊ ဖတ်ချိန်မှာ စစ်မလား</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — one database, two kinds of work. Blue parts, violet flow, red
+    # the clash. Then the same parts with the analytical work moved off:
+    # orange labels say which store is the record and which is derived.
+    - {
+        id: k-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Database တစ်ခု၊ အလုပ် နှစ်မျိုး",
+        fontSize: 36,
+      }
+    - {
+        id: k-w1,
+        kind: rectangle,
+        x: 260,
+        y: 240,
+        width: 270,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-w1-l,
+        kind: text,
+        align: center,
+        x: 260,
+        y: 258,
+        width: 270,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: k-w1-s,
+        kind: text,
+        x: 260,
+        y: 318,
+        width: 360,
+        height: 35,
+        text: "row အနည်းငယ်၊ မြန်မြန်",
+        fontSize: 28,
+      }
+    - {
+        id: k-ar1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 255,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: k-db, kind: ellipse, x: 630, y: 220, width: 310, height: 110, strokeColor: "#1971c2" }
+    - {
+        id: k-db-l,
+        kind: text,
+        align: center,
+        x: 630,
+        y: 258,
+        width: 310,
+        height: 35,
+        text: "primary database",
+        fontSize: 28,
+      }
+    - {
+        id: k-w2,
+        kind: rectangle,
+        x: 260,
+        y: 470,
+        width: 270,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-w2-l,
+        kind: text,
+        align: center,
+        x: 260,
+        y: 488,
+        width: 270,
+        height: 35,
+        text: "finance report",
+        fontSize: 28,
+      }
+    - {
+        id: k-w2-s,
+        kind: text,
+        x: 260,
+        y: 548,
+        width: 300,
+        height: 35,
+        text: "နှစ်ချီ data ကို scan",
+        fontSize: 28,
+      }
+    - {
+        id: k-ar2,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 540,
+        y: 340,
+        width: 110,
+        height: 125,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-clash,
+        kind: text,
+        x: 680,
+        y: 400,
+        width: 400,
+        height: 35,
+        text: "report ချိန် Booking နှေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-flow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 765,
+        y: 340,
+        width: 40,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-flow-l,
+        kind: text,
+        x: 815,
+        y: 372,
+        width: 180,
+        height: 35,
+        text: "ညတိုင်း ကူးယူ",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - { id: k-an, kind: ellipse, x: 630, y: 450, width: 310, height: 110, strokeColor: "#1971c2" }
+    - {
+        id: k-an-l,
+        kind: text,
+        align: center,
+        x: 630,
+        y: 488,
+        width: 310,
+        height: 35,
+        text: "analytical store",
+        fontSize: 28,
+      }
+    - {
+        id: k-ar3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 540,
+        y: 485,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-rec,
+        kind: text,
+        x: 955,
+        y: 258,
+        width: 130,
+        height: 35,
+        text: "record",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: k-der,
+        kind: text,
+        x: 955,
+        y: 488,
+        width: 130,
+        height: 35,
+        text: "derived",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer and reason,
+    # orange the condition.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Search index ပျက်သွားရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) data ဆုံးရှုံးတဲ့ ကပ်ဘေးကြီး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) နေ့တစ်ဝက် ပြန်ဆောက်ရုံ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 330,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 650,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 780,
+        height: 35,
+        text: "derived data: မူရင်းကနေ ပြန်ဆောက်လို့ရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-c,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 780,
+        height: 35,
+        text: "တံဆိပ်ရော၊ ပြန်ဆောက်တဲ့ လမ်းကြောင်းရော ရှိမှ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8128
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: stage
+    chapter: နှစ်နှစ်အကြာ၊ တနင်္လာ မနက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ EventStorming workshop နဲ့ business ဖြစ်စဉ် တစ်ခုကို လူတွေရဲ့ ခေါင်းထဲကနေ နံရံပေါ်
+      ဆွဲထုတ်ပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:readme]] အဲဒီနောက် နှစ်နှစ် ကြာသွားပါပြီ။ ခရီးဖော် က ကုမ္ပဏီ သက်တမ်း ငါးနှစ် ရှိလာပါပြီ။
+      [[mark:sel-teams]] developer က ၄၅ ယောက်၊ team က ခြောက်ခု ဖြစ်လာပြီး၊ ကိုယ်ကလည်း lead architect
+      ဖြစ်နေပါပြီ။
+      [[mark:sel-services]] Booking၊ Payment နဲ့ Notification တို့ကို သီးခြား service တွေအဖြစ်
+      ခွဲထုတ်ပြီးပါပြီ။ ကျန်တဲ့ အပိုင်းတွေကတော့ app အဟောင်းထဲမှာ ရှိနေတုန်းပါ။ တစ်ရက်ကို လက်မှတ်
+      ရှစ်သောင်းလောက် ရောင်းနေရတဲ့ ဒီအဆင့်မှာ၊ အခက်ခဲဆုံး ဆုံးဖြတ်ချက်တွေက data နဲ့ ပတ်သက်ပါတယ်။
+      [[mark:need]] တနင်္လာနေ့ မနက်တိုင်း ပြဿနာ တစ်ခု ဖြစ်နေပါတယ်။ တနင်္လာနေ့က ကားလိုင်းတွေကို ငွေစာရင်း
+      ရှင်းပေးရတဲ့ နေ့မို့၊ finance ဘက်က report ကြီးတွေကို run ပါတယ်။ အဲဒီအချိန်ဆို လက်မှတ် ဝယ်ရတာ
+      နှေးသွားတယ်လို့ Booking team lead မောင်မောင် က ပြောလာပါတယ်။
+      [[mark:nosql]] အဆိုပြုချက် တစ်ခုလည်း ရောက်လာပါတယ်။ developer တစ်ယောက်က NoSQL database ကို
+      ပြောင်းသုံးရအောင်၊ scale လုပ်ရတာ ပိုကောင်းတယ်လို့ ဆိုပါတယ်။ NoSQL ဆိုတာ relational မဟုတ်တဲ့ database
+      အမျိုးအစားတွေကို ခြုံခေါ်တဲ့ နာမည်ပါ။ CTO ဖြစ်တဲ့ အောင်အောင် ကလည်း ဒါနဲ့ ပြီးမလားလို့ ကိုယ့်ကို မေးပါတယ်။
+      အဖြေ မပေးခင် ပြဿနာက တကယ် ဘာလဲ ဆိုတာကို အရင် ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: readme }, path: README.md }
+      - id: sel-teams
+        type: editor.select
+        at: { mark: sel-teams }
+        target:
+          {
+            file: README.md,
+            text: "- developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification",
+          }
+      - id: sel-services
+        type: editor.select
+        at: { mark: sel-services }
+        target:
+          {
+            file: README.md,
+            text: "- Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ",
+          }
+      - id: sel-db
+        type: editor.select
+        at: { mark: nosql }
+        target: { file: README.md, text: "- database: primary တစ်ခုနဲ့ read replica 2 ခု" }
+
+  - id: two-kinds
+    chapter: အလုပ် နှစ်မျိုး
+    narration: >
+      [[mark:k-open]] database တစ်ခုတည်းကို အမျိုးအစား မတူတဲ့ အလုပ် နှစ်မျိုးက သုံးနေပါတယ်။
+      [[mark:k-book]] ပထမ တစ်မျိုးက Booking လို အလုပ်ပါ။ ထိုင်ခုံ တစ်ခုံ လွတ်လား ကြည့်တာ၊ လက်မှတ် တစ်စောင်
+      ရေးတာမျိုးပါ။
+      [[mark:k-book-s]] request တစ်ခုက row အနည်းငယ်ကိုပဲ ထိပြီး ချက်ချင်း ပြီးရပါတယ်။ ဒါပေမဲ့ request
+      အရေအတွက်ကတော့ အများကြီးပါ။ အခု ဘာဖြစ်နေလဲ ဆိုတဲ့ လက်ရှိ အခြေအနေကို ဖတ်တာ၊ ရေးတာမို့ operational အလုပ်လို့
+      ခေါ်ပါတယ်။
+      [[mark:k-report]] ဒုတိယ တစ်မျိုးက finance report လို အလုပ်ပါ။ request အရေအတွက်က နည်းပါတယ်။
+      [[mark:k-report-s]] ဒါပေမဲ့ တစ်ခုချင်းစီက ပြီးခဲ့တဲ့ လတွေ၊ နှစ်တွေရဲ့ လက်မှတ် row သန်းချီကို ဖတ်ပြီး
+      ပေါင်းတွက်ရပါတယ်။ ဖြစ်ခဲ့သမျှ history ကို ခွဲခြမ်းစိတ်ဖြာတာမို့ analytical အလုပ်လို့ ခေါ်ပါတယ်။
+      [[mark:k-clash]] ဒီ နှစ်မျိုးကို database တစ်ခုတည်းပေါ်မှာ အတူ run တဲ့အခါ၊ report တစ်ခုက disk နဲ့ memory
+      ကို အကြာကြီး ယူထားတော့ Booking ရဲ့ request သေးသေးလေးတွေက စောင့်ရပါတယ်။ တနင်္လာ မနက်မှာ ဖြစ်နေတာ ဒါပါပဲ။
+      report ကို ဖတ်ဖို့သက်သက် မိတ္တူ database၊ ဆိုလိုတာက read replica ပေါ် ရွှေ့ရင်လည်း၊ အဲဒီ replica ကို
+      သုံးနေတဲ့ app ရဲ့ ဖတ်တဲ့ request တွေ နှေးသွားမှာမို့ ပြဿနာက နေရာပဲ ပြောင်းသွားမှာပါ။
+      [[mark:k-fix]] ဒါကြောင့် အလုပ် နှစ်မျိုးကို နေရာ ခွဲပေးရပါတယ်။
+      [[mark:k-store]] primary database ထဲက data ကို analytical အလုပ်အတွက် သီးသန့် store တစ်ခုဆီ ပုံမှန်
+      ကူးယူပေးပြီး၊ report တွေကို အဲဒီ store ပေါ်မှာပဲ run ခိုင်းတာပါ။ ဒီလိုဆိုရင် report က ဘယ်လောက်ကြီးကြီး
+      Booking ကို မထိတော့ပါဘူး။
+      [[mark:k-cost]] ဒါပေမဲ့ တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတဲ့ trade off တော့ ရှိပါတယ်။ report ထဲက
+      ကိန်းဂဏန်းတွေက နောက်ဆုံး ကူးယူခဲ့တဲ့ အချိန်အထိပဲ မှန်ပါတော့တယ်။ မနေ့ညအထိ မှန်ရင် finance အတွက်
+      လုံလောက်လား ဆိုတာကို မေးရပါတယ်။ ငွေစာရင်း ရှင်းတာက တစ်ပတ် တစ်ခါမို့ လုံလောက်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-k-open,
+          type: whiteboard.apply,
+          at: { mark: k-open },
+          open: true,
+          upsertIds: [k-title],
+        }
+      - {
+          id: draw-k-book,
+          type: whiteboard.apply,
+          at: { mark: k-book },
+          upsertIds: [k-w1, k-w1-l, k-ar1, k-db, k-db-l],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-k-book-s,
+          type: whiteboard.apply,
+          at: { mark: k-book-s },
+          upsertIds: [k-w1-s],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-report,
+          type: whiteboard.apply,
+          at: { mark: k-report },
+          upsertIds: [k-w2, k-w2-l, k-ar2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-k-report-s,
+          type: whiteboard.apply,
+          at: { mark: k-report-s },
+          upsertIds: [k-w2-s],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-clash,
+          type: whiteboard.apply,
+          at: { mark: k-clash },
+          upsertIds: [k-clash],
+          drawMs: 1000,
+        }
+      - {
+          id: reset-k,
+          type: whiteboard.apply,
+          at: { mark: k-fix },
+          clear: true,
+          upsertIds: [k-w1, k-w1-l, k-ar1, k-db, k-db-l, k-w2, k-w2-l],
+        }
+      - {
+          id: draw-k-store,
+          type: whiteboard.apply,
+          at: { mark: k-store },
+          upsertIds: [k-flow, k-flow-l, k-an, k-an-l, k-ar3],
+          drawMs: 2500,
+        }
+
+  - id: labels
+    chapter: Record လား၊ derived လား
+    narration: >
+      store နှစ်ခု ရှိလာတော့ မေးခွန်း အသစ် တစ်ခု ပေါ်လာပါတယ်။ ကိန်းဂဏန်း နှစ်ခု မတူရင် ဘယ်ဟာကို အမှန်ယူမလဲ။
+      [[mark:l-record]] အမှန်လို့ ယူရတဲ့ မူရင်း data ကို system of record လို့ ခေါ်ပါတယ်။ ခရီးဖော် မှာတော့
+      primary database ပါ။ fact တစ်ခုကို ဒီမှာ တစ်ခါပဲ သိမ်းပြီး၊ မတူတာ တွေ့ရင် ဒီဘက်က အနိုင်ရပါတယ်။
+      [[mark:l-derived]] မူရင်းကနေ ပြန်တွက်ထုတ်လို့ ရတဲ့ data ကိုတော့ derived data လို့ ခေါ်ပါတယ်။ analytical
+      store က derived data ပါ။ ပျက်သွားရင် မူရင်းကနေ ပြန်ကူးလို့ ရပါတယ်။ မြန်အောင် ခဏ သိမ်းထားတဲ့ cache တွေ၊
+      တွက်ပြီးသား report ရလဒ်တွေလည်း derived data တွေပါပဲ။
+      [[mark:l-why]] store တိုင်းကို ဒီ တံဆိပ် နှစ်မျိုးထဲက တစ်ခု ကပ်ထားရင်၊ ဘယ် store ကို ဘယ်တော့မှ
+      မဆုံးရှုံးခံနိုင်ဘူး ဆိုတာ သိရပါတယ်။
+      [[mark:l-path]] derived store တစ်ခုစီကို ဘယ်လမ်းကြောင်းက update လုပ်ပေးနေလဲ ဆိုတာကိုလည်း မြင်ရပါတယ်။ အဲဒီ
+      လမ်းကြောင်း ပျက်ရင် derived data က ဟောင်းသွားမှာမို့၊ လမ်းကြောင်း ကိုယ်တိုင်ကလည်း design ဆွဲရတဲ့ အပိုင်း
+      တစ်ခုပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-l-record,
+          type: whiteboard.apply,
+          at: { mark: l-record },
+          upsertIds: [k-rec],
+          drawMs: 700,
+        }
+      - {
+          id: draw-l-derived,
+          type: whiteboard.apply,
+          at: { mark: l-derived },
+          upsertIds: [k-der],
+          drawMs: 700,
+        }
+      - {
+          id: point-l-flow,
+          type: whiteboard.point,
+          at: { mark: l-path },
+          target: { assetId: k-flow-l },
+        }
+
+  - id: models
+    chapter: Data ရဲ့ ပုံသဏ္ဌာန်နဲ့ model
+    narration: >
+      [[mark:m-open]] အခု NoSQL အဆိုပြုချက်ဆီ ပြန်သွားရအောင်။ database အမျိုးအစား တစ်ခုကို ရွေးတဲ့အခါ၊ scale
+      လုပ်လို့ ကောင်းလား ဆိုတာထက် အရင် မေးရမှာက ကိုယ့် data ရဲ့ ပုံသဏ္ဌာန်က ဘယ်လိုလဲ ဆိုတာပါ။
+      [[mark:m-rel]] data တွေက တစ်ခုနဲ့တစ်ခု အပြန်အလှန် ချိတ်ဆက်နေတာ များရင် relational model နဲ့ ကိုက်ပါတယ်။
+      ခရီးဖော် မှာ လက်မှတ် တစ်စောင်က ခရီးသည်၊ ခရီးစဉ်နဲ့ ထိုင်ခုံကို ချိတ်ထားပါတယ်။ ခရီးသည် တစ်ယောက်က ခရီးစဉ်
+      အများကြီး စီးသလို၊ ခရီးစဉ် တစ်ခုမှာလည်း ခရီးသည် အများကြီး ပါပါတယ်။ ဒီလို ဆက်နွယ်မှုတွေကို table တွေ
+      ခွဲသိမ်းပြီး လိုသလို join လုပ်နိုင်တာက relational ရဲ့ အားသာချက်ပါ။
+      [[mark:m-doc]] data က သူ့ဟာသူ ပြည့်စုံတဲ့ အစုလေးတွေ ဖြစ်ပြီး၊ အမြဲ တစ်ခုလုံး အတူ ဖတ်တယ်ဆိုရင်တော့
+      document model နဲ့ ကိုက်ပါတယ်။ ခရီးစဉ် ရှာတဲ့အခါ ပြတဲ့ ရလဒ် တစ်ခုချင်းစီလို၊ ကားလိုင်း နာမည်၊
+      ထွက်ချိန်နဲ့ ဈေးနှုန်း အားလုံး တစ်ခါတည်း ပါပြီးသား အစုမျိုးပါ။
+      [[mark:m-graph]] အရာတိုင်းက အရာတိုင်းနဲ့ ချိတ်နိုင်ပြီး၊ ချိတ်ဆက်မှုတွေကို အဆင့်ဆင့် လိုက်ရတယ်ဆိုရင်
+      graph model နဲ့ ကိုက်ပါတယ်။ မြို့တစ်မြို့ကနေ နောက်တစ်မြို့ကို ကား ဘယ်နှဆင့် ပြောင်းစီးရမလဲ ရှာတာမျိုးပါ။
+      ခရီးဖော် မှာတော့ ဒီလို လိုအပ်ချက် မရှိသေးပါဘူး။
+      [[mark:m-schema]] model ရွေးပြီးရင် schema၊ ဆိုလိုတာက data ရဲ့ ပုံစံကို ဘယ်အချိန်မှာ စစ်မလဲ ဆိုတာလည်း
+      ဆုံးဖြတ်ရပါတယ်။ relational database က ရေးတဲ့အချိန်မှာ စစ်ပြီး၊ ပုံစံ မကိုက်ရင် လက်မခံပါဘူး။ document
+      model မှာတော့ အများအားဖြင့် ရေးချိန်မှာ မစစ်ဘဲ၊ ဖတ်တဲ့ code က ပုံစံကို ကိုယ်တိုင် သိထားရပါတယ်။ schema
+      မရှိတာ မဟုတ်ဘဲ၊ code ထဲကို ရောက်သွားတာပါ။
+      [[mark:m-answer]] ခရီးဖော် ရဲ့ အဓိက data က ဆက်နွယ်မှု များတဲ့ ပုံသဏ္ဌာန်မို့ relational က
+      ကိုက်ညီနေပြီးသားပါ။ နှေးတာကလည်း model ကြောင့် မဟုတ်ဘဲ၊ အလုပ် နှစ်မျိုး ရောနေလို့ပါ။ database ကို
+      ခေတ်စားလို့ မရွေးဘဲ၊ data ကို ဘယ်လို ဖတ်၊ ဘယ်လို ရေးမလဲ ဆိုတဲ့ access pattern ကို ကြည့်ပြီး ရွေးရပါတယ်။
+      ကောင်းကောင်း နားလည်ထားတဲ့ database တစ်ခုတည်းနဲ့လည်း အတော် ဝေးဝေး သွားနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: close-kinds,
+          type: whiteboard.apply,
+          at: { mark: m-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-models,
+          type: slide.show,
+          at: { mark: m-open, offsetMs: -1000 },
+          slideId: data-models,
+        }
+      - { id: point-rel, type: slide.point, at: { mark: m-rel }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-doc, type: slide.point, at: { mark: m-doc }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-graph, type: slide.point, at: { mark: m-graph }, target: { x: 0.15, y: 0.67 } }
+      - {
+          id: point-schema,
+          type: slide.point,
+          at: { mark: m-schema },
+          target: { x: 0.15, y: 0.81 },
+        }
+      - {
+          id: point-rel-again,
+          type: slide.point,
+          at: { mark: m-answer },
+          target: { x: 0.15, y: 0.39 },
+        }
+
+  - id: table
+    chapter: Store တွေကို တံဆိပ်ကပ်ခြင်း
+    narration: >
+      [[mark:t-close]] ဒါတွေကို ခရီးဖော် ရဲ့ store တွေအတွက် table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။ store တစ်ခုစီအတွက်
+      ဘာသိမ်းလဲ၊ record လား derived လား၊ ဘယ် model လဲ ဆိုတာကို ဖြည့်သွားပါမယ်။
+      [[mark:type-primary]] primary database က system of record ပါ။ ခရီးစဉ်၊ ထိုင်ခုံ၊ လက်မှတ်နဲ့
+      ငွေပေးချေမှုတွေရဲ့ မူရင်းက ဒီမှာပဲ ရှိပြီး၊ model က relational ပါ။
+      [[mark:type-cache]] cache ကတော့ derived ပါ။ မကြာခဏ ဖတ်တဲ့ ဈေးနှုန်းနဲ့ လွတ်တဲ့ ခုံ အရေအတွက်တွေကို
+      မြန်အောင် ခဏ သိမ်းထားတာပါ။ key တစ်ခုနဲ့ value တစ်ခုကို တွဲသိမ်းတဲ့ အရိုးရှင်းဆုံး model ကို သုံးပါတယ်။
+      [[mark:type-analytical]] analytical store ကလည်း derived ပါ။ report အတွက် ရောင်းအား history ကို သိမ်းပြီး၊
+      primary database ကနေ ညတိုင်း ကူးယူပါမယ်။
+      [[mark:type-decision]] table အောက်မှာ ဆုံးဖြတ်ချက် နှစ်ခုကို ရေးထားပါမယ်။ finance report တွေကို
+      analytical store ပေါ် ရွှေ့မယ်၊ primary database ကိုတော့ relational အတိုင်း ဆက်သုံးမယ် ဆိုတာပါ။
+      [[mark:sel-pattern]] NoSQL ကို ပယ်လိုက်တာ မဟုတ်ပါဘူး။ ပြောင်းဖို့ လိုတဲ့ access pattern မတွေ့သေးတာပါ။
+      တွေ့လာတဲ့နေ့ကျရင် ဒီ ဆုံးဖြတ်ချက်ကို ပြန်စဉ်းစားရုံပါပဲ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-models, type: slide.close, at: { mark: t-close } }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-models },
+          path: notebook/28-stores.md,
+        }
+      - id: type-primary
+        type: editor.type
+        at: { mark: type-primary }
+        cadence: line-by-line
+        target: { file: notebook/28-stores.md, after: "|---|---|---|---|\n" }
+        text: "| primary database | ခရီးစဉ်၊ ထိုင်ခုံ၊ လက်မှတ်၊ ငွေပေးချေမှု | record | relational |\n"
+      - id: type-cache
+        type: editor.type
+        at: { mark: type-cache }
+        cadence: line-by-line
+        target: { file: notebook/28-stores.md, after: "| record | relational |\n" }
+        text: "| cache | ဈေးနှုန်း၊ လွတ်တဲ့ ခုံ အရေအတွက် | derived | key-value |\n"
+      - id: type-analytical
+        type: editor.type
+        at: { mark: type-analytical }
+        cadence: line-by-line
+        target: { file: notebook/28-stores.md, after: "| derived | key-value |\n" }
+        text: "| analytical store | ရောင်းအား history (report အတွက်) | derived | relational |\n"
+      - id: type-decision
+        type: editor.type
+        at: { mark: type-decision }
+        cadence: line-by-line
+        target: { file: notebook/28-stores.md, after: "## ဆုံးဖြတ်ချက်\n" }
+        text: "- finance report တွေကို analytical store ပေါ် ရွှေ့မယ် (ညတိုင်း ကူးယူ)\n- primary database က relational အတိုင်း ဆက်သုံးမယ်၊ ပြောင်းစရာ access pattern မတွေ့သေး\n"
+      - id: sel-pattern
+        type: editor.select
+        at: { mark: sel-pattern }
+        target: { file: notebook/28-stores.md, text: "ပြောင်းစရာ access pattern မတွေ့သေး" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခရီးဖော် မှာ ခရီးစဉ် ရှာတာ မြန်အောင် search index တစ်ခုလည်း
+      သုံးထားပါတယ်။ တစ်ညမှာ အဲဒီ search index ထဲက data အားလုံး ပျက်သွားတယ် ဆိုပါစို့။
+      [[mark:q-a]] ဒါက data ဆုံးရှုံးသွားတဲ့ ကပ်ဘေးကြီး တစ်ခုလား။
+      [[mark:q-b]] ဒါမှမဟုတ် နေ့တစ်ဝက်လောက် ပြန်ဆောက်လိုက်ရုံနဲ့ ပြီးတဲ့ ကိစ္စလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ပြန်ဆောက်လိုက်ရုံနဲ့ ပြီးတဲ့ ကိစ္စပါ။
+      [[mark:q-reason]] ဘာကြောင့်လဲဆိုတော့ search index ထဲက ခရီးစဉ် data အားလုံးရဲ့ မူရင်းက primary database
+      ထဲမှာ ရှိနေလို့ပါ။ ဆိုလိုတာက search index က derived data ပါ။ ရှာလို့ မရတဲ့ နာရီအနည်းငယ်ကတော့ နာပါတယ်။
+      ဒါပေမဲ့ fact တစ်ခုမှ မဆုံးရှုံးပါဘူး။
+      [[mark:q-cond]] ဒီအဖြေ မှန်ဖို့ အခြေအနေ နှစ်ခုတော့ လိုပါတယ်။ search index ကို derived လို့ ကြိုတင်
+      တံဆိပ်ကပ်ထားပြီး၊ မူရင်းကနေ ပြန်ဆောက်တဲ့ လမ်းကြောင်းလည်း တကယ် ရှိနေရပါမယ်။ search index ထဲကိုပဲ
+      တိုက်ရိုက် ရေးထားတဲ့ data တစ်ခုခု ရှိနေခဲ့ရင်တော့ အဲဒီညက ကပ်ဘေး ဖြစ်သွားမှာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: q-reason },
+          upsertIds: [q-r],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-cond,
+          type: whiteboard.apply,
+          at: { mark: q-cond },
+          upsertIds: [q-c],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] ဒါကြောင့် search index ကိုလည်း table ထဲမှာ derived အဖြစ် ထည့်ထားလိုက်ပါမယ်။
+      [[mark:type-search]] ရှာတဲ့ ရလဒ် တစ်ခုချင်းစီက တစ်ခုလုံး အတူဖတ်တဲ့ အစုမို့ model ကတော့ document ပါ။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ store
+      တွေကို တစ်ခုမကျန် ရေးကြည့်ပါ။ database၊ cache၊ search index အပြင် file တွေ၊ spreadsheet တွေလည်း ပါပါတယ်။
+      တစ်ခုစီကို record လား derived လား တံဆိပ်ကပ်ပါ။
+      [[mark:turn-2]] fact တစ်ခုတည်းကို record နှစ်ခုက သိမ်းနေတာ တွေ့ရင်၊ ဒါမှမဟုတ် ဘယ်ကနေ ပြန်ဆောက်ရမလဲ မသိတဲ့
+      derived store တွေ့ရင်၊ အဲဒါက ကိုယ့်ရဲ့ နောက်အလုပ်ပါပဲ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-search
+        type: editor.type
+        at: { mark: type-search }
+        cadence: line-by-line
+        target: { file: notebook/28-stores.md, after: "| derived | relational |\n" }
+        text: "| search index | ခရီးစဉ် ရှာဖို့ မိတ္တူ | derived | document |\n"
+      - id: expect-search
+        type: expect.file
+        at: { afterAction: type-search }
+        path: notebook/28-stores.md
+        contains: "| search index | ခရီးစဉ် ရှာဖို့ မိတ္တူ | derived | document |\n"
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn-you }
+        target:
+          { file: notebook/28-stores.md, text: "| Store | ဘာ သိမ်းလဲ | record / derived | Model |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ data နဲ့ ပတ်သက်တဲ့ လိုအပ်ချက် တစ်ခုကို တွေ့တိုင်း မေးခွန်း သုံးခု မေးပါ။ operational
+      အလုပ်လား analytical အလုပ်လား၊ system of record လား derived data လား၊ data ရဲ့ ပုံသဏ္ဌာန်က ဘယ် model နဲ့
+      ကိုက်လဲ ဆိုတာပါ။
+      [[mark:recap-mix]] အလုပ် နှစ်မျိုးကို database တစ်ခုတည်းပေါ်မှာ မရောပါနဲ့။ database ကိုလည်း ခေတ်စားမှုနဲ့
+      မဟုတ်ဘဲ access pattern နဲ့ ရွေးပါ။
+      [[mark:next]] နောက် lesson မှာတော့ service တွေနဲ့ app version တွေ အများကြီး တစ်ပြိုင်တည်း run နေချိန်မှာ၊
+      data ရဲ့ ပုံစံကို ဘာမှ မပျက်အောင် ဘယ်လို ပြောင်းမလဲ ဆိုတဲ့ schema evolution ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-decisions
+        type: editor.select
+        at: { mark: recap-mix }
+        target:
+          {
+            file: notebook/28-stores.md,
+            text: "- finance report တွေကို analytical store ပေါ် ရွှေ့မယ် (ညတိုင်း ကူးယူ)",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
