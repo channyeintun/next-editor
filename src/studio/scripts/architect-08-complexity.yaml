@@ -1,0 +1,1089 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-08-complexity
+  title: "Architect Path 08: Complexity ဘယ်က လာသလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/08-how-to-decide.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/08-how-to-decide.md: |
+        # ဘယ်လို ဆုံးဖြတ်မလဲ · ခရီးဖော်
+
+        | ဖြေရှင်းစရာ | အခြေအနေ | ဘယ်လို ဆုံးဖြတ်မလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the small change that broke something far away. Blue is the part
+    # that was changed, orange the change, violet the hidden link, red the damage.
+    - {
+        id: n-p,
+        kind: rectangle,
+        x: 290,
+        y: 225,
+        width: 330,
+        height: 120,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-p-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 240,
+        width: 330,
+        height: 35,
+        text: "ဈေးနှုန်း function",
+        fontSize: 28,
+      }
+    - {
+        id: n-p-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 292,
+        width: 330,
+        height: 35,
+        text: "12000 → 12,000 ကျပ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 632,
+        y: 265,
+        width: 96,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-s,
+        kind: rectangle,
+        x: 740,
+        y: 225,
+        width: 330,
+        height: 120,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-s-l1,
+        kind: text,
+        align: center,
+        x: 740,
+        y: 240,
+        width: 330,
+        height: 35,
+        text: "SMS စာသား",
+        fontSize: 28,
+      }
+    - {
+        id: n-s-l2,
+        kind: text,
+        align: center,
+        x: 740,
+        y: 292,
+        width: 330,
+        height: 35,
+        text: "လက်မှတ် နံပါတ် ပြတ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-ask,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 700,
+        height: 35,
+        text: "ဒီ နှစ်ခု ဆက်နေတာ ဘယ်သူ သိခဲ့လဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-def,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 700,
+        height: 40,
+        text: "ကြိုမမှန်းနိုင်တာ = complexity",
+        fontSize: 32,
+      }
+    # Board 2 — four situations, one way to decide in each. Neutral cells; orange
+    # is the one this lesson is about (complex), red the emergency (chaotic).
+    - {
+        id: a-title,
+        kind: text,
+        x: 290,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "အခြေအနေ လေးမျိုး · Cynefin",
+        fontSize: 36,
+      }
+    - { id: a-c1, kind: rectangle, x: 290, y: 220, width: 380, height: 180, strokeColor: "#1e1e1e" }
+    - {
+        id: a-c1-t,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 250,
+        width: 380,
+        height: 38,
+        text: "Clear",
+        fontSize: 30,
+      }
+    - {
+        id: a-c1-v,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 320,
+        width: 380,
+        height: 35,
+        text: "စည်းမျဉ်းအတိုင်း လုပ်",
+        fontSize: 28,
+      }
+    - { id: a-c2, kind: rectangle, x: 670, y: 220, width: 380, height: 180, strokeColor: "#1e1e1e" }
+    - {
+        id: a-c2-t,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 250,
+        width: 380,
+        height: 38,
+        text: "Complicated",
+        fontSize: 30,
+      }
+    - {
+        id: a-c2-v,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 320,
+        width: 380,
+        height: 35,
+        text: "သိတဲ့သူကို မေး",
+        fontSize: 28,
+      }
+    - {
+        id: a-c3,
+        kind: rectangle,
+        x: 290,
+        y: 400,
+        width: 380,
+        height: 180,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: a-c3-t,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 430,
+        width: 380,
+        height: 38,
+        text: "Complex",
+        fontSize: 30,
+      }
+    - {
+        id: a-c3-v,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 500,
+        width: 380,
+        height: 35,
+        text: "စမ်းကြည့်ပြီး တိုင်း",
+        fontSize: 28,
+      }
+    - { id: a-c4, kind: rectangle, x: 670, y: 400, width: 380, height: 180, strokeColor: "#e03131" }
+    - {
+        id: a-c4-t,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 430,
+        width: 380,
+        height: 38,
+        text: "Chaotic",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-c4-v,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 500,
+        width: 380,
+        height: 35,
+        text: "အရင် လုပ်၊ ပြီးမှ ရှာ",
+        fontSize: 28,
+      }
+    # Board 3 — seven parts in a line: many, but each talks only to the next.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ရှုပ်တာက အပိုင်း များလို့လား?",
+        fontSize: 36,
+      }
+    - {
+        id: l-1,
+        kind: rectangle,
+        x: 280,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-2,
+        kind: rectangle,
+        x: 392,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-3,
+        kind: rectangle,
+        x: 504,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-4,
+        kind: rectangle,
+        x: 616,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-5,
+        kind: rectangle,
+        x: 728,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-6,
+        kind: rectangle,
+        x: 840,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-7,
+        kind: rectangle,
+        x: 952,
+        y: 280,
+        width: 80,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 280,
+        y: 355,
+        width: 752,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-cap1,
+        kind: text,
+        x: 280,
+        y: 440,
+        width: 700,
+        height: 35,
+        text: "အပိုင်း 7 ခု · တစ်ဆင့်ပြီးမှ တစ်ဆင့်",
+        fontSize: 28,
+      }
+    - {
+        id: l-cap2,
+        kind: text,
+        x: 280,
+        y: 505,
+        width: 700,
+        height: 35,
+        text: "ပြင်ရင် ဘာဖြစ်မလဲ ကြိုသိနိုင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — five parts, tangled: few, but nobody can say what moves.
+    - {
+        id: t-1,
+        kind: rectangle,
+        x: 640,
+        y: 215,
+        width: 100,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-2,
+        kind: rectangle,
+        x: 400,
+        y: 330,
+        width: 100,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-3,
+        kind: rectangle,
+        x: 880,
+        y: 330,
+        width: 100,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-4,
+        kind: rectangle,
+        x: 480,
+        y: 500,
+        width: 100,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-5,
+        kind: rectangle,
+        x: 800,
+        y: 500,
+        width: 100,
+        height: 60,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-a1,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 510,
+        y: 265,
+        width: 120,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-a2,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 750,
+        y: 265,
+        width: 120,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-a3,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 510,
+        y: 392,
+        width: 280,
+        height: 105,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-a4,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 590,
+        y: 392,
+        width: 280,
+        height: 105,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-a5,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 590,
+        y: 512,
+        width: 200,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-a6,
+        kind: freedraw,
+        stroke: arrow-up-left,
+        x: 750,
+        y: 285,
+        width: 95,
+        height: 205,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-a7,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 450,
+        y: 398,
+        width: 50,
+        height: 95,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-cap,
+        kind: text,
+        x: 280,
+        y: 590,
+        width: 760,
+        height: 35,
+        text: "အပိုင်း 5 ခုတည်း · ဘာလှုပ်မလဲ မသိနိုင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 5 — growth: modules double, possible pairs grow much faster.
+    - {
+        id: g-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ကြီးလာရင် ဘာတွေ တိုးလာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: g-r1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 700,
+        height: 35,
+        text: "module 5 ခု → ဆက်နိုင်တဲ့ အတွဲ 10",
+        fontSize: 28,
+      }
+    - {
+        id: g-r2,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 700,
+        height: 35,
+        text: "module 10 ခု → အတွဲ 45",
+        fontSize: 28,
+      }
+    - {
+        id: g-r3,
+        kind: text,
+        x: 290,
+        y: 380,
+        width: 700,
+        height: 35,
+        text: "module 20 ခု → အတွဲ 190",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: g-head,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 700,
+        height: 35,
+        text: "ခေါင်းထဲ ဆံ့တာ → အရင်အတိုင်းပဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-group,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 760,
+        height: 35,
+        text: "ဖြေရှင်းနည်း: အုပ်စုဖွဲ့တဲ့ အဆင့်သစ် တစ်ဆင့်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 6 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ခရီးသည်တွေ ဘယ်လို တုံ့ပြန်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) ကျွမ်းကျင်သူကို မေးပြီး လုပ်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) ခရီးစဉ် တစ်ခုမှာ စမ်းပြီး တိုင်းမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 560,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 700,
+        height: 35,
+        text: "တစ်ယောက်ယောက် ကြိုပြောနိုင်လား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 700,
+        height: 35,
+        text: "မပြောနိုင်ရင် → စမ်းပြီး တိုင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8108
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: စာကြောင်း သုံးကြောင်းကြောင့် ပျက်သွားတဲ့ SMS
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အတူ ပြောင်းတတ်တဲ့ code ကို စုထားတဲ့ အပိုင်း၊ module တစ်ခုကို ဘာကို ဖုံးထားလဲ၊
+      ဘယ်သူတွေ မှီခိုနေလဲ ဆိုတာနဲ့ အကဲဖြတ်တာကို လေ့လာခဲ့ပါတယ်။
+      [[mark:n-price]] ပြီးခဲ့တဲ့ အပတ်က team ထဲက developer မောင်မောင် က အပြောင်းအလဲ သေးသေးလေး တစ်ခု
+      လုပ်ခဲ့ပါတယ်။ app ထဲမှာ ပြတဲ့ ဈေးနှုန်းတွေကို ဖတ်ရ လွယ်အောင် ကော်မာ ခံပြီး၊ နောက်မှာ ကျပ် ဆိုတဲ့
+      စာလုံး ထည့်ပေးလိုက်တာပါ။ ပြင်ရတာက function တစ်ခုတည်း၊ စာကြောင်း သုံးကြောင်းပါ။
+      [[mark:n-sms]] နောက်တစ်နေ့ မနက်မှာ ကားဂိတ်တွေကနေ ဖုန်းတွေ ဝင်လာပါတယ်။ ခရီးသည်တွေဆီ ရောက်တဲ့ SMS ထဲမှာ
+      လက်မှတ် နံပါတ်က တစ်ဝက်ပဲ ပါတော့တာပါ။ SMS စာသား စီတဲ့ code က အဲဒီ ဈေးနှုန်း function ကိုပဲ ယူသုံးထားပြီး၊
+      စာသား ရှည်လွန်းရင် အဆုံးပိုင်းကို ဖြတ်ပစ်ထားတာ ဖြစ်နေပါတယ်။ ဈေးနှုန်း စာသား ရှည်လာတော့ အဆုံးမှာ ရှိတဲ့
+      လက်မှတ် နံပါတ်က ပြတ်ကျန်ခဲ့တာပါ။
+      [[mark:n-who]] မောင်မောင် ပေါ့ဆလို့ ဖြစ်တာ မဟုတ်ပါဘူး။ ဒီ နှစ်ခု ဆက်နေတယ် ဆိုတာကို team ထဲက ဘယ်သူမှ
+      ကြိုမသိနိုင်ခဲ့တာပါ။ တကယ့် ပြဿနာက အဲဒါပါပဲ။
+      [[mark:n-def]] ပြင်လိုက်ရင် ဘာဖြစ်မလဲ ဆိုတာ ကြိုမှန်းလို့ မရတော့တဲ့ အခြေအနေကို complexity လို့
+      ခေါ်ပါတယ်။ complexity က ဘယ်က လာတာလဲ၊ အဲဒီလို အခြေအနေမှာ ဘယ်လို ဆုံးဖြတ်ရမလဲ ဆိုတာ ဒီနေ့ ကြည့်ကြရအောင်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-n-price,
+          type: whiteboard.apply,
+          at: { mark: n-price },
+          open: true,
+          upsertIds: [n-p, n-p-l1, n-p-l2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-sms,
+          type: whiteboard.apply,
+          at: { mark: n-sms },
+          upsertIds: [n-arrow, n-s, n-s-l1, n-s-l2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-n-ask,
+          type: whiteboard.apply,
+          at: { mark: n-who },
+          upsertIds: [n-ask],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-n-def,
+          type: whiteboard.apply,
+          at: { mark: n-def },
+          upsertIds: [n-def],
+          drawMs: 1000,
+        }
+
+  - id: four-situations
+    chapter: အခြေအနေ လေးမျိုး
+    narration: >
+      [[mark:f-open]] ဆုံးဖြတ်စရာ တစ်ခု ကြုံတိုင်း အရင်ဆုံး မေးသင့်တာက၊ ဒါကို လုပ်လိုက်ရင် ဘာဖြစ်မလဲ ဆိုတာ
+      ဘယ်လောက် ကြိုသိနိုင်လဲ ဆိုတာပါ။ အဲဒီ အဖြေပေါ် မူတည်ပြီး အခြေအနေကို လေးမျိုး ခွဲကြည့်လို့ ရပါတယ်။ ဒီ
+      ခွဲပုံကို Cynefin framework လို့ ခေါ်ပါတယ်။
+      [[mark:f-clear]] ပထမ အခြေအနေက clear ပါ။ လုပ်လိုက်ရင် ဘာဖြစ်မလဲ ဆိုတာ လူတိုင်း သိနေတဲ့ အခြေအနေပါ။
+      ခရီးဖော် မှာ ကားလိုင်း အသစ် တစ်ခု ထည့်တာက အဲဒီလိုပါ။ အကြိမ် လေးဆယ် လုပ်ဖူးပြီးသားမို့ အဆင့်တွေက
+      ရှိပြီးသားပါ။ ဒီလို အခြေအနေမှာ အကြာကြီး စဉ်းစားနေစရာ မလိုဘဲ၊ ရှိပြီးသား စည်းမျဉ်းအတိုင်း လုပ်လိုက်ရုံပါပဲ။
+      [[mark:f-complicated]] ဒုတိယက complicated ပါ။ အဖြေကို ကိုယ်တိုင် မသိပေမဲ့၊ ကျွမ်းကျင်သူ တစ်ယောက်က
+      လေ့လာကြည့်ရင် ပြောပြနိုင်တဲ့ အခြေအနေပါ။ ခရီးစဉ် ရှာတဲ့ query နှေးနေတာက ဥပမာ တစ်ခုပါ။ database ကို
+      ကောင်းကောင်း သိတဲ့သူက ခွဲခြမ်းကြည့်ပြီး ဘာလုပ်ရမလဲ ပြောနိုင်ပါတယ်။ ဆိုတော့ ဒီမှာ လုပ်ရမှာက သိတဲ့သူကို
+      မေးတာ၊ ဒါမှမဟုတ် ကိုယ်တိုင် အချိန်ယူပြီး လေ့လာတာပါ။
+      [[mark:f-complex]] တတိယက complex ပါ။ ဘယ်လောက် ကျွမ်းကျင်တဲ့သူမှ အဖြေကို ကြိုမပြောနိုင်ဘဲ၊
+      လုပ်ကြည့်ပြီးမှသာ သိရတဲ့ အခြေအနေပါ။ ဈေးနှုန်း function ကို ပြင်ရင် ဘာတွေ ပျက်မလဲ ဆိုတာက ဒီထဲမှာ
+      ပါပါတယ်။ ဒီလို အခြေအနေမှာ ထိုင်စဉ်းစားနေရုံနဲ့ အဖြေ မထွက်ပါဘူး။ သေးသေးလေး၊ ပြန်ဖျက်လို့ ရတဲ့
+      စမ်းသပ်မှု တစ်ခု လုပ်ပြီး၊ ဘာဖြစ်လာလဲ တိုင်းကြည့်ရပါတယ်။
+      [[mark:f-chaotic]] စတုတ္ထက chaotic ပါ။ ဘာက ဘာကြောင့် ဖြစ်နေမှန်း မသိသလို၊ စမ်းသပ်နေဖို့ အချိန်လည်း
+      မရှိတဲ့ အခြေအနေပါ။ သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်က ဒီလိုပါပဲ။ အဲဒီအချိန်မှာ အကြောင်းရင်းကို
+      ထိုင်ရှာနေလို့ မရပါဘူး။ ထိခိုက်မှု ဆက်မတိုးအောင် တစ်ခုခုကို အရင် လုပ်ရပါတယ်။ ဥပမာ ကောင်တာက ရောင်းတာကို
+      ခဏ ရပ်ထားလိုက်တာမျိုးပါ။ အခြေအနေ ငြိမ်သွားမှ ဘာဖြစ်ခဲ့လဲ ဆိုတာကို ပြန်ကြည့်ရပါတယ်။
+      [[mark:f-mistake]] အဖြစ်များတဲ့ အမှားကတော့ အခြေအနေကို မှားပြီး ခွဲမိတာပါ။ ဈေးနှုန်း ပြင်တာကို team က
+      clear လို့ ထင်ပြီး တန်းလုပ်လိုက်ပေမဲ့၊ တကယ်တော့ complex ဖြစ်နေခဲ့တာပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Cynefin framework (Wikipedia)",
+          url: "https://en.wikipedia.org/wiki/Cynefin_framework",
+        }
+    actions:
+      - {
+          id: draw-a-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          clear: true,
+          upsertIds: [a-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-clear,
+          type: whiteboard.apply,
+          at: { mark: f-clear },
+          upsertIds: [a-c1, a-c1-t, a-c1-v],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-complicated,
+          type: whiteboard.apply,
+          at: { mark: f-complicated },
+          upsertIds: [a-c2, a-c2-t, a-c2-v],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-complex,
+          type: whiteboard.apply,
+          at: { mark: f-complex },
+          upsertIds: [a-c3, a-c3-t, a-c3-v],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-chaotic,
+          type: whiteboard.apply,
+          at: { mark: f-chaotic },
+          upsertIds: [a-c4, a-c4-t, a-c4-v],
+          drawMs: 1500,
+        }
+      - {
+          id: point-a-complex,
+          type: whiteboard.point,
+          at: { mark: f-mistake },
+          target: { assetId: a-c3 },
+        }
+
+  - id: interactions
+    chapter: အရေအတွက် မဟုတ်၊ ဆက်သွယ်ပုံ
+    narration: >
+      [[mark:i-open]] ဒါဆို code ထဲမှာ complex ဖြစ်တဲ့ အခြေအနေက ဘယ်က ပေါ်လာတာလဲ။ လူအများစုကတော့ code
+      များလာလို့၊ အပိုင်းတွေ များလာလို့လို့ ထင်ကြပါတယ်။
+      [[mark:i-line]] ဒါပေမဲ့ လက်မှတ် ဝယ်တဲ့ လမ်းကြောင်းကို ကြည့်ပါ။ ခရီးစဉ် ရှာတာကနေ SMS ပို့တာအထိ အဆင့်
+      ခုနစ်ဆင့် ရှိပေမဲ့၊ တစ်ဆင့်ပြီးမှ တစ်ဆင့် ဆက်သွားတာပါ။
+      [[mark:i-line-2]] အဆင့် တစ်ခုကို ပြင်ရင် သူ့နောက်က အဆင့်ကိုပဲ ကြည့်ရတော့၊ အပိုင်း များပေမဲ့ ဘာဖြစ်မလဲ
+      ဆိုတာ ကြိုသိနိုင်ပါတယ်။
+      [[mark:i-tangle]] အခု အပိုင်း ငါးခုပဲ ရှိတဲ့ ပုံကို ကြည့်ပါ။
+      [[mark:i-tangle-2]] တစ်ခုက နောက်တစ်ခုကို ခေါ်တယ်၊ အဲဒီ တစ်ခုက တခြား နှစ်ခုကို ပြန်ခေါ်တယ်၊ တချို့က data
+      တစ်ခုတည်းကို ဝိုင်းပြင်ကြတယ်။ အရေအတွက်က နည်းပေမဲ့ တစ်ခုကို ထိလိုက်ရင် ဘယ်နှခု လှုပ်မလဲ မပြောနိုင်တော့ပါဘူး။
+      ဈေးနှုန်း code နဲ့ SMS code လိုပဲ၊ ဆက်နေမယ်လို့ ဘယ်သူမှ မထင်ထားတဲ့ နှစ်ခုက ဆက်နေတာမျိုးပါ။
+      [[mark:i-where]] ဆိုလိုတာက complexity က အပိုင်းတွေရဲ့ အရေအတွက်ထဲမှာ မရှိဘဲ၊ အပိုင်းတွေ အချင်းချင်း
+      ဆက်သွယ်ပုံထဲမှာ ရှိတာပါ။
+      [[mark:i-tiny]] ဒါကြောင့် module တွေကို သေးသေးလေးတွေ ဖြစ်အောင် ခွဲလိုက်ရုံနဲ့ complexity မလျော့ပါဘူး။
+      module တစ်ခုချင်းကတော့ ဖတ်ရ လွယ်သွားပါတယ်။ ဒါပေမဲ့ အရင်က module တစ်ခုထဲမှာ ရှိခဲ့တဲ့ ရှုပ်ထွေးမှုက module
+      တွေ ကြားက မြားတွေဆီကို ရွှေ့သွားတာပဲ ရှိပါတယ်။ အထဲမှာ ရှုပ်တာထက် အကြားမှာ ရှုပ်တာက မြင်ရ ပိုခက်ပါသေးတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: i-open },
+          clear: true,
+          upsertIds: [b-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-line,
+          type: whiteboard.apply,
+          at: { mark: i-line },
+          upsertIds: [l-1, l-2, l-3, l-4, l-5, l-6, l-7, l-arrow],
+          drawMs: 3200,
+        }
+      - {
+          id: draw-line-cap,
+          type: whiteboard.apply,
+          at: { mark: i-line-2 },
+          upsertIds: [l-cap1, l-cap2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-tangle-nodes,
+          type: whiteboard.apply,
+          at: { mark: i-tangle },
+          clear: true,
+          upsertIds: [t-1, t-2, t-3, t-4, t-5],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-tangle-arrows,
+          type: whiteboard.apply,
+          at: { mark: i-tangle-2 },
+          upsertIds: [t-a1, t-a2, t-a3, t-a4, t-a5, t-a6, t-a7],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-tangle-cap,
+          type: whiteboard.apply,
+          at: { mark: i-where },
+          upsertIds: [t-cap],
+          drawMs: 1000,
+        }
+
+  - id: growth
+    chapter: ကြီးလာလေ ဆက်စရာ များလေ
+    narration: >
+      [[mark:g-open]] system ကြီးလာတဲ့အခါ ဒီ ပြဿနာက ပိုဆိုးလာပါတယ်။ ဂဏန်းလေး တွက်ကြည့်ရအောင်။
+      [[mark:g-5]] module ငါးခု ရှိရင် အချင်းချင်း ဆက်နိုင်တဲ့ အတွဲက ၁၀ တွဲ ရှိပါတယ်။
+      [[mark:g-10]] module ကို နှစ်ဆ တိုးပြီး ၁၀ ခု ဖြစ်သွားရင်တော့ အတွဲက ၄၅ တွဲ ဖြစ်သွားပါတယ်။
+      [[mark:g-20]] module ၂၀ ဆိုရင် ၁၉၀ တွဲပါ။ feature တွေက တစ်ခုပြီး တစ်ခု ပုံမှန် တိုးလာပေမဲ့၊ ဆက်နိုင်တဲ့
+      နည်းလမ်းတွေကတော့ အဲဒီထက် အများကြီး ပိုမြန်မြန် တိုးလာတာပါ။
+      [[mark:g-head]] တစ်ဖက်မှာတော့ ကိုယ်တို့ ခေါင်းထဲမှာ တစ်ပြိုင်တည်း မှတ်ထားနိုင်တဲ့ ပမာဏက အရင်အတိုင်းပါပဲ။
+      developer ခြောက်ယောက်လုံးက system တစ်ခုလုံးကို ခေါင်းထဲ ထည့်ထားနိုင်တဲ့ အချိန်က ကုန်တော့မှာပါ။
+      [[mark:g-group]] ဖြေရှင်းနည်းက ပိုကြိုးစားပြီး မှတ်ဖို့ မဟုတ်ဘဲ၊ အုပ်စုဖွဲ့တဲ့ အဆင့်သစ် တစ်ဆင့် ထပ်ထည့်ဖို့ပါ။
+      ဆက်စပ်တဲ့ module တွေကို အစုကြီး တစ်ခုထဲ စုလိုက်ပြီး၊ အစုကြီး အချင်းချင်းကိုတော့ သဘောတူထားတဲ့ ပုံစံ
+      သေးသေးလေး တစ်ခုနဲ့ပဲ ဆက်ခိုင်းရင်၊ ခေါင်းထဲမှာ တစ်ပြိုင်တည်း ထားရမယ့် အရာက ပြန်နည်းသွားပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-g-open,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          clear: true,
+          upsertIds: [g-title],
+          drawMs: 900,
+        }
+      - { id: draw-g-5, type: whiteboard.apply, at: { mark: g-5 }, upsertIds: [g-r1], drawMs: 1200 }
+      - {
+          id: draw-g-10,
+          type: whiteboard.apply,
+          at: { mark: g-10 },
+          upsertIds: [g-r2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-g-20,
+          type: whiteboard.apply,
+          at: { mark: g-20 },
+          upsertIds: [g-r3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-g-head,
+          type: whiteboard.apply,
+          at: { mark: g-head },
+          upsertIds: [g-head],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-g-group,
+          type: whiteboard.apply,
+          at: { mark: g-group },
+          upsertIds: [g-group],
+          drawMs: 1200,
+        }
+
+  - id: decide
+    chapter: ဘယ်လို ဆုံးဖြတ်မလဲ
+    narration: >
+      [[mark:d-close]] ဒါတွေကို ခရီးဖော် မှာ အခု ဖြေရှင်းစရာ ရှိနေတဲ့ ကိစ္စတွေနဲ့ တွဲကြည့်ရအောင်။
+      [[mark:d-sel]] ကိစ္စ တစ်ခုစီအတွက် အခြေအနေက ဘာလဲ၊ ဒါဆို ဘယ်လို ဆုံးဖြတ်မလဲ ဆိုတာကို ချရေးပါမယ်။
+      [[mark:type-clear]] ကားလိုင်း အသစ် ထည့်တာက clear ပါ။ လုပ်နေကျ အဆင့်တွေကို checklist တစ်ခုအဖြစ် ရေးထားပြီး၊
+      အဲဒီအတိုင်း လုပ်ရုံပါပဲ။ ဒီအတွက် အစည်းအဝေး ခေါ်နေစရာ မလိုပါဘူး။
+      [[mark:type-complicated]] ခရီးစဉ် ရှာတဲ့ query နှေးနေတာက complicated ပါ။ အဖြေက ရှိပြီးသားမို့၊ database
+      ကို သိတဲ့သူနဲ့ အတူ ထိုင်ပြီး ခွဲခြမ်းကြည့်ပါမယ်။ team ထဲမှာ သိတဲ့သူ မရှိရင် အပြင်က ကျွမ်းကျင်သူကို
+      မေးတာလည်း သင့်တော်ပါတယ်။
+      [[mark:type-complex]] utils ဆိုတဲ့ folder ကြီးကို ခွဲထုတ်တာကတော့ complex ပါ။ စာကြောင်း ၄၀၀၀ ထဲမှာ ဘာက
+      ဘာနဲ့ ဆက်နေလဲ ဆိုတာ ဘယ်သူမှ အကုန် မသိပါဘူး။ ဒါကြောင့် plan အကြီးကြီး ဆွဲမနေဘဲ၊ တစ်စုချင်း ရွှေ့ပြီး
+      ရွှေ့တိုင်း test နဲ့ စစ်ပါမယ်။ တစ်ခုခု ပျက်ရင် အဲဒီ တစ်စုကိုပဲ ပြန်ဖြုတ်လို့ ရပါတယ်။
+      [[mark:type-chaotic]] နောက်ဆုံး တစ်ခုက လက်မှတ် ရောင်းနေတုန်း wallet ကုမ္ပဏီရဲ့ payment API ရုတ်တရက်
+      ကျသွားတာမျိုးပါ။ ဒါက chaotic ပါ။ အဲဒီအချိန်ကျမှ စဉ်းစားရင် နောက်ကျပါပြီ။ ပထမဆုံး ဘာလုပ်မလဲ ဆိုတာကို
+      အခုကတည်းက ဆုံးဖြတ်ထားရပါမယ်။ ငွေချေတာကို အရင် ပိတ်ပြီး ခရီးသည်ကို အသိပေးမယ်၊ အကြောင်းရင်းကိုတော့ ပြီးမှ
+      ရှာမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Cynefin framework (Wikipedia)",
+          url: "https://en.wikipedia.org/wiki/Cynefin_framework",
+        }
+    actions:
+      - { id: close-g, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-g },
+          path: notebook/08-how-to-decide.md,
+        }
+      - id: sel-head
+        type: editor.select
+        at: { mark: d-sel }
+        target:
+          { file: notebook/08-how-to-decide.md, text: "| ဖြေရှင်းစရာ | အခြေအနေ | ဘယ်လို ဆုံးဖြတ်မလဲ |" }
+      - id: type-clear
+        type: editor.type
+        at: { mark: type-clear }
+        cadence: line-by-line
+        target: { file: notebook/08-how-to-decide.md, after: "|---|---|---|\n" }
+        text: "| ကားလိုင်း အသစ် ထည့်တာ | clear | checklist အတိုင်း လုပ်မယ် |\n"
+      - id: type-complicated
+        type: editor.type
+        at: { mark: type-complicated }
+        cadence: line-by-line
+        target: { file: notebook/08-how-to-decide.md, after: "| checklist အတိုင်း လုပ်မယ် |\n" }
+        text: "| ရှာတဲ့ query နှေးနေတာ | complicated | database သိသူနဲ့ ခွဲခြမ်းကြည့်မယ် |\n"
+      - id: type-complex
+        type: editor.type
+        at: { mark: type-complex }
+        cadence: line-by-line
+        target: { file: notebook/08-how-to-decide.md, after: "| database သိသူနဲ့ ခွဲခြမ်းကြည့်မယ် |\n" }
+        text: "| utils ကို ခွဲထုတ်တာ | complex | တစ်စုချင်း ရွှေ့၊ ရွှေ့တိုင်း test နဲ့ စစ်မယ် |\n"
+      - id: type-chaotic
+        type: editor.type
+        at: { mark: type-chaotic }
+        cadence: line-by-line
+        target: { file: notebook/08-how-to-decide.md, after: "| တစ်စုချင်း ရွှေ့၊ ရွှေ့တိုင်း test နဲ့ စစ်မယ် |\n" }
+        text: "| payment API ရုတ်တရက် ကျတာ | chaotic | ငွေချေတာ အရင် ပိတ်၊ အကြောင်းရင်း ပြီးမှ ရှာမယ် |\n"
+      - id: expect-complex
+        type: expect.file
+        at: { afterAction: type-chaotic }
+        path: notebook/08-how-to-decide.md
+        contains: "| utils ကို ခွဲထုတ်တာ | complex | တစ်စုချင်း ရွှေ့၊ ရွှေ့တိုင်း test နဲ့ စစ်မယ် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ထိုင်ခုံကို ၁၀ မိနစ်ပဲ ထိန်းထားပေးမယ် ဆိုရင် ခရီးသည်တွေ ဘယ်လို
+      တုံ့ပြန်မလဲ ဆိုတာ team ထဲမှာ ဘယ်သူမှ မသိပါဘူး။ ငွေချေတာ မပြီးခင် ခုံ လွတ်သွားလို့ စိတ်ပျက်ပြီး
+      ထွက်သွားကြမလား၊ ပိုမြန်မြန် ချေဖြစ်သွားကြမလား ဆိုတာပါ။ ဒါကို ဘယ်လို ဆုံးဖြတ်မလဲ။
+      [[mark:q-a]] ပထမ နည်းက app design ကို ကျွမ်းကျင်တဲ့သူ တစ်ယောက်ကို မေးပြီး၊ သူ ပြောတဲ့အတိုင်း လုပ်တာပါ။
+      [[mark:q-b]] ဒုတိယ နည်းက ခရီးစဉ် တစ်ခုတည်းမှာ အရင် စမ်းသုံးကြည့်ပြီး၊ ဘာဖြစ်လာလဲ တိုင်းတာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ ဒါက complicated မဟုတ်ဘဲ complex
+      ဖြစ်နေလို့ပါ။ ကျွမ်းကျင်သူက တခြား app တွေမှာ ဘာဖြစ်ခဲ့လဲ ဆိုတာ ပြောပြနိုင်ပါတယ်။ ဒါပေမဲ့ ခရီးဖော် ရဲ့
+      ခရီးသည်တွေ၊ အထူးသဖြင့် internet အားနည်းတဲ့ ကားဂိတ်ကနေ ဖုန်းနဲ့ ဝယ်နေတဲ့သူတွေ ဘယ်လို တုံ့ပြန်မလဲ ဆိုတာကတော့
+      လုပ်မကြည့်ဘဲ ဘယ်သူမှ မသိနိုင်ပါဘူး။
+      [[mark:q-test]] နှစ်ခုကို ခွဲဖို့ မေးခွန်းက တစ်ခုတည်းပါ။ ဒီ အဖြေကို တစ်ယောက်ယောက်က ကြိုပြောနိုင်လား
+      ဆိုတာပါ။ ပြောနိုင်ရင် မေးပါ။ ဘယ်သူမှ မပြောနိုင်ရင်တော့ သေးသေးလေး စမ်းပြီး တိုင်းပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Cynefin framework (Wikipedia)",
+          url: "https://en.wikipedia.org/wiki/Cynefin_framework",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-test,
+          type: whiteboard.apply,
+          at: { mark: q-test },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] ဒီ အဖြေကိုလည်း table ထဲမှာ ထည့်ထားလိုက်ပါမယ်။
+      [[mark:type-hold]] hold အချိန်ကို ခရီးစဉ် တစ်ခုမှာပဲ အရင် စမ်းပါမယ်။ ငွေချေတာ ပြီးသွားတဲ့သူ ဘယ်နှယောက်၊
+      တစ်ဝက်မှာ ထွက်သွားတဲ့သူ ဘယ်နှယောက် ဆိုတာကို တိုင်းပါမယ်။ ရလဒ် မကောင်းရင် အဲဒီ ခရီးစဉ် တစ်ခုမှာပဲ
+      ပြန်ဖြုတ်လိုက်ရုံပါ။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် team မှာ အခု ဆုံးဖြတ်စရာ ရှိနေတဲ့
+      ကိစ္စ နှစ်ခုကို ဒီ table ထဲမှာ ထပ်ရေးကြည့်ပါ။ တစ်ခုစီအတွက် အခြေအနေက လေးမျိုးထဲက ဘယ်ဟာလဲ၊ ဒါဆို ဘယ်လို
+      ဆုံးဖြတ်မလဲ ဆိုတာကို ဖြည့်ပါ။
+      [[mark:turn-2]] ဖြည့်ရင်း သတိထားကြည့်စရာက အစည်းအဝေးထဲမှာ အကြာကြီး ငြင်းနေရတဲ့ ကိစ္စတွေပါ။ အဲဒီလို ကိစ္စ
+      အများစုက complex ဖြစ်နေတတ်ပြီး၊ ဆက်ငြင်းနေမယ့်အစား သေးသေးလေး စမ်းကြည့်လိုက်တာက ပိုမြန်ပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-hold
+        type: editor.type
+        at: { mark: type-hold }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/08-how-to-decide.md,
+            after: "| ငွေချေတာ အရင် ပိတ်၊ အကြောင်းရင်း ပြီးမှ ရှာမယ် |\n",
+          }
+        text: "| hold 10 မိနစ်ကို ခရီးသည် ဘယ်လို တုံ့ပြန်မလဲ | complex | ခရီးစဉ် 1 ခုမှာ စမ်းပြီး တိုင်းမယ် |\n"
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn-you }
+        target:
+          { file: notebook/08-how-to-decide.md, text: "| ဖြေရှင်းစရာ | အခြေအနေ | ဘယ်လို ဆုံးဖြတ်မလဲ |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ complexity ဆိုတာ ပြင်လိုက်ရင် ဘာဖြစ်မလဲ ကြိုမှန်းလို့ မရတာပါ။ အဲဒါက အပိုင်းတွေရဲ့
+      အရေအတွက်ကြောင့် မဟုတ်ဘဲ၊ အချင်းချင်း ဆက်သွယ်ပုံကြောင့် ဖြစ်တာပါ။ ဆုံးဖြတ်စရာ ကြုံရင် အခြေအနေကို အရင်
+      ခွဲပါ။ clear ဆိုရင် စည်းမျဉ်းအတိုင်း လုပ်၊ complicated ဆိုရင် သိတဲ့သူကို မေး၊ complex ဆိုရင် စမ်းပြီး
+      တိုင်း၊ chaotic ဆိုရင် အရင် လုပ်ပြီးမှ အကြောင်းရင်း ရှာပါ။
+      [[mark:next]] နောက် lesson မှာတော့ module နှစ်ခုက တစ်ခုအကြောင်း တစ်ခု ဘယ်လောက် သိနေရလဲ၊ အဲဒီ
+      ဆက်နွယ်မှုရဲ့ အားကို ဘယ်လို တိုင်းမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
