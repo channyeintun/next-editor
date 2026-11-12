@@ -1,0 +1,723 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-14-measuring-characteristics
+  title: "Architect Path 14: Characteristic ကို တိုင်းတာခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/14-measures.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/14-measures.md: |
+        # Characteristic တွေကို တိုင်းတာခြင်း
+
+        ## အခု ရေးထားတာ
+        - ခရီးစဉ် ရှာတာ မြန်ရမယ်
+
+        ## တိုင်းလို့ရတဲ့ ပစ်မှတ်
+        | Characteristic | ဘာကို တိုင်းမလဲ | ပစ်မှတ် | ဘယ်လို စစ်မလဲ |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — search requests sorted by how long they took: blue bars are most
+    # requests, the red bar is the long tail, orange is the average that hides it.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Response time က ဂဏန်း တစ်ခုတည်း မဟုတ်ဘူး",
+        fontSize: 36,
+      }
+    - { id: d-b1, kind: rectangle, x: 300, y: 270, width: 90, height: 250, strokeColor: "#1971c2" }
+    - { id: d-b2, kind: rectangle, x: 395, y: 330, width: 90, height: 190, strokeColor: "#1971c2" }
+    - { id: d-b3, kind: rectangle, x: 490, y: 430, width: 90, height: 90, strokeColor: "#1971c2" }
+    - { id: d-b4, kind: rectangle, x: 585, y: 475, width: 90, height: 45, strokeColor: "#1971c2" }
+    - { id: d-b5, kind: rectangle, x: 680, y: 500, width: 400, height: 20, strokeColor: "#e03131" }
+    - { id: d-p50-a, kind: freedraw, stroke: arrow-up, x: 372, y: 527, width: 40, height: 38 }
+    - {
+        id: d-p50-l,
+        kind: text,
+        x: 300,
+        y: 572,
+        width: 200,
+        height: 35,
+        text: "အလယ် 180 ms",
+        fontSize: 28,
+      }
+    - { id: d-p95-a, kind: freedraw, stroke: arrow-up, x: 657, y: 527, width: 40, height: 38 }
+    - {
+        id: d-p95-l,
+        kind: text,
+        x: 600,
+        y: 572,
+        width: 200,
+        height: 35,
+        text: "p95 900 ms",
+        fontSize: 28,
+      }
+    - {
+        id: d-p99-a,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 985,
+        y: 527,
+        width: 40,
+        height: 38,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-p99-l,
+        kind: text,
+        x: 960,
+        y: 572,
+        width: 130,
+        height: 35,
+        text: "p99 4 s",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-avg-l,
+        kind: text,
+        x: 500,
+        y: 225,
+        width: 260,
+        height: 35,
+        text: "ပျမ်းမျှ 350 ms",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-avg-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 515,
+        y: 268,
+        width: 40,
+        height: 155,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — availability as allowed downtime in a 30-day month, a ladder with the
+    # strictest target on top; green is the target ခရီးဖော် chose, red what rises.
+    - {
+        id: a-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "Availability = ခွင့်ပြုထားတဲ့ ပြတ်ချိန်",
+        fontSize: 36,
+      }
+    - { id: a-r1, kind: rectangle, x: 290, y: 235, width: 500, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: a-r1-p,
+        kind: text,
+        x: 320,
+        y: 258,
+        width: 130,
+        height: 35,
+        text: "99.99 %",
+        fontSize: 28,
+      }
+    - {
+        id: a-r1-d,
+        kind: text,
+        x: 470,
+        y: 258,
+        width: 310,
+        height: 35,
+        text: "→ တစ်လ 4 မိနစ်ကျော်",
+        fontSize: 28,
+      }
+    - { id: a-r2, kind: rectangle, x: 290, y: 335, width: 500, height: 80, strokeColor: "#2f9e44" }
+    - {
+        id: a-r2-p,
+        kind: text,
+        x: 320,
+        y: 358,
+        width: 130,
+        height: 35,
+        text: "99.9 %",
+        fontSize: 28,
+      }
+    - {
+        id: a-r2-d,
+        kind: text,
+        x: 470,
+        y: 358,
+        width: 310,
+        height: 35,
+        text: "→ တစ်လ 43 မိနစ်",
+        fontSize: 28,
+      }
+    - { id: a-r3, kind: rectangle, x: 290, y: 435, width: 500, height: 80, strokeColor: "#1971c2" }
+    - { id: a-r3-p, kind: text, x: 320, y: 458, width: 130, height: 35, text: "99 %", fontSize: 28 }
+    - {
+        id: a-r3-d,
+        kind: text,
+        x: 470,
+        y: 458,
+        width: 310,
+        height: 35,
+        text: "→ တစ်လ 7 နာရီကျော်",
+        fontSize: 28,
+      }
+    - {
+        id: a-cost-a,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 850,
+        y: 245,
+        width: 40,
+        height: 265,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-cost-l,
+        kind: text,
+        x: 905,
+        y: 360,
+        width: 170,
+        height: 35,
+        text: "ကုန်ကျစရိတ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-pick,
+        kind: freedraw,
+        stroke: check,
+        x: 798,
+        y: 353,
+        width: 40,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the quiz: white situation and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "အနှေးကို ကြုံရမယ့် ခရီးသည် ဘယ်နှယောက်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: z-s1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 760,
+        height: 35,
+        text: "ရှာတဲ့ အကြိမ် 100 မှာ 1 ကြိမ်က 4 စက္ကန့်ကျော်",
+        fontSize: 28,
+      }
+    - {
+        id: z-s2,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 760,
+        height: 35,
+        text: "ခရီးသည် တစ်ယောက်က 10 ခါ ရှာတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 385,
+        width: 500,
+        height: 35,
+        text: "က) 100 မှာ 1 ယောက်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 500,
+        height: 35,
+        text: "ခ) 100 မှာ 10 ယောက်လောက်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 455,
+        width: 350,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 650,
+        y: 443,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-why,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 780,
+        height: 35,
+        text: "ရေတွက်တာက အကြိမ်၊ ခံစားရတာက လူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8114
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: မြန်ရမယ် ဆိုတာ ဘယ်လောက်လဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ business ဘက်က ပြောတဲ့ စကားတွေကို architecture characteristic အဖြစ် ဘာသာပြန်ပြီး၊
+      အရေးကြီးဆုံး သုံးခုကို ရွေးခဲ့ပါတယ်။ characteristic ဆိုတာ system က ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ
+      ဆိုတဲ့ အရည်အသွေးပါ။
+      [[mark:n-word]] ဒါပေမဲ့ characteristic ရဲ့ နာမည်ကို သိရုံနဲ့ မလုံလောက်သေးပါဘူး။ ဥပမာ တစ်ခု ကြည့်ရအောင်။
+      [[mark:n-line]] requirement ထဲမှာ ခရီးစဉ် ရှာတာ မြန်ရမယ် ဆိုတဲ့ စာကြောင်း တစ်ကြောင်း ပါပါတယ်။ ဒီ စာကြောင်းကို
+      လူတိုင်းက သဘောတူကြပါတယ်။
+      [[mark:n-mm]] Booking team lead မောင်မောင် အတွက် မြန်တယ် ဆိုတာ မီလီစက္ကန့် ၂၀၀ အတွင်း အဖြေ ပြန်ရတာပါ။
+      product manager လှလှ အတွက်ကတော့ သုံးရတာ အဆင်ပြေနေရင် မြန်တာပါပဲ။ ဒါပေမဲ့ ရှာရတာ နှေးတယ် ဆိုတဲ့
+      ခရီးသည်တွေရဲ့ တိုင်ကြားချက်တွေကိုလည်း သူ ကြားနေရပါတယ်။ နှစ်ယောက်လုံးက မြန်ရမယ် ဆိုတဲ့
+      စကားလုံးကို သဘောတူကြပေမဲ့၊ ဘာကို ဆိုလိုတာလဲ ဆိုတာမှာတော့ လုံးဝ မတူကြပါဘူး။
+      [[mark:n-three]] ဂဏန်း မပါတဲ့ characteristic တစ်ခုနဲ့ဆိုရင် အလုပ် သုံးခု လုပ်လို့ မရပါဘူး။ ဘယ်လောက်အထိ
+      ဆောက်ရမလဲ မသိတော့ design ဆွဲလို့ မရပါဘူး။ ရပြီလား၊ မရသေးဘူးလား ဆိုတာကိုလည်း စစ်လို့ မရပါဘူး။ ပြီးတော့
+      သဘောထား ကွဲတဲ့အခါ ဘယ်သူ မှန်လဲ ဆိုတာကိုလည်း ဆုံးဖြတ်လို့ မရပါဘူး။ ဒါကြောင့် characteristic တိုင်းကို
+      တိုင်းလို့ရတဲ့ ပစ်မှတ်အဖြစ် ပြောင်းရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: n-word },
+          path: notebook/14-measures.md,
+        }
+      - id: sel-fast
+        type: editor.select
+        at: { mark: n-line }
+        target: { file: notebook/14-measures.md, text: "- ခရီးစဉ် ရှာတာ မြန်ရမယ်" }
+
+  - id: distribution
+    chapter: ပျမ်းမျှက အမြီးကို ဖုံးထားတယ်
+    narration: >
+      [[mark:d-open]] ခရီးစဉ် ရှာတဲ့ request တွေ ဘယ်လောက် ကြာလဲ ဆိုတာကို တကယ် တိုင်းကြည့်ရအောင်။ ရှာတိုင်း
+      အချိန် တူတူ မကြာပါဘူး။ တချို့က မြန်ပြီး တချို့က နှေးပါတယ်။ ဒါကြောင့် response time ဆိုတာ ဂဏန်း
+      တစ်ခုတည်း မဟုတ်ဘဲ၊ ပျံ့နှံ့နေတဲ့ ဂဏန်း အများကြီးပါ။
+      [[mark:d-bars]] request တွေကို ကြာချိန်အလိုက် စုကြည့်လိုက်ရင် ဒီလို ပုံမျိုး ထွက်လာပါတယ်။ အများစုက မြန်မြန်
+      ပြီးကြပါတယ်။
+      [[mark:d-tail]] ဒါပေမဲ့ အနည်းစုကတော့ အကြာကြီး ကြာပြီး၊ အမြီး ရှည်ရှည် တစ်ခုလို ဆန့်ထွက်နေပါတယ်။
+      [[mark:d-p50]] အလယ်တည့်တည့်က request ကို ကြည့်ရင် မီလီစက္ကန့် ၁၈၀ ပါ။ ဆိုလိုတာက request တစ်ဝက်က
+      ဒီထက် မြန်ပြီး၊ ကျန်တစ်ဝက်က ဒီထက် နှေးပါတယ်။
+      [[mark:d-p95]] request ၁၀၀ မှာ ၉၅ ခုက ဘယ်အချိန်အတွင်း ပြီးလဲ ဆိုတဲ့ ဂဏန်းကို ရာခိုင်နှုန်း ၉၅ ရဲ့ request
+      တွေအတွက် response time လို့ ပြောပြီး၊ အတိုကောက် p ၉၅ လို့ ခေါ်ပါတယ်။ ဒီမှာ p ၉၅ က မီလီစက္ကန့် ၉၀၀ ပါ။
+      [[mark:d-p99]] p ၉၉ ကတော့ ၄ စက္ကန့်ပါ။ ဆိုလိုတာက request ၁၀၀ မှာ ၁ ခုက ၄ စက္ကန့်ထက် ပိုကြာနေတာပါ။
+      [[mark:d-avg]] အခု ပျမ်းမျှကို ကြည့်ရအောင်။ ပျမ်းမျှက မီလီစက္ကန့် ၃၅၀ ပါ။ ဒီ ဂဏန်း တစ်ခုတည်းကို ကြည့်ရင်
+      အားလုံး ကောင်းနေသလို ထင်ရပါတယ်။ ၄ စက္ကန့် စောင့်နေရတဲ့ ခရီးသည်တွေ ရှိနေတာကို ပျမ်းမျှက
+      ဖုံးထားလိုက်တာပါ။
+      [[mark:d-who]] အမြီးပိုင်းထဲက request တွေက ဘယ်သူတွေရဲ့ request လဲ ဆိုတာကိုလည်း ကြည့်သင့်ပါတယ်။ ခရီးဖော်
+      မှာ ရှာရတာ အကြာဆုံးက ရန်ကုန်၊ မန္တလေး လို ကားလိုင်း အများဆုံး ပြေးဆွဲတဲ့ လမ်းကြောင်းတွေပါ။ ပြရမယ့်
+      ခရီးစဉ် အများဆုံးမို့ပါ။ အဲဒီ လမ်းကြောင်းတွေကပဲ လက်မှတ် အများဆုံး ရောင်းရတဲ့ လမ်းကြောင်းတွေ ဖြစ်နေပါတယ်။
+      ဆိုလိုတာက အနှေးဆုံးကို ခံစားနေရတာက အရေးကြီးဆုံး customer တွေပါ။
+      [[mark:d-both]] ဒီပုံကို ကြည့်ရင် မောင်မောင် ရော လှလှ ပါ မှန်နေတာကို တွေ့ရပါတယ်။ မောင်မောင် က အလယ်က request
+      တွေကို ကြည့်ပြီး မြန်တယ်လို့ ပြောတာပါ။ လှလှ ဆီ ရောက်လာတဲ့ တိုင်ကြားချက်တွေကတော့ အမြီးပိုင်းက လာတာပါ။
+      [[mark:d-use]] ဒါကြောင့် တုံ့ပြန်တာ ဘယ်လောက် မြန်လဲ ဆိုတဲ့ performance အတွက် ပစ်မှတ် ထားတဲ့အခါ ပျမ်းမျှကို မသုံးဘဲ၊ p ၉၅ နဲ့ p ၉၉ လို
+      ရာခိုင်နှုန်းတွေကို သုံးရပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          clear: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-d-bars,
+          type: whiteboard.apply,
+          at: { mark: d-bars },
+          upsertIds: [d-b1, d-b2, d-b3, d-b4],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-d-tail,
+          type: whiteboard.apply,
+          at: { mark: d-tail },
+          upsertIds: [d-b5],
+          drawMs: 900,
+        }
+      - {
+          id: draw-d-p50,
+          type: whiteboard.apply,
+          at: { mark: d-p50 },
+          upsertIds: [d-p50-a, d-p50-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-d-p95,
+          type: whiteboard.apply,
+          at: { mark: d-p95 },
+          upsertIds: [d-p95-a, d-p95-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-d-p99,
+          type: whiteboard.apply,
+          at: { mark: d-p99 },
+          upsertIds: [d-p99-a, d-p99-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-d-avg,
+          type: whiteboard.apply,
+          at: { mark: d-avg },
+          upsertIds: [d-avg-l, d-avg-a],
+          drawMs: 1200,
+        }
+      - { id: point-tail, type: whiteboard.point, at: { mark: d-who }, target: { assetId: d-b5 } }
+      - {
+          id: point-middle,
+          type: whiteboard.point,
+          at: { mark: d-both },
+          target: { assetId: d-p50-l },
+        }
+
+  - id: availability
+    chapter: Availability ကို ပြတ်ချိန်နဲ့ ပြောခြင်း
+    narration: >
+      [[mark:a-open]] response time မဟုတ်တဲ့ characteristic တွေကိုလည်း ဒီလိုပဲ ဂဏန်းနဲ့ ပြောလို့ရပါတယ်။
+      သုံးချင်တဲ့အချိန် သုံးလို့ရနေတာ ဆိုတဲ့ availability ကို ကြည့်ရအောင်။ အမြဲ သုံးလို့ရရမယ် ဆိုတာက ပစ်မှတ်
+      မဟုတ်ပါဘူး။ ဘယ် system မှ အမြဲတမ်း
+      မရနိုင်လို့ပါ။
+      [[mark:a-999]] availability ကို အချိန်ကာလ တစ်ခုအတွင်း သုံးလို့ရတဲ့ ရာခိုင်နှုန်းနဲ့ ပြောကြပါတယ်။ ဥပမာ
+      တစ်လအတွင်း ၉၉ ဒသမ ၉ ရာခိုင်နှုန်း ဆိုတာမျိုးပါ။ ဒါပေမဲ့ ရာခိုင်နှုန်းက မျက်စိထဲ မမြင်တတ်တာမို့၊
+      ခွင့်ပြုထားတဲ့ ပြတ်ချိန်အဖြစ် ပြောင်းပြောရင် ပိုရှင်းပါတယ်။
+      [[mark:a-43]] ရက် ၃၀ ရှိတဲ့ တစ်လမှာ မိနစ်ပေါင်း ၄၃၂၀၀
+      ရှိတာမို့၊ ၉၉ ဒသမ ၉ ရာခိုင်နှုန်း ဆိုတာ တစ်လမှာ ၄၃ မိနစ်လောက်ပဲ ပြတ်ခွင့် ရှိတယ်လို့ ပြောတာပါ။
+      [[mark:a-99]] ၉၉ ရာခိုင်နှုန်း ဆိုရင်တော့ တစ်လမှာ ၇ နာရီကျော် ပြတ်ခွင့် ရှိပါတယ်။
+      [[mark:a-9999]] ၉၉ ဒသမ ၉၉ ရာခိုင်နှုန်း ဆိုရင်တော့ ၄ မိနစ်ကျော်ပဲ ပြတ်ခွင့် ရှိပါတော့တယ်။
+      [[mark:a-cost]] ၉ ဂဏန်း တစ်လုံး တိုးတိုင်း ပြတ်ခွင့်က ဆယ်ပုံ တစ်ပုံပဲ ကျန်ပြီး၊ အဲဒါကို ရဖို့ ကုန်ကျစရိတ်ကလည်း
+      အများကြီး တက်သွားပါတယ်။ server အပိုတွေ၊ ညဘက် စောင့်ကြည့်ပေးမယ့် လူတွေ လိုလာလို့ပါ။
+      [[mark:a-agree]] ဒါကြောင့် ပစ်မှတ်ကို architect တစ်ယောက်တည်း မသတ်မှတ်ပါဘူး။ CTO ဖြစ်တဲ့ အောင်အောင်
+      တို့လို business ဘက်က လူတွေနဲ့ ညှိရပါတယ်။ တစ်လမှာ ၄၃ မိနစ် ပြတ်တာကို ခံနိုင်လား၊ မခံနိုင်ရင်
+      နောက်တစ်ဆင့်အတွက် ဘယ်လောက် ပေးနိုင်လဲ ဆိုတာကို မေးရတာပါ။
+      [[mark:a-pick]] ခရီးဖော် ကတော့ app ကနေ လက်မှတ် ဝယ်တာအတွက် ၉၉ ဒသမ ၉ ရာခိုင်နှုန်းကို ရွေးလိုက်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-a-open,
+          type: whiteboard.apply,
+          at: { mark: a-open },
+          clear: true,
+          upsertIds: [a-title],
+        }
+      - {
+          id: draw-a-999,
+          type: whiteboard.apply,
+          at: { mark: a-999 },
+          upsertIds: [a-r2, a-r2-p],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-a-43,
+          type: whiteboard.apply,
+          at: { mark: a-43, offsetMs: 5000 },
+          upsertIds: [a-r2-d],
+          drawMs: 900,
+        }
+      - {
+          id: draw-a-99,
+          type: whiteboard.apply,
+          at: { mark: a-99 },
+          upsertIds: [a-r3, a-r3-p, a-r3-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-9999,
+          type: whiteboard.apply,
+          at: { mark: a-9999 },
+          upsertIds: [a-r1, a-r1-p, a-r1-d],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-cost,
+          type: whiteboard.apply,
+          at: { mark: a-cost },
+          upsertIds: [a-cost-a, a-cost-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-a-pick,
+          type: whiteboard.apply,
+          at: { mark: a-pick },
+          upsertIds: [a-pick],
+          drawMs: 600,
+        }
+
+  - id: measures
+    chapter: တိုင်းလို့ရတဲ့ ပစ်မှတ်
+    narration: >
+      [[mark:m-close]] ဒါဆို ခရီးဖော် ရဲ့ characteristic တွေကို တိုင်းလို့ရတဲ့ ပစ်မှတ်အဖြစ် ပြန်ရေးကြည့်ရအောင်။
+      characteristic တစ်ခုစီအတွက် ဘာကို တိုင်းမလဲ၊ ပစ်မှတ်က ဘယ်လောက်လဲ၊ ရမရ ဘယ်လို စစ်မလဲ ဆိုတဲ့ သုံးချက်ကို
+      ဖြေရပါမယ်။
+      [[mark:m-perf]] ရှာတာ မြန်ရမယ် ဆိုတဲ့ စာကြောင်းကို response time ရဲ့ p ၉၅ နဲ့ p ၉၉ အတွက် ပစ်မှတ် နှစ်ခုနဲ့
+      အစားထိုးလိုက်ပါတယ်။ ဒါပေမဲ့ ဒီ ဂဏန်းတွေက ဘယ်လောက် load အောက်မှာလဲ ဆိုတာ မပါရင် မပြည့်စုံသေးပါဘူး။
+      user ဆယ်ယောက်ပဲ ရှိချိန်မှာ ၁ စက္ကန့်အောက် ရတာနဲ့၊ တစ်စက္ကန့်ကို request ရာနဲ့ချီ ဝင်နေချိန်မှာ ရတာက
+      အများကြီး ကွာပါတယ်။
+      [[mark:m-elastic]] ဒါကြောင့် load ကိုလည်း ဂဏန်းနဲ့ ဖော်ပြရပါတယ်။ တစ်စက္ကန့်ကို request ဘယ်နှခု ဝင်လဲ၊
+      အများဆုံးအချိန်က ပုံမှန်ရဲ့ ဘယ်နှဆ ရှိလဲ ဆိုတာမျိုးပါ။ ရုတ်တရက် တက်လာတဲ့ load ကို လိုက်နိုင်ရမယ့် elasticity အတွက်ဆိုရင် အရင်နှစ်က ၁၅ ဆ
+      ကြုံခဲ့ရတာမို့၊ ပစ်မှတ်ကို ပုံမှန်ရဲ့ ၂၀ ဆ လို့ ထားလိုက်ပါတယ်။ ရှာတာရဲ့ p ၉၅၊ p ၉၉ ပစ်မှတ်တွေကလည်း
+      အဲဒီ ၂၀ ဆ load အောက်မှာတောင် ရရမယ့် ဂဏန်းတွေပါ။
+      [[mark:m-avail]] availability အတွက်ကတော့ ညှိထားတဲ့အတိုင်း ၉၉ ဒသမ ၉ ရာခိုင်နှုန်းပါ။ ပြတ်ချိန်ကိုပါ
+      တွဲရေးထားတော့ ဖတ်တဲ့သူတိုင်း အဓိပ္ပာယ် တူတူ နားလည်ပါတယ်။
+      [[mark:m-int]] data မမှားရဘူး ဆိုတဲ့ data integrity ကိုလည်း တိုင်းလို့ရပါတယ်။ နှစ်ခါ ရောင်းမိတဲ့ ခုံ အရေအတွက်ကို
+      ရေတွက်ပြီး၊ ပစ်မှတ်ကို သုညလို့ ထားတာပါ။ ညတိုင်း ရောင်းပြီးသား လက်မှတ်တွေနဲ့ ထိုင်ခုံ စာရင်းကို တိုက်စစ်ရင်
+      ရမရ သိနိုင်ပါတယ်။
+      [[mark:m-deploy]] ပြောင်းလဲမှုကို production ဆီ ဘယ်လောက် မြန်မြန် ပို့နိုင်လဲ ဆိုတဲ့ deployability လို၊ code ရဲ့
+      ဖွဲ့စည်းပုံနဲ့ ဆိုင်တဲ့ အရည်အသွေးတွေမှာလည်း ဂဏန်း ရှိပါတယ်။
+      code ကို merge လုပ်ပြီးတဲ့အချိန်ကနေ production ရောက်တဲ့အထိ ဘယ်လောက် ကြာလဲ၊ test အားလုံး run တာ
+      ဘယ်နှမိနစ် ကြာလဲ ဆိုတာတွေကို တိုင်းလို့ရပါတယ်။ အခု တစ်ပတ်လောက် ကြာနေတာကို တစ်ရက်အောက် ရောက်အောင်
+      ပစ်မှတ် ထားလိုက်ပါတယ်။
+      [[mark:m-rule]] ဒီ စာကြောင်း ငါးကြောင်းလုံးမှာ တူတာ တစ်ခု ရှိပါတယ်။ ရပြီလား၊ မရသေးဘူးလား ဆိုတာကို ဘယ်သူပဲ
+      စစ်စစ် အဖြေ တစ်ခုတည်း ထွက်တာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-a, type: whiteboard.apply, at: { mark: m-close }, open: false }
+      - id: type-perf
+        type: editor.type
+        at: { mark: m-perf }
+        cadence: line-by-line
+        target: { file: notebook/14-measures.md, after: "| ဘယ်လို စစ်မလဲ |\n|---|---|---|---|\n" }
+        text: "| performance (ရှာတာ) | response time | p95 1 s အောက်၊ p99 2 s အောက် | production မှာ တိုင်း |\n"
+      - id: type-elastic
+        type: editor.type
+        at: { mark: m-elastic }
+        cadence: line-by-line
+        target: { file: notebook/14-measures.md, after: "| production မှာ တိုင်း |\n" }
+        text: "| elasticity | ခံနိုင်တဲ့ peak load | ပုံမှန်ရဲ့ 20 ဆ | သင်္ကြန်မတိုင်ခင် load test |\n"
+      - id: type-avail
+        type: editor.type
+        at: { mark: m-avail }
+        cadence: line-by-line
+        target: { file: notebook/14-measures.md, after: "| သင်္ကြန်မတိုင်ခင် load test |\n" }
+        text: "| availability (ဝယ်တာ) | တစ်လအတွင်း ပြတ်ချိန် | 99.9 % (43 မိနစ်အောက်) | monitor |\n"
+      - id: type-int
+        type: editor.type
+        at: { mark: m-int }
+        cadence: line-by-line
+        target: { file: notebook/14-measures.md, after: "(43 မိနစ်အောက်) | monitor |\n" }
+        text: "| data integrity | နှစ်ခါ ရောင်းမိတဲ့ ခုံ | 0 | ညတိုင်း စာရင်း တိုက်စစ် |\n"
+      - id: type-deploy
+        type: editor.type
+        at: { mark: m-deploy }
+        cadence: line-by-line
+        target: { file: notebook/14-measures.md, after: "| 0 | ညတိုင်း စာရင်း တိုက်စစ် |\n" }
+        text: "| deployability | merge ကနေ production အထိ | 1 ရက်အောက် | pipeline မှတ်တမ်း |\n"
+      - id: type-rule
+        type: editor.type
+        at: { mark: m-rule }
+        cadence: line-by-line
+        target: { file: notebook/14-measures.md, after: "| 1 ရက်အောက် | pipeline မှတ်တမ်း |\n" }
+        text: "\nဂဏန်း မပါရင် ပစ်မှတ် မဟုတ်သေးဘူး\n"
+      - id: expect-row
+        type: expect.file
+        at: { afterAction: type-rule }
+        path: notebook/14-measures.md
+        contains: "| availability (ဝယ်တာ) | တစ်လအတွင်း ပြတ်ချိန် | 99.9 % (43 မိနစ်အောက်) | monitor |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ရှာတာရဲ့ p ၉၉ က ၄ စက္ကန့် ဆိုတော့၊ ရှာတဲ့ အကြိမ် ၁၀၀ မှာ ၁ ကြိမ်က
+      ၄ စက္ကန့်ထက် ပိုကြာပါတယ်။ ခရီးသည် တစ်ယောက်က လက်မှတ် တစ်စောင် ဝယ်ဖို့ ၁၀ ခါလောက် ရှာတယ် ဆိုပါစို့။
+      [[mark:q-opts]] ဒါဆို ၄ စက္ကန့်ထက် ပိုစောင့်ရတာကို အနည်းဆုံး တစ်ခါ ကြုံရမယ့် ခရီးသည်က ၁၀၀ မှာ ၁ ယောက်လား၊
+      ၁၀ ယောက်လောက်လား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ၁၀၀ မှာ ၁၀ ယောက်လောက်ပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ၁၀၀ မှာ ၁ ဆိုတာက ရှာတဲ့ အကြိမ်ကို ရေတွက်တာပါ။ ခရီးသည်ကို ရေတွက်တာ
+      မဟုတ်ပါဘူး။ နှေးတဲ့ အကြိမ်တွေက ကြုံရာ ခရီးသည်ဆီ ကျတယ်လို့ ယူဆရင်၊ တစ်ယောက်က ၁၀ ခါ ရှာတဲ့အခါ အဲဒီထဲက တစ်ခါခါမှာ နှေးတာနဲ့ တိုးဖို့ အခွင့်အလမ်းက ၁၀ ဆနီးပါး
+      များသွားပါတယ်။
+      [[mark:q-more]] လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့လို လူတိုင်း ထပ်ခါထပ်ခါ ရှာကြတဲ့နေ့မှာဆိုရင် ပိုတောင်
+      ဆိုးပါသေးတယ်။ ပျမ်းမျှက ကောင်းနေလည်း ခရီးသည်တွေ တကယ် ခံစားရတာက အမြီးပိုင်း ဖြစ်နေတာ ဒါကြောင့်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-s1, z-s2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-q-opts,
+          type: whiteboard.apply,
+          at: { mark: q-opts },
+          upsertIds: [z-a, z-b],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [z-why],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် project အတွက် အရေးကြီးဆုံး characteristic တစ်ခုကို ရွေးပါ။ lesson ကို
+      pause လုပ်ပြီး ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ အဲဒီ characteristic အတွက် ဘာကို တိုင်းမလဲ၊ ပစ်မှတ်က
+      ဘယ်လောက်လဲ၊ ဘယ်လို စစ်မလဲ ဆိုတာကို တစ်ကြောင်း ရေးကြည့်ပါ။
+      [[mark:turn-2]] ရေးပြီးရင် စမ်းသပ်ချက် တစ်ခု လုပ်ကြည့်ပါ။ အဲဒီ စာကြောင်းကို ဖတ်ပြီး ရတယ်၊ မရဘူး ဆိုတာကို
+      လူ နှစ်ယောက်က အဖြေ တူတူ ပေးနိုင်ရပါမယ်။ အဖြေ ကွဲနေသေးရင်တော့ ဂဏန်း တစ်ခုခု လိုနေသေးတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-head
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/14-measures.md,
+            text: "| Characteristic | ဘာကို တိုင်းမလဲ | ပစ်မှတ် | ဘယ်လို စစ်မလဲ |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ မြန်ရမယ်၊ အမြဲ ရရမယ် ဆိုတဲ့ စကားတွေကို လူတိုင်း သဘောတူပေမဲ့၊
+      တစ်ယောက်နဲ့တစ်ယောက် နားလည်ပုံ မတူပါဘူး။ ဂဏန်း ပါမှ design ဆွဲလို့၊ စစ်လို့၊ ညှိလို့ ရပါတယ်။ response time
+      ကို ပျမ်းမျှနဲ့ မဟုတ်ဘဲ p ၉၅၊ p ၉၉ လို ရာခိုင်နှုန်းနဲ့ ပြောပြီး၊ ဘယ် load အောက်မှာလဲ ဆိုတာပါ ထည့်ရပါတယ်။
+      [[mark:recap-2]] availability ကိုတော့ ခွင့်ပြုထားတဲ့ ပြတ်ချိန်အဖြစ် ပြောရင် ပိုရှင်းပါတယ်။ ပစ်မှတ် တစ်ဆင့် တက်တိုင်း
+      ကုန်ကျစရိတ်လည်း တက်တာမို့၊ business နဲ့ အတူ ညှိပြီးမှ သတ်မှတ်ရပါတယ်။
+      [[mark:next]] ဒါပေမဲ့ ဒီ ပစ်မှတ်တွေက system တစ်ခုလုံးအတွက် တူတူ ဖြစ်ဖို့ လိုသလား။ ခရီးစဉ် ရှာတဲ့အပိုင်းနဲ့
+      ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့အပိုင်းက လိုအပ်ချက်ချင်း မတူပါဘူး။ နောက် lesson မှာတော့
+      characteristic တစ်ခုက system ရဲ့ ဘယ်အပိုင်းအထိ သက်ရောက်လဲ ဆိုတာကို ပြပေးတဲ့ architecture quantum ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-old
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/14-measures.md, text: "## တိုင်းလို့ရတဲ့ ပစ်မှတ်" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
