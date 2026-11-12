@@ -1,0 +1,1000 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-20-event-driven
+  title: "Architect Path 20: Event-driven architecture"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/20-events.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/20-events.md: |+
+        # Event စာရင်း · ခရီးဖော်
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: harder
+      contentType: html
+      name: Event သုံးရင် ပိုခက်လာတာ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Event သုံးရင် ပိုခက်လာတာ 5 ခု</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term red">Error</span>စောင့်နေသူ မရှိတော့ ဘယ်သူ သိမလဲ</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term red">Order</span>ပို့တဲ့ အစဉ်အတိုင်း မရောက်နိုင်</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term red">Duplicate</span>event တစ်ခုက နှစ်ခါ ရောက်နိုင်</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term red">Workflow</span>ဘယ်အဆင့် ရောက်နေလဲ မြင်ရ ခက်</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term red">Data</span>ခဏတာ ကွာနေနိုင်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — before: Booking calls three parts in turn (violet flow) while the
+    # passenger waits; red is the cost when one of them is slow.
+    - {
+        id: c-bk,
+        kind: rectangle,
+        x: 290,
+        y: 330,
+        width: 240,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-bk-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 357,
+        width: 240,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-sms,
+        kind: rectangle,
+        x: 800,
+        y: 195,
+        width: 270,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-sms-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 215,
+        width: 270,
+        height: 35,
+        text: "SMS",
+        fontSize: 28,
+      }
+    - {
+        id: c-dash,
+        kind: rectangle,
+        x: 800,
+        y: 337,
+        width: 270,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-dash-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 357,
+        width: 270,
+        height: 35,
+        text: "Dashboard",
+        fontSize: 28,
+      }
+    - {
+        id: c-set,
+        kind: rectangle,
+        x: 800,
+        y: 479,
+        width: 270,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-set-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 499,
+        width: 270,
+        height: 35,
+        text: "Settlement",
+        fontSize: 28,
+      }
+    - {
+        id: c-a1,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 545,
+        y: 233,
+        width: 240,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 545,
+        y: 355,
+        width: 240,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-a3,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 545,
+        y: 417,
+        width: 240,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-wait,
+        kind: text,
+        x: 290,
+        y: 440,
+        width: 270,
+        height: 35,
+        text: "ခရီးသည် စောင့်နေရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-slow,
+        kind: text,
+        x: 800,
+        y: 286,
+        width: 270,
+        height: 35,
+        text: "8 စက္ကန့် ကြာ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — after: Booking announces one event (orange, what the board is
+    # about); the broker (violet, wide and short) hands it to whoever listens;
+    # the dashed box is a listener added later.
+    - {
+        id: e-bk,
+        kind: rectangle,
+        x: 550,
+        y: 185,
+        width: 260,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-bk-l,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 205,
+        width: 260,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: e-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 660,
+        y: 269,
+        width: 40,
+        height: 72,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-ev,
+        kind: text,
+        x: 715,
+        y: 287,
+        width: 190,
+        height: 35,
+        text: "TicketSold",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: e-broker,
+        kind: rectangle,
+        x: 275,
+        y: 350,
+        width: 800,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-broker-l,
+        kind: text,
+        align: center,
+        x: 275,
+        y: 365,
+        width: 800,
+        height: 35,
+        text: "message broker",
+        fontSize: 28,
+      }
+    - {
+        id: e-sms,
+        kind: rectangle,
+        x: 275,
+        y: 424,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-sms-l,
+        kind: text,
+        align: center,
+        x: 275,
+        y: 446,
+        width: 190,
+        height: 35,
+        text: "SMS",
+        fontSize: 28,
+      }
+    - {
+        id: e-dash,
+        kind: rectangle,
+        x: 478,
+        y: 424,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-dash-l,
+        kind: text,
+        align: center,
+        x: 478,
+        y: 446,
+        width: 190,
+        height: 35,
+        text: "Dashboard",
+        fontSize: 28,
+      }
+    - {
+        id: e-set,
+        kind: rectangle,
+        x: 681,
+        y: 424,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-set-l,
+        kind: text,
+        align: center,
+        x: 681,
+        y: 446,
+        width: 190,
+        height: 35,
+        text: "Settlement",
+        fontSize: 28,
+      }
+    - {
+        id: e-new,
+        kind: rectangle,
+        x: 884,
+        y: 424,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: e-new-l,
+        kind: text,
+        align: center,
+        x: 884,
+        y: 446,
+        width: 190,
+        height: 35,
+        text: "အမှတ်ပေး",
+        fontSize: 28,
+      }
+    # Board 3 — two shapes for a three-step job. First the parts pass events on
+    # with nobody in the middle; then (same parts kept) a mediator directs them.
+    - {
+        id: h-t1,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ဗဟို မရှိဘဲ event နဲ့ လက်ဆင့်ကမ်း",
+        fontSize: 36,
+      }
+    - {
+        id: h-pay,
+        kind: rectangle,
+        x: 290,
+        y: 400,
+        width: 200,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-pay-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 422,
+        width: 200,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: h-tic,
+        kind: rectangle,
+        x: 590,
+        y: 400,
+        width: 200,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-tic-l,
+        kind: text,
+        align: center,
+        x: 590,
+        y: 422,
+        width: 200,
+        height: 35,
+        text: "Ticket",
+        fontSize: 28,
+      }
+    - {
+        id: h-sms,
+        kind: rectangle,
+        x: 890,
+        y: 400,
+        width: 200,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-sms-l,
+        kind: text,
+        align: center,
+        x: 890,
+        y: 422,
+        width: 200,
+        height: 35,
+        text: "SMS",
+        fontSize: 28,
+      }
+    - {
+        id: h-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 498,
+        y: 420,
+        width: 84,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 798,
+        y: 420,
+        width: 84,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-t2,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Mediator က တစ်ဆင့်ချင်း ညွှန်ကြား",
+        fontSize: 36,
+      }
+    - {
+        id: h-med,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 800,
+        height: 76,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: h-med-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 255,
+        width: 800,
+        height: 35,
+        text: "Mediator",
+        fontSize: 28,
+      }
+    - {
+        id: h-m1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 319,
+        width: 40,
+        height: 73,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-m2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 670,
+        y: 319,
+        width: 40,
+        height: 73,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-m3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 970,
+        y: 319,
+        width: 40,
+        height: 73,
+        strokeColor: "#6741d9",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ထိုင်ခုံ 12 လွတ်သေးလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) event ကြေညာပြီး အဖြေ event ကို စောင့်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 780,
+        height: 35,
+        text: "ခ) တိုက်ရိုက် ခေါ်ပြီး အဖြေကို ယူမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 450,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "အဖြေကို အခု လိုတယ် → call",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-r2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "ဖြစ်ပြီးသားကို အသိပေးရုံ → event",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8120
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: လက်မှတ် တစ်စောင် ရောင်းပြီးတိုင်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ app ကို service ကြီးကြီး အနည်းငယ် ခွဲပြီး database ကို မျှသုံးတဲ့ service based
+      architecture ကို လေ့လာခဲ့ပါတယ်။
+      [[mark:c-open]] ဒီနေ့တော့ အပိုင်းတွေ အချင်းချင်း ဘယ်လို ဆက်သွယ်မလဲ ဆိုတာကို ကြည့်ပါမယ်။ ခရီးဖော် မှာ
+      လက်မှတ် တစ်စောင် ရောင်းပြီးတိုင်း Booking က လုပ်စရာ သုံးခု ရှိပါတယ်။
+      [[mark:c-sms]] ပထမက ခရီးသည်ဆီ လက်မှတ် အတည်ပြုတဲ့ SMS ပို့တာပါ။
+      [[mark:c-dash]] ဒုတိယက ကားလိုင်းရဲ့ dashboard မှာ ရောင်းအားကို တိုးပေးတာပါ။
+      [[mark:c-set]] တတိယက အပတ်စဉ် ငွေစာရင်း ရှင်းဖို့ settlement ဘက်မှာ မှတ်တမ်းတင်တာပါ။
+      [[mark:c-wait]] Booking က ဒီ သုံးခုကို တစ်ခုပြီးတစ်ခု လှမ်းခေါ်ပြီး၊ အားလုံး ပြီးမှ ခရီးသည်ကို လက်မှတ် ရပြီလို့
+      ပြန်ဖြေပါတယ်။
+      [[mark:c-slow]] ပြီးခဲ့တဲ့လက တစ်ညနေမှာ SMS gateway က နှေးသွားပြီး SMS တစ်စောင် ပို့ဖို့ ၈ စက္ကန့်လောက်
+      ကြာခဲ့ပါတယ်။ လက်မှတ် ဝယ်တာကလည်း အဲဒီလောက် လိုက်ကြာသွားတော့၊ ခရီးသည်တွေက ငွေချေပြီးတာတောင် လက်မှတ်
+      မပေါ်လာဘူးလို့ တိုင်ကြားကြပါတယ်။ ငွေကို ယူပြီးသား၊ ထိုင်ခုံကို ပေးပြီးသား ဖြစ်ပေမဲ့၊ SMS တစ်စောင်ကြောင့်
+      ဝယ်ယူမှု တစ်ခုလုံး နှေးနေခဲ့တာပါ။
+      [[mark:c-more]] ဒီကြားထဲ product manager လှလှ က လက်မှတ် ဝယ်တိုင်း အမှတ်ပေးတဲ့ အစီအစဉ် တစ်ခု ထပ်ထည့်ချင်ပါတယ်။
+      ဆိုလိုတာက Booking ထဲမှာ လှမ်းခေါ်စရာ နောက်တစ်ခု ထပ်တိုးဦးမှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open, offsetMs: 5500 },
+          open: true,
+          upsertIds: [c-bk, c-bk-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-c-sms,
+          type: whiteboard.apply,
+          at: { mark: c-sms },
+          upsertIds: [c-a1, c-sms, c-sms-l],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-dash,
+          type: whiteboard.apply,
+          at: { mark: c-dash },
+          upsertIds: [c-a2, c-dash, c-dash-l],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-set,
+          type: whiteboard.apply,
+          at: { mark: c-set },
+          upsertIds: [c-a3, c-set, c-set-l],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-wait,
+          type: whiteboard.apply,
+          at: { mark: c-wait },
+          upsertIds: [c-wait],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-slow,
+          type: whiteboard.apply,
+          at: { mark: c-slow },
+          upsertIds: [c-slow],
+          drawMs: 800,
+        }
+      - {
+          id: point-c-bk,
+          type: whiteboard.point,
+          at: { mark: c-more, offsetMs: 6500 },
+          target: { assetId: c-bk },
+        }
+
+  - id: event
+    chapter: Event ဆိုတာ
+    narration: >
+      [[mark:e-open]] ဒီ ပုံစံကို ပြောင်းပြန် လှန်ကြည့်ရအောင်။ Booking က တခြား အပိုင်းတွေကို ဒါလုပ်ပါ၊ ဟိုဟာလုပ်ပါလို့
+      လိုက်ခိုင်းမယ့်အစား၊ လက်မှတ် ရောင်းပြီးပြီ ဆိုတဲ့ သတင်း တစ်ခုတည်းကိုပဲ ကြေညာလိုက်တာပါ။
+      [[mark:e-event]] ဒီလို ဖြစ်ပြီးသွားတဲ့ အကြောင်းအရာ တစ်ခုကို event လို့ ခေါ်ပါတယ်။ ဖြစ်ပြီးသားမို့ နာမည်ကိုလည်း
+      အတိတ်ကာလနဲ့ ပေးပါတယ်။ ဒီ event ကိုတော့ ticket sold လို့ ခေါ်ပါမယ်။ တစ်ခုခု လုပ်ပေးဖို့ တောင်းဆိုတာကိုတော့
+      command လို့ ခေါ်ပါတယ်။ SMS ပို့ပေးပါ ဆိုတာက command ပါ။ command ကို လက်ခံသူက ငြင်းလို့ ရပေမဲ့၊ event ကတော့
+      ဖြစ်ပြီးသားမို့ ငြင်းလို့ မရတော့ပါဘူး။
+      [[mark:e-broker]] Booking က event ကို message broker ဆီ ပို့ပါတယ်။ message broker ဆိုတာ event တွေကို လက်ခံပြီး၊
+      စိတ်ဝင်စားတဲ့ အပိုင်းတွေဆီ ဖြန့်ပေးတဲ့ ကြားခံပါ။
+      [[mark:e-cons]] SMS ပို့တဲ့အပိုင်း၊ dashboard နဲ့ settlement တို့က အဲဒီ event ကို နားထောင်နေပြီး၊ ရောက်လာတာနဲ့
+      ကိုယ့်အလုပ်ကိုယ် လုပ်ကြပါတယ်။ ဒီလို အပိုင်းတွေက event တွေနဲ့ ဆက်သွယ်တဲ့ ပုံစံကို event driven architecture လို့
+      ခေါ်ပါတယ်။
+      [[mark:e-async]] ဒီမှာ အရေးကြီးတာ နှစ်ချက် ရှိပါတယ်။ ပထမ အချက်က Booking က ဘယ်သူ့ကိုမှ ပြီးအောင်
+      မစောင့်တော့တာပါ။ event ကို ပို့ပြီးတာနဲ့ ခရီးသည်ကို ချက်ချင်း ပြန်ဖြေပါတယ်။ အဖြေကို မစောင့်ဘဲ ဆက်သွားတဲ့ ဒီ
+      ပုံစံကို asynchronous လို့ ခေါ်ပါတယ်။ SMS gateway က ၈ စက္ကန့် နှေးနေလည်း၊ နှေးတာက SMS တစ်ခုတည်းပါ။
+      [[mark:e-new]] ဒုတိယ အချက်က Booking က သူ့ event ကို ဘယ်သူတွေ နားထောင်နေလဲ မသိတာပါ။ လှလှ လိုချင်တဲ့ အမှတ်ပေး
+      အစီအစဉ်ကို ထည့်ချင်ရင်၊ အပိုင်းအသစ်က အဲဒီ event ကို လာနားထောင်ရုံပါပဲ။ Booking ရဲ့ code ကို တစ်ကြောင်းမှ
+      ပြင်စရာ မလိုပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { mark: e-open, offsetMs: 4500 },
+          clear: true,
+          upsertIds: [e-bk, e-bk-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-e-event,
+          type: whiteboard.apply,
+          at: { mark: e-event },
+          upsertIds: [e-a, e-ev],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-broker,
+          type: whiteboard.apply,
+          at: { mark: e-broker },
+          upsertIds: [e-broker, e-broker-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-cons,
+          type: whiteboard.apply,
+          at: { mark: e-cons },
+          upsertIds: [e-sms, e-sms-l, e-dash, e-dash-l, e-set, e-set-l],
+          drawMs: 2400,
+        }
+      - {
+          id: point-e-bk,
+          type: whiteboard.point,
+          at: { mark: e-async, offsetMs: 3000 },
+          target: { assetId: e-bk },
+        }
+      - {
+          id: draw-e-new,
+          type: whiteboard.apply,
+          at: { mark: e-new, offsetMs: 5000 },
+          upsertIds: [e-new, e-new-l],
+          drawMs: 1300,
+        }
+
+  - id: shapes
+    chapter: ပုံစံ နှစ်မျိုး
+    narration: >
+      [[mark:h-open]] အလုပ်တစ်ခုကို event တွေနဲ့ အဆင့်ဆင့် လုပ်တဲ့အခါ ပုံစံ နှစ်မျိုး ရှိပါတယ်။ ငွေချေပြီးရင် လက်မှတ်
+      ထုတ်၊ လက်မှတ် ထုတ်ပြီးရင် SMS ပို့ ဆိုတဲ့ အဆင့် သုံးဆင့်နဲ့ ကြည့်ရအောင်။
+      [[mark:h-chain]] ပထမ ပုံစံမှာ ဗဟိုက ညွှန်ကြားသူ မရှိပါဘူး။ Payment က ငွေချေပြီးပြီ ဆိုတဲ့ event ကို
+      ကြေညာပါတယ်။ အဲဒါကို ကြားတဲ့ Ticket အပိုင်းက လက်မှတ် ထုတ်ပြီး သူ့ event ကို ဆက်ကြေညာပါတယ်။ အဲဒါကို ကြားမှ
+      SMS ပို့တဲ့အပိုင်းက SMS ပို့ပါတယ်။ အပိုင်းတိုင်းက လွတ်လွတ်လပ်လပ် ရှိပြီး မြန်ပါတယ်။ ဒါပေမဲ့ အလုပ်တစ်ခုလုံး
+      ဘယ်အဆင့် ရောက်နေလဲ ဆိုတာကို သိတဲ့သူ တစ်ယောက်မှ မရှိပါဘူး။
+      [[mark:h-med]] ဒုတိယ ပုံစံမှာတော့ mediator လို့ ခေါ်တဲ့ ဗဟို အပိုင်း တစ်ခုက အဆင့်တွေကို ညွှန်ကြားပါတယ်။
+      ငွေချေပါ၊ လက်မှတ် ထုတ်ပါ၊ SMS ပို့ပါ ဆိုပြီး တစ်ဆင့်ချင်း ခိုင်းတာပါ။ ဘယ်အဆင့် ရောက်နေလဲ၊ ဘယ်မှာ
+      ပျက်သွားလဲ ဆိုတာကို mediator က သိပါတယ်။ အဲဒီအတွက် ပေးရတာက အပိုင်းအားလုံးက mediator ကို မှီခိုသွားပြီး၊ သူ
+      နှေးရင် အားလုံး နှေးတာပါ။
+      [[mark:h-pick]] အဆင့်နည်းပြီး ပျက်လည်း ကိစ္စမကြီးတဲ့ အလုပ်ဆိုရင် ပထမ ပုံစံက သင့်တော်ပါတယ်။ အဆင့်များပြီး၊
+      တစ်ဝက်တစ်ပျက်မှာ ပျက်သွားရင် ပြန်ပြင်ပေးရမယ့် အလုပ်ဆိုရင်တော့ mediator ပါတဲ့ ပုံစံက ပိုသင့်တော်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-h-open,
+          type: whiteboard.apply,
+          at: { mark: h-open, offsetMs: 5000 },
+          clear: true,
+          upsertIds: [h-pay, h-pay-l, h-tic, h-tic-l, h-sms, h-sms-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-h-chain,
+          type: whiteboard.apply,
+          at: { mark: h-chain },
+          upsertIds: [h-t1, h-a1, h-a2],
+          drawMs: 2400,
+        }
+      - {
+          id: keep-h-parts,
+          type: whiteboard.apply,
+          at: { mark: h-med },
+          clear: true,
+          upsertIds: [h-pay, h-pay-l, h-tic, h-tic-l, h-sms, h-sms-l],
+        }
+      - {
+          id: draw-h-med,
+          type: whiteboard.apply,
+          at: { mark: h-med, offsetMs: 800 },
+          upsertIds: [h-t2, h-med, h-med-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-h-cmds,
+          type: whiteboard.apply,
+          at: { mark: h-med, offsetMs: 6500 },
+          upsertIds: [h-m1, h-m2, h-m3],
+          drawMs: 1500,
+        }
+      - {
+          id: point-h-med,
+          type: whiteboard.point,
+          at: { mark: h-pick, offsetMs: 6500 },
+          target: { assetId: h-med },
+        }
+
+  - id: harder
+    chapter: ပိုခက်လာတဲ့ အရာတွေ
+    narration: >
+      [[mark:x-open]] event တွေက အခမဲ့ မဟုတ်ပါဘူး။ တိုက်ရိုက် ခေါ်တုန်းက မတွေ့ခဲ့ရတဲ့ ပြဿနာ ငါးမျိုးကို
+      ထည့်စဉ်းစားရပါတယ်။
+      [[mark:x-1]] ပထမက error ပါ။ တိုက်ရိုက် ခေါ်တုန်းက SMS ပို့လို့ မရရင် Booking က ချက်ချင်း သိပါတယ်။ အခုတော့
+      စောင့်နေတဲ့သူ မရှိတော့တဲ့အတွက်၊ ပျက်သွားတဲ့ event တွေကို စုထားပြီး လူကို အသိပေးတဲ့ နေရာ တစ်ခု သီးသန့်
+      လိုပါတယ်။
+      [[mark:x-2]] ဒုတိယက အစီအစဉ်ပါ။ event တွေက ပို့လိုက်တဲ့ အစဉ်အတိုင်း ရောက်ချင်မှ ရောက်ပါမယ်။ လက်မှတ် ဖျက်ပြီးပြီ
+      ဆိုတဲ့ event က ရောင်းပြီးပြီ ဆိုတဲ့ event ထက် အရင် ရောက်လာနိုင်ပါတယ်။
+      [[mark:x-3]] တတိယက ထပ်နေတာပါ။ event တစ်ခုတည်းက နှစ်ခါ ရောက်လာနိုင်ပါတယ်။ ဒါကြောင့် နားထောင်တဲ့ဘက်က နှစ်ခါ
+      လုပ်မိလည်း တစ်ခါ လုပ်သလိုပဲ ရလဒ် တူအောင် ရေးထားရပါတယ်။ ဒါကို idempotent လို့ ခေါ်ပါတယ်။ မဟုတ်ရင် settlement
+      မှာ လက်မှတ် တစ်စောင်ကို နှစ်ခါ ရေတွက်မိပါလိမ့်မယ်။
+      [[mark:x-4]] စတုတ္ထက အလုပ်တစ်ခု ဘယ်ရောက်နေလဲ မြင်ရ ခက်တာပါ။ ခရီးသည် တစ်ယောက်က သူ့ လက်မှတ် ဘယ်ရောက်နေလဲလို့
+      မေးလာရင်၊ အပိုင်း သုံးလေးခုရဲ့ log တွေကို ဆက်စပ်ကြည့်မှ သိရပါတယ်။
+      [[mark:x-5]] ပဉ္စမက data တွေ ခဏတာ ကွာနေတာပါ။ လက်မှတ် ရောင်းပြီး စက္ကန့်အနည်းငယ်အတွင်းမှာ dashboard က
+      ရောင်းအားအဟောင်းကို ပြနေနိုင်ပါတယ်။ ခဏ ကွာနေပေမဲ့ နောက်ဆုံးမှာ တူသွားမယ့် ဒီ အခြေအနေကို eventual
+      consistency လို့ ခေါ်ပါတယ်။ business ဘက်က လက်ခံနိုင်မနိုင်ကို အရင် မေးထားရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: close-shapes,
+          type: whiteboard.apply,
+          at: { mark: x-open, offsetMs: -1400 },
+          open: false,
+        }
+      - { id: show-harder, type: slide.show, at: { afterAction: close-shapes }, slideId: harder }
+      - { id: point-x-1, type: slide.point, at: { mark: x-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-x-2, type: slide.point, at: { mark: x-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-x-3, type: slide.point, at: { mark: x-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-x-4, type: slide.point, at: { mark: x-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-x-5, type: slide.point, at: { mark: x-5 }, target: { x: 0.15, y: 0.83 } }
+
+  - id: table
+    chapter: Event စာရင်း
+    narration: >
+      [[mark:d-open]] ဒါတွေကို သိထားပြီးမှ ခရီးဖော် ရဲ့ ပထမဆုံး event တွေကို table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။ event
+      တစ်ခုစီအတွက် ဘယ်သူက ကြေညာလဲ၊ ဘယ်သူတွေ နားထောင်လဲ၊ အထဲမှာ ဘာ data ပါလဲ ဆိုတာပါ။
+      [[mark:type-head]] ပထမ event က ticket sold ပါ။ ဒီ event ထဲမှာ ဈေးနဲ့ ကားလိုင်းကိုပါ ထည့်ပေးလိုက်ပါတယ်။
+      နားထောင်တဲ့ဘက်က Booking ကို ပြန်လှမ်းမေးစရာ မလိုတော့လို့ မြန်ပါတယ်။ ပေးရတာကတော့ event ရဲ့ ပုံစံကို နောက်မှ
+      ပြောင်းရ ခက်သွားတာပါ။ နားထောင်သူတိုင်းက အဲဒီ data တွေကို မှီခိုသွားလို့ပါ။
+      [[mark:type-row-2]] ဒုတိယ event ဖြစ်တဲ့ ticket cancelled မှာတော့ လက်မှတ်ရဲ့ id တစ်ခုတည်းကိုပဲ ထည့်ပါတယ်။ ဖျက်ခ
+      ဘယ်လောက်လဲ၊ ဘယ်လောက် ပြန်အမ်းရမလဲ ဆိုတာတွေက ပြောင်းနိုင်သေးတာမို့၊ လိုတဲ့သူက မူရင်းနေရာမှာ နောက်ဆုံး
+      အခြေအနေကို လာဖတ်တာက ပိုစိတ်ချရပါတယ်။ ပေးရတာကတော့ ပြန်လာဖတ်တဲ့ query တွေ တိုးလာတာပါ။
+      [[mark:type-row-3]] တတိယ event က တခြားဘက်က လာတာပါ။ ငွေချေတာ မအောင်မြင်ဘူး ဆိုတာကို Payment က ကြေညာပြီး၊
+      Booking က နားထောင်ပြီး ကိုင်ထားတဲ့ ထိုင်ခုံကို ပြန်လွှတ်ပေးပါတယ်။
+      [[mark:d-carry]] နောက်ဆုံး column က event တစ်ခုချင်းစီအတွက် ချရတဲ့ ဆုံးဖြတ်ချက်ပါ။ data ကို ထည့်ပေးလိုက်မလား၊
+      key တစ်ခုတည်းပဲ ပေးပြီး ပြန်လာဖတ်ခိုင်းမလား ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-harder, type: slide.close, at: { mark: d-open } }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-harder },
+          path: notebook/20-events.md,
+        }
+      - id: type-head
+        type: editor.type
+        at: { mark: type-head }
+        cadence: line-by-line
+        target: { file: notebook/20-events.md, after: "# Event စာရင်း · ခရီးဖော်\n\n" }
+        text: "| Event | Producer | Consumer | ပါတဲ့ data |\n|---|---|---|---|\n| TicketSold | Booking | Notification, Operator, Settlement | ticket id, ဈေး, ကားလိုင်း id |\n"
+      - id: type-row-2
+        type: editor.type
+        at: { mark: type-row-2 }
+        cadence: line-by-line
+        target: { file: notebook/20-events.md, after: "ကားလိုင်း id |\n" }
+        text: "| TicketCancelled | Booking | Notification, Settlement | ticket id တစ်ခုတည်း |\n"
+      - id: type-row-3
+        type: editor.type
+        at: { mark: type-row-3 }
+        cadence: line-by-line
+        target: { file: notebook/20-events.md, after: "ticket id တစ်ခုတည်း |\n" }
+        text: "| PaymentFailed | Payment | Booking | ticket id, အကြောင်းရင်း |\n"
+      - id: expect-cancelled
+        type: expect.file
+        at: { afterAction: type-row-3 }
+        path: notebook/20-events.md
+        contains: "| TicketCancelled | Booking | Notification, Settlement | ticket id တစ်ခုတည်း |\n"
+      - id: sel-carry
+        type: editor.select
+        at: { mark: d-carry }
+        target: { file: notebook/20-events.md, text: "ပါတဲ့ data" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခရီးသည် တစ်ယောက်က ထိုင်ခုံ နံပါတ် ၁၂ ကို ရွေးလိုက်ပါတယ်။ Booking က အဲဒီ
+      ခုံ လွတ်သေးလား ဆိုတာကို ထိုင်ခုံတွေကို ထိန်းတဲ့ အပိုင်းဆီ မေးရပါမယ်။ ဒါကို ဘယ်လို မေးမလဲ။
+      [[mark:q-a]] ပထမ နည်းက ခုံ လွတ်လား မေးတဲ့ event တစ်ခုကို ကြေညာပြီး၊ အဖြေ event ပြန်လာတာကို စောင့်တာပါ။
+      [[mark:q-b]] ဒုတိယ နည်းကတော့ တိုက်ရိုက် လှမ်းခေါ်ပြီး အဖြေကို စောင့်ယူတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်း၊ တိုက်ရိုက် ခေါ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ ဒီ အဖြေကို အခုချက်ချင်း
+      လိုလို့ပါ။ ခရီးသည်က screen ရှေ့မှာ စောင့်နေပြီး၊ အဖြေ မရမချင်း ရှေ့ဆက်လို့ မရပါဘူး။
+      [[mark:q-rule]] ခုံ လွတ်လား ဆိုတာက ဖြစ်ပြီးသား အကြောင်းအရာကို ကြေညာတာ မဟုတ်ဘဲ၊ မေးခွန်း တစ်ခုပါ။ အဖြေကို အခု
+      လိုတဲ့ မေးခွန်းတွေကို call အဖြစ်ပဲ ထားပြီး၊ ဖြစ်ပြီးသားကို အသိပေးရုံ ကိစ္စတွေကိုမှ event အဖြစ် ပြောင်းပါ။
+      တိုက်ရိုက် ခေါ်တာကို မူလအတိုင်း ထားပြီး၊ လိုအပ်တဲ့ နေရာမှာမှ event ကို သုံးတာက စိတ်ချရတဲ့ အစပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule, offsetMs: 5500 },
+          upsertIds: [q-r1, q-r2],
+          drawMs: 1800,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာ အလုပ်တစ်ခု ပြီးတိုင်း တခြား အပိုင်းတွေကို တစ်ခုပြီးတစ်ခု
+      လှမ်းခေါ်နေတဲ့ နေရာ တစ်ခုကို ရှာကြည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် project အတွက် event
+      တစ်ခုကို row အသစ် တစ်ခုအဖြစ် ရေးကြည့်ပါ။ နာမည်ကို အတိတ်ကာလနဲ့ ပေးပြီး၊ ဘယ်သူ ကြေညာမလဲ၊ ဘယ်သူတွေ
+      နားထောင်မလဲ၊ ဘာ data ထည့်မလဲ ဆိုတာ ဖြည့်ပါ။
+      [[mark:turn-2]] အဲဒီ call တွေထဲက အဖြေကို အခုချက်ချင်း လိုတဲ့ call တွေကိုတော့ ချန်ထားခဲ့ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 9000 }
+        target: { file: notebook/20-events.md, text: "| Event | Producer | Consumer | ပါတဲ့ data |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ event ဆိုတာ ဖြစ်ပြီးသွားတဲ့ အကြောင်းအရာ တစ်ခုပါ။ ကြေညာတဲ့ဘက်က ဘယ်သူ နားထောင်နေလဲ
+      မသိဘဲ၊ ဘယ်သူ့ကိုမှလည်း မစောင့်တာမို့၊ နားထောင်တဲ့ အပိုင်း တစ်ခု နှေးတာက ကြေညာတဲ့ဘက်ကို မနှေးစေတော့ပါဘူး။
+      [[mark:recap-2]] အဲဒီအတွက် error၊ အစီအစဉ်၊ ထပ်နေတာ၊ အလုပ် ဘယ်ရောက်နေလဲ မမြင်ရတာနဲ့ ခဏတာ ကွာနေတဲ့ data
+      တွေကို ကိုင်တွယ်ရပါတယ်။ ဒါကြောင့် အဖြေကို အခု လိုတဲ့ နေရာမှာ call၊ ဖြစ်ပြီးသားကို အသိပေးတဲ့ နေရာမှာ event
+      ဆိုပြီး နေရာအလိုက် ရွေးသုံးရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ service သေးသေးလေးတွေက data တစ်ခုစီ ပိုင်ပြီး သီးခြားစီ deploy လုပ်တဲ့
+      microservices ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-sold
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          {
+            file: notebook/20-events.md,
+            text: "| TicketSold | Booking | Notification, Operator, Settlement | ticket id, ဈေး, ကားလိုင်း id |",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
