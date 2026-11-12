@@ -1,0 +1,1134 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-37-service-granularity
+  title: "Architect Path 37: Service ဘယ်လောက် သေးရမလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/37-granularity.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/37-granularity.md: |
+        # Service granularity: ခွဲမလား၊ ပေါင်းမလား
+
+        - တောင်းဆိုချက် 1: Notification team က SMS, email, push ကို service 3 ခု ခွဲချင်တယ်
+        - တောင်းဆိုချက် 2: Payment team က Refund service ကို Payment ထဲ ပြန်ပေါင်းချင်တယ်
+
+        ## Notification
+
+        | အား | သက်ဆိုင်ပုံ | အလေးချိန် |
+        |---|---|---|
+
+        ## Refund
+
+        | အား | သက်ဆိုင်ပုံ | အလေးချိန် |
+        |---|---|---|
+
+        စစ်ချက်: boundary တစ်ခုက interface သေးသေးနဲ့ အလုပ်အများကြီးကို ဖုံးထားနိုင်မှ တန်တယ်
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: split-forces
+      contentType: html
+      name: ခွဲဖို့ တွန်းတဲ့ အား
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ခွဲဖို့ တွန်းတဲ့ အား 5 မျိုး</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide red">Fault tolerance</span>တစ်ခု ပျက်တာက ကျန်တာကို မဆွဲချစေချင်</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide green">Scale</span>အပိုင်း တစ်ခုတည်းက load အများကြီး ခံရ</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide orange">Volatility</span>အပိုင်း တစ်ခုက ပိုမကြာခဏ ပြောင်း</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide blue">Cohesion</span>မဆိုင်တဲ့ အလုပ်တွေ တစ်နေရာတည်း ရောနေ</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide violet">Security</span>အပိုင်း တစ်ခုက ပိုတင်းကျပ်ရ</div>
+        </div>
+    - id: join-forces
+      contentType: html
+      name: ပေါင်းဖို့ ဆွဲတဲ့ အား
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ပေါင်းဖို့ ဆွဲတဲ့ အား 3 မျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide violet">မျှသုံး</span>code ဒါမှမဟုတ် data အတူတူကို သုံးနေရ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide blue">Transaction</span>အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ်</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide orange">အပြန်အလှန် ခေါ်</span>request တိုင်းမှာ အကြိမ်ကြိမ် ခေါ်နေရ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — one service or three: blue parts, green what a boundary buys,
+    # red what it costs.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "သေးလေ ကောင်းလေ လား?",
+        fontSize: 36,
+      }
+    - {
+        id: s-one,
+        kind: rectangle,
+        x: 270,
+        y: 300,
+        width: 260,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-one-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 328,
+        width: 260,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    - { id: s-arrow, kind: freedraw, stroke: arrow-right, x: 545, y: 325, width: 100, height: 40 }
+    - {
+        id: s-sms,
+        kind: rectangle,
+        x: 660,
+        y: 235,
+        width: 180,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-sms-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 253,
+        width: 180,
+        height: 35,
+        text: "SMS",
+        fontSize: 28,
+      }
+    - {
+        id: s-email,
+        kind: rectangle,
+        x: 660,
+        y: 315,
+        width: 180,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-email-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 333,
+        width: 180,
+        height: 35,
+        text: "Email",
+        fontSize: 28,
+      }
+    - {
+        id: s-push,
+        kind: rectangle,
+        x: 660,
+        y: 395,
+        width: 180,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-push-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 413,
+        width: 180,
+        height: 35,
+        text: "Push",
+        fontSize: 28,
+      }
+    - {
+        id: s-gain1,
+        kind: text,
+        x: 865,
+        y: 253,
+        width: 230,
+        height: 35,
+        text: "သီးခြား deploy",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-gain2,
+        kind: text,
+        x: 865,
+        y: 333,
+        width: 230,
+        height: 35,
+        text: "သီးခြား scale",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-cost1,
+        kind: text,
+        x: 270,
+        y: 505,
+        width: 640,
+        height: 35,
+        text: "function call က network call ဖြစ်သွား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-cost2,
+        kind: text,
+        x: 270,
+        y: 565,
+        width: 640,
+        height: 35,
+        text: "deploy၊ စောင့်ကြည့်စရာ၊ ညဘက် တာဝန် 3 ဆ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the Notification request weighed: two dashed pans, white forces,
+    # red for the guess that gets no weight, orange the question to the business,
+    # green its answer.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Notification ကို ချိန်ကြည့်ရင်",
+        fontSize: 36,
+      }
+    - { id: w-left, kind: rectangle, x: 270, y: 230, width: 390, height: 250, strokeStyle: dashed }
+    - {
+        id: w-left-h,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 300,
+        height: 35,
+        text: "ခွဲဖို့ တွန်းတဲ့ အား",
+        fontSize: 28,
+      }
+    - { id: w-right, kind: rectangle, x: 690, y: 230, width: 390, height: 250, strokeStyle: dashed }
+    - {
+        id: w-right-h,
+        kind: text,
+        x: 710,
+        y: 245,
+        width: 300,
+        height: 35,
+        text: "ပေါင်းဖို့ ဆွဲတဲ့ အား",
+        fontSize: 28,
+      }
+    - {
+        id: w-f1,
+        kind: text,
+        x: 290,
+        y: 305,
+        width: 340,
+        height: 35,
+        text: "လက်မှတ် SMS နောက်ကျ",
+        fontSize: 28,
+      }
+    - {
+        id: w-f2,
+        kind: text,
+        x: 290,
+        y: 365,
+        width: 340,
+        height: 35,
+        text: "scale မတူ",
+        fontSize: 28,
+      }
+    - {
+        id: w-f3,
+        kind: text,
+        x: 290,
+        y: 425,
+        width: 340,
+        height: 35,
+        text: "channel အသစ်?",
+        fontSize: 28,
+      }
+    - {
+        id: w-f3-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 285,
+        y: 425,
+        width: 240,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-j1,
+        kind: text,
+        x: 710,
+        y: 305,
+        width: 340,
+        height: 35,
+        text: "template မျှသုံး",
+        fontSize: 28,
+      }
+    - {
+        id: w-j2,
+        kind: text,
+        x: 710,
+        y: 365,
+        width: 340,
+        height: 35,
+        text: "ခရီးသည် data မျှသုံး",
+        fontSize: 28,
+      }
+    - {
+        id: w-q,
+        kind: text,
+        x: 270,
+        y: 505,
+        width: 500,
+        height: 35,
+        text: "ဘယ်ဟာ ပိုအရေးကြီးလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-f1-o,
+        kind: freedraw,
+        stroke: circle,
+        x: 276,
+        y: 296,
+        width: 340,
+        height: 54,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: w-a,
+        kind: text,
+        x: 270,
+        y: 570,
+        width: 600,
+        height: 35,
+        text: "လက်မှတ် SMS အချိန်မီ ရောက်တာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — where to cut: the team's three channel services (blue) leave the
+    # problem inside SMS (red); the two services the force points at, and a
+    # green check.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "ဘယ်နေရာက ခွဲမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: c-sms,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 220,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-sms-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 253,
+        width: 220,
+        height: 35,
+        text: "SMS",
+        fontSize: 28,
+      }
+    - {
+        id: c-email,
+        kind: rectangle,
+        x: 520,
+        y: 235,
+        width: 220,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-email-l,
+        kind: text,
+        align: center,
+        x: 520,
+        y: 253,
+        width: 220,
+        height: 35,
+        text: "Email",
+        fontSize: 28,
+      }
+    - {
+        id: c-push,
+        kind: rectangle,
+        x: 770,
+        y: 235,
+        width: 220,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-push-l,
+        kind: text,
+        align: center,
+        x: 770,
+        y: 253,
+        width: 220,
+        height: 35,
+        text: "Push",
+        fontSize: 28,
+      }
+    - {
+        id: c-mixed,
+        kind: text,
+        x: 270,
+        y: 325,
+        width: 700,
+        height: 35,
+        text: "SMS ထဲမှာ အတည်ပြုစာနဲ့ promotion ရောနေဆဲ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-t,
+        kind: rectangle,
+        x: 270,
+        y: 420,
+        width: 540,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-t-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 438,
+        width: 540,
+        height: 35,
+        text: "လက်မှတ် message: SMS, email",
+        fontSize: 28,
+      }
+    - {
+        id: c-c,
+        kind: rectangle,
+        x: 270,
+        y: 510,
+        width: 540,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-c-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 528,
+        width: 540,
+        height: 35,
+        text: "Campaign: SMS, push",
+        fontSize: 28,
+      }
+    - {
+        id: c-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 840,
+        y: 468,
+        width: 64,
+        height: 64,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz: white givens and options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Refund ကို ဘယ်မှာ ထားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-g1,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 700,
+        height: 35,
+        text: "refund code က 3 ဆ ပိုပြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-g2,
+        kind: text,
+        x: 290,
+        y: 295,
+        width: 700,
+        height: 35,
+        text: "ငွေစာရင်း တစ်ခုတည်းကို အတူ ပြင်ရ",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 375,
+        width: 700,
+        height: 35,
+        text: "က) သီးခြား service အဖြစ် ဆက်ထား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 440,
+        width: 700,
+        height: 35,
+        text: "ခ) Payment ထဲ ပြန်ပေါင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 445,
+        width: 360,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 675,
+        y: 433,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 700,
+        height: 35,
+        text: "ငွေစာရင်းက တစ်ဝက်တစ်ပျက် မဖြစ်ရ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-mod,
+        kind: text,
+        x: 290,
+        y: 585,
+        width: 700,
+        height: 35,
+        text: "refund = Payment ထဲက module တစ်ခု",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8137
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: တောင်းဆိုချက် နှစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ monolith ကို business အကြောင်းပြချက် ရှိမှ၊ ပြန်လှည့်လို့ရတဲ့ အဆင့်လေးတွေနဲ့
+      တစ်ပိုင်းချင်း ခွဲထုတ်ပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ခွဲထုတ်ပြီးတဲ့နောက် ပေါ်လာတဲ့ မေးခွန်းကတော့ service တစ်ခုက ဘယ်လောက် သေးသင့်လဲ ဆိုတာပါ။ ဒီအပတ်ထဲမှာ ကိုယ့်ဆီကို တောင်းဆိုချက် နှစ်ခု ရောက်လာပါတယ်။
+      [[mark:sel-req1]] ပထမ တစ်ခုက Notification team ဆီကပါ။ SMS၊ email နဲ့ push notification သုံးမျိုးလုံးကို
+      ပို့ပေးနေတဲ့ service တစ်ခုတည်းကို သုံးခုအဖြစ် ခွဲချင်တယ်လို့ ဆိုပါတယ်။
+      [[mark:sel-req2]] ဒုတိယ တစ်ခုက Payment team ဆီကပါ။ သူတို့ကတော့ ပြောင်းပြန်ပါ။ မနှစ်က သီးခြား ခွဲထုတ်ခဲ့တဲ့
+      Refund service ကို Payment ထဲ ပြန်ပေါင်းချင်တယ်လို့ ဆိုပါတယ်။
+      [[mark:cto]] CTO ဖြစ်တဲ့ အောင်အောင် ကတော့ team တစ်ခုက ခွဲချင်ပြီး နောက်တစ်ခုက ပေါင်းချင်နေတယ်ဆိုတော့၊ service
+      တစ်ခုက ဘယ်လောက် သေးရမယ်ဆိုတဲ့ စည်းမျဉ်း ကိုယ်တို့မှာ ရှိသလားလို့ မေးပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/37-granularity.md,
+        }
+      - id: sel-req1
+        type: editor.select
+        at: { mark: sel-req1 }
+        target:
+          {
+            file: notebook/37-granularity.md,
+            text: "- တောင်းဆိုချက် 1: Notification team က SMS, email, push ကို service 3 ခု ခွဲချင်တယ်",
+          }
+      - id: sel-req2
+        type: editor.select
+        at: { mark: sel-req2 }
+        target:
+          {
+            file: notebook/37-granularity.md,
+            text: "- တောင်းဆိုချက် 2: Payment team က Refund service ကို Payment ထဲ ပြန်ပေါင်းချင်တယ်",
+          }
+
+  - id: smaller
+    chapter: သေးလေ ကောင်းလေ မဟုတ်ဘူး
+    narration: >
+      [[mark:s-open]] service တစ်ခု ဘယ်လောက် ကြီးလဲ၊ ဘယ်လောက် သေးလဲ ဆိုတာကို granularity လို့ ခေါ်ပါတယ်။
+      service ဆိုတာ သေးလေ ကောင်းလေလို့ ထင်မိတတ်ကြပါတယ်။
+      [[mark:s-one]] Notification က အခု အသိပေးစာ အားလုံးကို ပို့ပေးတဲ့ service တစ်ခုတည်းပါ။
+      [[mark:s-three]] ဒါကို team တောင်းတဲ့အတိုင်း SMS၊ email၊ push ဆိုပြီး သုံးခု ခွဲလိုက်မယ် ဆိုပါစို့။
+      [[mark:s-gain]] ရလာတာက တစ်ခုချင်းစီကို သီးခြား deploy လုပ်နိုင်၊ သီးခြား scale လုပ်နိုင်တာပါ။
+      [[mark:s-cost]] ဒါပေမဲ့ boundary အသစ် တစ်ခုတိုင်းမှာ ပေးရတာတွေလည်း ပါလာပါတယ်။ function တစ်ခု ခေါ်ရုံနဲ့
+      ပြီးတဲ့ကိစ္စက network ပေါ်ကနေ ခေါ်ရတဲ့ call ဖြစ်သွားပြီး၊ deploy လုပ်စရာ၊ စောင့်ကြည့်စရာ၊ ညဘက်
+      တာဝန်တွေကလည်း သုံးဆ ဖြစ်လာပါတယ်။
+      [[mark:s-balance]] ဒါကြောင့် သေးတာက သူ့အလိုလို မကောင်းသလို၊ ကြီးတာကလည်း သူ့အလိုလို မကောင်းပါဘူး။ granularity
+      ဆိုတာ ခွဲဖို့ တွန်းနေတဲ့ အားတွေနဲ့ ပေါင်းထားဖို့ ဆွဲနေတဲ့ အားတွေကို ချိန်ကြည့်ရတဲ့ ကိစ္စပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-one,
+          type: whiteboard.apply,
+          at: { mark: s-one },
+          upsertIds: [s-one, s-one-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-three,
+          type: whiteboard.apply,
+          at: { mark: s-three },
+          upsertIds: [s-arrow, s-sms, s-sms-l, s-email, s-email-l, s-push, s-push-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-s-gain,
+          type: whiteboard.apply,
+          at: { mark: s-gain },
+          upsertIds: [s-gain1, s-gain2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-s-cost,
+          type: whiteboard.apply,
+          at: { mark: s-cost, offsetMs: 2500 },
+          upsertIds: [s-cost1, s-cost2],
+          drawMs: 2400,
+        }
+
+  - id: forces
+    chapter: ခွဲစေတဲ့ အားနဲ့ ပေါင်းစေတဲ့ အား
+    narration: >
+      [[mark:p-open]] service တစ်ခုကို ခွဲဖို့ တွန်းတဲ့ အား ငါးမျိုးကို အရင် ကြည့်ပါမယ်။
+      [[mark:p-1]] ပထမက fault tolerance ပါ။ အပိုင်း တစ်ခု ပျက်လည်း ကျန်တာတွေ ဆက်အလုပ်လုပ်နိုင်တာပါ။ တစ်ခုရဲ့ ပြဿနာက ကျန်တာတွေကို ဆွဲချနေရင် ခွဲချင်စရာ ဖြစ်လာပါတယ်။
+      [[mark:p-2]] ဒုတိယက scale ပါ။ အပိုင်း တစ်ခုတည်းက load အများကြီး ခံရရင်၊ အဲဒီ တစ်ခုအတွက်နဲ့ service
+      တစ်ခုလုံးကို စက်တွေ ထပ်တိုးပေးနေရပါတယ်။
+      [[mark:p-3]] တတိယက volatility ပါ။ ဘယ်လောက် မကြာခဏ ပြောင်းလဲ ဆိုတာပါ။ အပိုင်း တစ်ခုက ကျန်တာတွေထက် အများကြီး
+      ပိုပြောင်းနေရင်၊ မပြောင်းတဲ့ အပိုင်းတွေပါ အတူတူ deploy လုပ်နေရပါတယ်။
+      [[mark:p-4]] စတုတ္ထက cohesion ပါ။ အပိုင်း တစ်ခုထဲက အရာတွေ တစ်ခုနဲ့တစ်ခု ဘယ်လောက် ဆိုင်လဲ ဆိုတာပါ။ မဆိုင်တဲ့
+      အလုပ်တွေ service တစ်ခုထဲ ရောနေရင် ခွဲသင့်ပါတယ်။
+      [[mark:p-5]] ပဉ္စမက security ပါ။ ဥပမာ wallet ကုမ္ပဏီနဲ့ ချိတ်ဖို့ လျှို့ဝှက် key တွေကို ကိုင်ရတဲ့ code ကို၊
+      လူနည်းနည်းပဲ ဝင်ခွင့်ရှိတဲ့ နေရာမှာ သီးသန့် ထားချင်တာမျိုးပါ။
+      [[mark:j-open]] တစ်ဖက်မှာတော့ ပေါင်းထားဖို့ ဆွဲတဲ့ အား သုံးမျိုး ရှိပါတယ်။
+      [[mark:j-1]] ပထမက မျှသုံးနေရတာပါ။ service နှစ်ခုက code အတူတူ၊ ဒါမှမဟုတ် data အတူတူကို သုံးနေရရင်၊ တစ်ဖက်က
+      ပြင်တိုင်း နောက်တစ်ဖက်ပါ လိုက်ပြင်ရပါတယ်။
+      [[mark:j-2]] ဒုတိယက transaction ပါ။ အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ လုပ်ဆောင်ချက် အစုပါ။ database
+      တစ်ခုတည်းထဲမှာဆို database က အာမခံပေးပေမဲ့၊ service နှစ်ခုက data ကို ခွဲပိုင်လိုက်တာနဲ့ အဲဒီ အာမခံချက်
+      ပျောက်သွားပါတယ်။
+      [[mark:j-3]] တတိယက အပြန်အလှန် ခေါ်နေရတာပါ။ request တစ်ခု ပြီးဖို့ service တစ်ခုက နောက်တစ်ခုကို အကြိမ်ကြိမ်
+      လှမ်းခေါ်နေရရင်၊ ခေါ်တိုင်း နှေးသလို တစ်ခု ပျက်ရင် နှစ်ခုလုံး ပျက်တတ်ပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: close-smaller,
+          type: whiteboard.apply,
+          at: { mark: p-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-split,
+          type: slide.show,
+          at: { mark: p-open, offsetMs: -1000 },
+          slideId: split-forces,
+        }
+      - { id: point-p1, type: slide.point, at: { mark: p-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-p2, type: slide.point, at: { mark: p-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-p3, type: slide.point, at: { mark: p-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-p4, type: slide.point, at: { mark: p-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-p5, type: slide.point, at: { mark: p-5 }, target: { x: 0.15, y: 0.83 } }
+      - {
+          id: show-join,
+          type: slide.show,
+          at: { mark: j-open, offsetMs: -1200 },
+          slideId: join-forces,
+        }
+      - { id: point-j1, type: slide.point, at: { mark: j-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-j2, type: slide.point, at: { mark: j-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-j3, type: slide.point, at: { mark: j-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: weigh
+    chapter: Notification ကို ချိန်ကြည့်ခြင်း
+    narration: >
+      [[mark:w-open]] ဒီ အားတွေနဲ့ Notification team ရဲ့ တောင်းဆိုချက်ကို ချိန်ကြည့်ရအောင်။ team ကို အရင်ဆုံး
+      မေးတာက ဘာ ပြဿနာကြောင့် ခွဲချင်တာလဲ ဆိုတာပါ။
+      [[mark:w-fail]] အဖြေက fault tolerance ပါ။ promotion တစ်ခု ကြေညာတိုင်း message သိန်းနဲ့ချီ တစ်ပြိုင်တည်း
+      ထွက်ပြီး၊ လက်မှတ် အတည်ပြုတဲ့ SMS တွေက အဲဒီနောက်မှာ မိနစ်နဲ့ချီ တန်းစီ စောင့်နေရပါတယ်။
+      [[mark:w-scale]] scale လည်း မတူပါဘူး။ အတည်ပြုစာက လက်မှတ် တစ်စောင် ရောင်းမှ တစ်စောင် ထွက်ပြီး၊ promotion
+      ကတော့ တစ်ခါတည်းနဲ့ အများကြီး ထွက်ပါတယ်။
+      [[mark:w-new]] team က နောင်မှာ channel အသစ်တွေ လာဦးမယ်လို့လည်း ဆိုပါတယ်။ အမျိုးအစား အသစ်တွေ လာမယ်ဆိုတာလည်း ခွဲစေတဲ့ အားပါ။ ဒါပေမဲ့ သေချာမှ ထည့်တွက်ရပါတယ်။
+      [[mark:w-guess]] product manager လှလှ ကို မေးကြည့်တော့ ဒီနှစ်အတွက် channel အသစ် plan မရှိပါဘူး။ မှန်းဆချက်ကိုတော့
+      အလေးချိန် မပေးပါဘူး။
+      [[mark:w-share]] ပေါင်းထားဖို့ဘက်မှာတော့ မျှသုံးနေရတာ ရှိပါတယ်။ စာသား template တွေနဲ့ ခရီးသည်ရဲ့
+      ဖုန်းနံပါတ်လို data ကို message အားလုံးက သုံးနေတာပါ။
+      [[mark:w-ask]] ဒီလို အားတွေ တိုက်နေတဲ့အခါ architect က ကိုယ့်သဘောနဲ့ မဆုံးဖြတ်ပါဘူး။ business ကို ဒီနေရာမှာ
+      ဘယ်ဟာက ပိုအရေးကြီးလဲ ဆိုတဲ့ မေးခွန်း တစ်ခုတည်း မေးပါတယ်။
+      [[mark:w-ask2]] လှလှ ကို မေးခဲ့တာက၊ promotion ပို့နေချိန်မှာတောင် လက်မှတ် SMS စက္ကန့်ပိုင်းအတွင်း ရောက်တာနဲ့၊
+      message နဲ့ ပတ်သက်သမျှကို တစ်နေရာတည်းမှာ ပြင်ရတာ၊ ဘယ်ဟာကို ပိုလိုချင်လဲ ဆိုတာပါ။
+      [[mark:w-pick]] လှလှ က လက်မှတ် SMS ကို ရွေးပါတယ်။ လက်မှတ် မရသေးတဲ့ ခရီးသည်က ကားပေါ် တက်လို့ မရလို့ပါ။
+      [[mark:c-open]] ဒါဆို ဘယ်နေရာက ခွဲမလဲ။ တစ်ခုကို တစ်ခု နှောင့်နေတာက SMS နဲ့ push
+      မဟုတ်ပါဘူး။ လက်မှတ် အတည်ပြုစာနဲ့ promotion ပါ။
+      [[mark:c-team]] team တောင်းတဲ့အတိုင်း channel အလိုက် သုံးခု ခွဲလိုက်မယ် ဆိုပါစို့။
+      [[mark:c-mixed]] SMS service အထဲမှာ အတည်ပြုစာနဲ့ promotion က အရင်အတိုင်း တန်းတူ စီနေဦးမှာပါ။ service
+      အရေအတွက်ပဲ တိုးပြီး ပြဿနာက မပျောက်ပါဘူး။
+      [[mark:c-cut]] ဒါကြောင့် အလုပ်အမျိုးအစားအလိုက် နှစ်ခုပဲ ခွဲပါမယ်။ လက်မှတ်နဲ့ ပတ်သက်တဲ့ message တွေကို ပို့တဲ့
+      service တစ်ခုနဲ့၊ promotion တွေကို ပို့တဲ့ campaign service တစ်ခုပါ။
+      [[mark:c-point]] အားကို နာမည်တပ်နိုင်ရင် ခွဲသင့်မသင့်တင်မကဘဲ၊ ဘယ်နေရာက ခွဲရမလဲ ဆိုတာပါ သိရပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-join, type: slide.close, at: { mark: w-open } }
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-join },
+          open: true,
+          clear: true,
+          upsertIds: [w-title, w-left, w-left-h, w-right, w-right-h],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-w-fail,
+          type: whiteboard.apply,
+          at: { mark: w-fail },
+          upsertIds: [w-f1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-scale,
+          type: whiteboard.apply,
+          at: { mark: w-scale },
+          upsertIds: [w-f2],
+          drawMs: 700,
+        }
+      - {
+          id: draw-w-new,
+          type: whiteboard.apply,
+          at: { mark: w-new },
+          upsertIds: [w-f3],
+          drawMs: 800,
+        }
+      - {
+          id: draw-w-guess,
+          type: whiteboard.apply,
+          at: { mark: w-guess, offsetMs: 2500 },
+          upsertIds: [w-f3-x],
+          drawMs: 700,
+        }
+      - {
+          id: draw-w-share,
+          type: whiteboard.apply,
+          at: { mark: w-share },
+          upsertIds: [w-j1, w-j2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-w-ask,
+          type: whiteboard.apply,
+          at: { mark: w-ask, offsetMs: 5000 },
+          upsertIds: [w-q],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-w-pick,
+          type: whiteboard.apply,
+          at: { mark: w-pick },
+          upsertIds: [w-f1-o, w-a],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-team,
+          type: whiteboard.apply,
+          at: { mark: c-team },
+          upsertIds: [c-sms, c-sms-l, c-email, c-email-l, c-push, c-push-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-c-mixed,
+          type: whiteboard.apply,
+          at: { mark: c-mixed },
+          upsertIds: [c-mixed],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-c-cut,
+          type: whiteboard.apply,
+          at: { mark: c-cut },
+          upsertIds: [c-t, c-t-l, c-c, c-c-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-c-point,
+          type: whiteboard.apply,
+          at: { mark: c-point },
+          upsertIds: [c-ok],
+          drawMs: 700,
+        }
+
+  - id: table
+    chapter: ချိန်ကြည့်ချက်ကို ချရေးခြင်း
+    narration: >
+      [[mark:t-close]] ချိန်ကြည့်ခဲ့တာကို နောက်လူတွေ ပြန်ကြည့်နိုင်အောင် မှတ်စုထဲမှာ ချရေးထားရအောင်။
+      [[mark:type-n1]] ခွဲဖို့ တွန်းတဲ့ အား နှစ်ခုကို ဘယ်လို သက်ဆိုင်လဲ၊ ဘယ်လောက် လေးလဲ ဆိုတာနဲ့တကွ ရေးပါတယ်။
+      အလေးချိန်ကတော့ အကြမ်းဖျင်း ပေးရုံနဲ့ လုံလောက်ပါတယ်။
+      [[mark:type-n2]] channel အသစ် ဆိုတဲ့ အကြောင်းကိုလည်း ချန်မထားပါဘူး။ အလေးချိန် မရှိဘူးလို့ မှတ်ထားမှ၊ plan တကယ်
+      ပေါ်လာတဲ့နေ့မှာ ပြန်ချိန်နိုင်မှာပါ။
+      [[mark:type-n3]] ပေါင်းဖို့ ဆွဲတဲ့ အားကတော့ တစ်ခုပဲ ရှိပါတယ်။ ခွဲလိုက်ရင် template တွေကို နှစ်နေရာ
+      ထားရမှာမို့ အလတ်လို့ ပေးထားပါတယ်။
+      [[mark:type-nd]] ဆုံးဖြတ်ချက်မှာ ဘာကို ရွေးလိုက်လဲ ဆိုတာအပြင်၊ ဘယ်သူ့ကို မေးလို့ ဒီအဖြေ ရခဲ့လဲ ဆိုတာကိုပါ
+      ထည့်ရေးထားပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-cut, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-cut },
+          path: notebook/37-granularity.md,
+        }
+      - id: type-n1
+        type: editor.type
+        at: { mark: type-n1 }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "## Notification\n\n| အား | သက်ဆိုင်ပုံ | အလေးချိန် |\n|---|---|---|\n",
+          }
+        text: "| Fault tolerance (ခွဲ) | promotion ပို့ချိန် လက်မှတ် SMS နောက်ကျ | ကြီး |\n| Scale (ခွဲ) | promotion က တစ်ခါ ပို့ရင် သိန်းချီ | အလတ် |\n"
+      - id: type-n2
+        type: editor.type
+        at: { mark: type-n2 }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "| Scale (ခွဲ) | promotion က တစ်ခါ ပို့ရင် သိန်းချီ | အလတ် |\n",
+          }
+        text: "| အမျိုးအစား အသစ် (ခွဲ) | channel အသစ် plan မရှိသေး | မရှိ |\n"
+      - id: type-n3
+        type: editor.type
+        at: { mark: type-n3 }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "| အမျိုးအစား အသစ် (ခွဲ) | channel အသစ် plan မရှိသေး | မရှိ |\n",
+          }
+        text: "| မျှသုံး (ပေါင်း) | template နဲ့ ခရီးသည် data | အလတ် |\n"
+      - id: type-nd
+        type: editor.type
+        at: { mark: type-nd }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "| မျှသုံး (ပေါင်း) | template နဲ့ ခရီးသည် data | အလတ် |\n",
+          }
+        text: "\nဆုံးဖြတ်ချက်: channel အလိုက် 3 ခု မခွဲဘူး။ အလုပ်အလိုက် 2 ခု ခွဲမယ်: လက်မှတ် message နဲ့ campaign\nအကြောင်း: လှလှ ကို မေးတော့ လက်မှတ် SMS အချိန်မီ ရောက်တာက ပိုအရေးကြီးတယ်\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Payment team ရဲ့ တောင်းဆိုချက်ကိုတော့ ကိုယ်တိုင် ချိန်ကြည့်ပါ။
+      [[mark:q-g1]] Refund ကို မနှစ်က ခွဲထုတ်ခဲ့တာမှာ အကြောင်းပြချက် ရှိခဲ့ပါတယ်။ ကားလိုင်းတွေရဲ့ လက်မှတ် ဖျက်တဲ့
+      စည်းမျဉ်းတွေကြောင့် refund code က ငွေဖြတ်တဲ့ code ထက် သုံးဆလောက် ပိုမကြာခဏ ပြောင်းရလို့ပါ။
+      [[mark:q-g2]] ဒါပေမဲ့ refund တစ်ခု လုပ်တိုင်း Refund နဲ့ Payment က ငွေစာရင်း တစ်ခုတည်းကို ပြင်ရပါတယ်။
+      ငွေပြန်အမ်းပြီးပြီ ဆိုတဲ့ မှတ်တမ်းနဲ့ မူလ ငွေချေမှုရဲ့ အခြေအနေက အတူတူ ပြောင်းမှ ရပါမယ်။
+      [[mark:q-a]] ဒါဆို Refund ကို သီးခြား service အဖြစ် ဆက်ထားမလား။
+      [[mark:q-b]] ဒါမှမဟုတ် Payment ထဲ ပြန်ပေါင်းမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ Payment ထဲ ပြန်ပေါင်းတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ငွေစာရင်းက တစ်ဝက်တစ်ပျက် ဖြစ်ခွင့် မရှိလို့ပါ။ service နှစ်ခု ခွဲထားတော့
+      refund မှတ်တမ်း ရေးပြီးချိန်နဲ့ ငွေချေမှုကို ပြင်ချိန်ကြားမှာ တစ်ခုခု ပျက်သွားရင်၊ စာရင်း နှစ်ခုက
+      မကိုက်တော့ပါဘူး။ ပြီးခဲ့တဲ့ သုံးလအတွင်း အဲဒီလို refund ၃၇ ခုကို finance ဘက်က လက်နဲ့ လိုက်ညှိခဲ့ရပါတယ်။ ဒီမှာတော့ transaction ဆိုတဲ့ အားက volatility ထက် အများကြီး ပိုလေးပါတယ်။
+      [[mark:q-module]] volatility မတူတာကိုတော့ Payment service အထဲမှာ refund ကို သီးခြား module အဖြစ် ထားပြီး
+      ဖြေရှင်းပါတယ်။ module ဆိုတာ အတူ ပြောင်းလဲတတ်တဲ့ code အုပ်စုပါ။ deploy က တစ်ခုတည်း ဖြစ်သွားပေမဲ့ code ကတော့ ရောမသွားပါဘူး။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-g1,
+          type: whiteboard.apply,
+          at: { mark: q-g1, offsetMs: 3500 },
+          upsertIds: [q-g1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-q-g2,
+          type: whiteboard.apply,
+          at: { mark: q-g2 },
+          upsertIds: [q-g2],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-module,
+          type: whiteboard.apply,
+          at: { mark: q-module },
+          upsertIds: [q-mod],
+          drawMs: 1200,
+        }
+
+  - id: refund
+    chapter: Boundary တစ်ခုက တန်မတန်
+    narration: >
+      [[mark:r-close]] ဒီ ချိန်ကြည့်ချက်ကိုလည်း မှတ်စုထဲ ထည့်ထားပါမယ်။
+      [[mark:type-r1]] volatility မတူတာက တကယ် ရှိတဲ့ အားပါ။ ဒါပေမဲ့ transaction ရဲ့ အလေးချိန်ကိုတော့ အလွန်ကြီးတယ်လို့
+      ရေးထားပါတယ်။ ငွေနဲ့ ပတ်သက်တဲ့ စာရင်းမို့ပါ။
+      [[mark:type-r2]] ပေါင်းဖို့ ဆွဲတဲ့ နောက်ထပ် အား တစ်ခုလည်း ရှိပါသေးတယ်။ refund တစ်ခု လုပ်ဖို့ Refund service က
+      Payment ကို လေးခါ လှမ်းခေါ်ရပါတယ်။ ဒီလောက် ခေါ်နေရတာက နှစ်ခုဟာ တစ်ခုတည်း ဖြစ်သင့်တယ် ဆိုတဲ့ လက္ခဏာ တစ်ခုပါ။
+      [[mark:type-rd]] ဒါကြောင့် ပြန်ပေါင်းပြီး၊ refund ကို အထဲမှာ module တစ်ခုအဖြစ် ထားပါမယ်။
+      [[mark:sel-check]] အောက်ဆုံးက စစ်ချက်ကတော့ ဆုံးဖြတ်ချက် နှစ်ခုလုံးကို ပြန်စစ်ဖို့ပါ။ boundary တစ်ခုက interface
+      သေးသေးလေးနဲ့ အလုပ်အများကြီးကို ဖုံးထားနိုင်မှ တန်ပါတယ်။ interface ဆိုတာ အပိုင်း နှစ်ခုကြား သဘောတူထားတဲ့
+      ပုံစံပါ။
+      [[mark:check-2]] campaign service ကို ကြည့်ရင်၊ ဒီ message ကို ဒီလူတွေဆီ ပို့ပေးပါ ဆိုတဲ့ တောင်းဆိုချက် တစ်ခုတည်းနောက်မှာ အချိန်ဇယား ဆွဲတာ၊ အရှိန်ထိန်းတာတွေကို ဝှက်ထားပါတယ်။ Refund service ကတော့ Payment ရဲ့ အတွင်းပိုင်း data တွေကို သိနေရတာမို့၊ ဖုံးထားနိုင်တာ မရှိသလောက်ပါပဲ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: r-close }, open: false }
+      - id: type-r1
+        type: editor.type
+        at: { mark: type-r1 }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "## Refund\n\n| အား | သက်ဆိုင်ပုံ | အလေးချိန် |\n|---|---|---|\n",
+          }
+        text: "| Volatility (ခွဲ) | refund code က 3 ဆ ပိုပြောင်း | အလတ် |\n| Transaction (ပေါင်း) | ငွေစာရင်း တစ်ခုတည်းကို အတူ ပြင်ရ | အလွန်ကြီး |\n"
+      - id: type-r2
+        type: editor.type
+        at: { mark: type-r2 }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "| Transaction (ပေါင်း) | ငွေစာရင်း တစ်ခုတည်းကို အတူ ပြင်ရ | အလွန်ကြီး |\n",
+          }
+        text: "| အပြန်အလှန် ခေါ် (ပေါင်း) | refund တစ်ခုမှာ Payment ကို 4 ခါ ခေါ် | ကြီး |\n"
+      - id: type-rd
+        type: editor.type
+        at: { mark: type-rd }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/37-granularity.md,
+            after: "| အပြန်အလှန် ခေါ် (ပေါင်း) | refund တစ်ခုမှာ Payment ကို 4 ခါ ခေါ် | ကြီး |\n",
+          }
+        text: "\nဆုံးဖြတ်ချက်: Payment ထဲ ပြန်ပေါင်းမယ်\nrefund ကို အထဲမှာ သီးခြား module အဖြစ် ထားမယ်\n"
+      - id: expect-refund
+        type: expect.file
+        at: { afterAction: type-rd }
+        path: notebook/37-granularity.md
+        contains: "| Transaction (ပေါင်း) | ငွေစာရင်း တစ်ခုတည်းကို အတူ ပြင်ရ | အလွန်ကြီး |\n"
+      - id: sel-check
+        type: editor.select
+        at: { mark: sel-check }
+        target:
+          {
+            file: notebook/37-granularity.md,
+            text: "စစ်ချက်: boundary တစ်ခုက interface သေးသေးနဲ့ အလုပ်အများကြီးကို ဖုံးထားနိုင်မှ တန်တယ်",
+          }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာ သေးလွန်းတယ်၊ ဒါမှမဟုတ် ကြီးလွန်းတယ်လို့ ထင်ရတဲ့ service
+      တစ်ခု၊ ဒါမှမဟုတ် module တစ်ခုကို ရွေးပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် project အတွက်
+      အဲဒါကို ခွဲဖို့ တွန်းနေတဲ့ အား၊ ဒါမှမဟုတ် ပေါင်းဖို့ ဆွဲနေတဲ့ အား တစ်ခုကို နာမည်တပ်ပြီး ရေးကြည့်ပါ။
+      [[mark:turn-2]] ခံစားချက်နဲ့ မရေးဘဲ သက်သေနဲ့ ရေးပါ။ ဘယ်နှခါ ပျက်ခဲ့လဲ၊ git history ထဲမှာ commit ဘယ်လောက် များလဲ ဆိုတာမျိုးပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-table
+        type: editor.select
+        at: { mark: turn, offsetMs: 6000 }
+        target: { file: notebook/37-granularity.md, text: "| အား | သက်ဆိုင်ပုံ | အလေးချိန် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ service တစ်ခုက ဘယ်လောက် သေးရမလဲ ဆိုတာအတွက် စည်းမျဉ်း တစ်ခုတည်း
+      မရှိပါဘူး။ ခွဲဖို့ တွန်းတဲ့ အားတွေနဲ့ ပေါင်းဖို့ ဆွဲတဲ့ အားတွေကို နာမည်တပ်၊ သက်သေနဲ့ အလေးချိန်ပေးပြီး
+      ချိန်ရပါတယ်။ အားတွေ တိုက်နေရင် ဘယ်ဟာက ပိုအရေးကြီးလဲလို့ business ကို မေးပါ။
+      [[mark:next]] နောက် lesson မှာတော့ service တွေ ခွဲလိုက်တဲ့အခါ table တစ်ခုစီကို ဘယ် service က ပိုင်မလဲ၊
+      ကိုယ်မပိုင်တဲ့ data ကို ဘယ်လို ဖတ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap }
+        target:
+          { file: notebook/37-granularity.md, text: "# Service granularity: ခွဲမလား၊ ပေါင်းမလား" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
