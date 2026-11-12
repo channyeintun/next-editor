@@ -1,0 +1,731 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-54-the-elevator
+  title: "Architect Path 54: Architect elevator"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/54-memo.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/54-memo.md: |
+        # Memo · ဒါရိုက်တာအဖွဲ့ အတွက်
+
+        မေးခွန်း: နောက်နှစ် engineering အချိန်ရဲ့ 20 % ကို architecture အလုပ်မှာ ဘာလို့ သုံးမလဲ?
+
+        ## 20 % က နောက်မှ လုပ်နိုင်ခွင့် 3 ခုကို ဝယ်ပေးမယ်
+
+        ## တစ်ခုစီရဲ့ ဈေးနဲ့ တန်မယ့် အခြေအနေ
+        | နောက်မှ လုပ်နိုင်မယ့်အရာ | အခု ကုန်ကျမှု | ဘယ်အခါ တန်မလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the building of lesson 02 again, same layout: floors are people
+    # (white), the lift shaft is the path between them (violet, dashed), the
+    # architect is the one thing the board is about (orange). New here: what
+    # the lift carries down and up.
+    - {
+        id: e-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "အထပ်တွေကြား ဘာတွေ သယ်သလဲ",
+        fontSize: 36,
+      }
+    - { id: e-f1, kind: rectangle, x: 270, y: 230, width: 440, height: 80 }
+    - {
+        id: e-f1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 252,
+        width: 440,
+        height: 35,
+        text: "ဒါရိုက်တာအဖွဲ့ · အောင်အောင်",
+        fontSize: 28,
+      }
+    - { id: e-f2, kind: rectangle, x: 270, y: 325, width: 440, height: 80 }
+    - {
+        id: e-f2-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 347,
+        width: 440,
+        height: 35,
+        text: "product · လှလှ",
+        fontSize: 28,
+      }
+    - { id: e-f3, kind: rectangle, x: 270, y: 420, width: 440, height: 80 }
+    - {
+        id: e-f3-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 442,
+        width: 440,
+        height: 35,
+        text: "စက်ခန်း · team 12 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: e-shaft,
+        kind: rectangle,
+        x: 740,
+        y: 230,
+        width: 180,
+        height: 270,
+        strokeStyle: dashed,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-car,
+        kind: rectangle,
+        x: 750,
+        y: 330,
+        width: 160,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: e-car-l,
+        kind: text,
+        align: center,
+        x: 750,
+        y: 347,
+        width: 160,
+        height: 35,
+        text: "architect",
+        fontSize: 28,
+      }
+    - {
+        id: e-down,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 950,
+        y: 240,
+        width: 40,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-down-l,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 800,
+        height: 35,
+        text: "အဆင်း: strategy ကို ဆုံးဖြတ်ချက်အဖြစ်",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-up,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 1010,
+        y: 380,
+        width: 40,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-up-l,
+        kind: text,
+        x: 270,
+        y: 585,
+        width: 800,
+        height: 35,
+        text: "အတက်: စက်ခန်းက အမှန်ကို မချောဘဲ",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    # Board 2 — the quiz: white question and options, green answer and reason,
+    # orange the rule the answer gives.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်စာကြောင်းနဲ့ ဆုံးဖြတ်နိုင်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) Payment မှာ adapter layer ပြန်ဆောက်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) wallet အသစ်ကို 6 လ မဟုတ်ဘဲ 2 ပတ်နဲ့ ထည့်နိုင်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 680,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1000,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "ဘာလုပ်နိုင်လာမလဲ၊ ဘယ်လောက် မြန်မလဲ ပြောတယ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-lead,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 790,
+        height: 35,
+        text: "ရလဒ်ကို အရင် ပြော: မြန်နှုန်း၊ risk၊ ကုန်ကျစရိတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — what an option is, as a small table for the wallet case: white
+    # labels, red what it costs, green what it gains, orange when it is worth it.
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Option: နောက်မှ လုပ်နိုင်ခွင့်",
+        fontSize: 36,
+      }
+    - {
+        id: o-h1,
+        kind: text,
+        x: 600,
+        y: 245,
+        width: 230,
+        height: 35,
+        text: "option မရှိရင်",
+        fontSize: 28,
+      }
+    - {
+        id: o-h2,
+        kind: text,
+        x: 860,
+        y: 245,
+        width: 230,
+        height: 35,
+        text: "option ရှိရင်",
+        fontSize: 28,
+      }
+    - {
+        id: o-r1,
+        kind: text,
+        x: 270,
+        y: 315,
+        width: 300,
+        height: 35,
+        text: "အခု ပေးရတာ",
+        fontSize: 28,
+      }
+    - { id: o-c11, kind: text, x: 600, y: 315, width: 200, height: 35, text: "0", fontSize: 28 }
+    - {
+        id: o-c12,
+        kind: text,
+        x: 860,
+        y: 315,
+        width: 200,
+        height: 35,
+        text: "team 2 လ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-r2,
+        kind: text,
+        x: 270,
+        y: 385,
+        width: 300,
+        height: 35,
+        text: "wallet ထပ်ထည့်ရရင်",
+        fontSize: 28,
+      }
+    - {
+        id: o-c21,
+        kind: text,
+        x: 600,
+        y: 385,
+        width: 200,
+        height: 35,
+        text: "6 လ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-c22,
+        kind: text,
+        x: 860,
+        y: 385,
+        width: 200,
+        height: 35,
+        text: "2 ပတ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - { id: o-r3, kind: text, x: 270, y: 455, width: 300, height: 35, text: "မထည့်ရရင်", fontSize: 28 }
+    - { id: o-c31, kind: text, x: 600, y: 455, width: 200, height: 35, text: "0", fontSize: 28 }
+    - { id: o-c32, kind: text, x: 860, y: 455, width: 200, height: 35, text: "ထပ်မကုန်", fontSize: 28 }
+    - {
+        id: o-note,
+        kind: text,
+        x: 270,
+        y: 545,
+        width: 800,
+        height: 35,
+        text: "ရှေ့ရေး မသေချာလေ option တန်ဖိုး ရှိလေ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8154
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ဒါရိုက်တာအဖွဲ့ရဲ့ မေးခွန်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ team အများကြီးရဲ့ ဆုံးဖြတ်ချက်တွေကို တားမယ့်သူ မလိုဘဲ တစ်သားတည်း ဖြစ်စေတဲ့ principle နဲ့
+      technology radar ကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီတစ်ခါ ကိုယ့်ကို မေးခွန်း မေးလာတာက team တွေ မဟုတ်ဘဲ၊ ကုမ္ပဏီရဲ့ ဒါရိုက်တာအဖွဲ့ပါ။
+      [[mark:sel-question]] CTO ဖြစ်တဲ့ အောင်အောင် က နောက်နှစ် engineering အချိန်ရဲ့ ငါးပုံတစ်ပုံကို architecture
+      အလုပ်အတွက် ချန်ထားဖို့ အဆိုပြုထားပါတယ်။ ဒါရိုက်တာအဖွဲ့က အဲဒီ အချိန်တွေနဲ့ feature အသစ်တွေ မလုပ်ဘဲ
+      ဘာလို့ architecture မှာ သုံးရမှာလဲလို့ မေးပါတယ်။ မေးသင့်တဲ့ မေးခွန်းပါ။ feature တစ်ခုက ဘာပေးမလဲ ဆိုတာ
+      မြင်ရပေမဲ့၊ architecture အလုပ်က ဘာပေးမလဲ ဆိုတာကတော့ မျက်စိနဲ့ မမြင်ရလို့ပါ။
+      [[mark:n-diagram]] ကိုယ်က ဖြေဖို့ service တွေ အားလုံး ပါတဲ့ ပုံကြီးကို ပြလိုက်ပါတယ်။ box တွေ၊ မြားတွေ
+      အပြည့်ပါ။ တစ်မိနစ်လောက် ကြာတော့ အခန်းထဲက လူတွေ ဖုန်းကို ကြည့်ကုန်ကြပါတယ်။ finance ဘက်က တာဝန်ခံကတော့
+      ဒီပုံက ကုမ္ပဏီကို ဘာပေးမှာလဲလို့ ထပ်မေးပါတယ်။
+      [[mark:n-wrong]] ပုံက မမှားပါဘူး။ ဒါပေမဲ့ သူတို့ မေးတဲ့ မေးခွန်းကို မဖြေပါဘူး။ ကိုယ် ဘာလွဲသွားလဲ သိဖို့၊
+      ဒီ course အစပိုင်းမှာ ဆွဲခဲ့တဲ့ အဆောက်အအုံကို ပြန်ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/54-memo.md,
+        }
+      - id: sel-question
+        type: editor.select
+        at: { mark: sel-question }
+        target:
+          {
+            file: notebook/54-memo.md,
+            text: "မေးခွန်း: နောက်နှစ် engineering အချိန်ရဲ့ 20 % ကို architecture အလုပ်မှာ ဘာလို့ သုံးမလဲ?",
+          }
+
+  - id: building
+    chapter: အထပ်တွေကို ဆက်ပေးခြင်း
+    narration: >
+      [[mark:e-open]] ကုမ္ပဏီ တစ်ခုကို အထပ်တွေ ပါတဲ့ အဆောက်အအုံ တစ်လုံးလို မြင်ကြည့်ခဲ့တာကို မှတ်မိမှာပါ။
+      [[mark:e-top]] အပေါ်ဆုံးထပ်မှာ ဒါရိုက်တာအဖွဲ့နဲ့ အောင်အောင် တို့ ရှိပါတယ်။ သူတို့ စဉ်းစားတာက ကုန်ကျစရိတ်၊
+      အချိန်၊ ကြီးထွားမှုနဲ့ risk၊ ဆိုလိုတာက မှားသွားရင် ဘယ်လောက် ထိခိုက်မလဲ ဆိုတာပါ။
+      [[mark:e-mid]] အလယ်မှာ product manager လှလှ တို့လို၊ ခရီးသည်နဲ့ ကားလိုင်းတွေရဲ့ လိုအပ်ချက်ကို ယူလာပေးတဲ့သူတွေ
+      ရှိပါတယ်။
+      [[mark:e-bottom]] အောက်ဆုံးက စက်ခန်းမှာတော့ အခု team ၁၂ ခု ရှိနေပါပြီ။ system ကို တကယ် ဆောက်နေတဲ့
+      နေရာပါ။
+      [[mark:e-filter]] ခုနစ်နှစ်အတွင်း ကြားက အထပ်တွေလည်း များလာပါတယ်။ သတင်း တစ်ခုက အထပ် တစ်ထပ် ဖြတ်တိုင်း
+      နည်းနည်းစီ ချောသွားတတ်ပါတယ်။ စက်ခန်းက ဒီအတိုင်း မရတော့ဘူးလို့ ပြောတာက၊ အပေါ်ရောက်တော့ အခက်အခဲ နည်းနည်း
+      ရှိတယ် ဖြစ်သွားပါတယ်။ အပေါ်က ဦးတည်ချက်ကလည်း အောက်ရောက်တော့ ဘာကြောင့်လဲ မပါတော့တဲ့ အမိန့် ဖြစ်သွားတတ်ပါတယ်။
+      သိတဲ့သူမှာ ဆုံးဖြတ်ခွင့် မရှိ၊ ဆုံးဖြတ်ခွင့် ရှိတဲ့သူက မသိ ဖြစ်လာတာပါ။
+      [[mark:e-car]] architect ရဲ့ တန်ဖိုးက အဲဒီ အထပ်တွေကို ဓာတ်လှေကားနဲ့ တိုက်ရိုက် ဆက်ပေးတာမှာ ရှိပါတယ်။
+      ဘယ်လောက် မြင့်မြင့် ရောက်လဲ မဟုတ်ဘဲ၊ အထပ် ဘယ်နှထပ်ကို ဆက်ပေးနိုင်လဲ ဆိုတာပါ။
+      [[mark:e-down]] အောက်ကို ဆင်းတဲ့အခါ သယ်သွားတာက strategy ပါ။ ဥပမာ ပါဆယ် လုပ်ငန်းကို စမ်းကြည့်မယ်၊
+      မအောင်မြင်ရင် ရပ်မယ် ဆိုတဲ့ ဦးတည်ချက်ကို၊ ပါဆယ်ကို လက်မှတ် system နဲ့ ခွဲဆောက်မယ် ဆိုတဲ့ technical
+      ဆုံးဖြတ်ချက်အဖြစ် ပြောင်းပေးတာပါ။
+      [[mark:e-up]] အပေါ်ကို တက်တဲ့အခါ သယ်သွားတာကတော့ စက်ခန်းက အမှန်ပါ။ ချောမထားဘဲ၊ ဒါပေမဲ့ အပေါ်ထပ်က
+      နားလည်တဲ့ စကားနဲ့ပါ။ ဥပမာ တနင်္လာနေ့ ငွေစာရင်း ရှင်းတဲ့ အလုပ်က ကားလိုင်း ၅၀၀ နဲ့တင် တစ်ညလုံး
+      ကြာနေပြီ ဆိုတာကို၊ ကားလိုင်းတွေ ထပ်များလာရင် ငွေရတာ နောက်ကျပြီး သူတို့ စိတ်ဆိုးကြမယ်လို့ ပြောပြတာပါ။
+      [[mark:e-mistake]] ကိုယ် လွဲသွားတာက ဒီနေရာပါ။ ဓာတ်လှေကားနဲ့ အပေါ်ထပ်အထိ တက်သွားခဲ့ပေမဲ့၊ စက်ခန်းရဲ့
+      စကားကို ဘာသာမပြန်ဘဲ ဒီအတိုင်း သယ်သွားမိတာပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { mark: e-open },
+          open: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-e-top,
+          type: whiteboard.apply,
+          at: { mark: e-top },
+          upsertIds: [e-f1, e-f1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-mid,
+          type: whiteboard.apply,
+          at: { mark: e-mid },
+          upsertIds: [e-f2, e-f2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-bottom,
+          type: whiteboard.apply,
+          at: { mark: e-bottom },
+          upsertIds: [e-f3, e-f3-l],
+          drawMs: 1200,
+        }
+      - {
+          id: point-e-mid,
+          type: whiteboard.point,
+          at: { mark: e-filter },
+          target: { assetId: e-f2 },
+        }
+      - {
+          id: draw-e-car,
+          type: whiteboard.apply,
+          at: { mark: e-car },
+          upsertIds: [e-shaft, e-car, e-car-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-down,
+          type: whiteboard.apply,
+          at: { mark: e-down },
+          upsertIds: [e-down, e-down-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-up,
+          type: whiteboard.apply,
+          at: { mark: e-up },
+          upsertIds: [e-up, e-up-l],
+          drawMs: 1500,
+        }
+      - {
+          id: point-e-car,
+          type: whiteboard.point,
+          at: { mark: e-mistake },
+          target: { assetId: e-car },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နောက်နှစ် လုပ်မယ့် အလုပ် တစ်ခုတည်းကို ဒါရိုက်တာအဖွဲ့ကို စာကြောင်း
+      နှစ်မျိုးနဲ့ ပြောလို့ ရပါတယ်။
+      [[mark:q-a]] ပထမ စာကြောင်းက Payment service ရဲ့ wallet ဘက်က layer ကို wallet အများကြီးအတွက် adapter layer
+      အဖြစ် ပြန်ဆောက်ပါမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ စာကြောင်းက wallet ကုမ္ပဏီ အသစ် တစ်ခုကို ခြောက်လ မဟုတ်ဘဲ နှစ်ပတ်နဲ့ ထည့်နိုင်ပါတော့မယ်
+      ဆိုတာပါ။ ဒါရိုက်တာအဖွဲ့က ဘယ်စာကြောင်းကို ကြားမှ ဆုံးဖြတ်နိုင်မလဲ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ စာကြောင်းပါ။ ဘာကြောင့်လဲဆိုတော့ ပထမ စာကြောင်းက ကိုယ်တို့ ဘာလုပ်မလဲကိုပဲ
+      ပြောပြီး၊ ကုမ္ပဏီအတွက် ဘာပြောင်းသွားမလဲကို မပြောလို့ပါ။ adapter layer ပြန်ဆောက်တာ ကောင်းလား၊ မကောင်းဘူးလား
+      ဆိုတာကို ဒါရိုက်တာတွေ အကဲမဖြတ်နိုင်ပါဘူး။
+      [[mark:q-r]] ဒုတိယ စာကြောင်းကတော့ ကုမ္ပဏီ ဘာလုပ်နိုင်လာမလဲ၊ ဘယ်လောက် မြန်မလဲ ဆိုတာကို ပြောပါတယ်။ wallet
+      ကုမ္ပဏီနဲ့ ဝန်ဆောင်ခ ညှိတဲ့အခါ၊ အဲဒီ wallet ပျက်သွားတဲ့အခါ ဒါက ဘာအဓိပ္ပာယ်လဲ ဆိုတာကို ဒါရိုက်တာတိုင်း
+      ချက်ချင်း မြင်နိုင်ပါတယ်။
+      [[mark:q-lead]] အလုပ်က အတူတူပါပဲ။ ပြောင်းသွားတာက ရလဒ်ကို အရင် ပြောလိုက်တာပါ။ အပေါ်ထပ်က နားထောင်တာက
+      ဘယ်လောက် မြန်မလဲ၊ risk ဘယ်လောက် လျော့မလဲ၊ ဘယ်လောက် ကုန်မလဲ ဆိုတာတွေပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 1200 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 1200 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: draw-q-r, type: whiteboard.apply, at: { mark: q-r }, upsertIds: [q-r], drawMs: 1300 }
+      - {
+          id: draw-q-lead,
+          type: whiteboard.apply,
+          at: { mark: q-lead },
+          upsertIds: [q-lead],
+          drawMs: 1300,
+        }
+
+  - id: options
+    chapter: Architecture က option ကို ရောင်းတယ်
+    narration: >
+      [[mark:o-open]] ဒုတိယ စာကြောင်းက တကယ်တော့ ဒါရိုက်တာအဖွဲ့ကို အရာ တစ်ခု ရောင်းနေတာပါ။ အဲဒါကို option လို့
+      ခေါ်ပါတယ်။ option ဆိုတာ အခု မဆုံးဖြတ်ဘဲ၊ နောက်မှ လုပ်ချင်ရင် လုပ်နိုင်ခွင့်ကို ချန်ထားတာပါ။ မဖြစ်မနေ
+      လုပ်ရမယ့် တာဝန် မဟုတ်ဘဲ၊ လုပ်ချင်ရင် လုပ်နိုင်တဲ့ အခွင့်အရေးပါ။
+      [[mark:o-now]] option က အလကား မရပါဘူး။ အခု ဈေး တစ်ခု ပေးရပါတယ်။ wallet ကိစ္စမှာဆိုရင် Payment team ရဲ့
+      နှစ်လစာ အလုပ်ပါ။
+      [[mark:o-later]] အဲဒီအတွက် ရတာက၊ wallet ကုမ္ပဏီ အသစ် တစ်ခု ထည့်ဖို့ လိုလာတဲ့နေ့မှာ ခြောက်လ မစောင့်ရဘဲ
+      နှစ်ပတ်နဲ့ ပြီးတာပါ။ ဘယ်လောက် ကုန်မလဲ ဆိုတာကိုလည်း ကြိုသိပြီးသားပါ။
+      [[mark:o-not]] မလိုလာဘူးဆိုရင်တော့ ဘာမှ ထပ်မကုန်ပါဘူး။ ပေးခဲ့ပြီးသား နှစ်လပဲ ကုန်တာပါ။
+      [[mark:o-when]] ဒါဆို option က ဘယ်အချိန်မှာ တန်ဖိုး အရှိဆုံးလဲ။
+      [[mark:o-uncertain]] ရှေ့မှာ ဘာဖြစ်မလဲ မသေချာလေ တန်ဖိုး ရှိလေပါ။ wallet ကုမ္ပဏီက ဝန်ဆောင်ခ တင်မလား၊ ပြိုင်ဘက်
+      wallet တစ်ခု လူကြိုက်များလာမလား ဆိုတာ ဘယ်သူမှ မသိပါဘူး။ အားလုံး သေချာနေရင်တော့ option ဝယ်စရာ
+      မလိုပါဘူး။
+      [[mark:o-question]] ဒါကြောင့် အပေါ်ထပ်က မေးသင့်တဲ့ မေးခွန်းက ဒီ architecture က သပ်ရပ်ရဲ့လား ဆိုတာ မဟုတ်ပါဘူး။
+      နောက်မှ ကိုယ်တို့ ဘာတွေ လုပ်နိုင်မလဲ၊ အဲဒီအတွက် ဘယ်လောက် ကုန်မလဲ ဆိုတာပါ။ ဘယ် option ကို ဝယ်မလဲ ဆိုတာကတော့ သူတို့ရဲ့
+      ဆုံးဖြတ်ချက်ပါ။ ရှေ့ရေး ဘယ်လောက် မသေချာလဲ ဆိုတာကို business က အသိဆုံးမို့ပါ။ architect ရဲ့ တာဝန်က
+      ဈေးနှုန်းစာရင်းကို အမှန်အတိုင်း ပြပေးဖို့ပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-o-open,
+          type: whiteboard.apply,
+          at: { mark: o-open },
+          clear: true,
+          upsertIds: [o-title],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-now,
+          type: whiteboard.apply,
+          at: { mark: o-now },
+          upsertIds: [o-h1, o-h2, o-r1, o-c11, o-c12],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-o-later,
+          type: whiteboard.apply,
+          at: { mark: o-later },
+          upsertIds: [o-r2, o-c21, o-c22],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-o-not,
+          type: whiteboard.apply,
+          at: { mark: o-not },
+          upsertIds: [o-r3, o-c31, o-c32],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-o-note,
+          type: whiteboard.apply,
+          at: { mark: o-uncertain },
+          upsertIds: [o-note],
+          drawMs: 1300,
+        }
+
+  - id: memo
+    chapter: တစ်မျက်နှာ memo
+    narration: >
+      [[mark:m-close]] ဒါကို ဒါရိုက်တာအဖွဲ့ဆီ ပို့မယ့် စာတစ်မျက်နှာနဲ့ ရေးကြည့်ရအောင်။ အစည်းအဝေးမှာ ပြောတာက ခဏနဲ့
+      ပျောက်သွားပေမဲ့၊ ရေးထားတဲ့ စာကတော့ မတက်နိုင်တဲ့သူဆီလည်း ရောက်ပြီး နောက်နှစ်အထိ ကျန်နေပါတယ်။
+      [[mark:type-purpose]] ပထမဆုံး ရည်ရွယ်ချက်ကို နှစ်ကြောင်းတည်းနဲ့ ရေးပါတယ်။ service တွေအကြောင်း တစ်လုံးမှ
+      မပါပါဘူး။ ဒီ အချိန်တွေက နောက်နှစ် မသေချာတဲ့ ကိစ္စ သုံးခုအတွက် လုပ်နိုင်ခွင့်တွေကို ကြိုဝယ်ထားတာ
+      ဆိုတာကိုပဲ ပြောပါတယ်။
+      [[mark:m-ramp]] ဒီနေရာမှာ option ဆိုတဲ့ စကားလုံးကို မသုံးဘဲ စရန်ပေးထားတာနဲ့ နှိုင်းပြထားပါတယ်။ စရန်ပေးတာကို ဒါရိုက်တာတိုင်း
+      သိပါတယ်။ မြေကွက် ဝယ်တဲ့အခါ ငွေနည်းနည်း အရင်ပေးပြီး၊ သဘောတူထားတဲ့ ဈေးနဲ့ နောက်မှ ဝယ်ခွင့်ကို ယူထားတာပါ။
+      [[mark:m-talk]] အပေါ်ထပ်ကို ရှင်းပြတဲ့အခါ jargon လည်း မသုံးရဘူး၊ ကလေးကို ပြောသလိုလည်း မပြောရပါဘူး။ သူတို့
+      သိပြီးသား အရာကနေ စပြီး၊ တစ်ဆင့်ချင်း တက်သွားနိုင်မယ့် လမ်းကို ခင်းပေးရတာပါ။ ကိန်းဂဏန်းတွေကိုလည်း မဖျောက်ပါဘူး။ နှစ်လ၊ ခြောက်လ၊
+      နှစ်ပတ် ဆိုတာတွေက သူတို့ နေ့တိုင်း ချိန်ဆနေကျ အရာတွေပါ။
+      [[mark:type-o1]] အောက်မှာ လုပ်နိုင်ခွင့် သုံးခုကို တစ်ကြောင်းစီ ရေးပါတယ်။ ပထမက wallet ပါ။ ဘာလုပ်နိုင်လာမလဲ၊
+      အခု ဘယ်လောက် ပေးရမလဲ၊ ဘယ်လို အခြေအနေမှာ တန်မလဲ ဆိုတာကို တစ်ကြောင်းတည်းမှာ မြင်ရပါတယ်။
+      [[mark:type-o2]] ဒုတိယက capacity ပါ။ သင်္ကြန်လို နေ့မျိုးမှာ ဝင်သုံးသူက ခန့်မှန်းထားတာထက် များလာရင်၊
+      တစ်နာရီအတွင်း နှစ်ဆ တိုးနိုင်ဖို့ပါ။
+      [[mark:type-o3]] တတိယက ပါဆယ် လုပ်ငန်းသစ်ပါ။ ဈေးကွက်က မသေချာသေးတာမို့၊ လက်မှတ် ရောင်းတဲ့ system ကို မထိဘဲ
+      ထည့်နိုင်၊ မအောင်မြင်ရင် ပြန်ဖြုတ်နိုင်အောင် ဆောက်မှာပါ။ ဖြုတ်နိုင်ခွင့်လည်း option တစ်ခုပါပဲ။
+      [[mark:type-note]] table အောက်မှာ မှတ်ချက် တစ်ကြောင်း ထည့်ထားပါတယ်။ နောက်နှစ် wallet ကုမ္ပဏီက ဝန်ဆောင်ခ
+      မတင်ဘူးဆိုရင် ပထမ လုပ်နိုင်ခွင့်ကို သုံးဖြစ်မှာ မဟုတ်ပါဘူး။ အဲဒါက ဆုံးဖြတ်ချက် မှားခဲ့တာ မဟုတ်ပါဘူး။
+      ဆုံးဖြတ်ချက် တစ်ခုကို ရလဒ်နဲ့ မဟုတ်ဘဲ၊ ဆုံးဖြတ်တဲ့ အချိန်က သိထားတာတွေနဲ့ အကဲဖြတ်ရတာပါ။ ဒါကို အခုကတည်းက
+      ရေးထားမှ၊ နောက်နှစ်မှာ မသုံးဖြစ်တဲ့ အရာအတွက် ဘာလို့ ပေးခဲ့လဲ ဆိုတဲ့ မေးခွန်းကို ဖြေနိုင်မှာပါ။
+      [[mark:m-depths]] နောက်ဆုံး ခေါင်းစဉ်တွေကို ကြည့်ပါ။ ခေါင်းစဉ် နှစ်ခုကိုပဲ ဖတ်တဲ့သူက အဓိက အချက်ကို ရသွားပါတယ်။
+      table ကိုပါ ဖတ်တဲ့သူကတော့ အသေးစိတ်ကို ရပါတယ်။ အချိန်မရှိတဲ့သူရော၊ စေ့စေ့စပ်စပ် ဖတ်တဲ့သူရော
+      တစ်မျက်နှာတည်းနဲ့ ရအောင် ရေးထားတာပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-options, type: whiteboard.apply, at: { mark: m-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-options },
+          path: notebook/54-memo.md,
+        }
+      - id: type-purpose
+        type: editor.type
+        at: { mark: type-purpose }
+        cadence: line-by-line
+        target: { file: notebook/54-memo.md, after: "## 20 % က နောက်မှ လုပ်နိုင်ခွင့် 3 ခုကို ဝယ်ပေးမယ်\n" }
+        text: "နောက်နှစ် မသေချာတဲ့ ကိစ္စ 3 ခုအတွက် လုပ်နိုင်ခွင့်ကို ကြိုဝယ်ထားတာပါ။\nစရန်ပေးသလိုပဲ: အခု နည်းနည်း ပေး၊ လိုလာတဲ့နေ့မှာ သိပြီးသား ဈေးနဲ့ မြန်မြန် လုပ်နိုင်။\n"
+      - id: sel-deposit
+        type: editor.select
+        at: { mark: m-ramp }
+        target: { file: notebook/54-memo.md, text: "စရန်ပေးသလိုပဲ" }
+      - id: sel-purpose
+        type: editor.select
+        at: { mark: m-talk }
+        target:
+          { file: notebook/54-memo.md, text: "နောက်နှစ် မသေချာတဲ့ ကိစ္စ 3 ခုအတွက် လုပ်နိုင်ခွင့်ကို ကြိုဝယ်ထားတာပါ။" }
+      - id: type-o1
+        type: editor.type
+        at: { mark: type-o1 }
+        cadence: line-by-line
+        target: { file: notebook/54-memo.md, after: "|---|---|---|\n" }
+        text: "| wallet အသစ်ကို 6 လ မဟုတ်ဘဲ 2 ပတ်နဲ့ ထည့်နိုင် | Payment team 2 လ | wallet ဝန်ဆောင်ခ တက်ရင်၊ ပျက်ရင် |\n"
+      - id: type-o2
+        type: editor.type
+        at: { mark: type-o2 }
+        cadence: line-by-line
+        target: { file: notebook/54-memo.md, after: "wallet ဝန်ဆောင်ခ တက်ရင်၊ ပျက်ရင် |\n" }
+        text: "| capacity ကို 1 နာရီအတွင်း 2 ဆ တိုးနိုင် | Platform team 3 လ | peak က ခန့်မှန်းထက် ကြီးရင် |\n"
+      - id: type-o3
+        type: editor.type
+        at: { mark: type-o3 }
+        cadence: line-by-line
+        target: { file: notebook/54-memo.md, after: "peak က ခန့်မှန်းထက် ကြီးရင် |\n" }
+        text: "| ပါဆယ်ကို လက်မှတ် system မထိဘဲ ထည့်၊ ဖြုတ်နိုင် | team 2 ခု 4 လ | ပါဆယ် ဈေးကွက် မသေချာသေးရင် |\n"
+      - id: expect-wallet
+        type: expect.file
+        at: { afterAction: type-o3 }
+        path: notebook/54-memo.md
+        contains: "| wallet အသစ်ကို 6 လ မဟုတ်ဘဲ 2 ပတ်နဲ့ ထည့်နိုင် | Payment team 2 လ | wallet ဝန်ဆောင်ခ တက်ရင်၊ ပျက်ရင် |\n"
+      - id: type-note
+        type: editor.type
+        at: { mark: type-note }
+        cadence: line-by-line
+        target: { file: notebook/54-memo.md, after: "ပါဆယ် ဈေးကွက် မသေချာသေးရင် |\n" }
+        text: "\nမှတ်ချက်: မသုံးဖြစ်ခဲ့တဲ့ လုပ်နိုင်ခွင့်က အမှား မဟုတ်ဘူး။ အခု သိထားတာနဲ့ ဆုံးဖြတ်တာပါ။\n"
+      - id: sel-heading
+        type: editor.select
+        at: { mark: m-depths }
+        target: { file: notebook/54-memo.md, text: "## 20 % က နောက်မှ လုပ်နိုင်ခွင့် 3 ခုကို ဝယ်ပေးမယ်" }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ရဲ့ architecture က business ကို ပေးထားတဲ့ option တစ်ခုကို ရွေးပါ။
+      [[mark:turn-sel]] lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ အဲဒါကို ကုမ္ပဏီရဲ့ အကြီးအကဲ တစ်ယောက် နားလည်မယ့်
+      စာတစ်ကြောင်းနဲ့ ရေးကြည့်ပါ။
+      [[mark:turn-2]] service၊ layer၊ pattern လို စကားလုံး တစ်လုံးမှ မပါပါစေနဲ့။ ဘာကို ဘယ်လောက် မြန်မြန်၊
+      ဘယ်လောက် ဈေးနဲ့ လုပ်နိုင်လာမလဲ ဆိုတာပဲ ပါပါစေ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - id: sel-row
+        type: editor.select
+        at: { mark: turn-sel }
+        target: { file: notebook/54-memo.md, text: "| wallet အသစ်ကို 6 လ မဟုတ်ဘဲ 2 ပတ်နဲ့ ထည့်နိုင် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ architect ရဲ့ တန်ဖိုးက အထပ်တွေကို ဆက်ပေးတာမှာ ရှိပါတယ်။ အပေါ်ထပ်ရဲ့ strategy ကို
+      စက်ခန်းအတွက် ဆုံးဖြတ်ချက်အဖြစ် ယူဆင်းပြီး၊ စက်ခန်းက အမှန်ကို အပေါ်ထပ် နားလည်တဲ့ စကားနဲ့ ယူတက်တာပါ။
+      [[mark:recap-2]] အပေါ်ထပ်မှာ architecture ကို ပုံနဲ့ မဟုတ်ဘဲ၊ နောက်မှ ဘာလုပ်နိုင်မလဲ၊ ဘယ်လောက် ကုန်မလဲ ဆိုတဲ့
+      option အဖြစ် ရှင်းပြရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ပါဆယ် လုပ်ငန်းသစ်အတွက် team တွေကို ဘယ်လို ဖွဲ့မလဲ ဆိုတာကနေ စပြီး၊
+      အဖွဲ့အစည်း တစ်ခုလုံးကို system တစ်ခုလို မြင်ကြည့်ပုံကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
