@@ -454,29 +454,12 @@ scenes:
         type: whiteboard.apply
         at: { mark: b-close }
         open: false
-
-  - id: code
-    chapter: Code နဲ့ စမ်းကြည့်ရအောင်
-    narration: >
-      [[mark:code]] ဒီ file ထဲမှာ နံပါတ်လေး တစ်ခုကို ပြပေးတဲ့ ရေတွက်စက် တစ်ခု
-      ရှိပါတယ်။
-      [[mark:sel-state]] ဒီတစ်ကြောင်းက state ပါ။ နံပါတ်ကို variable တစ်ခုထဲမှာ
-      သုညကနေ စပြီး မှတ်ထားတာပါ။
-      [[mark:sel-render]] ဒီ function ကတော့ render ပါ။ state ထဲက နံပါတ်ကို
-      ယူပြီး screen ပေါ်က စာသားထဲ ထည့်ပေးရုံပါပဲ။
-      [[mark:type-event]] လိုနေသေးတာက event ပါ။ ခလုတ်ကို နှိပ်တိုင်း state ကို
-      တစ် တိုးပြီး render ကို ပြန်ခေါ်ပေးဖို့ ရေးလိုက်ပါမယ်။
-      [[mark:sel-order]] အစီအစဉ်ကို သတိထားကြည့်ပါ။ state ကို အရင် ပြောင်းပြီးမှ
-      render ကို ခေါ်တာပါ။
-    sources:
-      - title: "MDN — EventTarget: addEventListener() method"
-        url: "https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"
-      - title: "MDN — Node: textContent property"
-        url: "https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent"
-    actions:
+      # The preview opens here, as the board closes, and not at the start of
+      # the next scene: its first load takes two to five seconds, and the next
+      # scene's first highlight must not wait for it.
       - id: wait-for-dev-server
         type: runtime.waitForReady
-        at: { mark: code }
+        at: { afterAction: close-board }
         timeoutMs: 30000
         retry: { maxAttempts: 2, delayMs: 250 }
       - id: open-preview
@@ -502,6 +485,26 @@ scenes:
       - id: collapse-runner-dock
         type: runtime.collapseDock
         at: { afterAction: expect-zero }
+
+  - id: code
+    chapter: Code နဲ့ စမ်းကြည့်ရအောင်
+    narration: >
+      ဒီ file ထဲမှာ နံပါတ်လေး တစ်ခုကို ပြပေးတဲ့ ရေတွက်စက် တစ်ခု
+      ရှိပါတယ်။
+      [[mark:sel-state]] ဒီတစ်ကြောင်းက state ပါ။ နံပါတ်ကို variable တစ်ခုထဲမှာ
+      သုညကနေ စပြီး မှတ်ထားတာပါ။
+      [[mark:sel-render]] ဒီ function ကတော့ render ပါ။ state ထဲက နံပါတ်ကို
+      ယူပြီး screen ပေါ်က စာသားထဲ ထည့်ပေးရုံပါပဲ။
+      [[mark:type-event]] လိုနေသေးတာက event ပါ။ ခလုတ်ကို နှိပ်တိုင်း state ကို
+      တစ် တိုးပြီး render ကို ပြန်ခေါ်ပေးဖို့ ရေးလိုက်ပါမယ်။
+      [[mark:sel-order]] အစီအစဉ်ကို သတိထားကြည့်ပါ။ state ကို အရင် ပြောင်းပြီးမှ
+      render ကို ခေါ်တာပါ။
+    sources:
+      - title: "MDN — EventTarget: addEventListener() method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"
+      - title: "MDN — Node: textContent property"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent"
+    actions:
       - id: select-state
         type: editor.select
         at: { mark: sel-state }
