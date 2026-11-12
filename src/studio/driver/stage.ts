@@ -280,7 +280,7 @@ export function stageCommands(
               ...panelFlags(),
             });
             if (penDraws) {
-              pen.draw(asset, progress, { starts: step === leadSteps + 1, ends: progress >= 1 });
+              pen.draw(asset, progress, { ends: progress >= 1 });
             }
           }
           await abortableSleep(WHITEBOARD_DRAW_FRAME_MS, signal);

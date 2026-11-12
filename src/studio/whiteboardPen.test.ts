@@ -99,7 +99,8 @@ describe("text pen points", () => {
     expect(whiteboardPenPoint(left, 7, 1, measure)).toEqual({ x: 413, y: 224 });
     // ceil(11 * 0.5) = 6 characters: "hello ".
     expect(whiteboardPenPoint(left, 7, 0.5, measure).x).toBe(363);
-    expect(whiteboardPenStart(left, 7, measure)).toEqual({ x: 300, y: 224 });
+    // Text has no press to land: the pen starts where the first character ends.
+    expect(whiteboardPenStart(left, 7, measure)).toEqual({ x: 313, y: 224 });
   });
 
   it("moves to the second line once it is typed", () => {
@@ -110,13 +111,16 @@ describe("text pen points", () => {
   it("centres a line on the middle of the box", () => {
     const centered = text({ text: "abcd", align: "center" });
     expect(whiteboardPenPoint(centered, 7, 1, measure).x).toBe(523);
-    expect(whiteboardPenStart(centered, 7, measure).x).toBe(480);
+    // Centred text grows out from the middle, so the pen starts beside its
+    // first character there (500 + 5 + 3), not at the finished line's left end.
+    expect(whiteboardPenStart(centered, 7, measure).x).toBe(508);
   });
 
   it("right-aligns a line to the box edge", () => {
     const right = text({ text: "abcd", align: "right" });
     expect(whiteboardPenPoint(right, 7, 1, measure).x).toBe(703);
-    expect(whiteboardPenStart(right, 7, measure).x).toBe(660);
+    // Right-aligned text always ends on the box edge, from its first character.
+    expect(whiteboardPenStart(right, 7, measure).x).toBe(703);
   });
 
   it("falls back to the share of the box without a measurer", () => {

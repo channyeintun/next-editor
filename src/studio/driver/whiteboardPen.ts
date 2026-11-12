@@ -38,12 +38,11 @@ export function resolveBoardSurface(): Element | null {
 export interface WhiteboardPen {
   /** Steps the pen needs to reach the next asset before drawing it (0 when it can start at once). */
   leadSteps(): number;
-  /** Put the pen where `progress` of `asset` ends, pressing as it `starts` and lifting as it `ends`. */
-  draw(
-    asset: StudioWhiteboardAsset,
-    progress: number,
-    stroke: { starts: boolean; ends: boolean },
-  ): void;
+  /**
+   * Put the pen where `progress` of `asset` ends. The first call for an asset
+   * lands the pen where its stroke begins and presses; `ends` lifts it.
+   */
+  draw(asset: StudioWhiteboardAsset, progress: number, stroke: { ends: boolean }): void;
   /** Where on screen the pointer rests to point at `asset`. */
   pointAim(surface: Element, asset: StudioWhiteboardAsset): PointerPoint;
 }
@@ -66,6 +65,11 @@ export function createWhiteboardPen(
     };
   };
 
+  // The asset the pen has begun: its stroke's first point is on the record.
+  // Not simply "the first step": a board that is just opening is not on
+  // screen for that step, and the stroke must still begin where it begins.
+  let begun: string | null = null;
+
   return {
     leadSteps() {
       return !pointer.isHidden() && pointer.restedMs() < STILL_MOVING_MS
@@ -73,9 +77,9 @@ export function createWhiteboardPen(
         : 0;
     },
 
-    draw(asset, progress, { starts, ends }) {
-      // The board's panel loads on its first open; until it is on screen there
-      // is nothing to draw over, and the pen joins in on a later step.
+    draw(asset, progress, { ends }) {
+      // The board's panel renders a moment after it opens; until it is on
+      // screen there is nothing to draw over, and the pen joins on a later step.
       const surface = resolveBoardSurface();
       const rect = surface?.getBoundingClientRect();
       if (!surface || !rect || rect.width <= 0 || rect.height <= 0) return;
@@ -87,22 +91,27 @@ export function createWhiteboardPen(
           whiteboardPenPoint(asset, deps.planSeed, progress, measureLineWithCanvas),
         ),
       );
-      if (starts || pointer.isHidden()) {
-        const start = starts
-          ? roundPoint(
-              toScreen(surface, whiteboardPenStart(asset, deps.planSeed, measureLineWithCanvas)),
-            )
-          : tip;
-        // A hidden pointer appears where the stroke begins; a visible one has
-        // just arrived there. Either way the press lands before the pen moves.
+      if (begun !== asset.id || pointer.isHidden()) {
+        // Where the stroke begins. Text has no press to land, so the pen goes
+        // straight to where its first character ends.
+        const start =
+          begun !== asset.id && held
+            ? roundPoint(
+                toScreen(surface, whiteboardPenStart(asset, deps.planSeed, measureLineWithCanvas)),
+              )
+            : tip;
+        // A hidden pointer appears there; a visible one has just arrived.
+        // Either way the press lands before the pen moves.
         pointer.revealAt(start);
         pointer.dispatchOn(start.x, start.y, surface, 0);
         if (held) pointer.dispatchOn(start.x, start.y, surface, held);
+        begun = asset.id;
       }
       pointer.dispatchOn(tip.x, tip.y, surface, held);
-      if (ends && held) {
+      if (ends) {
         // The pen lifts and rests where the stroke ended.
-        pointer.dispatchOn(tip.x, tip.y, surface, 0);
+        if (held) pointer.dispatchOn(tip.x, tip.y, surface, 0);
+        begun = null;
       }
     },
 

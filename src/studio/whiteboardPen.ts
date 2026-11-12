@@ -146,7 +146,12 @@ export function whiteboardPenPoint(
   };
 }
 
-/** Where the pen first touches the board to draw `asset`. */
+/**
+ * Where the pen first touches the board to draw `asset`: a shape's anchor
+ * corner, a stroke's first point. Text has no press to land — the pen is
+ * simply where the first character ends, so centred text, which grows out
+ * from the middle of its box, does not start with a jump from its left end.
+ */
 export function whiteboardPenStart(
   asset: StudioWhiteboardAsset,
   planSeed: number,
@@ -156,10 +161,7 @@ export function whiteboardPenStart(
     return whiteboardStrokeTip(asset, planSeed, 0);
   }
   if (asset.kind === "text") {
-    const { measure } = textLayout(asset, measureLine);
-    const firstLine = (asset.text ?? "").split("\n")[0];
-    const width = asset.align === "left" ? 0 : (measure(firstLine) ?? asset.width);
-    return { x: lineSpan(asset, width)[0], y: asset.y + asset.fontSize * 0.8 };
+    return whiteboardPenPoint(asset, planSeed, 0, measureLine);
   }
   return { x: asset.x, y: asset.y };
 }

@@ -299,6 +299,27 @@ describe("StudioDriver point actions and the whiteboard pen", () => {
       expect(last).toMatchObject({ id: "box", width: 100, height: 50 });
     });
 
+    it("still begins the drag at the anchor corner when the board renders a step late", async () => {
+      // A board that is just opening is not on screen for the apply's first
+      // step: React renders the panel after the scene is published.
+      const { board } = mountStage();
+      place(board, { left: 100, top: 50, width: 0, height: 0 });
+      const { driver } = makeDriver();
+      window.setTimeout(() => place(board, { left: 100, top: 50, width: 800, height: 600 }), 70);
+
+      await driver.applyWhiteboard({ open: true, upsertIds: ["box"], drawMs: 600 });
+
+      expect(visibility.filter((entry) => entry.visible)).toEqual([
+        { x: 110, y: 70, visible: true },
+      ]);
+      // The press lands on the corner before the pen is anywhere else.
+      expect(moves.slice(0, 2).map(({ x, y, buttons }) => ({ x, y, buttons }))).toEqual([
+        { x: 110, y: 70, buttons: 0 },
+        { x: 110, y: 70, buttons: 1 },
+      ]);
+      expect(moves.at(-1)).toMatchObject({ x: 210, y: 120, buttons: 0 });
+    });
+
     it("writes text along its line without holding the button", async () => {
       mountStage();
       const { driver } = makeDriver();
