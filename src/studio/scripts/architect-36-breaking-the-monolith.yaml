@@ -1,0 +1,1167 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-36-breaking-the-monolith
+  title: "Architect Path 36: Monolith ကို ခွဲထုတ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/36-plan.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/36-plan.md: |
+        # app အဟောင်းကို ခွဲထုတ်မယ့် အစီအစဉ်
+
+        ## Business driver
+
+        ## အဆင့်များ
+
+        ## မခွဲတာ
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the four parts still inside the old app and the business
+    # driver of each. Blue = the parts, green = a driver exists, red = none.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "app အဟောင်းထဲမှာ ကျန်တဲ့ လေးခု",
+        fontSize: 36,
+      }
+    - { id: d-wrap, kind: rectangle, x: 280, y: 220, width: 300, height: 415, strokeStyle: dashed }
+    - {
+        id: d-s,
+        kind: rectangle,
+        x: 310,
+        y: 240,
+        width: 240,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-s-l,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 260,
+        width: 240,
+        height: 35,
+        text: "Search",
+        fontSize: 28,
+      }
+    - {
+        id: d-o,
+        kind: rectangle,
+        x: 310,
+        y: 335,
+        width: 240,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-o-l,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 355,
+        width: 240,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: d-t,
+        kind: rectangle,
+        x: 310,
+        y: 430,
+        width: 240,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-t-l,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 450,
+        width: 240,
+        height: 35,
+        text: "Settlement",
+        fontSize: 28,
+      }
+    - {
+        id: d-r,
+        kind: rectangle,
+        x: 310,
+        y: 525,
+        width: 240,
+        height: 75,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-r-l,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 545,
+        width: 240,
+        height: 35,
+        text: "Report",
+        fontSize: 28,
+      }
+    - {
+        id: d-s-d,
+        kind: text,
+        x: 610,
+        y: 260,
+        width: 480,
+        height: 35,
+        text: "scale: သင်္ကြန် peak 20 ဆ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-o-d,
+        kind: text,
+        x: 610,
+        y: 355,
+        width: 480,
+        height: 35,
+        text: "မြန်မြန် ပြောင်းနိုင်ဖို့",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-t-d,
+        kind: text,
+        x: 610,
+        y: 450,
+        width: 480,
+        height: 35,
+        text: "ပျက်တာ မကူးစေဖို့",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-r-d,
+        kind: text,
+        x: 610,
+        y: 545,
+        width: 480,
+        height: 35,
+        text: "driver မရှိ၊ မခွဲဘူး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz, asked before the façade is shown: white question
+    # and options, green answer, red the risk, green the way instead.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 820,
+        height: 45,
+        text: "အသစ် ပြန်ရေးပြီး တစ်ညတည်းနဲ့ ပြောင်းမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 760,
+        height: 35,
+        text: "က) လုပ်သင့်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 760,
+        height: 35,
+        text: "ခ) မလုပ်သင့်ဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 330,
+        width: 230,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 550,
+        y: 318,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-risk,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 780,
+        height: 35,
+        text: "မှားရင် ပြန်လှည့်စရာ လမ်း မရှိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: q-piece,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 780,
+        height: 35,
+        text: "တစ်ပိုင်းချင်း ရွှေ့၊ အဆင့်တိုင်း ပြန်လှည့်လို့ရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — a façade in front, the old app and the new service side by
+    # side. Orange = the façade, blue = old and new, violet = requests,
+    # green = what the façade buys.
+    - {
+        id: f-req,
+        kind: text,
+        x: 262,
+        y: 378,
+        width: 130,
+        height: 35,
+        text: "request",
+        fontSize: 28,
+      }
+    - {
+        id: f-in,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 392,
+        y: 375,
+        width: 88,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-facade,
+        kind: rectangle,
+        x: 490,
+        y: 330,
+        width: 170,
+        height: 130,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: f-facade-l,
+        kind: text,
+        align: center,
+        x: 490,
+        y: 377,
+        width: 170,
+        height: 35,
+        text: "façade",
+        fontSize: 28,
+      }
+    - {
+        id: f-to-old,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 675,
+        y: 290,
+        width: 145,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-old,
+        kind: rectangle,
+        x: 830,
+        y: 235,
+        width: 260,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-old-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 262,
+        width: 260,
+        height: 35,
+        text: "app အဟောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: f-to-new,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 675,
+        y: 430,
+        width: 145,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-new,
+        kind: rectangle,
+        x: 830,
+        y: 465,
+        width: 260,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-new-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 492,
+        width: 260,
+        height: 35,
+        text: "Search service",
+        fontSize: 28,
+      }
+    - {
+        id: f-old-pct,
+        kind: text,
+        x: 690,
+        y: 250,
+        width: 90,
+        height: 35,
+        text: "95 %",
+        fontSize: 28,
+      }
+    - {
+        id: f-new-pct,
+        kind: text,
+        x: 690,
+        y: 505,
+        width: 90,
+        height: 35,
+        text: "5 %",
+        fontSize: 28,
+      }
+    - {
+        id: f-compare,
+        kind: text,
+        x: 830,
+        y: 378,
+        width: 260,
+        height: 35,
+        text: "အဖြေ နှိုင်းစစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-back,
+        kind: text,
+        x: 290,
+        y: 590,
+        width: 780,
+        height: 35,
+        text: "မတူရင် လမ်းကြောင်းကို ပြန်လှည့်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — can the code be taken apart at all? Orange = the question,
+    # blue = the two answers and what follows, green = ခရီးဖော်'s case.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "ဒီ code ကို ခွဲလို့ ရရဲ့လား?",
+        fontSize: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-l1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 370,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 262,
+        width: 370,
+        height: 35,
+        text: "ဖွဲ့စည်းပုံ ရှိတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-la,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 455,
+        y: 330,
+        width: 40,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - { id: p-l2, kind: rectangle, x: 290, y: 420, width: 370, height: 115, strokeColor: "#1971c2" }
+    - {
+        id: p-l2-t,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 432,
+        width: 370,
+        height: 35,
+        text: "component တစ်ခုချင်း",
+        fontSize: 28,
+      }
+    - {
+        id: p-l2-s,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 482,
+        width: 370,
+        height: 35,
+        text: "ထုတ်ယူ",
+        fontSize: 28,
+      }
+    - {
+        id: p-r1,
+        kind: rectangle,
+        x: 720,
+        y: 240,
+        width: 370,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-r1-l,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 262,
+        width: 370,
+        height: 35,
+        text: "ရောထွေးနေတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-ra,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 885,
+        y: 330,
+        width: 40,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - { id: p-r2, kind: rectangle, x: 720, y: 420, width: 370, height: 115, strokeColor: "#1971c2" }
+    - {
+        id: p-r2-t,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 432,
+        width: 370,
+        height: 35,
+        text: "team အလိုက် မိတ္တူ ကူး",
+        fontSize: 28,
+      }
+    - {
+        id: p-r2-s,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 482,
+        width: 370,
+        height: 35,
+        text: "မလိုတာကို ဖျက်",
+        fontSize: 28,
+      }
+    - {
+        id: p-pick,
+        kind: freedraw,
+        stroke: check,
+        x: 670,
+        y: 258,
+        width: 40,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    # Board 5 — the order: boundaries in the code, then the service, then the
+    # data; an automated check under each. Blue = the steps, violet = the
+    # order, green = the checks, orange = the advice on size.
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "ခွဲထုတ်တဲ့ အစီအစဉ်",
+        fontSize: 36,
+      }
+    - {
+        id: o-1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 205,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 267,
+        width: 205,
+        height: 35,
+        text: "1 နယ်နိမိတ်",
+        fontSize: 28,
+      }
+    - {
+        id: o-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 485,
+        y: 265,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: o-2,
+        kind: rectangle,
+        x: 575,
+        y: 240,
+        width: 205,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-2-l,
+        kind: text,
+        align: center,
+        x: 575,
+        y: 267,
+        width: 205,
+        height: 35,
+        text: "2 service",
+        fontSize: 28,
+      }
+    - {
+        id: o-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 790,
+        y: 265,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: o-3,
+        kind: rectangle,
+        x: 880,
+        y: 240,
+        width: 205,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-3-l,
+        kind: text,
+        align: center,
+        x: 880,
+        y: 267,
+        width: 205,
+        height: 35,
+        text: "3 data",
+        fontSize: 28,
+      }
+    - {
+        id: o-k1,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 205,
+        height: 35,
+        text: "build က စစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-k2,
+        kind: text,
+        x: 575,
+        y: 350,
+        width: 205,
+        height: 35,
+        text: "အဖြေ နှိုင်းစစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-k3,
+        kind: text,
+        x: 880,
+        y: 350,
+        width: 205,
+        height: 35,
+        text: "query စစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-big,
+        kind: text,
+        x: 270,
+        y: 450,
+        width: 780,
+        height: 35,
+        text: "service ကြီးကြီး အနည်းငယ်နဲ့ စ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-auto,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 780,
+        height: 35,
+        text: "အဆင့်တိုင်းကို အလိုအလျောက် စစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8136
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ဆက်ခွဲဦးမှာလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ data ထားတဲ့ နေရာ အများကြီးကို မူရင်း တစ်နေရာတည်းကနေ event stream နဲ့ လိုက်မီအောင် ထားပုံနဲ့၊
+      ထပ်ရောက်လာတဲ့ event ကို ဖတ်တဲ့ဘက်က မှတ်မိအောင် လုပ်ပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီနေ့ကစပြီး system ကို အပိုင်းတွေ ခွဲတဲ့ဘက်ကို ပြန်လှည့်ပါမယ်။
+      [[mark:state]] ခရီးဖော် မှာ Booking၊ Payment နဲ့ Notification ကို service အဖြစ် ခွဲထုတ်ပြီးတာ တစ်နှစ်နီးပါး
+      ရှိပါပြီ။ ဒါပေမဲ့ Search၊ Operator၊ Settlement နဲ့ Report တို့ကတော့ app အဟောင်းထဲမှာပဲ ရှိနေပါသေးတယ်။
+      တစ်ခါတည်း အတူ deploy လုပ်ရတဲ့ app ကြီး၊ ဆိုလိုတာက monolith အဖြစ်နဲ့ပါ။
+      [[mark:cto]] CTO ဖြစ်တဲ့ အောင်အောင် က မေးခွန်း နှစ်ခု မေးပါတယ်။ ဆက်ခွဲဦးမှာလား။ ခွဲမယ်ဆိုရင် business အတွက်
+      ဘာရမှာလဲ။
+      [[mark:honest]] ဒါက မေးသင့်တဲ့ မေးခွန်းပါ။ ပထမ service သုံးခုကို ခွဲနေတုန်းက team တွေက feature အသစ်
+      နည်းနည်းပဲ ထုတ်နိုင်ခဲ့ပါတယ်။ ခွဲထုတ်တာက အလကား မရတာမို့၊ ဆက်ခွဲမယ်ဆိုရင် အကြောင်းပြချက် ရှိရပါမယ်။
+      architecture က ပိုသန့်သွားမယ် ဆိုတာကတော့ အကြောင်းပြချက် မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/36-plan.md,
+        }
+      - id: sel-driver
+        type: editor.select
+        at: { mark: cto }
+        target: { file: notebook/36-plan.md, text: "## Business driver" }
+
+  - id: drivers
+    chapter: Business driver
+    narration: >
+      [[mark:d-open]] app အဟောင်းထဲမှာ ကျန်နေတဲ့ အပိုင်း လေးခုကို တစ်ခုချင်း မေးကြည့်ရအောင်။ ခွဲထုတ်ဖို့ business
+      အကြောင်းပြချက်၊ ဆိုလိုတာက business driver က အဓိက သုံးမျိုး ရှိပါတယ်။ ပြောင်းလဲမှုကို မြန်မြန် ထုတ်နိုင်ဖို့၊
+      load များတဲ့ အပိုင်းကို သီးခြား scale လုပ်နိုင်ဖို့နဲ့၊ တစ်ပိုင်း ပျက်တာက ကျန်တာကို မကူးစေဖို့ပါ။
+      [[mark:d-search]] Search ကို ကြည့်ရအောင်။ သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ နေ့မှာ ပုံမှန်ရဲ့ အဆ ၂၀ ဝင်လာတာ
+      အများစုက ရှာတဲ့ request တွေပါ။ အခုတော့ Search တစ်ခုအတွက် app အဟောင်း တစ်ခုလုံးကို အဆများစွာ ပွားပြီး run
+      နေရပါတယ်။ ဒါက scale အတွက် driver ပါ။
+      [[mark:d-operator]] Operator ကတော့ ကားလိုင်း အသစ်တွေ ဝင်လာတိုင်း ပြောင်းရတာ များပါတယ်။ ဒါပေမဲ့ တခြား
+      အပိုင်းတွေနဲ့ အတူ တစ်ပတ် တစ်ခါပဲ release လုပ်နိုင်ပါတယ်။ ဒါက မြန်မြန် ပြောင်းနိုင်ဖို့ driver ပါ။
+      [[mark:d-settle]] Settlement မှာတော့ တနင်္လာနေ့ ငွေစာရင်း ရှင်းတဲ့ job က app တစ်ခုလုံးကို နှေးသွားစေတတ်ပြီး၊
+      ကောင်တာ ဝန်ထမ်းတွေ သုံးတဲ့ Operator screen ပါ ထိပါတယ်။ ဒါက ပျက်တာ မကူးစေဖို့ driver ပါ။
+      [[mark:d-report]] Report အတွက်တော့ ဘာ driver မှ ရှာမတွေ့ပါဘူး။ ပြောင်းတာလည်း နည်း၊ load လည်း နည်း၊ ပျက်လည်း
+      တခြား အပိုင်းကို မထိပါဘူး။ driver မရှိရင် မခွဲပါဘူး။ app အဟောင်းထဲမှာပဲ ထားပါမယ်။
+      [[mark:d-first]] driver ရှိတဲ့ သုံးခုထဲမှာ သင်္ကြန်က ရက်သတ်မှတ် ရှိတာမို့ Search ကို အရင် ထုတ်ပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          upsertIds: [d-title, d-wrap, d-s, d-s-l, d-o, d-o-l, d-t, d-t-l, d-r, d-r-l],
+          drawMs: 4000,
+        }
+      - {
+          id: draw-d-search,
+          type: whiteboard.apply,
+          at: { mark: d-search },
+          upsertIds: [d-s-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d-operator,
+          type: whiteboard.apply,
+          at: { mark: d-operator },
+          upsertIds: [d-o-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d-settle,
+          type: whiteboard.apply,
+          at: { mark: d-settle },
+          upsertIds: [d-t-d],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d-report,
+          type: whiteboard.apply,
+          at: { mark: d-report },
+          upsertIds: [d-r-d],
+          drawMs: 1200,
+        }
+      - {
+          id: point-d-search,
+          type: whiteboard.point,
+          at: { mark: d-first },
+          target: { assetId: d-s },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Search team ရဲ့ lead က အဆိုပြုချက် တစ်ခု ယူလာပါတယ်။ app အဟောင်းထဲက
+      search code က အတော် ဟောင်းနေပြီမို့၊ Search ကို system အသစ် တစ်ခုအဖြစ် အစကနေ ပြန်ရေးမယ်။ ပြီးရင် လူနည်းတဲ့
+      ည တစ်ညမှာ အဟောင်းကို ပိတ်ပြီး အသစ်ကို တစ်ခါတည်း ပြောင်းသုံးမယ် ဆိုတာပါ။
+      [[mark:q-a]] ဒီအတိုင်း လုပ်သင့်သလား။
+      [[mark:q-b]] ဒါမှမဟုတ် မလုပ်သင့်ဘူးလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ မလုပ်သင့်ဘူး ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ တစ်ညတည်းနဲ့ ပြောင်းရင်၊ အသစ်က တကယ့်
+      request တွေနဲ့ ပထမဆုံး တွေ့ရတာက အားလုံးကို သူ့ဆီ လွှဲပြီးတဲ့ အချိန်ကျမှ ဖြစ်နေလို့ပါ။
+      [[mark:q-risk]] code အဟောင်းထဲမှာ ဘယ်သူမှ မမှတ်မိတော့တဲ့ စည်းကမ်း အသေးလေးတွေ အများကြီး ပါနေတတ်ပါတယ်။
+      အသစ်မှာ တစ်ခု ကျန်ခဲ့တာကို မနက်ကျမှ သိရင်၊ ပြန်လှည့်ဖို့ လမ်းက မရှိတော့ပါဘူး။
+      [[mark:q-piece]] ပြန်ရေးတာက မမှားပါဘူး။ မှားတာက တစ်ခါတည်း ပြောင်းတာပါ။ အဲဒီအစား တစ်ပိုင်းချင်း ရွှေ့ပြီး၊
+      အဆင့်တိုင်းမှာ ပြန်လှည့်လို့ ရအောင် လုပ်ရပါမယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-risk,
+          type: whiteboard.apply,
+          at: { mark: q-risk },
+          upsertIds: [q-risk],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-piece,
+          type: whiteboard.apply,
+          at: { mark: q-piece },
+          upsertIds: [q-piece],
+          drawMs: 1400,
+        }
+
+  - id: facade
+    chapter: Facade နောက်မှာ တစ်ပိုင်းချင်း
+    narration: >
+      [[mark:f-open]] အဲဒီလို ရွှေ့နိုင်ဖို့ request တွေ ဝင်လာတဲ့ အရှေ့ဆုံးမှာ facade တစ်ခု ထားပါတယ်။ facade ဆိုတာ
+      အနောက်မှာ ဘာရှိလဲ ဆိုတာကို ဖုံးထားပြီး၊ request တစ်ခုစီကို ဘယ်ဘက် ပို့မလဲ ဆုံးဖြတ်ပေးတဲ့ အလွှာပါ။
+      [[mark:f-old]] အစမှာတော့ ရှာတဲ့ request အားလုံးကို app အဟောင်းဆီပဲ ပို့ပါတယ်။ user ဘက်က ဘာမှ မပြောင်းပါဘူး။
+      [[mark:f-new]] Search service အသစ် အဆင်သင့် ဖြစ်တဲ့အခါ၊ request ရဲ့ ၅ ရာခိုင်နှုန်းကိုပဲ အသစ်ဆီ လွှဲပါတယ်။
+      အဟောင်းနဲ့ အသစ်က ဘေးချင်းယှဉ် အလုပ်လုပ်နေတာပါ။
+      [[mark:f-compare]] အဲဒီအချိန်မှာ request တစ်ခုတည်းကို နှစ်ဖက်လုံးဆီ ပို့ပြီး အဖြေ နှစ်ခုကို နှိုင်းကြည့်လို့လည်း
+      ရပါတယ်။ user ကိုတော့ အဟောင်းရဲ့ အဖြေကိုပဲ ပြန်ပေးပါတယ်။ မတူတာ တွေ့တိုင်း မှတ်တမ်းတင်ထားရင်၊ ဘယ်သူမှ
+      မမှတ်မိတော့တဲ့ စည်းကမ်းတွေကို code အဟောင်းက ကိုယ်တိုင် ပြပေးပါလိမ့်မယ်။
+      [[mark:f-back]] မတူတာ မရှိတော့မှ ၅ ကနေ ၂၅၊ ၅၀၊ ၁၀၀ ရာခိုင်နှုန်းအထိ တဖြည်းဖြည်း တိုးပါတယ်။ ဘယ်အဆင့်မှာ ပြဿနာ
+      တွေ့တွေ့၊ facade မှာ လမ်းကြောင်းကို ပြန်လှည့်လိုက်ရုံပါပဲ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-f-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          clear: true,
+          upsertIds: [f-req, f-in, f-facade, f-facade-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-f-old,
+          type: whiteboard.apply,
+          at: { mark: f-old },
+          upsertIds: [f-to-old, f-old, f-old-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-f-new,
+          type: whiteboard.apply,
+          at: { mark: f-new },
+          upsertIds: [f-to-new, f-new, f-new-l, f-new-pct, f-old-pct],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-f-compare,
+          type: whiteboard.apply,
+          at: { mark: f-compare },
+          upsertIds: [f-compare],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-f-back,
+          type: whiteboard.apply,
+          at: { mark: f-back },
+          upsertIds: [f-back],
+          drawMs: 1200,
+        }
+
+  - id: paths
+    chapter: ခွဲလို့ကော ရရဲ့လား
+    narration: >
+      [[mark:p-open]] ဒါပေမဲ့ အပိုင်း တစ်ခုကို ရွှေ့နိုင်ဖို့ အရင်ဆုံး မေးရမယ့် မေးခွန်း ရှိပါတယ်။ ဒီ code ကို ခွဲလို့ကော
+      ရရဲ့လား ဆိုတာပါ။
+      [[mark:p-struct]] code မှာ ဖွဲ့စည်းပုံ ရှိနေတယ်၊ ဆိုလိုတာက ဘယ် code က ဘယ် component ရဲ့ အပိုင်းလဲ
+      ပြောလို့ရတယ်ဆိုရင်၊ component တစ်ခုချင်း ထုတ်ယူသွားလို့ ရပါတယ်။ component ဆိုတာ system ရဲ့ လုပ်ငန်း တစ်ခုကို
+      တာဝန်ယူတဲ့ အစိတ်အပိုင်းပါ။
+      [[mark:p-tangle]] code က ရောထွေးနေပြီး ဘယ်မှာ စ ဘယ်မှာ ဆုံးလဲ မသိရတော့ဘူးဆိုရင်တော့၊ ထုတ်ယူဖို့ ကြိုးစားတာက
+      အချိန်ကုန်ပါတယ်။ အဲဒီအခါ app တစ်ခုလုံးကို team တစ်ခုစီအတွက် မိတ္တူ ကူးပေးပြီး၊ team တစ်ခုစီက ကိုယ်နဲ့
+      မဆိုင်တာတွေကို ဖျက်ထုတ်သွားတာက ပိုမြန်ပါတယ်။ ထုတ်ယူတာထက် ဖျက်တာက ပိုလွယ်တတ်လို့ပါ။ ဒါပေမဲ့ ထပ်နေတဲ့ code တွေ
+      ကျန်ခဲ့မှာကိုတော့ လက်ခံရပါမယ်။
+      [[mark:p-ours]] ခရီးဖော် မှာတော့ လွန်ခဲ့တဲ့ နှစ်တွေက app ကို module တွေ၊ ဆိုလိုတာက အတူ ပြောင်းလဲတတ်တဲ့ code
+      အုပ်စုတွေအဖြစ် ခွဲထားခဲ့တာမို့ Search မှာ ဖွဲ့စည်းပုံ ရှိပါတယ်။ ပထမ လမ်းနဲ့ သွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-struct,
+          type: whiteboard.apply,
+          at: { mark: p-struct },
+          upsertIds: [p-l1, p-l1-l, p-la, p-l2, p-l2-t, p-l2-s],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-p-tangle,
+          type: whiteboard.apply,
+          at: { mark: p-tangle },
+          upsertIds: [p-r1, p-r1-l, p-ra, p-r2, p-r2-t, p-r2-s],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-p-ours,
+          type: whiteboard.apply,
+          at: { mark: p-ours },
+          upsertIds: [p-pick],
+          drawMs: 700,
+        }
+
+  - id: order
+    chapter: နယ်နိမိတ်၊ service၊ data
+    narration: >
+      [[mark:o-open]] ထုတ်ယူတဲ့အခါ အစီအစဉ်က အရေးကြီးပါတယ်။
+      [[mark:o-logical]] ပထမ အဆင့်က နယ်နိမိတ်ကို code ထဲမှာ အရင် ရှင်းတာပါ။ Search ကို app အဟောင်းထဲမှာပဲ ထားပြီး၊
+      တခြား module တွေက သူ့အတွင်းပိုင်းကို တိုက်ရိုက် မခေါ်တော့အောင် ပြင်ပါတယ်။ ဒီအဆင့်မှာ network လည်း မပါ၊ deploy
+      လည်း မပြောင်းတာမို့ မှားရင် ပြန်ပြင်ရတာ စရိတ်နည်းပါတယ်။
+      [[mark:o-service]] ဒုတိယ အဆင့်ကျမှ အဲဒီ module ကို သီးခြား deploy လုပ်တဲ့ service အဖြစ် facade နောက်မှာ
+      တင်ပါတယ်။
+      [[mark:o-big]] Search ကို service သေးသေးလေး ငါးခု ခွဲမနေဘဲ၊ service ကြီးကြီး တစ်ခုအဖြစ်နဲ့ပဲ စပါမယ်။
+      လိုအပ်လာမှ ထပ်ခွဲတာက၊ အစကတည်းက အသေးလေးတွေ ခွဲမိတာထက် ပြန်ပြင်ရ သက်သာတတ်ပါတယ်။
+      [[mark:o-data]] data ကတော့ နောက်ဆုံး အဆင့်ပါ။ အခက်ဆုံးလည်း ဖြစ်ပါတယ်။ Search service က အစမှာ Operator ရဲ့
+      ခရီးစဉ် table တွေကို အရင်လိုပဲ တိုက်ရိုက် ဖတ်နေပါလိမ့်မယ်။ နောက်မှ ခရီးစဉ် data ကို event stream ကနေ ယူပြီး
+      သူ့ကိုယ်ပိုင် index ထဲ ထည့်တော့မှ၊ table တွေကို တိုက်ရိုက် ဖတ်တာကို ဖြတ်ပါတယ်။
+      [[mark:o-checks]] အဆင့်တိုင်းကို အလိုအလျောက် စစ်ဆေးချက် တစ်ခုနဲ့ ကာထားပါတယ်။ ပထမ အဆင့်မှာ အပြင်က code က
+      Search အတွင်းကို ခေါ်မိရင် build က ကျပါမယ်။ ဒုတိယ အဆင့်မှာ အဟောင်းနဲ့ အသစ်ရဲ့ အဖြေကို နှိုင်းစစ်ပါတယ်။ တတိယ
+      အဆင့်မှာ Search က Operator ရဲ့ table ကို ဖတ်တဲ့ query ကျန်မကျန် စစ်ပါတယ်။ စစ်ဆေးချက် မရှိရင် ရှင်းထားတဲ့
+      နယ်နိမိတ်က အချိန်ကြာတာနဲ့ ပြန်ရောသွားတတ်လို့ပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-o-open,
+          type: whiteboard.apply,
+          at: { mark: o-open },
+          clear: true,
+          upsertIds: [o-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-o-logical,
+          type: whiteboard.apply,
+          at: { mark: o-logical },
+          upsertIds: [o-1, o-1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-service,
+          type: whiteboard.apply,
+          at: { mark: o-service },
+          upsertIds: [o-a1, o-2, o-2-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-o-big,
+          type: whiteboard.apply,
+          at: { mark: o-big },
+          upsertIds: [o-big],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-data,
+          type: whiteboard.apply,
+          at: { mark: o-data },
+          upsertIds: [o-a2, o-3, o-3-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-o-checks,
+          type: whiteboard.apply,
+          at: { mark: o-checks },
+          upsertIds: [o-auto, o-k1, o-k2, o-k3],
+          drawMs: 2400,
+        }
+
+  - id: plan
+    chapter: အဆင့်တိုင်းမှာ ပြီးပြီ ဆိုတဲ့ အမှတ်
+    narration: >
+      [[mark:t-close]] အခု အောင်အောင် ကို ပြမယ့် အစီအစဉ်ကို ရေးပါမယ်။
+      [[mark:type-driver]] အပေါ်ဆုံးမှာ business driver ကို တစ်ကြောင်းတည်းနဲ့ ရေးပါတယ်။ သင်္ကြန် peak မှာ
+      ရှာဖွေမှုကို သီးခြား scale လုပ်နိုင်ဖို့ပါ။ ဒီစာကြောင်းကို မရေးနိုင်ရင် အောက်က အဆင့်တွေကို ရေးစရာ မလိုပါဘူး။
+      [[mark:type-1]] အဆင့် တစ်ခုစီမှာ ဘာလုပ်မလဲ ဆိုတာနဲ့အတူ၊ ဘယ်အချိန်မှာ ပြီးပြီလို့ ဆိုနိုင်မလဲ ဆိုတာကိုပါ
+      ရေးပါတယ်။ ပထမ အဆင့်က အပြင်က code က Search အတွင်းကို မခေါ်တော့ဘဲ၊ ခေါ်မိရင် build က တားပေးတဲ့အခါ
+      ပြီးပါတယ်။
+      [[mark:type-2]] ဒုတိယ အဆင့်က request အားလုံးကို service အသစ်က ဖြေနေပြီး၊ အဖြေ မတူတာ မရှိတော့တဲ့အခါ
+      ပြီးပါတယ်။
+      [[mark:type-3]] တတိယ အဆင့်က Search က တခြားသူရဲ့ table ကို တိုက်ရိုက် မဖတ်တော့တဲ့အခါ ပြီးပါတယ်။
+      [[mark:type-4]] နောက်ဆုံး အဆင့်က မေ့တတ်တဲ့ အဆင့်ပါ။ app အဟောင်းထဲက search code ကို ဖျက်ပစ်တာပါ။ မဖျက်ရင်
+      အဟောင်းရော အသစ်ရော နှစ်ခုလုံးကို ထိန်းသိမ်းနေရပါလိမ့်မယ်။
+      [[mark:type-not]] Report ကို မခွဲဘူး ဆိုတာကိုလည်း အစီအစဉ်ရဲ့ အစိတ်အပိုင်းအဖြစ် ရေးထားပါတယ်။
+      [[mark:t-why]] အဆင့်တိုင်းမှာ ပြီးပြီ ဆိုတဲ့ အမှတ် ပါတော့၊ အောင်အောင် က အဆင့် တစ်ခု ပြီးတိုင်း ဆက်မလား ရပ်မလား
+      ဆုံးဖြတ်နိုင်ပါတယ်။ ဘယ်အဆင့်မှာ ရပ်ရပ် system က အလုပ်လုပ်နေတဲ့ အခြေအနေမှာပဲ ရှိနေပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - { id: close-order, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-order },
+          path: notebook/36-plan.md,
+        }
+      - id: type-driver
+        type: editor.type
+        at: { mark: type-driver }
+        cadence: line-by-line
+        target: { file: notebook/36-plan.md, after: "## Business driver\n" }
+        text: "- Search: သင်္ကြန် peak 20 ဆမှာ ရှာဖွေမှုကို သီးခြား scale လုပ်နိုင်ဖို့\n"
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/36-plan.md, after: "## အဆင့်များ\n" }
+        text: "1. code ထဲမှာ နယ်နိမိတ် အရင်ရှင်း\n   - ပြီးပြီ: အပြင်က code က Search အတွင်းကို ခေါ်ရင် build ကျ\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/36-plan.md, after: "ခေါ်ရင် build ကျ\n" }
+        text: "2. façade နောက်မှာ Search service တင်၊ request 5 % ကနေ စ\n   - ပြီးပြီ: 100 % ကို အသစ်က ဖြေ၊ အဖြေ မတူတာ မရှိ\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/36-plan.md, after: "အဖြေ မတူတာ မရှိ\n" }
+        text: "3. data ကို နောက်ဆုံးမှ ခွဲ: ခရီးစဉ် data ကို event stream ကနေ\n   - ပြီးပြီ: Search က Operator ရဲ့ table ကို တိုက်ရိုက် မဖတ်တော့\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: type-4 }
+        cadence: line-by-line
+        target: { file: notebook/36-plan.md, after: "တိုက်ရိုက် မဖတ်တော့\n" }
+        text: "4. app အဟောင်းထဲက search code ကို ဖျက်\n   - ပြီးပြီ: façade မှာ လမ်းကြောင်းဟောင်း မရှိတော့\n"
+      - id: expect-4
+        type: expect.file
+        at: { afterAction: type-4 }
+        path: notebook/36-plan.md
+        contains: "4. app အဟောင်းထဲက search code ကို ဖျက်\n   - ပြီးပြီ: façade မှာ လမ်းကြောင်းဟောင်း မရှိတော့\n"
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        cadence: line-by-line
+        target: { file: notebook/36-plan.md, after: "## မခွဲတာ\n" }
+        text: "- Report: business driver မရှိ၊ app အဟောင်းထဲမှာပဲ ထား\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system မှာ နောက်ထပ် ခွဲထုတ်ချင်နေတဲ့ အပိုင်း တစ်ခုကို စဉ်းစားပါ။ lesson
+      ကို pause လုပ်ပြီး၊ အဲဒီအတွက် business driver ကို ဒီစာကြောင်းလိုပဲ တစ်ကြောင်းတည်းနဲ့ ရေးကြည့်ပါ။
+      [[mark:turn-2]] မြန်မြန် ပြောင်းနိုင်ဖို့လား၊ scale အတွက်လား၊ ပျက်တာ မကူးစေဖို့လား ဆိုတာ ပါရပါမယ်။
+      [[mark:turn-3]] ရေးလို့ မရဘူးဆိုရင်လည်း driver မရှိဘူးလို့ပဲ ရိုးရိုးသားသား ရေးလိုက်ပါ။ အဲဒါလည်း အဖြေ တစ်ခုပါပဲ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-driver-line
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/36-plan.md,
+            text: "- Search: သင်္ကြန် peak 20 ဆမှာ ရှာဖွေမှုကို သီးခြား scale လုပ်နိုင်ဖို့",
+          }
+      - id: sel-not
+        type: editor.select
+        at: { mark: turn-3 }
+        target: { file: notebook/36-plan.md, text: "- Report: business driver မရှိ" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ monolith တစ်ခုကို business driver မရှိဘဲ မခွဲပါနဲ့။ ခွဲမယ်ဆိုရင်လည်း တစ်ညတည်းနဲ့ မပြောင်းဘဲ၊
+      facade နောက်မှာ တစ်ပိုင်းချင်း ရွှေ့ပါ။
+      [[mark:recap-2]] နယ်နိမိတ်ကို code ထဲမှာ အရင်ရှင်း၊ ပြီးမှ service အဖြစ် တင်၊ data ကို နောက်ဆုံးမှ ခွဲပါ။
+      အဆင့်တိုင်းကို ပြန်လှည့်လို့ရအောင်နဲ့ အလိုအလျောက် စစ်လို့ရအောင် လုပ်ထားပါ။
+      [[mark:next]] ဒီနေ့ Search ကို service ကြီးကြီး တစ်ခုအဖြစ်နဲ့ပဲ စမယ်လို့ ပြောခဲ့ပါတယ်။ ဒါဆို service တစ်ခုက
+      ဘယ်လောက် ကြီးသင့်၊ ဘယ်လောက် သေးသင့်သလဲ။ နောက် lesson မှာတော့ service ရဲ့ အရွယ်အစား၊ ဆိုလိုတာက granularity
+      ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-steps
+        type: editor.select
+        at: { mark: recap-2 }
+        target: { file: notebook/36-plan.md, text: "## အဆင့်များ" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
