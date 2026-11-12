@@ -1,0 +1,832 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-13-finding-characteristics
+  title: "Architect Path 13: Business စကားကနေ characteristic ဆီ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/13-characteristics.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/13-characteristics.md: |
+        # Characteristic worksheet
+
+        ## Business ဘက်က ပြောတဲ့ စကား
+        - နောက် သင်္ကြန်မှာ အရင်နှစ်လို အရှက်မရချင်ဘူး (အောင်အောင်)
+        - ကားလိုင်း အသစ်တွေကို ပြိုင်ဘက်ထက် မြန်မြန် ထည့်ချင်တယ် (အောင်အောင်)
+        - ကားဂိတ်က ကောင်တာတွေမှာ internet မကောင်းဘူး (လှလှ)
+        - ထိုင်ခုံ နှစ်ခါ ရောင်းမိတာ နောက်ထပ် မဖြစ်စေနဲ့ (ကားလိုင်း ပိုင်ရှင်များ)
+
+        ## Worksheet
+        | Business စကား | Characteristic | Top 3 |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — what people said (white), translated (violet arrows) into
+    # characteristics (blue); orange marks the composite word the next board opens.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "Business စကားကနေ characteristic ဆီ",
+        fontSize: 36,
+      }
+    - {
+        id: b-l1,
+        kind: text,
+        x: 270,
+        y: 250,
+        width: 380,
+        height: 35,
+        text: "သင်္ကြန်မှာ အရှက်မရချင်",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 665,
+        y: 247,
+        width: 110,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r1,
+        kind: text,
+        x: 800,
+        y: 248,
+        width: 280,
+        height: 38,
+        text: "elasticity",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-l2,
+        kind: text,
+        x: 270,
+        y: 335,
+        width: 380,
+        height: 35,
+        text: "ကောင်တာ internet မကောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 665,
+        y: 332,
+        width: 110,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r2,
+        kind: text,
+        x: 800,
+        y: 333,
+        width: 280,
+        height: 38,
+        text: "availability",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-l3,
+        kind: text,
+        x: 270,
+        y: 420,
+        width: 380,
+        height: 35,
+        text: "ခုံ နှစ်ခါ မရောင်းချင်",
+        fontSize: 28,
+      }
+    - {
+        id: b-a3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 665,
+        y: 417,
+        width: 110,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r3,
+        kind: text,
+        x: 800,
+        y: 418,
+        width: 280,
+        height: 38,
+        text: "data integrity",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-l4,
+        kind: text,
+        x: 270,
+        y: 505,
+        width: 380,
+        height: 35,
+        text: "ပြိုင်ဘက်ထက် မြန်ချင်",
+        fontSize: 28,
+      }
+    - {
+        id: b-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 665,
+        y: 502,
+        width: 110,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-r4,
+        kind: text,
+        x: 800,
+        y: 503,
+        width: 280,
+        height: 38,
+        text: "agility",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-r4-o,
+        kind: freedraw,
+        stroke: circle,
+        x: 780,
+        y: 488,
+        width: 170,
+        height: 68,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the composite word taken apart: orange is the word, blue the three
+    # qualities it is made of, red the one that is weak at ခရီးဖော် today.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Agility ကို ခွဲထုတ်ကြည့်ရင်",
+        fontSize: 36,
+      }
+    - {
+        id: c-ag,
+        kind: rectangle,
+        x: 530,
+        y: 230,
+        width: 290,
+        height: 75,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-ag-l,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 249,
+        width: 290,
+        height: 38,
+        text: "agility",
+        fontSize: 30,
+      }
+    - { id: c-brace, kind: freedraw, stroke: brace-up, x: 275, y: 320, width: 815, height: 48 }
+    - {
+        id: c-m,
+        kind: rectangle,
+        x: 270,
+        y: 385,
+        width: 265,
+        height: 110,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-m-t,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 399,
+        width: 265,
+        height: 35,
+        text: "maintainability",
+        fontSize: 28,
+      }
+    - {
+        id: c-m-s,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 447,
+        width: 265,
+        height: 35,
+        text: "ပြင်ရ လွယ်လား",
+        fontSize: 28,
+      }
+    - {
+        id: c-t,
+        kind: rectangle,
+        x: 550,
+        y: 385,
+        width: 265,
+        height: 110,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-t-t,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 399,
+        width: 265,
+        height: 35,
+        text: "testability",
+        fontSize: 28,
+      }
+    - {
+        id: c-t-s,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 447,
+        width: 265,
+        height: 35,
+        text: "စစ်ရ လွယ်လား",
+        fontSize: 28,
+      }
+    - {
+        id: c-d,
+        kind: rectangle,
+        x: 830,
+        y: 385,
+        width: 265,
+        height: 110,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-d-t,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 399,
+        width: 265,
+        height: 35,
+        text: "deployability",
+        fontSize: 28,
+      }
+    - {
+        id: c-d-s,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 447,
+        width: 265,
+        height: 35,
+        text: "ပို့ရ မြန်လား",
+        fontSize: 28,
+      }
+    - {
+        id: c-weak,
+        kind: text,
+        x: 745,
+        y: 525,
+        width: 350,
+        height: 35,
+        text: "release တစ်ပတ် တစ်ခါပဲ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — the quiz: white situation and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 780,
+        height: 45,
+        text: "scalability လား၊ elasticity လား?",
+        fontSize: 36,
+      }
+    - {
+        id: z-s1,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 760,
+        height: 35,
+        text: "ည 8 နာရီမှာ promotion ဈေး ကြေညာတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-s2,
+        kind: text,
+        x: 290,
+        y: 305,
+        width: 760,
+        height: 35,
+        text: "ခရီးသည်တွေ တစ်ပြိုင်တည်း ဝင်လာတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 300,
+        height: 35,
+        text: "က) scalability",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 455,
+        width: 300,
+        height: 35,
+        text: "ခ) elasticity",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 460,
+        width: 210,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 448,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-why,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 780,
+        height: 35,
+        text: "တဖြည်းဖြည်း တိုးတာ မဟုတ်၊ ရုတ်တရက် တက်တာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8113
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Business ဘက်က ပြောတဲ့ စကား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ system က ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ ဆိုတဲ့ အရည်အသွေး၊ architecture
+      characteristic တွေကို လေ့လာပြီး၊ အများစုကို ဘယ်သူမှ ရေးမထားတတ်တာကို တွေ့ခဲ့ပါတယ်။
+      [[mark:n-meet]] ဒါဆို ရေးမထားတဲ့ အရာတွေကို ဘယ်မှာ သွားရှာရမလဲ။ အဖြေက business ဘက်က လူတွေ ပြောတဲ့
+      စကားတွေထဲမှာပါ။ ဒီအပတ် အစည်းအဝေးတွေမှာ ကြားခဲ့ရတဲ့ စကားတွေကို ကိုယ် မှတ်ထားပါတယ်။
+      [[mark:n-cto]] CTO ဖြစ်တဲ့ အောင်အောင် က အချက် နှစ်ချက် ပြောပါတယ်။ နောက် သင်္ကြန်မှာ အရင်နှစ်လို
+      အရှက်မရချင်တော့ဘူး ဆိုတာနဲ့၊ ကားလိုင်း အသစ်တွေကို ပြိုင်ဘက်တွေထက် မြန်မြန် ထည့်နိုင်ချင်တယ် ဆိုတာပါ။
+      [[mark:n-pm]] product manager လှလှ ကတော့ ကားဂိတ်က ကောင်တာတွေမှာ internet မကောင်းတာကို
+      စိုးရိမ်နေပါတယ်။ ကားလိုင်း ပိုင်ရှင်တွေကလည်း ထိုင်ခုံ နှစ်ခါ ရောင်းမိတာမျိုး နောက်ထပ်
+      မဖြစ်စေချင်ကြပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: n-meet },
+          path: notebook/13-characteristics.md,
+        }
+      - id: sel-cto
+        type: editor.select
+        at: { mark: n-cto }
+        target:
+          file: notebook/13-characteristics.md
+          text: "- နောက် သင်္ကြန်မှာ အရင်နှစ်လို အရှက်မရချင်ဘူး (အောင်အောင်)\n- ကားလိုင်း အသစ်တွေကို ပြိုင်ဘက်ထက် မြန်မြန် ထည့်ချင်တယ် (အောင်အောင်)"
+      - id: sel-pm
+        type: editor.select
+        at: { mark: n-pm }
+        target:
+          file: notebook/13-characteristics.md
+          text: "- ကားဂိတ်က ကောင်တာတွေမှာ internet မကောင်းဘူး (လှလှ)\n- ထိုင်ခုံ နှစ်ခါ ရောင်းမိတာ နောက်ထပ် မဖြစ်စေနဲ့ (ကားလိုင်း ပိုင်ရှင်များ)"
+
+  - id: outcomes
+    chapter: ရလဒ်ကိုပဲ ပြောကြတယ်
+    narration: >
+      [[mark:o-sel]] ဒီ စကားတွေကို သတိထားကြည့်ပါ။ ဘယ်သူကမှ elasticity လိုတယ်၊ deployability လိုတယ်လို့
+      မပြောပါဘူး။ business ဘက်က လူတွေက သူတို့ လိုချင်တဲ့ ရလဒ်ကိုပဲ ပြောကြတာပါ။ ဒါက မှားတာ မဟုတ်ပါဘူး။
+      သူတို့ရဲ့ အလုပ်က ဘယ်ရလဒ်ကို လိုချင်လဲ သိဖို့ပါ။ အဲဒီ ရလဒ်အတွက် system မှာ ဘယ်လို အရည်အသွေးတွေ
+      လိုမလဲ ဆိုတာကို ရှာပေးရမှာကတော့ architect ရဲ့ အလုပ်ပါ။
+      [[mark:o-ask]] ဒီနေရာမှာ မှားတတ်တာ တစ်ခု ရှိပါတယ်။ characteristic စာရင်း အရှည်ကြီးကို ယူသွားပြီး
+      availability လိုလား၊ security လိုလား၊ performance လိုလားလို့ တစ်ခုချင်း လိုက်မေးတာပါ။ အဲဒီလို မေးရင်
+      အဖြေက အများအားဖြင့် တူတူပါပဲ။ အကုန် လိုတယ်လို့ပဲ ဖြေကြမှာပါ။ မလိုဘူးလို့ ဘယ်သူက ပြောရဲမှာလဲ။
+      [[mark:o-useless]] အကုန် လိုတယ် ဆိုတဲ့ အဖြေကတော့ architect အတွက် ဘာမှ အသုံးမဝင်ပါဘူး။ ဘာကို အရင်
+      ဦးစားပေးပြီး ဆောက်ရမလဲ ဆိုတာကို မပြောပြနိုင်လို့ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-all
+        type: editor.select
+        at: { mark: o-sel }
+        target:
+          file: notebook/13-characteristics.md
+          text: "## Business ဘက်က ပြောတဲ့ စကား"
+
+  - id: translate
+    chapter: စကားကို ဘာသာပြန်ခြင်း
+    narration: >
+      [[mark:b-open]] ဒါကြောင့် architect က characteristic နာမည်တွေနဲ့ သွားမမေးဘဲ၊ သူတို့ ပြောပြီးသား
+      စကားတွေကို characteristic အဖြစ် ဘာသာပြန်ယူရပါတယ်။
+      [[mark:b-1]] နောက် သင်္ကြန်မှာ အရှက်မရချင်ဘူး ဆိုတဲ့ စကားကို အရင် ကြည့်ရအောင်။ အရင်နှစ်က ပြဿနာက
+      လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက် ၉ နာရီ ထိုးတာနဲ့ လူတွေ တစ်ပြိုင်တည်း ဝင်လာပြီး၊ ပုံမှန်နေ့ရဲ့ ၁၅ ဆ
+      ဖြစ်သွားတာပါ။ ဒီလို ရုတ်တရက် တက်လာတဲ့ load ကို ချက်ချင်း လိုက်နိုင်တဲ့ အရည်အသွေးကို elasticity လို့
+      ခေါ်ပါတယ်။
+      [[mark:b-2]] ကောင်တာတွေမှာ internet မကောင်းဘူး ဆိုတဲ့ စကားကတော့ availability ကို ပြောနေတာပါ။
+      availability ဆိုတာ သုံးချင်တဲ့အချိန်မှာ သုံးလို့ရနေတာပါ။ ဒီနေရာမှာ သတိထားစရာက system တစ်ခုလုံးရဲ့
+      availability ကို ပြောနေတာ မဟုတ်ဘဲ၊ ကောင်တာက ရောင်းတဲ့ အပိုင်းရဲ့ availability ကို ပြောနေတာပါ။
+      ဘယ်နေရာအတွက်လဲ ဆိုတာပါ တိတိကျကျ မှတ်ထားရပါမယ်။
+      [[mark:b-3]] ထိုင်ခုံ နှစ်ခါ မရောင်းစေချင်ဘူး ဆိုတာကတော့ data integrity ပါ။ data က အမြဲ မှန်ကန်နေရမယ်
+      ဆိုတဲ့ အရည်အသွေးပါ။
+      [[mark:b-4]] ပြိုင်ဘက်တွေထက် မြန်မြန် ထည့်ချင်တယ် ဆိုတဲ့ စကားကတော့ agility ကို ပြောနေတာပါ။ agility
+      ဆိုတာ ပြောင်းလဲမှုတွေကို မြန်မြန် လုပ်ပေးနိုင်တဲ့ စွမ်းရည်ပါ။
+      [[mark:b-but]] ဒါပေမဲ့ ဒီ စကားလုံးမှာတော့ ပြဿနာ တစ်ခု ရှိနေပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-1,
+          type: whiteboard.apply,
+          at: { mark: b-1 },
+          upsertIds: [b-l1, b-a1, b-r1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-2,
+          type: whiteboard.apply,
+          at: { mark: b-2 },
+          upsertIds: [b-l2, b-a2, b-r2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-3,
+          type: whiteboard.apply,
+          at: { mark: b-3 },
+          upsertIds: [b-l3, b-a3, b-r3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-4,
+          type: whiteboard.apply,
+          at: { mark: b-4 },
+          upsertIds: [b-l4, b-a4, b-r4],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-but,
+          type: whiteboard.apply,
+          at: { mark: b-but },
+          upsertIds: [b-r4-o],
+          drawMs: 700,
+        }
+
+  - id: composite
+    chapter: ပေါင်းထားတဲ့ စကားလုံးကို ခွဲထုတ်ခြင်း
+    narration: >
+      [[mark:c-open]] agility ကို တိုက်ရိုက် design ဆွဲလို့ မရပါဘူး။ တိုင်းကြည့်လို့လည်း မရပါဘူး။
+      ဘာကြောင့်လဲဆိုတော့ အရည်အသွေး အများကြီးကို ပေါင်းခေါ်ထားတဲ့ စကားလုံး ဖြစ်နေလို့ပါ။ ဒီလို
+      စကားလုံးမျိုးကို အရင်ဆုံး ခွဲထုတ်ရပါတယ်။
+      [[mark:c-why]] ခရီးဖော် မှာ ကားလိုင်း အသစ် တစ်ခု ထည့်တိုင်း အဲဒီ ကားလိုင်းရဲ့ ထိုင်ခုံ ပုံစံနဲ့ ဈေးနှုန်း
+      စည်းမျဉ်းတွေအတွက် code ပြင်ရပါတယ်။ အဲဒီ ပြင်ဆင်မှု မြန်မြန် ပြီးဖို့ဆိုရင် အရည်အသွေး သုံးခု လိုပါတယ်။
+      [[mark:c-1]] ပထမက maintainability ပါ။ ပြင်ရမယ့် code ကို ရှာတွေ့ဖို့နဲ့ နားလည်ဖို့ ဘယ်လောက် လွယ်လဲ
+      ဆိုတာပါ။
+      [[mark:c-2]] ဒုတိယက testability ပါ။ ပြင်လိုက်တာ မှန်မမှန်၊ တခြား ကားလိုင်းတွေကို မထိခိုက်ဘူး ဆိုတာကို
+      ဘယ်လောက် မြန်မြန် သိနိုင်လဲ ဆိုတာပါ။
+      [[mark:c-3]] တတိယက deployability ပါ။ စစ်ပြီးသား ပြောင်းလဲမှုကို production ဆီ ဘယ်လောက် မြန်မြန်
+      ပို့နိုင်လဲ ဆိုတာပါ။
+      [[mark:c-which]] ဒီလို ခွဲလိုက်မှ သုံးခုထဲက ဘယ်ဟာက အခု တကယ် နှောင့်နှေးစေနေတာလဲ ဆိုတာကို
+      မေးလို့ရလာပါတယ်။
+      [[mark:c-weak]] ခရီးဖော် မှာတော့ code ပြင်တာက ရက်ပိုင်းနဲ့ ပြီးပါတယ်။ ဒါပေမဲ့ release က တစ်ပတ်မှာ တစ်ခါပဲ
+      ရှိပြီး၊ တခြား team ရဲ့ bug ကြောင့် နောက်တစ်ပတ်ကို ရွှေ့ရတာလည်း မကြာခဏပါ။ ဆိုလိုတာက အခု
+      အားနည်းနေတာက deployability ပါ။ agility လိုတယ်လို့ပဲ မှတ်ထားခဲ့ရင်တော့ ဘယ်နေရာကို ပြင်ရမလဲ
+      သိမှာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title, c-ag, c-ag-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-why,
+          type: whiteboard.apply,
+          at: { mark: c-why, offsetMs: 6000 },
+          upsertIds: [c-brace],
+          drawMs: 800,
+        }
+      - {
+          id: draw-c-1,
+          type: whiteboard.apply,
+          at: { mark: c-1 },
+          upsertIds: [c-m, c-m-t, c-m-s],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-2,
+          type: whiteboard.apply,
+          at: { mark: c-2 },
+          upsertIds: [c-t, c-t-t, c-t-s],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-3,
+          type: whiteboard.apply,
+          at: { mark: c-3 },
+          upsertIds: [c-d, c-d-t, c-d-s],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-weak,
+          type: whiteboard.apply,
+          at: { mark: c-weak, offsetMs: 3000 },
+          upsertIds: [c-weak],
+          drawMs: 1000,
+        }
+
+  - id: worksheet
+    chapter: Worksheet ထဲ ချရေးခြင်း
+    narration: >
+      [[mark:w-close]] ဘာသာပြန်ပြီးသားတွေကို worksheet တစ်ခုထဲမှာ ချရေးကြည့်ရအောင်။ business ဘက်က ပြောခဲ့တဲ့
+      စကား တစ်ခုစီကို အဲဒီ စကားက ဆိုလိုတဲ့ characteristic နဲ့ တွဲရေးပါမယ်။
+      [[mark:w-a]] ပထမ သုံးကြောင်းကတော့ ရှင်းပါတယ်။ စကား တစ်ခွန်းက characteristic တစ်ခုစီကို
+      ညွှန်ပြနေတာပါ။ availability အတွက်ကိုတော့ ဘယ်နေရာအတွက်လဲ ဆိုတာပါ တစ်ခါတည်း ထည့်ရေးထားပါတယ်။
+      [[mark:w-b]] ကားလိုင်း အသစ် မြန်မြန် ထည့်ချင်တယ် ဆိုတဲ့ စကားအတွက်ကတော့ agility လို့ မရေးပါဘူး။
+      ခွဲထုတ်ထားတဲ့ သုံးခုကို တစ်ကြောင်းစီ ရေးပါမယ်။ ဒီလို ခွဲရေးထားမှ တစ်ခုချင်းစီကို သီးခြား ဆွေးနွေးလို့
+      ရမှာပါ။
+      [[mark:w-count]] အခု စာရင်းထဲမှာ characteristic ခြောက်ခု ရှိနေပါပြီ။ ခြောက်ခုလုံးက ကောင်းတဲ့
+      အရာတွေချည်းပါပဲ။ ဒါပေမဲ့ တစ်ခုကို ထောက်ပံ့တိုင်း ကုန်ကျစရိတ် ရှိသလို၊ တစ်ခုနဲ့တစ်ခုလည်း
+      ဆန့်ကျင်တတ်ပါတယ်။ ခြောက်ခုလုံးကို ထိပ်ဆုံးမှာ ထားလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-c, type: whiteboard.apply, at: { mark: w-close }, open: false }
+      - id: type-a
+        type: editor.type
+        at: { mark: w-a }
+        cadence: line-by-line
+        target: { file: notebook/13-characteristics.md, after: "| Top 3 |\n|---|---|---|\n" }
+        text: "| နောက် သင်္ကြန်မှာ အရှက်မရဖို့ | elasticity | |\n| ထိုင်ခုံ နှစ်ခါ မရောင်းမိဖို့ | data integrity | |\n| ကောင်တာမှာ internet မကောင်းတာ | availability (ကောင်တာ) | |\n"
+      - id: type-b
+        type: editor.type
+        at: { mark: w-b }
+        cadence: line-by-line
+        target: { file: notebook/13-characteristics.md, after: "| availability (ကောင်တာ) | |\n" }
+        text: "| ကားလိုင်း အသစ် မြန်မြန် ထည့်ဖို့ | maintainability | |\n| | testability | |\n| | deployability | |\n"
+
+  - id: top-three
+    chapter: အရေးကြီးဆုံး သုံးခု
+    narration: >
+      [[mark:top-open]] ဒါကြောင့် ကိုယ်က အောင်အောင် နဲ့ လှလှ ကို စည်းကမ်း တစ်ခုပဲ ပေးလိုက်ပါတယ်။ ဒီ ခြောက်ခုထဲက
+      အရေးကြီးဆုံး သုံးခုကိုပဲ ရွေးပေးပါ ဆိုတာပါ။ ဘယ်ဟာ ပထမ၊ ဘယ်ဟာ ဒုတိယ ဆိုပြီး စီစရာတော့ မလိုပါဘူး။
+      သုံးခုထက်တော့ မပိုရပါဘူး။
+      [[mark:top-talk]] သုံးခုလို့ ကန့်သတ်လိုက်တော့မှ တကယ့် ဆွေးနွေးပွဲက စပါတယ်။ အကုန် လိုတယ်လို့ ပြောလို့
+      မရတော့ဘဲ၊ ဘယ်ဟာကို ချန်ထားခဲ့မလဲ ဆိုတာကို ဆုံးဖြတ်ရလို့ပါ။
+      [[mark:tick-1]] elasticity ကိုတော့ နှစ်ယောက်လုံးက ချက်ချင်း ရွေးပါတယ်။ သင်္ကြန်နေ့လို အဖြစ်မျိုးကို
+      နောက်တစ်ခါ မခံနိုင်တော့လို့ပါ။
+      [[mark:tick-2]] data integrity ကိုလည်း ရွေးပါတယ်။ ထိုင်ခုံ နှစ်ခါ ရောင်းမိတာက ကားလိုင်းတွေရဲ့ ယုံကြည်မှုကို
+      တိုက်ရိုက် ထိခိုက်လို့ပါ။
+      [[mark:top-last]] နောက်ဆုံး တစ်နေရာအတွက်တော့ အချိန် အတော်ကြာ ဆွေးနွေးရပါတယ်။ လှလှ က ကောင်တာအတွက်
+      availability ကို ရွေးချင်ပြီး၊ အောင်အောင် ကတော့ deployability ကို ရွေးချင်ပါတယ်။ နှစ်ယောက်လုံးမှာ
+      ခိုင်လုံတဲ့ အကြောင်းပြချက် ရှိပါတယ်။
+      [[mark:tick-3]] နောက်ဆုံးမှာတော့ deployability ကို ရွေးလိုက်ကြပါတယ်။ ကောင်တာမှာ internet ပြတ်ရင်
+      ရုံးကို ဖုန်းဆက်ပြီး ခုံ လွတ်မလွတ် မေးတဲ့ နည်းလမ်း ရှိသေးပေမဲ့၊ release နှေးတာကတော့ team သုံးခုလုံးရဲ့
+      အလုပ်တိုင်းကို နှေးစေနေလို့ပါ။
+      [[mark:top-not]] ကောင်တာအတွက် availability ကို ပစ်လိုက်တာတော့ မဟုတ်ပါဘူး။ စာရင်းထဲမှာ ဆက်ရှိနေပြီး၊
+      ရနိုင်သလောက် ထောက်ပံ့မှာပါ။ ဒါပေမဲ့ ထိပ်ဆုံး သုံးခုနဲ့ ဆန့်ကျင်လာတဲ့အခါ ဘယ်ဟာကို ဦးစားပေးရမလဲ
+      ဆိုတာကိုတော့ အခု လူတိုင်း ကြိုသိသွားပါပြီ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-top
+        type: editor.select
+        at: { mark: top-open }
+        target: { file: notebook/13-characteristics.md, text: "Top 3" }
+      - id: tick-1
+        type: editor.type
+        at: { mark: tick-1 }
+        target: { file: notebook/13-characteristics.md, after: "| elasticity | " }
+        text: "✓ "
+      - id: tick-2
+        type: editor.type
+        at: { mark: tick-2 }
+        target: { file: notebook/13-characteristics.md, after: "| data integrity | " }
+        text: "✓ "
+      - id: tick-3
+        type: editor.type
+        at: { mark: tick-3 }
+        target: { file: notebook/13-characteristics.md, after: "| deployability | " }
+        text: "✓ "
+      - id: expect-row
+        type: expect.file
+        at: { afterAction: tick-3 }
+        path: notebook/13-characteristics.md
+        contains: "| ထိုင်ခုံ နှစ်ခါ မရောင်းမိဖို့ | data integrity | ✓ |\n"
+      - id: sel-counter
+        type: editor.select
+        at: { mark: top-not }
+        target: { file: notebook/13-characteristics.md, text: "| availability (ကောင်တာ) | |" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကားလိုင်း တစ်ခုက ည ၈ နာရီမှာ promotion ဈေး ကြေညာလိုက်တယ်
+      ဆိုပါစို့။ ကြေညာပြီးတာနဲ့ ခရီးသည်တွေ တစ်ပြိုင်တည်း ဝင်လာကြပါတယ်။
+      [[mark:q-opts]] ဒီ အခြေအနေက တောင်းဆိုနေတာ scalability လား၊ elasticity လား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ elasticity ပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ scalability ဆိုတာ user တွေ လအလိုက်၊ နှစ်အလိုက် တဖြည်းဖြည်း
+      များလာတာကို ခံနိုင်တာပါ။ အဲဒီအတွက်ဆိုရင် ကြိုတင် ပြင်ဆင်ဖို့ အချိန် ရပါတယ်။ ဒီမှာကတော့ load က
+      မိနစ်ပိုင်းအတွင်း တက်လာပြီး၊ ခဏကြာရင် ပြန်ကျသွားမှာပါ။ ဒီလို ရုတ်တရက် အတက်အကျကို ချက်ချင်း
+      လိုက်နိုင်တာက elasticity ပါ။
+      [[mark:q-more]] နှစ်ခုက မတူတဲ့အတွက် ဖြေရှင်းပုံလည်း မတူပါဘူး။ ဒါကြောင့် scale လုပ်နိုင်ရမယ်လို့ ယေဘုယျ
+      ရေးမထားဘဲ၊ ဘယ်ဟာကို ဆိုလိုတာလဲ ဆိုတာ ခွဲရေးထားဖို့ လိုပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-s1, z-s2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-q-opts,
+          type: whiteboard.apply,
+          at: { mark: q-opts },
+          upsertIds: [z-a, z-b],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [z-why],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် project မှာ manager တွေ၊ customer တွေ မကြာခဏ ပြောတတ်တဲ့ စကား
+      သုံးခွန်းကို သတိရကြည့်ပါ။ lesson ကို pause လုပ်ပြီး ဒီ worksheet ထဲမှာ အဲဒီ စကား သုံးခွန်းကို ရေးပြီး၊
+      တစ်ခုစီက ဘယ် characteristic ကို ဆိုလိုနေလဲ ဆိုတာ ဘာသာပြန်ကြည့်ပါ။
+      [[mark:turn-2]] မြန်ချင်တယ်၊ ခိုင်ချင်တယ် ဆိုတာလို အရည်အသွေး အများကြီး ပေါင်းနေတဲ့ စကားလုံး တွေ့ရင်
+      ခွဲထုတ်ဖို့ မမေ့ပါနဲ့။ ပြီးရင် အရေးကြီးဆုံး သုံးခုကို ကိုယ်တိုင် မရွေးဘဲ၊ အဲဒီ စကားတွေကို ပြောခဲ့တဲ့
+      လူတွေကိုပဲ ရွေးခိုင်းကြည့်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-head
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/13-characteristics.md,
+            text: "| Business စကား | Characteristic | Top 3 |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ business ဘက်က လူတွေက characteristic နာမည်တွေနဲ့ မပြောဘဲ၊ လိုချင်တဲ့
+      ရလဒ်ကိုပဲ ပြောကြပါတယ်။ architect က အဲဒီ စကားတွေကို characteristic အဖြစ် ဘာသာပြန်ယူရပါတယ်။ agility
+      လို ပေါင်းထားတဲ့ စကားလုံးကိုတော့ တစ်ခုချင်း ခွဲထုတ်ရပါတယ်။ ပြီးရင် စာရင်းကို တိုတိုပဲ ထားပြီး၊
+      အရေးကြီးဆုံး သုံးခုကို business ဘက်က လူတွေကိုယ်တိုင် ရွေးခိုင်းရပါတယ်။
+      [[mark:next]] ဒါပေမဲ့ elasticity လိုတယ် ဆိုတာနဲ့တင် design ဆွဲလို့ မရသေးပါဘူး။ ဘယ်လောက်ဆိုရင် လုံလောက်လဲ
+      ဆိုတာ မသိသေးလို့ပါ။ နောက် lesson မှာတော့ characteristic တစ်ခုကို ဂဏန်းနဲ့ တိုင်းတာလို့ရတဲ့
+      ပစ်မှတ်အဖြစ် ဘယ်လို ပြောင်းမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-said
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/13-characteristics.md, text: "## Worksheet" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
