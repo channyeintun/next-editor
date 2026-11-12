@@ -1,0 +1,1180 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-07-modularity
+  title: "Architect Path 07: Module, cohesion နဲ့ coupling"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/07-module-audit.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/07-module-audit.md: |
+        # Module audit · ခရီးဖော်
+
+        မေးခွန်း 3 ခု: ဘာကို ဖုံးထားလဲ · အထဲက ဆိုင်ကြလား · ဘယ်သူတွေ မှီခိုနေလဲ
+
+        | Module | ဖုံးထားတာ | မှီခိုနေသူ | ဆုံးဖြတ်ချက် |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the code as it is: three folders by kind (blue), the seat rules
+    # scattered over them (orange), the size of utils (red).
+    - {
+        id: n-c,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 240,
+        height: 210,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-c-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 252,
+        width: 240,
+        height: 35,
+        text: "controllers",
+        fontSize: 28,
+      }
+    - {
+        id: n-m,
+        kind: rectangle,
+        x: 550,
+        y: 240,
+        width: 240,
+        height: 210,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-m-l,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 252,
+        width: 240,
+        height: 35,
+        text: "models",
+        fontSize: 28,
+      }
+    - {
+        id: n-u,
+        kind: rectangle,
+        x: 830,
+        y: 240,
+        width: 240,
+        height: 210,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-u-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 252,
+        width: 240,
+        height: 35,
+        text: "utils",
+        fontSize: 28,
+      }
+    - {
+        id: n-u-size,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 462,
+        width: 240,
+        height: 35,
+        text: "4,000 lines",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ထိုင်ခုံ စည်းမျဉ်းတွေ ဘယ်မှာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: n-r1,
+        kind: rectangle,
+        x: 300,
+        y: 320,
+        width: 64,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: n-r2,
+        kind: rectangle,
+        x: 410,
+        y: 385,
+        width: 64,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: n-r3,
+        kind: rectangle,
+        x: 638,
+        y: 350,
+        width: 64,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: n-r4,
+        kind: rectangle,
+        x: 860,
+        y: 320,
+        width: 64,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: n-r5,
+        kind: rectangle,
+        x: 975,
+        y: 385,
+        width: 64,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: n-q,
+        kind: text,
+        x: 270,
+        y: 545,
+        width: 620,
+        height: 35,
+        text: "code ကို ဘယ်လို အုပ်စုဖွဲ့မလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — a deep and a shallow module. Orange is the interface (what the
+    # board is about), blue the hidden work, green / red the verdict.
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Module က ဘာကို ဖုံးထားလဲ?",
+        fontSize: 36,
+      }
+    - { id: dp-if, kind: rectangle, x: 300, y: 235, width: 300, height: 60, strokeColor: "#f08c00" }
+    - {
+        id: dp-if-l,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 247,
+        width: 300,
+        height: 35,
+        text: "ငွေ ဖြတ်ပေးပါ",
+        fontSize: 28,
+      }
+    - {
+        id: dp-body,
+        kind: rectangle,
+        x: 300,
+        y: 295,
+        width: 300,
+        height: 250,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: dp-l1,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 318,
+        width: 300,
+        height: 35,
+        text: "wallet API ခေါ်ပုံ",
+        fontSize: 28,
+      }
+    - {
+        id: dp-l2,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 388,
+        width: 300,
+        height: 35,
+        text: "ပြန်ကြိုးစားပုံ",
+        fontSize: 28,
+      }
+    - {
+        id: dp-l3,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 458,
+        width: 300,
+        height: 35,
+        text: "ပျက်ရင် ပြန်ပြင်ပုံ",
+        fontSize: 28,
+      }
+    - {
+        id: dp-cap,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 562,
+        width: 300,
+        height: 35,
+        text: "နက်တဲ့ module",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: sh-if,
+        kind: rectangle,
+        x: 700,
+        y: 235,
+        width: 360,
+        height: 190,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: sh-l1,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 268,
+        width: 360,
+        height: 35,
+        text: "column နာမည်တွေ",
+        fontSize: 28,
+      }
+    - {
+        id: sh-l2,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 348,
+        width: 360,
+        height: 35,
+        text: "status နံပါတ်တွေ",
+        fontSize: 28,
+      }
+    - {
+        id: sh-body,
+        kind: rectangle,
+        x: 700,
+        y: 425,
+        width: 360,
+        height: 60,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: sh-body-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 437,
+        width: 360,
+        height: 35,
+        text: "ဖတ်တာ၊ ရေးတာ",
+        fontSize: 28,
+      }
+    - {
+        id: sh-cap,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 562,
+        width: 360,
+        height: 35,
+        text: "တိမ်တဲ့ module",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — cohesion: what sits inside utils, and why it sits together.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Cohesion: အထဲက အရာတွေ ဆိုင်ကြလား?",
+        fontSize: 36,
+      }
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 310,
+        y: 235,
+        width: 740,
+        height: 270,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-box-l,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 247,
+        width: 740,
+        height: 35,
+        text: "utils",
+        fontSize: 28,
+      }
+    - {
+        id: c-i1,
+        kind: text,
+        x: 360,
+        y: 320,
+        width: 300,
+        height: 35,
+        text: "ရက်စွဲ format",
+        fontSize: 28,
+      }
+    - {
+        id: c-i2,
+        kind: text,
+        x: 710,
+        y: 320,
+        width: 300,
+        height: 35,
+        text: "ဈေးနှုန်း တွက်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: c-i3,
+        kind: text,
+        x: 360,
+        y: 410,
+        width: 300,
+        height: 35,
+        text: "SMS စာသား",
+        fontSize: 28,
+      }
+    - {
+        id: c-i4,
+        kind: text,
+        x: 710,
+        y: 410,
+        width: 300,
+        height: 35,
+        text: "ထိုင်ခုံ စစ်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: c-concl,
+        kind: text,
+        x: 310,
+        y: 530,
+        width: 600,
+        height: 35,
+        text: "အတူ ရှိနေတာက တိုက်ဆိုင်မှုပဲ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-test,
+        kind: text,
+        x: 310,
+        y: 590,
+        width: 700,
+        height: 35,
+        text: "ပြောင်းရတဲ့ အကြောင်းရင်း တစ်ခုတည်းလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 4 — who depends on whom. Blue modules, violet calls; utils (orange)
+    # is the one the board is about; red is the risk, green the free one.
+    - {
+        id: k-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "ဘယ်သူက ဘယ်သူ့ကို မှီခိုနေလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: k-b,
+        kind: rectangle,
+        x: 270,
+        y: 255,
+        width: 200,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-b-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 277,
+        width: 200,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: k-p,
+        kind: rectangle,
+        x: 580,
+        y: 255,
+        width: 200,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-p-l,
+        kind: text,
+        align: center,
+        x: 580,
+        y: 277,
+        width: 200,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: k-r,
+        kind: rectangle,
+        x: 880,
+        y: 255,
+        width: 200,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-r-l,
+        kind: text,
+        align: center,
+        x: 880,
+        y: 277,
+        width: 200,
+        height: 35,
+        text: "Report",
+        fontSize: 28,
+      }
+    - {
+        id: k-u,
+        kind: rectangle,
+        x: 540,
+        y: 500,
+        width: 280,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: k-u-l,
+        kind: text,
+        align: center,
+        x: 540,
+        y: 522,
+        width: 280,
+        height: 35,
+        text: "utils",
+        fontSize: 28,
+      }
+    - {
+        id: k-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 400,
+        y: 345,
+        width: 130,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 660,
+        y: 345,
+        width: 40,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-a3,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 830,
+        y: 345,
+        width: 130,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-in3,
+        kind: text,
+        x: 840,
+        y: 522,
+        width: 250,
+        height: 35,
+        text: "ဝင်လာတဲ့ မြား 3",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-in0,
+        kind: text,
+        x: 870,
+        y: 210,
+        width: 230,
+        height: 35,
+        text: "ဝင်လာတဲ့ မြား 0",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 5 — the cycle between Booking and Payment (the two boxes stay).
+    - {
+        id: k-c1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 480,
+        y: 255,
+        width: 90,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-c2,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 480,
+        y: 295,
+        width: 90,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 255,
+        y: 225,
+        width: 545,
+        height: 140,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-one,
+        kind: text,
+        x: 270,
+        y: 410,
+        width: 620,
+        height: 38,
+        text: "နာမည် နှစ်ခု၊ module တစ်ခုတည်း",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    # Board 6 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "hold 10 မိနစ် စည်းမျဉ်း ဘယ်မှာ ထားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) utils ထဲမှာ တန်ဖိုး တစ်ခုအဖြစ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) ထိုင်ခုံ အခြေအနေကို ပိုင်တဲ့ module ထဲမှာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 640,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 980,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 700,
+        height: 35,
+        text: "အတူ ပြောင်းတတ်တာတွေကို အတူ ထား",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 700,
+        height: 35,
+        text: "10 မိနစ်ကို module အထဲမှာ ဖုံးထား",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8107
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ငါးနေရာမှာ ပြန့်နေတဲ့ စည်းမျဉ်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဆုံးဖြတ်ချက်တွေကို ပြန်ပြင်ရင် ဘယ်လောက် ကုန်ကျမလဲ ဆိုတာနဲ့ ခွဲကြည့်ပြီး၊ tracer
+      bullet နဲ့ prototype ကို သုံးပြီး risk လျှော့တာကို လေ့လာခဲ့ပါတယ်။
+      [[mark:folders]] ခရီးဖော် ရဲ့ code ထဲမှာ folder ကြီး သုံးခု ရှိပါတယ်။ controllers၊ models နဲ့ utils
+      ပါ။
+      [[mark:utils-big]] အဲဒီထဲက utils က စာကြောင်းရေ ၄၀၀၀ လောက် ရှိနေပါပြီ။ ဘယ်မှာ ထားရမှန်း မသိတဲ့ code
+      မှန်သမျှ အဲဒီထဲကို ရောက်သွားတာပါ။
+      [[mark:five]] သင်္ကြန် ဖြစ်ရပ် ပြီးတော့ ကိုယ်နဲ့ team ထဲက developer မောင်မောင် က ထိုင်ခုံနဲ့ ဆိုင်တဲ့
+      စည်းမျဉ်းတွေ ဘယ်မှာ ရှိလဲ ဆိုတာ လိုက်ရှာကြည့်ကြပါတယ်။ ထိုင်ခုံ တစ်ခုံက ဘယ်အချိန်မှာ လွတ်တယ်၊ ဘယ်အချိန်မှာ
+      ခဏ ထိန်းထားတယ်၊ ဘယ်အချိန်မှာ ရောင်းပြီးသား ဖြစ်တယ် ဆိုတာတွေကို ဆုံးဖြတ်ပေးတဲ့ code တွေပါ။
+      [[mark:five-places]] တွေ့ရတာက တစ်နေရာတည်းမှာ မဟုတ်ဘဲ ငါးနေရာမှာ ပြန့်နေတာပါ။ controllers ထဲမှာ
+      နှစ်နေရာ၊ models ထဲမှာ တစ်နေရာ၊ utils ထဲမှာ နှစ်နေရာပါ။ စည်းမျဉ်း တစ်ခုကို ပြင်ချင်ရင် ငါးနေရာလုံးကို
+      မှတ်မိမှ ရပါမယ်။ တစ်နေရာ ကျန်ခဲ့တာနဲ့ bug ဖြစ်ပါပြီ။
+      [[mark:ask]] ဒါဆို code တွေကို ဘယ်လို အုပ်စုဖွဲ့ထားသင့်လဲ။ folder ခွဲထားရုံနဲ့ မလုံလောက်ဘူး ဆိုတာတော့
+      သေချာနေပါပြီ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-folders,
+          type: whiteboard.apply,
+          at: { mark: folders },
+          open: true,
+          upsertIds: [n-c, n-c-l, n-m, n-m-l, n-u, n-u-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-utils-size,
+          type: whiteboard.apply,
+          at: { mark: utils-big },
+          upsertIds: [n-u-size],
+          drawMs: 700,
+        }
+      - {
+          id: draw-n-title,
+          type: whiteboard.apply,
+          at: { mark: five },
+          upsertIds: [n-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-five,
+          type: whiteboard.apply,
+          at: { mark: five-places },
+          upsertIds: [n-r1, n-r2, n-r3, n-r4, n-r5],
+          drawMs: 2000,
+        }
+      - { id: draw-n-q, type: whiteboard.apply, at: { mark: ask }, upsertIds: [n-q], drawMs: 900 }
+
+  - id: module
+    chapter: Module က ဘာကို ဖုံးထားလဲ
+    narration: >
+      [[mark:m-open]] code ကို အုပ်စုဖွဲ့တဲ့ အခြေခံ အပိုင်းကို module လို့ ခေါ်ပါတယ်။ module ဆိုတာ အတူတူ
+      ပြောင်းလဲတတ်တဲ့ code တွေကို စုထားပြီး၊ အပြင်က သိစရာ မလိုတဲ့ အသေးစိတ်တွေကို ဖုံးထားပေးတဲ့ အပိုင်းပါ။
+      function တစ်ခုကနေ service တစ်ခုလုံးအထိ ဘယ်အရွယ်မဆို module ဖြစ်နိုင်ပါတယ်။ အရွယ်အစားက အဓိက မဟုတ်ဘဲ၊ ဘာကို ဖုံးထားလဲ ဆိုတာက အဓိကပါ။
+      [[mark:m-deep-if]] ဥပမာ ငွေချေတဲ့ အပိုင်းကို စဉ်းစားကြည့်ရအောင်။ ကျန်တဲ့ code တွေက သူ့ကို ပြောစရာ
+      တစ်ခုပဲ ရှိပါတယ်။ ဒီ booking အတွက် ငွေ ဘယ်လောက် ဖြတ်ပေးပါ ဆိုတာပါ။ အဲဒီလို အပြင်ကနေ မြင်ရတဲ့ အပိုင်းကို
+      interface လို့ ခေါ်ပါတယ်။ အပိုင်း နှစ်ခုကြားမှာ သဘောတူထားတဲ့ ပုံစံပါပဲ။
+      [[mark:m-deep-body]] အထဲမှာတော့ အလုပ်တွေ အများကြီး ရှိပါတယ်။ wallet ကုမ္ပဏီရဲ့ API ကို ဘယ်လို ခေါ်ရလဲ၊
+      အဖြေ မလာရင် ဘယ်နှခါ ပြန်ကြိုးစားမလဲ၊ ငွေဖြတ်ပြီးမှ တစ်ခုခု ပျက်သွားရင် ဘယ်လို ပြန်ပြင်မလဲ ဆိုတာတွေပါ။
+      ဒါတွေက နောက်ပိုင်းမှာ ပြောင်းဖို့ များတဲ့ ဆုံးဖြတ်ချက်တွေပါ။ wallet အသစ် တစ်ခု ထပ်ထည့်လိုက်ရင်တောင်
+      အပြင်က code တွေ ဘာမှ သိစရာ မလိုပါဘူး။
+      [[mark:m-deep-name]] interface က သေးသေးလေး၊ ဖုံးထားတာက အများကြီး ဖြစ်နေတဲ့ ဒီလို module မျိုးကို နက်တဲ့
+      module လို့ ခေါ်ကြပါတယ်။
+      [[mark:m-shallow]] ဆန့်ကျင်ဘက်ကတော့ တိမ်တဲ့ module ပါ။ ခရီးဖော် ရဲ့ models ထဲက ခရီးစဉ် code ကို ကြည့်ပါ။
+      table ထဲက column တွေကို ဖတ်တာနဲ့ ရေးတာပဲ လုပ်ပေးပါတယ်။ ခေါ်သုံးတဲ့ဘက်က column နာမည်တွေကို သိရမယ်၊
+      status ထဲက နံပါတ် ၂ ဆိုတာ ခရီးစဉ် ဖျက်လိုက်တာကို ဆိုလိုတယ် ဆိုတာလည်း သိရပါမယ်။
+      [[mark:m-shallow-name]] interface က အထဲမှာ ရှိသမျှနဲ့ အရွယ် တူနေတော့ ဘာကိုမှ ဖုံးမထားပါဘူး။ table ရဲ့
+      ပုံစံ နည်းနည်း ပြောင်းတာနဲ့ ခေါ်သုံးထားတဲ့ နေရာ အားလုံးမှာ လိုက်ပြင်ရပါတယ်။
+      [[mark:m-point]] ဒါကြောင့် module တစ်ခုကို အကဲဖြတ်ချင်ရင် ပထမဆုံး မေးရမယ့် မေးခွန်းက၊ ဒီ module က
+      ဘာကို ဖုံးထားပေးလဲ ဆိုတာပါ။ ဘာမှ ဖုံးမထားရင် အဲဒါက code တွေ စုထားတဲ့ နေရာ တစ်ခုပဲ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-deep-if,
+          type: whiteboard.apply,
+          at: { mark: m-deep-if },
+          upsertIds: [dp-if, dp-if-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-deep-body,
+          type: whiteboard.apply,
+          at: { mark: m-deep-body },
+          upsertIds: [dp-body, dp-l1, dp-l2, dp-l3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-deep-cap,
+          type: whiteboard.apply,
+          at: { mark: m-deep-name },
+          upsertIds: [dp-cap],
+          drawMs: 800,
+        }
+      - {
+          id: draw-shallow,
+          type: whiteboard.apply,
+          at: { mark: m-shallow },
+          upsertIds: [sh-if, sh-l1, sh-l2, sh-body, sh-body-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-shallow-cap,
+          type: whiteboard.apply,
+          at: { mark: m-shallow-name },
+          upsertIds: [sh-cap],
+          drawMs: 800,
+        }
+      - {
+          id: point-deep,
+          type: whiteboard.point,
+          at: { mark: m-point },
+          target: { assetId: dp-body },
+        }
+
+  - id: cohesion
+    chapter: Cohesion — အထဲကို ကြည့်ခြင်း
+    narration: >
+      [[mark:c-open]] ဒုတိယ မေးခွန်းက module ရဲ့ အထဲကို ကြည့်တာပါ။ အထဲမှာ ရှိတဲ့ အရာတွေက တစ်ခုနဲ့တစ်ခု တကယ်
+      ဆိုင်ကြရဲ့လား ဆိုတာပါ။ ဒါကို cohesion လို့ ခေါ်ပါတယ်။
+      [[mark:c-items]] utils ကို ဖွင့်ကြည့်ရအောင်။ ရက်စွဲကို စာသားအဖြစ် ပြောင်းပေးတဲ့ function တွေ ရှိတယ်၊
+      ဈေးနှုန်း တွက်တဲ့ function တွေ ရှိတယ်၊ ခရီးသည်ဆီ ပို့မယ့် SMS စာသားကို စီပေးတဲ့ code ရှိတယ်၊ ထိုင်ခုံ
+      လွတ်မလွတ် စစ်တဲ့ code လည်း ရှိပါတယ်။
+      [[mark:c-why]] ဒီ လေးမျိုးက ဘာကြောင့် အတူတူ ရှိနေတာလဲလို့ မေးရင်၊ ထားစရာ တခြားနေရာ မရှိလို့ ဆိုတဲ့
+      အဖြေပဲ ရပါတယ်။ အဓိပ္ပာယ်အရ ဆိုင်လို့ မဟုတ်ဘဲ၊ တိုက်ဆိုင်လို့ အတူ ရှိနေကြတာပါ။
+      [[mark:c-test]] cohesion ရှိမရှိ စစ်ဖို့ နည်း နှစ်ခု ရှိပါတယ်။ ပထမ နည်းက ဒီ module က ဘာလုပ်ပေးလဲ
+      ဆိုတာကို စာကြောင်း တစ်ကြောင်းတည်းနဲ့ ပြောကြည့်တာပါ။ ဒါလည်း လုပ်တယ်၊ ဟိုဟာလည်း လုပ်တယ်၊ နောက်ပြီး ဒါလည်း
+      ပါသေးတယ် ဆိုပြီး ဆက်နေရရင် cohesion နည်းနေပါပြီ။ ဒုတိယ နည်းကတော့ အထဲက အရာတွေက အကြောင်းရင်း တစ်ခုတည်းကြောင့်
+      ပြောင်းကြတာလား ဆိုတာကို ကြည့်တာပါ။
+      [[mark:c-change]] utils မှာဆိုရင် product manager လှလှ က discount အသစ် တောင်းတိုင်း ဈေးနှုန်း code ကို
+      ပြင်ရပါတယ်။ SMS စာသား ပြောင်းချင်တိုင်းလည်း ပြင်ရပါတယ်။ ဆိုတော့ အပတ်တိုင်း တစ်ယောက်မဟုတ် တစ်ယောက်က utils
+      ကို ပြင်နေရပြီး၊ မဆိုင်တဲ့ code တွေပါ အတူ ထိခိုက်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-items,
+          type: whiteboard.apply,
+          at: { mark: c-items },
+          upsertIds: [c-box, c-box-l, c-i1, c-i2, c-i3, c-i4],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-c-concl,
+          type: whiteboard.apply,
+          at: { mark: c-why, offsetMs: 2500 },
+          upsertIds: [c-concl],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-c-test,
+          type: whiteboard.apply,
+          at: { mark: c-change },
+          upsertIds: [c-test],
+          drawMs: 1000,
+        }
+
+  - id: coupling
+    chapter: Coupling — အပြင်ကို ကြည့်ခြင်း
+    narration: >
+      [[mark:k-open]] တတိယ မေးခွန်းက module ရဲ့ အပြင်ကို ကြည့်တာပါ။ module တစ်ခုက အလုပ်လုပ်နိုင်ဖို့ နောက် module
+      တစ်ခုအကြောင်း ဘယ်လောက် သိထားရလဲ ဆိုတာကို coupling လို့ ခေါ်ပါတယ်။ ခရီးဖော် ရဲ့ code ကို folder အလိုက်
+      မကြည့်ဘဲ လုပ်ငန်းအလိုက် ကြည့်လိုက်ရင် အစု လေးခုကို တွေ့ရပါတယ်။
+      [[mark:k-boxes]] လက်မှတ် ရောင်းတဲ့ Booking၊ ငွေချေတဲ့ Payment၊ ရောင်းအားကို တွက်ပြတဲ့ Report နဲ့ အားလုံးက
+      ယူသုံးနေတဲ့ utils ပါ။
+      [[mark:k-arrows]] တစ်ခုက နောက်တစ်ခုကို ခေါ်သုံးထားတိုင်း မြား တစ်ချောင်း ဆွဲကြည့်ပါ။ Booking၊ Payment နဲ့
+      Report သုံးခုလုံးက utils ကို ခေါ်သုံးနေကြပါတယ်။
+      [[mark:k-in]] ဆိုတော့ utils ဆီ ဝင်လာတဲ့ မြားက သုံးချောင်း ရှိပါတယ်။ ဝင်လာတဲ့ မြား များတယ် ဆိုတာ အဲဒီ
+      module ကို မှီခိုနေသူ များတယ်လို့ ဆိုလိုတာပါ။ အဲဒီလို module မျိုးက တည်ငြိမ်နေဖို့ လိုပါတယ်။ သူ
+      ပြောင်းလိုက်တိုင်း မှီခိုနေသူ အားလုံးကို ပြန်စစ်ရလို့ပါ။ ဒါပေမဲ့ utils က အပတ်တိုင်း ပြောင်းနေတဲ့ module
+      ဖြစ်နေပါတယ်။ အများဆုံး မှီခိုခံရတဲ့ အပိုင်းက အများဆုံး ပြောင်းနေတာမို့၊ အန္တရာယ် အများဆုံး နေရာပါပဲ။
+      [[mark:k-zero]] Report ကို ကြည့်ရင်တော့ ဝင်လာတဲ့ မြား တစ်ချောင်းမှ မရှိပါဘူး။ သူ့ကို ဘယ် module ကမှ
+      မမှီခိုတော့၊ ပြင်လိုက်လည်း တခြား module တွေကို မထိခိုက်ပါဘူး။
+      [[mark:k-cycle]] နောက်ထပ် သတိထားစရာ တစ်ခု ကျန်ပါသေးတယ်။
+      [[mark:k-go]] Booking က ငွေဖြတ်ဖို့အတွက် Payment ကို ခေါ်ပါတယ်။
+      [[mark:k-back]] Payment ကလည်း ငွေဖြတ်ပြီးတဲ့အခါ လက်မှတ် ထုတ်ပေးဖို့ Booking ကို ပြန်ခေါ်ပါတယ်။
+      [[mark:k-one]] ဒီလို မြားတွေ ကွင်းပတ်နေတာကို cycle လို့ ခေါ်ပါတယ်။ cycle ဖြစ်နေရင် တစ်ခုကို နားလည်ဖို့
+      နောက်တစ်ခုကိုပါ ဖတ်ရတယ်၊ တစ်ခုကို test လုပ်ဖို့ နောက်တစ်ခုပါ လိုတယ်၊ တစ်ခုကို ပြင်ရင် နောက်တစ်ခုပါ
+      ပျက်နိုင်ပါတယ်။ နာမည်က နှစ်ခု ဖြစ်နေပေမဲ့ တကယ်တော့ module တစ်ခုတည်းပါပဲ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-k-open,
+          type: whiteboard.apply,
+          at: { mark: k-open },
+          clear: true,
+          upsertIds: [k-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-boxes,
+          type: whiteboard.apply,
+          at: { mark: k-boxes },
+          upsertIds: [k-b, k-b-l, k-p, k-p-l, k-r, k-r-l, k-u, k-u-l],
+          drawMs: 3200,
+        }
+      - {
+          id: draw-k-arrows,
+          type: whiteboard.apply,
+          at: { mark: k-arrows, offsetMs: 2500 },
+          upsertIds: [k-a1, k-a2, k-a3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-k-in,
+          type: whiteboard.apply,
+          at: { mark: k-in },
+          upsertIds: [k-in3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-zero,
+          type: whiteboard.apply,
+          at: { mark: k-zero },
+          upsertIds: [k-in0],
+          drawMs: 900,
+        }
+      - {
+          id: clear-k,
+          type: whiteboard.apply,
+          at: { mark: k-cycle },
+          clear: true,
+          upsertIds: [k-b, k-b-l, k-p, k-p-l],
+        }
+      - {
+          id: draw-k-go,
+          type: whiteboard.apply,
+          at: { mark: k-go },
+          upsertIds: [k-c1],
+          drawMs: 700,
+        }
+      - {
+          id: draw-k-back,
+          type: whiteboard.apply,
+          at: { mark: k-back },
+          upsertIds: [k-c2],
+          drawMs: 700,
+        }
+      - {
+          id: draw-k-one,
+          type: whiteboard.apply,
+          at: { mark: k-one },
+          upsertIds: [k-circle, k-one],
+          drawMs: 1500,
+        }
+
+  - id: audit
+    chapter: Module audit
+    narration: >
+      [[mark:a-close]] module တစ်ခုကို စစ်ဖို့ မေးခွန်း သုံးခု ရပါပြီ။ ဘာကို ဖုံးထားလဲ၊ အထဲက အရာတွေ
+      ဆိုင်ကြလား၊ ဘယ်သူတွေ မှီခိုနေလဲ ဆိုတာပါ။ အဲဒီ အဖြေတွေကနေ ဘာဆက်လုပ်မလဲ ဆိုတဲ့ ဆုံးဖြတ်ချက် ထွက်လာပါတယ်။
+      [[mark:a-sel]] ဒီ သုံးခုနဲ့ ခရီးဖော် ရဲ့ module တွေကို တစ်ခုချင်း စစ်ပြီး table တစ်ခုထဲ ချရေးကြည့်ရအောင်။
+      [[mark:type-utils]] ပထမဆုံး utils ပါ။ သူက ဘာကိုမှ ဖုံးမထားသလို၊ အထဲက အရာတွေကလည်း တစ်ခုနဲ့တစ်ခု
+      မဆိုင်ကြပါဘူး။ မှီခိုနေသူကတော့ ကျန်တဲ့ သုံးခုလုံးပါ။ ဒါကြောင့် ဆုံးဖြတ်ချက်က အထဲက code တွေကို
+      အဓိပ္ပာယ်အလိုက် ခွဲထုတ်ဖို့ပါ။
+      [[mark:type-payment]] ဒုတိယက Payment ပါ။ wallet API ကို ဘယ်လို ခေါ်လဲ ဆိုတာကို သူက ဖုံးထားပေးပြီး၊
+      မှီခိုနေသူက Booking တစ်ခုတည်းပါ။ ပြင်ရမှာက Booking နဲ့ ဖြစ်နေတဲ့ cycle ကို ဖြတ်ဖို့ပါ။ Payment က
+      ငွေဖြတ်ပြီးပြီ ဆိုတဲ့ ရလဒ်ကိုပဲ ပြန်ပေးပြီး၊ လက်မှတ် ထုတ်တာကို Booking က ကိုယ်တိုင် ဆက်လုပ်လိုက်ရင် မြားက
+      တစ်ဖက်တည်းပဲ ကျန်ပါတော့မယ်။
+      [[mark:type-report]] တတိယက Report ပါ။ ရောင်းအားကို ဘယ်လို တွက်လဲ ဆိုတာကို ဖုံးထားပြီး၊ သူ့ကို
+      မှီခိုနေသူလည်း မရှိပါဘူး။ ဒီအတိုင်း ထားလို့ ရပါတယ်။ ပြင်စရာ မလိုတာကို မလိုဘူးလို့ ရေးထားတာလည်း ဒီလို စစ်ဆေးတာရဲ့ အသုံးဝင်တဲ့ ရလဒ် တစ်ခုပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-k, type: whiteboard.apply, at: { mark: a-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-k },
+          path: notebook/07-module-audit.md,
+        }
+      - id: sel-questions
+        type: editor.select
+        at: { mark: a-sel }
+        target:
+          {
+            file: notebook/07-module-audit.md,
+            text: "မေးခွန်း 3 ခု: ဘာကို ဖုံးထားလဲ · အထဲက ဆိုင်ကြလား · ဘယ်သူတွေ မှီခိုနေလဲ",
+          }
+      - id: type-utils
+        type: editor.type
+        at: { mark: type-utils }
+        cadence: line-by-line
+        target: { file: notebook/07-module-audit.md, after: "|---|---|---|---|\n" }
+        text: "| utils | ဘာမှ မဖုံး (4,000 lines) | Booking, Payment, Report | အဓိပ္ပာယ်အလိုက် ခွဲထုတ်မယ် |\n"
+      - id: type-payment
+        type: editor.type
+        at: { mark: type-payment }
+        cadence: line-by-line
+        target: { file: notebook/07-module-audit.md, after: "| အဓိပ္ပာယ်အလိုက် ခွဲထုတ်မယ် |\n" }
+        text: "| Payment | wallet API ခေါ်ပုံ | Booking | Booking နဲ့ cycle ကို ဖြတ်မယ် |\n"
+      - id: type-report
+        type: editor.type
+        at: { mark: type-report }
+        cadence: line-by-line
+        target: { file: notebook/07-module-audit.md, after: "| Booking နဲ့ cycle ကို ဖြတ်မယ် |\n" }
+        text: "| Report | ရောင်းအား တွက်ပုံ | မရှိ | ဒီအတိုင်း ထားမယ် |\n"
+      - id: expect-utils
+        type: expect.file
+        at: { afterAction: type-report }
+        path: notebook/07-module-audit.md
+        contains: "| utils | ဘာမှ မဖုံး (4,000 lines) | Booking, Payment, Report | အဓိပ္ပာယ်အလိုက် ခွဲထုတ်မယ် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ထိုင်ခုံကို ၁၀ မိနစ် ထိန်းထားမယ် ဆိုတဲ့ စည်းမျဉ်းကို ဘယ်မှာ
+      ထားသင့်လဲ။
+      [[mark:q-a]] ပထမ ရွေးစရာက utils ထဲမှာ တန်ဖိုး တစ်ခုအဖြစ် ထားတာပါ။ ဘယ် code ကမဆို အဲဒီကနေ ယူသုံးလို့
+      ရပါမယ်။
+      [[mark:q-b]] ဒုတိယ ရွေးစရာကတော့ ထိုင်ခုံရဲ့ အခြေအနေနဲ့ ဆိုင်တာ မှန်သမျှကို ပိုင်တဲ့ module တစ်ခုထဲမှာ
+      ထားတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ၁၀ မိနစ် ဆိုတဲ့ တန်ဖိုးက သူ့ချည်းသက်သက်
+      ရပ်တည်နေတာ မဟုတ်လို့ပါ။ ခုံကို ဘယ်အချိန် စထိန်းမလဲ၊ အချိန်ကျော်ရင် ဘယ်လို ပြန်လွှတ်မလဲ၊ ငွေချေပြီးရင်
+      ဘာဖြစ်မလဲ ဆိုတဲ့ စည်းမျဉ်းတွေနဲ့ အတူတူ ပြောင်းတတ်ပါတယ်။ utils ထဲမှာ ထားလိုက်ရင် တန်ဖိုးကတော့ တစ်နေရာတည်း
+      ဖြစ်သွားပါတယ်။ ဒါပေမဲ့ အဲဒီ တန်ဖိုးကို ယူပြီး အချိန် တွက်တဲ့ code တွေက ငါးနေရာမှာပဲ ကျန်နေဦးမှာပါ။
+      [[mark:q-test]] အတူ ပြောင်းတတ်တဲ့ အရာတွေကို အတူ ထားတာက အဓိပ္ပာယ်အရ ဖြစ်လာတဲ့ cohesion ပါ။ ထိုင်ခုံ module
+      က ခုံကို ထိန်းပေးပါ၊ ပြန်လွှတ်ပေးပါ ဆိုတာလောက်ကိုပဲ အပြင်ကို ပြပြီး၊ ၁၀ မိနစ် ဆိုတာကိုတော့ အထဲမှာ
+      ဖုံးထားလိုက်ရင် နက်တဲ့ module တစ်ခု ရပါပြီ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-test,
+          type: whiteboard.apply,
+          at: { mark: q-test },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် code အတွက်
+    narration: >
+      [[mark:turn]] ဒီ အဖြေကို table ထဲမှာ နောက်ဆုံး တစ်ကြောင်းအဖြစ် ထည့်လိုက်ပါမယ်။
+      [[mark:type-seat]] Seat inventory ဆိုတဲ့ module အသစ် တစ်ခု ဆောက်ပြီး၊ ငါးနေရာမှာ ပြန့်နေတဲ့ ထိုင်ခုံ စည်းမျဉ်းတွေကို
+      အဲဒီထဲမှာ စုပါမယ်။ app ဘက်ကရော ကောင်တာဘက်ကရော သူ့ကိုပဲ ခေါ်သုံးရမှာမို့၊ ဝင်လာတဲ့ မြား များမယ့် module
+      ပါ။ ဒါကြောင့် သူ့ရဲ့ interface ကို သေသေချာချာ စဉ်းစားပြီး တည်ငြိမ်အောင် ထားရပါမယ်။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲက module တစ်ခုကို
+      ရွေးပါ။ ပြီးရင် ဒီ table ထဲမှာ တစ်ကြောင်း ထပ်ဖြည့်ပြီး မေးခွန်း သုံးခုကို ဖြေကြည့်ပါ။
+      [[mark:turn-2]] အများဆုံး ပြင်နေရတဲ့ file ကနေ စရွေးရင် အကျိုး အရှိဆုံးပါ။ ဖုံးထားတာ ဆိုတဲ့ အကွက်မှာ
+      ဘာရေးရမလဲ စဉ်းစားလို့ မရဘူးဆိုရင်၊ အဲဒါကိုက တွေ့ရှိချက် တစ်ခုပါပဲ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-seat
+        type: editor.type
+        at: { mark: type-seat }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/07-module-audit.md,
+            after: "| Report | ရောင်းအား တွက်ပုံ | မရှိ | ဒီအတိုင်း ထားမယ် |\n",
+          }
+        text: "| Seat inventory (အသစ်) | ထိုင်ခုံ state၊ hold 10 မိနစ် | app, ကောင်တာ | module အသစ် ဆောက်မယ် |\n"
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn-you }
+        target:
+          { file: notebook/07-module-audit.md, text: "| Module | ဖုံးထားတာ | မှီခိုနေသူ | ဆုံးဖြတ်ချက် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ code ကို folder ခွဲထားရုံနဲ့ module မဖြစ်ပါဘူး။ module ဆိုတာ အတူ
+      ပြောင်းတတ်တဲ့ အရာတွေကို စုထားပြီး၊ ပြောင်းဖို့ များတဲ့ ဆုံးဖြတ်ချက်တွေကို interface သေးသေးလေးရဲ့ နောက်မှာ
+      ဖုံးထားပေးတဲ့ အပိုင်းပါ။ အထဲကို ကြည့်ရင် cohesion၊ အပြင်ကို ကြည့်ရင် coupling ဆိုပြီး နှစ်ဖက်လုံးက
+      စစ်ရပါတယ်။ ဝင်လာတဲ့ မြား များတဲ့ module က တည်ငြိမ်ရမယ်၊ cycle ဖြစ်နေတဲ့ module နှစ်ခုကတော့ တကယ်တော့
+      တစ်ခုတည်းပါ။
+      [[mark:next]] နောက် lesson မှာတော့ system တစ်ခုက ဘာကြောင့် ရှုပ်ထွေးလာရတာလဲ၊ complexity ဆိုတာ ဘယ်က
+      လာတာလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
