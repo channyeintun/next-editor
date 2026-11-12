@@ -1,0 +1,885 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-09-coupling-strength
+  title: "Architect Path 09: Coupling ရဲ့ အားကို တိုင်းခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/09-coupling-audit.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/09-coupling-audit.md: |
+        # Coupling audit · ခရီးဖော်
+
+        | ဆက်သွယ်မှု | မျှသိထားတာ | အဆင့် |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: connascence
+      contentType: html
+      name: Connascence
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Connascence: အတူ ပြောင်းရတဲ့ ဆက်နွယ်မှု</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide green">Code ထဲမှာ မြင်ရ</span>နာမည် · အဓိပ္ပာယ် · parameter အစီအစဉ်</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide red">Run မှ ပေါ်တာ</span>လုပ်တဲ့ အစဉ် · အချိန် · တူရမယ့် တန်ဖိုး</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide orange">စည်းမျဉ်း</span>အားကောင်းလေ နီးနီး ထားလေ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — Friday night: Booking owns its table (violet = its own access);
+    # Payment reads the table behind Booking's back (red); the rename (orange).
+    - {
+        id: n-b,
+        kind: rectangle,
+        x: 290,
+        y: 220,
+        width: 300,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-b-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 247,
+        width: 300,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: n-own,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 420,
+        y: 320,
+        width: 40,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - { id: n-t, kind: ellipse, x: 290, y: 400, width: 300, height: 110, strokeColor: "#1971c2" }
+    - {
+        id: n-t-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 437,
+        width: 300,
+        height: 35,
+        text: "booking table",
+        fontSize: 28,
+      }
+    - {
+        id: n-p,
+        kind: rectangle,
+        x: 770,
+        y: 220,
+        width: 300,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-p-l,
+        kind: text,
+        align: center,
+        x: 770,
+        y: 247,
+        width: 300,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: n-direct,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 605,
+        y: 320,
+        width: 190,
+        height: 110,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-rename,
+        kind: text,
+        x: 290,
+        y: 528,
+        width: 420,
+        height: 35,
+        text: "column နာမည် ပြောင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-broke,
+        kind: text,
+        x: 798,
+        y: 345,
+        width: 290,
+        height: 35,
+        text: "ငွေပြန်အမ်းတာ ပျက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-know,
+        kind: text,
+        x: 290,
+        y: 595,
+        width: 760,
+        height: 35,
+        text: "Payment က Booking အကြောင်း ဘာ သိနေရလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the ladder of four levels, strongest on top. Red = the risky
+    # level, green = the one to aim for across a boundary, white = in between.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "Integration strength: ဘာအသိ ကူးသွားလဲ?",
+        fontSize: 36,
+      }
+    - { id: l-1, kind: rectangle, x: 290, y: 220, width: 560, height: 78, strokeColor: "#e03131" }
+    - {
+        id: l-1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 241,
+        width: 560,
+        height: 35,
+        text: "Intrusive · အတွင်းပိုင်း အသေးစိတ်",
+        fontSize: 28,
+      }
+    - { id: l-2, kind: rectangle, x: 290, y: 305, width: 560, height: 78, strokeColor: "#1e1e1e" }
+    - {
+        id: l-2-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 326,
+        width: 560,
+        height: 35,
+        text: "Functional · business စည်းမျဉ်း",
+        fontSize: 28,
+      }
+    - { id: l-3, kind: rectangle, x: 290, y: 390, width: 560, height: 78, strokeColor: "#1e1e1e" }
+    - {
+        id: l-3-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 411,
+        width: 560,
+        height: 35,
+        text: "Model · data ရဲ့ ပုံစံ",
+        fontSize: 28,
+      }
+    - { id: l-4, kind: rectangle, x: 290, y: 475, width: 560, height: 78, strokeColor: "#2f9e44" }
+    - {
+        id: l-4-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 496,
+        width: 560,
+        height: 35,
+        text: "Contract · သီးသန့် ရေးထားတဲ့ ပုံစံ",
+        fontSize: 28,
+      }
+    - {
+        id: l-up,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 880,
+        y: 265,
+        width: 40,
+        height: 250,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-strong,
+        kind: text,
+        x: 930,
+        y: 225,
+        width: 160,
+        height: 35,
+        text: "အားကောင်း",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-weak,
+        kind: text,
+        x: 930,
+        y: 520,
+        width: 160,
+        height: 35,
+        text: "အားပျော့",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the hidden case: one rule written twice, no arrow between.
+    - {
+        id: h-p,
+        kind: rectangle,
+        x: 290,
+        y: 230,
+        width: 300,
+        height: 190,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-p-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 245,
+        width: 300,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: h-r,
+        kind: rectangle,
+        x: 770,
+        y: 230,
+        width: 300,
+        height: 190,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-r-l,
+        kind: text,
+        align: center,
+        x: 770,
+        y: 245,
+        width: 300,
+        height: 35,
+        text: "Report",
+        fontSize: 28,
+      }
+    - {
+        id: h-none,
+        kind: text,
+        x: 618,
+        y: 262,
+        width: 140,
+        height: 35,
+        text: "မြား မရှိ",
+        fontSize: 28,
+      }
+    - {
+        id: h-rule1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 340,
+        width: 300,
+        height: 35,
+        text: "ပြန်အမ်း 24 နာရီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: h-rule2,
+        kind: text,
+        align: center,
+        x: 770,
+        y: 340,
+        width: 300,
+        height: 35,
+        text: "ပြန်အမ်း 24 နာရီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: h-same,
+        kind: rectangle,
+        x: 310,
+        y: 325,
+        width: 740,
+        height: 66,
+        rounded: true,
+        strokeStyle: dotted,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: h-change,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "ပြောင်းရင် နှစ်နေရာလုံး တစ်ပြိုင်တည်း ပြင်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: h-name,
+        kind: text,
+        x: 290,
+        y: 540,
+        width: 760,
+        height: 35,
+        text: "ပုန်းနေတဲ့ functional coupling",
+        fontSize: 28,
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "event နဲ့ ပို့ရင် ဘယ်အဆင့်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-ctx,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 760,
+        height: 35,
+        text: "event ထဲမှာ: လက်မှတ် record တစ်ခုလုံး",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 600,
+        height: 35,
+        text: "က) contract coupling",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 600,
+        height: 35,
+        text: "ခ) model coupling",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 290,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 610,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 760,
+        height: 35,
+        text: "ပို့တဲ့ နည်းလမ်းက အားကို မပြောပြ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 760,
+        height: 35,
+        text: "ဘာအသိ ပါသွားလဲ ဆိုတာ ကြည့်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8109
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: သောကြာနေ့ညက ပျက်သွားတဲ့ ငွေပြန်အမ်းမှု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ပြင်လိုက်ရင် ဘာဖြစ်မလဲ ကြိုမှန်းရ ခက်တဲ့ complexity က အပိုင်းတွေရဲ့ အရေအတွက်ကြောင့် မဟုတ်ဘဲ၊ အချင်းချင်း ဆက်သွယ်ပုံကြောင့်
+      ဖြစ်တယ် ဆိုတာကို လေ့လာခဲ့ပါတယ်။ ဒီနေ့တော့ အဲဒီ ဆက်သွယ်ပုံကို အနီးကပ် ကြည့်ပါမယ်။
+      [[mark:n-boxes]] ခရီးဖော် မှာ လက်မှတ် ရောင်းတဲ့ Booking code က booking table တွေကို ပိုင်ပါတယ်။
+      [[mark:n-direct]] ငွေပြန်အမ်းတဲ့ အလုပ်ကို လုပ်တဲ့ Payment code ကတော့ Booking ကို မမေးဘဲ၊ အဲဒီ table
+      တွေကို တိုက်ရိုက် ဝင်ဖတ်နေပါတယ်။ အစတုန်းက မြန်မြန် ပြီးအောင် လုပ်ခဲ့တာပါ။
+      [[mark:n-rename]] ပြီးခဲ့တဲ့ သောကြာနေ့က Booking ဘက်မှာ column တစ်ခုရဲ့ နာမည်ကို ပိုရှင်းအောင်
+      ပြောင်းလိုက်ပါတယ်။ Booking ရဲ့ test တွေလည်း အကုန် အောင်ပါတယ်။
+      [[mark:n-broke]] ဒါပေမဲ့ အဲဒီညမှာ ငွေပြန်အမ်းတာတွေ အကုန် ပျက်သွားပါတယ်။ Payment က နာမည်ဟောင်းနဲ့ပဲ
+      ဆက်ဖတ်နေလို့ပါ။
+      [[mark:n-know]] ဒီမှာ မေးရမယ့် မေးခွန်းက Payment နဲ့ Booking ကြားမှာ မြား ရှိလား ဆိုတာ မဟုတ်ပါဘူး။
+      Payment က Booking အကြောင်း ဘာတွေကို သိနေရလဲ ဆိုတာပါ။ coupling ဆိုတာ အပိုင်း နှစ်ခုက တစ်ခုအကြောင်း တစ်ခု
+      သိထားရတဲ့ အသိပါ။ သိထားရတာ များလေ၊ တစ်ဖက် ပြောင်းရင် နောက်တစ်ဖက်ပါ လိုက်ပြောင်းရဖို့ များလေပါပဲ။
+      [[mark:n-close]] ဆိုတော့ coupling တိုင်းက အတူတူ မဟုတ်ဘဲ၊ အားကောင်းတာ ရှိသလို အားပျော့တာလည်း ရှိပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-n-boxes,
+          type: whiteboard.apply,
+          at: { mark: n-boxes },
+          open: true,
+          upsertIds: [n-b, n-b-l, n-own, n-t, n-t-l],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-n-direct,
+          type: whiteboard.apply,
+          at: { mark: n-direct },
+          upsertIds: [n-p, n-p-l, n-direct],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-rename,
+          type: whiteboard.apply,
+          at: { mark: n-rename },
+          upsertIds: [n-rename],
+          drawMs: 900,
+        }
+      - {
+          id: draw-n-broke,
+          type: whiteboard.apply,
+          at: { mark: n-broke },
+          upsertIds: [n-broke],
+          drawMs: 900,
+        }
+      - {
+          id: draw-n-know,
+          type: whiteboard.apply,
+          at: { mark: n-know },
+          upsertIds: [n-know],
+          drawMs: 1200,
+        }
+      - { id: close-need, type: whiteboard.apply, at: { mark: n-close }, open: false }
+
+  - id: connascence
+    chapter: Connascence
+    narration: >
+      [[mark:c-open]] အသိ မျှထားတာကို ပိုတိတိကျကျ ပြောနိုင်ဖို့ စကားလုံး တစ်လုံး ရှိပါတယ်။ connascence ပါ။
+      တစ်ခုကို ပြင်ရင် နောက်တစ်ခုပါ လိုက်ပြင်မှ မှန်မယ့် ဆက်နွယ်မှုကို ဆိုလိုပါတယ်။ ပုံစံ အမျိုးမျိုး ရှိပေမဲ့
+      အုပ်စု နှစ်စု ခွဲမှတ်ထားရင် လုံလောက်ပါတယ်။
+      [[mark:c-static]] ပထမ အုပ်စုက code ကို ဖတ်ကြည့်ရုံနဲ့ မြင်ရတဲ့ ဆက်နွယ်မှုတွေပါ။ နှစ်ဖက်လုံးက နာမည်
+      တစ်ခုတည်းကို သုံးရတာ၊ ဥပမာ သောကြာနေ့က column နာမည်လိုပါ။ status ထဲက နံပါတ် ၂ ဆိုတာ ဘာကို ဆိုလိုလဲ ဆိုတဲ့
+      အဓိပ္ပာယ်ကို နှစ်ဖက်လုံးက တူတူ နားလည်ထားရတာနဲ့၊ function ရဲ့ parameter တွေကို ဘယ်အစီအစဉ်နဲ့ ပေးရလဲ
+      သိထားရတာလည်း ဒီအုပ်စုထဲကပါ။ ဒါတွေကတော့ code ထဲမှာ ရှာလိုက်ရင် တန်းတွေ့ရပါတယ်။
+      [[mark:c-dynamic]] ဒုတိယ အုပ်စုကတော့ code ကို run မှ ပေါ်လာတဲ့ ဆက်နွယ်မှုတွေပါ။ ထိုင်ခုံကို အရင်
+      ထိန်းပြီးမှ ငွေဖြတ်ရမယ် ဆိုတဲ့ လုပ်ရမယ့် အစီအစဉ်၊ ထိန်းထားတဲ့ ၁၀ မိနစ် မကုန်ခင် ငွေချေတာ ပြီးရမယ် ဆိုတဲ့
+      အချိန်၊ app မှာ ပြတဲ့ လက်ကျန် ခုံအရေအတွက်နဲ့ ကောင်တာမှာ ပြတာ အမြဲ တူနေရမယ် ဆိုတဲ့ တန်ဖိုးတွေပါ။ ဒါတွေက
+      code ကို ဖတ်ရုံနဲ့ မမြင်ရဘဲ production မှာ ပျက်မှ သိရတတ်တာမို့၊ ပထမ အုပ်စုထက် ပိုအားကောင်းပါတယ်။
+      [[mark:c-rule]] ဒီကနေ စည်းမျဉ်း တစ်ခု ထွက်လာပါတယ်။ ဆက်နွယ်မှုက အားကောင်းလေ၊ အဲဒီ နှစ်ခုကို နီးနီးကပ်ကပ်
+      ထားလေပါ။ function တစ်ခုထဲ၊ file တစ်ခုထဲမှာဆိုရင် အားကောင်းတဲ့ ဆက်နွယ်မှုကို လက်ခံလို့ ရပါတယ်။ code ကို အုပ်စုဖွဲ့ထားတဲ့ အပိုင်း၊ module နှစ်ခု ခြားနေရင်တော့ အားပျော့တဲ့ ပုံစံပဲ ကျန်အောင် ကြိုးစားရပါမယ်။ လုပ်ငန်း စည်းမျဉ်းကိုက အားကောင်းတဲ့ ဆက်နွယ်မှုကို တောင်းနေရင်တော့ နှစ်ခုကို နီးအောင် ပြန်ထားရပါမယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: show-connascence,
+          type: slide.show,
+          at: { mark: c-open, offsetMs: -1200 },
+          slideId: connascence,
+        }
+      - {
+          id: point-static,
+          type: slide.point,
+          at: { mark: c-static },
+          target: { x: 0.15, y: 0.43 },
+        }
+      - {
+          id: point-dynamic,
+          type: slide.point,
+          at: { mark: c-dynamic },
+          target: { x: 0.15, y: 0.59 },
+        }
+      - { id: point-rule, type: slide.point, at: { mark: c-rule }, target: { x: 0.15, y: 0.75 } }
+
+  - id: ladder
+    chapter: အဆင့် လေးဆင့်ရှိတဲ့ လှေကား
+    narration: >
+      [[mark:l-open]] module နှစ်ခုကြားက ဆက်သွယ်မှုကို ကြည့်တဲ့အခါမှာတော့ ပိုလွယ်တဲ့ မေးခွန်း တစ်ခုနဲ့ စလို့
+      ရပါတယ်။ နယ်နိမိတ်ကို ဖြတ်ပြီး ဘာအသိက ကူးသွားလဲ ဆိုတာပါ။ ကူးသွားတဲ့ အသိ အမျိုးအစားအလိုက် အဆင့် လေးဆင့်
+      ခွဲလို့ ရပြီး၊ ဒါကို integration strength လို့ ခေါ်ပါတယ်။
+      [[mark:l-intrusive]] အပေါ်ဆုံးမှာ ရှိတဲ့ အားအကောင်းဆုံး အဆင့်က intrusive coupling ပါ။ တစ်ဖက်က နောက်တစ်ဖက်ရဲ့
+      အတွင်းပိုင်း အသေးစိတ်၊ အပြင်ကို ပြဖို့ မရည်ရွယ်ထားတဲ့ အရာတွေကို ဝင်သုံးနေတာပါ။ Payment က Booking ရဲ့ table
+      ကို တိုက်ရိုက် ဖတ်တာက ဒီအဆင့်ပါ။ Booking ဘက်က ဘယ်သူ ဝင်သုံးနေမှန်းတောင် မသိတော့၊ ဘာကိုပဲ ပြင်ပြင် တစ်ခုခု
+      ပျက်နိုင်ပါတယ်။
+      [[mark:l-functional]] ဒုတိယ အဆင့်က functional coupling ပါ။ နှစ်ဖက်လုံးက business စည်းမျဉ်း တစ်ခုတည်းကို
+      သိနေရတာပါ။ ထိုင်ခုံကို ထိန်းမယ်၊ ငွေဖြတ်မယ်၊ ပြီးမှ လက်မှတ် ထုတ်မယ် ဆိုတဲ့ အစီအစဉ်ကို Booking ရော Payment
+      ရော သိထားရတာမျိုးပါ။ စည်းမျဉ်း ပြောင်းတာနဲ့ နှစ်ဖက်လုံး ပြင်ရပါတယ်။
+      [[mark:l-model]] တတိယ အဆင့်က model coupling ပါ။ စည်းမျဉ်းကို မမျှဘဲ၊ data ရဲ့ ပုံစံကိုပဲ မျှထားတာပါ။
+      ဥပမာ Booking နဲ့ Report က booking တစ်ခုမှာ ဘာ field တွေ ပါလဲ ဆိုတဲ့ ပုံစံ တစ်ခုတည်းကို အတူ သုံးနေတာပါ။ Booking က
+      အဲဒီ ပုံစံကို ပြင်ချင်တိုင်း Report ကိုပါ လှည့်ကြည့်ရပါတယ်။ ဒါပေမဲ့ data ပုံစံက စည်းမျဉ်းလောက်
+      မကြာခဏ မပြောင်းတာမို့ ဒုတိယ အဆင့်ထက် အားပျော့ပါတယ်။
+      [[mark:l-contract]] အောက်ဆုံး အဆင့်က contract coupling ပါ။ ဆက်သွယ်ဖို့အတွက် သီးသန့် ရေးထားတဲ့ ပုံစံ
+      တစ်ခုကိုပဲ မျှထားတာပါ။ wallet ကုမ္ပဏီရဲ့ payment API က ဥပမာပါ။ ခရီးဖော် က သူတို့ ကြေညာထားတဲ့ API ကိုပဲ
+      သိပြီး၊ အထဲမှာ ဘာတွေ ရှိလဲ ဘာမှ မသိပါဘူး။ သူတို့ အတွင်းပိုင်းကို ဘယ်လောက်ပဲ ပြောင်းပြောင်း၊ API ကို မပြောင်းသရွေ့ ခရီးဖော်
+      ဘက်မှာ ပြင်စရာ မလိုပါဘူး။
+      [[mark:l-read]] ဆက်သွယ်မှု တစ်ခုကို တွေ့တိုင်း ဒီ လှေကားပေါ်မှာ ဘယ်အဆင့်လဲလို့ မေးကြည့်ပါ။ အပေါ်ရောက်လေ၊
+      တစ်ဖက်က ပြောင်းလိုက်ရင် ဘာဖြစ်မလဲ ဆိုတာ ကြိုမှန်းရ ခက်လေပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-connascence, type: slide.close, at: { mark: l-open } }
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-connascence },
+          open: true,
+          clear: true,
+          upsertIds: [l-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-l-intrusive,
+          type: whiteboard.apply,
+          at: { mark: l-intrusive },
+          upsertIds: [l-1, l-1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-functional,
+          type: whiteboard.apply,
+          at: { mark: l-functional },
+          upsertIds: [l-2, l-2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-model,
+          type: whiteboard.apply,
+          at: { mark: l-model },
+          upsertIds: [l-3, l-3-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-contract,
+          type: whiteboard.apply,
+          at: { mark: l-contract },
+          upsertIds: [l-4, l-4-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-read,
+          type: whiteboard.apply,
+          at: { mark: l-read },
+          upsertIds: [l-up, l-strong, l-weak],
+          drawMs: 1500,
+        }
+
+  - id: hidden
+    chapter: မြား မရှိတဲ့ coupling
+    narration: >
+      [[mark:h-open]] လှေကားပေါ်မှာ ရှာရ အခက်ဆုံး ပုံစံ တစ်ခု ကျန်ပါသေးတယ်။ Payment code နဲ့ Report code ကို
+      ကြည့်ပါ။ နှစ်ခုကြားမှာ တစ်ခုက တစ်ခုကို ခေါ်သုံးတာ လုံးဝ မရှိပါဘူး။
+      [[mark:h-rule]] ဒါပေမဲ့ ကားမထွက်ခင် ၂၄ နာရီ အလိုအထိ လက်မှတ် ပယ်ဖျက်ရင် ငွေအပြည့် ပြန်အမ်းတယ် ဆိုတဲ့
+      စည်းမျဉ်းကို နှစ်နေရာလုံးမှာ သီးခြားစီ ရေးထားပါတယ်။ Payment က ခရီးသည်ကို ငွေပြန်အမ်းတဲ့အခါ တွက်ဖို့၊
+      Report က ကားလိုင်း တစ်ခုစီရဲ့ ရောင်းအား ပြတဲ့အခါ တွက်ဖို့ပါ။
+      [[mark:h-change]] ဒီ စည်းမျဉ်း ပြောင်းတဲ့နေ့မှာ နှစ်နေရာလုံးကို တစ်ပြိုင်တည်း ပြင်ရပါမယ်။ တစ်နေရာ
+      မေ့ကျန်ခဲ့ရင် ခရီးသည်ကို ပြန်အမ်းတဲ့ ငွေနဲ့ report ထဲက ဂဏန်း မကိုက်တော့ပါဘူး။ ပြီးတော့ ဒီ နှစ်ခု
+      ဆက်နေတယ် ဆိုတာကို code ထဲမှာ ဘာကမှ မပြပါဘူး။
+      [[mark:h-name]] ဒါလည်း functional coupling ပါပဲ။ တကယ်တော့ အဲဒီအဆင့်ထဲက အားအကောင်းဆုံး ပုံစံပါ။ ရှာတွေ့ဖို့
+      နည်းကတော့ ဖြစ်လာနိုင်တဲ့ ပြောင်းလဲမှု တစ်ခုကို စိတ်ကူးကြည့်ပြီး၊ ဘယ်နှနေရာမှာ လိုက်ပြင်ရမလဲ ရေတွက်ကြည့်တာပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-h-open,
+          type: whiteboard.apply,
+          at: { mark: h-open },
+          clear: true,
+          upsertIds: [h-p, h-p-l, h-r, h-r-l, h-none],
+          drawMs: 2500,
+        }
+      - {
+          id: draw-h-rule,
+          type: whiteboard.apply,
+          at: { mark: h-rule },
+          upsertIds: [h-rule1, h-rule2, h-same],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-h-change,
+          type: whiteboard.apply,
+          at: { mark: h-change },
+          upsertIds: [h-change],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-h-name,
+          type: whiteboard.apply,
+          at: { mark: h-name },
+          upsertIds: [h-name],
+          drawMs: 1000,
+        }
+
+  - id: audit
+    chapter: Coupling audit
+    narration: >
+      [[mark:a-close]] အခု ခရီးဖော် ရဲ့ ဆက်သွယ်မှုတွေကို တစ်ခုချင်း စစ်ပြီး ချရေးကြည့်ရအောင်။
+      [[mark:a-sel]] တစ်ခုစီအတွက် ဘာကို မျှသိထားလဲ၊ အဲဒါက လှေကားပေါ်မှာ ဘယ်အဆင့်လဲ ဆိုတာကို ဖြည့်ပါမယ်။
+      [[mark:type-intrusive]] Payment က booking table ကို တိုက်ရိုက် ဖတ်တာမှာ မျှသိထားတာက column နာမည်တွေနဲ့
+      table ရဲ့ ပုံစံပါ။ Booking က ပေးဖို့ သဘောမတူခဲ့တဲ့ အသိမို့ intrusive ပါ။ ဒီစာရင်းထဲမှာ အရင်ဆုံး
+      ဖြေရှင်းရမယ့် တစ်ခုပါ။
+      [[mark:type-functional]] Payment နဲ့ Report ကြားမှာတော့ ငွေပြန်အမ်းတဲ့ စည်းမျဉ်းကို နှစ်နေရာ ရေးထားတာမို့
+      functional ပါ။ မြား မရှိပေမဲ့ စာရင်းထဲ ထည့်ထားရပါမယ်။
+      [[mark:type-model]] Booking နဲ့ Report က booking ရဲ့ data ပုံစံကို အတူ သုံးနေတာက model ပါ။ အခုလောလောဆယ် နှစ်ခုလုံးက
+      app တစ်ခုတည်းထဲမှာ ရှိပြီး team တစ်ခုတည်းက ပြင်နေတာမို့ လက်ခံလို့ ရပါသေးတယ်။
+      [[mark:type-contract]] Payment က wallet API ကို ခေါ်တာကတော့ contract ပါ။ ကုမ္ပဏီ နှစ်ခု ခြားနေတဲ့
+      ဆက်သွယ်မှုမို့ ဒီအဆင့်မှာ ရှိနေတာက သင့်တော်ပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-h, type: whiteboard.apply, at: { mark: a-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-h },
+          path: notebook/09-coupling-audit.md,
+        }
+      - id: sel-head
+        type: editor.select
+        at: { mark: a-sel }
+        target: { file: notebook/09-coupling-audit.md, text: "| ဆက်သွယ်မှု | မျှသိထားတာ | အဆင့် |" }
+      - id: type-intrusive
+        type: editor.type
+        at: { mark: type-intrusive }
+        cadence: line-by-line
+        target: { file: notebook/09-coupling-audit.md, after: "|---|---|---|\n" }
+        text: "| Payment → booking table | column နာမည်၊ table ပုံစံ | intrusive |\n"
+      - id: type-functional
+        type: editor.type
+        at: { mark: type-functional }
+        cadence: line-by-line
+        target:
+          { file: notebook/09-coupling-audit.md, after: "| column နာမည်၊ table ပုံစံ | intrusive |\n" }
+        text: "| Payment ↔ Report (မြား မရှိ) | ပြန်အမ်း 24 နာရီ စည်းမျဉ်း၊ 2 နေရာ | functional |\n"
+      - id: type-model
+        type: editor.type
+        at: { mark: type-model }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/09-coupling-audit.md,
+            after: "| ပြန်အမ်း 24 နာရီ စည်းမျဉ်း၊ 2 နေရာ | functional |\n",
+          }
+        text: "| Booking → Report | booking ရဲ့ data ပုံစံ | model |\n"
+      - id: type-contract
+        type: editor.type
+        at: { mark: type-contract }
+        cadence: line-by-line
+        target: { file: notebook/09-coupling-audit.md, after: "| booking ရဲ့ data ပုံစံ | model |\n" }
+        text: "| Payment → wallet API | ကြေညာထားတဲ့ API ပုံစံ | contract |\n"
+      - id: expect-intrusive
+        type: expect.file
+        at: { afterAction: type-contract }
+        path: notebook/09-coupling-audit.md
+        contains: "| Payment → booking table | column နာမည်၊ table ပုံစံ | intrusive |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ team ထဲက developer မောင်မောင် က အကြံ တစ်ခု ပေးပါတယ်။ လက်မှတ်
+      ရောင်းပြီးတိုင်း Booking က event တစ်ခု ထုတ်မယ်၊ SMS ပို့တဲ့ Notification code က အဲဒီ event ကို နားထောင်ပြီး
+      အလုပ်လုပ်မယ် ဆိုတာပါ။ event ဆိုတာ ဖြစ်ပြီးသွားတဲ့ အကြောင်းအရာ တစ်ခုကို အသိပေးတာပါ။
+      [[mark:q-ctx]] event ထဲမှာတော့ Booking အထဲမှာ သုံးတဲ့ လက်မှတ် record တစ်ခုလုံးကို ထည့်ပေးလိုက်ပါမယ်။ ဒီ
+      ဆက်သွယ်မှုက ဘယ်အဆင့်လဲ။
+      [[mark:q-a]] ပထမ အဖြေက contract coupling ပါ။ Booking က Notification ကို တိုက်ရိုက် မခေါ်တော့ဘဲ event နဲ့ပဲ
+      ဆက်သွယ်တာမို့လို့ပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက model coupling ပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ model coupling ပါ။ ဘာကြောင့်လဲဆိုတော့ နယ်နိမိတ်ကို ဖြတ်သွားတာက Booking ရဲ့
+      အတွင်းက record တစ်ခုလုံး ဖြစ်နေလို့ပါ။ Booking က field တစ်ခုကို နာမည်ပြောင်းလိုက်တာနဲ့ Notification ဘက်မှာ
+      ပျက်နိုင်ပါတယ်။ သောကြာနေ့ညက ဖြစ်ရပ်နဲ့ သိပ်မကွာပါဘူး။
+      [[mark:q-test]] function ကို တိုက်ရိုက် ခေါ်တာပဲ ဖြစ်ဖြစ်၊ event နဲ့ ပို့တာပဲ ဖြစ်ဖြစ်၊ အဖြေကို စောင့်စောင့်
+      မစောင့်စောင့်၊ ပို့တဲ့ နည်းလမ်းက coupling ရဲ့ အားကို မပြောပြပါဘူး။ ကြည့်ရမှာက အထဲမှာ ဘာအသိ ပါသွားလဲ
+      ဆိုတာပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-ctx,
+          type: whiteboard.apply,
+          at: { mark: q-ctx },
+          upsertIds: [q-ctx],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-test,
+          type: whiteboard.apply,
+          at: { mark: q-test },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] မောင်မောင် ရဲ့ အကြံကို ပယ်လိုက်တာ မဟုတ်ပါဘူး။ event သုံးတာက အဆင်ပြေပါတယ်၊ အထဲမှာ ထည့်မယ့်
+      အရာကိုပဲ ပြင်ရမှာပါ။ Notification လိုတာက ဖုန်းနံပါတ်၊ ခရီးစဉ်နဲ့ လက်မှတ် နံပါတ်လောက်ပါပဲ။
+      [[mark:type-event]] ဒါကြောင့် table ထဲမှာ ဒီလို မှတ်ထားလိုက်ပါမယ်။ အခု အကြံအတိုင်းဆိုရင် model ပါ။ လိုတာလောက်ကိုပဲ
+      ထည့်ထားတဲ့ event သီးသန့် တစ်ခု ရေးလိုက်မှ contract ဖြစ်ပါမယ်။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system ထဲက ဆက်သွယ်မှု တစ်ခုကို
+      ရွေးပါ။ module နှစ်ခုကြား ဖြစ်ဖြစ်၊ service နှစ်ခုကြား ဖြစ်ဖြစ် ရပါတယ်။ ပြီးရင် ဒီ table ထဲမှာ တစ်ကြောင်း
+      ထပ်ရေးပြီး၊ ဘာကို မျှသိထားလဲ၊ ဘယ်အဆင့်လဲ ဆိုတာ ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] အဆင့်ကို မသေချာရင် မေးခွန်း တစ်ခု မေးကြည့်ပါ။ ဟိုဘက်က သူ့ အတွင်းပိုင်းကို ပြောင်းလိုက်ရင်
+      ဒီဘက်မှာ ပျက်မလား ဆိုတာပါ။ ပျက်မယ်ဆိုရင် contract မဟုတ်သေးပါဘူး။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-event
+        type: editor.type
+        at: { mark: type-event }
+        cadence: line-by-line
+        target: { file: notebook/09-coupling-audit.md, after: "| ကြေညာထားတဲ့ API ပုံစံ | contract |\n" }
+        text: "| Booking → Notification (event) | လက်မှတ် record တစ်ခုလုံး | model |\n"
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn-you }
+        target: { file: notebook/09-coupling-audit.md, text: "| ဆက်သွယ်မှု | မျှသိထားတာ | အဆင့် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ coupling ဆိုတာ အပိုင်း နှစ်ခုကြား မျှသိထားတဲ့ အသိပါ။ မြား ရှိမရှိထက် ဘာအသိ ကူးသွားလဲ
+      ဆိုတာက ပိုအရေးကြီးပါတယ်။ အတွင်းပိုင်း အသေးစိတ်ကို သိနေရတာက အားအကောင်းဆုံး၊ ပြီးရင် business စည်းမျဉ်း၊ data
+      ပုံစံ ဆိုပြီး ဆင်းလာပြီး၊ သီးသန့် ရေးထားတဲ့ contract က အားအပျော့ဆုံးပါ။ စည်းမျဉ်း တစ်ခုကို နှစ်နေရာ
+      ရေးထားတာလည်း မြား မရှိတဲ့ coupling ပါပဲ။
+      [[mark:next]] နောက် lesson မှာတော့ coupling အားကောင်းတိုင်း မကောင်းတာလား၊ အပိုင်း နှစ်ခုကြားက အကွာအဝေးနဲ့
+      ပြောင်းလဲနှုန်းကိုပါ ထည့်ပြီး ဘယ်လို ချိန်ညှိမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
