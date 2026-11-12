@@ -125,3 +125,49 @@ describe("sanitizeSlideContent style attributes", () => {
     }
   });
 });
+
+describe("sanitizeSlideContent style sheets", () => {
+  // The HTML parser moves a <style> that precedes all body content into <head>.
+  it("keeps a style sheet the slide opens with, ahead of its content", () => {
+    const sanitized = sanitizeSlideContent(
+      `<style>.row { left: 8vw; }</style><div class="row">Event</div>`,
+      "text/html",
+    );
+
+    expect(sanitized).toBe(`<style>.row { left: 8vw; }</style><div class="row">Event</div>`);
+  });
+
+  it("keeps the style sheets of a whole authored document, in order", () => {
+    const sanitized = sanitizeSlideContent(
+      `<!doctype html><html><head><title>t</title><style>.a{}</style><style>.b{}</style></head>` +
+        `<body><style>.c{}</style><p class="a">x</p></body></html>`,
+      "text/html",
+    );
+
+    expect(sanitized).toBe(
+      `<style>.a{}</style><style>.b{}</style><style>.c{}</style><p class="a">x</p>`,
+    );
+  });
+
+  it("takes @import rules out of a style sheet and keeps the rest of it", () => {
+    for (const content of [
+      `<style>@import url("https://example.com/a.css");.a{color:red}</style><p>x</p>`,
+      `<p>x</p><style>@IMPORT "https://example.com/a.css" screen;.a{color:red}</style>`,
+    ]) {
+      const sanitized = sanitizeSlideContent(content, "text/html");
+      expect(sanitized).not.toContain("example.com");
+      expect(sanitized).toContain("<style>.a{color:red}</style>");
+    }
+  });
+
+  it("still drops everything else the parser files under head", () => {
+    const sanitized = sanitizeSlideContent(
+      `<base href="https://example.com/"><link rel="stylesheet" href="https://example.com/a.css">` +
+        `<meta http-equiv="refresh" content="0"><script>alert(1)</script>` +
+        `<style nonce="n" onload="alert(1)">.a{}</style><p>x</p>`,
+      "text/html",
+    );
+
+    expect(sanitized).toBe(`<style>.a{}</style><p>x</p>`);
+  });
+});

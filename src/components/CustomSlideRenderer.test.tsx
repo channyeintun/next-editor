@@ -142,7 +142,8 @@ describe("CustomSlideRenderer", () => {
     expect(container.querySelector("style")).toBeNull();
     expect(container.querySelector('[data-testid="host-sentinel"]')).not.toBeNull();
     expect(container.querySelector("iframe")?.getAttribute("sandbox")).toBe("");
-    expect(container.querySelector("iframe")?.srcdoc).not.toContain("body{display:none}");
+    // The slide's own sheet stays with the slide, inside the frame.
+    expect(container.querySelector("iframe")?.srcdoc).toContain("body{display:none}");
   });
 
   it("removes external stylesheets and blocks CSS imports inside the isolated frame", () => {

@@ -33,6 +33,11 @@ const IMAGE_DATA_URL = new RegExp(`^data:image/(?:${SLIDE_INLINE_IMAGE_TYPES});`
 const UNSAFE_STYLE =
   /(?:expression\s*\(|@import|binding\s*:|url\s*\(\s*(?:["']\s*)?(?:javascript|vbscript):)/i;
 
+// An @import in an authored <style>. The frame's CSP is what stops it loading
+// (style-src allows inline sheets only); taking the rule out as well keeps the
+// address it names out of the frame's document altogether. One pass, linear.
+const STYLE_SHEET_IMPORT = /@import[^;]*;?/gi;
+
 function isImageElement(elementName: string): boolean {
   return elementName === "img" || elementName === "image";
 }
@@ -112,6 +117,15 @@ export function sanitizeSlideContent(
     return "";
   }
 
+  // The HTML parser files a <style> that comes before any body content under
+  // <head>, and only the body is returned: a slide that opens with its style
+  // sheet lost all of it and rendered as unstyled text. Move those sheets into
+  // the body, ahead of the content, where the loop below treats them like any
+  // other authored <style>.
+  if (mimeType === "text/html") {
+    root.prepend(...Array.from(document.head.querySelectorAll("style")));
+  }
+
   sanitizeElement(root, inlineImages);
 
   for (const element of Array.from(root.querySelectorAll("*"))) {
@@ -120,6 +134,9 @@ export function sanitizeSlideContent(
       continue;
     }
     sanitizeElement(element, inlineImages);
+    if (element.localName.toLowerCase() === "style" && element.textContent) {
+      element.textContent = element.textContent.replace(STYLE_SHEET_IMPORT, "");
+    }
   }
 
   return mimeType === "text/html" ? root.innerHTML : root.outerHTML;
