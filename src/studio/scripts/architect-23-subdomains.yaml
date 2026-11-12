@@ -1,0 +1,722 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-23-subdomains
+  title: "Architect Path 23: Core, supporting, generic subdomain"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/23-subdomains.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/23-subdomains.md: |
+        # ခရီးဖော် ရဲ့ subdomain များ
+
+        လှလှ ရဲ့ စာရင်း (အားလုံး "အရေးကြီး"):
+        ထိုင်ခုံ လွတ်မလွတ် · ငွေချေမှု · SMS · login · ကားလိုင်း စာရင်းသွင်း · report
+
+        | Subdomain | Type | ဘာကြောင့် | Build / Buy |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the three subdomain types as rows: the type on the left (orange
+    # for core, the one this board is about), what defines it, and ခရီးဖော်'s
+    # own areas in blue.
+    - {
+        id: c-box,
+        kind: rectangle,
+        x: 270,
+        y: 190,
+        width: 220,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-label,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 220,
+        width: 220,
+        height: 40,
+        text: "Core",
+        fontSize: 32,
+      }
+    - {
+        id: c-def,
+        kind: text,
+        x: 515,
+        y: 198,
+        width: 560,
+        height: 35,
+        text: "ပြိုင်ဘက်နဲ့ ကွာစေတဲ့ အပိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: c-chip,
+        kind: text,
+        x: 515,
+        y: 248,
+        width: 560,
+        height: 35,
+        text: "ထိုင်ခုံ လွတ်မလွတ် (app + ကောင်တာ)",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: g-box, kind: rectangle, x: 270, y: 330, width: 220, height: 100, rounded: true }
+    - {
+        id: g-label,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 360,
+        width: 220,
+        height: 40,
+        text: "Generic",
+        fontSize: 32,
+      }
+    - {
+        id: g-def,
+        kind: text,
+        x: 515,
+        y: 338,
+        width: 560,
+        height: 35,
+        text: "လူတိုင်း အတူတူ လို၊ ဖြေရှင်းပြီးသား",
+        fontSize: 28,
+      }
+    - {
+        id: g-chip1,
+        kind: text,
+        x: 515,
+        y: 388,
+        width: 150,
+        height: 35,
+        text: "ငွေချေမှု",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-chip2,
+        kind: text,
+        x: 690,
+        y: 388,
+        width: 150,
+        height: 35,
+        text: "login",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: s-box, kind: rectangle, x: 270, y: 470, width: 220, height: 100, rounded: true }
+    - {
+        id: s-label,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 500,
+        width: 220,
+        height: 40,
+        text: "Supporting",
+        fontSize: 32,
+      }
+    - {
+        id: s-def,
+        kind: text,
+        x: 515,
+        y: 478,
+        width: 560,
+        height: 35,
+        text: "လိုအပ်တယ်၊ ရိုးတယ်၊ ထူးခြားမှု မပေး",
+        fontSize: 28,
+      }
+    - {
+        id: s-chip1,
+        kind: text,
+        x: 515,
+        y: 528,
+        width: 300,
+        height: 35,
+        text: "ကားလိုင်း စာရင်းသွင်း",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-chip2,
+        kind: text,
+        x: 840,
+        y: 528,
+        width: 150,
+        height: 35,
+        text: "report",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    # Board 2 — a type can move: violet is the move, orange the core it moved
+    # into and the signal that showed it.
+    - {
+        id: v-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "အမျိုးအစားက ပြောင်းတတ်တယ်",
+        fontSize: 36,
+      }
+    - { id: v-sup, kind: rectangle, x: 290, y: 300, width: 250, height: 80, rounded: true }
+    - {
+        id: v-sup-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 322,
+        width: 250,
+        height: 35,
+        text: "Supporting",
+        fontSize: 28,
+      }
+    - {
+        id: v-chip,
+        kind: text,
+        x: 510,
+        y: 245,
+        width: 260,
+        height: 35,
+        text: "ထိုင်ခုံ ရောင်းတာ",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 555,
+        y: 320,
+        width: 120,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: v-core,
+        kind: rectangle,
+        x: 690,
+        y: 300,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: v-core-l,
+        kind: text,
+        align: center,
+        x: 690,
+        y: 322,
+        width: 250,
+        height: 35,
+        text: "Core",
+        fontSize: 28,
+      }
+    - {
+        id: v-signal,
+        kind: text,
+        x: 290,
+        y: 410,
+        width: 700,
+        height: 35,
+        text: "feature ထည့်ရတာ ခက်လာရင် = အချက်ပြ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: v-back,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 420,
+        height: 35,
+        text: "ပိုကောင်းတဲ့ product ပေါ်လာရင်",
+        fontSize: 28,
+      }
+    - {
+        id: v-back-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 712,
+        y: 518,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: v-gen, kind: rectangle, x: 825, y: 498, width: 220, height: 80, rounded: true }
+    - {
+        id: v-gen-l,
+        kind: text,
+        align: center,
+        x: 825,
+        y: 520,
+        width: 220,
+        height: 35,
+        text: "Generic",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "SMS နောက်ကျတယ်။ ဘာလုပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) SMS system ကို ကိုယ်တိုင် ရေးမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) gateway ဆက်သုံး၊ အရန် တစ်ခု ထပ်ထား",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 560,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 880,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-reason,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "generic မို့ core ဆီက အားကို မယူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8123
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အားလုံးက အရေးကြီးတယ်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ မေးခွန်း သုံးခုနဲ့ ခရီးဖော် ရဲ့ system ကို ဖွဲ့စည်းမယ့် ပုံစံ၊ architecture style
+      ကို ရွေးပြီး၊ အဲဒီ ဆုံးဖြတ်ချက်ကို မှတ်တမ်းတင်ခဲ့ပါတယ်။ ဒီအပတ်တော့ နောက် သုံးလအတွက် အလုပ်တွေ စီစဉ်တဲ့ အစည်းအဝေးမှာ ပြဿနာ တစ်ခု
+      ပေါ်လာပါတယ်။
+      [[mark:sel-backlog]] product manager လှလှ ယူလာတဲ့ စာရင်းထဲမှာ လုပ်ငန်း အပိုင်း ခြောက်ခု ပါပြီး၊
+      အားလုံးကို အရေးကြီးတယ်လို့ မှတ်ထားပါတယ်။ တကယ်လည်း မလိုတာ တစ်ခုမှ မရှိပါဘူး။ ငွေချေလို့ မရရင် လက်မှတ်
+      မရောင်းရသလို၊ report မထွက်ရင်လည်း ကားလိုင်းတွေ စိတ်ဆိုးမှာပါ။
+      [[mark:waste]] ဒါပေမဲ့ developer က ၁၈ ယောက်ပဲ ရှိပါတယ်။ ပြီးခဲ့တဲ့ သုံးလမှာ အတွေ့အကြုံ အရှိဆုံး
+      developer နှစ်ယောက်က ကားလိုင်း အသစ်တွေ စာရင်းသွင်းတဲ့ screen တွေကို အသစ် ပြန်ရေးနေခဲ့ကြပါတယ်။
+      [[mark:seat]] အဲဒီအချိန်မှာ ကောင်တာက ရောင်းလိုက်တဲ့ ခုံက app ထဲမှာ ခဏကြာတဲ့အထိ လွတ်နေသလို ပေါ်နေတဲ့ ပြဿနာကတော့
+      မဖြေရှင်းရသေးပါဘူး။
+      [[mark:ask]] CTO ဖြစ်တဲ့ အောင်အောင် က အတော်ဆုံး လူတွေနဲ့ အသေချာဆုံး design ကို ဘယ်အပိုင်းမှာ
+      သုံးသင့်လဲလို့ မေးလာပါတယ်။
+      [[mark:idea]] အရေးကြီးလားလို့ မေးနေသရွေ့ အဖြေက အမြဲ အရေးကြီးတယ် ပဲ ဖြစ်နေမှာပါ။ ဒါကြောင့် မေးခွန်းကို
+      ပြောင်းမေးရပါမယ်။ ဒီ အပိုင်းက ခရီးဖော် ကို ပြိုင်ဘက်တွေနဲ့ ကွာစေသလား ဆိုတာပါ။ business ရဲ့
+      လုပ်ငန်းနယ်ပယ်၊ domain ကို ဒီ မေးခွန်းနဲ့ အပိုင်းတွေ ခွဲကြည့်တဲ့အခါ၊ အဲဒီ အပိုင်းတွေကို subdomain လို့
+      ခေါ်ပြီး အမျိုးအစား သုံးမျိုး ရှိပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/23-subdomains.md,
+        }
+      - id: sel-backlog
+        type: editor.select
+        at: { mark: sel-backlog }
+        target:
+          {
+            file: notebook/23-subdomains.md,
+            text: "ထိုင်ခုံ လွတ်မလွတ် · ငွေချေမှု · SMS · login · ကားလိုင်း စာရင်းသွင်း · report",
+          }
+      - id: sel-onboarding
+        type: editor.select
+        at: { mark: waste }
+        target: { file: notebook/23-subdomains.md, text: "ကားလိုင်း စာရင်းသွင်း" }
+      - id: sel-seat
+        type: editor.select
+        at: { mark: seat }
+        target: { file: notebook/23-subdomains.md, text: "ထိုင်ခုံ လွတ်မလွတ်" }
+      - id: sel-type
+        type: editor.select
+        at: { mark: idea }
+        target: { file: notebook/23-subdomains.md, text: "| Subdomain | Type |" }
+
+  - id: three-types
+    chapter: Subdomain အမျိုးအစား သုံးမျိုး
+    narration: >
+      [[mark:t-core]] ပထမ အမျိုးအစားက core subdomain ပါ။ ခရီးသည်တွေနဲ့ ကားလိုင်းတွေက ကိုယ့်ကို ရွေးရတဲ့
+      အကြောင်းရင်း ဖြစ်ပြီး၊ ပြိုင်ဘက်တွေ လွယ်လွယ် တုလို့ မရတဲ့ အပိုင်းပါ။
+      [[mark:t-core-chip]] ခရီးဖော် အတွက်က app မှာရော ကောင်တာမှာပါ ထိုင်ခုံ လွတ်မလွတ်ကို ချက်ချင်း မှန်အောင်
+      ပြနိုင်တာပါ။ ကားလိုင်းတွေက ခရီးဖော် ကို ယုံပြီး ခုံတွေ အပ်ထားတာ ဒါကြောင့်ပါ။ ကားဂိတ်က internet
+      မကောင်းတဲ့ကြားက မှန်အောင် လုပ်ရတာမို့ ရှုပ်ထွေးပါတယ်။ ပြိုင်ဘက်တွေ လိုက်မီလာတိုင်း ထပ်ကောင်းအောင်
+      လုပ်နေရတာမို့ မကြာခဏလည်း ပြောင်းရပါတယ်။
+      [[mark:t-core-why]] core ဆိုတာ code အများဆုံး အပိုင်းလည်း မဟုတ်၊ developer တွေ စိတ်အဝင်စားဆုံး အပိုင်းလည်း
+      မဟုတ်ပါဘူး။ ခရီးဖော် ကို ရွေးစေတဲ့ အပိုင်းကိုပဲ ဆိုလိုတာပါ။
+      [[mark:t-generic]] ဒုတိယက generic subdomain ပါ။ ကုမ္ပဏီတိုင်း အတူတူ လိုအပ်ပြီး၊ တခြားသူတွေ
+      ဖြေရှင်းပြီးသား ပြဿနာပါ။
+      [[mark:t-generic-chip]] ငွေချေမှုနဲ့ login က ဒီထဲ ပါပါတယ်။ ခက်တော့ ခက်ပါတယ်။ ဒါပေမဲ့ ဒီလို ပြဿနာမျိုးကို
+      နှစ်ပေါင်းများစွာ အချိန်ပေးပြီး ဖြေရှင်းထားတဲ့ ကုမ္ပဏီတွေနဲ့ အသင့်သုံး library တွေ ရှိပြီးသားပါ။ ခရီးဖော် က
+      ဒါတွေကို သူတို့ထက် ပိုကောင်းအောင် လုပ်နိုင်ရင်တောင် ခရီးသည်တွေက အဲဒါကြောင့် လာဝယ်မှာ မဟုတ်ပါဘူး။
+      [[mark:t-support]] တတိယက supporting subdomain ပါ။ လုပ်ငန်း လည်ပတ်ဖို့ လိုအပ်ပေမဲ့ ရိုးရှင်းပြီး၊
+      ထူးခြားမှုလည်း မပေးတဲ့ အပိုင်းပါ။
+      [[mark:t-support-chip]] ကားလိုင်း အသစ် စာရင်းသွင်းတာနဲ့ report တွေက ဒီထဲမှာပါ။ ခရီးဖော် ရဲ့
+      လုပ်ငန်းနဲ့ပဲ ကိုက်တာမို့ အသင့် ဝယ်လို့ မရပေမဲ့၊ data ကို ထည့်၊ ပြင်၊ ပြန်ပြတာလောက်ပဲ ရှိပါတယ်။ ရိုးတယ် ဆိုတာ
+      အရေးမကြီးဘူးလို့ ဆိုလိုတာ မဟုတ်ပါဘူး။ မရှိလို့ မရပေမဲ့၊ အလုပ်ဖြစ်ရုံနဲ့ လုံလောက်တဲ့ အပိုင်းပါ။
+      [[mark:t-test]] ခွဲရ ခက်တဲ့အခါ မေးခွန်း နှစ်ခုက ကူညီပါတယ်။ ဒါကို သူများထက် ပိုကောင်းအောင် လုပ်နိုင်ရင်
+      ကိုယ့်ကို ရွေးမယ့်သူ ပိုများလာမလား ဆိုတာက တစ်ခုပါ။ မများဘူးဆိုရင် အသင့်ရှိတာကို ယူသုံးတာက ကိုယ်တိုင်
+      ရေးတာထက် သက်သာမလား ဆိုတာက နောက်တစ်ခုပါ။
+      [[mark:t-distill]] နောက်တစ်ခု သတိထားရမှာက subdomain ဆိုတာ team တစ်ခု၊ ဌာန တစ်ခုနဲ့ ထပ်တူ မဟုတ်တာပါ။
+      Booking team ရဲ့ အလုပ်ထဲမှာတောင် ထိုင်ခုံ လွတ်မလွတ်က core ဖြစ်ပြီး၊ လက်မှတ်ကို ပုံနှိပ်လို့ရအောင်
+      ထုတ်ပေးတာလို အပိုင်းကတော့ supporting ပါ။ ဒါကြောင့် team နာမည်နဲ့ မခွဲဘဲ၊ လုပ်ငန်း အပိုင်း တစ်ခုချင်းကို
+      ခွဲကြည့်ရပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-t-core,
+          type: whiteboard.apply,
+          at: { mark: t-core },
+          open: true,
+          upsertIds: [c-box, c-label, c-def],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-t-core-chip,
+          type: whiteboard.apply,
+          at: { mark: t-core-chip },
+          upsertIds: [c-chip],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-generic,
+          type: whiteboard.apply,
+          at: { mark: t-generic },
+          upsertIds: [g-box, g-label, g-def],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-t-generic-chip,
+          type: whiteboard.apply,
+          at: { mark: t-generic-chip },
+          upsertIds: [g-chip1, g-chip2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-t-support,
+          type: whiteboard.apply,
+          at: { mark: t-support },
+          upsertIds: [s-box, s-label, s-def],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-t-support-chip,
+          type: whiteboard.apply,
+          at: { mark: t-support-chip },
+          upsertIds: [s-chip1, s-chip2],
+          drawMs: 900,
+        }
+      - { id: point-core, type: whiteboard.point, at: { mark: t-test }, target: { assetId: c-box } }
+
+  - id: decides
+    chapter: အမျိုးအစားက ဘာကို ဆုံးဖြတ်ပေးလဲ
+    narration: >
+      [[mark:d-close]] အမျိုးအစားကို သိသွားရင် ဘယ်လောက် အားစိုက်မလဲ၊ ဘယ်သူ့ကို တာဝန်ပေးမလဲ၊ design ကို
+      ဘယ်လောက် ဂရုစိုက်မလဲ ဆိုတာပါ လိုက်ပြီး ဆုံးဖြတ်နိုင်ပါတယ်။ ဒါကို table နဲ့ ချရေးကြည့်ရအောင်။
+      [[mark:d-core]] ထိုင်ခုံ လွတ်မလွတ်က core မို့ ကိုယ်တိုင် ဆောက်ရပါမယ်။ အတော်ဆုံး developer တွေကို ဒီမှာ
+      ထားပြီး၊ design ကိုလည်း အသေချာဆုံး လုပ်ရမယ့် နေရာပါ။ ဝယ်လို့ရတဲ့ အရာဆိုရင် ပြိုင်ဘက်လည်း
+      ဝယ်နိုင်တာမို့၊ အဲဒါက အားသာချက် မဟုတ်တော့ပါဘူး။
+      [[mark:d-core-2]] core က အမြဲ ပြောင်းနေမယ့် အပိုင်းမို့၊ ပြောင်းရ လွယ်အောင် ဆောက်ထားဖို့ကလည်း ဒီနေရာမှာ
+      အတန်ဆုံးပါ။ ပြီးခဲ့တဲ့ lesson မှာ Booking ကို service အဖြစ် အရင်ဆုံး ခွဲထုတ်ဖို့ ဆုံးဖြတ်ခဲ့တာနဲ့လည်း
+      ကိုက်ပါတယ်။
+      [[mark:d-generic]] ငွေချေမှုနဲ့ login ကတော့ generic မို့ ဝယ်သုံး၊ ဒါမှမဟုတ် အသင့်ရှိတာကို ယူသုံးပါမယ်။
+      ငွေချေမှုအတွက် wallet ကုမ္ပဏီရဲ့ payment API ကို သုံးနေတာက ဒီ ဆုံးဖြတ်ချက်ပါပဲ။ ကိုယ့်ဘက်မှာ
+      ကျန်တာက အဲဒါနဲ့ ချိတ်ဆက်တဲ့ အလုပ်လောက်ပါ။ ဝယ်သုံးတာက အလကားတော့ မဟုတ်ပါဘူး။ ငွေလည်း ကုန်ပြီး
+      တခြားသူကိုလည်း မှီခိုရပါတယ်။ ဒါပေမဲ့ သူတို့ နှစ်နဲ့ချီ လုပ်ထားတာကို ရက်ပိုင်းအတွင်း ရလိုက်တာပါ။
+      [[mark:d-support]] ကားလိုင်း စာရင်းသွင်းတာနဲ့ report ကတော့ supporting မို့ ကိုယ်တိုင် ဆောက်ရပေမဲ့၊
+      အရိုးဆုံး နည်းနဲ့ပဲ ဆောက်ပါမယ်။ အလုပ်ဝင်စ developer တွေအတွက်လည်း သင့်တော်တဲ့ နေရာပါ။ ပြီးခဲ့တဲ့
+      သုံးလက အတော်ဆုံး နှစ်ယောက် ဒီမှာ ရောက်နေခဲ့တာက ဘယ်သူ့ အမှားမှ မဟုတ်ပါဘူး။ ဒီလို ခွဲမကြည့်ခဲ့ကြလို့ပါ။
+      [[mark:d-sum]] ဒီ table က အောင်အောင် ရဲ့ မေးခွန်းကို ဖြေပေးပါတယ်။ အတော်ဆုံး လူတွေနဲ့ အချိန်
+      အများဆုံးကို core တစ်ခုတည်းမှာ ပုံအောပြီး၊ ကျန်တာတွေကိုတော့ လုံလောက်ရုံပဲ လုပ်ပါမယ်။ လုံလောက်ရုံ ဆိုတာ
+      ပေါ့ပေါ့ဆဆ လုပ်တာတော့ မဟုတ်ပါဘူး။ မှန်အောင် လုပ်ရပေမဲ့၊ လိုတာထက် ပိုမဆောက်တာကို ဆိုလိုပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-types, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - id: type-core
+        type: editor.type
+        at: { mark: d-core }
+        cadence: line-by-line
+        target: { file: notebook/23-subdomains.md, after: "|---|---|---|---|\n" }
+        text: "| ထိုင်ခုံ လွတ်မလွတ် (app + ကောင်တာ) | core | ဒါကြောင့် ရွေးကြတယ်၊ တုဖို့ ခက်တယ် | build: အတော်ဆုံး လူတွေ |\n"
+      - id: sel-build
+        type: editor.select
+        at: { mark: d-core-2 }
+        target: { file: notebook/23-subdomains.md, text: "build: အတော်ဆုံး လူတွေ" }
+      - id: type-generic
+        type: editor.type
+        at: { mark: d-generic }
+        cadence: line-by-line
+        target: { file: notebook/23-subdomains.md, after: "| build: အတော်ဆုံး လူတွေ |\n" }
+        text: "| ငွေချေမှု | generic | ကုမ္ပဏီတိုင်း အတူတူ လိုတယ် | buy: wallet payment API |\n| login | generic | ဖြေရှင်းပြီးသား ပြဿနာ | အသင့်ရှိတာ ယူသုံး |\n"
+      - id: type-support
+        type: editor.type
+        at: { mark: d-support }
+        cadence: line-by-line
+        target: { file: notebook/23-subdomains.md, after: "| အသင့်ရှိတာ ယူသုံး |\n" }
+        text: "| ကားလိုင်း စာရင်းသွင်း | supporting | လိုတယ်၊ ရိုးတယ် | build: အရိုးဆုံး နည်းနဲ့ |\n| report | supporting | လိုတယ်၊ ရိုးတယ် | build: အရိုးဆုံး နည်းနဲ့ |\n"
+      - id: sel-core-row
+        type: editor.select
+        at: { mark: d-sum }
+        target: { file: notebook/23-subdomains.md, text: "| ထိုင်ခုံ လွတ်မလွတ် (app + ကောင်တာ) | core |" }
+      - id: expect-core
+        type: expect.file
+        at: { afterAction: sel-core-row }
+        path: notebook/23-subdomains.md
+        contains: "| ထိုင်ခုံ လွတ်မလွတ် (app + ကောင်တာ) | core | ဒါကြောင့် ရွေးကြတယ်၊ တုဖို့ ခက်တယ် | build: အတော်ဆုံး လူတွေ |\n"
+
+  - id: moves
+    chapter: အမျိုးအစားက ပြောင်းတတ်တယ်
+    narration: >
+      [[mark:v-open]] သတိထားရမှာက ဒီ အမျိုးအစားတွေက တစ်သက်လုံး အတူတူ မနေတာပါ။
+      [[mark:v-seat]] နှစ် ၂ တုန်းက ထိုင်ခုံ ရောင်းတာကို table တစ်ခုထဲ ရေးလိုက်တာလောက်ပဲ ဆိုပြီး၊ ရိုးတဲ့
+      အလုပ်တစ်ခုလို့ မြင်ခဲ့ကြပါတယ်။ supporting လို့ ယူဆခဲ့တာပါ။
+      [[mark:v-core]] ဒါပေမဲ့ သင်္ကြန်မှာ ထိုင်ခုံ ၃၁၂ ခုံကို နှစ်ခါ ရောင်းမိတဲ့အခါမှ၊ ဒါက တကယ်တော့ ခရီးဖော် ရဲ့
+      core ဖြစ်နေပြီ ဆိုတာ သိလိုက်ရတာပါ။
+      [[mark:v-pain]] အဲဒီ မတိုင်ခင်ကတည်းက ထိုင်ခုံနဲ့ ပတ်သက်တဲ့ feature အသစ် ထည့်တိုင်း ပိုပိုပြီး
+      ခက်လာခဲ့ပါတယ်။ ဒီလို feature ထည့်ရတာ ခက်လာတာက အမျိုးအစား ပြောင်းသွားပြီ ဆိုတဲ့ အချက်ပြပါ။
+      [[mark:v-back]] ပြောင်းပြန်လည်း ဖြစ်နိုင်ပါတယ်။ ကိုယ်တိုင် ရေးထားတဲ့ အပိုင်း တစ်ခုအတွက် ပိုကောင်းတဲ့
+      အသင့်သုံး product ပေါ်လာရင်၊ အဲဒီ အပိုင်းက generic ဖြစ်သွားပြီး ကိုယ်တိုင် ဆက်ထိန်းစရာ မလိုတော့ပါဘူး။
+      ဒါကြောင့် ဒီလို ခွဲခြားမှုကို တစ်ခါ လုပ်ပြီး သိမ်းထားဖို့ မဟုတ်ဘဲ၊ နှစ်စဉ် ပြန်ကြည့်ရပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-v-open,
+          type: whiteboard.apply,
+          at: { mark: v-open },
+          open: true,
+          clear: true,
+          upsertIds: [v-title],
+        }
+      - {
+          id: draw-v-seat,
+          type: whiteboard.apply,
+          at: { mark: v-seat },
+          upsertIds: [v-sup, v-sup-l, v-chip],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-v-core,
+          type: whiteboard.apply,
+          at: { mark: v-core },
+          upsertIds: [v-arrow, v-core, v-core-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-v-pain,
+          type: whiteboard.apply,
+          at: { mark: v-pain },
+          upsertIds: [v-signal],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-v-back,
+          type: whiteboard.apply,
+          at: { mark: v-back },
+          upsertIds: [v-back, v-back-arrow, v-gen, v-gen-l],
+          drawMs: 2000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ လူအများကြီး ဝယ်တဲ့ နေ့တစ်နေ့မှာ လက်မှတ် အတည်ပြုတဲ့ SMS တွေ
+      နောက်ကျပြီးမှ ရောက်ခဲ့ပါတယ်။ Booking team lead မောင်မောင် က အရည်အသွေးကို ကိုယ်တိုင် ထိန်းနိုင်အောင်
+      SMS ပို့တဲ့ system ကို ကိုယ်တိုင် ရေးချင်ပါတယ်။
+      [[mark:quiz-a]] ပထမ ရွေးစရာက သူ အဆိုပြုသလို ကိုယ်တိုင် ရေးတာပါ။
+      [[mark:quiz-b]] ဒုတိယက အခု သုံးနေတဲ့ SMS gateway ကိုပဲ ဆက်သုံးပြီး၊ gateway နောက်တစ်ခုကို အရန်
+      ထပ်ထားတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ SMS ပို့တာက ကုမ္ပဏီတိုင်း အတူတူ
+      လိုတဲ့ generic subdomain မို့လို့ပါ။ မောင်မောင် စိုးရိမ်တာက မှန်ပါတယ်။ SMS နောက်ကျတာက တကယ့်
+      ပြဿနာပါ။ ဒါပေမဲ့ ကိုယ်တိုင် ရေးရင် ကုန်သွားမယ့် လတွေက core အတွက် သုံးရမယ့် လတွေ ဖြစ်နေပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [z-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer, offsetMs: 2600 },
+          upsertIds: [z-reason],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် လုပ်ငန်းရဲ့ core
+    narration: >
+      [[mark:t-close]] ဒီ ရလဒ်ကိုလည်း table ထဲ ထပ်ဖြည့်လိုက်ပါမယ်။
+      [[mark:type-sms]] SMS ပို့တာက generic မို့ gateway ကို ဝယ်သုံးတာပဲ ဆက်လုပ်ပါမယ်။
+      [[mark:core-line]] နောက်ဆုံးအနေနဲ့ ခရီးဖော် ရဲ့ core ကို စာတစ်ကြောင်းတည်းနဲ့ ရေးထားပါမယ်။ ဒီ
+      တစ်ကြောင်းကို team တိုင်း မှတ်မိနေရင်၊ အလုပ်အသစ် တစ်ခု ရောက်လာတိုင်း ဒါက core ကို အထောက်အကူ
+      ပြုသလားလို့ မေးကြည့်နိုင်ပါတယ်။
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ စာကြောင်းနေရာမှာ ကိုယ့် လုပ်ငန်းရဲ့ core
+      ကို တစ်ကြောင်းတည်းနဲ့ ရေးကြည့်ပါ။ ကိုယ့်ကို ဘာကြောင့် ရွေးကြလဲ၊ ပြိုင်ဘက်တွေ ဘာကို လွယ်လွယ် မတုနိုင်လဲ
+      ဆိုတာကို ဖြေရမှာပါ။
+      [[mark:turn-2]] တစ်ကြောင်းတည်းနဲ့ ရေးလို့ မရဘူးဆိုရင်၊ ဒါမှမဟုတ် team ထဲက လူတွေ ရေးတာ မတူဘူးဆိုရင်၊
+      အဲဒါကိုယ်တိုင်က အရေးကြီးတဲ့ တွေ့ရှိချက်ပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - id: type-sms
+        type: editor.type
+        at: { mark: type-sms }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/23-subdomains.md,
+            after: "| report | supporting | လိုတယ်၊ ရိုးတယ် | build: အရိုးဆုံး နည်းနဲ့ |\n",
+          }
+        text: "| SMS ပို့ခြင်း | generic | ကုမ္ပဏီတိုင်း အတူတူ လိုတယ် | buy: SMS gateway |\n"
+      - id: type-core-line
+        type: editor.type
+        at: { mark: core-line }
+        cadence: line-by-line
+        target: { file: notebook/23-subdomains.md, after: "| buy: SMS gateway |\n" }
+        text: "\nCore တစ်ကြောင်း: app မှာရော ကောင်တာမှာပါ ထိုင်ခုံ လွတ်မလွတ်ကို ချက်ချင်း မှန်အောင် ပြတာ\n"
+      - id: sel-core-line
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/23-subdomains.md,
+            text: "Core တစ်ကြောင်း: app မှာရော ကောင်တာမှာပါ ထိုင်ခုံ လွတ်မလွတ်ကို ချက်ချင်း မှန်အောင် ပြတာ",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ အားလုံးက အရေးကြီးတယ် ဆိုတဲ့အခါ ဘယ်အပိုင်းက ကိုယ့်ကို ပြိုင်ဘက်နဲ့ ကွာစေလဲလို့
+      ပြောင်းမေးရပါတယ်။ ကွာစေတဲ့ core ကို အတော်ဆုံး လူတွေနဲ့ ကိုယ်တိုင် ဆောက်ပါတယ်။ လူတိုင်း အတူတူ လုပ်တဲ့
+      generic ကို ဝယ်သုံးပြီး၊ လိုအပ်ပေမဲ့ ရိုးတဲ့ supporting ကိုတော့ အရိုးဆုံး နည်းနဲ့ ဆောက်ပါတယ်။
+      အမျိုးအစားက အချိန်နဲ့အမျှ ပြောင်းတတ်တာမို့ ပြန်ကြည့်နေရပါမယ်။
+      [[mark:next]] core ကို သိပြီဆိုတော့ အဲဒီအကြောင်း business ဘက်က လူတွေနဲ့ developer တွေ စကားပြောတဲ့အခါ၊
+      စကားလုံး တစ်လုံးတည်းကို အဓိပ္ပာယ် မတူဘဲ သုံးနေကြတာ တွေ့လာပါလိမ့်မယ်။ နောက် lesson မှာတော့ ubiquitous
+      language နဲ့ bounded context ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
