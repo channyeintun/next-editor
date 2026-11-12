@@ -1,0 +1,1341 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-39-sagas
+  title: "Architect Path 39: Distributed transaction နဲ့ saga"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/39-purchase-saga.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/39-purchase-saga.md: |
+        # လက်မှတ် ဝယ်ယူမှု saga
+
+        အဆင့်: ထိုင်ခုံ ကိုင် (Booking) → ငွေဖြတ် (Payment) → လက်မှတ် ထုတ် (Booking) → SMS ပို့ (Notification)
+
+        | State | နောက် ဘာဖြစ်မလဲ | ပျက်ရင် |
+        |---|---|---|
+
+        Coordinator: Booking ထဲက purchase coordinator။ SMS ကိုတော့ event နဲ့ပဲ ပို့
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — buying a ticket as four steps in three services: blue steps,
+    # violet order, red the failed step, orange the question it leaves.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "လက်မှတ် တစ်စောင် ဝယ်ရင်",
+        fontSize: 36,
+      }
+    - {
+        id: p-b1,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 250,
+        width: 400,
+        height: 35,
+        text: "1  ထိုင်ခုံ ကိုင် · Booking",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 303,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b2,
+        kind: rectangle,
+        x: 270,
+        y: 340,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 355,
+        width: 400,
+        height: 35,
+        text: "2  ငွေဖြတ် · Payment",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 408,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b3,
+        kind: rectangle,
+        x: 270,
+        y: 445,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 460,
+        width: 400,
+        height: 35,
+        text: "3  လက်မှတ် ထုတ် · Booking",
+        fontSize: 28,
+      }
+    - {
+        id: p-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 450,
+        y: 513,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b4,
+        kind: rectangle,
+        x: 270,
+        y: 550,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l4,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 565,
+        width: 400,
+        height: 35,
+        text: "4  SMS ပို့ · Notification",
+        fontSize: 28,
+      }
+    - {
+        id: p-fail,
+        kind: text,
+        x: 700,
+        y: 355,
+        width: 300,
+        height: 35,
+        text: "မအောင်မြင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-q,
+        kind: text,
+        x: 700,
+        y: 250,
+        width: 300,
+        height: 35,
+        text: "ခုံက ကိုင်ထားဆဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the same steps, each with its way back (orange); red where the
+    # way back does not exist or can itself fail.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Saga: အဆင့်တိုင်းမှာ ပြန်ဆုတ်လမ်း",
+        fontSize: 36,
+      }
+    - {
+        id: s-w1,
+        kind: text,
+        x: 700,
+        y: 250,
+        width: 300,
+        height: 35,
+        text: "ခုံ ပြန်လွှတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-w2,
+        kind: text,
+        x: 700,
+        y: 345,
+        width: 300,
+        height: 35,
+        text: "ငွေပြန်အမ်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-also,
+        kind: text,
+        x: 700,
+        y: 388,
+        width: 300,
+        height: 35,
+        text: "ဒါလည်း ပျက်နိုင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-w3,
+        kind: text,
+        x: 700,
+        y: 460,
+        width: 300,
+        height: 35,
+        text: "လက်မှတ် ဖျက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-w4,
+        kind: text,
+        x: 700,
+        y: 565,
+        width: 300,
+        height: 35,
+        text: "ပြန်ရုပ်မရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — three linked choices (orange), the lines that tie them, and the
+    # trap in red.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ဆက်နွယ်နေတဲ့ ရွေးချယ်မှု 3 ခု",
+        fontSize: 36,
+      }
+    - {
+        id: c-b1,
+        kind: rectangle,
+        x: 495,
+        y: 225,
+        width: 370,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-b1-q,
+        kind: text,
+        align: center,
+        x: 495,
+        y: 237,
+        width: 370,
+        height: 35,
+        text: "အဖြေကို စောင့်မလား",
+        fontSize: 28,
+      }
+    - {
+        id: c-b1-o,
+        kind: text,
+        align: center,
+        x: 495,
+        y: 280,
+        width: 370,
+        height: 35,
+        text: "စောင့် / မစောင့်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-b2,
+        kind: rectangle,
+        x: 270,
+        y: 430,
+        width: 370,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-b2-q,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 442,
+        width: 370,
+        height: 35,
+        text: "data အတူ မှန်ရမလား",
+        fontSize: 28,
+      }
+    - {
+        id: c-b2-o,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 485,
+        width: 370,
+        height: 35,
+        text: "အကုန်ဖြစ် / နောက်မှ တူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-b3,
+        kind: rectangle,
+        x: 720,
+        y: 430,
+        width: 370,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-b3-q,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 442,
+        width: 370,
+        height: 35,
+        text: "ဘယ်သူ ညွှန်ကြားမလဲ",
+        fontSize: 28,
+      }
+    - {
+        id: c-b3-o,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 485,
+        width: 370,
+        height: 35,
+        text: "ဗဟို / event",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - { id: c-l12, kind: freedraw, stroke: arrow-down-left, x: 470, y: 335, width: 90, height: 85 }
+    - { id: c-l13, kind: freedraw, stroke: arrow-down-right, x: 800, y: 335, width: 90, height: 85 }
+    - { id: c-l23, kind: freedraw, stroke: underline, x: 648, y: 445, width: 64, height: 40 }
+    - {
+        id: c-trap,
+        kind: text,
+        x: 270,
+        y: 570,
+        width: 700,
+        height: 35,
+        text: "အကုန်ဖြစ် + မစောင့် + ဗဟိုမရှိ = ထောင်ချောက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 4 — the purchase with a coordinator (orange), then with an event
+    # stream (violet); green what each buys, red what each costs.
+    - {
+        id: k-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ပုံစံ 1: coordinator က ညွှန်ကြား",
+        fontSize: 36,
+      }
+    - {
+        id: k-coord,
+        kind: rectangle,
+        x: 520,
+        y: 225,
+        width: 300,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: k-coord-l,
+        kind: text,
+        align: center,
+        x: 520,
+        y: 243,
+        width: 300,
+        height: 35,
+        text: "Coordinator",
+        fontSize: 28,
+      }
+    - {
+        id: k-b,
+        kind: rectangle,
+        x: 270,
+        y: 400,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-b-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 418,
+        width: 240,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: k-p,
+        kind: rectangle,
+        x: 550,
+        y: 400,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-p-l,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 418,
+        width: 240,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: k-n,
+        kind: rectangle,
+        x: 830,
+        y: 400,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-n-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 418,
+        width: 250,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    - {
+        id: k-a1,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 400,
+        y: 305,
+        width: 150,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 305,
+        width: 40,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-a3,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 790,
+        y: 305,
+        width: 150,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-good,
+        kind: text,
+        x: 270,
+        y: 510,
+        width: 720,
+        height: 35,
+        text: "ဘယ်အဆင့် ရောက်နေလဲ တစ်နေရာတည်းမှာ မြင်ရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: k-bad,
+        kind: text,
+        x: 270,
+        y: 570,
+        width: 720,
+        height: 35,
+        text: "coordinator ပျက်ရင် ဘယ်သူမှ ဝယ်မရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "ပုံစံ 2: event ကို ကြည့်ပြီး ကိုယ်တိုင် လုပ်",
+        fontSize: 36,
+      }
+    - {
+        id: e-stream,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 810,
+        height: 54,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-stream-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 260,
+        width: 810,
+        height: 35,
+        text: "event stream",
+        fontSize: 28,
+      }
+    - {
+        id: e-a1,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 370,
+        y: 314,
+        width: 40,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 650,
+        y: 314,
+        width: 40,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 935,
+        y: 314,
+        width: 40,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-good,
+        kind: text,
+        x: 270,
+        y: 510,
+        width: 720,
+        height: 35,
+        text: "တစ်ခု နှေးလည်း ကျန်တာ မနှေး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-bad,
+        kind: text,
+        x: 270,
+        y: 570,
+        width: 720,
+        height: 35,
+        text: "လုပ်ငန်းစဉ် တစ်ခုလုံးကို ဘယ်သူမှ မမြင်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 5 — the purchase as explicit states: white states, violet moves,
+    # green the end, red the failure that is kept as a state.
+    - { id: st-held, kind: rectangle, x: 270, y: 240, width: 210, height: 70, rounded: true }
+    - {
+        id: st-held-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 258,
+        width: 210,
+        height: 35,
+        text: "HELD",
+        fontSize: 28,
+      }
+    - {
+        id: st-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 255,
+        width: 75,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: st-paid, kind: rectangle, x: 575, y: 240, width: 210, height: 70, rounded: true }
+    - {
+        id: st-paid-l,
+        kind: text,
+        align: center,
+        x: 575,
+        y: 258,
+        width: 210,
+        height: 35,
+        text: "PAID",
+        fontSize: 28,
+      }
+    - {
+        id: st-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 795,
+        y: 255,
+        width: 75,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: st-tick,
+        kind: rectangle,
+        x: 880,
+        y: 240,
+        width: 210,
+        height: 70,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: st-tick-l,
+        kind: text,
+        align: center,
+        x: 880,
+        y: 258,
+        width: 210,
+        height: 35,
+        text: "TICKETED",
+        fontSize: 28,
+      }
+    - {
+        id: st-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 355,
+        y: 322,
+        width: 40,
+        height: 86,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: st-failed,
+        kind: rectangle,
+        x: 270,
+        y: 420,
+        width: 290,
+        height: 70,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: st-failed-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 438,
+        width: 290,
+        height: 35,
+        text: "PAYMENT_FAILED",
+        fontSize: 28,
+      }
+    - {
+        id: st-a4,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 570,
+        y: 435,
+        width: 75,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: st-rel, kind: rectangle, x: 655, y: 420, width: 210, height: 70, rounded: true }
+    - {
+        id: st-rel-l,
+        kind: text,
+        align: center,
+        x: 655,
+        y: 438,
+        width: 210,
+        height: 35,
+        text: "RELEASED",
+        fontSize: 28,
+      }
+    # Board 6 — the quiz: white options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ငွေချေပြီး၊ လက်မှတ် ထုတ်မရ",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 700,
+        height: 35,
+        text: "က) ချက်ချင်း ငွေပြန်အမ်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 700,
+        height: 35,
+        text: "ခ) လက်မှတ် ထုတ်တာကို ထပ်ကြိုးစား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 430,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 740,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 700,
+        height: 35,
+        text: "ခရီးသည် လိုချင်တာက လက်မှတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-then,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 700,
+        height: 35,
+        text: "5 ခါ မရမှ ငွေပြန်အမ်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8139
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Service သုံးခုကို ဖြတ်တဲ့ ဝယ်ယူမှု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ table တစ်ခုစီကို service တစ်ခုတည်းက ပိုင်ဖို့နဲ့၊ ကိုယ်မပိုင်တဲ့ data ကို ဖတ်တဲ့ နည်းတွေကို
+      လေ့လာခဲ့ပါတယ်။
+      [[mark:n-open]] data ကို service အလိုက် ခွဲပိုင်လိုက်တော့၊ လက်မှတ် တစ်စောင် ဝယ်တာက service သုံးခုကို ဖြတ်ရတဲ့
+      အလုပ် ဖြစ်သွားပါတယ်။
+      [[mark:n-1]] ပထမ Booking က ထိုင်ခုံကို ကိုင်ထားပါတယ်။
+      [[mark:n-2]] ပြီးရင် Payment က wallet ကနေ ငွေဖြတ်ပါတယ်။
+      [[mark:n-3]] ငွေရပြီဆိုမှ Booking က လက်မှတ် ထုတ်ပေးပါတယ်။
+      [[mark:n-4]] နောက်ဆုံးမှာ Notification က ခရီးသည်ဆီ SMS ပို့ပါတယ်။
+      [[mark:n-tx]] အရင် monolith တုန်းကဆို ငွေချေမှုကို မှတ်တာနဲ့ လက်မှတ် ထုတ်တာကို database transaction တစ်ခုတည်းထဲမှာ ရေးလို့ ရပါတယ်။ transaction ဆိုတာ
+      အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ လုပ်ဆောင်ချက် အစုပါ။ တစ်ခု ပျက်ရင် database က အားလုံးကို
+      အလိုလို ပြန်ဖျက်ပေးပါတယ်။
+      [[mark:n-now]] အခုတော့ service တစ်ခုစီက ကိုယ့် table ကို ကိုယ့် transaction နဲ့ပဲ ရေးတာမို့၊
+      သုံးခုလုံးကို ခြုံတဲ့ transaction မရှိတော့ပါဘူး။ service အများကြီးက data ကို အတူ ပြောင်းရတဲ့ ဒီလို အလုပ်မျိုးကို
+      distributed transaction လို့ ခေါ်ကြပေမဲ့၊ database transaction လို အာမခံချက်တော့ မပါပါဘူး။
+      [[mark:n-q]] ဒါဆို ထိုင်ခုံ ကိုင်ပြီးမှ ငွေဖြတ်တာ မအောင်မြင်ရင် ဘာဖြစ်မလဲ။ ဘယ်သူမှ ဘာမှ မလုပ်ရင် အဲဒီ ခုံက
+      ဝယ်သူ မရှိဘဲ ကိုင်ထားလျက် ကျန်နေပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-n-1,
+          type: whiteboard.apply,
+          at: { mark: n-1 },
+          upsertIds: [p-b1, p-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-n-2,
+          type: whiteboard.apply,
+          at: { mark: n-2 },
+          upsertIds: [p-a1, p-b2, p-l2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-3,
+          type: whiteboard.apply,
+          at: { mark: n-3 },
+          upsertIds: [p-a2, p-b3, p-l3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-4,
+          type: whiteboard.apply,
+          at: { mark: n-4 },
+          upsertIds: [p-a3, p-b4, p-l4],
+          drawMs: 1500,
+        }
+      - { id: point-n-now, type: whiteboard.point, at: { mark: n-now }, target: { assetId: p-b1 } }
+      - {
+          id: draw-n-q,
+          type: whiteboard.apply,
+          at: { mark: n-q },
+          upsertIds: [p-fail, p-q],
+          drawMs: 1500,
+        }
+
+  - id: saga
+    chapter: Saga နဲ့ compensation
+    narration: >
+      [[mark:s-open]] ဒီလို service အများကြီးကို ဖြတ်တဲ့ လုပ်ငန်းစဉ်ကို တည်ဆောက်တဲ့ ပုံစံကို saga လို့ ခေါ်ပါတယ်။ saga မှာ
+      အဆင့်တိုင်းက service တစ်ခုအတွင်းက transaction အသေးလေး တစ်ခုပါ။ ပြီးတော့ အဆင့်တိုင်းမှာ ပြန်ဆုတ်ဖို့ လမ်း
+      တစ်ခုစီ ပါရပါတယ်။ လုပ်ပြီးသား အဆင့်ကို ပြန်ဖျက်ပေးတဲ့ အဲဒီ လုပ်ဆောင်ချက်ကို compensation လို့ ခေါ်ပါတယ်။
+      [[mark:s-c1]] ထိုင်ခုံ ကိုင်တာရဲ့ compensation က ခုံကို ပြန်လွှတ်တာပါ။
+      [[mark:s-c2]] ငွေဖြတ်တာအတွက်ကတော့ ငွေပြန်အမ်းတာပါ။
+      [[mark:s-c3]] လက်မှတ် ထုတ်တာအတွက်က လက်မှတ်ကို ဖျက်တာပါ။
+      [[mark:s-c4]] ဒါပေမဲ့ SMS ကိုတော့ ပို့ပြီးရင် ပြန်ရုပ်သိမ်းလို့ မရတော့ပါဘူး။ ဒါက compensation ရဲ့ ပထမ ပြဿနာပါ။
+      database transaction လို ဘာမှ မဖြစ်ခဲ့သလို ပြန်မဖြစ်နိုင်ပါဘူး။ ကြားကာလ အခြေအနေကို တခြားသူတွေ မြင်ပြီးသား
+      ဖြစ်နေတတ်ပါတယ်။ ခုံကို ကိုင်ထားတုန်း လာရှာတဲ့ ခရီးသည်က ခုံ မရှိဘူး ထင်ပြီး တခြား ကားလိုင်းဆီ
+      ရောက်သွားနိုင်ပါတယ်။
+      [[mark:s-fail]] ဒုတိယ ပြဿနာက compensation ကိုယ်တိုင်လည်း ပျက်နိုင်တာပါ။ ငွေပြန်အမ်းဖို့ wallet ကို ခေါ်တဲ့အချိန်
+      wallet ဘက်က ပျက်နေရင်၊ ပြန်ဖျက်ဖို့ လုပ်တာကိုပါ ထပ်ပြင်ရပါဦးမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title, p-b1, p-l1, p-b2, p-l2, p-b3, p-l3, p-b4, p-l4],
+        }
+      - {
+          id: draw-s-c1,
+          type: whiteboard.apply,
+          at: { mark: s-c1 },
+          upsertIds: [s-w1],
+          drawMs: 800,
+        }
+      - {
+          id: draw-s-c2,
+          type: whiteboard.apply,
+          at: { mark: s-c2 },
+          upsertIds: [s-w2],
+          drawMs: 800,
+        }
+      - {
+          id: draw-s-c3,
+          type: whiteboard.apply,
+          at: { mark: s-c3 },
+          upsertIds: [s-w3],
+          drawMs: 800,
+        }
+      - {
+          id: draw-s-c4,
+          type: whiteboard.apply,
+          at: { mark: s-c4 },
+          upsertIds: [s-w4],
+          drawMs: 800,
+        }
+      - {
+          id: draw-s-fail,
+          type: whiteboard.apply,
+          at: { mark: s-fail },
+          upsertIds: [s-also],
+          drawMs: 900,
+        }
+
+  - id: choices
+    chapter: ဆက်နွယ်နေတဲ့ ရွေးချယ်မှု သုံးခု
+    narration: >
+      [[mark:c-open]] ဒီလို လုပ်ငန်းစဉ်တိုင်းကို ရွေးချယ်မှု သုံးခုက ပုံဖော်ပါတယ်။
+      [[mark:c-1]] ပထမက အဖြေကို စောင့်မလား ဆိုတာပါ။ လှမ်းခေါ်ပြီး အဖြေကို စောင့်နေတာကို synchronous၊ မစောင့်ဘဲ
+      ဆက်သွားတာကို asynchronous လို့ ခေါ်ပါတယ်။
+      [[mark:c-2]] ဒုတိယက data တွေ အတူ မှန်ရမလား ဆိုတာပါ။ service အားလုံးမှာ အကုန်ဖြစ် ဒါမှမဟုတ် တစ်ခုမှ မဖြစ်
+      ဖြစ်ရမလား၊ ခဏ ကွာနေပြီး နောက်မှ တူသွားတာကို လက်ခံမလား ဆိုတာပါ။ နောက်တစ်မျိုးကို eventual consistency လို့
+      ခေါ်ပါတယ်။
+      [[mark:c-3]] တတိယက ဘယ်သူ ညွှန်ကြားမလဲ ဆိုတာပါ။ ဗဟိုက တစ်ယောက်က အဆင့်တွေကို ညွှန်ကြားတာကို orchestration၊ ဗဟို
+      မရှိဘဲ service တစ်ခုစီက event ကို ကြည့်ပြီး ကိုယ့်အလုပ်ကိုယ် လုပ်တာကို choreography လို့ ခေါ်ပါတယ်။
+      [[mark:c-link]] ဒီ သုံးခုကို သီးခြားစီ ရွေးလို့ မရပါဘူး။ တစ်ခုကို ရွေးလိုက်ရင် ကျန်တာတွေကို ဆွဲပါတယ်။ အကုန်ဖြစ်
+      ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ကို လိုချင်ရင်၊ အဆင့်တိုင်းရဲ့ အဖြေကို စောင့်ပြီး ဗဟိုက ညွှန်ကြားတဲ့အခါ ထိန်းရ အသက်သာဆုံးပါ။
+      scale ကို လိုချင်ရင်တော့ မစောင့်ဘဲ၊ နောက်မှ တူတာကို လက်ခံပြီး event နဲ့ သွားတာက ပိုအဆင်ပြေပါတယ်။
+      [[mark:c-trap]] ထောင်ချောက်ကတော့ နှစ်ဖက်လုံးကို လိုချင်တာပါ။ အကုန်ဖြစ်ရမယ်၊ ဒါပေမဲ့ ဘယ်သူ့ကိုမှ မစောင့်ဘူး၊
+      ဗဟိုလည်း မထားဘူး ဆိုရင်၊ ပြန်ဖျက်ဖို့ message တွေက service တွေကြားမှာ ဖြတ်သန်းပြေးနေပြီး ဘယ်သူမှ
+      မထိန်းနိုင်တော့ပါဘူး။
+      [[mark:c-merge]] business က အကုန်ဖြစ် ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ကို တကယ် လိုအပ်တယ်ဆိုရင်တော့၊ အဲဒါက saga နဲ့
+      ဖြေရှင်းရမယ့် ကိစ္စ မဟုတ်ဘဲ service တွေကို ပြန်ပေါင်းဖို့ ဆွဲတဲ့ အားပါ။ product manager လှလှ ကို
+      မေးကြည့်တော့၊ ငွေချေပြီး စက္ကန့်အနည်းငယ်အတွင်း လက်မှတ် ရောက်လာရင် ရပြီလို့ ဆိုပါတယ်။ ဒါကြောင့် ခရီးဖော် က
+      နောက်မှ တူတာကို လက်ခံပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-1,
+          type: whiteboard.apply,
+          at: { mark: c-1 },
+          upsertIds: [c-b1, c-b1-q, c-b1-o],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-2,
+          type: whiteboard.apply,
+          at: { mark: c-2 },
+          upsertIds: [c-b2, c-b2-q, c-b2-o],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-3,
+          type: whiteboard.apply,
+          at: { mark: c-3 },
+          upsertIds: [c-b3, c-b3-q, c-b3-o],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-link,
+          type: whiteboard.apply,
+          at: { mark: c-link },
+          upsertIds: [c-l12, c-l13, c-l23],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-trap,
+          type: whiteboard.apply,
+          at: { mark: c-trap, offsetMs: 3500 },
+          upsertIds: [c-trap],
+          drawMs: 1600,
+        }
+      - { id: point-c-b2, type: whiteboard.point, at: { mark: c-merge }, target: { assetId: c-b2 } }
+
+  - id: coordination
+    chapter: Coordinator လား၊ event လား
+    narration: >
+      [[mark:k-open]] ဝယ်ယူမှု တစ်ခုတည်းကို ညွှန်ကြားပုံ နှစ်မျိုးနဲ့ ဆွဲကြည့်ရအောင်။
+      [[mark:k-coord]] ပထမ ပုံစံမှာ coordinator တစ်ခု ထားပါတယ်။ သူက Booking ကို ခုံ ကိုင်ခိုင်း၊ Payment ကို
+      ငွေဖြတ်ခိုင်းပြီးမှ၊ လက်မှတ် ထုတ်ခိုင်း၊ SMS ပို့ခိုင်းပါတယ်။
+      [[mark:k-good]] ဝယ်ယူမှု တစ်ခု ဘယ်အဆင့် ရောက်နေလဲ၊ ဘယ်မှာ ပျက်လဲ ဆိုတာကို တစ်နေရာတည်းမှာ မြင်ရပါတယ်။ ပျက်ရင်
+      ဘာလုပ်မလဲ ဆိုတဲ့ စည်းမျဉ်းတွေလည်း တစ်နေရာတည်းမှာ ရှိပါတယ်။
+      [[mark:k-bad]] ပေးရတာက အားလုံးက coordinator ကို မှီခိုသွားတာပါ။ သူ ပျက်ရင် ဘယ်သူမှ လက်မှတ် ဝယ်မရပါဘူး။
+      [[mark:k-events]] ဒုတိယ ပုံစံမှာ coordinator မရှိပါဘူး။ Booking က ခုံ ကိုင်ပြီးပြီ ဆိုတဲ့ event ကို ကြေညာပါတယ်။
+      Payment က အဲဒါကို ကြားမှ ငွေဖြတ်ပြီး သူ့ event ကို ဆက်ကြေညာပါတယ်။
+      [[mark:e-good]] service တစ်ခုက နောက်တစ်ခုကို မသိ၊ မစောင့်တာမို့ တစ်ခု နှေးလည်း ကျန်တာ မနှေးပါဘူး။
+      [[mark:e-bad]] ပေးရတာက လုပ်ငန်းစဉ် တစ်ခုလုံးကို မြင်နိုင်တဲ့ နေရာ မရှိတော့တာပါ။ ငွေဖြတ်တာ မအောင်မြင်ရင် ခုံ
+      ပြန်လွှတ်ဖို့အတွက်လည်း event အသစ်တွေ၊ နားထောင်သူ အသစ်တွေ ထပ်တိုးရပါတယ်။
+      [[mark:k-pick]] ခရီးဖော် ကတော့ ခုံ ကိုင်တာကနေ လက်မှတ် ထုတ်တဲ့အထိကို coordinator နဲ့ လုပ်ပါမယ်။ ငွေနဲ့ ပတ်သက်ပြီး
+      ပျက်နိုင်တဲ့ လမ်းကြောင်း များလို့ပါ။ Booking team lead မောင်မောင် ကလည်း ဝယ်ယူမှုက Booking ရဲ့ အလုပ်မို့
+      coordinator ကို Booking ထဲမှာ ထားဖို့ သဘောတူပါတယ်။
+      [[mark:k-sms]] SMS ပို့တာကိုတော့ event နဲ့ပဲ ထားပါမယ်။ SMS နှေးတာကြောင့်
+      ဝယ်ယူမှု မနှေးစေချင်လို့ပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-k-open,
+          type: whiteboard.apply,
+          at: { mark: k-open },
+          clear: true,
+          upsertIds: [k-title, k-b, k-b-l, k-p, k-p-l, k-n, k-n-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-k-coord,
+          type: whiteboard.apply,
+          at: { mark: k-coord },
+          upsertIds: [k-coord, k-coord-l, k-a1, k-a2, k-a3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-k-good,
+          type: whiteboard.apply,
+          at: { mark: k-good },
+          upsertIds: [k-good],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-k-bad,
+          type: whiteboard.apply,
+          at: { mark: k-bad },
+          upsertIds: [k-bad],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { mark: k-events },
+          clear: true,
+          upsertIds: [e-title, k-b, k-b-l, k-p, k-p-l, k-n, k-n-l],
+        }
+      - {
+          id: draw-e-stream,
+          type: whiteboard.apply,
+          at: { mark: k-events, offsetMs: 1500 },
+          upsertIds: [e-stream, e-stream-l, e-a1, e-a2, e-a3],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-e-good,
+          type: whiteboard.apply,
+          at: { mark: e-good },
+          upsertIds: [e-good],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-bad,
+          type: whiteboard.apply,
+          at: { mark: e-bad },
+          upsertIds: [e-bad],
+          drawMs: 1400,
+        }
+      - { id: point-k-pick, type: whiteboard.point, at: { mark: k-pick }, target: { assetId: k-b } }
+      - { id: point-k-sms, type: whiteboard.point, at: { mark: k-sms }, target: { assetId: k-n } }
+
+  - id: states
+    chapter: State တွေကို အတိအလင်း ရေးခြင်း
+    narration: >
+      [[mark:st-open]] coordinator က ဝယ်ယူမှု တစ်ခုစီ ဘယ်အဆင့် ရောက်နေလဲ မှတ်ထားဖို့ လိုပါတယ်။ ဒါကြောင့် ဝယ်ယူမှုရဲ့
+      အခြေအနေတွေ၊ ဆိုလိုတာက state တွေကို အတိအလင်း နာမည်ပေးပါတယ်။ ခုံကို ကိုင်ထားပြီးတဲ့ state က စမှတ်ပါ။
+      [[mark:st-paid]] ငွေဖြတ်တာ အောင်မြင်ရင် ငွေချေပြီး state ကို ရောက်ပါတယ်။
+      [[mark:st-ticketed]] လက်မှတ် ထုတ်ပြီးရင်တော့ ဝယ်ယူမှု ပြီးဆုံးပါပြီ။
+      [[mark:st-failed]] ငွေဖြတ်တာ မအောင်မြင်ရင်တော့ ငွေချေမှု မအောင်မြင်ဘူးဆိုတဲ့ state ကို သီးသန့် မှတ်ပါတယ်။ error
+      ကို ဖျောက်ပစ်တာ မဟုတ်ဘဲ၊ ဝယ်ယူမှုရဲ့ အခြေအနေ တစ်ခုအဖြစ် လက်ခံလိုက်တာပါ။
+      [[mark:st-released]] အဲဒီ state ကနေ ခုံကို ပြန်လွှတ်ပြီး၊ ခရီးသည်ကို အသိပေးပါတယ်။
+      [[mark:st-why]] state တွေကို ဒီလို ရေးထားတော့ coordinator က အလုပ်လုပ်နေရင်း ပျက်သွားလည်း၊ ပြန်တက်လာတဲ့အခါ ဘယ်
+      ဝယ်ယူမှုက ဘယ် state မှာ ရပ်နေလဲ ကြည့်ပြီး ဆက်လုပ်နိုင်ပါတယ်။ ခရီးသည်ကလည်း သူ့ ဝယ်ယူမှု ဘယ်ရောက်နေလဲ မေးလို့
+      ရပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-st-open,
+          type: whiteboard.apply,
+          at: { mark: st-open, offsetMs: 5000 },
+          clear: true,
+          upsertIds: [st-held, st-held-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-st-paid,
+          type: whiteboard.apply,
+          at: { mark: st-paid },
+          upsertIds: [st-a1, st-paid, st-paid-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-st-ticketed,
+          type: whiteboard.apply,
+          at: { mark: st-ticketed },
+          upsertIds: [st-a2, st-tick, st-tick-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-st-failed,
+          type: whiteboard.apply,
+          at: { mark: st-failed },
+          upsertIds: [st-a3, st-failed, st-failed-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-st-released,
+          type: whiteboard.apply,
+          at: { mark: st-released },
+          upsertIds: [st-a4, st-rel, st-rel-l],
+          drawMs: 1500,
+        }
+
+  - id: table
+    chapter: Saga ကို table နဲ့ ရေးခြင်း
+    narration: >
+      [[mark:t-close]] ဒီ state တွေကို table နဲ့ ချရေးကြည့်ရအောင်။ state တစ်ခုစီအတွက် နောက်ဘာဖြစ်မလဲနဲ့၊ ပျက်ရင်
+      ဘာလုပ်မလဲ ဆိုတာပါ။
+      [[mark:type-held]] ခုံ ကိုင်ထားတဲ့ state မှာ နောက်အဆင့်က ငွေဖြတ်ခိုင်းတာပါ။ ပျက်တဲ့ လမ်းက နှစ်လမ်း ရှိပါတယ်။
+      ငွေဖြတ်တာ မအောင်မြင်တာနဲ့၊ ဘာအဖြေမှ မလာဘဲ ၁၀ မိနစ် ပြည့်သွားတာပါ။ နှစ်ခုလုံးမှာ ခုံကို ပြန်လွှတ်ရပါမယ်။
+      [[mark:type-failed]] ငွေချေမှု မအောင်မြင်တဲ့ state မှာ လုပ်စရာက ခုံ ပြန်လွှတ်တာပါ။ ဒါကိုယ်တိုင် ပျက်ရင်တော့
+      ရတဲ့အထိ ထပ်ကြိုးစားပါတယ်။
+      [[mark:type-ticketed]] လက်မှတ် ထုတ်ပြီးတဲ့ state မှာတော့ SMS ပို့ဖို့ event ကို ကြေညာပါတယ်။ SMS မရောက်လည်း
+      လက်မှတ်က app ထဲမှာ ရှိနေတာမို့၊ ဝယ်ယူမှုကို ပြန်မဖျက်ပါဘူး။
+      [[mark:sel-coord]] table အောက်က စာကြောင်းမှာတော့ ဒီ saga ကို ဘယ်သူ ညွှန်ကြားလဲ ဆိုတာ မှတ်ထားပါတယ်။ state တွေကို
+      သိမ်းထားတဲ့ နေရာကလည်း အဲဒီ coordinator ပါပဲ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-states, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-states },
+          path: notebook/39-purchase-saga.md,
+        }
+      - id: type-held
+        type: editor.type
+        at: { mark: type-held }
+        cadence: line-by-line
+        target: { file: notebook/39-purchase-saga.md, after: "|---|---|---|\n" }
+        text: "| HELD (ခုံ ကိုင်ထား) | Payment ကို ငွေဖြတ်ခိုင်း | PAYMENT_FAILED၊ ဒါမှမဟုတ် 10 မိနစ် ပြည့်ရင် ခုံ လွှတ် |\n"
+      - id: type-failed
+        type: editor.type
+        at: { mark: type-failed }
+        cadence: line-by-line
+        target: { file: notebook/39-purchase-saga.md, after: "10 မိနစ် ပြည့်ရင် ခုံ လွှတ် |\n" }
+        text: "| PAYMENT_FAILED | ခုံ ပြန်လွှတ်၊ ခရီးသည်ကို ပြော → RELEASED | ရတဲ့အထိ ထပ်ကြိုးစား |\n"
+      - id: type-ticketed
+        type: editor.type
+        at: { mark: type-ticketed }
+        cadence: line-by-line
+        target: { file: notebook/39-purchase-saga.md, after: "→ RELEASED | ရတဲ့အထိ ထပ်ကြိုးစား |\n" }
+        text: "| TICKETED (ပြီးဆုံး) | SMS အတွက် event ကြေညာ | SMS မရောက်လည်း ဝယ်ယူမှုကို မဖျက် |\n"
+      - id: sel-coord
+        type: editor.select
+        at: { mark: sel-coord }
+        target:
+          {
+            file: notebook/39-purchase-saga.md,
+            text: "Coordinator: Booking ထဲက purchase coordinator။ SMS ကိုတော့ event နဲ့ပဲ ပို့",
+          }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ table ထဲမှာ ငွေချေပြီး state အတွက် row မရေးရသေးပါဘူး။ ခရီးသည်ဆီက
+      ငွေဖြတ်တာ အောင်မြင်သွားပါပြီ။ ဒါပေမဲ့ လက်မှတ် ထုတ်တဲ့ အဆင့်မှာ error တက်ပါတယ်။
+      [[mark:q-a]] ချက်ချင်း ငွေပြန်အမ်းပြီး ဝယ်ယူမှုကို ဖျက်မလား။
+      [[mark:q-b]] ဒါမှမဟုတ် လက်မှတ် ထုတ်တာကို ထပ်ကြိုးစားမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ လက်မှတ် ထုတ်တာကို အရင် ထပ်ကြိုးစားတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ခရီးသည် လိုချင်တာက ငွေပြန်ရဖို့ မဟုတ်ဘဲ လက်မှတ်ပါ။ ငွေလည်း ရပြီး၊ ခုံလည်း
+      ကိုင်ထားပြီးသားမို့၊ ကျန်တာက ခရီးဖော် ဘက်က အလုပ်ပဲ ရှိပါတော့တယ်။ ပြန်ဆုတ်မယ့်အစား ရှေ့ကို ဆက်တွန်းတာပါ။
+      [[mark:q-then]] အကြိမ် အနည်းငယ် ကြိုးစားလို့မှ မရတော့မှသာ ငွေပြန်အမ်းပါတယ်။ compensation က နောက်ဆုံး ရွေးစရာပါ။
+      ပထမ ရွေးစရာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-then,
+          type: whiteboard.apply,
+          at: { mark: q-then },
+          upsertIds: [q-then],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn-row]] ဒီ အဖြေကို table ထဲ ဖြည့်လိုက်ပါမယ်။
+      [[mark:type-paid]] ငွေချေပြီး state မှာ ပျက်ရင် ငါးခါအထိ ထပ်ကြိုးစားပြီး၊ မရမှ ငွေပြန်အမ်းပါမယ်။ ထပ်ကြိုးစားတဲ့အခါ
+      လက်မှတ် နှစ်စောင် မထွက်အောင်၊ လက်မှတ် ထုတ်တဲ့ဘက်က ဝယ်ယူမှု နံပါတ် တူရင် တစ်ခါပဲ ထုတ်ပေးရပါမယ်။
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာ service တစ်ခုထက် ပိုပြီး ဖြတ်ရတဲ့ အလုပ် တစ်ခုကို ရွေးပါ။
+      order တင်တာ၊ ငွေလွှဲတာ၊ account ဖွင့်တာမျိုးပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် project အတွက်
+      အဲဒီ အလုပ်ရဲ့ state တွေကို ရေးကြည့်ပါ။
+      [[mark:turn-2]] state တစ်ခုစီမှာ ပျက်ရင် ဘာလုပ်မလဲ ဆိုတဲ့ column ကို ကွက်လပ် မထားပါနဲ့။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn-row }, open: false }
+      - id: type-paid
+        type: editor.type
+        at: { mark: type-paid }
+        cadence: line-by-line
+        target: { file: notebook/39-purchase-saga.md, after: "10 မိနစ် ပြည့်ရင် ခုံ လွှတ် |\n" }
+        text: "| PAID (ငွေချေပြီး) | လက်မှတ် ထုတ် → TICKETED | 5 ခါ ထပ်ကြိုးစား၊ မရမှ ငွေပြန်အမ်း |\n"
+      - id: expect-paid
+        type: expect.file
+        at: { afterAction: type-paid }
+        path: notebook/39-purchase-saga.md
+        contains: "| PAID (ငွေချေပြီး) | လက်မှတ် ထုတ် → TICKETED | 5 ခါ ထပ်ကြိုးစား၊ မရမှ ငွေပြန်အမ်း |\n"
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 9000 }
+        target: { file: notebook/39-purchase-saga.md, text: "| State | နောက် ဘာဖြစ်မလဲ | ပျက်ရင် |" }
+      - id: sel-fail-col
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/39-purchase-saga.md, text: "ပျက်ရင် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ service အများကြီးကို ဖြတ်တဲ့ အလုပ်မှာ transaction တစ်ခုတည်း မရှိတော့ပါဘူး။
+      အဖြေကို စောင့်မလား၊ အတူ မှန်ရမလား၊ ဘယ်သူ ညွှန်ကြားမလဲ ဆိုတဲ့ ရွေးချယ်မှု သုံးခုက တစ်ခုကို တစ်ခု
+      ဆွဲနေတာမို့ အတူ ရွေးရပါတယ်။ ပြန်ဖျက်တာက အခမဲ့ မဟုတ်တဲ့အတွက်၊ state တွေကို အတိအလင်း ရေးပြီး ရှေ့ကို
+      ဆက်တွန်းတာက များသောအားဖြင့် ပိုသင့်တော်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ service တွေကြားမှာ code နဲ့ လုပ်ဆောင်ချက်ကို မျှသုံးမလား၊ ကူးယူမလား ဆိုတဲ့
+      reuse ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/39-purchase-saga.md, text: "# လက်မှတ် ဝယ်ယူမှု saga" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
