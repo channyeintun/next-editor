@@ -1,0 +1,622 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-48-risk
+  title: "Architect Path 48: Risk ကို မြင်အောင် ကြည့်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/48-risk.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/48-risk.md: |
+        # သင်္ကြန် မတိုင်ခင် risk အကဲဖြတ်ချက်
+
+        မေးခွန်း: ဒီနှစ် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့မှာ ဘယ်နေရာက အရင် ပျက်နိုင်လဲ?
+        အမှတ်: 1 = နိမ့်၊ 2 = အလယ်၊ 3 = မြင့် · Risk = Impact × Likelihood
+
+        | Part | Characteristic | Impact | Likelihood | Risk | Mitigation |
+        |---|---|---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the risk grid: impact rises upward, likelihood to the right. The
+    # red corner is where to act first; orange marks the unknown (Search and the
+    # direction it moved since last year).
+    - { id: g-up, kind: freedraw, stroke: arrow-up, x: 392, y: 225, width: 30, height: 330 }
+    - { id: g-up-l, kind: text, x: 270, y: 228, width: 110, height: 35, text: "ထိခိုက်မှု", fontSize: 28 }
+    - { id: g-right, kind: freedraw, stroke: arrow-right, x: 430, y: 566, width: 660, height: 30 }
+    - {
+        id: g-right-l,
+        kind: text,
+        x: 925,
+        y: 600,
+        width: 170,
+        height: 35,
+        text: "ဖြစ်နိုင်ခြေ",
+        fontSize: 28,
+      }
+    - { id: g-outer, kind: rectangle, x: 430, y: 225, width: 660, height: 330 }
+    - { id: g-row, kind: rectangle, x: 430, y: 335, width: 660, height: 110 }
+    - { id: g-col, kind: rectangle, x: 650, y: 225, width: 220, height: 330 }
+    - {
+        id: g-hot,
+        kind: rectangle,
+        x: 870,
+        y: 225,
+        width: 220,
+        height: 110,
+        strokeColor: "#e03131",
+        backgroundColor: "#ffc9c9",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-booking,
+        kind: text,
+        x: 450,
+        y: 262,
+        width: 130,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-notif,
+        kind: text,
+        x: 880,
+        y: 482,
+        width: 205,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    - { id: c-was, kind: ellipse, x: 662, y: 360, width: 130, height: 60, strokeStyle: dashed }
+    - {
+        id: c-was-l,
+        kind: text,
+        align: center,
+        x: 662,
+        y: 372,
+        width: 130,
+        height: 35,
+        text: "မနှစ်က",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 803,
+        y: 370,
+        width: 88,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-search,
+        kind: text,
+        x: 902,
+        y: 372,
+        width: 110,
+        height: 35,
+        text: "Search",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the group session and the quiz: six people rate one item silently;
+    # white question and options, red the one rating that differs, green the
+    # answer, orange what that person knew.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 720,
+        height: 45,
+        text: "တစ်ယောက်ချင်း တိတ်တိတ် အမှတ်ပေး",
+        fontSize: 36,
+      }
+    - {
+        id: z-item,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 420,
+        height: 35,
+        text: "wallet API ရဲ့ ဖြစ်နိုင်ခြေ",
+        fontSize: 28,
+      }
+    - { id: z-v1, kind: text, x: 290, y: 295, width: 60, height: 35, text: "နိမ့်", fontSize: 28 }
+    - { id: z-v2, kind: text, x: 400, y: 295, width: 60, height: 35, text: "နိမ့်", fontSize: 28 }
+    - { id: z-v3, kind: text, x: 510, y: 295, width: 60, height: 35, text: "နိမ့်", fontSize: 28 }
+    - { id: z-v4, kind: text, x: 620, y: 295, width: 60, height: 35, text: "နိမ့်", fontSize: 28 }
+    - { id: z-v5, kind: text, x: 730, y: 295, width: 60, height: 35, text: "နိမ့်", fontSize: 28 }
+    - {
+        id: z-v6,
+        kind: text,
+        x: 850,
+        y: 295,
+        width: 70,
+        height: 35,
+        text: "မြင့်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 365,
+        width: 700,
+        height: 35,
+        text: "က) ပျမ်းမျှ ယူပြီး နိမ့်လို့ မှတ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 700,
+        height: 35,
+        text: "ခ) မြင့် ပေးသူကို ဘာကြောင့်လဲ မေး",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 435,
+        width: 430,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 745,
+        y: 423,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-know,
+        kind: text,
+        x: 290,
+        y: 510,
+        width: 620,
+        height: 35,
+        text: "သူ သိတာ: wallet က request ကန့်သတ်ထား",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: z-nine,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 460,
+        height: 35,
+        text: "ထိခိုက်မှု 3 × ဖြစ်နိုင်ခြေ 3 = 9",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8148
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ဘယ်နေရာက အရင် ပျက်မလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဆုံးဖြတ်ချက် တစ်ခုကို ဘာကြောင့်လဲ ဆိုတာနဲ့အတူ architecture decision record ထဲမှာ
+      ရေးမှတ်ထားပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီနေ့ကတော့ သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းမယ့်နေ့ကို ခြောက်ပတ်ပဲ လိုပါတော့တယ်။ CTO ဖြစ်တဲ့
+      အောင်အောင် က အစည်းအဝေးမှာ မေးခွန်း တစ်ခု ယူလာပါတယ်။
+      [[mark:sel-question]] ဒီနှစ်မှာ system ရဲ့ ဘယ်နေရာက အရင်ဆုံး ပျက်နိုင်လဲ တဲ့။ အဖြေတွေကတော့ တစ်ယောက်
+      တစ်မျိုးပါ။ တစ်ယောက်က database ကို စိုးရိမ်တယ်၊ တစ်ယောက်က မနှစ်က အဆင်ပြေခဲ့တာပဲလို့ ပြောတယ်၊
+      နောက်တစ်ယောက်ကတော့ နေရာတိုင်းမှာ အန္တရာယ် ရှိတယ်လို့ ဆိုပါတယ်။
+      [[mark:n-compare]] လူတိုင်းမှာ အမြင် ရှိပေမဲ့၊ တစ်ယောက်ရဲ့ စိုးရိမ်တယ် ဆိုတာနဲ့ နောက်တစ်ယောက်ရဲ့
+      စိုးရိမ်တယ် ဆိုတာကို နှိုင်းယှဉ်လို့ မရပါဘူး။ နှိုင်းလို့ မရတော့ ကျန်တဲ့ ခြောက်ပတ်ကို ဘယ်နေရာမှာ သုံးရမလဲ
+      ဆိုတာလည်း မဆုံးဖြတ်နိုင်ပါဘူး။ ဒါကြောင့် risk ကို လူတိုင်း တူတူ မြင်နိုင်တဲ့ ပုံစံ တစ်ခုနဲ့ ချကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/48-risk.md,
+        }
+      - id: sel-question
+        type: editor.select
+        at: { mark: sel-question }
+        target:
+          { file: notebook/48-risk.md, text: "မေးခွန်း: ဒီနှစ် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့မှာ ဘယ်နေရာက အရင် ပျက်နိုင်လဲ?" }
+
+  - id: matrix
+    chapter: ထိခိုက်မှုနဲ့ ဖြစ်နိုင်ခြေ
+    narration: >
+      [[mark:m-open]] risk ဆိုတာ မေးခွန်း နှစ်ခုရဲ့ အဖြေကို ပေါင်းထားတာပါ။ မှားသွားရင် ဘယ်လောက် ထိခိုက်မလဲ၊
+      ဖြစ်နိုင်ခြေကကော ဘယ်လောက် ရှိလဲ ဆိုတာပါ။ ထိခိုက်မှုကို ခရီးသည်နဲ့ ကားလိုင်းတွေအပေါ် ကျမယ့် ဆုံးရှုံးမှုနဲ့
+      တိုင်းပါတယ်။ ဖြစ်နိုင်ခြေကိုတော့ အရင်က ဘယ်နှခါ ဖြစ်ဖူးလဲ၊ ဘာတွေ ကာထားပြီးပြီလဲ ဆိုတာနဲ့ ခန့်မှန်းပါတယ်။
+      [[mark:m-grid]] နှစ်ခုလုံးကို နိမ့်၊ အလယ်၊ မြင့် ဆိုပြီး သုံးဆင့်ပဲ ခွဲပါမယ်။ ဒီထက် အသေးစိတ် ခွဲလည်း
+      ခန့်မှန်းချက်က ပိုတိကျလာဖို့ မသေချာပါဘူး။ အပေါ်ဘက် ရောက်လေ ထိခိုက်မှု ကြီးလေ၊ ညာဘက် ရောက်လေ ဖြစ်နိုင်ခြေ
+      များလေပါ။
+      [[mark:m-hot]] ဆိုတော့ ထိခိုက်မှုရော ဖြစ်နိုင်ခြေပါ မြင့်တဲ့ ထောင့်ကို ရောက်တဲ့ risk တွေက အရင်ဆုံး ကိုင်တွယ်ရမယ့်
+      risk တွေပါ။
+      [[mark:m-parts]] သတိထားရမှာက system တစ်ခုလုံးကို တစ်ခါတည်း အမှတ်မပေးတာပါ။ တစ်ခုလုံးအတွက် ပေးတဲ့
+      အမှတ်က ဘာလုပ်ရမလဲ မပြောပြနိုင်ပါဘူး။ အပိုင်း တစ်ခုစီကို၊ အဲဒီအပိုင်းအတွက် အရေးကြီးတဲ့ architecture
+      characteristic၊ ဆိုလိုတာက ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ ဆိုတဲ့ အရည်အသွေး တစ်ခုချင်းနဲ့ တွဲပြီး
+      အမှတ်ပေးရပါတယ်။
+      [[mark:m-booking]] ဥပမာ Booking အတွက် အရေးကြီးဆုံးက data မမှားဖို့ပါ။ ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ ရောင်းမိရင်
+      ထိခိုက်မှုက မြင့်ပါတယ်။ ဒါပေမဲ့ database constraint နဲ့ ကာထားပြီး test လည်း ရှိတာမို့ ဖြစ်နိုင်ခြေက
+      နိမ့်ပါတယ်။
+      [[mark:m-notif]] Notification ကတော့ ပြောင်းပြန်ပါ။ peak တိုင်း SMS တွေ နောက်ကျတတ်တာမို့ ဖြစ်နိုင်ခြေက
+      မြင့်ပေမဲ့၊ လက်မှတ်က app ထဲမှာ ရှိပြီးသားမို့ ထိခိုက်မှုက နိမ့်ပါတယ်။
+      [[mark:m-two]] ဒီ နှစ်ခုကို စိုးရိမ်ရတယ် ဆိုတဲ့ စကားလုံး တစ်လုံးတည်းနဲ့ ပြောရင် အတူတူလို့ ထင်ရပါတယ်။
+      ကွက်ထဲ ချကြည့်မှ တစ်ခုက ဖြစ်ခဲပေမဲ့ ဖြစ်ရင် ကြီးတယ်၊ နောက်တစ်ခုက ခဏခဏ ဖြစ်ပေမဲ့ သေးတယ် ဆိုတာ
+      ပေါ်လာတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-axes,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          open: true,
+          upsertIds: [g-up, g-up-l, g-right, g-right-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-grid,
+          type: whiteboard.apply,
+          at: { mark: m-grid },
+          upsertIds: [g-outer, g-row, g-col],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-hot,
+          type: whiteboard.apply,
+          at: { mark: m-hot },
+          upsertIds: [g-hot],
+          drawMs: 800,
+        }
+      - {
+          id: draw-booking,
+          type: whiteboard.apply,
+          at: { mark: m-booking, offsetMs: 4500 },
+          upsertIds: [c-booking],
+          drawMs: 700,
+        }
+      - {
+          id: draw-notif,
+          type: whiteboard.apply,
+          at: { mark: m-notif, offsetMs: 2500 },
+          upsertIds: [c-notif],
+          drawMs: 800,
+        }
+
+  - id: unknown
+    chapter: မစမ်းရသေးတာကို မြင့်လို့ ယူခြင်း
+    narration: >
+      [[mark:u-search]] Search ကို ကြည့်ရအောင်။ Search အတွက် အရေးကြီးတာက ရုတ်တရက် တက်လာတဲ့ load ကို
+      ချက်ချင်း လိုက်နိုင်တဲ့ elasticity ပါ။ မနှစ်ကတော့ ထိခိုက်မှုရော ဖြစ်နိုင်ခြေပါ အလယ်အလတ်မို့ အလယ်ကွက်မှာ
+      ရှိခဲ့ပါတယ်။
+      [[mark:u-new]] ဒီနှစ်မှာ Search team က ခရီးစဉ် ရှာတဲ့ index ကို နည်းပညာ အသစ် တစ်ခုနဲ့ ပြောင်းထားပါတယ်။
+      ပုံမှန်နေ့တွေမှာ ပိုမြန်လာပေမဲ့၊ သင်္ကြန် peak ကိုတော့ တစ်ခါမှ မဖြတ်ဖူးသေးပါဘူး။ ပုံမှန်နေ့မှာ မြန်တာက peak
+      မှာ ခံနိုင်တယ်လို့ မဆိုလိုပါဘူး။ မစမ်းရသေးတဲ့ နည်းပညာအတွက် ဖြစ်နိုင်ခြေကို မသိဘူးလို့ ချန်မထားဘဲ၊ သက်သေ
+      မပြနိုင်သေးသမျှ မြင့်တယ်လို့ပဲ ယူရပါတယ်။
+      [[mark:u-dir]] ဒီမြားကလည်း အရေးကြီးပါတယ်။ risk တစ်ခုရဲ့ အခု အမှတ်တင် မကဘဲ၊ တက်နေတာလား ကျနေတာလား
+      ဆိုတဲ့ ဦးတည်ရာကပါ ဘယ်ကို အရင် ကြည့်ရမလဲ ပြောပြနေတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-was,
+          type: whiteboard.apply,
+          at: { mark: u-search, offsetMs: 8500 },
+          upsertIds: [c-was, c-was-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-search,
+          type: whiteboard.apply,
+          at: { mark: u-new },
+          upsertIds: [c-arrow, c-search],
+          drawMs: 1200,
+        }
+      - {
+          id: point-arrow,
+          type: whiteboard.point,
+          at: { mark: u-dir },
+          target: { assetId: c-arrow },
+        }
+
+  - id: session
+    chapter: တစ်ယောက်တည်း မမြင်နိုင်တာ
+    narration: >
+      ဒီ အမှတ်တွေကို ကိုယ် တစ်ယောက်တည်း ထိုင်ပေးလို့တော့ မရပါဘူး။ architect တစ်ယောက်က system ရဲ့
+      အပိုင်းတိုင်းကို နီးနီးကပ်ကပ် မသိနိုင်လို့ပါ။
+      [[mark:s-book]] Booking ရဲ့ ဖြစ်နိုင်ခြေကို အမှန်ဆုံး ခန့်မှန်းနိုင်တာက Booking team lead မောင်မောင် ပါ။
+      [[mark:s-search]] index အသစ်ရဲ့ အားနည်းချက်ကိုတော့ Search team က ပိုသိပါတယ်။
+      [[mark:s-six]] ဒါကြောင့် ကိုယ်၊ architect နောက်တစ်ယောက်၊ မောင်မောင်၊ Search team lead၊ Payment team က
+      developer တစ်ယောက်နဲ့ operations engineer တစ်ယောက်၊ စုစုပေါင်း ခြောက်ယောက် ထိုင်ကြပါတယ်။
+      [[mark:s-silent]] ပထမ အဆင့်မှာ ဘယ်သူမှ စကားမပြောဘဲ၊ တစ်ယောက်ချင်း ကိုယ့် အမှတ်ကို ကိုယ် ရေးပါတယ်။
+      အရင် ဆွေးနွေးလိုက်ရင် ရာထူးကြီးသူ၊ အသံကျယ်သူရဲ့ အမှတ်နောက်ကို ကျန်တဲ့သူတွေ လိုက်သွားတတ်လို့ပါ။
+      ပြီးမှ အမှတ်တွေကို ဘေးချင်းယှဉ် ကြည့်ပါတယ်။ အများစုမှာတော့ အမှတ်တွေက တူကြပါတယ်။
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ wallet ကုမ္ပဏီရဲ့ payment API နဲ့ ချိတ်ထားတဲ့ အပိုင်းအတွက်
+      ဖြစ်နိုင်ခြေကို ငါးယောက်က နိမ့်လို့ ပေးပြီး၊ တစ်ယောက်တည်းက မြင့်လို့ ပေးထားပါတယ်။
+      [[mark:quiz-a]] ပထမ နည်းက အများစုအတိုင်း ပျမ်းမျှယူပြီး နိမ့်လို့ မှတ်လိုက်တာပါ။
+      [[mark:quiz-b]] ဒုတိယ နည်းက မြင့်လို့ ပေးတဲ့ တစ်ယောက်ကို ဘာကြောင့်လဲ မေးတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ တစ်ယောက်တည်း ကွဲထွက်နေတဲ့ အမှတ်က
+      မှားနေတာ မဟုတ်ဘဲ၊ ကျန်တဲ့သူတွေ မသိတာ တစ်ခုခုကို သူ သိနေတာ ဖြစ်နိုင်လို့ပါ။
+      [[mark:quiz-know]] မြင့်လို့ ပေးခဲ့တာက Payment team က developer ပါ။ wallet ကုမ္ပဏီက တစ်မိနစ်ကို လက်ခံမယ့်
+      request အရေအတွက်ကို ပြီးခဲ့တဲ့လကစပြီး ကန့်သတ်လိုက်တာကို သူ တစ်ယောက်တည်း သိထားတာပါ။ peak မှာ အဲဒီ
+      ကန့်သတ်ချက်ကို ကျော်မှာ သေချာသလောက်ပါပဲ။
+      [[mark:quiz-nine]] ငွေချေလို့ မရရင် လက်မှတ် ရောင်းလို့ မရတော့တာမို့ ထိခိုက်မှုကလည်း မြင့်ပါတယ်။
+      ပျမ်းမျှယူလိုက်ရင် ဒီ risk က စာရင်းထဲကနေ ပျောက်သွားမှာပါ။ ဒီလို အတူ ထိုင်ပြီး အမှတ်ပေးတာရဲ့ တန်ဖိုးက
+      အမှတ်တွေ တူတဲ့နေရာမှာ မဟုတ်ဘဲ၊ ကွဲတဲ့နေရာမှာ ရှိတာပါ။ ဒါကြောင့် architect တွေချည်း မဟုတ်ဘဲ၊ အဲဒီ အပိုင်းကို နေ့စဉ်
+      ကိုင်တွယ်နေတဲ့ developer တွေပါ ပါမှ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: point-booking,
+          type: whiteboard.point,
+          at: { mark: s-book },
+          target: { assetId: c-booking },
+        }
+      - {
+          id: point-search,
+          type: whiteboard.point,
+          at: { mark: s-search },
+          target: { assetId: c-search },
+        }
+      - {
+          id: draw-silent,
+          type: whiteboard.apply,
+          at: { mark: s-silent },
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          upsertIds: [z-item],
+          drawMs: 900,
+        }
+      - {
+          id: draw-votes,
+          type: whiteboard.apply,
+          at: { mark: quiz, offsetMs: 5500 },
+          upsertIds: [z-v1, z-v2, z-v3, z-v4, z-v5, z-v6],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [z-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-know,
+          type: whiteboard.apply,
+          at: { mark: quiz-know, offsetMs: 3500 },
+          upsertIds: [z-know],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-nine,
+          type: whiteboard.apply,
+          at: { mark: quiz-nine },
+          upsertIds: [z-nine],
+          drawMs: 1200,
+        }
+
+  - id: table
+    chapter: လျှော့ချမလား၊ လက်ခံမလား
+    narration: >
+      [[mark:t-close]] အမှတ်တွေ ရပြီဆိုရင် တစ်ခုချင်းအတွက် ဘာလုပ်မလဲ ဆုံးဖြတ်ရပါမယ်။ အဓိက ရွေးစရာ
+      နှစ်မျိုး ရှိပါတယ်။ design ကို ပြောင်းတာ၊ စမ်းသပ်ပြီး သက်သေပြတာလို နည်းတွေနဲ့ risk ကို လျှော့ချတာရယ်၊ လက်ခံပြီး လက်ခံတယ်လို့ ပွင့်ပွင့်လင်းလင်း
+      ပြောထားတာရယ်ပါ။
+      [[mark:t-scale]] table ထဲမှာတော့ နိမ့်ကို တစ်၊ အလယ်ကို နှစ်၊ မြင့်ကို သုံးလို့ ရေးပြီး၊ နှစ်ခုကို
+      မြှောက်ထားပါတယ်။
+      [[mark:t-booking]] Booking ရဲ့ အမှတ်က သုံးပဲ ရှိတာမို့ အသစ် ဘာမှ မလုပ်ပါဘူး။ ရှိပြီးသား constraint နဲ့
+      test ကို ဆက်ထားရုံပါ။
+      [[mark:t-search]] Search ကတော့ ခြောက်ပါ။ ဒီအတွက် design ကို မပြောင်းသေးဘဲ၊ peak အတိုင်း load test
+      လုပ်ပြီး သက်သေပြပါမယ်။ အောင်ရင် ဖြစ်နိုင်ခြေ ကျသွားမှာပါ။ မအောင်ရင်လည်း ပြင်ဖို့ အချိန် ကျန်ပါသေးတယ်။
+      [[mark:t-notif]] Notification ကိုတော့ လက်ခံပါမယ်။ SMS နောက်ကျတာကို ပြင်ဖို့ ကုန်မယ့် အားက ရမယ့်
+      အကျိုးထက် များလို့ပါ။ ဒါပေမဲ့ တိတ်တိတ်လေး လက်ခံတာ မဟုတ်ဘဲ၊ စာရင်းထဲမှာ ရေးပြီး product manager
+      လှလှ ကိုလည်း ကြိုပြောထားပါမယ်။
+      [[mark:t-payment]] Payment က ကိုးနဲ့ အမြင့်ဆုံးမို့၊ ဒီမှာတော့ design ကို ပြောင်းရပါမယ်။ ကုမ္ပဏီ စခါစတုန်းက ဒုတိယ wallet တစ်ခုနဲ့
+      ဆွေးနွေးခဲ့ပေမဲ့ သဘောတူညီချက် မရခဲ့လို့၊ ခရီးဖော် က အခုထိ wallet ကုမ္ပဏီ တစ်ခုတည်းနဲ့ပဲ ချိတ်ထားတာပါ။
+      ဒါကြောင့် ပထမဆုံး ထွက်လာတဲ့
+      အကြံက wallet ကုမ္ပဏီ နောက်တစ်ခုကို သင်္ကြန် မတိုင်ခင် ထပ်ချိတ်ဖို့ပါ။ ဒါပေမဲ့ team နှစ်ခုကို
+      သင်္ကြန်အထိ တစ်ချိန်လုံး သုံးရမှာ ဖြစ်ပြီး၊ အချိန်မီမယ်လို့လည်း မသေချာတာမို့ အောင်အောင် က
+      လက်မခံနိုင်ပါဘူး။
+      [[mark:t-negotiate]] risk ကို လျှော့ချတဲ့ စရိတ်ကလည်း တခြား အရာတွေလိုပဲ ညှိနှိုင်းရတာပါ။ နောက်ဆုံး
+      သဘောတူလိုက်တာက wallet ကုမ္ပဏီနဲ့ အဲဒီနေ့အတွက် ကန့်သတ်ချက်ကို တိုးပေးဖို့ ညှိမယ်၊ ကိုယ့်ဘက်ကလည်း
+      ငွေချေတဲ့ request တွေကို queue ထဲမှာ တန်းစီပြီး ကန့်သတ်ချက်အောက်မှာပဲ ပို့မယ် ဆိုတာပါ။ လူ သုံးယောက်နဲ့
+      နှစ်ပတ်လောက်ပဲ ကုန်မှာမို့ စရိတ်က အများကြီး သက်သာပြီး၊ risk ကိုလည်း လုံလောက်အောင် လျှော့ချပေးနိုင်မယ်လို့ ယူဆပါတယ်။
+      [[mark:r-again]] ဒီ table ကို တစ်ခါ ရေးပြီး သိမ်းထားလိုက်ဖို့ မဟုတ်ပါဘူး။ နှစ်ပတ်ကြာရင် ဒီ ခြောက်ယောက်
+      ပြန်ထိုင်ပြီး အမှတ်တွေကို ပြန်ပေးပါမယ်။ Search ရဲ့ load test အောင်ပြီလား၊ Payment က ကိုးကနေ ကျလာပြီလား
+      ဆိုတာ အဲဒီမှာ ပေါ်လာမှာပါ။ မကျဘဲ တက်လာတဲ့ risk ကို တွေ့ရင်၊ အဲဒါက ကျန်တဲ့ အချိန်ကို သုံးရမယ့်
+      နေရာပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: notebook/48-risk.md,
+        }
+      - id: sel-scale
+        type: editor.select
+        at: { mark: t-scale }
+        target:
+          {
+            file: notebook/48-risk.md,
+            text: "အမှတ်: 1 = နိမ့်၊ 2 = အလယ်၊ 3 = မြင့် · Risk = Impact × Likelihood",
+          }
+      - id: type-booking
+        type: editor.type
+        at: { mark: t-booking }
+        cadence: line-by-line
+        target: { file: notebook/48-risk.md, after: "|---|---|---|---|---|---|\n" }
+        text: "| Booking | data integrity | 3 | 1 | 3 | ရှိပြီးသား constraint နဲ့ test ကို ဆက်ထား |\n"
+      - id: type-search
+        type: editor.type
+        at: { mark: t-search }
+        cadence: line-by-line
+        target: { file: notebook/48-risk.md, after: "test ကို ဆက်ထား |\n" }
+        text: "| Search | elasticity | 2 | 3 | 6 | peak load test နဲ့ သက်သေပြ (index အသစ်) |\n"
+      - id: type-notif
+        type: editor.type
+        at: { mark: t-notif }
+        cadence: line-by-line
+        target: { file: notebook/48-risk.md, after: "(index အသစ်) |\n" }
+        text: "| Notification | performance | 1 | 3 | 3 | လက်ခံတယ်: SMS နောက်ကျနိုင်၊ လက်မှတ်က app ထဲမှာ ရှိ |\n"
+      - id: type-payment
+        type: editor.type
+        at: { mark: t-payment }
+        cadence: line-by-line
+        target: { file: notebook/48-risk.md, after: "app ထဲမှာ ရှိ |\n" }
+        text: "| Payment | availability | 3 | 3 | 9 | "
+      - id: type-payment-fix
+        type: editor.type
+        at: { mark: t-negotiate, offsetMs: 6000 }
+        cadence: line-by-line
+        target: { file: notebook/48-risk.md, after: "| Payment | availability | 3 | 3 | 9 | " }
+        text: "wallet limit တိုးဖို့ ညှိ၊ request တွေကို queue နဲ့ တန်းစီ |\n"
+      - id: expect-payment
+        type: expect.file
+        at: { afterAction: type-payment-fix }
+        path: notebook/48-risk.md
+        contains: "| Payment | availability | 3 | 3 | 9 | wallet limit တိုးဖို့ ညှိ၊ request တွေကို queue နဲ့ တန်းစီ |\n"
+      - id: type-again
+        type: editor.type
+        at: { mark: r-again }
+        cadence: line-by-line
+        target: { file: notebook/48-risk.md, after: "queue နဲ့ တန်းစီ |\n" }
+        text: "\nနောက်တစ်ခါ: 2 ပတ်အကြာ ပြန်ပေးမယ်။ အမှတ် တက်နေလား၊ ကျနေလား ကြည့်မယ်\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ အန္တရာယ်
+      အများဆုံးလို့ ထင်တဲ့ အပိုင်း သုံးခုကို ရေးကြည့်ပါ။ အပိုင်း တစ်ခုစီအတွက် characteristic တစ်ခုကို ရွေးပြီး၊
+      ထိခိုက်မှုနဲ့ ဖြစ်နိုင်ခြေကို တစ်ကနေ သုံးအထိ ပေးပါ။
+      [[mark:turn-2]] ပြီးရင် အဲဒီ အပိုင်းတွေကို နေ့စဉ် ကိုင်တွယ်နေတဲ့ လူတစ်ယောက်ကိုလည်း သီးခြား
+      ပေးခိုင်းကြည့်ပါ။ အမှတ် ကွဲတဲ့နေရာ တွေ့ရင် စကားပြောစရာ တစ်ခု ရပါပြီ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2500 }
+        target:
+          {
+            file: notebook/48-risk.md,
+            text: "| Part | Characteristic | Impact | Likelihood | Risk | Mitigation |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ risk ဆိုတာ ထိခိုက်မှုနဲ့ ဖြစ်နိုင်ခြေကို တွဲကြည့်တာပါ။ system တစ်ခုလုံးကို မဟုတ်ဘဲ၊
+      အပိုင်း တစ်ခုစီကို characteristic တစ်ခုချင်းနဲ့ တွဲပြီး အကဲဖြတ်ရပါတယ်။ မစမ်းရသေးတဲ့ နည်းပညာကို
+      မြင့်တယ်လို့ ယူပါ။
+      [[mark:recap-2]] တစ်ယောက်တည်း မပေးဘဲ အဖွဲ့လိုက် ပေးပြီး၊ အမှတ် ကွဲတဲ့နေရာမှာ မေးပါ။ ပြီးရင်
+      လျှော့ချမလား၊ လက်ခံမလား ဆုံးဖြတ်ပြီး ပုံမှန် ပြန်စစ်ပါ။ ဒါဆို ဘယ်နေရာက အရင် ပျက်မလဲ ဆိုတဲ့ မေးခွန်းကို
+      ထင်မြင်ချက်နဲ့ မဟုတ်ဘဲ၊ နှိုင်းယှဉ်လို့ရတဲ့ အမှတ်တွေနဲ့ ဖြေနိုင်ပါပြီ။
+      [[mark:next]] risk တွေကို တွေ့ပြီဆိုရင် တခြားသူတွေ နားလည်အောင် ပြဖို့ လိုလာပါတယ်။ နောက် lesson မှာတော့
+      architecture ကို diagram နဲ့ ဘယ်လို ဆွဲပြီး ဘယ်လို တင်ပြမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
