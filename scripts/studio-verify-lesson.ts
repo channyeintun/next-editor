@@ -1039,6 +1039,9 @@ async function verifyLesson(lessonPath: string, options: Options): Promise<Lesso
     // Not this verifier's concern: the render's own gates check these.
     moveCursor: async () => skip("pointer moves are not checked"),
     pointConsole: async () => skip("console actions are not checked"),
+    pointPreview: async () => skip("pointer moves are not checked"),
+    pointSlide: async () => skip("pointer moves are not checked"),
+    pointWhiteboard: async () => skip("pointer moves are not checked"),
     runWorkspace: async () => skip("console runs are not checked"),
     waitForOutput: async () => skip("console output is not checked"),
     collapseRuntimeDock: async () => skip("dock state is not checked"),

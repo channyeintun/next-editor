@@ -4,11 +4,12 @@ import YAML from "yaml";
 import { describe, expect, it } from "vite-plus/test";
 import { canonicalJson } from "../hash";
 import { parseStudioPlan } from "../plan";
-import { estimateAlignment, sceneStartMs } from "./alignment";
+import { POINTER_AIM_MAX_MS } from "../../core/src/utils/pointerMotion";
+import { estimateAlignment, markerTimeMs, sceneStartMs } from "./alignment";
 import { CompileError, compileLessonScript, type CompileInput } from "./compile";
 import { splitIntoDialogs } from "./dialogs";
 import { LEXICON_V1, speechTextOf, spokenFormOf } from "./lexicon";
-import { extractScriptNarration } from "./markers";
+import { extractScriptNarration, requireMarker } from "./markers";
 import { scheduleDialogs } from "./schedule";
 import { parseLessonScript, type LessonScript } from "./schema";
 
@@ -1035,5 +1036,91 @@ describe("lessonScriptSchema", () => {
     expect(parseLessonScript(raw).build.seed).toBe(0x7fffffff);
     raw.build.seed = 0x80000000;
     expect(() => parseLessonScript(raw)).toThrow(/build\.seed: must be at most 2147483647/);
+  });
+});
+
+describe("point actions", () => {
+  function tourRaw() {
+    return YAML.parse(readFileSync(TOUR_PATH, "utf8"));
+  }
+
+  /** The tour with a whiteboard.point at cube-box on the board-label mark, the label drawn after it. */
+  function tourWithBoardPoint() {
+    const raw = tourRaw();
+    const actions = raw.scenes[1].actions;
+    actions.splice(1, 0, {
+      id: "point-box",
+      type: "whiteboard.point",
+      at: { mark: "board-label" },
+      target: { assetId: "cube-box" },
+    });
+    actions[2].at = { afterAction: "point-box" };
+    return raw;
+  }
+
+  it("compiles a whiteboard.point at a drawn asset with its travel budget at its mark", () => {
+    const input = scheduledInputFor(parseLessonScript(tourWithBoardPoint()));
+    const { plan } = compileLessonScript(input);
+
+    const point = plan.actions.find((action) => action.id === "point-box");
+    expect(point).toMatchObject({
+      type: "whiteboard.point",
+      target: { assetId: "cube-box" },
+      durationMs: POINTER_AIM_MAX_MS,
+    });
+    expect(point?.at).toBe(
+      markerTimeMs(input.alignment, requireMarker(input.extracted, "board-label")),
+    );
+    // A gesture of its own: no derived click precedes it.
+    expect(plan.actions.some((action) => action.id === "cursor-point-box")).toBe(false);
+  });
+
+  it("compiles a slide.point after a slide.show with its target and travel budget", () => {
+    const raw = tourRaw();
+    raw.scenes[0].actions.splice(1, 0, {
+      id: "point-intro",
+      type: "slide.point",
+      at: { mark: "slide" },
+      target: { x: 0.25, y: 0.5 },
+    });
+    const { plan } = compileLessonScript(scheduledInputFor(parseLessonScript(raw)));
+
+    expect(plan.actions.find((action) => action.id === "point-intro")).toMatchObject({
+      type: "slide.point",
+      target: { x: 0.25, y: 0.5 },
+      durationMs: POINTER_AIM_MAX_MS,
+    });
+  });
+
+  it("rejects a slide.point target outside the slide or with an unknown key", () => {
+    for (const [target, message] of [
+      [{ x: 1.2, y: 0.5 }, /actions\.1\.target\.x: /],
+      [{ x: 0.1, y: 0.1, z: 1 }, /actions\.1\.target: Unrecognized key: "z"/],
+    ] as const) {
+      const raw = tourRaw();
+      raw.scenes[0].actions.splice(1, 0, {
+        id: "point-intro",
+        type: "slide.point",
+        at: { mark: "slide" },
+        target,
+      });
+      expect(() => parseLessonScript(raw)).toThrow(message);
+    }
+  });
+
+  it("rejects a whiteboard.point at an asset the lesson does not declare, naming it", () => {
+    const raw = tourWithBoardPoint();
+    raw.scenes[1].actions[1].target.assetId = "ghost-asset";
+    expect(() => parseLessonScript(raw)).toThrow(/ghost-asset/);
+  });
+
+  // The Performer runs strictly sequentially, so an action planned inside a
+  // point's travel would start late and fail the timing gate.
+  it("treats a point's travel as busy time", () => {
+    const raw = tourWithBoardPoint();
+    raw.scenes[1].actions[2].at = { mark: "board-label", offsetMs: 300 };
+    const compile = () => compileLessonScript(scheduledInputFor(parseLessonScript(raw)));
+    expect(compile).toThrow(CompileError);
+    expect(compile).toThrow(/Pointing action/);
   });
 });

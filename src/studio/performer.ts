@@ -114,10 +114,28 @@ export async function invokeAction(
         command: { type: "route", route: action.route },
         timeoutMs: action.timeoutMs,
       });
+    case "preview.point":
+      return driver.pointPreview({
+        target: action.target,
+        durationMs: action.durationMs,
+        timeoutMs: action.timeoutMs,
+      });
     case "slide.show":
       return driver.showSlide({ slideId: action.slideId, maximized: action.maximized });
     case "slide.close":
       return driver.closeSlide();
+    case "slide.point":
+      return driver.pointSlide({
+        target: action.target,
+        durationMs: action.durationMs,
+        timeoutMs: action.timeoutMs,
+      });
+    case "whiteboard.point":
+      return driver.pointWhiteboard({
+        target: action.target,
+        durationMs: action.durationMs,
+        timeoutMs: action.timeoutMs,
+      });
     case "whiteboard.apply":
       return driver.applyWhiteboard({
         open: action.open,
@@ -153,8 +171,8 @@ async function invokeWithDeadline(
   driver: StudioDriver,
   signal: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  // Typing spends its planned chunk delays, a select its drag-glide, a console
-  // point its travel and a drawn whiteboard apply its frames before
+  // Typing spends its planned chunk delays, a select its drag-glide, a point
+  // its travel and a drawn whiteboard apply its frames before
   // acknowledging; expect/run actions own their internal waits. The outer
   // deadline covers the whole command either way.
   const deadlineMs = action.timeoutMs + planActionBusyMs(action);
@@ -234,6 +252,8 @@ export function actionAwaitsRuntimeStart(action: StudioPlanAction): boolean {
     case "preview.input":
     case "preview.scroll":
     case "preview.route":
+    // Asks the preview bridge where the element is.
+    case "preview.point":
     case "expect.preview":
       return true;
     // Aiming at a preview element asks the preview bridge where it is.
@@ -249,7 +269,9 @@ export function actionAwaitsRuntimeStart(action: StudioPlanAction): boolean {
     case "editor.select":
     case "slide.show":
     case "slide.close":
+    case "slide.point":
     case "whiteboard.apply":
+    case "whiteboard.point":
     case "expect.file":
       return false;
   }

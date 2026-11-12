@@ -239,14 +239,13 @@ export function compileLessonScript({
             : select;
         }
         case "console.point":
-          return {
-            id: action.id,
-            type: action.type,
-            at,
-            timeoutMs: action.timeoutMs,
-            target: action.target,
-            durationMs: pointDurationOf(action),
-          };
+        case "preview.point":
+        case "slide.point":
+        case "whiteboard.point": {
+          // A point carries its authored target as it is, plus its travel budget.
+          const { at: _anchor, ...fields } = action;
+          return { ...fields, at, durationMs: pointDurationOf(action) };
+        }
         default: {
           // Every other action carries its authored fields into the plan as
           // they are; only the narration anchor becomes an absolute time.

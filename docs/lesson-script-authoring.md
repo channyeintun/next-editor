@@ -166,8 +166,10 @@ exits 1 on an error: a compile failure at any rate, a Burmese dialog over the
 2,000 characters VoxCPM2 speaks per request, pale whiteboard ink, or a label
 under 28px. Warnings are advisory — fix each one or keep it on purpose: a long
 dialog, a Burmese dialog that stops mid-clause instead of at `။` or `၊`,
-code-like characters in narration, a box outside the visible area, or a board
-whose shapes share one colour.
+code-like characters in narration, a box outside the visible area, a board
+whose shapes share one colour, a slide that stays up more than 8 seconds with
+no `slide.point` on it, or a preview whose elements the lesson checks but
+never points at (see The pointer).
 
 `studio-verify-lesson` is for WebContainer (Vite) lessons. It replays every
 action in plan order through the Performer's own dispatch, against the pinned
@@ -519,10 +521,13 @@ Action catalog:
 | `preview.input`        | `target`, `value`, `retry`                                            | Sets the target's value and emits input/change events through the acknowledged bridge; the pointer clicks into it first.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `preview.scroll`       | `target?`, `top`, `left?`, `retry`                                    | Scrolls the document or a stable target to exact coordinates; `left` defaults to `0`. A `top` past the end of the page scrolls to the end, so `5000` means "the footer" at any preview height; the QA gate accepts a recorded scroll that stopped at the page's end (the recording carries how far the page could scroll). A scroll must still move the page: one to the position it is already at fires no event, and one that falls short of the end does not match.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `preview.route`        | `route`, `retry`                                                      | Navigates to an absolute-path route such as `/done` and acknowledges the resulting location.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `preview.point`        | `target`                                                              | **Points at an element of the running app** while the narration talks about it: the pointer moves to the `data-testid` target and rests, no click. A line of something (a heading, a label, a button, a field) is pointed at from just under the middle of its words, so the words stay readable; a taller region (a card, a list, an image) in its middle. The element must be on screen: one that is hidden or scrolled out of the preview fails the render — put a `preview.scroll` before the point. After `preview.open` only. Its ~0.8 s travel counts as busy time like a select. See The pointer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `expect.preview`       | `target?`, `textContains?`, `value?`, `route?`, `attribute?`, `retry` | Requires a target or route. Text/value/attribute checks require a target. A passing observation is stored in the artifact as a DOM/route checkpoint; a failure aborts and captures a diagnostic screenshot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `slide.show`           | `slideId`, `maximized` (default true)                                 | `slideId` must be in `lesson.slides`. Showing a slide while another is open advances **in place** (like moving to the next slide) — do not `slide.close` between consecutive slides; close only when returning to the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `slide.close`          | —                                                                     |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `slide.point`          | `target: {x, y}`                                                      | **Points at a spot on the slide that is showing**: `x` and `y` are fractions of the slide (0–1 from its left and top edge), so `{ x: 0.5, y: 0.5 }` is its centre. For a deck page laid out in points, divide by the page size (720 × 405 pt for the lesson template): a bullet whose text starts at (80, 190) pt and is 24 pt tall is pointed at from under its first words with `{ x: 0.2, y: 0.54 }`. The arrow's tip is its top-left corner, so aim just **below** the words, never on them. Needs a slide showing (after `slide.show`, before `slide.close`) and no whiteboard open over it. ~0.8 s busy time. See The pointer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `whiteboard.apply`     | `open?`, `maximized?`, `upsertIds: []`, `clear?`, `drawMs?`           | Ids from `lesson.whiteboardAssets`. Must open/close, clear, or upsert ≥1 asset (checked when the script is parsed). Never set `maximized: true`: lessons use the default board panel only (see Whiteboard assets). `drawMs` draws the upserts in instead of applying them at once, and `clear` wipes the board first (both under Whiteboard assets); `drawMs` must be under the action's `timeoutMs` and at most 6000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `whiteboard.point`     | `target: {assetId}`                                                   | **Points back at something already on the whiteboard**: the pointer moves to the asset and rests with its tip on the middle of the asset's bottom edge — under a label, on the lower border of a box — so nothing is covered. The asset must be on the open board at that moment (drawn by an earlier `whiteboard.apply` and not wiped by a `clear` since); otherwise the compile step fails. ~0.8 s busy time. See The pointer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `expect.output`        | `contains`, `timeoutMs`                                               | QA gate, not lesson content: waits for a console line containing the string; any `[go-run error]` / `[kotlin-run error]` / `[rust-run error]` / `[zig-run error]` / `[haskell-run error]` / `[asm-run error]` line fails it, except the pinned lines of a run the fixture pins to fail. Use with Playground runtimes after `runtime.run`, or with console-only Python after `runtime.start`; it is not a JavaScript/TypeScript preview assertion. In Playground lessons the string must be in the pinned console of the most recent `runtime.run` before it (checked like `console.point`, before any synthesis).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `expect.file`          | `path`, `contains`                                                    | Asserts the final workspace file contains the string.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
@@ -592,10 +597,14 @@ Critical `editor.type` discipline:
 
 ### The pointer
 
-You never author pointer moves; the Director derives them from the actions,
-and they follow one rule: the pointer moves only to do what a hand would do on
-screen. Its motion is modelled on recorded people — straight strokes that leave
-and land at rest, timed by distance, a short rest before every press.
+The pointer does two jobs, and it never moves for any other reason: it
+**operates the app** the way a hand would, and it **shows the learner where to
+look** while the narration explains something. The first you never author; the
+second is four small actions you place at the words they belong to. Its motion
+is modelled on recorded people — straight strokes that leave and land at rest,
+timed by distance, a short rest before every press.
+
+**Derived for you — operating the app**
 
 - **Clicks.** Before `workspace.openFile` (the file's row — none when the file
   is already showing or the explorer starts shut), `runtime.run` (the Run
@@ -616,25 +625,87 @@ and land at rest, timed by distance, a short rest before every press.
   narration leaves the output. A `console.point` after the select needs a new
   run first.
 - A click needs at least **550 ms** clear before its action: after the previous
-  action's start (of any type) and after any typing, select drag or whiteboard
-  drawing ends, whichever is later. With less, the Director skips the click and
-  warns; the action itself still runs.
+  action's start (of any type) and after any typing, select drag, point or
+  whiteboard drawing ends, whichever is later. With less, the Director skips
+  the click and warns; the action itself still runs.
 - A click on a preview element is skipped, never failed, when the element is
   not on screen yet (not mounted, hidden, or scrolled out of view) — the
   authored `preview.click` / `preview.input` stays the check that counts. Guard
   interactions that follow asynchronous UI with an `expect.preview` first.
 - **Drags.** `editor.select` is its own gesture: press on the first character,
   sweep, release, rest (above).
-- **Pointing at output.** `console.point` is the one gesture you author for the
-  pointer itself: when the narration walks through what a run printed, put one
-  at the start of the words about each line ("the first line shows…", "then…")
-  and the pointer moves line to line — tip just past each line's end, nothing
-  covered, no click. Don't point at every word; one point per line you explain.
-  The recorded pointer keeps to the line itself, not a pixel spot, so a viewer
-  whose console fits more or fewer rows still sees it on the right line.
-- **Hands on the keyboard.** The pointer hides while `editor.type` runs and
-  while a slide or whiteboard is up, then reappears exactly where its next
-  gesture starts — it never travels in from a stale spot.
+- **The pen.** While a `whiteboard.apply` draws its assets in (`drawMs`), the
+  pointer is the hand that draws them: it drags a shape out from its corner,
+  traces a stroke, writes text along its line, and rests where the pen lifts
+  (see Drawing a diagram in). You author only the apply.
+
+**Authored by you — showing where to look**
+
+A learner who hears "this value here" with nothing on screen moving has no clue
+which value is meant. Whenever the narration refers to a particular thing on
+screen, point at it, with the point at the mark where the words about it begin:
+
+| the narration talks about…          | action             | target                                         |
+| ----------------------------------- | ------------------ | ---------------------------------------------- |
+| code in the editor                  | `editor.select`    | the exact text (it is highlighted, not edited) |
+| a line the program printed          | `console.point`    | `{ text, occurrence }`                         |
+| something in the running app        | `preview.point`    | `{ by: testId, value }`                        |
+| a part of the slide on screen       | `slide.point`      | `{ x, y }` — fractions of the slide            |
+| something already on the whiteboard | `whiteboard.point` | `{ assetId }`                                  |
+
+```yaml
+- id: point-total
+  type: preview.point
+  at: { mark: total }
+  target: { by: testId, value: cart-total }
+- id: point-second-bullet
+  type: slide.point
+  at: { mark: second-reason }
+  target: { x: 0.2, y: 0.54 }
+- id: point-heap
+  type: whiteboard.point
+  at: { mark: back-to-heap }
+  target: { assetId: heap-box }
+```
+
+- A point is travel and a rest: no click, no highlight. The pointer stays on
+  the thing until the next gesture, so it marks the subject for as long as the
+  narration stays on it.
+- **Point at the thing, once.** One point per thing explained, at the start of
+  the words about it ("the first line shows…", "then…", "this button…"). Do not
+  chase every clause, and never point at something just to keep the pointer
+  moving — a point with no words about its target is noise.
+- **Nothing is covered.** The arrow's tip is its top-left corner and its body
+  hangs down and to the right. `console.point` rests just past the end of the
+  line; `preview.point` and `whiteboard.point` rest just under the middle of
+  the words or on the lower edge of the box; for `slide.point` you choose the
+  spot, so choose one just **below** the words, not on them.
+- **Where the thing must be.** A point at something the viewer cannot see
+  fails: a `console.point` needs the latest run's line on screen with the dock
+  open, a `preview.point` an element that is mounted and in view (scroll
+  first), a `slide.point` a slide showing with no whiteboard over it, a
+  `whiteboard.point` an asset on the open board. The compile step catches the
+  last two and a point before any run or `preview.open`; the rest fail the
+  render with a message that names the fix.
+- **On the whiteboard, point back — not forward.** The pen already leads the
+  eye to what is being drawn. Use `whiteboard.point` when the narration returns
+  to something drawn earlier ("remember this box", "compare it with the one on
+  the left"), and a `freedraw` stroke (`circle`, `underline`) when the emphasis
+  should stay on the board after the pointer has moved on.
+- The recorded pointer keeps to the thing itself, not a pixel spot: a console
+  line, a point of the whiteboard's drawing, a fraction of the slide or the
+  preview. A viewer whose console fits more rows, whose board is a different
+  size, or who pans the board still sees it on the right thing.
+- Each point's ~0.8 s travel counts as busy time, like a select: leave that
+  much before the next action's mark.
+
+**Hands off the mouse**
+
+- The pointer hides while `editor.type` runs, when a slide or the whiteboard
+  opens over what it rested on, when a slide or the board it rested on closes,
+  and when the board changes without the pen (an apply with no `drawMs`, or a
+  `clear`). It reappears exactly where its next gesture starts — it never
+  travels in from a stale spot.
 - **Between gestures.** Playback carries a resting pointer straight to its next
   gesture and lets it settle there briefly before it presses.
 
@@ -705,6 +776,13 @@ repeatability comparison fails loudly rather than shipping a half-updated
 lesson. Keep lesson decks text-only where possible; Google-hosted images go
 through the app's media ingestion path at fetch time.
 
+A slide is a picture to the studio — its words are not text it can find — so a
+`slide.point` names a spot, not a phrase: `target: { x, y }` as fractions of the
+slide. Read the spot off the deck's own layout (a 720 × 405 pt page: `x = pt /
+720`, `y = pt / 405`) and aim just below the words the narration is on. One
+point per bullet as the narration reaches it turns a slide the learner has to
+read alone into one that is read to them.
+
 Deck SVGs embed font data, and painting them briefly stalls the render's
 main thread at each show/close — actions scheduled right next to a
 `slide.show`/`slide.close` can start ~0.4s late. For deck-slide lessons a
@@ -729,8 +807,8 @@ whiteboardAssets:
     }
 ```
 
-Kinds: `rectangle`, `ellipse`, `text`, `freedraw`. Coordinates are canvas
-pixels; keep content roughly within (250,150)–(1100,650) so it is visible
+Kinds: `rectangle`, `ellipse`, `diamond`, `text`, `freedraw`. Coordinates are
+canvas pixels; keep content roughly within (250,150)–(1100,650) so it is visible
 unzoomed.
 
 Never put the board in full-screen mode: leave `maximized` out of every
@@ -748,15 +826,74 @@ violet — which inverts to legible pastels, and give each colour a job: a board
 whose shapes all share one colour reads flat.
 
 A `freedraw` asset is a hand-drawn annotation stroke generated inside its box.
-Pick one with `stroke`: `underline`, `strike`, `circle`, `check`,
-`arrow-right`, or `arrow-down`. Size the box around whatever it annotates —
-`circle` inscribes the box, `underline` runs along its bottom edge. Strokes
-always use the thin pen (stroke width 1, not the authorable field) — freedraw
-renders heavier than a shape outline at the same width, and anything thicker
-reads as a marker blob over the diagram:
+Pick one with `stroke` and size the box around whatever it annotates:
+
+| `stroke`                                                                 | what it draws in the box                                                                                               | use it for                                                 |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `underline`, `double-underline`, `wavy`                                  | a line along the bottom edge — single, there-and-back, or a squiggle                                                   | the term being named; the key one; the one that is wrong   |
+| `strike`, `scribble`                                                     | a line through the middle; a fast zigzag across the whole box                                                          | "not this"; crossed out for good                           |
+| `circle`, `box`                                                          | an ellipse inscribed in the box; a loose hand-drawn frame around it                                                    | one thing singled out; several things that belong together |
+| `check`                                                                  | a tick filling the box                                                                                                 | done, correct                                              |
+| `arrow-right`, `arrow-left`, `arrow-up`, `arrow-down`                    | a straight arrow along the middle of the box, tip in the named direction                                               | a step, a flow, "becomes"                                  |
+| `arrow-up-right`, `arrow-down-right`, `arrow-up-left`, `arrow-down-left` | an arrow across the box's diagonal, tip in the named corner                                                            | linking things that are not on one row or column           |
+| `arrow-arc-right`                                                        | an arrow that leaves the bottom-left corner, bows up to the top edge and lands on the bottom-right corner              | hopping over what lies between two things                  |
+| `arrow-arc-left`                                                         | an arrow that leaves the top-right corner, dips to the bottom edge and lands on the top-left corner                    | going back: a loop, a retry, a return value                |
+| `brace-right`, `brace-left`, `brace-up`, `brace-down`                    | a curly brace spanning the box; its point faces the named direction, so the things it gathers are on the opposite side | "these three together are one X"                           |
+
+Strokes always use the thin pen (stroke width 1, not an authorable field) —
+freedraw renders heavier than a shape outline at the same width, and anything
+thicker reads as a marker blob over the diagram:
 
 ```yaml
 - { id: circle-owner, kind: freedraw, stroke: circle, x: 340, y: 280, width: 240, height: 90 }
+- { id: back-edge, kind: freedraw, stroke: arrow-arc-left, x: 360, y: 430, width: 380, height: 70 }
+- { id: three-fields, kind: freedraw, stroke: brace-right, x: 720, y: 220, width: 36, height: 210 }
+```
+
+Shapes and text take a few optional style fields. Each has one job — use it
+for that job across the lesson, the way colour is used, and leave it out
+otherwise:
+
+| field                                             | applies to                        | default | use it for                                                                                                                                                                                                              |
+| ------------------------------------------------- | --------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rounded: true`                                   | `rectangle`, `diamond`            | `false` | a card or a node that stands alone. Keep the default square corners for boxes drawn edge to edge — array cells, stack frames, table rows — which must meet squarely.                                                    |
+| `strokeStyle: dashed` (or `dotted`)               | `rectangle`, `ellipse`, `diamond` | `solid` | something that is not real yet: a planned step, an optional part, a boundary or a scope rather than a thing.                                                                                                            |
+| `fillStyle: hachure` (or `cross-hatch`, `zigzag`) | shapes with a `backgroundColor`   | `solid` | the one box the board is about. A sketched fill keeps a label inside the shape readable; `solid` is a flat block of colour. Fill colours invert like ink: author mid-tones (`#a5d8ff`, `#b2f2bb`, `#ffec99`).           |
+| `align: center` (or `right`)                      | `text`                            | `left`  | a label inside a shape: give the text the shape's `x` and `width` and it is centred in the shape however wide its glyphs turn out — no guessing its width. Set `y` to the shape's `y + (height − fontSize × 1.25) / 2`. |
+
+```yaml
+- {
+    id: node,
+    kind: rectangle,
+    x: 320,
+    y: 200,
+    width: 260,
+    height: 90,
+    rounded: true,
+    strokeColor: "#1971c2",
+  }
+- {
+    id: node-label,
+    kind: text,
+    align: center,
+    x: 320,
+    y: 227,
+    width: 260,
+    height: 36,
+    text: "Scheduler",
+  }
+- {
+    id: later,
+    kind: rectangle,
+    x: 640,
+    y: 200,
+    width: 260,
+    height: 90,
+    rounded: true,
+    strokeStyle: dashed,
+    strokeColor: "#f08c00",
+  }
+- { id: choice, kind: diamond, x: 420, y: 360, width: 200, height: 120, strokeColor: "#6741d9" }
 ```
 
 ### Drawing a diagram in
@@ -778,6 +915,20 @@ shapes grow from their top-left corner, text types in a character at a time,
 and a `freedraw` stroke traces point by point. The recorded lesson interpolates
 between the recorded steps, so playback is smooth even though the live render
 you watch in Chrome steps at 20 fps.
+
+**The pointer is the pen.** When each asset gets at least **300 ms** of the
+budget (`drawMs ÷ number of ids ≥ 300`), the pointer draws: it presses on the
+shape's corner and drags it out, traces the stroke with the button held, and
+moves along the line as text is written, at a hand's pace — quick off the
+mark, slowing onto the end. Between two assets of the same apply it takes
+150 ms of the second one's share to get there. When the apply ends it rests
+where the pen lifted, and it stays there until the next gesture. With less
+than 300 ms an asset the board is being filled in rather than drawn, and the
+pointer stays out of it.
+
+So budget for the hand: `drawMs: 1200` for two or three assets, `1800`–`2400`
+for four to six. To put a whole finished diagram up at once, leave `drawMs`
+out — then nothing is drawn and no pointer appears.
 
 Use it for the diagram the narration is actively building — the box being
 introduced, the arrow being drawn, the term being circled. A `drawMs` on

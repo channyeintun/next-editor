@@ -7,7 +7,13 @@ import {
   createSeededRandom,
 } from "../cadence";
 import { POINTER_AIM_MAX_MS } from "../../core/src/utils/pointerMotion";
-import { planActionBusyMs, type StudioActionTiming, type TypingChunk } from "../plan";
+import {
+  isPointActionType,
+  planActionBusyMs,
+  type StudioActionTiming,
+  type StudioPointActionType,
+  type TypingChunk,
+} from "../plan";
 import type { LessonScript, ScriptAction } from "./schema";
 
 /**
@@ -78,13 +84,20 @@ export function selectDurationOf(action: ScriptAction, seed: number): number {
   return Math.min(SELECT_DRAG_MAX_MS, Math.round(base + jitter));
 }
 
+export type ScriptPointAction = Extract<ScriptAction, { type: StudioPointActionType }>;
+
+export function isPointAction(action: ScriptAction): action is ScriptPointAction {
+  return isPointActionType(action.type);
+}
+
 /**
- * Travel budget for a `console.point` (0 for any other action): the longest
- * human approach, so the move from wherever the pointer rests — the Run button,
- * the line above — never has to rush. A hop to the next line takes far less.
+ * Travel budget for a point (0 for any other action): the longest human
+ * approach, so the move from wherever the pointer rests — the Run button, the
+ * line above, the far side of the board — never has to rush. A hop to the next
+ * line takes far less.
  */
 export function pointDurationOf(action: ScriptAction): number {
-  return action.type === "console.point" ? POINTER_AIM_MAX_MS : 0;
+  return isPointAction(action) ? POINTER_AIM_MAX_MS : 0;
 }
 
 /**
@@ -99,6 +112,9 @@ function actionTimingOf(action: ScriptAction, seed: number): StudioActionTiming 
     case "editor.select":
       return { type: action.type, durationMs: selectDurationOf(action, seed) };
     case "console.point":
+    case "preview.point":
+    case "slide.point":
+    case "whiteboard.point":
       return { type: action.type, durationMs: pointDurationOf(action) };
     default:
       return action;

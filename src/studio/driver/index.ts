@@ -19,6 +19,8 @@ import type { StudioPreviewCommand } from "../../utils/iframeStudioCommandBridge
 import type {
   ConsoleLineTarget,
   SelectionAnchor,
+  SlidePointTarget,
+  WhiteboardPointTarget,
   StudioRuntime,
   StudioRuntimeMode,
   StudioPreviewTarget,
@@ -117,6 +119,24 @@ export interface StudioDriver {
     command: StudioPreviewCommand;
     timeoutMs: number;
   }): Promise<Record<string, unknown>>;
+  /** Points at an element of the running app and rests there (`preview.point`). */
+  pointPreview(input: {
+    target: StudioPreviewTarget;
+    durationMs: number;
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
+  /** Points at a spot on the slide that is showing (`slide.point`). */
+  pointSlide(input: {
+    target: SlidePointTarget;
+    durationMs: number;
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
+  /** Points at an asset drawn on the whiteboard (`whiteboard.point`). */
+  pointWhiteboard(input: {
+    target: WhiteboardPointTarget;
+    durationMs: number;
+    timeoutMs: number;
+  }): Promise<Record<string, unknown>>;
   expectPreview(input: {
     actionId: string;
     target?: StudioPreviewTarget;
@@ -152,7 +172,7 @@ export function createStudioDriver(deps: StudioDriverDeps): StudioDriver {
     ...editorCommands(deps, pointer),
     moveCursor: (input) => moveCursor(deps, pointer, input),
     ...consoleCommands(deps, pointer),
-    ...webContainerCommands(deps),
+    ...webContainerCommands(deps, pointer),
     ...stageCommands(deps, pointer),
   };
 }

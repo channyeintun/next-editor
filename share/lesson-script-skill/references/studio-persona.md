@@ -103,12 +103,23 @@ plain words — if a phrase would need a dictionary or is an idiom, rewrite it:
   across several — then **rests** while you keep talking about it, modelled on a
   real person's recorded pointer and selection. The pointer only ever moves to
   do something — drag a selection, click a file, Run, the dock's chevron, a
-  preview element — and hides while code is typed or a slide is up. Time the highlight to land as the
+  preview element, draw on the whiteboard — or to show what the words are
+  about, and hides while code is typed. Time the highlight to land as the
   words name the code, and give it a beat to sit before moving on; don't
   re-select on every clause.
 - Point at the output you read: when the narration explains what a run printed,
   `console.point` each line as the words reach it ("the first line… then…"), so
   the eye follows the voice down the console instead of hunting for the line.
+- Point at everything else the same way. A learner who hears "this button", "the
+  second reason" or "that box again" with nothing moving on screen has no clue
+  where to look: `preview.point` the element in the running app, `slide.point`
+  the bullet the narration has reached, `whiteboard.point` the thing drawn
+  earlier that the words return to. One point per thing, where the words about
+  it begin — and none where the words are not about a particular thing.
+- Draw the board, don't paste it: give a diagram enough `drawMs` (300 ms or more
+  per asset) for the pointer to draw it as a pen, in the order the narration
+  builds it, so the board grows with the explanation instead of appearing ahead
+  of it.
 - No fake mistakes unless the lesson explicitly teaches debugging.
 - Every runnable checkpoint must actually run; expected output is asserted, not
   narrated on faith (`expect.output`).

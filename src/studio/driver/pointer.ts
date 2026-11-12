@@ -14,8 +14,9 @@ import { previewAimPoint } from "./webContainer";
 /**
  * The studio pointer: the one place the recorded mouse lives. It owns where
  * the pointer last rested and whether it is hidden, and every domain that
- * moves it (a control click, a drag-select, a console point, a dock change, a
- * slide taking the stage) goes through the controller below.
+ * moves it (a control click, a drag-select, a point at the console, the
+ * preview, a slide or the whiteboard, the pen drawing on the board, a dock
+ * change, a slide taking the stage) goes through the controller below.
  */
 
 // How long a pointer move waits for its control to render (see moveCursor).
@@ -78,9 +79,21 @@ export interface StudioPointer {
   pinToApp(): void;
   /** Dispatch one synthetic pointer sample at (x, y), `buttons` 1 while held. */
   dispatch(x: number, y: number, element: Element, buttons?: number): void;
+  /**
+   * The same sample, dispatched on `element` itself rather than on whatever is
+   * topmost at the point. For a surface that reacts to pointer events of its
+   * own — the whiteboard canvas would take a button-held move as its own
+   * gesture — the sample goes to the surface's container: it is still recorded
+   * against that surface, and nothing inside it hears it.
+   */
+  dispatchOn(x: number, y: number, element: Element, buttons?: number): void;
   isHidden(): boolean;
   /** Where the last sample landed, or null before the first one. */
   lastPoint(): PointerPoint | null;
+  /** Milliseconds since the pointer last moved, appeared or hid (Infinity before the first). */
+  restedMs(): number;
+  /** Hide a pointer that rests inside `surface` (which is about to close or change). */
+  hideOver(surface: Element | null): void;
 }
 
 export function createStudioPointer(): StudioPointer {
@@ -88,15 +101,16 @@ export function createStudioPointer(): StudioPointer {
   // Whether the recorded pointer is hidden right now (mouseTrackingActor records
   // every sample hidden until it is shown again).
   let pointerHidden = false;
+  let lastSampleAt = Number.NEGATIVE_INFINITY;
 
-  const dispatch = (x: number, y: number, element: Element, buttons = 0) => {
+  const dispatchOn = (x: number, y: number, element: Element, buttons = 0) => {
     // Synthetic pointer input rides the exact capture path human input uses:
     // the mouse-tracking actor listens on the document in the capture phase,
     // so dispatching on the element under the point yields target-aware
     // samples (`createCursorPositionFromClientPoint` walks up from `target`).
     // `buttons` is 1 while the button is held — a click's press, or a select
     // drag — and 0 otherwise, so the recorded cursor shows the press.
-    cursorDispatchTarget(x, y, element).dispatchEvent(
+    element.dispatchEvent(
       new PointerEvent("pointermove", {
         clientX: x,
         clientY: y,
@@ -108,7 +122,11 @@ export function createStudioPointer(): StudioPointer {
       }),
     );
     lastCursorPoint = { x, y };
+    lastSampleAt = performance.now();
   };
+
+  const dispatch = (x: number, y: number, element: Element, buttons = 0) =>
+    dispatchOn(x, y, cursorDispatchTarget(x, y, element), buttons);
 
   // Hands off the mouse. The pointer disappears where it rests — at the start,
   // before it has anything to point at; while typing, as the OS hides it; under
@@ -122,6 +140,16 @@ export function createStudioPointer(): StudioPointer {
     };
     dispatchRecordedCursorVisibility({ x: at.x, y: at.y, visible: false });
     pointerHidden = true;
+    lastSampleAt = performance.now();
+  };
+
+  const hideOver = (surface: Element | null) => {
+    if (pointerHidden || !lastCursorPoint || !surface) return;
+    const rect = surface.getBoundingClientRect();
+    const { x, y } = lastCursorPoint;
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      hide();
+    }
   };
 
   // A hidden pointer never travels: it reappears on the spot its next gesture
@@ -131,6 +159,7 @@ export function createStudioPointer(): StudioPointer {
     dispatchRecordedCursorVisibility({ x: point.x, y: point.y, visible: true });
     pointerHidden = false;
     lastCursorPoint = point;
+    lastSampleAt = performance.now();
   };
 
   // Pin a resting pointer to the app itself just before the layout under it
@@ -164,9 +193,68 @@ export function createStudioPointer(): StudioPointer {
     revealAt,
     pinToApp,
     dispatch,
+    dispatchOn,
     isHidden: () => pointerHidden,
     lastPoint: () => lastCursorPoint,
+    restedMs: () => performance.now() - lastSampleAt,
+    hideOver,
   };
+}
+
+/**
+ * The point gesture every surface shares (a console line, a preview element,
+ * a spot on a slide, an asset on the whiteboard): the pointer goes to `aim`
+ * and rests. No click — it points. A hidden pointer appears on the spot, since
+ * a hidden pointer never travels; a visible one makes the straight, eased move
+ * a hand makes toward a target, for the time its distance needs and never
+ * longer than `durationMs`.
+ *
+ * `aim` is read again on every step, so a target that is still settling (a
+ * panel sliding open) is followed. `surface` is the element the samples are
+ * recorded against; with `exact` they are dispatched on it directly
+ * (StudioPointer.dispatchOn).
+ */
+export async function pointAndRest(
+  pointer: StudioPointer,
+  {
+    aim,
+    surface,
+    durationMs,
+    signal,
+    exact = false,
+  }: {
+    aim: () => PointerPoint;
+    surface: Element;
+    durationMs: number;
+    signal: AbortSignal;
+    exact?: boolean;
+  },
+): Promise<{ travelMs: number }> {
+  const send = exact ? pointer.dispatchOn : pointer.dispatch;
+  const from = pointer.isHidden() ? null : pointer.lastPoint();
+  if (!from) {
+    const at = roundPoint(aim());
+    pointer.revealAt(at);
+    // The reveal's own sample is placed by plain hit-testing, which can find
+    // an overlay outside the recorded app; record the rest again through the
+    // surface so it is anchored to what is pointed at, as every move is.
+    send(at.x, at.y, surface);
+    return { travelMs: 0 };
+  }
+  const first = aim();
+  const travelMs = Math.min(
+    durationMs,
+    pointerAimDurationMs(Math.hypot(first.x - from.x, first.y - from.y)),
+  );
+  await tween(travelMs, easePointerAim, signal, (eased) => {
+    const to = aim();
+    send(
+      Math.round(from.x + (to.x - from.x) * eased),
+      Math.round(from.y + (to.y - from.y) * eased),
+      surface,
+    );
+  });
+  return { travelMs };
 }
 
 export async function moveCursor(

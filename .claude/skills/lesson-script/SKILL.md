@@ -39,10 +39,24 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
      Only the console's last 6 rows are on screen (output + the exit line), so
      point at the last 5 output lines at most; points must follow a run while
      the dock is open.
-   - Never author pointer moves: the Director derives a click on the file row,
-     Run button / dock chevron and preview element before the actions that use
-     them, and the pointer hides while typing or under a slide — see "The
+   - Show the learner where to look. Whenever the narration refers to a
+     particular thing on screen, point at it at the mark where those words begin:
+     `editor.select` for code, `console.point` for a printed line,
+     `preview.point` for an element of the running app (`target: { by: testId,
+     value }`), `slide.point` for a spot on the slide (`target: { x, y }`,
+     fractions of the slide — aim just below the words), `whiteboard.point` for
+     something drawn earlier (`target: { assetId }`). One point per thing
+     explained; never point just to keep the pointer moving.
+   - Never author any other pointer move: the Director derives a click on the
+     file row, Run button / dock chevron and preview element before the actions
+     that use them, the pointer is the pen while a `whiteboard.apply` draws
+     (`drawMs` ≥ 300 ms per asset), and it hides while typing — see "The
      pointer" in the authoring reference.
+   - Draw boards a hand could draw: budget `drawMs` at 300 ms or more per asset,
+     centre labels in their shapes with `align: center`, and use the stroke
+     vocabulary (arrows in every direction, arc arrows, braces, `box`, `wavy`)
+     and the style fields (`rounded`, `strokeStyle: dashed`, `fillStyle:
+     hachure`) each for one job — see "Whiteboard assets".
    - Never put the whiteboard in full-screen mode: leave `maximized` out of
      every `whiteboard.apply` (the default board panel is the only one lessons
      use; a maximized board looks bad in the recorded lesson).

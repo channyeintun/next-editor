@@ -30,6 +30,14 @@ export const STUDIO_DOCK_TOGGLE_TARGET_ID = "runtime-dock-toggle";
 const PREVIEW_FRAME_SELECTOR = '[data-cursor-replay-target="preview-frame"]';
 
 /**
+ * The slide on screen: the box a deck page is scaled to fill, which is what a
+ * `slide.point`'s fractions are fractions of. Null while no slide is showing.
+ */
+export function resolveSlideSurface(): Element | null {
+  return document.querySelector('[data-cursor-replay-target="slide-content"]');
+}
+
+/**
  * A runner dock container's target id, named after its console's scroll
  * surface ("go-runner" → "go-runner-dock"). The pointer clicks the Run button
  * or the dock's chevron rather than the dock itself (the middle of a dock is

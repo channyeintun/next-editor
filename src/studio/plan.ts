@@ -135,8 +135,8 @@ export type TypingChunk = z.infer<typeof typingChunkSchema>;
  *
  * Only the nested objects come in: the script passes `.strict()` variants, so
  * a typo inside an authored target still fails, while the plan keeps zod's
- * default. `editor.type`, `editor.select` and `console.point` are not here —
- * the author writes a target the compiler turns into a different plan payload.
+ * default. `editor.type`, `editor.select` and the point actions are not here —
+ * the author writes a target, and the compiler adds the materialized timing.
  */
 export function studioActionFieldShapes<
   Retry extends z.ZodType<StudioRetryPolicy>,
@@ -296,6 +296,36 @@ const consolePointActionSchema = planActionBase.extend({
   durationMs: positiveMs,
 });
 
+/** A spot on the slide that is showing, as fractions of its width and height. */
+export const slidePointTargetSchema = z.object({
+  x: z.number().finite().min(0).max(1),
+  y: z.number().finite().min(0).max(1),
+});
+export type SlidePointTarget = z.infer<typeof slidePointTargetSchema>;
+
+/** An asset on the whiteboard, by its id in `whiteboardAssets`. */
+export const whiteboardPointTargetSchema = z.object({ assetId: z.string().min(1) });
+export type WhiteboardPointTarget = z.infer<typeof whiteboardPointTargetSchema>;
+
+const previewPointActionSchema = planActionBase.extend({
+  type: z.literal("preview.point"),
+  target: studioPreviewTargetSchema,
+  /** Travel budget toward the element, as for `console.point`. */
+  durationMs: positiveMs,
+});
+
+const slidePointActionSchema = planActionBase.extend({
+  type: z.literal("slide.point"),
+  target: slidePointTargetSchema,
+  durationMs: positiveMs,
+});
+
+const whiteboardPointActionSchema = planActionBase.extend({
+  type: z.literal("whiteboard.point"),
+  target: whiteboardPointTargetSchema,
+  durationMs: positiveMs,
+});
+
 const editorSelectActionSchema = planActionBase.extend({
   type: z.literal("editor.select"),
   path: z.string().min(1),
@@ -406,9 +436,12 @@ export const studioPlanActionSchema = z.discriminatedUnion("type", [
   previewInputActionSchema,
   previewScrollActionSchema,
   previewRouteActionSchema,
+  previewPointActionSchema,
   slideShowActionSchema,
   slideCloseActionSchema,
+  slidePointActionSchema,
   whiteboardApplyActionSchema,
+  whiteboardPointActionSchema,
   expectOutputActionSchema,
   expectFileActionSchema,
   expectPreviewActionSchema,
@@ -421,14 +454,33 @@ export type StudioPlanActionType = StudioPlanAction["type"];
  * plan action is one; the Director builds one from a script action's
  * materialized chunks/durations (script/actionTiming.ts) before the plan exists.
  */
+/**
+ * The gestures an author writes for the pointer itself: it travels to what the
+ * narration is about — a line of output, an element in the preview, a spot on
+ * a slide, an asset on the whiteboard — and rests there. No click.
+ */
+export const STUDIO_POINT_ACTION_TYPES = [
+  "console.point",
+  "preview.point",
+  "slide.point",
+  "whiteboard.point",
+] as const;
+export type StudioPointActionType = (typeof STUDIO_POINT_ACTION_TYPES)[number];
+
+const POINT_ACTION_TYPES: ReadonlySet<string> = new Set(STUDIO_POINT_ACTION_TYPES);
+
+export function isPointActionType(type: string): type is StudioPointActionType {
+  return POINT_ACTION_TYPES.has(type);
+}
+
 export type StudioActionTiming =
   | { type: "editor.type"; chunks: readonly TypingChunk[] }
-  | { type: "editor.select" | "console.point"; durationMs: number }
+  | { type: "editor.select" | StudioPointActionType; durationMs: number }
   | { type: "whiteboard.apply"; upsertIds: readonly string[]; drawMs: number }
   | {
       type: Exclude<
         StudioPlanActionType,
-        "editor.type" | "editor.select" | "console.point" | "whiteboard.apply"
+        "editor.type" | "editor.select" | StudioPointActionType | "whiteboard.apply"
       >;
     };
 
@@ -446,6 +498,9 @@ export function planActionBusyMs(action: StudioActionTiming): number {
       return totalTypingDurationMs(action.chunks);
     case "editor.select":
     case "console.point":
+    case "preview.point":
+    case "slide.point":
+    case "whiteboard.point":
       return action.durationMs;
     case "whiteboard.apply":
       return whiteboardDrawDurationMs(action.upsertIds.length, action.drawMs);
@@ -1037,6 +1092,8 @@ function planPinnedReferences(action: StudioPlanAction): PinnedReference[] {
         kind: "whiteboard-asset",
         value: assetId,
       }));
+    case "whiteboard.point":
+      return [{ id: action.id, kind: "whiteboard-asset", value: action.target.assetId }];
     default:
       return [];
   }
@@ -1158,7 +1215,7 @@ export const studioPlanSchema = z
             ? "Typing"
             : action.type === "editor.select"
               ? "Selection"
-              : action.type === "console.point"
+              : isPointActionType(action.type)
                 ? "Pointing"
                 : "Whiteboard drawing";
         ctx.addIssue({

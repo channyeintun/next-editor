@@ -74,10 +74,15 @@ export interface PointerChoreography {
   warnings: string[];
 }
 
-/** What is on screen for the pointer to click, as the lesson's actions change it. */
+/** What is on screen for the pointer to click or point at, as the lesson's actions change it. */
 interface PointerUiState {
   activeFile: string;
   dockOpen: boolean;
+  slideShowing: boolean;
+  boardOpen: boolean;
+  /** Ids of the assets on the whiteboard (closing the board keeps them; `clear` removes them). */
+  boardAssets: Set<string>;
+  previewOpen: boolean;
 }
 
 /**
@@ -128,6 +133,46 @@ function advancePointerUiState(action: ScriptAction, ui: PointerUiState): void {
     ui.dockOpen = true;
   } else if (action.type === "runtime.collapseDock") {
     ui.dockOpen = false;
+  } else if (action.type === "slide.show") {
+    ui.slideShowing = true;
+  } else if (action.type === "slide.close") {
+    ui.slideShowing = false;
+  } else if (action.type === "preview.open") {
+    ui.previewOpen = true;
+  } else if (action.type === "whiteboard.apply") {
+    if (action.clear) ui.boardAssets.clear();
+    for (const assetId of action.upsertIds) ui.boardAssets.add(assetId);
+    ui.boardOpen = action.open ?? ui.boardOpen;
+  }
+}
+
+/**
+ * Why a point has nothing on screen to land on at its moment in the lesson, or
+ * null when it has. A point at something the viewer cannot see teaches
+ * nothing, and the render would only find out mid-recording.
+ */
+function pointTargetIssue(action: ScriptAction, ui: PointerUiState): string | null {
+  switch (action.type) {
+    case "slide.point":
+      if (!ui.slideShowing) {
+        return `slide.point "${action.id}" points at a slide while none is showing — put it after the slide.show and before the slide.close`;
+      }
+      return ui.boardOpen
+        ? `slide.point "${action.id}" points at a slide while the whiteboard is open over it — close the board first (whiteboard.apply with open: false)`
+        : null;
+    case "whiteboard.point":
+      if (!ui.boardOpen) {
+        return `whiteboard.point "${action.id}" points at the whiteboard while it is closed — put it after the whiteboard.apply that opens the board and before the one that closes it`;
+      }
+      return ui.boardAssets.has(action.target.assetId)
+        ? null
+        : `whiteboard.point "${action.id}" points at "${action.target.assetId}", which is not on the board at that moment — draw it with a whiteboard.apply first (a clear: true since then wiped it)`;
+    case "preview.point":
+      return ui.previewOpen
+        ? null
+        : `preview.point "${action.id}" comes before the lesson's preview.open — there is no preview on screen to point at yet`;
+    default:
+      return null;
   }
 }
 
@@ -135,9 +180,11 @@ function advancePointerUiState(action: ScriptAction, ui: PointerUiState): void {
  * Derive the click before every action that has a control on screen, the dock
  * opening before a run whose dock is shut, and the dock closing before a
  * select while it is open. A click that has no room is
- * skipped with a warning; a `console.point` with no output to land on, or with
- * the dock shut, is a CompileError, as is an edit to a file that is not open
- * or an `expect.output` before the first run.
+ * skipped with a warning; a point with nothing on screen to land on (a
+ * `console.point` with no output or with the dock shut, a `slide.point` with no
+ * slide showing, a `whiteboard.point` at an asset that is not on the open
+ * board, a `preview.point` before the preview opens) is a CompileError, as is
+ * an edit to a file that is not open or an `expect.output` before the first run.
  */
 export function planPointerChoreography({
   script,
@@ -152,6 +199,10 @@ export function planPointerChoreography({
     activeFile: script.lesson.workspace.entryFilePath,
     // A lesson with no runtime renders no dock at all.
     dockOpen: script.runtime.kind !== "none" && !runtimeDockStartsCollapsed(script.runtime),
+    slideShowing: false,
+    boardOpen: false,
+    boardAssets: new Set(),
+    previewOpen: false,
   };
   let lastBusyUntilMs = 0;
   let prevAuthoredAtMs = 0;
@@ -232,6 +283,10 @@ export function planPointerChoreography({
           `console.point "${entry.action.id}" points at the console while the runner dock is shut — move it before the runtime.collapseDock or editor.select that shuts it, or run again first`,
         );
       }
+    }
+    const pointIssue = pointTargetIssue(entry.action, ui);
+    if (pointIssue) {
+      throw new CompileError(pointIssue);
     }
     if (entry.action.type === runActionType) {
       hasRunOutput = true;

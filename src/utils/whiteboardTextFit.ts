@@ -54,7 +54,8 @@ export type MeasureTextLine = (font: string, line: string) => number | null;
 let measureContext: CanvasRenderingContext2D | null | undefined;
 const lineWidths = new Map<string, number>();
 
-const measureLineWithCanvas: MeasureTextLine = (font, line) => {
+/** Measures with a 2D canvas, which is how Excalidraw sizes the text it draws. */
+export const measureLineWithCanvas: MeasureTextLine = (font, line) => {
   if (measureContext === undefined) {
     try {
       measureContext = document.createElement("canvas").getContext("2d");

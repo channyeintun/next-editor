@@ -1,6 +1,8 @@
 import * as z from "zod";
 import {
   consoleLineTargetSchema as planConsoleLineTargetSchema,
+  slidePointTargetSchema as planSlidePointTargetSchema,
+  whiteboardPointTargetSchema as planWhiteboardPointTargetSchema,
   studioActionFieldShapes,
   studioActionTimeoutMsSchema,
   studioPreviewAttributeSchema as planPreviewAttributeSchema,
@@ -175,6 +177,26 @@ const scriptConsolePointSchema = scriptActionBase.extend({
   target: planConsoleLineTargetSchema.strict(),
 });
 
+// The other three points work the same way on their own surfaces: the pointer
+// travels to what the narration is about and rests there, with no click.
+// An element of the running app, by its data-testid.
+const scriptPreviewPointSchema = scriptActionBase.extend({
+  type: z.literal("preview.point"),
+  target: studioPreviewTargetSchema,
+});
+
+// A spot on the slide that is showing, as fractions of its width and height.
+const scriptSlidePointSchema = scriptActionBase.extend({
+  type: z.literal("slide.point"),
+  target: planSlidePointTargetSchema.strict(),
+});
+
+// An asset already drawn on the whiteboard.
+const scriptWhiteboardPointSchema = scriptActionBase.extend({
+  type: z.literal("whiteboard.point"),
+  target: planWhiteboardPointTargetSchema.strict(),
+});
+
 const scriptRuntimeRunSchema = scriptActionBase.extend({
   type: z.literal("runtime.run"),
   ...fields["runtime.run"],
@@ -266,9 +288,12 @@ const scriptActionSchema = z.discriminatedUnion("type", [
   scriptPreviewInputSchema,
   scriptPreviewScrollSchema,
   scriptPreviewRouteSchema,
+  scriptPreviewPointSchema,
   scriptSlideShowSchema,
   scriptSlideCloseSchema,
+  scriptSlidePointSchema,
   scriptWhiteboardApplySchema,
+  scriptWhiteboardPointSchema,
   scriptExpectOutputSchema,
   scriptExpectFileSchema,
   scriptExpectPreviewSchema,
@@ -294,6 +319,8 @@ function scriptPinnedReferences(action: ScriptAction): PinnedReference[] {
         kind: "whiteboard-asset",
         value: assetId,
       }));
+    case "whiteboard.point":
+      return [{ id: action.id, kind: "whiteboard-asset", value: action.target.assetId }];
     default:
       return [];
   }

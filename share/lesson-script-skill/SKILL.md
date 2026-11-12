@@ -44,6 +44,21 @@ Read, entirely and in order, before writing:
      then let it sit.
    - End insertions that sit in front of existing code with `\n` — the
      performer presses Enter first so existing code moves down naturally.
+   - Show the learner where to look. Whenever the narration refers to a
+     particular thing on screen, point at it at the mark where those words
+     begin: `editor.select` for code, `console.point` for a printed line,
+     `preview.point` for an element of the running app (`target: { by: testId,
+     value }`), `slide.point` for a spot on the slide (`target: { x, y }`,
+     fractions of the slide — aim just below the words), `whiteboard.point` for
+     something drawn earlier (`target: { assetId }`). One point per thing
+     explained; never point just to keep the pointer moving. Every other
+     pointer move is derived for you — see "The pointer" in the reference.
+   - Draw boards a hand could draw: budget `drawMs` at 300 ms or more per
+     asset so the pointer draws them as the pen, centre labels in their shapes
+     with `align: center`, and use the stroke vocabulary (arrows in every
+     direction, arc arrows, braces, `box`, `wavy`) and the style fields
+     (`rounded`, `strokeStyle: dashed`, `fillStyle: hachure`) each for one job
+     — see "Whiteboard assets".
    - Never put the whiteboard in full-screen mode: leave `maximized` out of
      every `whiteboard.apply` (the default board panel is the only one lessons
      use; a maximized board looks bad in the recorded lesson).

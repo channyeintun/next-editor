@@ -1,12 +1,11 @@
 import type { Terminal } from "@xterm/xterm";
-import { easePointerAim, pointerAimDurationMs } from "../../core/src/utils/pointerMotion";
 import { getXtermTerminal } from "../../components/xtermRegistry";
 import {
   appendRunnerConsoleLines,
   beginRunnerOperation,
 } from "../../runtime/playgroundConsoleStore";
 import { selectIsCollapsed } from "../../stores/runtimePanelStore";
-import { StudioActionError, tween, waitUntil } from "../async";
+import { StudioActionError, waitUntil } from "../async";
 import { consoleLineAimPoint, findConsoleLine, type ConsoleLineLookup } from "../consoleLines";
 import {
   PlaygroundTerminalError,
@@ -17,7 +16,7 @@ import { pinnedFailureConsoleLines } from "../fixtureConsoleLines";
 import { runOutcomeIssue } from "../fixtureRuns";
 import { isPlaygroundRuntime, isPlaygroundRuntimeKind } from "../plan";
 import type { StudioDriver, StudioDriverDeps } from "./index";
-import { isCoveredAt, roundPoint, type StudioPointer } from "./pointer";
+import { isCoveredAt, pointAndRest, roundPoint, type StudioPointer } from "./pointer";
 
 /**
  * The runner dock and its console: a Playground run, pointing at a printed
@@ -145,27 +144,12 @@ export function consoleCommands(
         throw new StudioActionError(`The ${described} is covered on screen`);
       }
 
-      // A hidden pointer appears at the line; a visible one travels there the
-      // way it does toward a control — no click: it points, then rests.
-      const from = pointer.isHidden() ? null : pointer.lastPoint();
-      const travelMs = from
-        ? Math.min(durationMs, pointerAimDurationMs(Math.hypot(aim.x - from.x, aim.y - from.y)))
-        : 0;
-      if (!from) {
-        pointer.revealAt(aim);
-        // The reveal's own sample is placed by plain hit-testing, which can find
-        // an overlay outside the recorded app; record the rest again through
-        // the console so it is anchored to the line, as every move is.
-        pointer.dispatch(aim.x, aim.y, container);
-      } else {
-        await tween(travelMs, easePointerAim, signal, (eased) => {
-          pointer.dispatch(
-            Math.round(from.x + (aim.x - from.x) * eased),
-            Math.round(from.y + (aim.y - from.y) * eased),
-            container,
-          );
-        });
-      }
+      const { travelMs } = await pointAndRest(pointer, {
+        aim: () => aim,
+        surface: container,
+        durationMs,
+        signal,
+      });
       return { line: visible.line.text, travelMs };
     },
 

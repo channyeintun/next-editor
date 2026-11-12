@@ -1,10 +1,15 @@
 import type { WebContainerRuntimeRecordingSnapshot } from "../../contexts/WebContainerRuntimeContext";
-import type { StudioPreviewCommandResult } from "../../utils/iframeStudioCommandBridge";
+import type {
+  StudioPreviewCommandResult,
+  StudioPreviewTargetBox,
+} from "../../utils/iframeStudioCommandBridge";
 import { StudioActionError, abortableSleep, throwIfAborted, waitUntil } from "../async";
 import type { StudioRuntime } from "../plan";
 import { previewCommandTarget, previewExpectationMismatches } from "../previewExpectation";
 import { runtimeStartIsOneShotRun } from "../runtimeContract";
+import { resolveStudioTarget } from "../targets";
 import type { StudioDriver, StudioDriverDeps } from "./index";
+import { isCoveredAt, pointAndRest, roundPoint, type StudioPointer } from "./pointer";
 import { RECORDER_ASSIGNS_TIMESTAMP } from "./recorderTimestamp";
 
 /**
@@ -82,14 +87,54 @@ export async function previewAimPoint(
   };
 }
 
+// An element at most this tall is a line of something — a heading, a label, a
+// button, a field — and is pointed at from underneath. Taller, it is a region
+// (a card, a list, an image), and the pointer goes to the middle of it.
+const PREVIEW_LINE_MAX_HEIGHT_PX = 64;
+
+// How long a preview.point waits between looks for an element that is not
+// mounted yet.
+const PREVIEW_POINT_RETRY_MS = 100;
+
+/**
+ * Where the pointer rests to point at a preview element (`preview.point`), in
+ * the preview's own viewport, or null when none of the element is on screen.
+ *
+ * The arrow's tip is its top-left corner and its body hangs down and to the
+ * right, so a line is pointed at from just under the middle of its words: the
+ * words stay readable. A region taller than a line is pointed at in the middle
+ * of the part of it that is in view.
+ */
+export function previewPointAim(box: StudioPreviewTargetBox): { x: number; y: number } | null {
+  const content = box.content ?? box;
+  const left = Math.max(0, content.left);
+  const top = Math.max(0, content.top);
+  const right = Math.min(box.viewportWidth, content.left + content.width);
+  const bottom = Math.min(box.viewportHeight, content.top + content.height);
+  if (right <= left || bottom <= top) {
+    return null;
+  }
+  const x = (left + right) / 2;
+  const under = content.top + content.height + 2;
+  return content.height <= PREVIEW_LINE_MAX_HEIGHT_PX && under <= box.viewportHeight
+    ? { x, y: under }
+    : { x, y: (top + bottom) / 2 };
+}
+
 export function webContainerCommands(
   deps: Pick<
     StudioDriverDeps,
     "runtime" | "webContainerRuntime" | "workspace" | "preview" | "notifyPreviewEvent" | "signal"
   >,
+  pointer: StudioPointer,
 ): Pick<
   StudioDriver,
-  "startRuntime" | "waitForRuntimeReady" | "openPreview" | "executePreviewCommand" | "expectPreview"
+  | "startRuntime"
+  | "waitForRuntimeReady"
+  | "openPreview"
+  | "executePreviewCommand"
+  | "pointPreview"
+  | "expectPreview"
 > {
   const { signal } = deps;
 
@@ -268,6 +313,79 @@ export function webContainerCommands(
       }
       assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
       return { acknowledgement };
+    },
+
+    async pointPreview({ target, durationMs, timeoutMs }) {
+      requireWebContainerRuntime("preview.point");
+      const described = `preview element "${target.value}"`;
+      const deadlineAt = performance.now() + timeoutMs;
+      const remainingMs = () => Math.max(0, deadlineAt - performance.now());
+
+      // The element may not be mounted yet (the app is still rendering what
+      // the narration is about to name), so look until it is or the deadline.
+      let frame: Element | null = null;
+      let box: StudioPreviewTargetBox | undefined;
+      let lookupError: unknown = null;
+      while (box === undefined) {
+        throwIfAborted(signal);
+        assertWebContainerHealthy(deps.webContainerRuntime.getSnapshot());
+        frame = resolveStudioTarget({ kind: "preview", testId: target.value });
+        if (frame) {
+          try {
+            const acknowledgement = await deps.preview.executeCommand(
+              { type: "inspect", target: previewCommandTarget(target) },
+              { timeoutMs: Math.max(1, Math.min(2_000, remainingMs())), signal },
+            );
+            box = acknowledgement.targetBox;
+          } catch (error) {
+            throwIfAborted(signal);
+            lookupError = error;
+          }
+        }
+        if (box === undefined) {
+          if (remainingMs() <= 0) {
+            const cause =
+              lookupError instanceof Error
+                ? lookupError.message
+                : frame
+                  ? "the preview reported no box for it"
+                  : "the preview is not open";
+            throw new StudioActionError(
+              `The ${described} could not be found within ${timeoutMs}ms: ${cause}`,
+            );
+          }
+          await abortableSleep(Math.min(PREVIEW_POINT_RETRY_MS, remainingMs()), signal);
+        }
+      }
+
+      const inFrame = previewPointAim(box);
+      if (!frame || !inFrame) {
+        // Pointing at something the viewer cannot see teaches nothing, so this
+        // fails the render rather than skipping, the way a console line that
+        // scrolled away does.
+        throw new StudioActionError(
+          `The ${described} is hidden or scrolled out of the preview's view — add a preview.scroll before the point so it is on screen`,
+        );
+      }
+      const surface = frame;
+      const scaleX = box.viewportWidth > 0 ? 1 / box.viewportWidth : 0;
+      const scaleY = box.viewportHeight > 0 ? 1 / box.viewportHeight : 0;
+      // The frame can still be settling into its dock, so its box is read on
+      // every step; the element's place inside it was measured once.
+      const aim = () => {
+        const rect = surface.getBoundingClientRect();
+        return {
+          x: rect.left + inFrame.x * scaleX * rect.width,
+          y: rect.top + inFrame.y * scaleY * rect.height,
+        };
+      };
+      if (isCoveredAt(roundPoint(aim()), surface)) {
+        throw new StudioActionError(
+          `The ${described} is covered on screen — is a slide or the whiteboard open over the preview?`,
+        );
+      }
+      const { travelMs } = await pointAndRest(pointer, { aim, surface, durationMs, signal });
+      return { testId: target.value, travelMs };
     },
 
     async expectPreview({ actionId, target, textContains, value, route, attribute, timeoutMs }) {

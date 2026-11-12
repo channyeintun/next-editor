@@ -31,6 +31,18 @@ function makePlan(overrides?: { failRun?: boolean }): {
       calls.push(`point:${target.text}`);
       return {};
     },
+    async pointPreview({ target }) {
+      calls.push(`point-preview:${target.value}`);
+      return {};
+    },
+    async pointSlide({ target }) {
+      calls.push(`point-slide:${target.x},${target.y}`);
+      return {};
+    },
+    async pointWhiteboard({ target }) {
+      calls.push(`point-board:${target.assetId}`);
+      return {};
+    },
     async runWorkspace() {
       calls.push("run");
       if (overrides?.failRun) {
@@ -838,6 +850,14 @@ describe("actionAwaitsRuntimeStart", () => {
     }
     expect(of({ type: "cursor.moveTo", target: { kind: "run-button" } })).toBe(false);
     expect(of({ type: "cursor.moveTo", target: { kind: "editor" } })).toBe(false);
+  });
+
+  // A preview.point asks the preview bridge where its element is, so it needs
+  // the server up; the slide and the board are on the stage, not the runtime.
+  it("holds a preview.point, and lets slide and whiteboard points carry on", () => {
+    expect(of({ type: "preview.point", target: { by: "testId", value: "title" } })).toBe(true);
+    expect(of({ type: "slide.point", target: { x: 0.25, y: 0.5 } })).toBe(false);
+    expect(of({ type: "whiteboard.point", target: { assetId: "box" } })).toBe(false);
   });
 
   it("runs only a server-style runtime.start in the background", () => {
