@@ -1,0 +1,762 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-26-business-logic-patterns
+  title: "Architect Path 26: Business logic ကို ဘယ်လို တည်ဆောက်မလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/26-patterns.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/26-patterns.md: |
+        # Business logic pattern ရွေးချယ်မှု
+
+        အခု အခြေအနေ:
+        - ကားလိုင်း စာရင်းသွင်း: layer 5 ထပ်၊ field တစ်ခု ထည့်ဖို့ file 7 ခု ပြင်ရတယ်
+        - ထိုင်ခုံ စည်းကမ်း: controller 4 ခုထဲမှာ script အဖြစ် ကူးရေးထားတယ်
+
+        | Area | Subdomain type | Logic pattern | ဘာကြောင့် |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — a ladder of the four ways to build business logic, lightest at
+    # the bottom and heaviest at the top; blue is the area of ခရီးဖော် that
+    # belongs on each step.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "Business logic ပုံစံ လေးမျိုး",
+        fontSize: 36,
+      }
+    - { id: r-event, kind: rectangle, x: 270, y: 225, width: 380, height: 80 }
+    - {
+        id: r-event-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 247,
+        width: 380,
+        height: 35,
+        text: "Event-sourced model",
+        fontSize: 28,
+      }
+    - { id: r-model, kind: rectangle, x: 270, y: 320, width: 380, height: 80 }
+    - {
+        id: r-model-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 342,
+        width: 380,
+        height: 35,
+        text: "Domain model",
+        fontSize: 28,
+      }
+    - { id: r-record, kind: rectangle, x: 270, y: 415, width: 380, height: 80 }
+    - {
+        id: r-record-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 437,
+        width: 380,
+        height: 35,
+        text: "Active record",
+        fontSize: 28,
+      }
+    - { id: r-script, kind: rectangle, x: 270, y: 510, width: 380, height: 80 }
+    - {
+        id: r-script-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 532,
+        width: 380,
+        height: 35,
+        text: "Transaction script",
+        fontSize: 28,
+      }
+    - {
+        id: a-event,
+        kind: text,
+        x: 675,
+        y: 247,
+        width: 400,
+        height: 35,
+        text: "ငွေရှင်းတာ (settlement)",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-model,
+        kind: text,
+        x: 675,
+        y: 342,
+        width: 400,
+        height: 35,
+        text: "ထိုင်ခုံ စည်းကမ်း",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-record,
+        kind: text,
+        x: 675,
+        y: 437,
+        width: 400,
+        height: 35,
+        text: "ကားလိုင်း စာရင်းသွင်း",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-script,
+        kind: text,
+        x: 675,
+        y: 532,
+        width: 400,
+        height: 35,
+        text: "လက်မှတ် PDF ထုတ်တာ",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    # Board 2 — an aggregate: the orange dashed line is the boundary the board
+    # is about, blue the data inside and outside it, violet the link by id.
+    - {
+        id: g-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "အတူတူ မှန်နေရမယ့် data",
+        fontSize: 36,
+      }
+    - {
+        id: g-bound,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 470,
+        height: 330,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-trip,
+        kind: rectangle,
+        x: 300,
+        y: 255,
+        width: 410,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-trip-l,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 277,
+        width: 410,
+        height: 35,
+        text: "ခရီးစဉ်",
+        fontSize: 28,
+      }
+    - {
+        id: g-s1,
+        kind: rectangle,
+        x: 300,
+        y: 370,
+        width: 195,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-s1-l,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 387,
+        width: 195,
+        height: 35,
+        text: "ခုံ 1",
+        fontSize: 28,
+      }
+    - {
+        id: g-s2,
+        kind: rectangle,
+        x: 515,
+        y: 370,
+        width: 195,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-s2-l,
+        kind: text,
+        align: center,
+        x: 515,
+        y: 387,
+        width: 195,
+        height: 35,
+        text: "ခုံ 2",
+        fontSize: 28,
+      }
+    - {
+        id: g-rule,
+        kind: text,
+        x: 300,
+        y: 485,
+        width: 420,
+        height: 35,
+        text: "ခုံ တစ်ခုံ၊ တစ်ခါပဲ ရောင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-pass,
+        kind: rectangle,
+        x: 830,
+        y: 255,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-pass-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 277,
+        width: 240,
+        height: 35,
+        text: "ခရီးသည်",
+        fontSize: 28,
+      }
+    - {
+        id: g-payment,
+        kind: rectangle,
+        x: 830,
+        y: 370,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-payment-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 387,
+        width: 240,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: g-id,
+        kind: text,
+        x: 830,
+        y: 485,
+        width: 240,
+        height: 35,
+        text: "id နဲ့ပဲ ညွှန်း",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "အပတ်စဉ် ရောင်းအား report",
+        fontSize: 36,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) domain model နဲ့ ဆောက်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) transaction script နဲ့ ဆောက်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 540,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 860,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-reason,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "မေးခွန်း 3 ခုလုံးရဲ့ အဖြေ: မဟုတ်ဘူး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8126
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ပိုဆောက်ထားတာနဲ့ လျော့ဆောက်ထားတာ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ context တွေကြားက ဆက်ဆံရေးကို team တွေရဲ့ ဆက်ဆံရေးနဲ့ လိုက်ပြီး ရွေးခဲ့ပြီး၊ context map
+      ဆိုတဲ့ ပုံပေါ်မှာ ဆွဲခဲ့ပါတယ်။ ဒီနေ့တော့ context တစ်ခုရဲ့ အတွင်းဘက်ကို ကြည့်ပါမယ်။ Booking team lead
+      မောင်မောင် က code ထဲက နေရာ နှစ်ခုကို ကိုယ့်ကို ပြပါတယ်။
+      [[mark:n-over]] ပထမ နေရာက ကားလိုင်း အသစ်တွေ စာရင်းသွင်းတဲ့ အပိုင်းပါ။ data ကို ထည့်ပြီး သိမ်းတာလောက်ပဲ
+      ရှိပေမဲ့၊ layer ငါးထပ်နဲ့ ဆောက်ထားတာမို့ field တစ်ခု ထပ်ထည့်ချင်ရင် file ခုနစ်ခု ပြင်ရပါတယ်။
+      ဆောက်တုန်းကလည်း အပတ်ပေါင်းများစွာ ကြာခဲ့ပါတယ်။
+      [[mark:n-under]] ဒုတိယ နေရာက ထိုင်ခုံ စည်းကမ်းတွေပါ။ ထိုင်ခုံကို hold လုပ်တာ၊ ရောင်းတာ၊ ပြန်လွှတ်တာ ဆိုတဲ့
+      system ရဲ့ အခက်ဆုံး အပိုင်းက controller လေးခုထဲမှာ script အဖြစ် ကူးရေးထားတာ ဖြစ်နေပါတယ်။ တစ်နေရာမှာ
+      ပြင်ပြီး ကျန်တဲ့ နေရာမှာ မေ့ကျန်ခဲ့တာက ပြဿနာ အများစုရဲ့ အစပါ။
+      [[mark:n-idea]] ရိုးတဲ့ အပိုင်းကို လေးလေးလံလံ ဆောက်ထားပြီး၊ ခက်တဲ့ အပိုင်းကိုတော့ ပေါ့ပေါ့ ဆောက်ထားမိတာပါ။
+      ဘယ်သူ့ အမှားမှ မဟုတ်ပါဘူး။ အပိုင်းတိုင်းကို အရင် project မှာ ဆောက်ခဲ့တဲ့ ပုံစံ တစ်မျိုးတည်းနဲ့
+      ဆောက်ခဲ့ကြလို့ပါ။
+      [[mark:n-goal]] business ရဲ့ စည်းကမ်းတွေကို code ထဲမှာ ရေးထားတဲ့ အပိုင်းကို business logic လို့
+      ခေါ်ပါတယ်။ အဲဒါကို အပိုင်းရဲ့ ရှုပ်ထွေးမှုနဲ့ လိုက်အောင် ဘယ်လို တည်ဆောက်မလဲ ဆိုတာ ဒီနေ့ ရွေးတတ်အောင်
+      လေ့လာပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/26-patterns.md,
+        }
+      - id: sel-over
+        type: editor.select
+        at: { mark: n-over }
+        target:
+          {
+            file: notebook/26-patterns.md,
+            text: "- ကားလိုင်း စာရင်းသွင်း: layer 5 ထပ်၊ field တစ်ခု ထည့်ဖို့ file 7 ခု ပြင်ရတယ်",
+          }
+      - id: sel-under
+        type: editor.select
+        at: { mark: n-under }
+        target:
+          {
+            file: notebook/26-patterns.md,
+            text: "- ထိုင်ခုံ စည်းကမ်း: controller 4 ခုထဲမှာ script အဖြစ် ကူးရေးထားတယ်",
+          }
+      - id: sel-pattern
+        type: editor.select
+        at: { mark: n-goal }
+        target: { file: notebook/26-patterns.md, text: "Logic pattern" }
+
+  - id: ladder
+    chapter: ပုံစံ လေးမျိုး၊ အပေါ့ဆုံးကနေ အလေးဆုံး
+    narration: >
+      [[mark:l-open]] business logic ကို တည်ဆောက်တဲ့ ပုံစံ လေးမျိုး ရှိပြီး၊ အပေါ့ဆုံးကနေ အလေးဆုံးအထိ
+      လှေကားထစ်လို စီကြည့်လို့ ရပါတယ်။
+      [[mark:l-script]] အောက်ဆုံး အထစ်က transaction script ပါ။ လုပ်ဆောင်ချက် တစ်ခုအတွက် အစကနေ အဆုံးထိ script
+      တစ်ခု ရေးလိုက်တာပါ။ ဖတ်ရ လွယ်ပြီး မြန်မြန် ပြီးပါတယ်။ ပတ်ဝန်းကျင်က structure ကလည်း ပါးပါးလေးပဲ လိုပါတယ်။
+      ဒါပေမဲ့ စည်းကမ်းတွေ များလာရင် script တစ်ခုနဲ့တစ်ခု ထပ်နေတဲ့ code တွေ ကွဲလွဲလာပါတယ်။
+      [[mark:l-record]] ဒုတိယ အထစ်က active record ပါ။ database ထဲက row တစ်ကြောင်းကို ကိုယ်စားပြုပြီး၊
+      ကိုယ့်ကိုယ်ကို သိမ်းတတ်တဲ့ object တွေကို သုံးတာပါ။ စည်းကမ်းက နည်းပေမဲ့ data ရဲ့ ပုံစံက ရှုပ်တဲ့ အပိုင်းအတွက်
+      သင့်တော်ပါတယ်။
+      [[mark:l-model]] တတိယ အထစ်က domain model ပါ။ စည်းကမ်းတွေကို script တွေထဲ ဖြန့်မထားဘဲ၊ object တွေရဲ့
+      အထဲမှာပဲ ထားတာပါ။ ထိုင်ခုံ တစ်ခုံက hold လုပ်ထားပြီးသားလား ဆိုတာကို အပြင်က code က မစစ်ရဘဲ၊ ထိုင်ခုံ
+      ကိုယ်တိုင်က ငြင်းပါတယ်။ ဒီ model ကို database နဲ့ framework တွေဆီက ကင်းအောင် အလယ်မှာ ထားပြီး၊ အပြင်ဘက်က
+      adapter တွေနဲ့ ချိတ်ရတာမို့ ဆောက်ရတာ ပိုကုန်ကျပါတယ်။
+      [[mark:l-event]] အပေါ်ဆုံး အထစ်က event sourced domain model ပါ။ လက်ရှိ အခြေအနေကို မသိမ်းဘဲ၊ ဖြစ်ခဲ့သမျှ
+      အကြောင်းအရာ၊ event တွေကို အစဉ်အတိုင်း သိမ်းထားတာပါ။ ဘာတွေ ဖြစ်ခဲ့လဲ ဆိုတာကို အချိန်မရွေး ပြန်ပြနိုင်ပေမဲ့၊
+      data ကို ပြန်ရှာဖတ်ဖို့အတွက် ဖတ်တဲ့ model တစ်ခုကို သီးခြား ထပ်ဆောက်ရတာမို့ လေးခုထဲမှာ အလေးဆုံးပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-open },
+          open: true,
+          upsertIds: [r-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-l-script,
+          type: whiteboard.apply,
+          at: { mark: l-script },
+          upsertIds: [r-script, r-script-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-record,
+          type: whiteboard.apply,
+          at: { mark: l-record },
+          upsertIds: [r-record, r-record-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-model,
+          type: whiteboard.apply,
+          at: { mark: l-model },
+          upsertIds: [r-model, r-model-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-event,
+          type: whiteboard.apply,
+          at: { mark: l-event },
+          upsertIds: [r-event, r-event-l],
+          drawMs: 1200,
+        }
+
+  - id: questions
+    chapter: မေးခွန်း သုံးခုနဲ့ ရွေးခြင်း
+    narration: >
+      ဘယ်အထစ်ကို ရွေးမလဲ ဆိုတာအတွက် မေးခွန်း သုံးခုကို အပေါ်ကနေ အောက်ကို အစဉ်အတိုင်း မေးပါတယ်။
+      ပထမဆုံး ဟုတ်တယ် ဆိုတဲ့ နေရာမှာ ရပ်ပါတယ်။
+      [[mark:q-money]] ပထမ မေးခွန်းက ဒီ အပိုင်းက ငွေ ဝင်ထွက်တာကို မှတ်ရသလား၊ ဒါမှမဟုတ် ဘာတွေ ဖြစ်ခဲ့လဲ ဆိုတာကို
+      နောက်မှ အကုန် ပြန်ပြနိုင်ဖို့ လိုသလား ဆိုတာပါ။
+      [[mark:q-money-a]] ကားလိုင်းတွေကို တနင်္လာနေ့တိုင်း ငွေရှင်းပေးတဲ့ settlement က ဟုတ်ပါတယ်။ ကားလိုင်း တစ်ခုက
+      ဒီငွေ ဘယ်လို ရလာတာလဲလို့ မေးရင် တစ်ဆင့်ချင်း ပြနိုင်ရပါမယ်။
+      [[mark:q-rules]] မဟုတ်ဘူးဆိုရင် ဒုတိယ မေးခွန်းက စည်းကမ်းတွေ ရှုပ်ထွေးသလား ဆိုတာပါ။
+      [[mark:q-rules-a]] ထိုင်ခုံ စည်းကမ်းတွေက ဟုတ်ပါတယ်။ ဆယ်မိနစ် hold၊ app နဲ့ ကောင်တာ နှစ်ဖက်၊ လက်မှတ်
+      ပြောင်းတာ၊ ဖျက်တာတွေ အားလုံးက တစ်ခုနဲ့တစ်ခု ဆက်နေပါတယ်။
+      [[mark:q-data]] အဲဒါလည်း မဟုတ်ဘူးဆိုရင် တတိယ မေးခွန်းက data ရဲ့ ပုံစံပဲ ရှုပ်တာလား ဆိုတာပါ။
+      [[mark:q-data-a]] ကားလိုင်း စာရင်းသွင်းတာက ဒီမှာ ဟုတ်ပါတယ်။ ကားလိုင်း တစ်ခုမှာ ကားတွေ၊ ထိုင်ခုံ ပုံစံတွေ၊
+      လမ်းကြောင်းတွေ ပါပေမဲ့၊ စည်းကမ်းကတော့ သိပ်မရှိပါဘူး။
+      [[mark:q-script]] သုံးခုလုံး မဟုတ်ရင်တော့ အောက်ဆုံး အထစ်နဲ့ လုံလောက်ပါတယ်။
+      [[mark:q-script-a]] လက်မှတ်ကို PDF အဖြစ် ထုတ်ပေးတာက အဆင့်တွေကို တန်းစီ လုပ်သွားတာလောက်ပဲ ရှိပါတယ်။
+      [[mark:q-mix]] ကြည့်လိုက်ရင် ကုမ္ပဏီ တစ်ခုတည်းမှာ အထစ် လေးခုလုံးကို သုံးထားတာ တွေ့ရပါမယ်။ ဒါက စနစ်မကျတာ
+      မဟုတ်ပါဘူး။ အပိုင်းတိုင်းကို အလေးဆုံး ပုံစံနဲ့ ဆောက်ရင် စာရင်းသွင်းတဲ့ အပိုင်းလို ဖြစ်ပြီး၊ အပေါ့ဆုံးနဲ့
+      ဆောက်ရင်တော့ ထိုင်ခုံ စည်းကမ်းလို ဖြစ်မှာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: point-q-money,
+          type: whiteboard.point,
+          at: { mark: q-money },
+          target: { assetId: r-event },
+        }
+      - {
+          id: draw-q-money,
+          type: whiteboard.apply,
+          at: { mark: q-money-a },
+          upsertIds: [a-event],
+          drawMs: 1000,
+        }
+      - {
+          id: point-q-rules,
+          type: whiteboard.point,
+          at: { mark: q-rules },
+          target: { assetId: r-model },
+        }
+      - {
+          id: draw-q-rules,
+          type: whiteboard.apply,
+          at: { mark: q-rules-a },
+          upsertIds: [a-model],
+          drawMs: 1000,
+        }
+      - {
+          id: point-q-data,
+          type: whiteboard.point,
+          at: { mark: q-data },
+          target: { assetId: r-record },
+        }
+      - {
+          id: draw-q-data,
+          type: whiteboard.apply,
+          at: { mark: q-data-a },
+          upsertIds: [a-record],
+          drawMs: 1000,
+        }
+      - {
+          id: point-q-script,
+          type: whiteboard.point,
+          at: { mark: q-script },
+          target: { assetId: r-script },
+        }
+      - {
+          id: draw-q-script,
+          type: whiteboard.apply,
+          at: { mark: q-script-a },
+          upsertIds: [a-script],
+          drawMs: 1000,
+        }
+
+  - id: aggregate
+    chapter: Aggregate
+    narration: >
+      [[mark:g-open]] domain model ကို ရွေးလိုက်ရင် ချက်ချင်း ပေါ်လာတဲ့ မေးခွန်းက ဘယ် data တွေကို object
+      တစ်စုတည်းအဖြစ် အတူ ထားမလဲ ဆိုတာပါ။
+      [[mark:g-trip]] ခရီးစဉ် တစ်ခုနဲ့ သူ့ရဲ့ ထိုင်ခုံတွေကို ကြည့်ပါ။ ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းရဘူး ဆိုတဲ့
+      စည်းကမ်းက ခရီးစဉ် တစ်ခုထဲက ထိုင်ခုံတွေ အားလုံးကို တစ်ပြိုင်တည်း ကြည့်မှ စောင့်ရှောက်လို့ ရပါတယ်။
+      [[mark:g-agg]] ဒီလို အမြဲတမ်း အတူတူ မှန်နေရမယ့် data အစုကို aggregate လို့ ခေါ်ပါတယ်။ aggregate တစ်ခုကို
+      ပြင်တဲ့အခါ အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ transaction တစ်ခုတည်းနဲ့ ပြင်ရပါတယ်။ အပြင်က code
+      ကလည်း အထဲက ထိုင်ခုံကို တိုက်ရိုက် မပြင်ရဘဲ၊ ခရီးစဉ်ကနေတစ်ဆင့်ပဲ တောင်းဆိုရပါတယ်။
+      [[mark:g-small]] aggregate ကို သေးနိုင်သမျှ သေးအောင် ထားရပါတယ်။ ခရီးသည်ရဲ့ အချက်အလက်နဲ့ ငွေချေမှုကို အထဲ
+      မထည့်ဘဲ၊ id နဲ့ပဲ ညွှန်းထားပါမယ်။ ဘာကြောင့်လဲဆိုတော့ aggregate ကြီးလေ၊ တစ်ပြိုင်တည်း ဝယ်တဲ့သူတွေ
+      အချင်းချင်း စောင့်ရလေ ဖြစ်လို့ပါ။
+      [[mark:g-test]] ထည့်မထည့် ဆုံးဖြတ်ဖို့ မေးခွန်းကတော့ ဒီ data ခဏ နောက်ကျနေရင် စည်းကမ်း ပျက်မလား ဆိုတာပါ။
+      ပျက်မယ်ဆိုမှ အထဲ ထည့်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-g-open,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          clear: true,
+          upsertIds: [g-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-g-trip,
+          type: whiteboard.apply,
+          at: { mark: g-trip },
+          upsertIds: [g-trip, g-trip-l, g-s1, g-s1-l, g-s2, g-s2-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-g-agg,
+          type: whiteboard.apply,
+          at: { mark: g-agg },
+          upsertIds: [g-bound, g-rule],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-small,
+          type: whiteboard.apply,
+          at: { mark: g-small },
+          upsertIds: [g-pass, g-pass-l, g-payment, g-payment-l, g-id],
+          drawMs: 2400,
+        }
+      - {
+          id: point-g-test,
+          type: whiteboard.point,
+          at: { mark: g-test },
+          target: { assetId: g-bound },
+        }
+
+  - id: table
+    chapter: ခရီးဖော် အတွက် ရွေးချယ်မှု
+    narration: >
+      [[mark:d-close]] ရွေးထားတာတွေကို table နဲ့ ချရေးပါမယ်။ အပိုင်း တစ်ခုစီအတွက် ပုံစံကို ဘာကြောင့် ရွေးလဲ
+      ဆိုတာပါ ရေးထားမှ၊ နောက်လူတွေက အရင်ကလို ပုံစံ တစ်မျိုးတည်းနဲ့ လိုက်မဆောက်မိမှာပါ။
+      [[mark:d-rows]] subdomain အမျိုးအစားကိုလည်း ဘေးမှာ တွဲရေးထားပါတယ်။ ပြိုင်ဘက်နဲ့ ကွာစေတဲ့ core အပိုင်းက
+      အလေးဘက် ပုံစံတွေနဲ့ ကိုက်တတ်ပြီး၊ လိုအပ်ပေမဲ့ ရိုးတဲ့ supporting အပိုင်းက အပေါ့ဘက် ပုံစံတွေနဲ့
+      ကိုက်တတ်ပါတယ်။ အမျိုးအစားက လမ်းညွှန်ပေးတာပါ။ ဆုံးဖြတ်ပေးတာကတော့ မေးခွန်း သုံးခုပါ။
+      [[mark:d-mismatch]] ဒါပေမဲ့ settlement ကို ကြည့်ပါ။ supporting လို့ ယူဆထားပေမဲ့ အလေးဆုံး ပုံစံကို
+      လိုနေပါတယ်။ ဒီလို မကိုက်တာ တွေ့ရင် နှစ်ခုထဲက တစ်ခုပါ။ ပုံစံက လိုတာထက် လေးနေတာ ဖြစ်နိုင်သလို၊ အဲဒီ
+      အပိုင်းက ထင်ထားတာထက် ပိုအရေးကြီးနေတာလည်း ဖြစ်နိုင်ပါတယ်။ ဘယ်ဟာလဲ ဆိုတာကို business ဘက်က လူတွေနဲ့
+      ပြန်ဆွေးနွေးရပါမယ်။
+      [[mark:d-plan]] အခု အခြေအနေနဲ့ ယှဉ်ကြည့်ရင် လုပ်ရမယ့် အလုပ်က ရှင်းပါတယ်။ ထိုင်ခုံ စည်းကမ်းတွေကို
+      controller တွေထဲကနေ ထုတ်ပြီး domain model တစ်ခုထဲ စုရပါမယ်။ စာရင်းသွင်းတဲ့ အပိုင်းကိုတော့ ဒီအတိုင်း
+      ထားပြီး၊ နောက်တစ်ခါ ပြင်ရမှ ရိုးအောင် လုပ်ပါမယ်။ အလုပ်ဖြစ်နေတဲ့ ရိုးတဲ့ အပိုင်းကို ပြန်ရေးနေရင် အားကို
+      အရေးကြီးတဲ့ အပိုင်းဆီက ယူသွားမှာမို့ပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-aggregate, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - id: type-rows
+        type: editor.type
+        at: { mark: d-rows }
+        cadence: line-by-line
+        target: { file: notebook/26-patterns.md, after: "|---|---|---|---|\n" }
+        text: "| ငွေရှင်းတာ (settlement) | supporting | event-sourced model | ငွေမို့ ဖြစ်ခဲ့သမျှ ပြန်ပြနိုင်ရမယ် |\n| ထိုင်ခုံ စည်းကမ်း | core | domain model | စည်းကမ်း ရှုပ်ပြီး မကြာခဏ ပြောင်းတယ် |\n| ကားလိုင်း စာရင်းသွင်း | supporting | active record | စည်းကမ်း နည်း၊ data ပုံစံပဲ ရှုပ်တယ် |\n| လက်မှတ် PDF ထုတ်တာ | supporting | transaction script | အဆင့်တွေ တန်းစီ လုပ်တာလောက်ပဲ |\n"
+      - id: sel-settlement
+        type: editor.select
+        at: { mark: d-mismatch }
+        target:
+          {
+            file: notebook/26-patterns.md,
+            text: "| ငွေရှင်းတာ (settlement) | supporting | event-sourced model |",
+          }
+      - id: expect-seat
+        type: expect.file
+        at: { afterAction: sel-settlement }
+        path: notebook/26-patterns.md
+        contains: "| ထိုင်ခုံ စည်းကမ်း | core | domain model | စည်းကမ်း ရှုပ်ပြီး မကြာခဏ ပြောင်းတယ် |\n"
+      - id: sel-now-seat
+        type: editor.select
+        at: { mark: d-plan }
+        target:
+          {
+            file: notebook/26-patterns.md,
+            text: "- ထိုင်ခုံ စည်းကမ်း: controller 4 ခုထဲမှာ script အဖြစ် ကူးရေးထားတယ်",
+          }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကားလိုင်းတွေအတွက် အပတ်စဉ် ရောင်းအား report ကို ဆောက်ရပါမယ်။
+      ရောင်းပြီးသား လက်မှတ်တွေကို ဖတ်ပြီး ခရီးစဉ် အလိုက် ပေါင်းပြတာပါ။
+      [[mark:quiz-a]] ပထမ ရွေးစရာက စည်းကမ်းတွေကို object တွေထဲ ထားတဲ့ domain model နဲ့ ဆောက်တာပါ။
+      [[mark:quiz-b]] ဒုတိယက report တစ်ခုအတွက် script တစ်ခု ရေးတဲ့ transaction script နဲ့ ဆောက်တာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ မေးခွန်း သုံးခုလုံးအတွက် အဖြေက မဟုတ်ဘူး
+      ဖြစ်နေလို့ပါ။ report က ငွေကို မရွှေ့ပါဘူး။ စောင့်ရှောက်ရမယ့် စည်းကမ်းလည်း မရှိသလို၊ data ကိုလည်း ဖတ်ပြီး
+      ပေါင်းတာလောက်ပါပဲ။ domain model နဲ့ ဆောက်ရင် ကာကွယ်စရာ စည်းကမ်း မရှိတဲ့ object တွေကိုပဲ
+      အပတ်ပေါင်းများစွာ ရေးနေရမှာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [z-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer, offsetMs: 2600 },
+          upsertIds: [z-reason],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:t-close]] ဒီ အဖြေကိုလည်း table ထဲ ထည့်ထားလိုက်ပါမယ်။
+      [[mark:type-report]] report က လိုအပ်ပေမဲ့ ရိုးတဲ့ အပိုင်းမို့ အပေါ့ဆုံး ပုံစံနဲ့ပဲ ဆောက်ပါမယ်။
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ အခု အခြေအနေ အောက်က နှစ်ကြောင်းကို ကိုယ့်
+      system အတွက် ပြန်ရေးကြည့်ပါ။ လိုတာထက် ပိုဆောက်ထားတဲ့ အပိုင်း တစ်ခုနဲ့၊ လိုတာထက် လျော့ဆောက်ထားတဲ့ အပိုင်း
+      တစ်ခုကို ရှာရမှာပါ။
+      [[mark:turn-2]] ရှာရ ခက်ရင် ပြင်ရမှာ ကြောက်တဲ့ အပိုင်းနဲ့၊ အသေးအဖွဲ ပြင်ဖို့တောင် file အများကြီး
+      ဖွင့်ရတဲ့ အပိုင်းကို စဉ်းစားကြည့်ပါ။ ပထမက လျော့ဆောက်ထားတာ၊ ဒုတိယက ပိုဆောက်ထားတာ ဖြစ်တတ်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - id: type-report
+        type: editor.type
+        at: { mark: type-report }
+        cadence: line-by-line
+        target: { file: notebook/26-patterns.md, after: "| အဆင့်တွေ တန်းစီ လုပ်တာလောက်ပဲ |\n" }
+        text: "| အပတ်စဉ် ရောင်းအား report | supporting | transaction script | ဖတ်ပြီး ပေါင်းပြတာလောက်ပဲ |\n"
+      - id: sel-now
+        type: editor.select
+        at: { mark: turn }
+        target:
+          file: notebook/26-patterns.md
+          text: "- ကားလိုင်း စာရင်းသွင်း: layer 5 ထပ်၊ field တစ်ခု ထည့်ဖို့ file 7 ခု ပြင်ရတယ်\n- ထိုင်ခုံ စည်းကမ်း: controller 4 ခုထဲမှာ script အဖြစ် ကူးရေးထားတယ်"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ business logic ကို အပိုင်းတိုင်းမှာ ပုံစံ တစ်မျိုးတည်းနဲ့ မဆောက်ဘဲ၊ အဲဒီ အပိုင်းရဲ့
+      ရှုပ်ထွေးမှုနဲ့ လိုက်အောင် ရွေးရပါတယ်။ ငွေ ဝင်ထွက်ကို မှတ်ရသလား ဒါမှမဟုတ် မှတ်တမ်း အပြည့် လိုသလား၊ စည်းကမ်း ရှုပ်သလား၊ data ပဲ
+      ရှုပ်သလား ဆိုတဲ့ မေးခွန်း သုံးခုက အထစ် လေးခုထဲက တစ်ခုကို ရွေးပေးပါတယ်။ domain model ထဲမှာတော့ အတူတူ
+      မှန်နေရမယ့် data ကို aggregate သေးသေးတွေအဖြစ် ထားရပါတယ်။
+      [[mark:next]] ဒါပေမဲ့ အပိုင်း တစ်ခုမှာ တကယ် ဘာ စည်းကမ်းတွေ ရှိလဲ၊ ဘယ်လောက် ရှုပ်လဲ ဆိုတာက code ထဲမှာထက်
+      business ဘက်က လူတွေရဲ့ ခေါင်းထဲမှာ ပိုရှိတတ်ပါတယ်။ နောက် lesson မှာတော့ အဲဒီ အသိတွေကို အတူတူ ထုတ်ယူတဲ့
+      workshop တစ်မျိုးဖြစ်တဲ့ EventStorming ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
