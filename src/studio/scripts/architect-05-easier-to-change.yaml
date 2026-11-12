@@ -1,0 +1,909 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-05-easier-to-change
+  title: "Architect Path 05: ပြောင်းရ လွယ်အောင် ဆောက်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/05-change-test.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/05-change-test.md: |
+        # Change test — ဒါ ပြောင်းရင် ဘယ်နှနေရာ ပြင်ရမလဲ
+
+        | ဖြစ်လာနိုင်တဲ့ ပြောင်းလဲမှု | ဒီနေ့ ပြင်ရမယ့် နေရာ | ဘာကြောင့် |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — one small request, nine files. Orange is the request the board
+    # is about, violet the change flowing in, blue the files, red the cost.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "တောင်းဆိုချက် တစ်ခု၊ file 9 ခု",
+        fontSize: 36,
+      }
+    - {
+        id: d-req,
+        kind: rectangle,
+        x: 270,
+        y: 345,
+        width: 330,
+        height: 90,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: d-req-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 372,
+        width: 330,
+        height: 35,
+        text: "ကျောင်းသား လျှော့ဈေး",
+        fontSize: 28,
+      }
+    - {
+        id: d-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 615,
+        y: 370,
+        width: 105,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: d-f1, kind: rectangle, x: 740, y: 250, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f2, kind: rectangle, x: 840, y: 250, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f3, kind: rectangle, x: 940, y: 250, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f4, kind: rectangle, x: 740, y: 350, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f5, kind: rectangle, x: 840, y: 350, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f6, kind: rectangle, x: 940, y: 350, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f7, kind: rectangle, x: 740, y: 450, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f8, kind: rectangle, x: 840, y: 450, width: 80, height: 80, strokeColor: "#1971c2" }
+    - { id: d-f9, kind: rectangle, x: 940, y: 450, width: 80, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: d-count,
+        kind: text,
+        x: 740,
+        y: 560,
+        width: 350,
+        height: 35,
+        text: "9 ခုလုံး ပြင်ရမယ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — four pieces of design advice gathered into the one question
+    # behind them (orange).
+    - {
+        id: v-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "design အကြံတွေရဲ့ နောက်က တန်ဖိုး",
+        fontSize: 36,
+      }
+    - {
+        id: v-1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 310,
+        height: 35,
+        text: "code ကို မကူးနဲ့",
+        fontSize: 28,
+      }
+    - {
+        id: v-2,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 310,
+        height: 35,
+        text: "မဆိုင်တာ ခွဲထား",
+        fontSize: 28,
+      }
+    - {
+        id: v-3,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 310,
+        height: 35,
+        text: "နာမည် ရှင်းအောင်ပေး",
+        fontSize: 28,
+      }
+    - {
+        id: v-4,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 310,
+        height: 35,
+        text: "function သေးသေးထား",
+        fontSize: 28,
+      }
+    - { id: v-brace, kind: freedraw, stroke: brace-right, x: 615, y: 245, width: 36, height: 225 }
+    - {
+        id: v-box,
+        kind: rectangle,
+        x: 680,
+        y: 315,
+        width: 390,
+        height: 90,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: v-box-l,
+        kind: text,
+        align: center,
+        x: 680,
+        y: 341,
+        width: 390,
+        height: 38,
+        text: "ပြောင်းရ လွယ်လား?",
+        fontSize: 30,
+      }
+    # Board 3 — one rule written in three places (blue parts, white copies, red
+    # risk), then the same three parts reading one home (green) through violet
+    # arrows.
+    - {
+        id: h-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "10 မိနစ် ကို ဘယ်မှာ ရေးထားလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: h-b1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-b1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 257,
+        width: 240,
+        height: 35,
+        text: "Booking code",
+        fontSize: 28,
+      }
+    - {
+        id: h-b2,
+        kind: rectangle,
+        x: 530,
+        y: 240,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-b2-l,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 257,
+        width: 240,
+        height: 35,
+        text: "app ထဲက နာရီ",
+        fontSize: 28,
+      }
+    - {
+        id: h-b3,
+        kind: rectangle,
+        x: 790,
+        y: 240,
+        width: 240,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-b3-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 257,
+        width: 240,
+        height: 35,
+        text: "ခုံလွှတ်တဲ့ job",
+        fontSize: 28,
+      }
+    - {
+        id: h-t1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 325,
+        width: 240,
+        height: 35,
+        text: "10 မိနစ်",
+        fontSize: 28,
+      }
+    - {
+        id: h-t2,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 325,
+        width: 240,
+        height: 35,
+        text: "10 မိနစ်",
+        fontSize: 28,
+      }
+    - {
+        id: h-t3,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 325,
+        width: 240,
+        height: 35,
+        text: "10 မိနစ်",
+        fontSize: 28,
+      }
+    - {
+        id: h-forget,
+        kind: text,
+        x: 270,
+        y: 410,
+        width: 800,
+        height: 35,
+        text: "တစ်နေရာ ပြင်၊ နှစ်နေရာ မေ့ရင်?",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: h-home,
+        kind: rectangle,
+        x: 480,
+        y: 480,
+        width: 340,
+        height: 70,
+        rounded: true,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+        fillStyle: hachure,
+      }
+    - {
+        id: h-home-l,
+        kind: text,
+        align: center,
+        x: 480,
+        y: 497,
+        width: 340,
+        height: 35,
+        text: "seat hold = 10 မိနစ်",
+        fontSize: 28,
+      }
+    - {
+        id: h-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 400,
+        y: 325,
+        width: 100,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 630,
+        y: 325,
+        width: 40,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-a3,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 800,
+        y: 325,
+        width: 100,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-one,
+        kind: text,
+        x: 270,
+        y: 580,
+        width: 700,
+        height: 38,
+        text: "ပြင်စရာ တစ်နေရာတည်း",
+        fontSize: 30,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz: two functions (blue), white question and options,
+    # green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "တူနေတဲ့ function နှစ်ခု",
+        fontSize: 36,
+      }
+    - {
+        id: q-f1,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 380,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-f1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 252,
+        width: 380,
+        height: 35,
+        text: "ခရီးသည် ပြန်အမ်းကြေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-f2,
+        kind: rectangle,
+        x: 690,
+        y: 235,
+        width: 380,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: q-f2-l,
+        kind: text,
+        align: center,
+        x: 690,
+        y: 252,
+        width: 380,
+        height: 35,
+        text: "ကားလိုင်း ဖျက်ကြေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-eq,
+        kind: text,
+        x: 270,
+        y: 325,
+        width: 800,
+        height: 35,
+        text: "ဒီနေ့ နှစ်ခုလုံး လက်မှတ်ခရဲ့ 10 %",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 400,
+        width: 760,
+        height: 35,
+        text: "က) function တစ်ခုတည်း ပေါင်းမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 760,
+        height: 35,
+        text: "ခ) ခွဲထားမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 465,
+        width: 190,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 510,
+        y: 453,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 790,
+        height: 35,
+        text: "အကြောင်းရင်း တစ်ခုတည်းကြောင့် အတူ ပြောင်းမလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8105
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: discount
+    chapter: ကျောင်းသား လျှော့ဈေး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ architect တစ်ယောက်အနေနဲ့ ရွေးစရာတွေ ရှိမှန်း ကျယ်ကျယ် သိထားဖို့ လိုတယ် ဆိုတာနဲ့၊
+      အဲဒီအတွက် ကိုယ်ပိုင် radar တစ်ခု ဆွဲပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:d-open]] ဒီအပတ်မှာတော့ product manager လှလှ က တောင်းဆိုချက် သေးသေး တစ်ခု ယူလာပါတယ်။
+      ကျောင်းဖွင့်ရာသီ မတိုင်ခင် ကျောင်းသားတွေအတွက် လက်မှတ်ခကို လျှော့ပေးချင်တာပါ။
+      [[mark:d-look]] ကိုယ်က တစ်ရက်လောက်နဲ့ ပြီးမယ်လို့ ထင်ခဲ့ပါတယ်။ ဒါပေမဲ့ team ထဲက developer မောင်မောင် နဲ့
+      code ကို လိုက်ကြည့်တော့ လက်မှတ်ဈေးကို တွက်ထားတဲ့ နေရာက တစ်နေရာတည်း မဟုတ်ပါဘူး။
+      [[mark:d-files]] ခရီးစဉ် ရှာတဲ့ စာမျက်နှာမှာ တစ်ခါ၊ ငွေချေတဲ့အပိုင်းမှာ တစ်ခါ၊ ကားလိုင်းတွေ ကြည့်တဲ့ report
+      မှာ တစ်ခါ စသဖြင့် file ကိုးခုမှာ ဈေးကို သီးခြားစီ တွက်ထားတာပါ။ လျှော့ဈေး ထည့်ဖို့ဆိုရင် ကိုးခုလုံးကို
+      လိုက်ပြင်ရပါမယ်။
+      [[mark:d-count]] တစ်ခုလောက် ကျန်ခဲ့ရင် ခရီးသည် မြင်ရတဲ့ ဈေးနဲ့ တကယ် ဖြတ်တဲ့ ငွေ မတူတော့ပါဘူး။
+      တောင်းဆိုချက်က သေးပေမဲ့ ပြင်ရမယ့် နေရာက များနေတာ feature က ခက်လို့ မဟုတ်ပါဘူး။ system ကို ဆောက်ခဲ့တဲ့
+      ပုံစံက ပြောင်းရ ခက်အောင် ဖြစ်နေလို့ပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          clear: true,
+          upsertIds: [d-title, d-req, d-req-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-d-files,
+          type: whiteboard.apply,
+          at: { mark: d-files },
+          upsertIds: [d-arrow, d-f1, d-f2, d-f3, d-f4, d-f5, d-f6, d-f7, d-f8, d-f9],
+          drawMs: 3200,
+        }
+      - {
+          id: draw-d-count,
+          type: whiteboard.apply,
+          at: { mark: d-count },
+          upsertIds: [d-count],
+          drawMs: 900,
+        }
+
+  - id: one-value
+    chapter: တန်ဖိုး တစ်ခုတည်း
+    narration: >
+      [[mark:v-open]] developer တွေ ကြားဖူးနေကျ design အကြံတွေ အများကြီး ရှိပါတယ်။
+      [[mark:v-list]] code ကို ထပ်ခါထပ်ခါ မကူးနဲ့၊ function ကို သေးသေးထား ဆိုတာမျိုးတွေကို code review
+      တွေမှာ မကြာခဏ ကြားရပါတယ်။ ဒီ အကြံတွေကို တစ်ခုချင်းစီ သီးခြား စည်းကမ်းတွေလို မှတ်ထားရင် ဘယ်အချိန်မှာ
+      ဘယ်ဟာကို သုံးရမလဲ ဝေခွဲရ ခက်ပါတယ်။
+      [[mark:v-one]] တကယ်တော့ အားလုံးရဲ့ နောက်မှာ တန်ဖိုး တစ်ခုတည်း ရှိပါတယ်။ နောက်မှ ပြောင်းရတာ ပိုလွယ်သွားလား
+      ဆိုတာပါ။ ကူးထားတဲ့ code နည်းရင် ပြင်စရာ နေရာ နည်းပါတယ်။ နာမည် ရှင်းရင် ပြင်ရမယ့် နေရာကို မြန်မြန်
+      ရှာတွေ့ပါတယ်။
+      [[mark:v-why]] ဥပမာ လျှော့ဈေးကို file ကိုးခုလုံးမှာ စစ်ဆေးချက် တစ်ခုစီ လိုက်ထည့်တာက ဒီနေ့အတွက်
+      မြန်ပါတယ်။ ဒါပေမဲ့ နောက်လမှာ လျှော့ဈေး အမျိုးအစား တစ်ခု ထပ်လာရင် ပြင်ရတာ ပိုခက်သွားမှာပါ။
+      [[mark:v-arch]] architect အတွက် ဒီ တန်ဖိုးက ပိုအရေးကြီးပါတယ်။ လှလှ နောက်လမှာ ဘာတောင်းမလဲ ဆိုတာ
+      ဘယ်သူမှ ကြိုမသိနိုင်ပါဘူး။ သေချာတာက တစ်ခုခုတော့ ပြောင်းရမယ် ဆိုတာပါပဲ။ ဒါကြောင့် design တစ်ခုကို
+      အကဲဖြတ်တဲ့အခါ၊ ဒီလို ဆောက်လိုက်ရင် နောက်တစ်ခါ ပြောင်းရတာ ပိုလွယ်မလား၊ ပိုခက်မလားလို့ မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-v-open,
+          type: whiteboard.apply,
+          at: { mark: v-open },
+          clear: true,
+          upsertIds: [v-title],
+        }
+      - {
+          id: draw-v-list,
+          type: whiteboard.apply,
+          at: { mark: v-list },
+          upsertIds: [v-1, v-2, v-3, v-4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-v-one,
+          type: whiteboard.apply,
+          at: { mark: v-one },
+          upsertIds: [v-brace, v-box, v-box-l],
+          drawMs: 1600,
+        }
+
+  - id: one-home
+    chapter: အသိတစ်ခုကို အိမ်တစ်လုံး
+    narration: >
+      [[mark:h-open]] ပြောင်းရ ခက်စေတဲ့ အကြောင်းရင်းတွေထဲမှာ အတွေ့ရများတဲ့ တစ်ခုက အသိတစ်ခုတည်းကို နေရာအများကြီးမှာ
+      ရေးထားတာပါ။ ထိုင်ခုံကို ၁၀ မိနစ် ထိန်းထားမယ်လို့ ကိုယ်တို့ ဆုံးဖြတ်ခဲ့တာ မှတ်မိမှာပါ။ အဲဒီ ၁၀ ဆိုတဲ့
+      ဂဏန်းက code ထဲမှာ သုံးနေရာ ရောက်နေပါတယ်။
+      [[mark:h-1]] ပထမ နေရာက ခုံကို ထိန်းပေးတဲ့ Booking code ပါ။
+      [[mark:h-2]] ဒုတိယ နေရာက ငွေချေတဲ့ စာမျက်နှာမှာ ခရီးသည်ကို ကျန်တဲ့ အချိန် ပြပေးတဲ့ app ထဲက နာရီပါ။
+      [[mark:h-3]] တတိယ နေရာကတော့ အချိန်ကုန်သွားတဲ့ ခုံတွေကို ပြန်လွှတ်ပေးတဲ့ job ပါ။
+      [[mark:h-forget]] တစ်နေ့မှာ ငွေချေတာ မြန်လာလို့ ၈ မိနစ်အထိ လျှော့မယ် ဆိုပါစို့။ ပြင်တဲ့သူက job
+      တစ်ခုတည်းကိုပဲ ပြင်မိပြီး ကျန်တဲ့ နှစ်နေရာကို မေ့ခဲ့ရင် ဘာဖြစ်မလဲ။ ခရီးသည်ရဲ့ နာရီက နှစ်မိနစ်
+      ကျန်သေးတယ်လို့ ပြနေချိန်မှာ ခုံက လွတ်သွားပြီး၊ ကောင်တာက ရောင်းလိုက်နိုင်ပါတယ်။ ထိုင်ခုံ နှစ်ခါ ရောင်းမိတဲ့
+      ပြဿနာ ပြန်ပေါ်လာတာပါပဲ။ ရေးထားတဲ့ နေရာ သုံးခု ဆိုတာ မေ့နိုင်တဲ့ နေရာ သုံးခုပါ။
+      [[mark:h-home]] ဖြေရှင်းနည်းက အသိတစ်ခုစီကို အိမ်တစ်လုံးပဲ ပေးတာပါ။ ခုံကို ဘယ်လောက်ကြာကြာ ထိန်းမလဲ ဆိုတာကို
+      နေရာ တစ်ခုတည်းမှာပဲ ရေးထားပါတယ်။
+      [[mark:h-read]] Booking code ရော၊ နာရီရော၊ job ရော အဲဒီနေရာကနေပဲ လာဖတ်ကြပါတယ်။
+      [[mark:h-one]] ဒါဆို နောက်တစ်ခါ ပြောင်းချင်ရင် ပြင်စရာ တစ်နေရာတည်းပါ။ မေ့စရာလည်း မရှိတော့ပါဘူး။
+      [[mark:h-rule]] ဒီနေရာမှာ အသိ ဆိုတာ ဂဏန်းတင် မဟုတ်ပါဘူး။ ဈေးကို ဘယ်လို တွက်လဲ၊ ခုံ တစ်ခုံကို ဘယ်အခါ
+      လွတ်တယ်လို့ သတ်မှတ်လဲ ဆိုတဲ့ business ရဲ့ စည်းမျဉ်းတွေ အားလုံး ပါပါတယ်။ လျှော့ဈေးအတွက် file ကိုးခု
+      ပြင်ရတာလည်း ဈေးတွက်တဲ့ စည်းမျဉ်းမှာ အိမ် မရှိသေးလို့ပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-h-open,
+          type: whiteboard.apply,
+          at: { mark: h-open },
+          clear: true,
+          upsertIds: [h-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-h-1,
+          type: whiteboard.apply,
+          at: { mark: h-1 },
+          upsertIds: [h-b1, h-b1-l, h-t1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-h-2,
+          type: whiteboard.apply,
+          at: { mark: h-2 },
+          upsertIds: [h-b2, h-b2-l, h-t2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-h-3,
+          type: whiteboard.apply,
+          at: { mark: h-3 },
+          upsertIds: [h-b3, h-b3-l, h-t3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-h-forget,
+          type: whiteboard.apply,
+          at: { mark: h-forget },
+          upsertIds: [h-forget],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-h-home,
+          type: whiteboard.apply,
+          at: { mark: h-home },
+          clear: true,
+          upsertIds: [h-title, h-b1, h-b1-l, h-b2, h-b2-l, h-b3, h-b3-l],
+        }
+      - {
+          id: draw-h-home-box,
+          type: whiteboard.apply,
+          at: { mark: h-home, offsetMs: 2500 },
+          upsertIds: [h-home, h-home-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-h-read,
+          type: whiteboard.apply,
+          at: { mark: h-read },
+          upsertIds: [h-a1, h-a2, h-a3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-h-one,
+          type: whiteboard.apply,
+          at: { mark: h-one },
+          upsertIds: [h-one],
+          drawMs: 900,
+        }
+
+  - id: change-test
+    chapter: Change test
+    narration: >
+      [[mark:t-close]] ဒါဆို ကိုယ်တို့ system က ပြောင်းရ ဘယ်လောက် လွယ်လဲ ဆိုတာကို ဘယ်လို သိမလဲ။ စမ်းသပ်နည်း
+      တစ်ခု ရှိပါတယ်။
+      [[mark:t-how]] ဖြစ်လာနိုင်တဲ့ ပြောင်းလဲမှု တစ်ခုကို ယူပြီး၊ ဒါ ပြောင်းရင် module ဘယ်နှခုကို ပြင်ရမလဲလို့
+      ရေတွက်ကြည့်တာပါ။ module ဆိုတာ အတူ ပြောင်းလဲတတ်တဲ့ code ကို အုပ်စုဖွဲ့ထားတဲ့ အပိုင်းပါ။ အဖြေက တစ်ခုနဲ့
+      နီးလေ ကောင်းလေပါပဲ။
+      [[mark:type-r1]] ကျောင်းသား လျှော့ဈေးလို ဈေးနှုန်း စည်းမျဉ်း အသစ် တစ်ခု ထည့်ရင် ဒီနေ့အတိုင်းဆို file
+      ကိုးခု၊ module ခုနစ်ခုကို ထိပါတယ်။
+      [[mark:type-r2]] ထိုင်ခုံ ထိန်းချိန်ကို ပြောင်းရင်တော့ သုံးနေရာ ပြင်ရပါမယ်။ ခုနက မြင်ခဲ့တဲ့အတိုင်း
+      ဂဏန်း တစ်ခုတည်းကို သုံးခါ ရေးထားလို့ပါ။
+      [[mark:type-r3]] commission နှုန်းကို ပြောင်းရင်တော့ တစ်နေရာတည်းပါ။ ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့
+      Settlement အပိုင်းမှာပဲ တွက်ထားလို့ပါ။ system တစ်ခုလုံး ဆိုးနေတာ မဟုတ်ဘဲ၊ တချို့နေရာတွေက ကောင်းနေပြီးသား
+      ဆိုတာကိုလည်း ဒီ စမ်းသပ်နည်းက ပြပေးပါတယ်။
+      [[mark:type-r4]] ငွေချေဖို့ wallet အသစ် တစ်ခု ထပ်ထည့်ရင်တော့ wallet ကုမ္ပဏီရဲ့ API ကို တိုက်ရိုက် ခေါ်ထားတဲ့
+      နေရာတိုင်းကို လိုက်ပြင်ရမှာပါ။
+      [[mark:t-read]] ဒီ table ကို ကြည့်လိုက်ရင် ဘယ်နေရာကို အရင် ပြင်သင့်လဲ ဆိုတာ ပေါ်လာပါတယ်။
+      [[mark:t-first]] ပြင်ရမယ့် နေရာ များပြီး၊ မကြာခဏလည်း ပြောင်းရမယ့် အရာက ဦးစားပေးပါ။ ဈေးနှုန်း စည်းမျဉ်းတွေက လတိုင်းလိုလို ပြောင်းလာမှာမို့၊
+      ဈေးတွက်တာကို အိမ်တစ်လုံး ပေးဖို့က ပထမပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - { id: close-home, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-home },
+          path: notebook/05-change-test.md,
+        }
+      - id: sel-cols
+        type: editor.select
+        at: { mark: t-how }
+        target:
+          {
+            file: notebook/05-change-test.md,
+            text: "| ဖြစ်လာနိုင်တဲ့ ပြောင်းလဲမှု | ဒီနေ့ ပြင်ရမယ့် နေရာ | ဘာကြောင့် |",
+          }
+      - id: type-r1
+        type: editor.type
+        at: { mark: type-r1 }
+        cadence: line-by-line
+        target: { file: notebook/05-change-test.md, after: "|---|---|---|\n" }
+        text: "| ကျောင်းသား လျှော့ဈေး ထည့် | file 9 ခု၊ module 7 ခု | ဈေးကို နေရာတိုင်းမှာ သီးခြား တွက်ထား |\n"
+      - id: type-r2
+        type: editor.type
+        at: { mark: type-r2 }
+        cadence: line-by-line
+        target: { file: notebook/05-change-test.md, after: "သီးခြား တွက်ထား |\n" }
+        text: "| seat hold အချိန် ပြောင်း | 3 နေရာ | 10 ကို Booking, app နာရီ, job မှာ ရေးထား |\n"
+      - id: type-r3
+        type: editor.type
+        at: { mark: type-r3 }
+        cadence: line-by-line
+        target: { file: notebook/05-change-test.md, after: "job မှာ ရေးထား |\n" }
+        text: "| commission နှုန်း ပြောင်း | 1 နေရာ (Settlement) | တစ်နေရာမှာပဲ တွက်ထား |\n"
+      - id: type-r4
+        type: editor.type
+        at: { mark: type-r4 }
+        cadence: line-by-line
+        target: { file: notebook/05-change-test.md, after: "တစ်နေရာမှာပဲ တွက်ထား |\n" }
+        text: "| wallet အသစ် ထည့် | API ခေါ်ထားတဲ့ နေရာတိုင်း | wallet API ကို တိုက်ရိုက် ခေါ်ထား |\n"
+      - id: sel-first
+        type: editor.select
+        at: { mark: t-first }
+        target:
+          {
+            file: notebook/05-change-test.md,
+            text: "| ကျောင်းသား လျှော့ဈေး ထည့် | file 9 ခု၊ module 7 ခု |",
+          }
+
+  - id: agree
+    chapter: ဘယ်လောက် ကောင်းရင် လုံလောက်လဲ
+    narration: >
+      ဒါပေမဲ့ ပြဿနာ နှစ်ခု ကျန်ပါသေးတယ်။ ပထမက လှလှ က လျှော့ဈေးကို ကျောင်းမဖွင့်ခင် ဒီအပတ်ထဲ
+      လိုချင်တာပါ။ ဈေးတွက်တာကို အရင် စုနေရင် အချိန် မမီပါဘူး။
+      [[mark:a-quality]] ဒီလို အခါမျိုးမှာ ကိုယ်တစ်ယောက်တည်း တိတ်တိတ်လေး ဆုံးဖြတ်လို့ မရပါဘူး။ ပြီးပြည့်စုံအောင်
+      လုပ်မယ် ဆိုပြီး နှစ်ပတ် ကြာသွားတာလည်း မမှန်သလို၊ မြန်မြန်ပြီးအောင် ဆိုပြီး အရည်အသွေးကို ဘယ်သူမှ မသိအောင်
+      လျှော့ချတာလည်း မမှန်ပါဘူး။ ဘယ်လောက် ကောင်းရင် လုံလောက်လဲ ဆိုတာက လှလှ နဲ့ CTO ဖြစ်တဲ့ အောင်အောင် တို့နဲ့
+      အတူ သဘောတူရမယ့် requirement တစ်ခုပါ။
+      [[mark:type-agree]] ကိုယ်တို့ သဘောတူလိုက်တာက ဒီအပတ်မှာ လျှော့ဈေးကို လက်ရှိ ပုံစံအတိုင်း file ကိုးခု ပြင်ပြီး
+      ထုတ်မယ် ဆိုတာပါ။ ဒါပေမဲ့ ခရီးသည်ဆီက ဖြတ်တဲ့ ငွေပမာဏကတော့ မှားလို့ မရဘူး ဆိုတဲ့ အနိမ့်ဆုံး စံကို
+      ထားပါတယ်။ ဈေးတွက်တာကို တစ်နေရာတည်း စုတဲ့ အလုပ်ကိုတော့ နောက်အပတ်မှာ လုပ်ပါမယ်။
+      [[mark:a-rot]] ဒုတိယ ပြဿနာက ထိုင်ခုံ code ပါ။ သင်္ကြန် ဖြစ်ရပ်ပြီးနောက် အလျင်အမြန် ဖာထေးခဲ့ရတာမို့၊
+      ယာယီလို့ ရေးထားတဲ့ မှတ်ချက်တွေနဲ့ ပိတ်ထားတဲ့ code အပိုင်းတွေ ကျန်နေပါတယ်။ ပြင်မထားတဲ့ ချို့ယွင်းချက်
+      အသေးလေးတွေက ဒီ code ကို ဘယ်သူမှ ဂရုမစိုက်ဘူး ဆိုတဲ့ အချက်ပြ ဖြစ်နေပါတယ်။ နောက်လူကလည်း ဒီလိုပဲ
+      ဖာထေးသွားပြီး၊ ကြာလာရင် ဘယ်သူမှ မထိရဲတော့ပါဘူး။
+      [[mark:type-mark]] ဒါကြောင့် တွေ့တာနဲ့ ချက်ချင်း ပြင်ပါ။ အခု မပြင်နိုင်သေးရင်လည်း ဘာက မှားနေလဲ၊ ဘယ်တော့
+      ပြင်မလဲ ဆိုတာကို မှတ်ချက်နဲ့ အမှတ်အသား လုပ်ထားပါ။ အမှတ်အသား လုပ်ထားတာက ဒီနေရာကို သိတယ်၊
+      တာဝန်ယူထားတယ် ဆိုတာ နောက်လူ မြင်အောင် ပြတာပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - id: type-agree
+        type: editor.type
+        at: { mark: type-agree }
+        cadence: line-by-line
+        target: { file: notebook/05-change-test.md, after: "wallet API ကို တိုက်ရိုက် ခေါ်ထား |\n" }
+        text: "\n## သဘောတူချက်\n\n- ဒီအပတ်: လျှော့ဈေးကို လက်ရှိ ပုံစံနဲ့ ထုတ်မယ်၊ ဖြတ်တဲ့ ငွေ မမှားရ\n- နောက်အပတ်: ဈေးတွက်တာကို တစ်နေရာတည်း စုမယ်\n"
+      - id: type-mark
+        type: editor.type
+        at: { mark: type-mark }
+        cadence: line-by-line
+        target: { file: notebook/05-change-test.md, after: "တစ်နေရာတည်း စုမယ်\n" }
+        text: "- ထိုင်ခုံ code: မပြင်နိုင်သေးတဲ့ နေရာကို မှတ်ချက်နဲ့ အမှတ်အသား လုပ်မယ်\n"
+      - id: expect-agree
+        type: expect.file
+        at: { afterAction: type-mark }
+        path: notebook/05-change-test.md
+        contains: "## သဘောတူချက်\n\n- ဒီအပတ်: လျှော့ဈေးကို လက်ရှိ ပုံစံနဲ့ ထုတ်မယ်၊ ဖြတ်တဲ့ ငွေ မမှားရ\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခရီးဖော် ရဲ့ code ထဲမှာ တူနေတဲ့ function နှစ်ခု ရှိပါတယ်။
+      [[mark:q-f1]] တစ်ခုက ခရီးသည်က လက်မှတ်ကို ပြန်အမ်းတဲ့အခါ ဖြတ်တဲ့ ကြေးကို တွက်ပါတယ်။
+      [[mark:q-f2]] နောက်တစ်ခုက ကားလိုင်းက ခရီးစဉ်ကို ဖျက်တဲ့အခါ ကားလိုင်းဆီက ကောက်တဲ့ ကြေးကို တွက်ပါတယ်။
+      [[mark:q-eq]] ဒီနေ့မှာတော့ နှစ်ခုလုံးက လက်မှတ်ခရဲ့ ၁၀ ရာခိုင်နှုန်း ဖြစ်နေပြီး၊ code ကလည်း တစ်ပုံစံတည်းပါ။
+      [[mark:q-a]] ဒီ နှစ်ခုကို function တစ်ခုတည်းအဖြစ် ပေါင်းလိုက်သင့်လား။
+      [[mark:q-b]] ဒါမှမဟုတ် အခုအတိုင်း ခွဲထားသင့်လား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ခွဲထားတာပါ။ ဘာကြောင့်လဲဆိုတော့ code က တူနေပေမဲ့ အသိက မတူလို့ပါ။ ခရီးသည်
+      ပြန်အမ်းကြေးက ခရီးသည်တွေအပေါ် ထားတဲ့ မူဝါဒပါ။ ကားလိုင်း ဖျက်ကြေးကတော့ ကားလိုင်းတွေနဲ့ ချုပ်ထားတဲ့
+      သဘောတူညီချက်ပါ။ ပြောင်းစေမယ့် အကြောင်းရင်းလည်း မတူ၊ ပြောင်းမယ့် အချိန်လည်း မတူပါဘူး။
+      [[mark:q-merge]] ပေါင်းလိုက်ရင် ခရီးသည် ကြေးကို ပြင်တဲ့နေ့မှာ ကားလိုင်း ကြေးပါ ဘယ်သူမှ မသိလိုက်ဘဲ
+      လိုက်ပြောင်းသွားနိုင်ပါတယ်။ ဆိုတော့ အိမ်တစ်လုံးပဲ ပေးရမှာက တူနေတဲ့ code ကို မဟုတ်ဘဲ၊ တူနေတဲ့ အသိကိုပါ။
+      [[mark:q-r]] ပေါင်းမယ့်အခါတိုင်း ဒီ နှစ်ခုက အကြောင်းရင်း တစ်ခုတည်းကြောင့် အတူတူ ပြောင်းမှာလားလို့
+      မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-f1,
+          type: whiteboard.apply,
+          at: { mark: q-f1 },
+          upsertIds: [q-f1, q-f1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-f2,
+          type: whiteboard.apply,
+          at: { mark: q-f2 },
+          upsertIds: [q-f2, q-f2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-eq,
+          type: whiteboard.apply,
+          at: { mark: q-eq },
+          upsertIds: [q-eq],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 700 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: draw-test, type: whiteboard.apply, at: { mark: q-r }, upsertIds: [q-r], drawMs: 1200 }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system မှာ မကြာခင် ဖြစ်လာနိုင်တဲ့
+      ပြောင်းလဲမှု တစ်ခုကို ဒီ table ထဲမှာ တစ်ကြောင်း ထည့်ကြည့်ပါ။ အဲဒါ ပြောင်းရင် ဘယ်နှနေရာ ပြင်ရမလဲ ဆိုတာကို
+      code ထဲမှာ တကယ် လိုက်ရှာပြီး ရေတွက်ပါ။
+      [[mark:turn-2]] ထင်ထားတာထက် များနေရင် ဘာကြောင့် ဆိုတဲ့ နေရာမှာ အိမ် မရှိသေးတဲ့ အသိက ဘာလဲ ဆိုတာ
+      ရေးထားပါ။ အဲဒါက ကိုယ် ပထမဆုံး ပြင်ရမယ့် နေရာပါပဲ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-last-row
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/05-change-test.md,
+            text: "| wallet အသစ် ထည့် | API ခေါ်ထားတဲ့ နေရာတိုင်း | wallet API ကို တိုက်ရိုက် ခေါ်ထား |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ design တစ်ခု ကောင်းမကောင်းကို နောက်တစ်ခါ ပြောင်းရတာ ပိုလွယ်သွားလား ဆိုတဲ့ မေးခွန်း
+      တစ်ခုတည်းနဲ့ အကဲဖြတ်နိုင်ပါတယ်။
+      [[mark:recap-2]] အသိတစ်ခုစီကို အိမ်တစ်လုံးပဲ ပေးပါ။ ဒါ ပြောင်းရင် ဘယ်နှနေရာ ပြင်ရမလဲ ဆိုတာ ရေတွက်ကြည့်ပါ။
+      ချို့ယွင်းချက် အသေးလေးတွေကို ပြင်ပါ၊ မပြင်နိုင်သေးရင် အမှတ်အသား လုပ်ထားပါ။ ဘယ်လောက် ကောင်းရင်
+      လုံလောက်လဲ ဆိုတာကိုတော့ business နဲ့ အတူ သဘောတူပါ။
+      [[mark:next]] နောက် lesson မှာတော့ ဆုံးဖြတ်ချက် တစ်ခုကို နောက်မှ ပြန်ပြင်ရင် ဘယ်လောက် ကုန်ကျမလဲ ဆိုတာနဲ့၊
+      မသေချာသေးတဲ့အခါ အန္တရာယ် နည်းနည်းနဲ့ ဘယ်လို စမ်းကြည့်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
