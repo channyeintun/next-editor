@@ -1,0 +1,906 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-27-eventstorming
+  title: "Architect Path 27: EventStorming"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/27-refund-events.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/27-refund-events.md: |+
+        # Refund ဖြစ်စဉ် · EventStorming မှတ်တမ်း
+
+        လှလှ (product) ရဲ့ မေးခွန်း: ခရီးသည်တွေက refund ကြာတယ်လို့ တိုင်နေတယ်။ ဘယ်နေရာမှာ ကြာနေတာလဲ?
+
+        ပါဝင်သူ: finance, ကားလိုင်း ဆက်ဆံရေး, ခရီးသည် ဝန်ဆောင်မှု, product, Booking team, Payment team
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: workshop-setup
+      contentType: html
+      name: Workshop ပြင်ဆင်ပုံ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">EventStorming workshop ပြင်ဆင်ပုံ</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">လူ</span>သိတဲ့သူနဲ့ ဆောက်တဲ့သူ၊ 10 ယောက်ခန့်</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">နံရံ</span>note ကပ်စရာ နေရာ မကုန်စေနဲ့</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term green">မတ်တပ်ရပ်</span>လူတိုင်း ကိုယ်တိုင် ရေး၊ ကိုယ်တိုင် ကပ်</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term violet">Facilitator</span>အဖြေ မပေးဘဲ မေးခွန်း မေးသူ</div>
+        </div>
+  whiteboardAssets:
+    # This lesson's boards 1–3 follow the sticky-note convention of the workshop
+    # (the narration says so): orange = event, blue = command, violet = rule,
+    # red = pain point. White = people, outside systems, boundaries.
+    # Board 1 — the refund timeline, note by note (time runs downward).
+    - {
+        id: e-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Refund ဖြစ်စဉ်ရဲ့ event တွေ",
+        fontSize: 36,
+      }
+    - { id: e1, kind: rectangle, x: 270, y: 228, width: 400, height: 58, strokeColor: "#f08c00" }
+    - {
+        id: e1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 240,
+        width: 400,
+        height: 35,
+        text: "လက်မှတ် ဖျက်လိုက်ပြီ",
+        fontSize: 28,
+      }
+    - { id: e2, kind: rectangle, x: 270, y: 308, width: 400, height: 58, strokeColor: "#f08c00" }
+    - {
+        id: e2-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 320,
+        width: 400,
+        height: 35,
+        text: "ထိုင်ခုံ ပြန်လွတ်သွားပြီ",
+        fontSize: 28,
+      }
+    - { id: e3, kind: rectangle, x: 270, y: 388, width: 400, height: 58, strokeColor: "#f08c00" }
+    - {
+        id: e3-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 400,
+        width: 400,
+        height: 35,
+        text: "ပြန်အမ်းငွေ အတည်ပြုပြီ",
+        fontSize: 28,
+      }
+    - { id: e4, kind: rectangle, x: 270, y: 468, width: 400, height: 58, strokeColor: "#f08c00" }
+    - {
+        id: e4-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 480,
+        width: 400,
+        height: 35,
+        text: "wallet ထဲ ငွေပြန်ရောက်ပြီ",
+        fontSize: 28,
+      }
+    - { id: e5, kind: rectangle, x: 270, y: 548, width: 400, height: 58, strokeColor: "#f08c00" }
+    - {
+        id: e5-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 560,
+        width: 400,
+        height: 35,
+        text: "ကားလိုင်း စာရင်းက နုတ်ပြီ",
+        fontSize: 28,
+      }
+    - {
+        id: e-p1,
+        kind: text,
+        x: 700,
+        y: 400,
+        width: 380,
+        height: 35,
+        text: "လက်နဲ့ စစ်၊ 3 ရက် ကြာ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: e-p2,
+        kind: text,
+        x: 700,
+        y: 560,
+        width: 380,
+        height: 35,
+        text: "ငွေရှင်းပြီးသားဆို?",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — what surrounds one event: who gives which command, the rule
+    # that follows, the outside system it reaches.
+    - { id: a-evt, kind: rectangle, x: 730, y: 265, width: 360, height: 70, strokeColor: "#f08c00" }
+    - {
+        id: a-evt-l,
+        kind: text,
+        align: center,
+        x: 730,
+        y: 283,
+        width: 360,
+        height: 35,
+        text: "ပြန်အမ်းငွေ အတည်ပြုပြီ",
+        fontSize: 28,
+      }
+    - {
+        id: a-actor,
+        kind: text,
+        x: 335,
+        y: 175,
+        width: 260,
+        height: 35,
+        text: "finance ဝန်ထမ်း",
+        fontSize: 28,
+      }
+    - { id: a-ar1, kind: freedraw, stroke: arrow-down, x: 430, y: 216, width: 40, height: 40 }
+    - { id: a-cmd, kind: rectangle, x: 270, y: 265, width: 360, height: 70, strokeColor: "#1971c2" }
+    - {
+        id: a-cmd-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 283,
+        width: 360,
+        height: 35,
+        text: "ပြန်အမ်းငွေ အတည်ပြုပါ",
+        fontSize: 28,
+      }
+    - { id: a-ar2, kind: freedraw, stroke: arrow-right, x: 640, y: 280, width: 80, height: 40 }
+    - { id: a-ar3, kind: freedraw, stroke: arrow-down, x: 890, y: 345, width: 40, height: 70 }
+    - {
+        id: a-rule,
+        kind: rectangle,
+        x: 730,
+        y: 425,
+        width: 360,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-rule-l,
+        kind: text,
+        align: center,
+        x: 730,
+        y: 443,
+        width: 360,
+        height: 35,
+        text: "အတည်ပြုတိုင်း ငွေပြန်ပို့",
+        fontSize: 28,
+      }
+    - { id: a-ar4, kind: freedraw, stroke: arrow-left, x: 640, y: 440, width: 80, height: 40 }
+    - {
+        id: a-ext,
+        kind: rectangle,
+        x: 270,
+        y: 425,
+        width: 360,
+        height: 70,
+        strokeStyle: dashed,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-ext-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 443,
+        width: 360,
+        height: 35,
+        text: "wallet payment API",
+        fontSize: 28,
+      }
+    # Board 3 — the five events again, grouped: the event where the business
+    # changes phase, the data each group changes, two candidate contexts (green).
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Event အုပ်စုတွေ",
+        fontSize: 36,
+      }
+    - {
+        id: c-e1,
+        kind: text,
+        x: 300,
+        y: 240,
+        width: 330,
+        height: 35,
+        text: "လက်မှတ် ဖျက်လိုက်ပြီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e2,
+        kind: text,
+        x: 300,
+        y: 288,
+        width: 330,
+        height: 35,
+        text: "ထိုင်ခုံ ပြန်လွတ်သွားပြီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e3,
+        kind: text,
+        x: 300,
+        y: 400,
+        width: 330,
+        height: 35,
+        text: "ပြန်အမ်းငွေ အတည်ပြုပြီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e4,
+        kind: text,
+        x: 300,
+        y: 448,
+        width: 370,
+        height: 35,
+        text: "wallet ထဲ ငွေပြန်ရောက်ပြီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-e5,
+        kind: text,
+        x: 300,
+        y: 496,
+        width: 350,
+        height: 35,
+        text: "ကားလိုင်း စာရင်းက နုတ်ပြီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-pivot,
+        kind: freedraw,
+        stroke: double-underline,
+        x: 300,
+        y: 398,
+        width: 310,
+        height: 44,
+      }
+    - {
+        id: c-g1,
+        kind: rectangle,
+        x: 280,
+        y: 228,
+        width: 420,
+        height: 108,
+        strokeStyle: dashed,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-g2,
+        kind: rectangle,
+        x: 280,
+        y: 388,
+        width: 420,
+        height: 156,
+        strokeStyle: dashed,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: c-d1,
+        kind: text,
+        x: 730,
+        y: 240,
+        width: 360,
+        height: 35,
+        text: "data: လက်မှတ်၊ ထိုင်ခုံ",
+        fontSize: 28,
+      }
+    - {
+        id: c-d2,
+        kind: text,
+        x: 730,
+        y: 400,
+        width: 360,
+        height: 35,
+        text: "data: ပြန်အမ်းငွေ",
+        fontSize: 28,
+      }
+    - {
+        id: c-x1,
+        kind: text,
+        x: 730,
+        y: 288,
+        width: 360,
+        height: 38,
+        text: "Cancellation context",
+        fontSize: 30,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-x2,
+        kind: text,
+        x: 730,
+        y: 448,
+        width: 360,
+        height: 38,
+        text: "Refund context",
+        fontSize: 30,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz (the course's usual colours): white question and
+    # options, orange for the word in dispute, green for the answer.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ဒီ workshop က ကျရှုံးခဲ့တာလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-m0,
+        kind: text,
+        x: 290,
+        y: 238,
+        width: 600,
+        height: 35,
+        text: "refund ပြီးပြီ ဆိုတာ ဘာလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-m1,
+        kind: text,
+        x: 290,
+        y: 286,
+        width: 700,
+        height: 35,
+        text: "developer: လက်မှတ် ဖျက်ပြီးတာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-m2,
+        kind: text,
+        x: 290,
+        y: 334,
+        width: 700,
+        height: 35,
+        text: "finance: အတည်ပြုပြီးတာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-m3,
+        kind: text,
+        x: 290,
+        y: 382,
+        width: 760,
+        height: 35,
+        text: "ဝန်ဆောင်မှု: wallet ထဲ ငွေရောက်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 500,
+        height: 35,
+        text: "က) ကျရှုံးခဲ့တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 512,
+        width: 500,
+        height: 35,
+        text: "ခ) အောင်မြင်ခဲ့တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 517,
+        width: 250,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 570,
+        y: 506,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 592,
+        width: 760,
+        height: 35,
+        text: "ငြင်းခုံမှု ပေါ်လာတာကိုက ရလဒ်ပါ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8127
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Refund ကို ဘယ်သူ အပြည့်အစုံ သိလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ business logic ကို တည်ဆောက်တဲ့ ပုံစံကို၊ အဲဒီ အပိုင်းက တကယ် ဘယ်လောက် ရှုပ်ထွေးလဲ
+      ဆိုတာနဲ့ လိုက်ပြီး ရွေးရတယ် ဆိုတာ လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီအပတ်မှာ product manager လှလှ က ကိစ္စ တစ်ခု ယူလာပါတယ်။
+      [[mark:sel-note]] ခရီးသည်တွေက လက်မှတ် ဖျက်ပြီးတဲ့နောက် ငွေပြန်အမ်းတာ၊ ဆိုလိုတာက refund ရတာ အရမ်း
+      ကြာတယ်လို့ တိုင်ကြားနေကြတာပါ။ ဘယ်နေရာမှာ ကြာနေတာလဲ ဆိုတာကို သူ သိချင်ပါတယ်။
+      [[mark:who-knows]] ကိုယ်က refund တစ်ခု ဘယ်လို စီးဆင်းသွားလဲ ဆိုတာကို ပုံဆွဲကြည့်ပါတယ်။ Booking team lead
+      မောင်မောင် က လက်မှတ် ဖျက်တာနဲ့ ထိုင်ခုံ ပြန်လွှတ်ပေးတာအထိကို သိပါတယ်။ Payment team က wallet ဆီ
+      ငွေပြန်ပို့တဲ့ အပိုင်းကို သိပါတယ်။ ဒါပေမဲ့ အဲဒီကြားမှာ finance ဘက်က ဘာတွေ စစ်ဆေးလဲ၊ ကားလိုင်းကို
+      ရှင်းပေးရမယ့် ငွေစာရင်းထဲကနေ ဘယ်လို ပြန်နုတ်လဲ ဆိုတာကိုတော့ engineering ဘက်က ဘယ်သူမှ အပြည့်အစုံ
+      မပြောနိုင်ပါဘူး။
+      [[mark:heads]] refund ဖြစ်စဉ်ရဲ့ အသိက code ထဲမှာလည်း အပြည့် မရှိဘဲ၊ ဌာန အသီးသီးက လူတွေရဲ့ ခေါင်းထဲမှာ
+      အပိုင်းပိုင်း ပြန့်ကျဲနေတာပါ။ အဲဒီ အသိတွေကို တစ်နေရာတည်းမှာ စုပြီး အားလုံး မြင်ရအောင် လုပ်ပေးတဲ့ နည်းကို
+      EventStorming လို့ ခေါ်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/27-refund-events.md,
+        }
+      - id: sel-note
+        type: editor.select
+        at: { mark: sel-note }
+        target:
+          file: notebook/27-refund-events.md
+          text: "ခရီးသည်တွေက refund ကြာတယ်လို့ တိုင်နေတယ်။ ဘယ်နေရာမှာ ကြာနေတာလဲ?"
+
+  - id: wall
+    chapter: Workshop ကို ပြင်ဆင်ခြင်း
+    narration: >
+      [[mark:w-open]] EventStorming ဆိုတာ business ဖြစ်စဉ် တစ်ခုမှာ ဖြစ်ပျက်သွားတာတွေကို sticky note တွေပေါ်
+      ရေးပြီး၊ နံရံမှာ အချိန်အလိုက် ကပ်သွားတဲ့ workshop တစ်မျိုးပါ။ ပြင်ဆင်တဲ့အခါ သတိထားစရာ လေးချက် ရှိပါတယ်။
+      [[mark:w-people]] ပထမ အချက်က လူပါ။ ဖြစ်စဉ်ကို တကယ် သိတဲ့သူတွေနဲ့ system ကို ဆောက်တဲ့သူတွေ နှစ်မျိုးလုံး
+      ပါရပါမယ်။ refund အတွက်ဆိုရင် finance ဘက်က တာဝန်ခံ၊ ကားလိုင်းတွေနဲ့ နေ့စဉ် ဆက်ဆံနေတဲ့ ဝန်ထမ်း၊
+      ခရီးသည်တွေရဲ့ တိုင်ကြားချက်ကို ဖြေပေးနေတဲ့ ဝန်ထမ်း၊ လှလှ နဲ့ developer တွေကို ဖိတ်ပါတယ်။ ဆယ်ယောက်လောက်ဆို
+      အတော်ပါပဲ။
+      [[mark:w-wall]] ဒုတိယ အချက်က နေရာပါ။ note တွေ ကပ်ဖို့ နံရံ ရှည်ရှည် တစ်ခု လိုပါတယ်။ နေရာ ကုန်သွားရင်
+      လူတွေက ရေးစရာ ကျန်သေးတာကို မရေးတော့ဘဲ ရပ်သွားတတ်လို့ပါ။
+      [[mark:w-stand]] တတိယ အချက်က မတ်တပ်ရပ်ပြီး လုပ်တာပါ။ စားပွဲမှာ ထိုင်လိုက်ရင် တစ်ယောက်က ပြော၊
+      ကျန်တဲ့သူတွေက နားထောင်တဲ့ အစည်းအဝေး ဖြစ်သွားပါတယ်။ နံရံရှေ့မှာ ရပ်နေရင်တော့ လူတိုင်းက ကိုယ်တိုင် ရေးပြီး
+      ကိုယ်တိုင် ကပ်ကြပါတယ်။
+      [[mark:w-fac]] စတုတ္ထ အချက်က facilitator၊ ဆိုလိုတာက workshop ကို ဦးဆောင်ပေးတဲ့သူပါ။ ဒီနေ့အတွက်တော့
+      ကိုယ်ပါပဲ။ facilitator ရဲ့ အလုပ်က အဖြေပေးဖို့ မဟုတ်ဘဲ၊ ဒီ နှစ်ခုကြားမှာ ဘာဖြစ်သေးလဲ၊ ဒါကို ဘယ်သူက
+      လုပ်တာလဲ ဆိုပြီး မေးခွန်းတွေ မေးပေးဖို့ပါ။ အဖြေကို သိတာက နံရံရှေ့က လူတွေပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+      - { title: "EventStorming", url: "https://www.eventstorming.com/" }
+    actions:
+      - {
+          id: show-setup,
+          type: slide.show,
+          at: { mark: w-open, offsetMs: -1200 },
+          slideId: workshop-setup,
+        }
+      - {
+          id: point-people,
+          type: slide.point,
+          at: { mark: w-people },
+          target: { x: 0.15, y: 0.39 },
+        }
+      - { id: point-wall, type: slide.point, at: { mark: w-wall }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-stand, type: slide.point, at: { mark: w-stand }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-fac, type: slide.point, at: { mark: w-fac }, target: { x: 0.15, y: 0.81 } }
+
+  - id: events
+    chapter: Event တွေကနေ စခြင်း
+    narration: >
+      [[mark:e-open]] workshop က event တွေနဲ့ စပါတယ်။ event ဆိုတာ business ထဲမှာ ဖြစ်ပြီးသွားတဲ့ အကြောင်းအရာ
+      တစ်ခုပါ။ ဖြစ်ပြီးသား ဖြစ်လို့ အမြဲတမ်း အတိတ်ကာလနဲ့ ရေးရပါတယ်။ note အရောင်တွေမှာလည်း အဓိပ္ပာယ် တစ်ခုစီ
+      ရှိပြီး၊ event ကို လိမ္မော်ရောင် note ပေါ်မှာ ရေးပါတယ်။ လူတိုင်းကို ကိုယ်သိတဲ့ event တွေကို အစီအစဉ်
+      မလိုဘဲ ရေးခိုင်းလိုက်ပါတယ်။
+      [[mark:e-cancel]] မောင်မောင် က လက်မှတ် ဖျက်လိုက်ပြီ ဆိုတဲ့ event ကို အရင်ဆုံး ကပ်ပါတယ်။
+      [[mark:e-approve]] finance ဘက်က တာဝန်ခံကတော့ ပြန်အမ်းငွေကို အတည်ပြုပြီ ဆိုတဲ့ event ကို ကပ်ပါတယ်။
+      [[mark:e-wallet]] Payment team က developer တစ်ယောက်ကလည်း wallet ထဲ ငွေပြန်ရောက်ပြီ ဆိုတာကို ကပ်ပါတယ်။
+      [[mark:e-order]] ပြီးတော့ note တွေကို ဖြစ်တဲ့ အချိန်အလိုက် စီကြပါတယ်။ စီလိုက်တဲ့အခါမှ ကွက်လပ်တွေ
+      ပေါ်လာတာပါ။ လက်မှတ် ဖျက်ပြီးတာနဲ့ အတည်ပြုတာကြားမှာ ဘာဖြစ်သေးလဲလို့ ကိုယ်က မေးလိုက်ပါတယ်။
+      [[mark:e-seat]] အဲဒီတော့မှ ထိုင်ခုံ ပြန်လွတ်သွားပြီ ဆိုတဲ့ event တစ်ခု ထပ်ဝင်လာပါတယ်။
+      [[mark:e-settle-q]] ငွေပြန်ရောက်ရင်ကော ပြီးပြီလားလို့ မေးတော့၊ finance တာဝန်ခံက မပြီးသေးဘူးလို့ ဖြေပါတယ်။
+      [[mark:e-settle]] ပြန်အမ်းလိုက်တဲ့ ငွေကို ကားလိုင်းကို ရှင်းပေးမယ့် စာရင်းထဲကနေ ပြန်နုတ်ရပါသေးတယ်။ ဒီ
+      event ကို engineering ဘက်က ဘယ်သူမှ မသိခဲ့ပါဘူး။
+      [[mark:e-pain]] နောက်တစ်ဆင့်က အခက်အခဲ ရှိနေတဲ့ နေရာတွေ၊ ဆိုလိုတာက pain point တွေကို အနီရောင် note နဲ့
+      မှတ်တာပါ။
+      [[mark:e-pain1]] finance က ပြန်အမ်းငွေ တစ်ခုချင်းစီကို လက်နဲ့ စစ်ပြီးမှ အတည်ပြုရလို့ သုံးရက်လောက်
+      ကြာပါတယ်။ လှလှ ရှာနေတဲ့ အဖြေက ဒီနေရာမှာပါ။
+      [[mark:e-pain2]] နောက်တစ်ခုက ကားလိုင်းကို ငွေရှင်းပေးပြီးသား အပတ်ရဲ့ လက်မှတ်ကို ဖျက်လာရင် ဘယ်လို
+      ပြန်နုတ်မလဲ ဆိုတာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-setup, type: slide.close, at: { mark: e-open, offsetMs: -600 } }
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { mark: e-open },
+          open: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-e-cancel,
+          type: whiteboard.apply,
+          at: { mark: e-cancel },
+          upsertIds: [e1, e1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-approve,
+          type: whiteboard.apply,
+          at: { mark: e-approve },
+          upsertIds: [e3, e3-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-wallet,
+          type: whiteboard.apply,
+          at: { mark: e-wallet },
+          upsertIds: [e4, e4-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-seat,
+          type: whiteboard.apply,
+          at: { mark: e-seat },
+          upsertIds: [e2, e2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-settle,
+          type: whiteboard.apply,
+          at: { mark: e-settle },
+          upsertIds: [e5, e5-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-pain1,
+          type: whiteboard.apply,
+          at: { mark: e-pain1 },
+          upsertIds: [e-p1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-e-pain2,
+          type: whiteboard.apply,
+          at: { mark: e-pain2 },
+          upsertIds: [e-p2],
+          drawMs: 900,
+        }
+
+  - id: around
+    chapter: ဘယ်သူက ဘာကို ဖြစ်စေတာလဲ
+    narration: >
+      event တွေချည်းပဲဆိုရင် ဘာဖြစ်ခဲ့လဲ ဆိုတာလောက်ပဲ သိရပါတယ်။ ဘာကြောင့် ဖြစ်ခဲ့လဲ သိဖို့ event
+      တစ်ခုချင်းစီရဲ့ ပတ်ဝန်းကျင်ကို ဆက်ဖြည့်ရပါတယ်။
+      [[mark:a-pick]] ပြန်အမ်းငွေ အတည်ပြုပြီ ဆိုတဲ့ event ကို ဥပမာ ယူကြည့်ရအောင်။
+      [[mark:a-cmd]] ဒီ event ကို ဖြစ်စေတာက command ပါ။ command ဆိုတာ တစ်ခုခု လုပ်ပေးဖို့
+      တောင်းဆိုချက်ဖြစ်ပြီး၊ အပြာရောင် note ပေါ်မှာ ရေးပါတယ်။
+      [[mark:a-actor]] ဒီ command ကို ပေးတာကတော့ finance ဝန်ထမ်းပါ။ command ကို ငြင်းလို့ ရပေမဲ့၊ event ကတော့
+      ဖြစ်ပြီးသားမို့ ပြန်ငြင်းလို့ မရတော့ပါဘူး။
+      [[mark:a-rule]] event တစ်ခု ဖြစ်တိုင်း အလိုအလျောက် လိုက်ဖြစ်ရမယ့် အရာတွေလည်း ရှိပါတယ်။ အဲဒါကို rule လို့
+      ခေါ်ပြီး ခရမ်းရောင် note နဲ့ ရေးပါတယ်။ ဒီမှာဆိုရင် ပြန်အမ်းငွေ အတည်ပြုတိုင်း ခရီးသည်ဆီ ငွေပြန်ပို့ရမယ်
+      ဆိုတာပါ။ rule တွေကို လိုက်မေးကြည့်တဲ့အခါ code ထဲမှာ မရှိဘဲ၊ လူက မှတ်မိလို့ လုပ်ပေးနေတဲ့ rule တွေကိုပါ
+      တွေ့ရတတ်ပါတယ်။
+      [[mark:a-ext]] နောက်ဆုံး တစ်ခုက အပြင်က system ပါ။ ငွေကို တကယ် ပြန်ပို့ပေးတာက ခရီးဖော် မဟုတ်ဘဲ wallet
+      ကုမ္ပဏီရဲ့ payment API ပါ။ ကိုယ်တို့ ထိန်းချုပ်လို့ မရတဲ့ အပိုင်းတွေ ဘယ်နေရာမှာ ဝင်လာလဲ ဆိုတာကို ဒီလို
+      မှတ်ထားရပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-a-open,
+          type: whiteboard.apply,
+          at: { mark: a-pick },
+          clear: true,
+          upsertIds: [a-evt, a-evt-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-a-cmd,
+          type: whiteboard.apply,
+          at: { mark: a-cmd },
+          upsertIds: [a-cmd, a-cmd-l, a-ar2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-actor,
+          type: whiteboard.apply,
+          at: { mark: a-actor },
+          upsertIds: [a-actor, a-ar1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-rule,
+          type: whiteboard.apply,
+          at: { mark: a-rule },
+          upsertIds: [a-ar3, a-rule, a-rule-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-ext,
+          type: whiteboard.apply,
+          at: { mark: a-ext },
+          upsertIds: [a-ar4, a-ext, a-ext-l],
+          drawMs: 1500,
+        }
+
+  - id: clusters
+    chapter: Event အုပ်စုကနေ context ဆီ
+    narration: >
+      [[mark:c-open]] နံရံ ပြည့်သွားတဲ့အခါ နောက်ကို ဆုတ်ပြီး event အားလုံးကို တစ်ခါတည်း ပြန်ကြည့်ပါတယ်။
+      [[mark:c-pivot]] ဒီထဲမှာ ပြန်အမ်းငွေ အတည်ပြုပြီ ဆိုတဲ့ event က ထူးခြားပါတယ်။ အဲဒီ မတိုင်ခင်အထိ လူတွေ
+      ပြောနေတာက လက်မှတ်နဲ့ ထိုင်ခုံ အကြောင်းပါ။ အဲဒီနောက်ပိုင်းမှာတော့ ငွေအကြောင်း ဖြစ်သွားပြီး၊ ပါဝင်တဲ့
+      လူတွေလည်း ပြောင်းသွားပါတယ်။ business က အဆင့် တစ်ခုကနေ နောက်တစ်ခုကို ကူးသွားတဲ့ ဒီလို event မျိုးကို အထူး
+      မှတ်ထားရပါတယ်။
+      [[mark:c-groups]] အဲဒီ event ရဲ့ အရှေ့နဲ့ အနောက်မှာ event တွေက data တစ်မျိုးစီကို ဝိုင်းပြီး
+      အုပ်စုဖွဲ့နေပါတယ်။ ပထမ အုပ်စုက လက်မှတ်နဲ့ ထိုင်ခုံကို၊ ဒုတိယ အုပ်စုက ပြန်အမ်းငွေကို ပြောင်းလဲပါတယ်။ အမြဲ
+      အတူတူ မှန်နေရမယ့် data အစုကို aggregate လို့ ခေါ်တာမို့၊ ဒီ အုပ်စုတွေက aggregate အတွက် လျာထားချက်တွေပါ။
+      [[mark:c-ctx]] အဲဒီထက် ပိုကျယ်တဲ့ အစုအဝေးတွေကတော့ bounded context၊ ဆိုလိုတာက စကားလုံး တစ်လုံးက အဓိပ္ပာယ်
+      တစ်ခုတည်း ရှိတဲ့ နယ်နိမိတ်ကို ညွှန်ပြပါတယ်။
+      [[mark:c-names]] ဒီမှာတော့ လက်မှတ် ဖျက်တဲ့ဘက်ကို Cancellation၊ ငွေဘက်ကို Refund ဆိုပြီး context နှစ်ခု
+      လျာထားလို့ ရပါတယ်။ လျာထားချက်လို့ပဲ ပြောတာက workshop တစ်ခါတည်းနဲ့ နယ်နိမိတ်ကို အတည် မဆုံးဖြတ်လို့ပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title, c-e1, c-e2, c-e3, c-e4, c-e5],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-c-pivot,
+          type: whiteboard.apply,
+          at: { mark: c-pivot },
+          upsertIds: [c-pivot],
+          drawMs: 800,
+        }
+      - {
+          id: draw-c-agg,
+          type: whiteboard.apply,
+          at: { mark: c-groups },
+          upsertIds: [c-g1, c-d1, c-g2, c-d2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-c-ctx,
+          type: whiteboard.apply,
+          at: { mark: c-names },
+          upsertIds: [c-x1, c-x2],
+          drawMs: 1400,
+        }
+
+  - id: record
+    chapter: မှတ်တမ်း ချရေးခြင်း
+    narration: >
+      [[mark:d-close]] နံရံက note တွေက အမြဲ ကပ်မနေပါဘူး။ ဒါကြောင့် workshop ပြီးတာနဲ့ တွေ့ခဲ့တာတွေကို မှတ်တမ်း
+      တိုတို တစ်ခုအဖြစ် ချရေးထားရပါတယ်။
+      [[mark:type-e1]] အရင်ဆုံး event တွေကို ဖြစ်တဲ့ အစဉ်အတိုင်း ရေးပါတယ်။ ပထမ နှစ်ခုက လက်မှတ်နဲ့ ထိုင်ခုံဘက်က
+      event တွေပါ။
+      [[mark:type-e2]] ကျန်တဲ့ သုံးခုက ငွေဘက်က event တွေပါ။ pain point နှစ်ခုကိုလည်း သက်ဆိုင်တဲ့ event အောက်မှာ
+      တွဲရေးထားပါတယ်။ refund ကို မြန်အောင် လုပ်မယ်ဆိုရင် ဘယ်နေရာက စရမလဲ ဆိုတာကို ဒီ နှစ်ကြောင်းက ပြောပြနေပါတယ်။
+      [[mark:type-ctx]] နောက်ဆုံးမှာ context လျာထားချက် နှစ်ခုကို၊ ဘယ် event က ဘယ် context ထဲ ကျလဲ ဆိုတာနဲ့အတူ
+      ရေးပါတယ်။ နောက်ပိုင်း code ကို အပိုင်းခွဲတဲ့အခါ ဒီ မှတ်တမ်းကို ပြန်ကိုးကားလို့ ရပါတယ်။
+      [[mark:sel-pain]] ဒုတိယ pain point ကိုတော့ သတိထားကြည့်ပါ။ အဖြေ မရှိသေးတဲ့ မေးခွန်းပါ။ မှတ်တမ်းထဲမှာ အဖြေ
+      မရှိသေးဘူးလို့ ပွင့်ပွင့်လင်းလင်း ရေးထားတာက၊ မသိဘဲနဲ့ code ရေးလိုက်တာထက် အများကြီး တန်ဖိုးရှိပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-clusters, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-clusters },
+          path: notebook/27-refund-events.md,
+        }
+      - id: type-e1
+        type: editor.type
+        at: { mark: type-e1 }
+        cadence: line-by-line
+        target: { file: notebook/27-refund-events.md, after: "Booking team, Payment team\n\n" }
+        text: "## Event တွေ (ဖြစ်တဲ့ အစဉ်အတိုင်း)\n1. လက်မှတ် ဖျက်လိုက်ပြီ\n2. ထိုင်ခုံ ပြန်လွတ်သွားပြီ\n"
+      - id: type-e2
+        type: editor.type
+        at: { mark: type-e2 }
+        cadence: line-by-line
+        target: { file: notebook/27-refund-events.md, after: "2. ထိုင်ခုံ ပြန်လွတ်သွားပြီ\n" }
+        text: "3. ပြန်အမ်းငွေ အတည်ပြုပြီ\n   - pain point: finance က လက်နဲ့ စစ်ရတယ်၊ 3 ရက်လောက် ကြာတယ်\n4. wallet ထဲ ငွေပြန်ရောက်ပြီ\n5. ကားလိုင်း စာရင်းက နုတ်ပြီ\n   - pain point: ငွေရှင်းပြီးသား အပတ်ဆို ဘယ်လို နုတ်မလဲ? အဖြေ မရှိသေး\n\n"
+      - id: type-ctx
+        type: editor.type
+        at: { mark: type-ctx }
+        cadence: line-by-line
+        target: { file: notebook/27-refund-events.md, after: "အဖြေ မရှိသေး\n\n" }
+        text: "## Context လျာထားချက်\n- Cancellation: event 1–2 (လက်မှတ်နဲ့ ထိုင်ခုံ)\n- Refund: event 3–5 (ငွေ)\n"
+      - id: sel-pain
+        type: editor.select
+        at: { mark: sel-pain }
+        target:
+          { file: notebook/27-refund-events.md, text: "ငွေရှင်းပြီးသား အပတ်ဆို ဘယ်လို နုတ်မလဲ? အဖြေ မရှိသေး" }
+      - id: expect-contexts
+        type: expect.file
+        at: { afterAction: sel-pain }
+        path: notebook/27-refund-events.md
+        contains: "## Context လျာထားချက်\n- Cancellation: event 1–2 (လက်မှတ်နဲ့ ထိုင်ခုံ)\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ workshop က နှစ်နာရီကျော် ကြာပြီးမှ ပြီးသွားပါတယ်။ နံရံကတော့ note
+      တွေနဲ့ ရှုပ်ပွနေပြီး၊ ကြည့်လို့ ကောင်းတဲ့ ပုံတစ်ပုံ မဟုတ်ပါဘူး။
+      [[mark:q-mean]] ဒါ့အပြင် refund ပြီးပြီ ဆိုတဲ့ စကားကို လူတွေက သုံးမျိုး နားလည်နေလို့ သုံးခါတောင်
+      ငြင်းခုံခဲ့ရပါတယ်။ developer တွေအတွက်က လက်မှတ် ဖျက်ပြီးတာပါ။ finance အတွက်က အတည်ပြုပြီးတာပါ။
+      ခရီးသည်တွေကို ဖြေပေးရတဲ့ ဝန်ထမ်းအတွက်ကတော့ wallet ထဲ ငွေရောက်တာပါ။
+      [[mark:q-a]] ဒါဆို ဒီ workshop က ကျရှုံးခဲ့တာလား။
+      [[mark:q-b]] ဒါမှမဟုတ် အောင်မြင်ခဲ့တာလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ အောင်မြင်ခဲ့တာပါ။ ဘာကြောင့်လဲဆိုတော့ အဲဒီ ငြင်းခုံမှုတွေက workshop ကြောင့်
+      ဖြစ်လာတာ မဟုတ်ဘဲ၊ အရင်ကတည်းက ရှိနေပြီးသားမို့ပါ။ app က လက်မှတ် ဖျက်တာနဲ့ refund ပြီးပြီလို့ ပြနေချိန်မှာ၊
+      ခရီးသည်ဆီ ငွေက သုံးရက်ကြာမှ ရောက်ပါတယ်။ တိုင်ကြားချက် တချို့က ဒီ ကွဲလွဲမှုကနေ လာတာပါ။
+      [[mark:q-why]] EventStorming ရဲ့ တကယ့် တန်ဖိုးက နံရံပေါ်က ပုံ မဟုတ်ပါဘူး။
+      [[mark:q-reason]] ဌာန မတူတဲ့ လူတွေ စကားလုံး တစ်လုံးကို အဓိပ္ပာယ် တစ်ခုတည်းနဲ့ သုံးလာတာနဲ့၊ ဖုံးကွယ်နေတဲ့
+      သဘောထား ကွဲလွဲမှုတွေ ပေါ်လာတာက ရလဒ်ပါ။ ပုံကတော့ အပိုထွက်လာတဲ့ အရာ တစ်ခုပဲ ဖြစ်ပါတယ်။ ဒီနေ့မှာပဲ refund
+      ပြီးပြီ ဆိုတာကို ခရီးသည်ဆီ ငွေရောက်မှ သုံးမယ်လို့ သဘောတူနိုင်ခဲ့ကြပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-mean,
+          type: whiteboard.apply,
+          at: { mark: q-mean },
+          upsertIds: [q-m0, q-m1, q-m2, q-m3],
+          drawMs: 3200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 700 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 700 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: q-reason },
+          upsertIds: [q-r],
+          drawMs: 1000,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် လုပ်ငန်းထဲက ဖြစ်စဉ် တစ်ခုကို ရွေးပါ။ lesson ကို pause လုပ်ပြီး၊
+      ဒီ event စာရင်းနေရာမှာ ကိုယ့် system ရဲ့ ဖြစ်စဉ်ထဲက ပထမဆုံး event ငါးခုကို အတိတ်ကာလနဲ့ ရေးကြည့်ပါ။
+      [[mark:turn-2]] ရေးရင်းနဲ့ event နှစ်ခုကြားမှာ ဘာဖြစ်လဲ ကိုယ်တိုင် မသေချာတဲ့ နေရာတွေ တွေ့လာပါလိမ့်မယ်။
+      အဲဒီ နေရာတွေက workshop မှာ ဘယ်သူတွေကို ဖိတ်ရမလဲ ဆိုတာကို ပြောပြနေတာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-events
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/27-refund-events.md
+          text: "1. လက်မှတ် ဖျက်လိုက်ပြီ\n2. ထိုင်ခုံ ပြန်လွတ်သွားပြီ\n3. ပြန်အမ်းငွေ အတည်ပြုပြီ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ business ဖြစ်စဉ် တစ်ခုရဲ့ အသိက လူတွေရဲ့ ခေါင်းထဲမှာ အပိုင်းပိုင်း
+      ပြန့်ကျဲနေတတ်ပါတယ်။ EventStorming က သိတဲ့သူနဲ့ ဆောက်တဲ့သူကို နံရံ တစ်ခုရှေ့မှာ စုပြီး၊ event တွေကို
+      အချိန်အလိုက် စီ၊ pain point တွေကို မှတ်ပြီး၊ command၊ rule နဲ့ အပြင်က system တွေကို ဖြည့်သွားတဲ့ နည်းပါ။
+      [[mark:recap-ctx]] event အုပ်စုတွေကနေ aggregate နဲ့ context လျာထားချက်တွေ ရပါတယ်။ အရေးအကြီးဆုံး ရလဒ်ကတော့
+      အားလုံး အတူသုံးတဲ့ စကားနဲ့၊ ပေါ်လာတဲ့ သဘောထား ကွဲလွဲမှုတွေပါ။
+      [[mark:next]] ဒီ lesson နဲ့ domain ကို နားလည်တဲ့ အပိုင်း ပြီးဆုံးပါပြီ။ နောက် lesson မှာတော့ data ဘက်ကို
+      ကူးပြီး၊ data system တွေကို ရွေးတဲ့အခါ ချိန်ဆရတဲ့ trade off တွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - id: sel-contexts
+        type: editor.select
+        at: { mark: recap-ctx }
+        target:
+          file: notebook/27-refund-events.md
+          text: "- Cancellation: event 1–2 (လက်မှတ်နဲ့ ထိုင်ခုံ)\n- Refund: event 3–5 (ငွေ)"
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
