@@ -36,6 +36,7 @@ import {
   narrationOf,
 } from "../src/studio/script/estimatedCompile.ts";
 import { pointingGaps } from "../src/studio/pointingLint.ts";
+import { previewLoadRoom } from "../src/studio/previewRoomLint.ts";
 import { narrationIssues } from "../src/studio/script/narrationLint.ts";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
 import {
@@ -107,9 +108,10 @@ function checkScript(file: string, rates: number[]): CheckResult {
 
   // The plan validates its own timeline (overlaps, narration end), so a rate
   // that does not fit throws here exactly as it would at render.
-  // Where the pointer leaves the learner without a clue is judged once, on
-  // the typical narrator (the middle rate): whether a slide outstays its
-  // welcome is about the lesson, not about which rate found it first.
+  // Where the pointer leaves the learner without a clue, and whether the
+  // preview has room to load, are judged once, on the typical narrator (the
+  // middle rate): whether a slide outstays its welcome is about the lesson,
+  // not about which rate found it first.
   const typicalRate = [...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)];
   for (const msPerChar of rates) {
     try {
@@ -119,7 +121,9 @@ function checkScript(file: string, rates: number[]): CheckResult {
         narration,
       );
       result.rates.push({ msPerChar, totalMs: schedule.totalDurationMs, warnings });
-      if (msPerChar === typicalRate) result.warnings.push(...pointingGaps(plan));
+      if (msPerChar === typicalRate) {
+        result.warnings.push(...pointingGaps(plan), ...previewLoadRoom(plan));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       result.rates.push({ msPerChar, totalMs: 0, warnings: [], error: message });

@@ -210,8 +210,10 @@ under 28px. Warnings are advisory — fix each one or keep it on purpose: a long
 dialog, a Burmese dialog that stops mid-clause instead of at `။` or `၊`,
 code-like characters in narration, a box outside the visible area, a board
 whose shapes share one colour, a slide that stays up more than 8 seconds with
-no `slide.point` on it, a `slide.point` on a markdown slide, or a preview
-whose elements the lesson checks but never points at (see The pointer).
+no `slide.point` on it, a `slide.point` on a markdown slide, a preview whose
+elements the lesson checks but never points at (see The pointer), or a
+`preview.open` with less than 5 seconds before the next narrated action (see
+Opening the preview).
 
 `studio-verify-lesson` is for WebContainer (Vite) lessons. It replays every
 action in plan order through the Performer's own dispatch, against the pinned
@@ -1007,6 +1009,24 @@ top of it. Two ways to show a second diagram:
 `clear` never removes an id the same action upserts, so re-drawing one element
 of the previous board while wiping the rest works.
 
+### Opening the preview
+
+`preview.open` acknowledges once the app has loaded in the panel, and that
+first load takes two to five seconds — not the same twice. The actions you
+chain after it with `afterAction` (the `expect.preview` checks, a
+`runtime.collapseDock`) wait for it by design, and neither the timing gate nor
+the repeatability comparison holds their start against them. The next action
+the narration times is different: planned sooner than the load can finish, it
+starts late, and the words run ahead of the screen in one render and not in
+the next.
+
+So open the preview where the narration leaves it room: at least 5 seconds
+before the next action anchored to a mark. The end of the scene before the one
+that uses the preview is a good place — as a whiteboard closes, or over the
+sentence that turns to the code — rather than the first mark of the scene whose
+first highlight follows a moment later. `studio-compile-check` warns when the
+room is under 5 seconds.
+
 ### Preview focus
 
 Focus that a `preview.click` gave an element in the preview does not last
@@ -1039,26 +1059,27 @@ focus surviving one.
 
 ## Failure → fix table
 
-| Symptom                                         | Fix                                                                                                                                                                      |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.                                                                      |
-| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                                                                                    |
-| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                                                                                     |
-| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.                                                                            |
-| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).                                                                     |
-| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the provider's reason.                                                                     |
-| `… needs Burmese narration …` (or the reverse)  | The narration select and the script's `locale` disagree; choose the matching provider (it never translates).                                                             |
-| `AthanLab: …` asking you to connect your key    | The saved key is missing, expired, revoked, or can no longer be read; connect a new key in the AthanLab panel.                                                           |
-| Other `AthanLab: …` errors                      | AthanLab's own reason (for example, no characters left); fix it on AthanLab, then render again (see below).                                                              |
-| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take.                                                                  |
-| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions.                                                                  |
-| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                                                                                            |
-| `runtime.waitForReady` times out                | Check the pinned install/run commands, package versions, expected port, and server diagnostics in the receipt.                                                           |
-| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.                                                                    |
-| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.                                                                        |
-| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.                                                                         |
-| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                                                                                  |
-| Repeatability FAIL on `repeat.audio`            | Pocket-TTS and VoxCPM2 are seeded: report it as a bug. AthanLab takes are not seeded — they replay from the browser cache or AthanLab's 24 h idempotent job (see below). |
+| Symptom                                         | Fix                                                                                                                                                                                                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Invalid lesson script: …`                      | Schema violation (including an unknown or misspelled key); the path in the message names the field.                                                                                                                                               |
+| `Unknown marker "x" — known markers: …`         | An action references a mark not present in narration.                                                                                                                                                                                             |
+| `Typing action "…" overlaps "…"` (compile)      | Two authored actions collide; move the later mark or add `offsetMs`.                                                                                                                                                                              |
+| `⚠ …ms of silence inserted before dialog …`     | Your action outlasts the narration around it; add a sentence there or shorten the typed text.                                                                                                                                                     |
+| `… ran to the speech engine's length limit …`   | A sentence hit Pocket's ~40s cap unended; reword or split it (the warning repeats until it changes).                                                                                                                                              |
+| `Narration dialog N/M "…" ("…"): …`             | That dialog's synthesis failed or its audio is unusable; Burmese errors carry the provider's reason.                                                                                                                                              |
+| `… needs Burmese narration …` (or the reverse)  | The narration select and the script's `locale` disagree; choose the matching provider (it never translates).                                                                                                                                      |
+| `AthanLab: …` asking you to connect your key    | The saved key is missing, expired, revoked, or can no longer be read; connect a new key in the AthanLab panel.                                                                                                                                    |
+| Other `AthanLab: …` errors                      | AthanLab's own reason (for example, no characters left); fix it on AthanLab, then render again (see below).                                                                                                                                       |
+| `… stays N dB quieter than the rest …`          | Too quiet or too peaky for leveling to match the others; listen, and reword that dialog for a new take.                                                                                                                                           |
+| `Anchor occurrence N of "…" not found` (render) | The `after` string doesn't match the file at perform time — check tabs/newlines and earlier insertions.                                                                                                                                           |
+| `checkpoint.output.… never contains …`          | Fixture output and `expect.output` disagree, or the program doesn't print it.                                                                                                                                                                     |
+| `runtime.waitForReady` times out                | Check the pinned install/run commands, package versions, expected port, and server diagnostics in the receipt.                                                                                                                                    |
+| `Preview … command failed`                      | The iframe bridge did not acknowledge, the target's `data-testid` is missing, or the preview crashed.                                                                                                                                             |
+| `checkpoint.preview.…` failure                  | The recorded route/DOM differs from `expect.preview`; inspect the attached diagnostic screenshot.                                                                                                                                                 |
+| `preview.replayData` failure                    | The artifact lacks an rrweb seed or the mutation patches required for the authored interactions.                                                                                                                                                  |
+| `timing.p95 — … (max 300ms)` failure            | Usually a squeezed action; check the receipts in the render report for the late action.                                                                                                                                                           |
+| Repeatability FAIL on `repeat.actionTiming`     | The detail names the action that started at different times. If it follows a `preview.open`, the preview loaded slower in one render: open the preview earlier (see Opening the preview). Otherwise find what ran long before it in the receipts. |
+| Repeatability FAIL on `repeat.audio`            | Pocket-TTS and VoxCPM2 are seeded: report it as a bug. AthanLab takes are not seeded — they replay from the browser cache or AthanLab's 24 h idempotent job (see below).                                                                          |
 
 **Rendering again with AthanLab.** Dialogs AthanLab has already finished stay
 in this browser's dialog cache, so a new render pays only for the dialogs that
