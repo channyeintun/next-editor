@@ -1,0 +1,899 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-44-production-ready
+  title: "Architect Path 44: Production အတွက် design"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/44-readiness.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/44-readiness.md: |
+        # Production readiness checklist
+
+        Notification (ပြီးခဲ့တဲ့ နှစ်): test အားလုံး အောင် → ပထမဆုံး လူများတဲ့နေ့မှာ SMS နာရီနဲ့ချီ နောက်ကျ
+
+        ## Run · ဘယ်လို run မလဲ
+
+        ## See · ဘယ်လို မြင်ရမလဲ
+
+        ## Change · ဘယ်လို ပြောင်းမလဲ
+
+        ## Survive · ဘယ်လို ခံနိုင်မလဲ
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: four-questions
+      contentType: html
+      name: Production review ရဲ့ မေးခွန်းများ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Production review ရဲ့ မေးခွန်း လေးခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">Run</span>ဘယ်လို run မလဲ</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">See</span>ဘယ်လို မြင်ရမလဲ</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term violet">Change</span>ဘယ်လို ပြောင်းမလဲ</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term green">Survive</span>ဘယ်လို ခံနိုင်မလဲ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — instances come and go. Blue = instances and config, red = the
+    # one that disappears, green dashed = its replacement, violet = the queue
+    # and what flows from outside into every instance.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "Instance တွေက လာလိုက် သွားလိုက်",
+        fontSize: 36,
+      }
+    - {
+        id: r-a,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-a-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 263,
+        width: 220,
+        height: 35,
+        text: "instance",
+        fontSize: 28,
+      }
+    - {
+        id: r-b,
+        kind: rectangle,
+        x: 560,
+        y: 240,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-b-l,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 263,
+        width: 220,
+        height: 35,
+        text: "instance",
+        fontSize: 28,
+      }
+    - {
+        id: r-x,
+        kind: freedraw,
+        stroke: scribble,
+        x: 570,
+        y: 250,
+        width: 200,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-new,
+        kind: rectangle,
+        x: 830,
+        y: 240,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-new-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 263,
+        width: 250,
+        height: 35,
+        text: "instance အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: r-queue,
+        kind: rectangle,
+        x: 290,
+        y: 470,
+        width: 400,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-queue-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 485,
+        width: 400,
+        height: 35,
+        text: "SMS queue (အပြင်မှာ)",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow1,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 470,
+        y: 332,
+        width: 40,
+        height: 126,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-config,
+        kind: rectangle,
+        x: 740,
+        y: 470,
+        width: 340,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-config-l,
+        kind: text,
+        align: center,
+        x: 740,
+        y: 485,
+        width: 340,
+        height: 35,
+        text: "config (အပြင်မှာ)",
+        fontSize: 28,
+      }
+    - {
+        id: r-arrow2,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 890,
+        y: 332,
+        width: 40,
+        height: 126,
+        strokeColor: "#6741d9",
+      }
+    # Board 2 — the quiz, asked before the business level is named.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "CPU, memory ကောင်း = ဝယ်လို့ ရ?",
+        fontSize: 36,
+      }
+    - { id: q-a, kind: text, x: 290, y: 270, width: 760, height: 35, text: "က) ပြတယ်", fontSize: 28 }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) မပြဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 150,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 780,
+        height: 35,
+        text: "ဝယ်လို့ ရမရကို တိုက်ရိုက် တိုင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — three levels of signals as a ladder, the business level on
+    # top. Blue = the system's own levels, orange = the level this lesson is
+    # about.
+    - { id: l-m, kind: rectangle, x: 270, y: 440, width: 400, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: l-m-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 468,
+        width: 400,
+        height: 35,
+        text: "စက်ရဲ့ အခြေအနေ",
+        fontSize: 28,
+      }
+    - {
+        id: l-m-e,
+        kind: text,
+        x: 700,
+        y: 468,
+        width: 340,
+        height: 35,
+        text: "CPU, memory, disk",
+        fontSize: 28,
+      }
+    - { id: l-s, kind: rectangle, x: 270, y: 330, width: 400, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: l-s-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 358,
+        width: 400,
+        height: 35,
+        text: "service ရဲ့ အလုပ်",
+        fontSize: 28,
+      }
+    - {
+        id: l-s-e,
+        kind: text,
+        x: 700,
+        y: 358,
+        width: 340,
+        height: 35,
+        text: "request, error, log",
+        fontSize: 28,
+      }
+    - {
+        id: l-b,
+        kind: rectangle,
+        x: 270,
+        y: 220,
+        width: 400,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: l-b-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 248,
+        width: 400,
+        height: 35,
+        text: "business ရဲ့ ရလဒ်",
+        fontSize: 28,
+      }
+    - {
+        id: l-b-e,
+        kind: text,
+        x: 700,
+        y: 248,
+        width: 350,
+        height: 35,
+        text: "ရောင်းရတဲ့ လက်မှတ် / မိနစ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 4 — a rollout to one instance first. Blue = instances on the old
+    # version, green = the one on the new version, orange = what is watched,
+    # red = the limited damage and the brake.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "အနည်းငယ်ကို အရင် deploy",
+        fontSize: 36,
+      }
+    - {
+        id: c-b1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-b1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 263,
+        width: 170,
+        height: 35,
+        text: "v1",
+        fontSize: 28,
+      }
+    - {
+        id: c-b2,
+        kind: rectangle,
+        x: 490,
+        y: 240,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-b2-l,
+        kind: text,
+        align: center,
+        x: 490,
+        y: 263,
+        width: 170,
+        height: 35,
+        text: "v1",
+        fontSize: 28,
+      }
+    - {
+        id: c-b3,
+        kind: rectangle,
+        x: 690,
+        y: 240,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-b3-l,
+        kind: text,
+        align: center,
+        x: 690,
+        y: 263,
+        width: 170,
+        height: 35,
+        text: "v1",
+        fontSize: 28,
+      }
+    - {
+        id: c-b4,
+        kind: rectangle,
+        x: 890,
+        y: 240,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-b4-l,
+        kind: text,
+        align: center,
+        x: 890,
+        y: 263,
+        width: 170,
+        height: 35,
+        text: "v1",
+        fontSize: 28,
+      }
+    - {
+        id: c-n1,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: c-n1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 263,
+        width: 170,
+        height: 35,
+        text: "v2",
+        fontSize: 28,
+      }
+    - {
+        id: c-watch,
+        kind: text,
+        x: 290,
+        y: 360,
+        width: 780,
+        height: 35,
+        text: "error နဲ့ ပို့ပြီး SMS ကို v1 နဲ့ ယှဉ်ကြည့်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-bad,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 780,
+        height: 35,
+        text: "မကောင်းရင် ထိခိုက်တာ 1/4 ပဲ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-brake,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 780,
+        height: 35,
+        text: "automation မှာ ဘရိတ်: error တက်ရင် ရပ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8144
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Test အောင်ပြီး ပထမနေ့မှာ ပျက်တဲ့ service
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ တခြား system ကို ခေါ်တဲ့ နေရာ တစ်ခုစီအတွက် အကာအကွယ် ရွေးပုံနဲ့၊ အကာအကွယ်တိုင်းမှာ ပေးရတဲ့ တန်ဖိုး
+      ရှိတာကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီတစ်ခါတော့ ပြီးခဲ့တဲ့ နှစ်က ဖြစ်ရပ် တစ်ခုကို ပြန်ကြည့်ရအောင်။ Notification ကို သီးခြား
+      service အဖြစ် ပထမဆုံး ခွဲထုတ်ခဲ့တုန်းကပါ။
+      [[mark:sel-story]] service အသစ်က test အားလုံးကို အောင်ခဲ့ပါတယ်။ ဒါပေမဲ့ production ရောက်ပြီး ပထမဆုံး
+      လူများတဲ့နေ့၊ သီတင်းကျွတ် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့မှာ၊ လက်မှတ် SMS တွေက နာရီနဲ့ချီ နောက်ကျပြီးမှ
+      ရောက်ပါတယ်။
+      [[mark:story-2]] ပိုဆိုးတာက service က အထဲမှာ ဘာလုပ်နေလဲ ဆိုတာ ဘယ်သူမှ မမြင်ရတာပါ။ ခရီးသည်တွေ ဖုန်းဆက်
+      တိုင်ကြားမှ သိရပြီး၊ အကြောင်းရင်းကို ရှာဖို့ server ထဲ ဝင်ပြီး log ကို လိုက်ဖတ်ခဲ့ရပါတယ်။ တစ်နာရီအကြာမှာ
+      ပြင်ထားတဲ့ version ရပါတယ်။ ဒါပေမဲ့ အဲဒါကို deploy လုပ်ဖို့ service ကို ရပ်လိုက်တော့၊ memory ထဲမှာ ပို့ဖို့
+      စောင့်နေတဲ့ SMS ထောင်ချီ ပျောက်သွားပါတယ်။
+      [[mark:story-3]] CTO ဖြစ်တဲ့ အောင်အောင် က test အကုန် အောင်ထားတဲ့ service က ဘာလို့ ပထမနေ့မှာပဲ ပျက်ရတာလဲ
+      လို့ မေးပါတယ်။ အဖြေက test တွေက service က ဘာလုပ်ပေးလဲ ဆိုတာကိုပဲ စစ်ခဲ့လို့ပါ။ production မှာ ဘယ်လို
+      အသက်ရှင်မလဲ ဆိုတာကိုတော့ ဘယ်သူမှ design မဆွဲခဲ့ပါဘူး။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/44-readiness.md,
+        }
+      - id: sel-story
+        type: editor.select
+        at: { mark: sel-story }
+        target:
+          {
+            file: notebook/44-readiness.md,
+            text: "test အားလုံး အောင် → ပထမဆုံး လူများတဲ့နေ့မှာ SMS နာရီနဲ့ချီ နောက်ကျ",
+          }
+
+  - id: questions
+    chapter: Production review ရဲ့ မေးခွန်း လေးခု
+    narration: >
+      [[mark:s-open]] system တစ်ခုအတွက် တကယ် အရေးကြီးတဲ့ environment က production ပါ။ ခရီးသည်တွေ လက်မှတ် ဝယ်တာ၊
+      ကုမ္ပဏီ ဝင်ငွေရတာ အဲဒီမှာပဲ ဖြစ်တာမို့၊ design ကို အစကတည်းက production အတွက် ဆွဲရပါတယ်။ ဒါကြောင့် service
+      အသစ်တိုင်း production မတက်ခင် မေးခွန်း လေးခု မေးပါမယ်။
+      [[mark:s-run]] ပထမက ဘယ်လို run မလဲ ပါ။ instance ဘယ်နှခုကို ဘာ config နဲ့ run မလဲ၊ instance တစ်ခု
+      ပျောက်သွားရင် ဘာဆုံးရှုံးမလဲ ဆိုတာပါ။
+      [[mark:s-see]] ဒုတိယက ဘယ်လို မြင်ရမလဲ ပါ။ service က ကောင်းနေလား၊ ဘာလုပ်နေလဲ ဆိုတာကို server ထဲ မဝင်ဘဲ
+      အပြင်ကနေ သိနိုင်ရပါမယ်။
+      [[mark:s-change]] တတိယက ဘယ်လို ပြောင်းမလဲ ပါ။ version အသစ်ကို ခရီးသည်တွေ မသိလိုက်ဘဲ deploy
+      လုပ်နိုင်ရပါမယ်။
+      [[mark:s-survive]] စတုတ္ထက ဘယ်လို ခံနိုင်မလဲ ပါ။ အပိုင်းတစ်ခု ပျက်တဲ့အခါနဲ့ တစ်ယောက်ယောက်က တမင်
+      နှောင့်ယှက်တဲ့အခါ ဘာဖြစ်မလဲ ဆိုတာပါ။ Notification ရဲ့ ဖြစ်ရပ်မှာ ပထမ သုံးခုလုံး လွဲခဲ့ပါတယ်။ တစ်ခုချင်း
+      ကြည့်ရအောင်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: show-questions,
+          type: slide.show,
+          at: { mark: s-open, offsetMs: -1200 },
+          slideId: four-questions,
+        }
+      - { id: point-run, type: slide.point, at: { mark: s-run }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-see, type: slide.point, at: { mark: s-see }, target: { x: 0.15, y: 0.53 } }
+      - {
+          id: point-change,
+          type: slide.point,
+          at: { mark: s-change },
+          target: { x: 0.15, y: 0.67 },
+        }
+      - {
+          id: point-survive,
+          type: slide.point,
+          at: { mark: s-survive },
+          target: { x: 0.15, y: 0.81 },
+        }
+
+  - id: run
+    chapter: Instance တွေက လာလိုက် သွားလိုက်
+    narration: >
+      [[mark:r-open]] production မှာ service တစ်ခုကို instance အများကြီးနဲ့ run ပါတယ်။ အဲဒီ instance တွေက အမြဲ
+      ရှိနေမယ့် အရာတွေ မဟုတ်ပါဘူး။
+      [[mark:r-die]] deploy လုပ်တိုင်း၊ စက်တစ်လုံး ပျက်တိုင်း instance တစ်ခုက ပျောက်သွားပြီး၊ အသစ်တစ်ခုက
+      အစားဝင်လာပါတယ်။ load များလာရင်လည်း ထပ်တိုးရပါတယ်။
+      [[mark:r-state]] ဒီတော့ instance ထဲမှာ ပျောက်လို့ မဖြစ်တဲ့ အရာကို မထားရပါဘူး။ Notification က ပို့ဖို့
+      စောင့်နေတဲ့ SMS တွေကို memory ထဲမှာ ထားခဲ့လို့ ပျောက်ခဲ့တာပါ။ အဲဒါတွေကို instance အပြင်ဘက်က queue ထဲမှာ
+      ထားရင်၊ ဘယ် instance ပျောက်ပျောက် နောက် instance တစ်ခုက ဆက်ပို့နိုင်ပါတယ်။
+      [[mark:r-config]] config လည်း အတူတူပါပဲ။ SMS gateway ရဲ့ လိပ်စာ၊ စောင့်ချိန် ကန့်သတ်ချက်လို တန်ဖိုးတွေကို code ထဲမှာ
+      မထည့်ဘဲ အပြင်ကနေ ပေးရပါတယ်။ ဒါမှ instance အသစ်တိုင်းက တူညီတဲ့ တန်ဖိုးနဲ့ စနိုင်ပြီး၊ တန်ဖိုး တစ်ခု
+      ပြောင်းချင်တိုင်း code ကို ပြန် build လုပ်စရာ မလိုတော့ပါဘူး။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - { id: close-questions, type: slide.close, at: { mark: r-open } }
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-questions },
+          open: true,
+          clear: true,
+          upsertIds: [r-title, r-a, r-a-l, r-b, r-b-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-r-die,
+          type: whiteboard.apply,
+          at: { mark: r-die },
+          upsertIds: [r-x, r-new, r-new-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-state,
+          type: whiteboard.apply,
+          at: { mark: r-state },
+          upsertIds: [r-queue, r-queue-l, r-arrow1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-config,
+          type: whiteboard.apply,
+          at: { mark: r-config },
+          upsertIds: [r-config, r-config-l, r-arrow2],
+          drawMs: 1500,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] အခု မြင်ရဖို့ အပိုင်းကို ကြည့်ပါမယ်။ မေးခွန်း တစ်ခု မေးပါရစေ။ Booking service ရဲ့ dashboard
+      မှာ CPU နဲ့ memory နှစ်ခုလုံး ကောင်းနေတယ်လို့ ပြနေပါတယ်။ ခရီးသည်တွေ လက်မှတ် ဝယ်လို့ ရနေတယ် ဆိုတာကို အဲဒီ
+      dashboard က ပြသလား။
+      [[mark:q-a]] ပထမ အဖြေက ပြတယ် ဆိုတာပါ။ စက်တွေ ကောင်းနေရင် ဝယ်လို့လည်း ရနေမှာပဲ ဆိုတဲ့ အမြင်ပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေကတော့ မပြဘူး ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ မပြဘူး ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ CPU နဲ့ memory က စက်ရဲ့ အခြေအနေကိုပဲ
+      ပြောတာပါ။ ငွေချေတဲ့ စာမျက်နှာက ခလုတ် တစ်ခု ပျက်နေရင်၊ ဒါမှမဟုတ် wallet API ကို ခေါ်လို့ မရတော့ရင်၊
+      ခရီးသည်တွေ ဝယ်မရပေမဲ့ CPU ကတော့ အေးအေးဆေးဆေးပါပဲ။ ဘာအလုပ်မှ မလုပ်ရတော့လို့ပါ။
+      [[mark:q-why]] ခရီးသည် ဝယ်လို့ ရမရ သိချင်ရင် အဲဒါကိုပဲ တိုက်ရိုက် တိုင်းရပါတယ်။ တစ်မိနစ်ကို လက်မှတ်
+      ဘယ်နှစောင် ရောင်းရလဲ ဆိုတာပါ။ service တစ်ခုက သူ့အခြေအနေကို အဆင့် သုံးဆင့်နဲ့ ပြောပြနိုင်ရပါမယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+
+  - id: see
+    chapter: အဆင့် သုံးဆင့်နဲ့ မြင်ရခြင်း
+    narration: >
+      [[mark:l-machine]] အောက်ဆုံး အဆင့်က စက်ရဲ့ အခြေအနေပါ။ CPU၊ memory၊ disk တွေပါ။ ပြဿနာရဲ့ အကြောင်းရင်းကို
+      ရှာတဲ့အခါ အသုံးဝင်ပေမဲ့၊ ခရီးသည်တွေအတွက် ပြဿနာ ရှိမရှိကိုတော့ သူတို့ချည်းပဲနဲ့ မပြောနိုင်ပါဘူး။
+      [[mark:l-service]] အလယ် အဆင့်က service ရဲ့ အလုပ်ပါ။ request ဘယ်နှခု ဝင်လဲ၊ ဘယ်နှခု ပျက်လဲ၊ ဘယ်လောက် ကြာလဲ
+      ဆိုတဲ့ ဂဏန်းတွေနဲ့၊ ဘာဖြစ်ခဲ့လဲ ပြန်ကြည့်လို့ရတဲ့ log တွေပါ။ service က အလုပ် လက်ခံနိုင်မနိုင် မေးလို့ရတဲ့
+      health check လည်း ဒီအဆင့်မှာ ပါပါတယ်။
+      [[mark:l-business]] အပေါ်ဆုံး အဆင့်က business ရဲ့ ရလဒ်ပါ။ တစ်မိနစ်ကို ရောင်းရတဲ့ လက်မှတ်၊ ပို့ပြီးသွားတဲ့
+      SMS လို ဂဏန်းတွေပါ။ ဒီ ဂဏန်း ပုံမှန်ထက် ကျသွားရင် အောက်က အဆင့်တွေ ဘယ်လောက်ပဲ ကောင်းနေပါစေ၊ တစ်ခုခု မှားနေပါပြီ။
+      Notification မှာ ပို့ပြီး SMS အရေအတွက်ကို တိုင်းထားခဲ့ရင်၊ ခရီးသည်တွေ ဖုန်းမဆက်ခင်ကတည်းက သိခဲ့မှာပါ။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-l-machine,
+          type: whiteboard.apply,
+          at: { mark: l-machine },
+          clear: true,
+          upsertIds: [l-m, l-m-l, l-m-e],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-service,
+          type: whiteboard.apply,
+          at: { mark: l-service },
+          upsertIds: [l-s, l-s-l, l-s-e],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-l-business,
+          type: whiteboard.apply,
+          at: { mark: l-business },
+          upsertIds: [l-b, l-b-l, l-b-e],
+          drawMs: 1500,
+        }
+
+  - id: change
+    chapter: အနည်းငယ်ကို အရင် deploy
+    narration: >
+      [[mark:c-open]] တတိယ မေးခွန်းက ဘယ်လို ပြောင်းမလဲ ပါ။ deploy လုပ်တာက design ရဲ့ အပြင်က ကိစ္စ မဟုတ်ဘဲ၊
+      design ရဲ့ အစိတ်အပိုင်း တစ်ခုပါ။
+      [[mark:c-inst]] Notification ကို instance လေးခုနဲ့ run ထားတယ် ဆိုပါစို့။ အရင်က
+      လေးခုလုံးကို တစ်ပြိုင်တည်း ရပ်ပြီးမှ version အသစ် တင်ခဲ့တာပါ။
+      [[mark:c-one]] အခုတော့ version အသစ်ကို instance တစ်ခုတည်းမှာ အရင် တင်ပါမယ်။ ကျန်တဲ့ သုံးခုက version
+      အဟောင်းနဲ့ ဆက်အလုပ်လုပ်နေပါတယ်။
+      [[mark:c-watch]] ပြီးရင် အဲဒီ instance ရဲ့ error နဲ့ ပို့ပြီး SMS အရေအတွက်ကို ကျန်တဲ့ သုံးခုနဲ့
+      ယှဉ်ကြည့်ပါတယ်။ ကောင်းမှ ကျန်တာတွေကို ဆက်တင်ပါတယ်။
+      [[mark:c-bad]] မကောင်းရင်တော့ ထိခိုက်တာက SMS လေးပုံတစ်ပုံလောက်ပဲ ရှိပြီး၊ အဲဒီ တစ်ခုကိုပဲ ပြန်ဖြုတ်လိုက်ရုံပါ။
+      [[mark:c-brake]] ဒီအဆင့်တွေကို အလိုအလျောက် လုပ်ပေးတဲ့ automation ကိုယ်တိုင်မှာလည်း ဘရိတ် ပါရပါမယ်။ error
+      တက်လာတာနဲ့ ကိုယ်တိုင် ရပ်ပြီး လူကို အသိပေးရပါမယ်။ automation က မြန်ပေမဲ့၊ မှားတဲ့အခါလည်း အဲဒီလိုပဲ မြန်မြန်
+      မှားတတ်လို့ပါ။
+      [[mark:c-both]] ဒီနည်းမှာ သတိထားစရာ တစ်ခု ရှိပါတယ်။ တင်နေတုန်းမှာ version အဟောင်းနဲ့ အသစ်က တစ်ချိန်တည်း
+      အတူ run နေတာပါ။ ဒါကြောင့် database ကို ပြောင်းစရာ ရှိရင် အဆင့်ခွဲ ပြောင်းရပါတယ်။ အသစ်ကို အရင် ထပ်ထည့်၊
+      code အားလုံး ပြောင်းပြီးမှ အဟောင်းကို ဖြုတ်တာပါ။ ကိုယ့် service ကို ခေါ်သုံးနေတဲ့သူတွေကိုလည်း မထိခိုက်အောင်၊
+      လက်ခံတာကို ပိုလက်ခံလို့ ရပေမဲ့ တောင်းဆိုတာကိုတော့ ထပ်မတိုးရပါဘူး။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-inst,
+          type: whiteboard.apply,
+          at: { mark: c-inst },
+          upsertIds: [c-b1, c-b1-l, c-b2, c-b2-l, c-b3, c-b3-l, c-b4, c-b4-l],
+          drawMs: 3200,
+        }
+      - {
+          id: reset-c,
+          type: whiteboard.apply,
+          at: { mark: c-one },
+          clear: true,
+          upsertIds: [c-title, c-b2, c-b2-l, c-b3, c-b3-l, c-b4, c-b4-l],
+        }
+      - {
+          id: draw-c-one,
+          type: whiteboard.apply,
+          at: { afterAction: reset-c },
+          upsertIds: [c-n1, c-n1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-watch,
+          type: whiteboard.apply,
+          at: { mark: c-watch },
+          upsertIds: [c-watch],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-bad,
+          type: whiteboard.apply,
+          at: { mark: c-bad },
+          upsertIds: [c-bad],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-c-brake,
+          type: whiteboard.apply,
+          at: { mark: c-brake },
+          upsertIds: [c-brake],
+          drawMs: 1200,
+        }
+      - { id: point-c-old, type: whiteboard.point, at: { mark: c-both }, target: { assetId: c-b2 } }
+
+  - id: checklist
+    chapter: Service အသစ်အတွက် checklist
+    narration: >
+      [[mark:d-close]] ဒါတွေကို service အသစ်တိုင်း production မတက်ခင် စစ်ရမယ့် checklist အဖြစ်
+      ချရေးကြည့်ရအောင်။
+      [[mark:type-run]] ဘယ်လို run မလဲ ဆိုတဲ့ အောက်က နှစ်ချက်က၊ instance တစ်ခု ပျောက်သွားလည်း ဘာမှ
+      မဆုံးရှုံးဖို့နဲ့ instance အသစ်က ချက်ချင်း အလုပ်ဝင်နိုင်ဖို့ကို စစ်တာပါ။
+      [[mark:type-see]] ဘယ်လို မြင်ရမလဲ ဆိုတဲ့ အောက်မှာတော့ အဆင့် သုံးဆင့်လုံး ပါရပါမယ်။ အရေးအကြီးဆုံးက
+      နောက်ဆုံး စာကြောင်း၊ business ရဲ့ ရလဒ်ကို တိုင်းတဲ့ ဂဏန်း တစ်ခု ရှိဖို့ပါ။
+      [[mark:type-change]] ဘယ်လို ပြောင်းမလဲ ဆိုတဲ့ အောက်က သုံးချက်ကတော့၊ version အသစ် မှားနေရင် ခရီးသည်
+      နည်းနည်းပဲ ထိပြီး၊ ချက်ချင်း ရပ်နိုင်ဖို့ကို စစ်တာပါ။
+      [[mark:type-survive]] နောက်ဆုံး မေးခွန်း၊ ဘယ်လို ခံနိုင်မလဲ ဆိုတဲ့ အောက်မှာ နှစ်ချက် ရှိပါတယ်။ ပထမ အချက်က
+      လုံခြုံရေးပါ။ service တစ်ခုကို သူ့အလုပ်အတွက် လိုတဲ့ ခွင့်ပြုချက်ပဲ ပေးပါ။ Notification က လက်မှတ် data ကို
+      ဖတ်ဖို့ပဲ လိုတာမို့ ပြင်ခွင့် မပေးပါဘူး။ အပြင်က ဝင်လာတဲ့ အရာမှန်သမျှကိုလည်း မယုံဘဲ၊ စစ်ပြီးမှ သုံးရပါတယ်။
+      [[mark:survive-2]] ဒုတိယ အချက်က ပျက်တာကို တမင် လေ့ကျင့်တာပါ။ ပြီးခဲ့တဲ့ lesson က အကာအကွယ်တွေ တကယ်
+      အလုပ်လုပ်မလုပ် ဆိုတာကို ပျက်တဲ့နေ့ ရောက်မှ သိရရင် နောက်ကျပါပြီ။ ဒါကြောင့် အလုပ်ချိန်အတွင်းမှာ instance
+      တစ်ခုကို တမင် ပိတ်ကြည့်ပါတယ်။ မလုပ်ခင် ယူဆချက် တစ်ခုကို ရေးထားရပါမယ်။ ဥပမာ instance တစ်ခု ပျောက်လည်း SMS
+      တစ်စောင်မှ မပျောက်ဘူး ဆိုတာမျိုးပါ။ ထိခိုက်နိုင်တဲ့ နယ်ပယ်ကိုလည်း instance တစ်ခုတည်းလို သေးသေးနဲ့
+      စရပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - { id: close-change, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-change },
+          path: notebook/44-readiness.md,
+        }
+      - id: type-run
+        type: editor.type
+        at: { mark: type-run }
+        cadence: line-by-line
+        target: { file: notebook/44-readiness.md, after: "## Run · ဘယ်လို run မလဲ\n" }
+        text: "- [ ] config ကို အပြင်ကနေ ပေး\n- [ ] instance ထဲမှာ ပျောက်လို့ မဖြစ်တဲ့ အရာ မထား\n"
+      - id: type-see
+        type: editor.type
+        at: { mark: type-see }
+        cadence: line-by-line
+        target: { file: notebook/44-readiness.md, after: "## See · ဘယ်လို မြင်ရမလဲ\n" }
+        text: "- [ ] health check: အလုပ် လက်ခံနိုင်မနိုင် ဖြေ\n- [ ] ဂဏန်းနဲ့ log: request, error, ကြာချိန်\n- [ ] business ဂဏန်း: 1 မိနစ်ကို ရောင်းရတဲ့ လက်မှတ်၊ ပို့ပြီး SMS\n"
+      - id: expect-business
+        type: expect.file
+        at: { afterAction: type-see }
+        path: notebook/44-readiness.md
+        contains: "- [ ] business ဂဏန်း: 1 မိနစ်ကို ရောင်းရတဲ့ လက်မှတ်၊ ပို့ပြီး SMS\n"
+      - id: type-change
+        type: editor.type
+        at: { mark: type-change }
+        cadence: line-by-line
+        target: { file: notebook/44-readiness.md, after: "## Change · ဘယ်လို ပြောင်းမလဲ\n" }
+        text: "- [ ] instance အနည်းငယ်ကို အရင် deploy၊ ကောင်းမှ ကျန်တာ\n- [ ] version အဟောင်းနဲ့ အသစ် အတူ run နိုင် (data အဆင့်ခွဲ ပြောင်း)\n- [ ] automation မှာ ဘရိတ်: error တက်ရင် ကိုယ်တိုင် ရပ်\n"
+      - id: type-survive
+        type: editor.type
+        at: { mark: type-survive }
+        cadence: line-by-line
+        target: { file: notebook/44-readiness.md, after: "## Survive · ဘယ်လို ခံနိုင်မလဲ\n" }
+        text: "- [ ] လိုတဲ့ ခွင့်ပြုချက်ပဲ ပေး၊ အပြင်က ဝင်လာသမျှ စစ်ပြီးမှ သုံး\n- [ ] ပျက်တာကို တမင် လေ့ကျင့်: ယူဆချက် တစ်ခု၊ ထိခိုက်မယ့် နယ်ပယ် သေးသေး\n"
+      - id: sel-practice
+        type: editor.select
+        at: { mark: survive-2 }
+        target:
+          {
+            file: notebook/44-readiness.md,
+            text: "- [ ] ပျက်တာကို တမင် လေ့ကျင့်: ယူဆချက် တစ်ခု၊ ထိခိုက်မယ့် နယ်ပယ် သေးသေး",
+          }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system မှာ CPU၊ memory လို ဂဏန်းတွေက ရှိပြီးသား ဖြစ်နိုင်ပါတယ်။
+      lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system မှာ လိုနေသေးတဲ့ business အဆင့် ဂဏန်း တစ်ခုကို ဒီစာကြောင်းနေရာမှာ
+      ရေးကြည့်ပါ။
+      [[mark:turn-2]] user တွေက ကိုယ့် system ကို သုံးပြီး အဓိက လုပ်ချင်တဲ့ အရာ တစ်ခုကို ရွေးပါ။ order တင်တာ၊
+      ငွေလွှဲတာ၊ စာပို့တာ ဘာပဲဖြစ်ဖြစ်၊ တစ်မိနစ်ကို ဘယ်နှခု အောင်မြင်လဲ ဆိုတာကို တိုင်းပါ။ အဲဒီ ဂဏန်း
+      ပုံမှန်ထက် ကျသွားတာနဲ့ တစ်ယောက်ယောက်ဆီ အကြောင်းကြားအောင်လည်း လုပ်ထားပါ။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - id: sel-business
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/44-readiness.md,
+            text: "- [ ] business ဂဏန်း: 1 မိနစ်ကို ရောင်းရတဲ့ လက်မှတ်၊ ပို့ပြီး SMS",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ test အောင်တာက production အတွက် အဆင်သင့် ဖြစ်တာနဲ့ မတူပါဘူး။ production အတွက် design
+      ဆွဲတယ် ဆိုတာ မေးခွန်း လေးခုကို အစကတည်းက ဖြေထားတာပါ။ ဘယ်လို run မလဲ၊ ဘယ်လို မြင်ရမလဲ၊ ဘယ်လို ပြောင်းမလဲ၊
+      ဘယ်လို ခံနိုင်မလဲ ဆိုတာပါ။ မြင်ရဖို့ ဆိုတာမှာလည်း စက်ရဲ့ အခြေအနေတင် မဟုတ်ဘဲ၊ ခရီးသည်တွေ ဝယ်လို့ ရမရ ဆိုတဲ့
+      အဆင့်ထိ တိုင်းရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ သဘောတူထားတဲ့ စည်းကမ်းတွေ နှစ်တွေကြာလာလည်း မပျက်အောင် စောင့်ကြည့်ပေးတဲ့
+      evolutionary architecture နဲ့ fitness function ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
