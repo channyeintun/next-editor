@@ -1,0 +1,909 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-35-streams-and-derived-data
+  title: "Architect Path 35: Event stream နဲ့ derived data"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/35-consumers.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/35-consumers.md: |
+        # TicketSold event ကို ဖတ်သူတွေ
+
+        ဖြစ်ရပ်: လက်မှတ် 41 စောင် database ထဲ ရှိ၊ SMS မရောက်၊ settlement စာရင်းထဲ မပါ
+
+        | Consumer | Derived store | ထပ်လာတာကို ဘယ်လို သိလဲ | ပြန်ဆောက်လို့ ရလား |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — Booking writes to two places one after the other. Blue = the
+    # service and its database, violet = the stream and the writes, red = the
+    # crash and what it leaves behind.
+    - {
+        id: a-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "နေရာ နှစ်ခုကို တစ်ခုပြီးမှ တစ်ခု ရေးရင်",
+        fontSize: 36,
+      }
+    - {
+        id: a-book,
+        kind: rectangle,
+        x: 290,
+        y: 330,
+        width: 230,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-book-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 352,
+        width: 230,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - { id: a-db, kind: ellipse, x: 800, y: 235, width: 280, height: 100, strokeColor: "#1971c2" }
+    - {
+        id: a-db-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 267,
+        width: 280,
+        height: 35,
+        text: "database",
+        fontSize: 28,
+      }
+    - {
+        id: a-stream,
+        kind: rectangle,
+        x: 800,
+        y: 450,
+        width: 280,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-stream-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 467,
+        width: 280,
+        height: 35,
+        text: "event stream",
+        fontSize: 28,
+      }
+    - {
+        id: a-w1,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 535,
+        y: 290,
+        width: 255,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-n1,
+        kind: text,
+        x: 540,
+        y: 245,
+        width: 240,
+        height: 35,
+        text: "1 လက်မှတ် သိမ်း",
+        fontSize: 28,
+      }
+    - {
+        id: a-w2,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 535,
+        y: 400,
+        width: 255,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-n2,
+        kind: text,
+        x: 540,
+        y: 470,
+        width: 240,
+        height: 35,
+        text: "2 event တင်",
+        fontSize: 28,
+      }
+    - {
+        id: a-x,
+        kind: freedraw,
+        stroke: scribble,
+        x: 600,
+        y: 395,
+        width: 50,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-res,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 600,
+        height: 38,
+        text: "လက်မှတ် ရှိ၊ event မရှိ",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — one source: the ticket and its event in one transaction, a
+    # relay to the stream. Orange = the transaction the board is about.
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "ရေးတဲ့နေရာ တစ်ခုတည်း: outbox",
+        fontSize: 36,
+      }
+    - {
+        id: o-tx,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 400,
+        height: 230,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-tx-l,
+        kind: text,
+        x: 290,
+        y: 475,
+        width: 400,
+        height: 35,
+        text: "transaction တစ်ခုတည်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-ticket,
+        kind: rectangle,
+        x: 320,
+        y: 260,
+        width: 340,
+        height: 75,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-ticket-l,
+        kind: text,
+        align: center,
+        x: 320,
+        y: 280,
+        width: 340,
+        height: 35,
+        text: "လက်မှတ်",
+        fontSize: 28,
+      }
+    - { id: o-out, kind: rectangle, x: 320, y: 365, width: 340, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: o-out-l,
+        kind: text,
+        align: center,
+        x: 320,
+        y: 385,
+        width: 340,
+        height: 35,
+        text: "outbox: TicketSold",
+        fontSize: 28,
+      }
+    - {
+        id: o-relay,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 705,
+        y: 382,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: o-relay-l,
+        kind: text,
+        x: 715,
+        y: 335,
+        width: 100,
+        height: 35,
+        text: "relay",
+        fontSize: 28,
+      }
+    - {
+        id: o-stream,
+        kind: rectangle,
+        x: 820,
+        y: 365,
+        width: 270,
+        height: 75,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: o-stream-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 385,
+        width: 270,
+        height: 35,
+        text: "event stream",
+        fontSize: 28,
+      }
+    - {
+        id: o-cdc,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 800,
+        height: 35,
+        text: "နောက်တစ်နည်း: database ရဲ့ ပြောင်းလဲမှုကို stream လုပ်",
+        fontSize: 28,
+      }
+    # Board 3 — the log and its three readers, each with its own derived
+    # store (orange: what the board is about).
+    - {
+        id: g-stream,
+        kind: rectangle,
+        x: 290,
+        y: 215,
+        width: 800,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-stream-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 232,
+        width: 800,
+        height: 35,
+        text: "event stream = အစဉ်လိုက်၊ ပြန်ဖတ်လို့ရတဲ့ log",
+        fontSize: 28,
+      }
+    - {
+        id: g-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 395,
+        y: 295,
+        width: 40,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-c1,
+        kind: rectangle,
+        x: 290,
+        y: 390,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-c1-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 412,
+        width: 250,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    - {
+        id: g-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 670,
+        y: 295,
+        width: 40,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-c2,
+        kind: rectangle,
+        x: 565,
+        y: 390,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-c2-l,
+        kind: text,
+        align: center,
+        x: 565,
+        y: 412,
+        width: 250,
+        height: 35,
+        text: "Settlement",
+        fontSize: 28,
+      }
+    - {
+        id: g-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 945,
+        y: 295,
+        width: 40,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: g-c3,
+        kind: rectangle,
+        x: 840,
+        y: 390,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: g-c3-l,
+        kind: text,
+        align: center,
+        x: 840,
+        y: 412,
+        width: 250,
+        height: 35,
+        text: "Seat cache",
+        fontSize: 28,
+      }
+    - {
+        id: g-s1,
+        kind: text,
+        x: 290,
+        y: 495,
+        width: 260,
+        height: 35,
+        text: "ပို့ပြီး SMS စာရင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-s2,
+        kind: text,
+        x: 565,
+        y: 495,
+        width: 270,
+        height: 35,
+        text: "ကားလိုင်း ငွေစာရင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: g-s3,
+        kind: text,
+        x: 840,
+        y: 495,
+        width: 250,
+        height: 35,
+        text: "လွတ်တဲ့ ခုံ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 4 — the quiz: white question and options, green answer and
+    # reason, orange the name of the idea.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 820,
+        height: 45,
+        text: "Event နှစ်ခါ ရောက်ရင် ဘာက တားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 780,
+        height: 35,
+        text: "က) stream က တစ်ခါပဲ ပို့အောင် ချထား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 780,
+        height: 35,
+        text: "ခ) Settlement က မြင်ဖူးတာကို မှတ်မိ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 330,
+        width: 515,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 835,
+        y: 318,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-id,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 780,
+        height: 35,
+        text: "event id ကို ငွေစာရင်းနဲ့အတူ မှတ်ထား",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-term,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 780,
+        height: 35,
+        text: "မြင်ဖူးတဲ့ id ဆို ကျော် = idempotent",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8135
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: လက်မှတ် ရှိပြီး SMS မရောက်ဘူး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ strong consistency ကို တစ်ယောက်ပဲ အနိုင်ရရမယ့် operation အနည်းငယ်အတွက်ပဲ သုံးပြီး၊
+      ကျန်တာကို နောက်မှ လိုက်မီခွင့် ပေးထားပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] နောက်မှ လိုက်မီတယ် ဆိုတာက လိုက်မီအောင် ပို့ပေးတဲ့ လမ်းကြောင်း ခိုင်မှ မှန်ပါတယ်။ ပြီးခဲ့တဲ့
+      အပတ်က အဲဒီ လမ်းကြောင်း ပြတ်သွားခဲ့ပါတယ်။
+      [[mark:sel-incident]] ကားလိုင်း ပိုင်ရှင် တစ်ယောက်က ဒီအပတ် ရတဲ့ ငွေက သူ့စာရင်းထက် လျော့နေတယ်လို့
+      တိုင်လာပါတယ်။ စစ်ကြည့်တော့ လက်မှတ် ၄၁ စောင်က database ထဲမှာ ရှိပေမဲ့၊ ခရီးသည်ဆီ SMS လည်း မရောက်၊
+      settlement စာရင်းထဲလည်း မပါခဲ့ပါဘူး။ settlement ဆိုတာ ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတာပါ။
+      [[mark:why]] အကြောင်းရင်းက Booking service ရဲ့ လုပ်ပုံမှာ ရှိပါတယ်။ လက်မှတ် ရောင်းပြီးတိုင်း Booking က
+      လက်မှတ်ကို database မှာ အရင် သိမ်းပါတယ်။ ပြီးမှ လက်မှတ် ရောင်းပြီ ဆိုတဲ့ event ကို event stream ပေါ်
+      တင်ပါတယ်။ event ဆိုတာ ဖြစ်ပြီးသွားတဲ့ အကြောင်းအရာ တစ်ခုကို ပြောတဲ့ message ပါ။
+      [[mark:readers]] Notification က အဲဒီ event ကို ဖတ်ပြီး SMS ပို့ပါတယ်။ Settlement က ဖတ်ပြီး ကားလိုင်းအတွက်
+      ငွေစာရင်း ရေးပါတယ်။ အဲဒီနေ့က Booking က လက်မှတ် သိမ်းပြီးလို့ event မတင်ရသေးခင် restart ဖြစ်သွားခဲ့တာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/35-consumers.md,
+        }
+      - id: sel-incident
+        type: editor.select
+        at: { mark: sel-incident }
+        target:
+          {
+            file: notebook/35-consumers.md,
+            text: "လက်မှတ် 41 စောင် database ထဲ ရှိ၊ SMS မရောက်၊ settlement စာရင်းထဲ မပါ",
+          }
+
+  - id: two-writes
+    chapter: နေရာ နှစ်ခုကို ရေးခြင်း
+    narration: >
+      [[mark:a-open]] ဒီပြဿနာကို ပုံနဲ့ ကြည့်ရအောင်။
+      [[mark:a-two]] Booking က လက်မှတ် ရောင်းပြီးတိုင်း နေရာ နှစ်ခုကို ရေးရပါတယ်။ ပထမက သူ့ database ထဲ လက်မှတ်ကို
+      သိမ်းတာပါ။
+      [[mark:a-second]] ဒုတိယက event stream ပေါ် event တင်တာပါ။ နှစ်ခုကို တစ်ခုပြီးမှ တစ်ခု လုပ်ရပါတယ်။
+      [[mark:a-crash]] နှစ်ခုကြားမှာ process ပျက်သွားရင် လက်မှတ်က ရှိပြီး event က မရှိတော့ပါဘူး။
+      [[mark:a-swap]] အစီအစဉ်ကို ပြောင်းပြန်လှန်လည်း မထူးပါဘူး။ event ကို အရင်တင်ပြီးမှ ပျက်သွားရင်၊ မရှိတဲ့
+      လက်မှတ်အတွက် SMS ရောက်သွားမှာပါ။ နေရာ နှစ်ခုကို transaction တစ်ခုတည်းနဲ့ မရေးနိုင်သရွေ့၊ တစ်နေ့နေ့မှာ
+      တစ်ခုက လွတ်သွားမှာပါပဲ။ ပျက်တဲ့အခါ ပြန်ကြိုးစားအောင် ရေးထားလည်း၊ ကြိုးစားမယ့် process ကိုယ်တိုင်
+      ပျက်သွားတာကိုတော့ မကာနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-a-open,
+          type: whiteboard.apply,
+          at: { mark: a-open },
+          open: true,
+          upsertIds: [a-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-a-two,
+          type: whiteboard.apply,
+          at: { mark: a-two },
+          upsertIds: [a-book, a-book-l, a-w1, a-n1, a-db, a-db-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-a-second,
+          type: whiteboard.apply,
+          at: { mark: a-second },
+          upsertIds: [a-w2, a-n2, a-stream, a-stream-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-a-crash,
+          type: whiteboard.apply,
+          at: { mark: a-crash },
+          upsertIds: [a-x, a-res],
+          drawMs: 1200,
+        }
+
+  - id: outbox
+    chapter: Outbox
+    narration: >
+      [[mark:o-open]] အဖြေက ရေးတဲ့နေရာကို တစ်ခုတည်း ဖြစ်အောင် လုပ်တာပါ။
+      [[mark:o-tx]] Booking က လက်မှတ်ကို သိမ်းတဲ့ transaction ထဲမှာပဲ၊ ပို့ရမယ့် event ကိုပါ သူ့ database ထဲက table
+      တစ်ခုထဲ ရေးထားလိုက်ပါတယ်။ အဲဒီ table ကို outbox လို့ ခေါ်ပါတယ်။ ပို့ဖို့ စောင့်နေတဲ့ စာတွေ ထည့်ထားတဲ့
+      စာတိုက်ပုံးလိုပါပဲ။ transaction တစ်ခုတည်းမို့ လက်မှတ်ရော event ရော နှစ်ခုလုံး ရှိမယ်၊ ဒါမှမဟုတ် နှစ်ခုလုံး
+      မရှိဘူး။
+      [[mark:o-relay]] ပြီးတော့ relay လို့ ခေါ်တဲ့ သီးခြား process တစ်ခုက outbox ထဲက event တွေကို အစဉ်လိုက် ယူပြီး
+      event stream ပေါ် တင်ပေးပါတယ်။ တင်ပြီးတာကို မှတ်ထားပြီး၊ သူ ပျက်သွားရင်လည်း ပြန်တက်လာတဲ့အခါ
+      မတင်ရသေးတာကနေ ဆက်တင်ပါတယ်။ ဒါဆို event တစ်ခုမှ မပျောက်တော့ပါဘူး။
+      [[mark:o-cdc]] နောက်တစ်နည်းက database ကိုယ်တိုင် မှတ်ထားတဲ့ ပြောင်းလဲမှု မှတ်တမ်းကို တိုက်ရိုက် stream လုပ်ပြီး
+      ယူတာပါ။ နှစ်နည်းလုံးရဲ့ အခြေခံက အတူတူပါ။ အမှန်လို့ ယူရတဲ့ မူရင်းက တစ်နေရာတည်းမှာ ရှိပြီး၊ ကျန်တာ အားလုံးက
+      အဲဒီကနေ ဆင်းလာတာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-o-open,
+          type: whiteboard.apply,
+          at: { mark: o-open },
+          clear: true,
+          upsertIds: [o-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-o-tx,
+          type: whiteboard.apply,
+          at: { mark: o-tx },
+          upsertIds: [o-ticket, o-ticket-l, o-out, o-out-l, o-tx, o-tx-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-o-relay,
+          type: whiteboard.apply,
+          at: { mark: o-relay },
+          upsertIds: [o-relay, o-relay-l, o-stream, o-stream-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-o-cdc,
+          type: whiteboard.apply,
+          at: { mark: o-cdc },
+          upsertIds: [o-cdc],
+          drawMs: 1400,
+        }
+
+  - id: log
+    chapter: Log နဲ့ derived data
+    narration: >
+      [[mark:g-open]] event stream ဘက်ကို ကြည့်ရအောင်။ ခရီးဖော် ရဲ့ stream က event တွေကို ရောက်လာတဲ့ အစဉ်အတိုင်း
+      နောက်ကနေ ဆက်ရေးသွားတဲ့ မှတ်တမ်းရှည် တစ်ခုပါ။ ဖတ်ပြီးလည်း မဖျက်ပါဘူး။ ဒီလို မှတ်တမ်းကို log လို့ ခေါ်ပါတယ်။
+      အစဉ်က အရေးကြီးပါတယ်။ လက်မှတ် ရောင်းပြီ ဆိုတဲ့ event နဲ့ အဲဒီ လက်မှတ်ကို ဖျက်ပြီ ဆိုတဲ့ event ကို ပြောင်းပြန်
+      ဖတ်မိရင်၊ ဖျက်ပြီးသား ခုံကို ရောင်းပြီးသားလို့ ပြနေမှာမို့ပါ။
+      [[mark:g-consumers]] ဖတ်တဲ့ဘက်၊ ဆိုလိုတာက consumer တစ်ခုစီက log ထဲမှာ ကိုယ် ဘယ်နေရာအထိ ဖတ်ပြီးပြီလဲ ဆိုတာကို
+      ကိုယ်တိုင် မှတ်ထားပါတယ်။ Notification၊ Settlement နဲ့ ခုံ cache တို့က တစ်ခုနဲ့တစ်ခု မစောင့်ဘဲ ကိုယ့်အရှိန်နဲ့ကိုယ်
+      ဖတ်ပါတယ်။ SMS gateway နှေးနေလို့ Notification နောက်ကျနေလည်း Settlement က ဆက်သွားနိုင်ပါတယ်။
+      [[mark:g-stores]] consumer တစ်ခုစီက ဖတ်ရတာတွေနဲ့ သူ့ကိုယ်ပိုင် data ကို တည်ဆောက်ပါတယ်။ ပို့ပြီး SMS စာရင်း၊
+      ကားလိုင်းရဲ့ ငွေစာရင်းနဲ့၊ ခရီးစဉ် ရှာတဲ့အခါ Booking က ဖြေပေးတဲ့ လွတ်တဲ့ ခုံ cache တွေပါ။ ဒါတွေ အားလုံးက မူရင်းကနေ ပြန်တွက်ထုတ်လို့ရတဲ့ derived
+      data တွေပါ။
+      [[mark:g-replay]] log က ပြန်ဖတ်လို့ရတာမို့ နောက်ထပ် အကျိုး တစ်ခု ရပါတယ်။ consumer အသစ် တစ်ခု ထပ်ထည့်ချင်ရင်၊
+      ဥပမာ လက်မှတ် ဝယ်တိုင်း အမှတ်ပေးတဲ့ အစီအစဉ် ဆိုပါစို့၊ log ကို အစကနေ ပြန်ဖတ်ပြီး သူ့ data ကို
+      တည်ဆောက်လိုက်ရုံပါ။ derived data တစ်ခု ပျက်သွားရင်လည်း အဲဒီလိုပဲ ပြန်ဆောက်နိုင်ပါတယ်။ ညတိုင်း ကူးယူနေတဲ့
+      report အတွက် data store ကိုလည်း ဒီ stream ကနေပဲ ဖြည့်ပေးလို့ ရပါတယ်။
+      [[mark:g-dup]] ပေးဆပ်ရတာ တစ်ခုတော့ ရှိပါတယ်။ relay က event ကို stream ပေါ် တင်ပြီးလို့၊ တင်ပြီးပြီလို့
+      မမှတ်ရသေးခင် ပျက်သွားရင်၊ ပြန်တက်လာတဲ့အခါ အဲဒီ event ကို နောက်တစ်ခါ ထပ်တင်ပါလိမ့်မယ်။ event
+      မပျောက်တော့ပေမဲ့ နှစ်ခါ ရောက်တာကတော့ ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-g-open,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          clear: true,
+          upsertIds: [g-stream, g-stream-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-consumers,
+          type: whiteboard.apply,
+          at: { mark: g-consumers },
+          upsertIds: [g-a1, g-c1, g-c1-l, g-a2, g-c2, g-c2-l, g-a3, g-c3, g-c3-l],
+          drawMs: 3600,
+        }
+      - {
+          id: draw-g-stores,
+          type: whiteboard.apply,
+          at: { mark: g-stores },
+          upsertIds: [g-s1, g-s2, g-s3],
+          drawMs: 1800,
+        }
+      - {
+          id: point-g-stream,
+          type: whiteboard.point,
+          at: { mark: g-replay },
+          target: { assetId: g-stream },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Settlement က လက်မှတ် တစ်စောင်တည်းအတွက် လက်မှတ် ရောင်းပြီ ဆိုတဲ့ event ကို
+      နှစ်ခါ ရလိုက်ပါတယ်။ ကားလိုင်းကို ငွေ နှစ်ခါ မပေးမိအောင် ဘာက တားပေးမလဲ။
+      [[mark:q-a]] ပထမ အဖြေက event stream ကို တစ်ခါပဲ ပို့ပေးအောင် ချိန်ထားလို့ ရတယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက Settlement ကိုယ်တိုင်က မြင်ဖူးပြီးသား event ကို မှတ်မိရမယ် ဆိုတာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ထပ်နေတာက stream ထဲ မရောက်ခင်ကတည်းက
+      ဖြစ်နိုင်သလို၊ consumer က ဖတ်ပြီးမှ ပျက်သွားလို့ ပြန်ဖတ်ရတာမျိုးလည်း ရှိနိုင်လို့ပါ။ နောက်ဆုံးမှာ ရလဒ်ကို
+      ရေးတဲ့သူကပဲ သေချာအောင် လုပ်နိုင်ပါတယ်။
+      [[mark:q-id]] event တိုင်းမှာ event id တစ်ခု ပါပါတယ်။ Settlement က ငွေစာရင်း ရေးတဲ့ transaction ထဲမှာပဲ အဲဒီ
+      id ကိုပါ မှတ်ထားပါတယ်။ မှတ်ထားပြီးသား id ပြန်ရောက်လာရင် ဘာမှ မလုပ်ဘဲ ကျော်လိုက်ပါတယ်။
+      [[mark:q-term]] Payment ကို ထပ်ခေါ်တဲ့အခါ သုံးခဲ့တဲ့ request id နဲ့ သဘောတရား အတူတူပါပဲ။ နှစ်ခါ လုပ်လည်း တစ်ခါ
+      လုပ်သလိုပဲ ရလဒ် တူအောင်၊ ဆိုလိုတာက idempotent ဖြစ်အောင် လုပ်ထားတာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-id,
+          type: whiteboard.apply,
+          at: { mark: q-id },
+          upsertIds: [q-id],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-term,
+          type: whiteboard.apply,
+          at: { mark: q-term },
+          upsertIds: [q-term],
+          drawMs: 1200,
+        }
+
+  - id: table
+    chapter: Consumer တစ်ခုစီရဲ့ ဆုံးဖြတ်ချက်
+    narration: >
+      [[mark:t-close]] အခု ဒီဖြစ်ရပ်အတွက် ဆုံးဖြတ်ချက်တွေကို ချရေးပါမယ်။
+      [[mark:type-fix]] အရင်ဆုံး ပြင်ဆင်ချက်ပါ။ Booking က လက်မှတ်နဲ့ event ကို transaction တစ်ခုတည်းနဲ့ outbox ထဲ
+      ရေးပါမယ်။
+      [[mark:type-settle]] ပြီးရင် consumer တစ်ခုစီပါ။ Settlement က ကားလိုင်းရဲ့ ငွေစာရင်းကို တည်ဆောက်ပါတယ်။
+      ထပ်လာတာကို event id နဲ့ သိပြီး၊ ပျက်သွားရင် log ကနေ ပြန်ဆောက်နိုင်ပါတယ်။
+      [[mark:type-notify]] Notification ကတော့ နည်းနည်း ကွာပါတယ်။ event id နဲ့ ထပ်တာကို သိနိုင်ပေမဲ့၊ ပို့ပြီးသား SMS
+      ကိုတော့ ပြန်ရုပ်လို့ မရပါဘူး။ ဒါကြောင့် log ကို အစကနေ ပြန်ဖတ်တဲ့အခါ SMS တွေ ထပ်မပို့မိအောင်၊ ပို့ပြီးစာရင်းကို
+      မဖျက်ဘဲ ထားရပါမယ်။
+      [[mark:type-search]] ခုံ cache ကတော့ id မှတ်စရာတောင် မလိုပါဘူး။ ခုံ တစ်ခုံချင်းစီကို ရောင်းပြီးလို့ မှတ်တာမို့၊ event နှစ်ခါ ရလည်း ရလဒ် အတူတူပါပဲ။ ခဏ နောက်ကျနိုင်ပေမဲ့၊ ခုံ ရောင်းတဲ့အခါကတော့ မူရင်း record ကိုပဲ စစ်ပါတယ်။ ပျက်ရင်လည်း အကုန် ပြန်ဆောက်လို့ ရပါတယ်။
+      [[mark:type-batch]] Settlement မှာ ဆုံးဖြတ်စရာ နှစ်ခု ကျန်ပါသေးတယ်။ SMS လို စက္ကန့်ပိုင်းအတွင်း ရောက်ရမယ့် အလုပ်ကို
+      event ရောက်တာနဲ့ တစ်ခုချင်း လုပ်ရပါတယ်။ ကားလိုင်းတွေကို ငွေလွှဲတာကိုတော့ event ရောက်တိုင်း မလုပ်ဘဲ၊
+      တနင်္လာနေ့မှာ တစ်ပတ်စာကို တစ်ခါတည်း တွက်ပါတယ်။ ဒီလို အစုလိုက် တွက်တာကို batch လို့ ခေါ်ပါတယ်။
+      [[mark:batch-why]] ပြီးခဲ့တဲ့ အပတ်ရဲ့ event တွေက ပြောင်းတော့မှာ မဟုတ်တဲ့ input မို့၊ တွက်တဲ့ code မှားခဲ့ရင် ပြင်ပြီး
+      အစကနေ ပြန် run လို့ ရပါတယ်။ အမှားကို ပြန်ပြင်နိုင်တာက batch ရဲ့ အားသာချက်ပါ။
+      [[mark:type-late]] ဒုတိယက နောက်ကျပြီးမှ ရောက်လာတဲ့ event တွေပါ။ relay ခဏ ရပ်နေခဲ့ရင် event တွေ နောက်ကျပါတယ်။ ကောင်တာအတွက် ခုံ ကြိုခွဲပေးဖို့ business က ဆုံးဖြတ်ခဲ့ရင်လည်း၊ internet ပြတ်ချိန်မှာ ရောင်းတဲ့ လက်မှတ်တွေက ပြန်ချိတ်မိမှ ရောက်လာမှာမို့ နာရီနဲ့ချီ နောက်ကျနိုင်ပါတယ်။ ဘယ်လောက်ထိ စောင့်မလဲ ဆိုတာ ဆုံးဖြတ်ထားရပါမယ်။
+      ကိုယ်တို့ကတော့ တနင်္လာ မနက် ခြောက်နာရီအထိ စောင့်ပြီး၊ အဲဒီနောက်မှ ရောက်တာကို နောက်အပတ် စာရင်းထဲ ထည့်ပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: notebook/35-consumers.md,
+        }
+      - id: type-fix
+        type: editor.type
+        at: { mark: type-fix }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "settlement စာရင်းထဲ မပါ\n" }
+        text: "ပြင်ဆင်ချက်: လက်မှတ်နဲ့ event ကို transaction တစ်ခုတည်းနဲ့ ရေး (outbox)\n"
+      - id: type-settle
+        type: editor.type
+        at: { mark: type-settle }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "|---|---|---|---|\n" }
+        text: "| Settlement | ကားလိုင်း ငွေစာရင်း | event id ကို စာရင်းနဲ့အတူ မှတ် | ရ (log ကနေ) |\n"
+      - id: type-notify
+        type: editor.type
+        at: { mark: type-notify }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "| ရ (log ကနေ) |\n" }
+        text: "| Notification | ပို့ပြီး SMS စာရင်း | event id | စာရင်း မဖျက်ရ၊ SMS ပြန်မပို့ရ |\n"
+      - id: type-search
+        type: editor.type
+        at: { mark: type-search }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "SMS ပြန်မပို့ရ |\n" }
+        text: "| Seat cache | လွတ်တဲ့ ခုံ အရေအတွက် | မလို (ခုံအလိုက် မှတ်၊ နှစ်ခါ ရလည်း တူ) | ရ (အကုန်) |\n"
+      - id: expect-search
+        type: expect.file
+        at: { afterAction: type-search }
+        path: notebook/35-consumers.md
+        contains: "| Seat cache | လွတ်တဲ့ ခုံ အရေအတွက် | မလို (ခုံအလိုက် မှတ်၊ နှစ်ခါ ရလည်း တူ) | ရ (အကုန်) |\n"
+      - id: type-batch
+        type: editor.type
+        at: { mark: type-batch }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "| ရ (အကုန်) |\n" }
+        text: "\n## Settlement (အပတ်စဉ် batch)\n- input: ပြီးခဲ့တဲ့ အပတ်ရဲ့ event တွေ (မပြောင်းတော့)\n"
+      - id: type-rerun
+        type: editor.type
+        at: { mark: batch-why }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "(မပြောင်းတော့)\n" }
+        text: "- မှားရင် ပြင်ပြီး အစကနေ ပြန် run\n"
+      - id: type-late
+        type: editor.type
+        at: { mark: type-late }
+        cadence: line-by-line
+        target: { file: notebook/35-consumers.md, after: "- မှားရင် ပြင်ပြီး အစကနေ ပြန် run\n" }
+        text: "- နောက်ကျတဲ့ event: တနင်္လာ 06:00 အထိ စောင့်၊ ကျော်ရင် နောက်အပတ်ထဲ\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာ နေရာ နှစ်ခုကို တစ်ခုပြီးမှ တစ်ခု ရေးနေတဲ့ code
+      တစ်နေရာကို ရှာကြည့်ပါ။ database မှာ သိမ်းပြီးမှ message ပို့တာ၊ cache ကို ပြင်တာ၊ search index ထဲ ထည့်တာ၊
+      တခြား service ကို ခေါ်တာ စတာတွေပါ။
+      [[mark:turn-2]] lesson ကို pause လုပ်ပြီး၊ တွေ့တဲ့နေရာကို ဒီ ပြင်ဆင်ချက် စာကြောင်းလိုပဲ ရေးကြည့်ပါ။ နှစ်ခုကြားမှာ
+      ပျက်သွားရင် ဘာလွတ်သွားမလဲ ဆိုတာပါ တွဲရေးပါ။ တစ်ခုထက်ပို တွေ့ရင် ငွေနဲ့ ဆိုင်တဲ့ နေရာကို အရင် ရွေးပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-incident-2
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/35-consumers.md,
+            text: "ဖြစ်ရပ်: လက်မှတ် 41 စောင် database ထဲ ရှိ၊ SMS မရောက်၊ settlement စာရင်းထဲ မပါ",
+          }
+      - id: sel-fix
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          {
+            file: notebook/35-consumers.md,
+            text: "ပြင်ဆင်ချက်: လက်မှတ်နဲ့ event ကို transaction တစ်ခုတည်းနဲ့ ရေး (outbox)",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ နေရာ နှစ်ခုကို တစ်ခုပြီးမှ တစ်ခု ရေးနေရင် တစ်နေ့နေ့မှာ တစ်ခုက လွတ်သွားမှာပါ။ အမှန်လို့
+      ယူရတဲ့ မူရင်းကို တစ်နေရာတည်းမှာ ထားပြီး၊ ကျန်တဲ့ derived data အားလုံးကို အစဉ်လိုက် ပြန်ဖတ်လို့ရတဲ့ log ကနေ
+      တည်ဆောက်ပါ။
+      [[mark:recap-2]] event တွေက ထပ်ရောက်လာနိုင်တာမို့၊ consumer တိုင်းက မြင်ဖူးပြီးသား event ကို မှတ်မိအောင်
+      လုပ်ထားရပါမယ်။
+      [[mark:next]] ဒီ lesson နဲ့ data အပိုင်း ပြီးပါပြီ။ Booking၊ Payment နဲ့ Notification ကို service အဖြစ်
+      ခွဲထုတ်ထားပေမဲ့၊ ကျန်နေတဲ့ app အဟောင်းက အခုထိ ကြီးနေပါသေးတယ်။ နောက် lesson မှာတော့ အတူတူ deploy လုပ်ရတဲ့
+      app ကြီး၊ ဆိုလိုတာက monolith တစ်ခုကို ဘာကြောင့်၊ ဘယ်အစီအစဉ်နဲ့ ခွဲထုတ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: recap-2 }
+        target: { file: notebook/35-consumers.md, text: "ထပ်လာတာကို ဘယ်လို သိလဲ" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
