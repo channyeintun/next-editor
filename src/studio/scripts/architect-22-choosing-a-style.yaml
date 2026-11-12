@@ -1,0 +1,953 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-22-choosing-a-style
+  title: "Architect Path 22: Style တစ်ခုကို ရွေးချယ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/22-adr-style.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/22-adr-style.md: |
+        # ADR-001
+
+        ## Status
+        Proposed
+
+        ## Context
+        Top 3: elasticity · data integrity · deployability
+
+        | Candidate | elasticity | data integrity | deployability |
+        |---|---|---|---|
+
+        ## Decision
+
+        ## Consequences
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: inputs
+      contentType: html
+      name: မရွေးခင် သိထားရမယ့် အချက်များ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">မရွေးခင် သိထားရမယ့် အချက် 5 ချက်</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide blue">Characteristic</span>အရေးကြီးဆုံး 3 ခုက ဘာလဲ</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide orange">Domain</span>business ရဲ့ ပုံသဏ္ဌာန်က ဘယ်လိုလဲ</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide green">Data</span>ဘယ် data က မှားလို့ မရလဲ</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide violet">Team</span>လူ ဘယ်နှယောက်၊ team ဘယ်နှခုလဲ</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide red">Budget</span>ငွေနဲ့ လူအင်အား ဘယ်လောက် ရှိလဲ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — every style is a profile: blue is the style, green its strength,
+    # red its weakness (our own one-line summary of each).
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Style တစ်ခုစီမှာ အားသာချက်၊ အားနည်းချက်",
+        fontSize: 36,
+      }
+    - {
+        id: p-b1,
+        kind: rectangle,
+        x: 270,
+        y: 260,
+        width: 300,
+        height: 84,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 284,
+        width: 300,
+        height: 35,
+        text: "Modular monolith",
+        fontSize: 28,
+      }
+    - {
+        id: p-g1,
+        kind: text,
+        x: 600,
+        y: 263,
+        width: 480,
+        height: 35,
+        text: "ရိုးရှင်း၊ စရိတ် နည်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-r1,
+        kind: text,
+        x: 600,
+        y: 306,
+        width: 480,
+        height: 35,
+        text: "အပိုင်း တစ်ခုတည်း scale လုပ်မရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-b3,
+        kind: rectangle,
+        x: 270,
+        y: 420,
+        width: 300,
+        height: 84,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 444,
+        width: 300,
+        height: 35,
+        text: "Microservices",
+        fontSize: 28,
+      }
+    - {
+        id: p-g3,
+        kind: text,
+        x: 600,
+        y: 423,
+        width: 480,
+        height: 35,
+        text: "team တစ်ခုစီ ကိုယ်တိုင် deploy",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-r3,
+        kind: text,
+        x: 600,
+        y: 466,
+        width: 480,
+        height: 35,
+        text: "စရိတ်ကြီး၊ ရှုပ်ထွေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the three questions as a path: orange questions, green for the
+    # answer ခရီးဖော် gives today.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "မေးခွန်း 3 ခု၊ အစဉ်အတိုင်း",
+        fontSize: 36,
+      }
+    - {
+        id: q-b1,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 440,
+        height: 76,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 255,
+        width: 440,
+        height: 35,
+        text: "1. အပိုင်းတိုင်း လိုတာ တူသလား?",
+        fontSize: 28,
+      }
+    - {
+        id: q-a1,
+        kind: text,
+        x: 740,
+        y: 255,
+        width: 340,
+        height: 35,
+        text: "မတူဘူး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - { id: q-d1, kind: freedraw, stroke: arrow-down, x: 470, y: 317, width: 40, height: 38 }
+    - {
+        id: q-b2,
+        kind: rectangle,
+        x: 270,
+        y: 362,
+        width: 440,
+        height: 76,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-l2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 382,
+        width: 440,
+        height: 35,
+        text: "2. data ဘယ်မှာ နေရမလဲ?",
+        fontSize: 28,
+      }
+    - {
+        id: q-a2,
+        kind: text,
+        x: 740,
+        y: 382,
+        width: 340,
+        height: 35,
+        text: "database တစ်ခုတည်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - { id: q-d2, kind: freedraw, stroke: arrow-down, x: 470, y: 444, width: 40, height: 38 }
+    - {
+        id: q-b3,
+        kind: rectangle,
+        x: 270,
+        y: 489,
+        width: 440,
+        height: 76,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 509,
+        width: 440,
+        height: 35,
+        text: "3. ဘာတွေ async ဖြစ်ရမလဲ?",
+        fontSize: 28,
+      }
+    - {
+        id: q-a3,
+        kind: text,
+        x: 740,
+        y: 509,
+        width: 340,
+        height: 35,
+        text: "ရောင်းပြီးမှ ဖြစ်တာတွေ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — styles mixed: the dashed line is the one deployment, blue the
+    # modules and the plug-in, violet the event leaving the app.
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Style တွေကို ရောသုံးတာ",
+        fontSize: 36,
+      }
+    - { id: m-bound, kind: rectangle, x: 270, y: 235, width: 485, height: 300, strokeStyle: dashed }
+    - {
+        id: m-bound-l,
+        kind: text,
+        x: 290,
+        y: 247,
+        width: 300,
+        height: 35,
+        text: "modular monolith",
+        fontSize: 28,
+      }
+    - {
+        id: m-book,
+        kind: rectangle,
+        x: 290,
+        y: 310,
+        width: 140,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-book-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 327,
+        width: 140,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: m-pay,
+        kind: rectangle,
+        x: 440,
+        y: 310,
+        width: 140,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-pay-l,
+        kind: text,
+        align: center,
+        x: 440,
+        y: 327,
+        width: 140,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: m-op,
+        kind: rectangle,
+        x: 590,
+        y: 310,
+        width: 152,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-op-l,
+        kind: text,
+        align: center,
+        x: 590,
+        y: 327,
+        width: 152,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: m-plug,
+        kind: rectangle,
+        x: 472,
+        y: 430,
+        width: 270,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-plug-l,
+        kind: text,
+        align: center,
+        x: 472,
+        y: 444,
+        width: 270,
+        height: 35,
+        text: "ကားလိုင်း plug-in",
+        fontSize: 28,
+      }
+    - {
+        id: m-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 766,
+        y: 325,
+        width: 90,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: m-queue,
+        kind: rectangle,
+        x: 866,
+        y: 317,
+        width: 216,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: m-queue-l,
+        kind: text,
+        align: center,
+        x: 866,
+        y: 327,
+        width: 216,
+        height: 35,
+        text: "TicketSold",
+        fontSize: 28,
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "Internal tool တစ်ခုအတွက်",
+        fontSize: 36,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 700,
+        height: 35,
+        text: "က) အားလုံးကို deploy တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 700,
+        height: 35,
+        text: "ခ) service 4 ခု ခွဲပြီး ဆောက်",
+        fontSize: 28,
+      }
+    - {
+        id: z-a-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 275,
+        width: 420,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-a-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 730,
+        y: 263,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-reason,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "လိုတာ တူရင် ခွဲစရာ အကြောင်း မရှိ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8122
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: နောက် နှစ်နှစ်အတွက် လမ်းကြောင်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ microservices က ဘာတွေ တောင်းဆိုလဲ၊ ခရီးဖော် က အဲဒီအတွက် အဆင်သင့် ဖြစ်ပြီလား
+      ဆိုတာကို စစ်ကြည့်ခဲ့ပါတယ်။ ဒီနေ့တော့ CTO ဖြစ်တဲ့ အောင်အောင် က နောက် နှစ်နှစ်အတွက် system ကို
+      ဘယ်ပုံစံနဲ့ ဆက်ဆောက်မလဲ ဆုံးဖြတ်ပြီး၊ သူ့ကို ရှင်းပြပေးဖို့ တောင်းလာပါတယ်။
+      [[mark:ask]] ဒီ lesson အဆုံးမှာ အဲဒီ ဆုံးဖြတ်ချက်ကို ဒီ စာရွက်ထဲ ရေးပြီးသား ဖြစ်ရပါမယ်။ Booking team
+      lead မောင်မောင် က microservices ကို လိုလားနေတုန်းပါပဲ။ တခြား team တွေကတော့ အခုအတိုင်း
+      ဆက်သွားချင်ကြပါတယ်။ အမြင် မတူတဲ့အခါ ကိုယ် ကြိုက်တာကို ရွေးလို့ မရပါဘူး။ ဘာကြောင့် ရွေးလဲ ဆိုတာ
+      လူတိုင်း လိုက်ကြည့်လို့ရတဲ့ လမ်းကြောင်း တစ်ခု လိုပါတယ်။
+      [[mark:p-open]] အရင်ဆုံး သိထားရမှာက system တစ်ခုလုံးကို ဖွဲ့စည်းတဲ့ ပုံစံ၊ architecture style
+      တစ်ခုစီမှာ အားသာချက်ရော အားနည်းချက်ပါ တွဲပါလာတယ် ဆိုတာပါ။
+      [[mark:p-mono]] deploy တစ်ခုတည်းထဲမှာ module တွေ ခွဲထားတဲ့ modular monolith က ရိုးရှင်းပြီး
+      စရိတ်နည်းပေမဲ့၊ load များတဲ့ အပိုင်း တစ်ခုတည်းကို ခွဲပြီး scale လုပ်လို့ မရပါဘူး။
+      [[mark:p-micro]] data တစ်ခုစီ ပိုင်ပြီး သီးခြား deploy လုပ်နိုင်တဲ့ service သေးသေးတွေ၊ microservices
+      ကတော့ team တစ်ခုစီ ကိုယ်တိုင် deploy လုပ်နိုင်ပေမဲ့၊ စရိတ်ကြီးပြီး ရှုပ်ထွေးပါတယ်။
+      [[mark:p-point]] ဆိုတော့ နေရာတိုင်းမှာ သာတဲ့ style ဆိုတာ မရှိပါဘူး။ မေးရမယ့် မေးခွန်းက ဘယ် style က
+      ကောင်းလဲ မဟုတ်ဘဲ၊ ခရီးဖော် ရဲ့ အခု အခြေအနေနဲ့ ဘယ်ဟာ ကိုက်လဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/22-adr-style.md,
+        }
+      - id: sel-adr
+        type: editor.select
+        at: { mark: ask }
+        target: { file: notebook/22-adr-style.md, text: "# ADR-001" }
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          open: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-mono,
+          type: whiteboard.apply,
+          at: { mark: p-mono },
+          upsertIds: [p-b1, p-l1, p-g1, p-r1],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-p-micro,
+          type: whiteboard.apply,
+          at: { mark: p-micro },
+          upsertIds: [p-b3, p-l3, p-g3, p-r3],
+          drawMs: 2400,
+        }
+
+  - id: inputs
+    chapter: မရွေးခင် သိထားရမယ့် အချက်များ
+    narration: >
+      [[mark:i-open]] style မရွေးခင် ကိုယ့်ဘက်က သိထားရမယ့် အချက် ငါးချက် ရှိပါတယ်။
+      [[mark:i-char]] ပထမက architecture characteristic၊ ဆိုလိုတာက system က ဘယ်လောက် ကောင်းကောင်း
+      လုပ်နိုင်ရမလဲ ဆိုတဲ့ အရည်အသွေးတွေထဲက အရေးကြီးဆုံး သုံးခုပါ။ ခရီးဖော် အတွက်က ရုတ်တရက် တက်လာတဲ့ load
+      ကို လိုက်နိုင်တဲ့ elasticity၊ ထိုင်ခုံကို နှစ်ခါ မရောင်းမိစေတဲ့ data integrity နဲ့၊ ပြောင်းလဲမှုကို
+      production ဆီ မြန်မြန် ပို့နိုင်တဲ့ deployability ပါ။
+      [[mark:i-domain]] ဒုတိယက domain၊ business ရဲ့ လုပ်ငန်းနယ်ပယ်ပါ။ ကားလိုင်း ၁၂၀ မှာ လက်မှတ်
+      ဖျက်ကြေးလို စည်းကမ်းတွေ တစ်ခုနဲ့တစ်ခု မတူတာမျိုးကို style က လက်ခံနိုင်ရပါမယ်။
+      [[mark:i-data]] တတိယက data ပါ။ ထိုင်ခုံနဲ့ ငွေက ခဏလေးတောင် မှားလို့ မရပေမဲ့၊ ရောင်းအား report ကတော့
+      မိနစ်အနည်းငယ် နောက်ကျလည်း ရပါတယ်။
+      [[mark:i-team]] စတုတ္ထက team ပါ။ developer ၁၈ ယောက်၊ team သုံးခုနဲ့ service အများကြီးကို ထိန်းဖို့
+      မလွယ်ပါဘူး။
+      [[mark:i-budget]] နောက်ဆုံးက budget ပါ။ server စရိတ်တင် မကဘဲ၊ system ကို နေ့စဉ် ထိန်းမယ့်
+      လူအင်အားနဲ့ အလိုအလျောက် deploy လုပ်ပေးတဲ့ tool တွေပါ ပါပါတယ်။ ခရီးဖော် မှာ ဒီအင်အားက
+      မများသေးပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: close-profile,
+          type: whiteboard.apply,
+          at: { mark: i-open, offsetMs: -1300 },
+          open: false,
+        }
+      - { id: show-inputs, type: slide.show, at: { afterAction: close-profile }, slideId: inputs }
+      - { id: point-char, type: slide.point, at: { mark: i-char }, target: { x: 0.15, y: 0.35 } }
+      - {
+          id: point-domain,
+          type: slide.point,
+          at: { mark: i-domain },
+          target: { x: 0.15, y: 0.47 },
+        }
+      - { id: point-data, type: slide.point, at: { mark: i-data }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-team, type: slide.point, at: { mark: i-team }, target: { x: 0.15, y: 0.71 } }
+      - {
+          id: point-budget,
+          type: slide.point,
+          at: { mark: i-budget },
+          target: { x: 0.15, y: 0.83 },
+        }
+
+  - id: three-questions
+    chapter: မေးခွန်း သုံးခု
+    narration: >
+      [[mark:q-open]] ဒီ အချက်တွေ သိပြီဆိုရင် မေးခွန်း သုံးခုကို အစဉ်အတိုင်း မေးပါမယ်။ ပထမက အပိုင်းတိုင်းက
+      characteristic အတူတူကိုပဲ လိုတာလား ဆိုတာပါ။ လက်မှတ် ရှာတာနဲ့ ဝယ်တာက သင်္ကြန်လို နေ့မျိုးမှာ
+      အဆများစွာ တက်လာတဲ့ load ကို ခံနိုင်ရပါမယ်။ ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့ settlement ကတော့
+      တစ်ပတ် တစ်ခါပဲ run ပြီး၊ မြန်ဖို့ထက် မှန်ဖို့က အဓိကပါ။
+      [[mark:q-a1]] ဆိုတော့ အဖြေက မတူဘူး ပါ။ မတူတဲ့ အပိုင်းတွေကို အမြဲ အတူတူ deploy လုပ်နေရရင် တစ်ခုအတွက်
+      ပေးရတဲ့ စရိတ်ကို အားလုံးက ခံရတာမို့၊ သီးခြား deploy လုပ်နိုင်တဲ့ အပိုင်း တစ်ခုထက် ပိုလိုလာပါပြီ။
+      [[mark:q-2]] ဒုတိယက data ဘယ်မှာ နေရမလဲ ဆိုတာပါ။ ထိုင်ခုံကို hold လုပ်တာနဲ့ ရောင်းတာက transaction
+      တစ်ခုထဲမှာ၊ ဆိုလိုတာက အကုန်ဖြစ် ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ အစုထဲမှာ ရှိမှ စိတ်ချရပါတယ်။ data
+      ကို service တစ်ခုစီဆီ ခွဲလိုက်ရင် အဲဒီ အာမခံချက်ကို ကိုယ်တိုင် ပြန်ဆောက်ရပါမယ်။
+      [[mark:q-a2]] developer ၁၈ ယောက်နဲ့ အဲဒီ ဝန်ကို မထမ်းချင်သေးတာမို့၊ အဖြေက database တစ်ခုတည်းမှာပဲ
+      ဆက်ထားမယ် ဆိုတာပါ။
+      [[mark:q-3]] တတိယက ဘယ် ဆက်သွယ်မှုတွေက asynchronous၊ ဆိုလိုတာက အဖြေကို မစောင့်ဘဲ ဆက်သွားတာ
+      ဖြစ်ရမလဲ ဆိုတာပါ။ ပုံမှန်ကတော့ အဖြေကို စောင့်တဲ့ call ပါပဲ။ နားလည်ရ လွယ်ပြီး မှားရင်လည်း ချက်ချင်း
+      သိရလို့ပါ။ ခုံ လွတ်သေးလား ဆိုတာမျိုးက call ပဲ ဖြစ်ရပါမယ်။
+      [[mark:q-a3]] လက်မှတ် ရောင်းပြီးမှ SMS ပို့တာ၊ ကားလိုင်းရဲ့ ရောင်းအား စာရင်းကို update လုပ်တာတွေကတော့
+      ခရီးသည်ကို စောင့်ခိုင်းစရာ မလိုတာမို့၊ အဲဒါတွေကိုပဲ asynchronous လုပ်ပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-inputs, type: slide.close, at: { mark: q-open } }
+      - {
+          id: draw-q-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-inputs },
+          open: true,
+          clear: true,
+          upsertIds: [q-title, q-b1, q-l1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-q-a1,
+          type: whiteboard.apply,
+          at: { mark: q-a1 },
+          upsertIds: [q-a1],
+          drawMs: 700,
+        }
+      - {
+          id: draw-q-2,
+          type: whiteboard.apply,
+          at: { mark: q-2 },
+          upsertIds: [q-d1, q-b2, q-l2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-q-a2,
+          type: whiteboard.apply,
+          at: { mark: q-a2 },
+          upsertIds: [q-a2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-3,
+          type: whiteboard.apply,
+          at: { mark: q-3 },
+          upsertIds: [q-d2, q-b3, q-l3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-q-a3,
+          type: whiteboard.apply,
+          at: { mark: q-a3 },
+          upsertIds: [q-a3],
+          drawMs: 900,
+        }
+
+  - id: mix
+    chapter: Style တွေကို ရောသုံးခြင်း
+    narration: >
+      [[mark:m-open]] အဖြေ သုံးခုကို ပေါင်းလိုက်ရင် style တစ်ခုတည်းနဲ့ အတိအကျ မတူတဲ့ ပုံတစ်ပုံ
+      ထွက်လာပါတယ်။ လက်တွေ့ system အများစုကလည်း ဒီလိုပဲ style တွေကို ရောသုံးကြတာပါ။
+      [[mark:m-mono]] အခြေခံက အခု ရှိပြီးသား modular monolith ပါ။ Booking၊ Payment နဲ့ Operator module
+      တွေက အခုထိ deploy တစ်ခုတည်းထဲမှာ အတူ ရှိပါတယ်။ ပထမ မေးခွန်းရဲ့ အဖြေအရ ဘယ်အပိုင်းကို အရင်
+      ခွဲထုတ်မလဲ ဆိုတာကိုတော့ ခဏနေ နှိုင်းယှဉ်ပြီး ဆုံးဖြတ်ပါမယ်။
+      [[mark:m-plugin]] ကားလိုင်း တစ်ခုစီရဲ့ မတူတဲ့ စည်းကမ်းတွေကိုတော့ plug in အဖြစ် တပ်ပါမယ်။ core ကို
+      သေးသေးထားပြီး ကွဲပြားတာတွေကို ထပ်တပ်တဲ့ microkernel style ဆီက ယူသုံးတာပါ။
+      [[mark:m-event]] လက်မှတ် ရောင်းပြီးတိုင်း Booking က ရောင်းပြီးပြီ ဆိုတဲ့ ဖြစ်ပြီးသား အကြောင်းအရာ၊
+      event တစ်ခုကို ထုတ်ပေးပြီး၊ SMS ပို့တဲ့ အပိုင်းနဲ့ report အပိုင်းက အဲဒါကို နားထောင်ပါမယ်။ ဒါကတော့
+      event driven style ဆီက ယူသုံးတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m-mono,
+          type: whiteboard.apply,
+          at: { mark: m-mono },
+          upsertIds: [m-bound, m-bound-l, m-book, m-book-l, m-pay, m-pay-l, m-op, m-op-l],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-m-plugin,
+          type: whiteboard.apply,
+          at: { mark: m-plugin },
+          upsertIds: [m-plug, m-plug-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-m-event,
+          type: whiteboard.apply,
+          at: { mark: m-event },
+          upsertIds: [m-arrow, m-queue, m-queue-l],
+          drawMs: 1500,
+        }
+
+  - id: compare
+    chapter: ကိုယ်ပိုင် နှိုင်းယှဉ်ချက်
+    narration: >
+      [[mark:c-close]] အခု ရွေးစရာ သုံးခုကို ခရီးဖော် ရဲ့ အရေးကြီးဆုံး characteristic သုံးခုနဲ့
+      တိုက်ကြည့်ပါမယ်။
+      [[mark:c-top3]] ဒီ အကဲဖြတ်ချက်တွေက နေရာတိုင်းမှာ မှန်တဲ့ အမှတ်ပေးချက် မဟုတ်ဘဲ၊ ခရီးဖော် ရဲ့ အခု
+      အခြေအနေအတွက် ကိုယ်တို့ ကိုယ်တိုင် ချတာပါ။ ဒါကြောင့် နံပါတ် မသုံးဘဲ စကားလုံးနဲ့ပဲ ရေးပါမယ်။
+      [[mark:c-mono]] အခုအတိုင်း modular monolith နဲ့ ဆက်သွားရင် database တစ်ခု၊ transaction တစ်ခုမို့
+      data integrity က အားကောင်းပါတယ်။ ဒါပေမဲ့ app တစ်ခုလုံးကို အတူတူ scale လုပ်ရပြီး၊ release ကလည်း
+      တစ်ခုတည်းမို့ ကျန်နှစ်ခုမှာ အားနည်းပါတယ်။
+      [[mark:c-service]] service based architecture ကတော့ လုပ်ငန်းနယ်ပယ် ကြီးကြီး service အနည်းငယ်ကို
+      သီးခြား deploy လုပ်ပြီး database ကို မျှသုံးတဲ့ ပုံစံပါ။ team တစ်ခုစီ ကိုယ့် release ကို ကိုယ်တိုင်
+      ထုတ်နိုင်ပြီး၊ data ကလည်း တစ်နေရာတည်းမှာပါ။ elasticity ကတော့ service ကြီး တစ်ခုလုံးကို တိုးရတာမို့
+      အသင့်အတင့်ပဲ ရပါတယ်။
+      [[mark:c-micro]] microservices က elasticity နဲ့ deployability မှာ အားကောင်းပါတယ်။ ဒါပေမဲ့ data ကို
+      service တစ်ခုစီဆီ ခွဲရတာမို့ လက်မှတ် ရောင်းတာက transaction တစ်ခုတည်း မဟုတ်တော့ဘဲ၊ data integrity က
+      အားနည်းသွားပါမယ်။
+      [[mark:c-read]] အားနည်း ဆိုတာ တစ်ခုမှ မပါတဲ့ ရွေးစရာက service based တစ်ခုတည်းပါ။ microservices
+      ကတော့ ခရီးဖော် ဘယ်တော့မှ မလျှော့နိုင်တဲ့ data integrity မှာ ကျပြီး၊ team နဲ့ budget ကလည်း
+      မထောက်ခံပါဘူး။
+      [[mark:c-space]] ခဏတာ အလွန်မြင့်တဲ့ peak အတွက်ဆိုရင် data ကို code ဘေးက memory ထဲမှာ ထားပြီး၊
+      database ကို နောက်မှ လိုက်ရေးတဲ့ style တစ်မျိုးလည်း ရှိပါသေးတယ်။ elasticity အလွန်ကောင်းပေမဲ့ data
+      ခဏ မကိုက်ညီနိုင်တာမို့၊ ထိုင်ခုံအတွက်တော့ စာရင်းထဲ မထည့်ခဲ့ပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-mix, type: whiteboard.apply, at: { mark: c-close }, open: false }
+      - id: sel-top3
+        type: editor.select
+        at: { mark: c-top3 }
+        target:
+          {
+            file: notebook/22-adr-style.md,
+            text: "Top 3: elasticity · data integrity · deployability",
+          }
+      - id: type-row-mono
+        type: editor.type
+        at: { mark: c-mono }
+        cadence: line-by-line
+        target: { file: notebook/22-adr-style.md, after: "|---|---|---|---|\n" }
+        text: "| Modular monolith | အားနည်း | အားကောင်း | အားနည်း |\n"
+      - id: type-row-service
+        type: editor.type
+        at: { mark: c-service }
+        cadence: line-by-line
+        target: { file: notebook/22-adr-style.md, after: "| အားနည်း | အားကောင်း | အားနည်း |\n" }
+        text: "| Service-based | အသင့်အတင့် | အားကောင်း | အားကောင်း |\n"
+      - id: type-row-micro
+        type: editor.type
+        at: { mark: c-micro }
+        cadence: line-by-line
+        target: { file: notebook/22-adr-style.md, after: "| အသင့်အတင့် | အားကောင်း | အားကောင်း |\n" }
+        text: "| Microservices | အားကောင်း | အားနည်း | အားကောင်း |\n"
+      - id: sel-service-row
+        type: editor.select
+        at: { mark: c-read }
+        target:
+          {
+            file: notebook/22-adr-style.md,
+            text: "| Service-based | အသင့်အတင့် | အားကောင်း | အားကောင်း |",
+          }
+      - id: sel-integrity
+        type: editor.select
+        at: { mark: c-space }
+        target: { file: notebook/22-adr-style.md, text: "data integrity", occurrence: 2 }
+
+  - id: adr
+    chapter: ဆုံးဖြတ်ချက်ကို ADR နဲ့ မှတ်ခြင်း
+    narration: >
+      [[mark:a-open]] ရွေးပြီးရင် architecture decision record၊ အတိုကောက် ADR နဲ့ မှတ်တမ်းတင်ရပါမယ်။ ဘာကို
+      ဘာကြောင့် ဆုံးဖြတ်ခဲ့လဲ ရေးမှတ်ထားတဲ့ စာတိုလေးပါ။
+      [[mark:a-context]] Context အောက်မှာ မေးခွန်း သုံးခုရဲ့ အဖြေကို ရေးထားပါမယ်။ နောက်မှ ပြန်ဖတ်တဲ့သူက
+      အဲဒီတုန်းက အခြေအနေကို ဒီကနေ သိရပြီး၊ အခြေအနေ ပြောင်းရင် ဆုံးဖြတ်ချက်ကိုပါ ပြန်စဉ်းစားနိုင်မှာပါ။
+      [[mark:a-decision]] Decision က modular monolith ကို အခြေခံ ဆက်ထားပြီး၊ Booking ကို service အဖြစ်
+      အရင်ဆုံး ခွဲထုတ်မယ် ဆိုတာပါ။ load အများဆုံး ကျတာရော၊ release မြန်မြန် ထုတ်ချင်တာပါ Booking
+      မို့လို့ပါ။ ကျန်တာတွေကိုတော့ အကြောင်းပြချက် ပေါ်လာမှ တစ်ခုချင်း ခွဲပါမယ်။
+      [[mark:a-cons]] Consequences အောက်မှာ ရမယ့်အရာရော ပေးရမယ့်အရာပါ ရေးရပါတယ်။ ပေးရတာက schema၊
+      ဆိုလိုတာက data ရဲ့ ပုံစံ ပြောင်းတိုင်း team တွေ ညှိရတာနဲ့၊ elasticity အသင့်အတင့်ပဲ ရတာပါ။
+      အားနည်းချက်ကို ဖုံးမထားမှ သင်္ကြန် မတိုင်ခင် load test လုပ်ဖို့လို အလုပ်တွေကို ကြိုစီစဉ်နိုင်မှာပါ။
+      [[mark:a-title]] ခေါင်းစဉ်ကိုတော့ ဆုံးဖြတ်ချက် တစ်ကြောင်းနဲ့ ဖြည့်လိုက်ပါမယ်။
+      [[mark:a-status]] Status က Proposed ပဲ ရှိပါသေးတယ်။ အောင်အောင် နဲ့ team lead တွေ သဘောတူမှ
+      အတည်ဖြစ်မှာပါ။ အောင်အောင် ကို ရှင်းပြရင်လည်း style နာမည်တွေနဲ့ မစဘဲ၊ သင်္ကြန်မှာ ထပ်မရှက်ရဖို့၊ ခုံ
+      နှစ်ခါ မရောင်းမိဖို့၊ team တွေ အချင်းချင်း စောင့်မနေရဖို့ ဆိုတဲ့ သူ ဂရုစိုက်တဲ့ အရာတွေကနေ
+      စပြောပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-context
+        type: editor.select
+        at: { mark: a-open }
+        target: { file: notebook/22-adr-style.md, text: "## Context" }
+      - id: type-context
+        type: editor.type
+        at: { mark: a-context }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/22-adr-style.md,
+            after: "| Microservices | အားကောင်း | အားနည်း | အားကောင်း |\n",
+          }
+        text: "\n- အပိုင်းတွေ လိုတာ မတူဘူး: ရှာတာ၊ ဝယ်တာက elasticity၊ settlement က မှန်ကန်မှု\n- ထိုင်ခုံ data က database တစ်ခုတည်းမှာ၊ transaction တစ်ခုထဲမှာ\n- ရောင်းပြီးမှ ဖြစ်တာတွေပဲ asynchronous၊ ကျန်တာ call\n"
+      - id: type-decision
+        type: editor.type
+        at: { mark: a-decision }
+        cadence: line-by-line
+        target: { file: notebook/22-adr-style.md, after: "## Decision\n" }
+        text: "- Booking ကို service အဖြစ် အရင် ခွဲထုတ်မယ်၊ ကျန်တာ module အဖြစ် ဆက်ထားမယ်\n- database တစ်ခုတည်း ဆက်သုံးမယ်၊ ရောင်းပြီးတာတွေကို event နဲ့ ကြေညာမယ်\n"
+      - id: type-cons
+        type: editor.type
+        at: { mark: a-cons }
+        cadence: line-by-line
+        target: { file: notebook/22-adr-style.md, after: "## Consequences\n" }
+        text: "+ Booking team က ကိုယ့် release ကို ကိုယ်တိုင် ထုတ်နိုင်မယ်\n+ ထိုင်ခုံက transaction တစ်ခုထဲမှာ ဆက်ရှိမယ်\n− schema ပြောင်းရင် team တွေ ညှိရမယ်\n− elasticity က အသင့်အတင့်ပဲ: သင်္ကြန် မတိုင်ခင် load test လိုမယ်\n"
+      - id: type-title
+        type: editor.type
+        at: { mark: a-title }
+        cadence: line-by-line
+        target: { file: notebook/22-adr-style.md, after: "# ADR-001" }
+        text: " · Modular monolith ကနေ service-based ဆီ တစ်ဆင့်ချင်း သွားမယ်"
+      - id: expect-title
+        type: expect.file
+        at: { afterAction: type-title }
+        path: notebook/22-adr-style.md
+        contains: "# ADR-001 · Modular monolith ကနေ service-based ဆီ တစ်ဆင့်ချင်း သွားမယ်\n"
+      - id: sel-status
+        type: editor.select
+        at: { mark: a-status }
+        target: { file: notebook/22-adr-style.md, text: "Proposed" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ရုံးဝန်ထမ်း ဆယ်ယောက်လောက်ပဲ သုံးမယ့်၊ ကားလိုင်း စာချုပ်တွေကို
+      စီမံတဲ့ internal tool တစ်ခု ဆောက်ရမယ် ဆိုပါစို့။ အပိုင်းတိုင်းက လိုတာ တူပြီး၊ လိုအပ်ချက်ကလည်း
+      မမြင့်ပါဘူး။
+      [[mark:quiz-a]] ပထမ ရွေးစရာက အားလုံးကို deploy တစ်ခုတည်းအဖြစ် ဆောက်တာပါ။
+      [[mark:quiz-b]] ဒုတိယက service လေးခု ခွဲပြီး ဆောက်တာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ပထမ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ အပိုင်းတိုင်း လိုတာ တူနေရင်
+      ခွဲထုတ်ဖို့ အကြောင်းပြချက် မရှိလို့ပါ။ ခွဲလိုက်ရင် network ကြားခံလာတာ၊ deploy လုပ်စရာ များလာတာလို စရိတ်တွေကိုပဲ
+      ပေးရပြီး၊ ပြန်ရတာ မရှိပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [z-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-a-line, z-a-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer, offsetMs: 2600 },
+          upsertIds: [z-reason],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ Context အောက်က စာကြောင်း သုံးကြောင်းကို
+      ကိုယ့် system အတွက် ပြန်ရေးကြည့်ပါ။ အပိုင်းတိုင်း လိုတာ တူသလား၊ data ဘယ်မှာ နေရမလဲ၊ ဘာတွေ
+      asynchronous ဖြစ်ရမလဲ ဆိုတာပါ။
+      [[mark:turn-2]] အဖြေက အခု သုံးနေတဲ့ style နဲ့ မကိုက်ရင်လည်း ချက်ချင်း ပြောင်းဖို့ မဟုတ်ပါဘူး။
+      ဘာကြောင့် ကွာနေလဲ မေးကြည့်ဖို့ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-answers
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/22-adr-style.md
+          text: "- အပိုင်းတွေ လိုတာ မတူဘူး: ရှာတာ၊ ဝယ်တာက elasticity၊ settlement က မှန်ကန်မှု\n- ထိုင်ခုံ data က database တစ်ခုတည်းမှာ၊ transaction တစ်ခုထဲမှာ\n- ရောင်းပြီးမှ ဖြစ်တာတွေပဲ asynchronous၊ ကျန်တာ call"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ နေရာတိုင်းမှာ သာတဲ့ style ဆိုတာ မရှိပါဘူး။ ကိုယ့် characteristic၊ domain၊ data၊
+      team နဲ့ budget ကို သိထားပြီး၊ မေးခွန်း သုံးခုကို အစဉ်အတိုင်း မေးရပါတယ်။ ပြီးရင် ရွေးစရာတွေကို
+      ကိုယ်ပိုင် စကားလုံးနဲ့ နှိုင်းယှဉ်ပြီး၊ ဆုံးဖြတ်ချက်ကို ADR နဲ့ မှတ်ထားရပါမယ်။
+      [[mark:next]] လမ်းကြောင်းတော့ ရပါပြီ။ ဒါပေမဲ့ developer ၁၈ ယောက်ရဲ့ အားကို ဘယ်အပိုင်းမှာ အများဆုံး
+      သုံးသင့်လဲ မသိရသေးပါဘူး။ နောက် lesson မှာတော့ business ကို core၊ supporting၊ generic ဆိုတဲ့
+      subdomain တွေအဖြစ် ခွဲကြည့်တာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
