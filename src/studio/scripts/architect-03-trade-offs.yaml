@@ -1,0 +1,843 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-03-trade-offs
+  title: "Architect Path 03: အရာတိုင်းက trade-off"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/03-seat-hold-trade-off.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/03-seat-hold-trade-off.md: |
+        # ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် — trade-off
+
+        | Option | ရတာ | ပေးရတာ | ဘယ်အခါ သင့်တော်လဲ |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — two fixes weighed against each other. Blue boxes are the two
+    # mechanisms, green what each gains, red what each costs, orange the pivot
+    # the board is about.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ဘယ်နည်းက ပိုကောင်းလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: b-a,
+        kind: rectangle,
+        x: 270,
+        y: 300,
+        width: 380,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-a-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 317,
+        width: 380,
+        height: 35,
+        text: "ရွေးတာနဲ့ lock",
+        fontSize: 28,
+      }
+    - {
+        id: b-a-gain,
+        kind: text,
+        x: 280,
+        y: 395,
+        width: 380,
+        height: 35,
+        text: "+ ငွေချေသူ စိတ်ချရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-a-cost,
+        kind: text,
+        x: 280,
+        y: 450,
+        width: 380,
+        height: 35,
+        text: "− မဝယ်သူက ခုံ ပိတ်ထား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-b,
+        kind: rectangle,
+        x: 690,
+        y: 300,
+        width: 380,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-b-l,
+        kind: text,
+        align: center,
+        x: 690,
+        y: 317,
+        width: 380,
+        height: 35,
+        text: "ငွေချေမှ စစ်",
+        fontSize: 28,
+      }
+    - {
+        id: b-b-gain,
+        kind: text,
+        x: 700,
+        y: 395,
+        width: 380,
+        height: 35,
+        text: "+ ကောင်တာ မြန်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-b-cost,
+        kind: text,
+        x: 700,
+        y: 450,
+        width: 380,
+        height: 35,
+        text: "− ငွေချေခါနီးမှ ခုံ မရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - { id: b-beam, kind: rectangle, x: 440, y: 236, width: 460, height: 12 }
+    - {
+        id: b-pivot,
+        kind: diamond,
+        x: 645,
+        y: 250,
+        width: 50,
+        height: 44,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - { id: b-ha, kind: freedraw, stroke: arrow-down, x: 440, y: 252, width: 40, height: 42 }
+    - { id: b-hb, kind: freedraw, stroke: arrow-down, x: 860, y: 252, width: 40, height: 42 }
+    - {
+        id: b-trade,
+        kind: text,
+        x: 270,
+        y: 545,
+        width: 700,
+        height: 38,
+        text: "ဆုံးဖြတ်ချက်တိုင်း = trade-off",
+        fontSize: 30,
+      }
+    # Board 2 — "it depends": on what. Orange questions, white facts of ခရီးဖော်.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ဘာပေါ် မူတည်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: d-q1,
+        kind: text,
+        x: 290,
+        y: 260,
+        width: 460,
+        height: 35,
+        text: "ငွေချေတာ ဘယ်လောက် ကြာလဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-v1,
+        kind: text,
+        x: 790,
+        y: 260,
+        width: 300,
+        height: 35,
+        text: "3–8 မိနစ်",
+        fontSize: 28,
+      }
+    - {
+        id: d-q2,
+        kind: text,
+        x: 290,
+        y: 340,
+        width: 460,
+        height: 35,
+        text: "ရွေးပြီး မဝယ်သူ ဘယ်လောက်လဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-v2,
+        kind: text,
+        x: 790,
+        y: 340,
+        width: 300,
+        height: 35,
+        text: "10 ယောက်မှာ 4",
+        fontSize: 28,
+      }
+    - {
+        id: d-q3,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 460,
+        height: 35,
+        text: "ကောင်တာက ဘယ်လောက် ရောင်းလဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - { id: d-v3, kind: text, x: 790, y: 420, width: 300, height: 35, text: "60 %", fontSize: 28 }
+    - {
+        id: d-ctx,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 760,
+        height: 38,
+        text: "အခြေအနေ မတူရင် အဖြေလည်း မတူ",
+        fontSize: 30,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the hold time as one line between the two fixes. Orange marks
+    # the point chosen, green the gain that grows, red the cost that grows.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ခုံကို ဘယ်လောက် ကြာကြာ ထိန်းမလဲ?",
+        fontSize: 36,
+      }
+    - { id: p-bar, kind: rectangle, x: 290, y: 320, width: 760, height: 24 }
+    - {
+        id: p-l,
+        kind: text,
+        x: 290,
+        y: 355,
+        width: 360,
+        height: 35,
+        text: "0 မိနစ် · ငွေချေမှ စစ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-r,
+        kind: text,
+        x: 790,
+        y: 355,
+        width: 290,
+        height: 35,
+        text: "အကန့်အသတ်မဲ့ lock",
+        fontSize: 28,
+      }
+    - { id: p-2, kind: text, x: 370, y: 268, width: 130, height: 35, text: "2 မိနစ်", fontSize: 28 }
+    - { id: p-10, kind: text, x: 545, y: 268, width: 140, height: 35, text: "10 မိနစ်", fontSize: 28 }
+    - { id: p-30, kind: text, x: 760, y: 268, width: 140, height: 35, text: "30 မိနစ်", fontSize: 28 }
+    - {
+        id: p-10-c,
+        kind: freedraw,
+        stroke: circle,
+        x: 525,
+        y: 256,
+        width: 160,
+        height: 58,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-gain,
+        kind: text,
+        x: 290,
+        y: 430,
+        width: 760,
+        height: 35,
+        text: "ကြာလေ ငွေချေသူ စိတ်ချရလေ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-cost,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 760,
+        height: 35,
+        text: "ကြာလေ ရောင်းမရတဲ့ ခုံ များလေ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-why,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 760,
+        height: 35,
+        text: "ငွေချေတာ အကြာဆုံး 8 မိနစ်ခန့်",
+        fontSize: 28,
+      }
+    # Board 4 — the quiz: white question and options, green answer and reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဆိုးကျိုး မရှိဘူးလို့ ပြောလာရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) ချက်ချင်း လက်ခံမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) ဘာကို လျှော့ပေးရလဲ အရင် ရှာမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 520,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 850,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 790,
+        height: 35,
+        text: "မမြင်ရသေးတဲ့ cost က အန္တရာယ် အများဆုံး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-ex,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 790,
+        height: 35,
+        text: "cache: လွတ်တဲ့ ခုံ အရေအတွက် ဟောင်းနေနိုင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8103
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: two-fixes
+    chapter: နည်းလမ်း နှစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ architect ရဲ့ အလုပ် သုံးမျိုးကို လေ့လာခဲ့ပြီး၊ ထိုင်ခုံတွေကို နှစ်ခါ မရောင်းမိအောင်
+      ဘယ်လို ကာမလဲ ဆိုတာက ကိုယ် တာဝန်ယူရမယ့် ဆုံးဖြတ်ချက် ဖြစ်တယ် ဆိုတာ တွေ့ခဲ့ပါတယ်။
+      [[mark:b-open]] ဒီအပတ် team အစည်းအဝေးမှာ အဲဒီအတွက် နည်းလမ်း နှစ်ခု ထွက်လာပါတယ်။
+      [[mark:b-a]] team ထဲက developer မောင်မောင် ကတော့ ခရီးသည် ဖြစ်ဖြစ်၊ ကောင်တာ ဝန်ထမ်း ဖြစ်ဖြစ် ထိုင်ခုံကို
+      ရွေးလိုက်တာနဲ့ အဲဒီခုံကို ချက်ချင်း lock လုပ်ထားချင်ပါတယ်။ တခြားသူ ရွေးလို့ မရအောင် ပိတ်ထားလိုက်တာပါ။
+      ဒါဆိုရင် ငွေချေနေတဲ့ ခရီးသည်က သူ့ခုံကို တခြားသူ ယူသွားမှာ စိုးရိမ်စရာ မလိုတော့ပါဘူး။
+      [[mark:b-b]] product manager လှလှ ကတော့ သဘောမတူပါဘူး။ ခုံကို ပိတ်မထားဘဲ၊ ငွေချေတဲ့ အချိန်ကျမှ ခုံ
+      လွတ်သေးလား စစ်ပြီး အရင် ငွေချေတဲ့သူကို ပေးလိုက်ချင်ပါတယ်။ လက်မှတ် အများစုကို ကောင်တာကနေ ရောင်းနေရတာမို့၊
+      app ထဲမှာ ကြည့်ရုံ ကြည့်နေတဲ့သူတွေကြောင့် ကောင်တာရှေ့က ခရီးသည်ကို စောင့်မခိုင်းချင်လို့ပါ။
+      [[mark:b-which]] အစည်းအဝေးက ဘယ်နည်းက ပိုကောင်းလဲ ဆိုတဲ့ မေးခွန်းနဲ့ပဲ တစ်နာရီ ကုန်သွားပါတယ်။
+      နှစ်ယောက်လုံးက ကိုယ့်နည်းရဲ့ ကောင်းကွက်ကို ပြောနေကြပြီး၊ နှစ်ယောက်လုံးလည်း မှန်နေလို့ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-a,
+          type: whiteboard.apply,
+          at: { mark: b-a },
+          upsertIds: [b-a, b-a-l, b-a-gain],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-b-b,
+          type: whiteboard.apply,
+          at: { mark: b-b },
+          upsertIds: [b-b, b-b-l, b-b-gain],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-b-which,
+          type: whiteboard.apply,
+          at: { mark: b-which },
+          upsertIds: [b-beam, b-pivot, b-ha, b-hb],
+          drawMs: 1800,
+        }
+
+  - id: costs
+    chapter: ရတာနဲ့ ပေးရတာ
+    narration: >
+      [[mark:c-a]] ဒါပေမဲ့ နည်းလမ်း တစ်ခုစီမှာ ပေးရတာလည်း ရှိပါတယ်။ ရွေးတာနဲ့ lock လုပ်ရင် ခုံကို ရွေးပြီး
+      ငွေမချေဘဲ ထွက်သွားတဲ့သူတွေက အဲဒီခုံကို ပိတ်ထားမိပါတယ်။ လူစည်တဲ့နေ့မှာ ကားက ပြည့်နေသလို ပေါ်ပြီး၊
+      တကယ်တော့ ခုံတွေ လွတ်နေတာမျိုး ဖြစ်လာမှာပါ။ ကောင်တာ ဝန်ထမ်းကလည်း ရှေ့မှာ ရပ်နေတဲ့ ခရီးသည်ကို
+      ရောင်းစရာ ခုံ မရှိဘူးလို့ ပြောရပါလိမ့်မယ်။
+      [[mark:c-b]] ငွေချေမှ စစ်တဲ့ နည်းမှာတော့ ခရီးသည်က ခုံရွေး၊ wallet ဖွင့်ပြီး ငွေချေခါနီးကျမှ ခုံက
+      မရှိတော့ဘူး ဆိုတာ သိရတာမျိုး ကြုံရပါမယ်။ သင်္ကြန်လို နေ့မျိုးမှာ ဒီလို ကြုံရတဲ့သူ အများကြီး
+      ရှိလာမှာပါ။
+      [[mark:c-trade]] ဒီလို တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတာကို trade off လို့ ခေါ်ပါတယ်။
+      architecture ထဲက ဆုံးဖြတ်ချက်တွေက ဒီလို trade off တွေချည်းပါပဲ။ ဒါကြောင့် ဘယ်နည်းက ပိုကောင်းလဲ
+      ဆိုတဲ့ မေးခွန်းမှာ အဖြေ မရှိပါဘူး။ မောင်မောင် မှန်လား၊ လှလှ မှန်လား ငြင်းနေမယ့်အစား မေးရမယ့်
+      မေးခွန်းက ကိုယ်တို့ရဲ့ အခြေအနေမှာ ဘယ်နည်းရဲ့ ပေးရတာက ခံသာဆုံးလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-c-a,
+          type: whiteboard.apply,
+          at: { mark: c-a },
+          upsertIds: [b-a-cost],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-b,
+          type: whiteboard.apply,
+          at: { mark: c-b },
+          upsertIds: [b-b-cost],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-trade,
+          type: whiteboard.apply,
+          at: { mark: c-trade },
+          upsertIds: [b-trade],
+          drawMs: 1000,
+        }
+
+  - id: depends
+    chapter: ဘာပေါ် မူတည်လဲ
+    narration: >
+      [[mark:d-open]] ဒီလို မေးခွန်းမျိုးကို မေးလိုက်ရင် အခြေအနေပေါ် မူတည်တယ် လို့ ဖြေလေ့ ရှိကြပါတယ်။
+      မှန်ပေမဲ့ အဲဒီမှာ ရပ်လိုက်ရင် အဖြေ မဟုတ်သေးပါဘူး။ ဘာပေါ် မူတည်တာလဲ ဆိုတာပါ ဆက်ပြောနိုင်မှ အဖြေ
+      ဖြစ်ပါတယ်။ ခရီးဖော် အတွက်ဆိုရင် အချက် သုံးခုပေါ် မူတည်ပါတယ်။
+      [[mark:d-1]] ပထမက ငွေချေတာ ဘယ်လောက် ကြာလဲ ဆိုတာပါ။ ကိုယ်တို့ရဲ့ မှတ်တမ်းတွေအရ wallet နဲ့ ငွေချေတာ
+      အများစုက ၃ မိနစ်အတွင်း ပြီးပါတယ်။ connection မကောင်းတဲ့ နေရာက ခရီးသည်တွေကျတော့ ၈ မိနစ်လောက်အထိ
+      ကြာတတ်ပါတယ်။
+      [[mark:d-2]] ဒုတိယက ခုံကို ရွေးပြီး မဝယ်တဲ့သူ ဘယ်လောက် များလဲ ဆိုတာပါ။ app ထဲမှာ ထိုင်ခုံ ရွေးတဲ့သူ
+      ဆယ်ယောက်မှာ လေးယောက်လောက်က ငွေမချေဘဲ ထွက်သွားကြပါတယ်။
+      [[mark:d-3]] တတိယက ကောင်တာက ရောင်းတာ ဘယ်လောက် များလဲ ဆိုတာပါ။ ခရီးဖော် မှာ လက်မှတ် ၆၀ ရာခိုင်နှုန်းကို
+      ကောင်တာကနေ ရောင်းပါတယ်။
+      [[mark:d-ctx]] ဒီ ဂဏန်းတွေကို ကိုယ်က ခန့်မှန်းထားတာ မဟုတ်ဘဲ၊ app ရဲ့ မှတ်တမ်းတွေထဲကနေ
+      သွားရှာခဲ့တာပါ။ ထင်မြင်ချက်ချင်း ငြင်းနေတာကို ဂဏန်းက ရပ်ပေးနိုင်လို့ပါ။ [[mark:d-best]] ဒီ
+      ဂဏန်းတွေ မတူတဲ့ ကုမ္ပဏီ တစ်ခုအတွက် မှန်တဲ့ အဖြေက ကိုယ်တို့အတွက် မှန်ချင်မှ မှန်မှာပါ။ ဒါကြောင့်
+      တခြားနေရာမှာ အောင်မြင်ခဲ့တဲ့ နည်းကို best practice ဆိုပြီး အလွတ် ကူးယူလို့ မရပါဘူး။ architect က
+      ရှာရမှာ အရာရာမှာ အကောင်းဆုံး ဖြစ်တဲ့ နည်း မဟုတ်ဘဲ၊ ကိုယ့်အခြေအနေမှာ ပေးရတာ ခံသာဆုံး ဖြစ်တဲ့ နည်းပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          clear: true,
+          upsertIds: [d-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-d-1,
+          type: whiteboard.apply,
+          at: { mark: d-1 },
+          upsertIds: [d-q1, d-v1],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-d-2,
+          type: whiteboard.apply,
+          at: { mark: d-2 },
+          upsertIds: [d-q2, d-v2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-d-3,
+          type: whiteboard.apply,
+          at: { mark: d-3 },
+          upsertIds: [d-q3, d-v3],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-d-ctx,
+          type: whiteboard.apply,
+          at: { mark: d-best },
+          upsertIds: [d-ctx],
+          drawMs: 1000,
+        }
+
+  - id: spectrum
+    chapter: ဟုတ်၊ မဟုတ် မဟုတ်ဘဲ ဘယ်လောက်လဲ
+    narration: >
+      [[mark:p-open]] နောက်ထပ် သတိထားစရာ တစ်ခု ရှိပါသေးတယ်။ lock လုပ်မလား၊ မလုပ်ဘူးလား ဆိုပြီး နှစ်ခုထဲက
+      တစ်ခုကို ရွေးရမယ်လို့ ထင်ရပေမဲ့၊ တကယ်တော့ ဒီ နည်းလမ်း နှစ်ခုက မျဉ်းတစ်ကြောင်းတည်းရဲ့ အစွန်း
+      နှစ်ဖက်ပါ။
+      [[mark:p-ends]] ငွေချေမှ စစ်တယ် ဆိုတာ ခုံကို သုည မိနစ် ထိန်းထားတာနဲ့ အတူတူပါပဲ။ ရွေးတာနဲ့ lock
+      လုပ်ပြီး ငွေမချေမချင်း မလွှတ်ဘူး ဆိုတာကတော့ အကန့်အသတ် မရှိ ထိန်းထားတာပါ။
+      [[mark:p-mid]] အဲဒီ နှစ်ခုကြားမှာ ၂ မိနစ်၊ ၁၀ မိနစ်၊ ၃၀ မိနစ် ဆိုပြီး ရွေးစရာတွေ အများကြီး ရှိပါတယ်။
+      ထိုင်ခုံကို အချိန် အကန့်အသတ်နဲ့ ခဏ ထိန်းထားပေးတာကို seat hold လို့ ခေါ်ပါတယ်။ ဆိုတော့ တကယ့်
+      မေးခွန်းက lock လုပ်မလား မဟုတ်ဘဲ၊ ဘယ်လောက် ကြာကြာ ထိန်းထားမလဲ ဆိုတာ ဖြစ်သွားပါတယ်။
+      [[mark:p-gain]] ထိန်းထားတဲ့ အချိန် ကြာလေ ငွေချေနေတဲ့ ခရီးသည်က စိတ်ချရလေပါ။
+      [[mark:p-cost]] တစ်ဖက်မှာတော့ ကြာလေ မဝယ်တဲ့သူတွေ ပိတ်ထားမိတဲ့ ခုံတွေ များလေ ဖြစ်ပြီး၊ ကောင်တာက
+      ရောင်းစရာ နည်းလေပါ။
+      [[mark:p-fact]] ငွေချေတာ အကြာဆုံး ၈ မိနစ်လောက် ဆိုတာ ကိုယ်တို့ သိထားပြီးသားပါ။ ၂ မိနစ်ပဲ
+      ထိန်းထားရင် ငွေချေနေတုန်း ခုံ ပြန်လွတ်သွားတဲ့သူတွေ အများကြီး ရှိမှာပါ။ ၃၀ မိနစ် ထိန်းထားရင်တော့
+      သင်္ကြန်နေ့မျိုးမှာ မဝယ်တဲ့သူတွေရဲ့ ခုံတွေက နာရီဝက်စီ ရောင်းမရ ဖြစ်နေပါလိမ့်မယ်။
+      [[mark:p-ten]] ဒါကြောင့် ၁၀ မိနစ် ထိန်းထားရင် ငွေချေနေတဲ့သူ အားလုံးနီးပါးကို ကာပေးနိုင်ပါတယ်။ မဝယ်တဲ့သူ
+      ပိတ်ထားမိတဲ့ ခုံကလည်း အများဆုံး ၁၀ မိနစ်ပဲ ရောင်းမရ ဖြစ်မှာပါ။ ခရီးဖော် ရဲ့ အခု အခြေအနေအတွက်တော့ ၁၀
+      မိနစ်က အသင့်တော်ဆုံးလို့ ကိုယ်တို့ ယူဆပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title, p-bar],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-ends,
+          type: whiteboard.apply,
+          at: { mark: p-ends },
+          upsertIds: [p-l, p-r],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-p-mid,
+          type: whiteboard.apply,
+          at: { mark: p-mid },
+          upsertIds: [p-2, p-10, p-30],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-gain,
+          type: whiteboard.apply,
+          at: { mark: p-gain },
+          upsertIds: [p-gain],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-cost,
+          type: whiteboard.apply,
+          at: { mark: p-cost },
+          upsertIds: [p-cost],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-fact,
+          type: whiteboard.apply,
+          at: { mark: p-fact },
+          upsertIds: [p-why],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-ten,
+          type: whiteboard.apply,
+          at: { mark: p-ten },
+          upsertIds: [p-10-c],
+          drawMs: 700,
+        }
+
+  - id: table
+    chapter: Trade-off table
+    narration: >
+      [[mark:t-close]] ဒီ ဆွေးနွေးချက်ကို နောက်လူတွေ ဖတ်လို့ရအောင် table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။
+      [[mark:t-cols]] ရွေးစရာ တစ်ခုစီအတွက် ရတာ၊ ပေးရတာနဲ့ ဘယ်အခါမှာ သင့်တော်လဲ ဆိုတာကို ဖြည့်သွားမှာပါ။
+      [[mark:type-a]] ရွေးတာနဲ့ lock လုပ်တဲ့ နည်းက ခုံ ပေါပြီး ဝယ်သူ နည်းတဲ့ အချိန်မှာ သင့်တော်ပါတယ်။
+      ပိတ်ထားမိတဲ့ ခုံတွေကြောင့် ဘယ်သူမှ မထိခိုက်လို့ပါ။
+      [[mark:type-b]] ငွေချေမှ စစ်တဲ့ နည်းကတော့ ငွေချေတာ စက္ကန့်ပိုင်းနဲ့ ပြီးတဲ့ အခါမျိုးမှာ သင့်တော်ပါတယ်။
+      ခုံရွေးတာနဲ့ ငွေချေတာကြား အချိန် တိုလေ၊ တခြားသူ ဝင်ယူသွားနိုင်ခြေ နည်းလေမို့ပါ။
+      [[mark:type-c]] ၁၀ မိနစ် hold ကတော့ နှစ်ဖက်လုံးကနေ နည်းနည်းစီ ယူထားတာပါ။ ရတာလည်း အပြည့် မဟုတ်သလို၊
+      ပေးရတာလည်း အကုန် မပျောက်ပါဘူး။ ဒါပေမဲ့ ငွေချေတာ မိနစ်ပိုင်း ကြာတဲ့ ခရီးဖော် ရဲ့ အခု အခြေအနေမှာ
+      ပေးရတာ ခံသာဆုံး ဖြစ်ပါတယ်။
+      [[mark:type-dec]] နောက်ဆုံးမှာ ဆုံးဖြတ်ချက်နဲ့ ဘာကြောင့်လဲ ဆိုတာကို တစ်ကြောင်းစီ ရေးထားပါတယ်။ ဒီ
+      နှစ်ကြောင်း မပါရင် table က ဆွေးနွေးချက် တစ်ခုပဲ ဖြစ်နေပြီး၊ ဆုံးဖြတ်ချက် မဖြစ်သေးပါဘူး။
+      [[mark:sel-why]] ဘာကြောင့် ဆိုတဲ့ စာကြောင်းက ၁၀ ဆိုတဲ့ ဂဏန်းထက် ပိုတန်ဖိုးရှိပါတယ်။ ဂဏန်းကို code ထဲမှာ
+      ဘယ်သူမဆို ပြင်လို့ ရပါတယ်။ ဒါပေမဲ့ ဘာကြောင့် ၁၀ လဲ ဆိုတာ သိမှ၊ ငွေချေတာ ပိုမြန်လာတဲ့နေ့မှာ
+      လျှော့သင့်တယ် ဆိုတာ နောက်လူက သိနိုင်မှာပါ။
+      [[mark:why-how]] ဘယ်လို လုပ်ထားလဲ ဆိုတာကို code က ပြောပြနိုင်ပါတယ်။ ဘာကြောင့် ဒီလို လုပ်ထားလဲ
+      ဆိုတာကိုတော့ ရေးမထားရင် ဘယ်သူမှ မသိနိုင်တော့တာမို့၊ ဘာကြောင့် ဆိုတာက ဘယ်လို ဆိုတာထက် ပိုအရေးကြီးပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-spectrum, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-spectrum },
+          path: notebook/03-seat-hold-trade-off.md,
+        }
+      - id: sel-head
+        type: editor.select
+        at: { mark: t-cols }
+        target:
+          {
+            file: notebook/03-seat-hold-trade-off.md,
+            text: "| Option | ရတာ | ပေးရတာ | ဘယ်အခါ သင့်တော်လဲ |",
+          }
+      - id: type-a
+        type: editor.type
+        at: { mark: type-a }
+        cadence: line-by-line
+        target: { file: notebook/03-seat-hold-trade-off.md, after: "|---|---|---|---|\n" }
+        text: "| ရွေးတာနဲ့ lock | ငွေချေသူ စိတ်ချရ | မဝယ်သူက ခုံ ပိတ်ထားမိ၊ ကောင်တာ စောင့်ရ | ခုံ ပေါပြီး ဝယ်သူ နည်းချိန် |\n"
+      - id: type-b
+        type: editor.type
+        at: { mark: type-b }
+        cadence: line-by-line
+        target: { file: notebook/03-seat-hold-trade-off.md, after: "ခုံ ပေါပြီး ဝယ်သူ နည်းချိန် |\n" }
+        text: "| ငွေချေမှ စစ် | ကောင်တာ မြန်၊ ခုံ မပိတ် | ငွေချေခါနီးမှ ခုံ မရတာ ကြုံရ | ငွေချေတာ စက္ကန့်ပိုင်းနဲ့ ပြီးချိန် |\n"
+      - id: type-c
+        type: editor.type
+        at: { mark: type-c }
+        cadence: line-by-line
+        target: { file: notebook/03-seat-hold-trade-off.md, after: "စက္ကန့်ပိုင်းနဲ့ ပြီးချိန် |\n" }
+        text: "| 10 မိနစ် hold | ငွေချေသူ အများစု စိတ်ချရ | မဝယ်သူရဲ့ ခုံ 10 မိနစ် ရောင်းမရ | ငွေချေတာ 3–8 မိနစ် ကြာချိန် |\n"
+      - id: type-dec
+        type: editor.type
+        at: { mark: type-dec }
+        cadence: line-by-line
+        target: { file: notebook/03-seat-hold-trade-off.md, after: "3–8 မိနစ် ကြာချိန် |\n" }
+        text: "\n## ဆုံးဖြတ်ချက်\n\n- ထိုင်ခုံကို 10 မိနစ် hold လုပ်မယ်\n- ဘာကြောင့်: ငွေချေတာ အများစု 3 မိနစ်၊ အကြာဆုံး 8 မိနစ်ခန့်။ ပိုမြန်လာရင် လျှော့မယ်\n"
+      - id: sel-why
+        type: editor.select
+        at: { mark: sel-why }
+        target:
+          {
+            file: notebook/03-seat-hold-trade-off.md,
+            text: "- ဘာကြောင့်: ငွေချေတာ အများစု 3 မိနစ်၊ အကြာဆုံး 8 မိနစ်ခန့်။ ပိုမြန်လာရင် လျှော့မယ်",
+          }
+      - id: expect-decision
+        type: expect.file
+        at: { afterAction: sel-why }
+        path: notebook/03-seat-hold-trade-off.md
+        contains: "## ဆုံးဖြတ်ချက်\n\n- ထိုင်ခုံကို 10 မိနစ် hold လုပ်မယ်\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ team ထဲက တစ်ယောက်က ခရီးစဉ် ရှာတဲ့ ရလဒ်တွေကို cache ထဲ ခဏ
+      သိမ်းထားဖို့ အဆို တင်လာပါတယ်။ ဒီလို လုပ်ရင် ရှာတာ ပိုမြန်မယ်၊ ဆိုးကျိုးလည်း ဘာမှ မရှိဘူးလို့ သူက
+      ပြောပါတယ်။ ကိုယ့် နောက်တစ်ဆင့်က ဘာဖြစ်သင့်လဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက ဆိုးကျိုး မရှိတာမို့ ချက်ချင်း လက်ခံလိုက်တာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုကတော့ ဒီနည်းက ဘာကို လျှော့ပေးရလဲ ဆိုတာ အရင် လိုက်ရှာတာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ပေးရတာ မရှိတဲ့ ရွေးချယ်မှု ဆိုတာ
+      မရှိလို့ပါ။ မတွေ့သေးဘူး ဆိုရင် မရှိတာ မဟုတ်ဘဲ၊ ရှာမတွေ့သေးတာပါ။
+      [[mark:q-r]] မမြင်ရသေးတဲ့ ပေးရတာက production ရောက်မှ ပေါ်လာတတ်လို့ အန္တရာယ် အများဆုံးပါ။
+      [[mark:q-ex]] ဒီ cache မှာဆိုရင် ရလဒ်ထဲက လွတ်နေတဲ့ ခုံ အရေအတွက်က မိနစ်အနည်းငယ် ဟောင်းနေနိုင်ပါတယ်။
+      ခရီးသည်က ခုံ လွတ်တယ် ထင်ပြီး ဝင်ကြည့်မှ ကုန်နေတာမျိုး ကြုံရမှာပါ။ ဒါကို သိပြီးမှ လက်ခံတာနဲ့ မသိဘဲ
+      လက်ခံတာ မတူပါဘူး။
+      [[mark:q-love]] အဆိုတင်တဲ့သူက ဒါကို မမြင်တာ ထူးဆန်းတာ မဟုတ်ပါဘူး။ ကိုယ် ကြိုက်နေတဲ့ နည်းအတွက်ဆိုရင်
+      ရတာတွေကိုပဲ မြင်ပြီး၊ ပေးရတာကို မမြင်တော့တာ ကိုယ်အပါအဝင် ဘယ်သူမဆို ဖြစ်တတ်ပါတယ်။ ဒါကြောင့် ကိုယ်
+      အကြိုက်ဆုံး နည်းရဲ့ ပေးရတာကို အရင်ဆုံး ရှာပါ။ ရှာမတွေ့ရင် အဲဒီနည်းကို မကြိုက်တဲ့သူ တစ်ယောက်ကို
+      သွားမေးပါ။ lock ရဲ့ ပေးရတာကို လှလှ က အရင် မြင်ခဲ့တာလည်း သူက ကောင်တာရှေ့က ခရီးသည်တွေဘက်ကနေ
+      ကြည့်နေလို့ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: q-r },
+          upsertIds: [q-r],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-example,
+          type: whiteboard.apply,
+          at: { mark: q-ex },
+          upsertIds: [q-ex],
+          drawMs: 1000,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် project ထဲမှာ ဒါက ပိုကောင်းတာ
+      သေချာတယ် ဆိုပြီး သိပ်မစဉ်းစားဘဲ ရွေးခဲ့တဲ့ ရွေးချယ်မှု တစ်ခုကို ယူပါ။ ဒီ table ထဲမှာ အဲဒီ ရွေးချယ်မှုကို
+      တစ်ကြောင်း ထည့်ပြီး၊ ပေးရတာ ဆိုတဲ့ နေရာကို ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] ပြီးရင် ဘယ်အခါမှာ ဒီ ရွေးချယ်မှုက မသင့်တော်တော့ဘူးလဲ ဆိုတာကိုပါ ရေးထားပါ။ trade
+      off ကို တစ်ခါ ချိန်ပြီးတာနဲ့ အမြဲတမ်း မှန်နေတာ မဟုတ်ပါဘူး။ အဲဒီ အခြေအနေ ရောက်လာတဲ့နေ့က
+      ပြန်ချိန်ရမယ့် နေ့ပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-cost-col
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/03-seat-hold-trade-off.md,
+            text: "| 10 မိနစ် hold | ငွေချေသူ အများစု စိတ်ချရ | မဝယ်သူရဲ့ ခုံ 10 မိနစ် ရောင်းမရ | ငွေချေတာ 3–8 မိနစ် ကြာချိန် |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ဘယ်နည်းက ပိုကောင်းလဲ ဆိုတဲ့ မေးခွန်းကို ရတာ၊ ပေးရတာနဲ့ ဘယ်အခါ သင့်တော်လဲ ဆိုတဲ့
+      table တစ်ခုအဖြစ် ပြောင်းလိုက်ရင် အဖြေက ဘာပေါ် မူတည်လဲ ဆိုတာ ပေါ်လာပါတယ်။
+      [[mark:recap-2]] ဆုံးဖြတ်ချက် အများစုက ဟုတ်၊ မဟုတ် ရွေးရတာ မဟုတ်ဘဲ၊ မျဉ်းတစ်ကြောင်းပေါ်က နေရာ တစ်ခုကို
+      ရွေးရတာပါ။ ရွေးပြီးရင်လည်း ဘာကြောင့်လဲ ဆိုတာကို မှတ်ထားမှ နောက်တစ်ချိန် ပြန်ပြင်နိုင်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ဒီလို ရွေးစရာတွေ ရှိမှန်း သိနိုင်ဖို့ architect တစ်ယောက်က ဘာတွေကို
+      ဘယ်လောက် ကျယ်ကျယ် သိထားရမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
