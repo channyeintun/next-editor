@@ -1,0 +1,770 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-53-principles-and-radar
+  title: "Architect Path 53: Principle နဲ့ technology radar"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/53-principles.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/53-principles.md: |
+        # ခရီးဖော် ရဲ့ principle နဲ့ technology radar
+
+        ## Principles (9 ခုထဲက 2 ခု)
+
+        ## Technology radar · message broker
+        | Ring | Technology | မှတ်ချက် |
+        |---|---|---|
+
+        ## ပုံ ပြည့်စုံဖို့ နောက်ထပ် နှစ်ခု
+        - တိုင်းလို့ရတဲ့ ပန်းတိုင်: ရှာတာ ဘယ်လောက် မြန်ရမလဲ၊ ဝယ်တာ ဘယ်လောက် ရနေရမလဲ
+        - ဒီနှစ် အားစိုက်မယ့်နေရာ: ပါဆယ် လုပ်ငန်းနဲ့ platform
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the need: three kinds of broker already (blue parts), a team
+    # asking for a fourth (orange, dashed = not real yet), what each kind costs
+    # (red), the question (orange) and where the answer lies (green).
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Broker လေးမျိုးမြောက်?",
+        fontSize: 36,
+      }
+    - {
+        id: n-b1,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 260,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-b1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 252,
+        width: 260,
+        height: 35,
+        text: "event stream",
+        fontSize: 28,
+      }
+    - {
+        id: n-b2,
+        kind: rectangle,
+        x: 550,
+        y: 235,
+        width: 260,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-b2-l,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 252,
+        width: 260,
+        height: 35,
+        text: "job queue",
+        fontSize: 28,
+      }
+    - {
+        id: n-b3,
+        kind: rectangle,
+        x: 830,
+        y: 235,
+        width: 260,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-b3-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 252,
+        width: 260,
+        height: 35,
+        text: "pub/sub broker",
+        fontSize: 28,
+      }
+    - {
+        id: n-team,
+        kind: text,
+        x: 270,
+        y: 357,
+        width: 285,
+        height: 35,
+        text: "Notification team",
+        fontSize: 28,
+      }
+    - {
+        id: n-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 560,
+        y: 354,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-new,
+        kind: rectangle,
+        x: 650,
+        y: 340,
+        width: 260,
+        height: 70,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-new-l,
+        kind: text,
+        align: center,
+        x: 650,
+        y: 357,
+        width: 260,
+        height: 35,
+        text: "broker အသစ်?",
+        fontSize: 28,
+      }
+    - {
+        id: n-cost,
+        kind: text,
+        x: 270,
+        y: 445,
+        width: 800,
+        height: 35,
+        text: "တစ်မျိုး တိုးတိုင်း: operate, monitor, ညဘက် တာဝန်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-q,
+        kind: text,
+        x: 270,
+        y: 515,
+        width: 800,
+        height: 35,
+        text: "တားမယ့်သူ မရှိဘဲ ဘယ်လို တစ်သားတည်း ရှိမလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-ans,
+        kind: text,
+        x: 270,
+        y: 585,
+        width: 800,
+        height: 35,
+        text: "ထိန်းချုပ်တာ မဟုတ်၊ အတူ သိထားတာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — the quiz: white question and options, orange the sentence being
+    # judged and the test, green the answer and its reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "အသုံးဝင်တဲ့ principle လား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-quote,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 700,
+        height: 38,
+        text: "ကိုယ်တို့ quality ကို တန်ဖိုးထားတယ်",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 400,
+        height: 35,
+        text: "က) အသုံးဝင်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 400,
+        height: 35,
+        text: "ခ) အသုံးမဝင်ဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 225,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 545,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 490,
+        width: 790,
+        height: 35,
+        text: "ဘယ်သူမှ မငြင်းနိုင်ရင် ဘာမှ မဆုံးဖြတ်ပေးဘူး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-test,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 790,
+        height: 35,
+        text: "စစ်ပုံ: ဆန့်ကျင်ဘက်ကို ရွေးမယ့်သူ ရှိနိုင်လား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — ခရီးဖော်'s own radar as four nested rings, drawn from the inside
+    # out. Green ring = the paved road, red ring = do not start new uses; blue
+    # entries are technologies in the system, orange the broker this board is
+    # about and the note left beside it.
+    - {
+        id: rd-r1,
+        kind: rectangle,
+        x: 380,
+        y: 395,
+        width: 590,
+        height: 90,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - { id: rd-r2, kind: rectangle, x: 340, y: 335, width: 670, height: 200, rounded: true }
+    - { id: rd-r3, kind: rectangle, x: 300, y: 275, width: 750, height: 310, rounded: true }
+    - {
+        id: rd-r4,
+        kind: rectangle,
+        x: 260,
+        y: 215,
+        width: 830,
+        height: 420,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - { id: rd-l1, kind: text, x: 395, y: 422, width: 110, height: 35, text: "Adopt", fontSize: 28 }
+    - {
+        id: rd-b1,
+        kind: text,
+        x: 530,
+        y: 422,
+        width: 420,
+        height: 35,
+        text: "event stream · job queue",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: rd-l2, kind: text, x: 355, y: 347, width: 110, height: 35, text: "Trial", fontSize: 28 }
+    - {
+        id: rd-b2,
+        kind: text,
+        x: 490,
+        y: 347,
+        width: 300,
+        height: 35,
+        text: "feature flag",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: rd-l3,
+        kind: text,
+        x: 315,
+        y: 287,
+        width: 120,
+        height: 35,
+        text: "Assess",
+        fontSize: 28,
+      }
+    - {
+        id: rd-b3,
+        kind: text,
+        x: 450,
+        y: 287,
+        width: 300,
+        height: 35,
+        text: "workflow engine",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - { id: rd-l4, kind: text, x: 275, y: 227, width: 110, height: 35, text: "Hold", fontSize: 28 }
+    - {
+        id: rd-b4,
+        kind: text,
+        x: 410,
+        y: 227,
+        width: 260,
+        height: 35,
+        text: "pub/sub broker",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: rd-new,
+        kind: text,
+        x: 700,
+        y: 227,
+        width: 220,
+        height: 35,
+        text: "broker အသစ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: rd-note,
+        kind: text,
+        x: 275,
+        y: 593,
+        width: 600,
+        height: 35,
+        text: "job queue ရဲ့ delay နဲ့ ရတယ် · ADR-019",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8153
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Broker လေးမျိုးမြောက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ထိခိုက်မယ့်သူနဲ့ ကျွမ်းကျင်သူဆီက အကြံ တောင်းပြီးရင် ဘယ်သူမဆို ဆုံးဖြတ်နိုင်တဲ့ advice
+      process ကို လေ့လာခဲ့ပါတယ်။
+      [[mark:n-open]] Booking team နဲ့ သုံးလ စမ်းပြီး ပြန်သုံးသပ်တော့ အဆင်ပြေတာမို့၊ အခု ခရီးဖော် ရဲ့ team ၁၂ ခုလုံးက
+      အဲဒီနည်းနဲ့ ကိုယ်တိုင် ဆုံးဖြတ်နေကြပါပြီ။ ဆုံးဖြတ်ချက်တွေ
+      မြန်လာပေမဲ့ ပြဿနာ အသစ် တစ်ခု ပေါ်လာပါတယ်။
+      [[mark:n-three]] ခရီးဖော် မှာ message broker သုံးမျိုး ရှိနေပါပြီ။ message broker ဆိုတာ service တစ်ခုက
+      ပို့တဲ့ message ကို နောက် service တစ်ခုဆီ ရောက်အောင် ကြားက သယ်ပေးတဲ့ အပိုင်းပါ။ နှစ်တွေ ကြာလာတာနဲ့အမျှ
+      team တစ်ခုစီက ကိုယ့် လိုအပ်ချက်အတွက် တစ်မျိုးစီ ထည့်ခဲ့ကြတာပါ။
+      [[mark:n-new]] ဒီအပတ်မှာ Notification team က စတုတ္ထ အမျိုးအစား တစ်ခု ထည့်ဖို့ အကြံ လာတောင်းပါတယ်။ ကား
+      မထွက်ခင် သုံးနာရီအလိုမှာ ခရီးသည်ဆီ သတိပေး SMS ပို့ချင်လို့၊ message ကို အချိန်ကျမှ ပို့ပေးနိုင်တဲ့ broker
+      အသစ် တစ်ခုကို သုံးချင်တာပါ။ သူတို့ဘက်က ကြည့်ရင် ကျိုးကြောင်း ဆီလျော်ပါတယ်။
+      [[mark:n-cost]] ကိုယ့်ဘက်က ကြည့်ရင်တော့ အမျိုးအစား တစ်ခု တိုးတိုင်း အဲဒါကို operate လုပ်တတ်တဲ့သူ၊ monitor
+      လုပ်ဖို့ dashboard နဲ့ ညဘက် ပျက်ရင် ပြင်နိုင်မယ့်သူ လိုလာပါတယ်။ team ၁၂ ခုလုံးက ဒီလို တစ်ခုစီ ထည့်သွားရင်
+      ဘယ်သူမှ မထိန်းနိုင်တော့ပါဘူး။
+      [[mark:n-but]] ဒါပေမဲ့ ကိုယ်က မထည့်နဲ့လို့ တားလိုက်ရင်လည်း၊ ဆုံးဖြတ်ချက်တိုင်း ကိုယ့်ဆီ ပြန်ရောက်လာတဲ့
+      ပုံစံဟောင်းကို ပြန်ရောက်သွားမှာပါ။
+      [[mark:n-q]] တားမယ့်သူ မရှိဘဲ ကုမ္ပဏီ တစ်ခုလုံး ဘယ်လို တစ်သားတည်း ရှိနေမလဲ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-three,
+          type: whiteboard.apply,
+          at: { mark: n-three },
+          upsertIds: [n-b1, n-b1-l, n-b2, n-b2-l, n-b3, n-b3-l],
+          drawMs: 2700,
+        }
+      - {
+          id: draw-n-new,
+          type: whiteboard.apply,
+          at: { mark: n-new },
+          upsertIds: [n-team, n-arrow, n-new, n-new-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-n-cost,
+          type: whiteboard.apply,
+          at: { mark: n-cost },
+          upsertIds: [n-cost],
+          drawMs: 1500,
+        }
+      - { id: draw-n-q, type: whiteboard.apply, at: { mark: n-q }, upsertIds: [n-q], drawMs: 1300 }
+
+  - id: shared
+    chapter: ထိန်းချုပ်တာ မဟုတ်ဘဲ အတူ သိထားတာ
+    narration: >
+      [[mark:c-open]] အဖြေက ထိန်းချုပ်တာ မဟုတ်ဘဲ၊ ဆုံးဖြတ်မယ့်သူတိုင်း အတူတူ သိထားတာတွေ ရှိအောင် လုပ်တာပါ။
+      ကုမ္ပဏီအတွက် ဘာက အရေးကြီးလဲ၊ ဘာတွေ ရှိပြီးသားလဲ ဆိုတာကို team တိုင်း သိထားရင်၊ သီးခြားစီ ဆုံးဖြတ်ကြလည်း
+      ဦးတည်ရာက တူလာတတ်ပါတယ်။
+      [[mark:c-principle]] အဲဒီအတွက် ပထမဆုံး လိုတာက principle တွေပါ။ principle ဆိုတာ ဆုံးဖြတ်ချက်တွေကို
+      လမ်းညွှန်ပေးဖို့ အတူ သဘောတူထားတဲ့ စာကြောင်း တိုတိုတွေပါ။ architect လေးယောက်က ရေးပြီး ကြေညာတာ မဟုတ်ဘဲ၊
+      team တိုင်းက လူတွေ ပါတဲ့ workshop တစ်ခုမှာ အတူတူ ရေးကြပါတယ်။ ကိုယ်တိုင် ပါဝင် ရေးခဲ့တဲ့ စာကြောင်းကို
+      လူတွေက ပိုသုံးဖြစ်တတ်လို့ပါ။
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ workshop မှာ ပထမဆုံး ထွက်လာတဲ့ စာကြောင်းက ကိုယ်တို့ quality ကို
+      တန်ဖိုးထားတယ် ဆိုတာပါ။ အားလုံးကလည်း ခေါင်းညိတ်ကြပါတယ်။
+      [[mark:q-a]] ဒါက အသုံးဝင်တဲ့ principle လား။
+      [[mark:q-b]] ဒါမှမဟုတ် အသုံးမဝင်ဘူးလား။ Notification team ရဲ့ broker ကိစ္စကို စိတ်ထဲထားပြီး၊ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ အသုံးမဝင်ဘူး ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ ဒီစာကြောင်းကို ဘယ်သူမှ
+      မငြင်းနိုင်လို့ပါ။ broker အသစ် ထည့်မယ့်သူကလည်း quality အတွက်လို့ ပြောမယ်၊ မထည့်ဘူး ဆိုတဲ့သူကလည်း quality
+      အတွက်လို့ပဲ ပြောမှာပါ။
+      [[mark:q-r]] ရွေးစရာ နှစ်ခုလုံးကို ထောက်ခံနေတဲ့ စာကြောင်းက ဘာကိုမှ မဆုံးဖြတ်ပေးပါဘူး။
+      [[mark:q-test]] ဒါကြောင့် principle တစ်ခုကို စစ်တဲ့ မေးခွန်းက၊ စဉ်းစားတတ်တဲ့သူ တစ်ယောက်က ဒီ
+      စာကြောင်းရဲ့ ဆန့်ကျင်ဘက်ကို ရွေးနိုင်မလား ဆိုတာပါ။ ရွေးနိုင်မှ ဒီ principle က တစ်ခုခုကို တကယ်
+      ဆုံးဖြတ်ပေးနေတာပါ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-n-ans,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          upsertIds: [n-ans],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title, q-quote],
+          drawMs: 2000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 800 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 800 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: draw-q-r, type: whiteboard.apply, at: { mark: q-r }, upsertIds: [q-r], drawMs: 1300 }
+      - {
+          id: draw-q-test,
+          type: whiteboard.apply,
+          at: { mark: q-test },
+          upsertIds: [q-test],
+          drawMs: 1300,
+        }
+
+  - id: principles
+    chapter: Principle နှစ်ခု
+    narration: >
+      [[mark:p-close]] workshop ကနေ နောက်ဆုံး ထွက်လာတဲ့ principle ကိုးခုထဲက နှစ်ခုကို ကြည့်ရအောင်။ ဆယ်ခုဝန်းကျင်ထက်
+      မပိုအောင် ထားတာက၊ လူတိုင်း ခေါင်းထဲမှာ မှတ်ထားနိုင်မှ ဆုံးဖြတ်တဲ့အချိန်မှာ သုံးဖြစ်မှာမို့ပါ။
+      [[mark:type-p1]] ပထမ principle က ရှိပြီးသားကို အရင် သုံးမယ် ဆိုတာပါ။ ဒီစာကြောင်းရဲ့ ဆန့်ကျင်ဘက်ကို ရွေးတဲ့
+      ကုမ္ပဏီတွေ တကယ် ရှိပါတယ်။ team တစ်ခုစီက ကိုယ့်အလုပ်နဲ့ အကိုက်ဆုံး tool ကို လွတ်လွတ်လပ်လပ် ရွေးစေတဲ့
+      ကုမ္ပဏီတွေပါ။ ဒါကြောင့် ဒီ principle က ခရီးဖော် ဘယ်ဘက်ကို ရွေးထားလဲ ဆိုတာကို ပြောပြနေတာပါ။
+      [[mark:type-p1-why]] principle တစ်ခုမှာ စာကြောင်းအပြင် နောက်ထပ် နှစ်ခု ပါရပါတယ်။ ဘာကြောင့်လဲ ဆိုတာနဲ့၊
+      လက်တွေ့မှာ ဘာလုပ်ရမလဲ ဆိုတာပါ။ ဘာကြောင့်လဲ ဆိုတာက ကိုယ် စိုးရိမ်ခဲ့တဲ့ ကုန်ကျစရိတ်ပါပဲ။ လက်တွေ့မှာတော့
+      အသစ် ထည့်ချင်တဲ့ team က ရှိပြီးသားနဲ့ ဘာလို့ မရတာလဲ ဆိုတာကို ADR ထဲမှာ ရေးပြရပါမယ်။ ADR ဆိုတာ ဘာကို
+      ဘာကြောင့် ဆုံးဖြတ်ခဲ့လဲ ရေးမှတ်ထားတဲ့ စာတိုလေးပါ။
+      [[mark:p-not-rule]] ဒီ principle က အသစ် ထည့်တာကို တားထားတာ မဟုတ်တာကို သတိထားပါ။ principle ဆိုတာ မျက်စိမှိတ်
+      လိုက်နာရမယ့် စည်းကမ်း မဟုတ်ဘဲ၊ စဉ်းစားရမယ့် ဦးတည်ချက်ကို ပေးတာပါ။ ရှိပြီးသားနဲ့ တကယ် မရတဲ့
+      လိုအပ်ချက်ဆိုရင် အကြောင်းပြချက် ရေးပြီး အသစ် ထည့်လို့ ရပါတယ်။
+      [[mark:type-p2]] ဒုတိယ principle က လက်မှတ် ဝယ်တာကို အရင် ကာကွယ်မယ် ဆိုတာပါ။ ခရီးသည် ဝယ်လို့ မရတဲ့
+      မိနစ်တိုင်းမှာ ရောင်းအားရော၊ ကားလိုင်းတွေရဲ့ ယုံကြည်မှုရော ဆုံးရှုံးလို့ပါ။ ဒါကြောင့် load များလာတဲ့အခါ
+      report နဲ့ dashboard တွေကို အရင် နှေးခွင့်ပေးပါမယ်။ feature အားလုံး တန်းတူ အရေးကြီးတယ်လို့ ယူဆတဲ့သူက ဒါကို
+      သဘောတူမှာ မဟုတ်ပါဘူး။ အဲဒီလို တစ်ခုခုကို လက်လွှတ်ရတာ ပါမှ principle က အလုပ်လုပ်တာပါ။
+      [[mark:p-revisit]] principle တွေက တစ်ခါ ရေးပြီး ပြီးသွားတာလည်း မဟုတ်ပါဘူး။ ဆုံးဖြတ်ချက်တွေက principle
+      တစ်ခုနဲ့ ခဏခဏ ငြိနေရင်၊ ဒါမှမဟုတ် ဘယ် ADR ကမှ မကိုးကားတော့ရင်၊ အဲဒီ principle ကို ပြန်ကြည့်ရမယ့်
+      အချိန်ပါ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: p-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: notebook/53-principles.md,
+        }
+      - id: type-p1
+        type: editor.type
+        at: { mark: type-p1 }
+        cadence: line-by-line
+        target: { file: notebook/53-principles.md, after: "## Principles (9 ခုထဲက 2 ခု)\n\n" }
+        text: "### 1. ရှိပြီးသားကို အရင် သုံးမယ်\n\n"
+      - id: type-p1-why
+        type: editor.type
+        at: { mark: type-p1-why }
+        cadence: line-by-line
+        target: { file: notebook/53-principles.md, after: "### 1. ရှိပြီးသားကို အရင် သုံးမယ်\n" }
+        text: "- ဘာကြောင့်: technology တစ်မျိုး တိုးတိုင်း operate လုပ်ရသူနဲ့ ညဘက် တာဝန် တိုးတယ်\n- ဒါကြောင့်: အသစ် ထည့်ရင် ရှိပြီးသားနဲ့ ဘာလို့ မရလဲ ADR မှာ ရေးမယ်\n"
+      - id: sel-so
+        type: editor.select
+        at: { mark: p-not-rule }
+        target:
+          {
+            file: notebook/53-principles.md,
+            text: "- ဒါကြောင့်: အသစ် ထည့်ရင် ရှိပြီးသားနဲ့ ဘာလို့ မရလဲ ADR မှာ ရေးမယ်",
+          }
+      - id: type-p2
+        type: editor.type
+        at: { mark: type-p2 }
+        cadence: line-by-line
+        target: { file: notebook/53-principles.md, after: "ဘာလို့ မရလဲ ADR မှာ ရေးမယ်\n" }
+        text: "\n### 2. လက်မှတ် ဝယ်တာကို အရင် ကာကွယ်မယ်\n- ဘာကြောင့်: ဝယ်မရတဲ့ မိနစ်တိုင်း ရောင်းအားနဲ့ ကားလိုင်းရဲ့ ယုံကြည်မှု ဆုံးတယ်\n- ဒါကြောင့်: load များရင် report နဲ့ dashboard ကို အရင် နှေးခွင့်ပေးမယ်\n"
+
+  - id: radar
+    chapter: ကိုယ်ပိုင် technology radar
+    narration: >
+      [[mark:r-open]] principle က ဦးတည်ချက်ကို ပြောပေမဲ့၊ ရှိပြီးသား ဆိုတာ ဘာတွေလဲ ဆိုတာကိုတော့ မပြောပါဘူး။
+      အဲဒါကို ပြတာက technology radar ပါ။ technology radar ဆိုတာ ကုမ္ပဏီက သုံးနေတဲ့ technology တွေကို ကွင်း
+      လေးကွင်းထဲ ခွဲပြထားတဲ့ ပုံပါ။ အပြင်က radar တစ်ခုကို ကူးယူတာ မဟုတ်ဘဲ၊ team တွေ တကယ် သုံးနေတာ၊ စမ်းဖူးတာတွေကို
+      စုထားတာပါ။
+      [[mark:r-adopt]] အတွင်းဆုံး ကွင်းက adopt ပါ။ စိတ်ချလက်ချ သုံးလို့ရပြီး၊ အလုပ်အသစ်တိုင်းအတွက် ပထမဆုံး
+      ရွေးသင့်တာတွေပါ။ ခရီးဖော် မှာ event stream နဲ့ job queue က ဒီထဲမှာ ရှိပါတယ်။
+      [[mark:r-trial]] ဒုတိယ ကွင်းက trial ပါ။ team တစ်ခု နှစ်ခုက production မှာ တကယ် စမ်းသုံးနေတာတွေပါ။ feature flag ကို
+      team နှစ်ခုက စမ်းနေတာမျိုးပါ။
+      [[mark:r-assess]] တတိယ ကွင်းက assess ပါ။ မသုံးသေးဘဲ လေ့လာ စောင့်ကြည့်နေတာတွေပါ။ ငွေပြန်အမ်းတဲ့
+      လုပ်ငန်းစဉ်အတွက် workflow engine တစ်ခုကို လေ့လာနေတာမျိုးပါ။
+      [[mark:r-hold]] အပြင်ဆုံး ကွင်းက hold ပါ။ အသစ် ထပ်မသုံးဖို့ သဘောတူထားတာတွေပါ။ Payment မှာပဲ ကျန်နေတဲ့ pub sub
+      broker အဟောင်းက ဒီထဲမှာပါ။
+      [[mark:r-road]] adopt ကွင်းက ခင်းပြီးသား လမ်းကို ပြတာပါ။ အဲဒီလမ်းအတိုင်း သွားရင် သုံးတတ်တဲ့သူတွေ၊ dashboard
+      တွေ၊ အဆင်သင့် template တွေ ရှိပြီးသားမို့ မြန်ပါတယ်။
+      [[mark:r-new]] Notification team က radar ကို ကြည့်ပြီး platform team ဆီက အကြံ တောင်းပါတယ်။
+      [[mark:r-queue]] platform team က job queue မှာ message ကို အချိန်ကျမှ ပို့တဲ့ လုပ်ဆောင်ချက် ပါပြီးသားလို့ ပြောပြပါတယ်။ team က broker အသစ်
+      မထည့်တော့ဘဲ job queue ကို သုံးဖို့ ကိုယ်တိုင် ဆုံးဖြတ်လိုက်ပါတယ်။
+      [[mark:r-note]] broker အသစ်ကိုတော့ hold ထဲမှာ မှတ်ချက်နဲ့အတူ ထည့်ထားလိုက်ပါတယ်။ နောက်တစ်ခါ တခြား team က ဒီ
+      broker ကို စဉ်းစားမိရင်၊ ဘယ်သူ လေ့လာဖူးလဲ၊ ဘာကြောင့် မသုံးခဲ့လဲ ဆိုတာကို ဒီမှာ တွေ့ရမှာပါ။
+      [[mark:r-leave]] hold ဆိုတာလည်း တားမြစ်ချက် မဟုတ်ပါဘူး။ ခင်းပြီးသား လမ်းပေါ်က ထွက်ချင်ရင် ထွက်လို့ ရပါတယ်။
+      အကြံ တောင်းရမယ်၊ ဘာကြောင့် ထွက်လဲ ADR မှာ ရေးရမယ်၊ အဲဒီ technology ကို operate လုပ်ရတဲ့ ဝန်ကိုလည်း ကိုယ့်
+      team က ထမ်းရမယ် ဆိုတာပါပဲ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-rings,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          open: true,
+          clear: true,
+          upsertIds: [rd-r1, rd-r2, rd-r3, rd-r4],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-adopt,
+          type: whiteboard.apply,
+          at: { mark: r-adopt },
+          upsertIds: [rd-l1, rd-b1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-trial,
+          type: whiteboard.apply,
+          at: { mark: r-trial },
+          upsertIds: [rd-l2, rd-b2],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-assess,
+          type: whiteboard.apply,
+          at: { mark: r-assess },
+          upsertIds: [rd-l3, rd-b3],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-hold,
+          type: whiteboard.apply,
+          at: { mark: r-hold },
+          upsertIds: [rd-l4, rd-b4],
+          drawMs: 1300,
+        }
+      - { id: point-road, type: whiteboard.point, at: { mark: r-road }, target: { assetId: rd-r1 } }
+      - {
+          id: point-queue,
+          type: whiteboard.point,
+          at: { mark: r-queue },
+          target: { assetId: rd-b1 },
+        }
+      - {
+          id: draw-note,
+          type: whiteboard.apply,
+          at: { mark: r-note },
+          upsertIds: [rd-new, rd-note],
+          drawMs: 1800,
+        }
+      - {
+          id: point-hold,
+          type: whiteboard.point,
+          at: { mark: r-leave },
+          target: { assetId: rd-l4 },
+        }
+
+  - id: written
+    chapter: တစ်နေရာတည်းမှာ ရေးထားခြင်း
+    narration: >
+      [[mark:d-close]] radar ကို team တိုင်း ဖတ်နိုင်တဲ့ နေရာမှာ ရေးထားမှ အသုံးဝင်ပါတယ်။ message broker အတွက်
+      အပိုင်းကို table နဲ့ ချရေးကြည့်ရအောင်။
+      [[mark:type-radar]] အလုပ်အသစ် စမယ့်သူက ဘာကို သုံးရမလဲ၊ ဘာကို ထပ်မသုံးသင့်ဘူးလဲ ဆိုတာကို တစ်ချက်ကြည့်ရုံနဲ့
+      သိရပါမယ်။ broker အသစ်ရဲ့ ဘေးမှာ Notification team ရေးခဲ့တဲ့ ADR နံပါတ်ကို ထည့်ထားတာက၊ အသေးစိတ်ကို ဘယ်မှာ
+      ဖတ်ရမလဲ၊ ဘယ်သူ့ကို မေးရမလဲ သိအောင်ပါ။ ဆုံးဖြတ်ချက်တွေက radar ကို ပြောင်းပေးပြီး၊ radar ကလည်း နောက်
+      ဆုံးဖြတ်ချက်တွေကို ကူပေးတာပါ။ ဒါကြောင့် radar ကို ခြောက်လတစ်ခါလောက် team တွေနဲ့ အတူ ပြန်စစ်ပါတယ်။
+      [[mark:sel-rest]] principle နဲ့ radar အပြင်၊ ပုံကို ပြည့်စုံစေတာ နှစ်ခု ကျန်ပါသေးတယ်။ ပထမက team တိုင်း
+      တိုင်းတာလို့ရတဲ့ ပန်းတိုင်တွေပါ။ ရှာတာ ဘယ်လောက် မြန်ရမလဲ၊ ဝယ်တာ ဘယ်လောက် ရနေရမလဲ ဆိုတာကို ကိန်းဂဏန်းနဲ့
+      သဘောတူထားတာပါ။
+      [[mark:sel-invest]] ဒုတိယက ကုမ္ပဏီက ဒီနှစ် ဘယ်နေရာမှာ အားစိုက်မလဲ ဆိုတဲ့ စာတိုလေးပါ။ CTO ဖြစ်တဲ့
+      အောင်အောင် က ဒီနှစ်အတွက် ပါဆယ် လုပ်ငန်းနဲ့ platform ကို ရွေးထားပါတယ်။ ဒီ လေးခုကို သိထားတဲ့ team က ကိုယ့်
+      ခွင့်ပြုချက်ကို မစောင့်ဘဲနဲ့ ကုမ္ပဏီနဲ့ ကိုက်တဲ့ ဆုံးဖြတ်ချက်ကို ချနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-radar, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-radar },
+          path: notebook/53-principles.md,
+        }
+      - id: type-radar
+        type: editor.type
+        at: { mark: type-radar }
+        cadence: line-by-line
+        target: { file: notebook/53-principles.md, after: "|---|---|---|\n" }
+        text: "| Adopt | event stream, job queue | အလုပ်အသစ်ဆို ဒါကို အရင် သုံး |\n| Hold | pub/sub broker | Payment မှာပဲ ကျန်၊ အသစ် မထည့် |\n| Hold | broker အသစ် | job queue ရဲ့ delay နဲ့ ရတယ် · ADR-019 |\n"
+      - id: expect-radar
+        type: expect.file
+        at: { afterAction: type-radar }
+        path: notebook/53-principles.md
+        contains: "| Hold | broker အသစ် | job queue ရဲ့ delay နဲ့ ရတယ် · ADR-019 |\n"
+      - id: sel-targets
+        type: editor.select
+        at: { mark: sel-rest }
+        target:
+          {
+            file: notebook/53-principles.md,
+            text: "- တိုင်းလို့ရတဲ့ ပန်းတိုင်: ရှာတာ ဘယ်လောက် မြန်ရမလဲ၊ ဝယ်တာ ဘယ်လောက် ရနေရမလဲ",
+          }
+      - id: sel-invest
+        type: editor.select
+        at: { mark: sel-invest }
+        target: { file: notebook/53-principles.md, text: "- ဒီနှစ် အားစိုက်မယ့်နေရာ: ပါဆယ် လုပ်ငန်းနဲ့ platform" }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ ဘယ်သူမှ ရေးမထားပေမဲ့ လူတိုင်း လိုက်နာနေတဲ့ principle
+      တစ်ခုတော့ ရှိမှာပါ။
+      [[mark:turn-sel]] lesson ကို pause လုပ်ပြီး၊ ဒီ ပုံစံအတိုင်း စာကြောင်း တစ်ကြောင်း၊ ဘာကြောင့်လဲ၊ ဒါကြောင့်
+      ဘာလုပ်လဲ ဆိုတာကို ရေးကြည့်ပါ။
+      [[mark:turn-2]] ရေးပြီးရင် ဆန့်ကျင်ဘက်ကို ရွေးမယ့်သူ ရှိနိုင်မလား စစ်ကြည့်ပါ။ မရှိနိုင်ဘူးဆိုရင် ပိုတိကျအောင်
+      ပြန်ရေးပါ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - id: sel-pattern
+        type: editor.select
+        at: { mark: turn-sel }
+        target:
+          file: notebook/53-principles.md
+          text: "### 1. ရှိပြီးသားကို အရင် သုံးမယ်\n- ဘာကြောင့်: technology တစ်မျိုး တိုးတိုင်း operate လုပ်ရသူနဲ့ ညဘက် တာဝန် တိုးတယ်\n- ဒါကြောင့်: အသစ် ထည့်ရင် ရှိပြီးသားနဲ့ ဘာလို့ မရလဲ ADR မှာ ရေးမယ်"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ team အများကြီးက ကိုယ်တိုင် ဆုံးဖြတ်ကြတဲ့ ကုမ္ပဏီကို တစ်သားတည်း ဖြစ်စေတာက တားမယ့်သူ
+      မဟုတ်ဘဲ၊ အားလုံး အတူ သိထားတဲ့ အရာတွေပါ။
+      [[mark:recap-2]] principle က ဘယ်ဘက်ကို ရွေးမလဲ ဆိုတဲ့ ဦးတည်ချက်ကို ပေးပြီး၊ technology radar က ခင်းပြီးသား
+      လမ်းကို ပြပါတယ်။ နှစ်ခုလုံးက လမ်းညွှန်တာပဲ ဖြစ်ပြီး၊ ဆုံးဖြတ်တာကတော့ team ကိုယ်တိုင်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ architecture ရဲ့ တန်ဖိုးကို ကုမ္ပဏီရဲ့ ထိပ်ပိုင်းက လူတွေ နားလည်တဲ့ စကားနဲ့
+      ဘယ်လို ရှင်းပြမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
