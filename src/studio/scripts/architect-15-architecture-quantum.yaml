@@ -1,0 +1,695 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-15-architecture-quantum
+  title: "Architect Path 15: Architecture quantum"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/15-quanta.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/15-quanta.md: |
+        # Architecture quantum
+
+        ## ခရီးဖော် ရဲ့ ပစ်မှတ် (အကျဉ်း)
+        - elasticity: ပုံမှန်ရဲ့ 20 ဆ ခံနိုင်ရမယ်
+        - data integrity: ထိုင်ခုံ နှစ်ခါ မရောင်းရ၊ ငွေစာရင်း မမှားရ
+        - deployability: merge ကနေ production အထိ 1 ရက်အောက်
+
+        ## အပိုင်းအလိုက် ကြည့်ရင်
+        | အပိုင်း | လိုတဲ့ characteristic | တခြားအပိုင်းနဲ့ တူလား |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — today: three parts, one database, one deployment. Blue parts, violet
+    # use of the database, orange dashed boundary = the quantum the board is about.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "ဘာတွေက အတူတူ deploy လုပ်ရလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: s-search,
+        kind: rectangle,
+        x: 290,
+        y: 260,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-search-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 282,
+        width: 220,
+        height: 35,
+        text: "Search",
+        fontSize: 28,
+      }
+    - {
+        id: s-booking,
+        kind: rectangle,
+        x: 590,
+        y: 260,
+        width: 210,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-booking-l,
+        kind: text,
+        align: center,
+        x: 590,
+        y: 282,
+        width: 210,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: s-settle,
+        kind: rectangle,
+        x: 840,
+        y: 260,
+        width: 230,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-settle-l,
+        kind: text,
+        align: center,
+        x: 840,
+        y: 282,
+        width: 230,
+        height: 35,
+        text: "Settlement",
+        fontSize: 28,
+      }
+    - { id: s-db, kind: ellipse, x: 620, y: 440, width: 420, height: 100, strokeColor: "#1971c2" }
+    - {
+        id: s-db-l,
+        kind: text,
+        align: center,
+        x: 620,
+        y: 472,
+        width: 420,
+        height: 35,
+        text: "database",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 400,
+        y: 350,
+        width: 214,
+        height: 128,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 675,
+        y: 350,
+        width: 40,
+        height: 88,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 935,
+        y: 350,
+        width: 40,
+        height: 88,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-bound,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 820,
+        height: 330,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-one,
+        kind: text,
+        x: 290,
+        y: 575,
+        width: 300,
+        height: 35,
+        text: "quantum 1 ခု",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the same parts if Search had its own data: two dashed boundaries, and
+    # a violet call that waits for an answer ties them together again.
+    - {
+        id: s-sdata,
+        kind: ellipse,
+        x: 290,
+        y: 440,
+        width: 220,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-sdata-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 472,
+        width: 220,
+        height: 35,
+        text: "Search data",
+        fontSize: 28,
+      }
+    - {
+        id: s-bound-a,
+        kind: rectangle,
+        x: 272,
+        y: 238,
+        width: 256,
+        height: 325,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-bound-b,
+        kind: rectangle,
+        x: 572,
+        y: 238,
+        width: 516,
+        height: 325,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-call,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 518,
+        y: 280,
+        width: 64,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    # Board 3 — the quiz: white situation and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 780,
+        height: 45,
+        text: "Quantum ဘယ်နှခု ရှိမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: z-s1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 780,
+        height: 35,
+        text: "service 3 ခု၊ တစ်ခုစီ သီးခြား deploy လုပ်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-s2,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 780,
+        height: 35,
+        text: "database ကတော့ 1 ခုတည်းကို အတူ သုံးတယ်",
+        fontSize: 28,
+      }
+    - { id: z-a, kind: text, x: 290, y: 385, width: 200, height: 35, text: "က) 3 ခု", fontSize: 28 }
+    - { id: z-b, kind: text, x: 290, y: 450, width: 200, height: 35, text: "ခ) 1 ခု", fontSize: 28 }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 455,
+        width: 120,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 425,
+        y: 443,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-why,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 780,
+        height: 35,
+        text: "database ကို မျှသုံးရင် quantum တစ်ခုတည်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8115
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ပစ်မှတ်က ဘယ်အပိုင်းအတွက်လဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ system က ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ ဆိုတဲ့ architecture characteristic တွေကို
+      ဂဏန်းနဲ့ တိုင်းလို့ရတဲ့ ပစ်မှတ်အဖြစ် ပြောင်းခဲ့ပါတယ်။
+      [[mark:n-open]] ဒီ ပစ်မှတ်တွေကို team တွေဆီ ယူသွားတော့ Booking team lead မောင်မောင် က မေးခွန်း တစ်ခု
+      မေးပါတယ်။ ဒီ ပစ်မှတ်တွေက ဘယ်အပိုင်းအတွက်လဲ ဆိုတာပါ။
+      [[mark:n-el]] ရုတ်တရက် တက်လာတဲ့ load ကို ပုံမှန်ရဲ့ ၂၀ ဆ အထိ ခံနိုင်ရမယ် ဆိုတဲ့ elasticity ပစ်မှတ်ကို ကြည့်ပါ။ သင်္ကြန် လက်မှတ် ဖွင့်တဲ့ မနက်မှာ
+      ၂၀ ဆ တက်လာမှာက ခရီးစဉ် ရှာတဲ့ Search အပိုင်းနဲ့ လက်မှတ် ဝယ်တဲ့ အပိုင်းတွေပါ။
+      [[mark:n-set]] ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့ Settlement ကတော့ တနင်္လာနေ့တိုင်း၊ တစ်ပတ်မှာ တစ်ခါပဲ run
+      ပါတယ်။ သင်္ကြန်နေ့မှာ လူ ဘယ်လောက်ပဲ ဝင်ဝင် သူ့အလုပ်က မပြောင်းပါဘူး။ သူ့အတွက် အရေးကြီးတာက မြန်ဖို့
+      မဟုတ်ဘဲ၊ တစ်ကျပ်မှ မမှားဖို့ပါ။
+      [[mark:n-q]] ဒါဆို app တစ်ခုလုံးကို ၂၀ ဆ ခံနိုင်အောင် ဆောက်ရမှာလား။ Settlement အတွက်ပါ အဲဒီ ကုန်ကျစရိတ်ကို
+      ပေးရမှာလား။ CTO ဖြစ်တဲ့ အောင်အောင် ကလည်း ဒီအချက်ကို စိုးရိမ်ပါတယ်။ တစ်နှစ်မှာ တစ်ရက်၊ နှစ်ရက်အတွက် system
+      တစ်ခုလုံးကို အကြီးကြီး ပြင်ထားရရင် ကုန်ကျစရိတ် များမှာမို့ပါ။
+      [[mark:n-unit]] ဒီ မေးခွန်းကို ဖြေဖို့ဆိုရင် characteristic တစ်ခုက system ရဲ့ ဘယ်အထိ သက်ရောက်လဲ ဆိုတာကို
+      ပြောပြနိုင်တဲ့ အတိုင်းအတာ တစ်ခု လိုပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: n-open },
+          path: notebook/15-quanta.md,
+        }
+      - id: sel-el
+        type: editor.select
+        at: { mark: n-el }
+        target: { file: notebook/15-quanta.md, text: "- elasticity: ပုံမှန်ရဲ့ 20 ဆ ခံနိုင်ရမယ်" }
+      - id: sel-int
+        type: editor.select
+        at: { mark: n-set }
+        target: { file: notebook/15-quanta.md, text: "ငွေစာရင်း မမှားရ" }
+
+  - id: one-quantum
+    chapter: Architecture quantum ဆိုတာ
+    narration: >
+      [[mark:s-open]] ခရီးဖော် ရဲ့ system ကို အပိုင်း သုံးခုနဲ့ ပုံကြမ်း ဆွဲကြည့်ရအောင်။
+      [[mark:s-parts]] ခရီးစဉ် ရှာတဲ့ Search၊ လက်မှတ် ဝယ်တဲ့ Booking နဲ့ ငွေစာရင်း ရှင်းတဲ့ Settlement ပါ။ code
+      ထဲမှာတော့ ဒီ သုံးခုကို module တွေအဖြစ် ခွဲနေပါပြီ။ module ဆိုတာ အတူ ပြောင်းလဲတတ်တဲ့ code ကို
+      အုပ်စုဖွဲ့ထားတဲ့ အပိုင်းပါ။
+      [[mark:s-db]] ဒါပေမဲ့ သုံးခုလုံးက database တစ်ခုတည်းကို သုံးကြပါတယ်။ deploy လုပ်တဲ့အခါမှာလည်း သုံးခုလုံးက
+      app တစ်ခုတည်းအဖြစ် အတူတူ ထွက်ရပါတယ်။ Settlement ထဲက အမှား သေးသေး တစ်ခုကို ပြင်ချင်ရင်တောင် app
+      တစ်ခုလုံးကို ပြန်ထုတ်ရတာပါ။
+      [[mark:s-q]] ဒီလို အတူတူ deploy လုပ်ရပြီး၊ run ဖို့ လိုသမျှ အရာအားလုံး ပါဝင်တဲ့ အစုအဝေး တစ်ခုကို
+      architecture quantum လို့ ခေါ်ပါတယ်။ လိုသမျှ အားလုံး ဆိုတဲ့အထဲမှာ database လည်း ပါပါတယ်။
+      [[mark:s-test]] quantum တစ်ခု ဟုတ်မဟုတ် သိချင်ရင် မေးခွန်း တစ်ခု မေးကြည့်နိုင်ပါတယ်။ ဒီအပိုင်းကို ဘာမှ
+      မရှိတဲ့နေရာကနေ စပြီး run ဖို့ဆိုရင် ဘာတွေ ရှိရမလဲ ဆိုတာပါ။ Search တစ်ခုတည်းကို run ချင်ရင်တောင် app
+      တစ်ခုလုံးနဲ့ database တစ်ခုလုံး ရှိမှ ရပါတယ်။
+      [[mark:s-one]] ဒီ အဓိပ္ပာယ်နဲ့ ကြည့်ရင် ခရီးဖော် မှာ module တွေ ဘယ်လောက်ပဲ ခွဲထားထား၊ quantum ကတော့
+      တစ်ခုတည်းပါ။
+      [[mark:s-why]] quantum က ဘာကြောင့် အရေးကြီးလဲဆိုတော့ characteristic တွေက quantum အလိုက်
+      သက်ရောက်လို့ပါ။ quantum တစ်ခုထဲက အပိုင်းတွေက server အတူတူ၊ database အတူတူကို မျှသုံးနေကြပါတယ်။
+      ဒါကြောင့် တစ်ခုက ၂၀ ဆ ခံနိုင်ဖို့ဆိုရင် အားလုံးကို အတူတူ တိုးချဲ့ရပါတယ်။
+      [[mark:s-share]] Search မှာ လူတွေ ပြည့်နေလို့ database နှေးသွားရင် Settlement ပါ လိုက်နှေးပါတယ်။ တစ်ခုကြောင့်
+      app ပျက်သွားရင်လည်း အားလုံး အတူတူ ပျက်ပါတယ်။ ဆိုလိုတာက quantum တစ်ခုထဲမှာ အတူ ရှိနေသရွေ့ ကံကြမ္မာ တူတူပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-parts,
+          type: whiteboard.apply,
+          at: { mark: s-parts },
+          upsertIds: [s-search, s-search-l, s-booking, s-booking-l, s-settle, s-settle-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-s-db,
+          type: whiteboard.apply,
+          at: { mark: s-db },
+          upsertIds: [s-db, s-db-l, s-a1, s-a2, s-a3],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-s-q,
+          type: whiteboard.apply,
+          at: { mark: s-q },
+          upsertIds: [s-bound],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-one,
+          type: whiteboard.apply,
+          at: { mark: s-one },
+          upsertIds: [s-one],
+          drawMs: 800,
+        }
+      - { id: point-db, type: whiteboard.point, at: { mark: s-share }, target: { assetId: s-db } }
+
+  - id: two-quanta
+    chapter: Quantum နှစ်ခု ဖြစ်လာရင်
+    narration: >
+      [[mark:b-if]] ဒါဆို Search အတွက်ပဲ elasticity ကို ပေးချင်တယ် ဆိုပါစို့။
+      [[mark:b-data]] အဲဒီအတွက် Search ကို သူ့ဟာသူ deploy လုပ်နိုင်အောင် ခွဲထုတ်ပြီး၊ ရှာဖို့ လိုတဲ့ data ကိုလည်း
+      သူ့အတွက် သီးသန့် ထားပေးလိုက်တယ် ဆိုပါစို့။
+      [[mark:b-two]] ဒီအခါမှာ quantum က နှစ်ခု ဖြစ်လာပါတယ်။ Search ရှိတဲ့ quantum ကို ၂၀ ဆ ခံနိုင်အောင်
+      တိုးချဲ့လို့ရပြီး၊ ကျန်တဲ့ quantum ကိုတော့ အရင်အတိုင်း ရိုးရိုးပဲ ထားလို့ရပါတယ်။ Settlement အတွက် မလိုတဲ့
+      ကုန်ကျစရိတ်ကို ပေးစရာ မလိုတော့ပါဘူး။
+      [[mark:b-call]] ဒါပေမဲ့ သတိထားစရာ တစ်ခု ကျန်ပါသေးတယ်။
+      [[mark:b-ask]] Search က ခုံ ဘယ်နှခုံ လွတ်သေးလဲ သိဖို့ ရှာတိုင်း Booking ကို လှမ်းမေးပြီး၊ အဖြေကို စောင့်နေတယ်
+      ဆိုပါစို့။ ဒီလို အဖြေကို စောင့်နေရတဲ့ call ကို synchronous call လို့ ခေါ်ပါတယ်။
+      [[mark:b-tied]] စောင့်နေတဲ့ အချိန်အတွင်းမှာ quantum နှစ်ခုက တစ်ခုတည်းလို ပြန်ဖြစ်သွားပါတယ်။ Booking နှေးရင်
+      Search လည်း နှေးပြီး၊ Booking ပျက်ရင် Search လည်း အဖြေ မပေးနိုင်တော့ပါဘူး။ Search ကို ဘယ်လောက်ပဲ
+      တိုးချဲ့ထားထား၊ သူ ခေါ်နေတဲ့ဘက်က ခံနိုင်သလောက်ပဲ ခံနိုင်တော့တာပါ။ အဖြေကို မစောင့်ဘဲ ဆက်သွားနိုင်တဲ့
+      ဆက်သွယ်နည်းတွေလည်း ရှိပါတယ်။ အဲဒါတွေကိုတော့ နောက်ပိုင်း lesson တွေမှာ လေ့လာပါမယ်။
+      [[mark:b-so]] ဒါကြောင့် quantum ကို ရေတွက်တဲ့အခါ deploy နဲ့ database ကိုပဲ မကြည့်ဘဲ၊ အဖြေကို စောင့်ရတဲ့ call
+      တွေ ဘယ်နေရာမှာ ရှိလဲ ဆိုတာကိုပါ ကြည့်ရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: keep-parts,
+          type: whiteboard.apply,
+          at: { mark: b-if },
+          clear: true,
+          upsertIds:
+            [
+              s-title,
+              s-search,
+              s-search-l,
+              s-booking,
+              s-booking-l,
+              s-settle,
+              s-settle-l,
+              s-db,
+              s-db-l,
+              s-a2,
+              s-a3,
+            ],
+        }
+      - {
+          id: draw-b-data,
+          type: whiteboard.apply,
+          at: { mark: b-data },
+          upsertIds: [s-sdata, s-sdata-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-two,
+          type: whiteboard.apply,
+          at: { mark: b-two },
+          upsertIds: [s-bound-a, s-bound-b],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-b-call,
+          type: whiteboard.apply,
+          at: { mark: b-ask },
+          upsertIds: [s-call],
+          drawMs: 700,
+        }
+      - {
+          id: point-call,
+          type: whiteboard.point,
+          at: { mark: b-tied },
+          target: { assetId: s-booking },
+        }
+
+  - id: table
+    chapter: ခရီးဖော် ရဲ့ အပိုင်းတွေကို ရေတွက်ခြင်း
+    narration: >
+      [[mark:t-close]] ဒါဆို ခရီးဖော် ရဲ့ အပိုင်းတွေကို တစ်ခုချင်း ကြည့်ပြီး၊ ဘယ်အပိုင်းက ဘယ် characteristic ကို
+      လိုလဲ၊ တခြားအပိုင်းတွေနဲ့ တူလား ဆိုတာ ချရေးကြည့်ရအောင်။
+      [[mark:t-search]] Search က ရုတ်တရက် တက်လာတဲ့ load ကို ခံနိုင်ဖို့နဲ့ မြန်ဖို့ လိုပါတယ်။ တခြား ဘယ်အပိုင်းနဲ့မှ
+      မတူပါဘူး။
+      [[mark:t-core]] Booking၊ Payment နဲ့ ကောင်တာက သုံးတဲ့ Operator တို့ကတော့ ထိုင်ခုံနဲ့ ငွေကို ကိုင်တွယ်တာမို့၊
+      data မမှားဖို့နဲ့ အမြဲ သုံးလို့ရနေဖို့ လိုပါတယ်။ ဒီ သုံးခုက အချင်းချင်း လိုအပ်ချက် တူကြပါတယ်။
+      [[mark:t-settle]] Settlement နဲ့ Report ကတော့ မမှားဖို့ပဲ လိုပါတယ်။ မြန်စရာလည်း မလို၊ ရုတ်တရက် တက်လာတဲ့
+      load လည်း မရှိပါဘူး။
+      [[mark:t-count]] ရေတွက်ကြည့်ရင် လိုအပ်ချက် တူတဲ့ characteristic အုပ်စုက သုံးစု ရှိနေပါတယ်။ quantum ကတော့
+      အခု တစ်ခုတည်းပဲ ရှိပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-b, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - id: type-search
+        type: editor.type
+        at: { mark: t-search }
+        cadence: line-by-line
+        target: { file: notebook/15-quanta.md, after: "| တခြားအပိုင်းနဲ့ တူလား |\n|---|---|---|\n" }
+        text: "| Search | elasticity, performance | မတူ |\n"
+      - id: type-core
+        type: editor.type
+        at: { mark: t-core }
+        cadence: line-by-line
+        target: { file: notebook/15-quanta.md, after: "| elasticity, performance | မတူ |\n" }
+        text: "| Booking, Payment, Operator | data integrity, availability | အချင်းချင်း တူ |\n"
+      - id: type-settle
+        type: editor.type
+        at: { mark: t-settle }
+        cadence: line-by-line
+        target:
+          { file: notebook/15-quanta.md, after: "| data integrity, availability | အချင်းချင်း တူ |\n" }
+        text: "| Settlement, Report | data integrity (မြန်စရာ မလို) | မတူ |\n"
+      - id: type-count
+        type: editor.type
+        at: { mark: t-count }
+        cadence: line-by-line
+        target: { file: notebook/15-quanta.md, after: "| data integrity (မြန်စရာ မလို) | မတူ |\n" }
+        text: "\nလိုအပ်ချက် အုပ်စု 3 စု · quantum 1 ခု\n"
+      - id: expect-count
+        type: expect.file
+        at: { afterAction: type-count }
+        path: notebook/15-quanta.md
+        contains: "လိုအပ်ချက် အုပ်စု 3 စု · quantum 1 ခု\n"
+
+  - id: reason
+    chapter: အကြောင်းပြချက်လား၊ ဆုံးဖြတ်ချက်လား
+    narration: >
+      [[mark:r-two]] ဒီ ဂဏန်း နှစ်ခုက architecture ကို ဆုံးဖြတ်တဲ့အခါ အသုံးဝင်ပါတယ်။
+      [[mark:r-same]] အပိုင်းအားလုံးက characteristic အတူတူကို လိုတယ်ဆိုရင် quantum တစ်ခုနဲ့ လုံလောက်ပါတယ်။
+      ဆိုလိုတာက အားလုံးကို အတူတူ deploy လုပ်တဲ့ monolith တစ်ခုနဲ့ အဆင်ပြေပါတယ်။ monolith ဆိုတာ တစ်ခါတည်း
+      အတူ deploy လုပ်ရတဲ့ app တစ်ခုလုံးပါ။ အကြောင်းမရှိဘဲ ခွဲစရာ မလိုပါဘူး။
+      [[mark:r-diff]] ခရီးဖော် လို အပိုင်းတွေက မတူတဲ့ characteristic တွေ လိုနေတယ်ဆိုရင်တော့၊ quantum ကို ခွဲဖို့
+      အကြောင်းပြချက် တစ်ခု ရှိလာပါပြီ။ ဒါပေမဲ့ ဒါက အကြောင်းပြချက်ပဲ ရှိပါသေးတယ်။ ဆုံးဖြတ်ချက် မဟုတ်သေးပါဘူး။
+      [[mark:r-cost]] ခွဲလိုက်တာနဲ့ အပိုင်းတွေက network ပေါ်ကနေ ဆက်သွယ်ရတော့မှာ ဖြစ်ပြီး၊ data ကိုလည်း နေရာခွဲ
+      ထားရတော့မှာပါ။ အဲဒီ ကုန်ကျစရိတ်တွေကို ရမယ့် အကျိုးနဲ့ ချိန်ကြည့်ပြီးမှ ဆုံးဖြတ်ရမှာပါ။ ခရီးဖော် အတွက်
+      အဲဒီ ချိန်ဆမှုကို နောက် lesson တွေမှာ ဆက်လုပ်သွားပါမယ်။
+      [[mark:r-not-all]] နောက်တစ်ချက်က အုပ်စု သုံးစု ရှိတိုင်း quantum သုံးခု ခွဲရမယ်လို့ မဆိုလိုပါဘူး။ Settlement က
+      Booking တို့နဲ့ အတူ ရှိနေလည်း ကြီးကြီးမားမား မထိခိုက်ပါဘူး။ တကယ် ကွဲထွက်နေပြီး၊ အတူထားရင် အားလုံးကို
+      ဈေးကြီးစေတာက Search တစ်ခုတည်းပါ။ ခွဲဖို့ စဉ်းစားရင် အဲဒီလို အကွာဆုံး နေရာကနေ စကြည့်ရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-count
+        type: editor.select
+        at: { mark: r-two }
+        target: { file: notebook/15-quanta.md, text: "လိုအပ်ချက် အုပ်စု 3 စု · quantum 1 ခု" }
+      - id: sel-search-row
+        type: editor.select
+        at: { mark: r-not-all }
+        target: { file: notebook/15-quanta.md, text: "| Search | elasticity, performance | မတူ |" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ တခြား ကုမ္ပဏီ တစ်ခုမှာ service သုံးခု ရှိပြီး၊ တစ်ခုစီကို သီးခြား
+      deploy လုပ်ကြပါတယ်။ ဒါပေမဲ့ သုံးခုလုံးက database တစ်ခုတည်းကို ဖတ်လည်း ဖတ်၊ ရေးလည်း ရေးကြပါတယ်။
+      [[mark:q-opts]] ဒီ system မှာ architecture quantum ဘယ်နှခု ရှိမလဲ။ သုံးခုလား၊ တစ်ခုလား။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ တစ်ခုပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ quantum တစ်ခု ဖြစ်ဖို့ဆိုရင် run ဖို့ လိုသမျှ အားလုံးကို ကိုယ်ပိုင် ရှိရပါမယ်။
+      ဒီ service သုံးခုကတော့ database ကို မျှသုံးနေကြပါတယ်။ database နှေးရင် သုံးခုလုံး နှေးပြီး၊ အတူသုံးတဲ့ table
+      တစ်ခုရဲ့ ပုံစံကို ပြောင်းချင်ရင်လည်း သုံးခုလုံးကို ညှိပြီး အတူတူ ထုတ်ရပါတယ်။
+      [[mark:q-more]] ပုံထဲမှာ box သုံးခု ဆွဲထားပေမဲ့၊ characteristic အတွက်ကတော့ တစ်ခုတည်းလိုပဲ ပြုမူပါတယ်။
+      ဒါကြောင့် service ဘယ်နှခု ရှိလဲ ဆိုတာကို မရေတွက်ဘဲ၊ quantum ဘယ်နှခု ရှိလဲ ဆိုတာကို ရေတွက်ရတာပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-s1, z-s2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-q-opts,
+          type: whiteboard.apply,
+          at: { mark: q-opts },
+          upsertIds: [z-a, z-b],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [z-why],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ စာရွက် တစ်ရွက် ယူပြီး ကိုယ့် system ရဲ့ အပိုင်းတွေနဲ့ database တွေကို
+      ဆွဲကြည့်ပါ။ ပြီးရင် အတူတူ deploy လုပ်ရတာတွေ၊ database အတူတူ သုံးတာတွေကို မျဉ်းပြတ်နဲ့ ဝိုင်းပြီး quantum
+      ဘယ်နှခု ရှိလဲ ရေတွက်ပါ။
+      [[mark:turn-2]] ပြီးတော့ lesson ကို pause လုပ်ပြီး ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ အပိုင်းတွေက ဘယ်
+      characteristic ကို လိုလဲ ဆိုတာ ရေးကြည့်ပါ။ characteristic အုပ်စု အရေအတွက်နဲ့ quantum အရေအတွက်
+      ကွာနေတယ်ဆိုရင်၊ အဲဒီ ကွာဟချက်က ကိုယ့် architecture အတွက် ပထမဆုံး စဉ်းစားရမယ့် မေးခွန်းပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-head
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          { file: notebook/15-quanta.md, text: "| အပိုင်း | လိုတဲ့ characteristic | တခြားအပိုင်းနဲ့ တူလား |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ characteristic တစ်ခုက system တစ်ခုလုံးကို အလိုအလျောက် သက်ရောက်တာ
+      မဟုတ်ဘဲ၊ quantum အလိုက် သက်ရောက်ပါတယ်။ architecture quantum ဆိုတာ သူ့ဟာသူ deploy လုပ်နိုင်ပြီး၊ run ဖို့
+      လိုသမျှကို database အပါအဝင် ကိုယ်ပိုင် ရှိတဲ့ အစုအဝေးပါ။ အဖြေကို စောင့်ရတဲ့ call တွေကတော့ quantum တွေကို
+      ခဏ ပြန်ချည်ထားတတ်ပါတယ်။
+      [[mark:recap-2]] အပိုင်းအားလုံး လိုအပ်ချက် တူရင် quantum တစ်ခုနဲ့ လုံလောက်ပါတယ်။ မတူရင်တော့ ခွဲဖို့
+      အကြောင်းပြချက် တစ်ခု ရလာတာပါ။
+      [[mark:next]] နောက် lesson မှာတော့ အားလုံးကို app တစ်ခုတည်းအဖြစ် ထားတာနဲ့ network ပေါ်မှာ အပိုင်းတွေ
+      ခွဲထားတာ၊ ဘယ်ဟာက ဘာကို ပေးပြီး ဘာကို ပြန်ယူသွားလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-recap
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/15-quanta.md, text: "## အပိုင်းအလိုက် ကြည့်ရင်" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
