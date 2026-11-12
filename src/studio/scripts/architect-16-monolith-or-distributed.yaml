@@ -1,0 +1,863 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-16-monolith-or-distributed
+  title: "Architect Path 16: Monolith လား၊ distributed လား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/16-reasons-to-distribute.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/16-reasons-to-distribute.md: |
+        # Distributed လုပ်ဖို့ အကြောင်းပြချက် ရှိလား
+
+        ## အဆိုပြုချက်
+        - Booking team: app ကို microservices အဖြစ် ခွဲချင်တယ်
+
+        ## Checklist
+        | ရချင်တာ | ခရီးဖော် မှာ အခု လိုလား | အထောက်အထား |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: four-gains
+      contentType: html
+      name: Distributed လုပ်ရင် ရနိုင်တာ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Distributed လုပ်ရင် ရနိုင်တာ 4 ခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term wide green">သီးခြား deploy</span>အပိုင်း တစ်ခုကို သူ့ဟာသူ ထုတ်နိုင်</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term wide green">သီးခြား scale</span>load များတဲ့ အပိုင်းကိုပဲ တိုးချဲ့နိုင်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term wide green">ပျက်တာ ကန့်ထား</span>တစ်ခု ပျက်လည်း ကျန်တာ ဆက်အလုပ်လုပ်</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term wide green">Team လွတ်လပ်မှု</span>team တစ်ခုက တစ်ခုကို မစောင့်ရ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the two families: one deployable app, or separately deployed parts
+    # (blue) that talk over a network (violet).
+    - {
+        id: f-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "Deploy တစ်ခုလား၊ အများကြီးလား?",
+        fontSize: 36,
+      }
+    - {
+        id: f-mono,
+        kind: rectangle,
+        x: 290,
+        y: 260,
+        width: 280,
+        height: 260,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-mono-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 371,
+        width: 280,
+        height: 38,
+        text: "app တစ်ခု",
+        fontSize: 30,
+      }
+    - {
+        id: f-s1,
+        kind: rectangle,
+        x: 660,
+        y: 260,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-s1-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 282,
+        width: 170,
+        height: 35,
+        text: "Search",
+        fontSize: 28,
+      }
+    - {
+        id: f-s2,
+        kind: rectangle,
+        x: 920,
+        y: 260,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-s2-l,
+        kind: text,
+        align: center,
+        x: 920,
+        y: 282,
+        width: 170,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: f-s3,
+        kind: rectangle,
+        x: 660,
+        y: 440,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-s3-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 462,
+        width: 170,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: f-s4,
+        kind: rectangle,
+        x: 920,
+        y: 440,
+        width: 170,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-s4-l,
+        kind: text,
+        align: center,
+        x: 920,
+        y: 462,
+        width: 170,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: f-w1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 840,
+        y: 280,
+        width: 70,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-w2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 985,
+        y: 350,
+        width: 40,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-w3,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 840,
+        y: 350,
+        width: 70,
+        height: 80,
+        strokeColor: "#6741d9",
+      }
+    # Board 2 — one call across the network (orange dashed zone) and what it always
+    # costs (red).
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "ခွဲလိုက်ရင် အမြဲ ပေးရတာ",
+        fontSize: 36,
+      }
+    - {
+        id: c-book,
+        kind: rectangle,
+        x: 290,
+        y: 250,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-book-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 272,
+        width: 190,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-pay,
+        kind: rectangle,
+        x: 890,
+        y: 250,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-pay-l,
+        kind: text,
+        align: center,
+        x: 890,
+        y: 272,
+        width: 190,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: c-net,
+        kind: rectangle,
+        x: 530,
+        y: 222,
+        width: 310,
+        height: 130,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-net-l,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 230,
+        width: 310,
+        height: 35,
+        text: "network",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-wire,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 490,
+        y: 272,
+        width: 390,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-k1,
+        kind: text,
+        x: 290,
+        y: 385,
+        width: 780,
+        height: 35,
+        text: "နှေးတယ်၊ တစ်ခါတလေ ပြတ်တယ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-k2,
+        kind: text,
+        x: 290,
+        y: 435,
+        width: 780,
+        height: 35,
+        text: "time out: ဖြတ်ပြီးပြီလား မသိရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-k3,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 780,
+        height: 35,
+        text: "transaction တစ်ခုတည်း မဟုတ်တော့",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-k4,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 780,
+        height: 35,
+        text: "version အဟောင်း၊ အသစ် အတူရှိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-k5,
+        kind: text,
+        x: 290,
+        y: 585,
+        width: 780,
+        height: 35,
+        text: "log တွေ နေရာအနှံ့ ပြန့်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — the quiz: white claim and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 780,
+        height: 45,
+        text: "ဒီ ကောက်ချက်က ခိုင်လုံလား?",
+        fontSize: 36,
+      }
+    - {
+        id: z-s1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 780,
+        height: 35,
+        text: "code တွေ ရောထွေးနေပြီ",
+        fontSize: 28,
+      }
+    - {
+        id: z-s2,
+        kind: text,
+        x: 290,
+        y: 300,
+        width: 780,
+        height: 35,
+        text: "ဒါကြောင့် microservices လိုတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 385,
+        width: 400,
+        height: 35,
+        text: "က) ခိုင်လုံတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 400,
+        height: 35,
+        text: "ခ) မခိုင်လုံဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 455,
+        width: 190,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 495,
+        y: 443,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-why,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 780,
+        height: 35,
+        text: "ရောထွေးမှုက network ပေါ် ရွှေ့သွားရုံပဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8116
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: လူတိုင်း ပြောင်းနေပြီ ဆိုတဲ့ အဆိုပြုချက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အတူတူ deploy လုပ်ရတဲ့ အစုအဝေး၊ architecture quantum ကို လေ့လာပြီး၊ ခရီးဖော် ရဲ့
+      အပိုင်းတွေက မတူတဲ့ အရည်အသွေးတွေ လိုနေတာကို တွေ့ခဲ့ပါတယ်။
+      [[mark:n-conf]] အဲဒီအချိန်မှာပဲ Booking team lead မောင်မောင် က conference တစ်ခုကနေ ပြန်ရောက်လာပြီး၊
+      အဆိုပြုချက် တစ်ခု ယူလာပါတယ်။
+      [[mark:n-prop]] ခရီးဖော် ရဲ့ app ကို microservices အဖြစ် ခွဲကြရအောင် ဆိုတာပါ။ microservices ဆိုတာ data
+      တစ်ခုစီ ပိုင်ပြီး သီးခြား deploy လုပ်နိုင်တဲ့ service သေးသေးတွေနဲ့ system ကို ဆောက်တဲ့ ပုံစံပါ။ conference မှာ
+      ဟောပြောသူ အများစုက သူတို့ ကုမ္ပဏီတွေ ဒီပုံစံကို ပြောင်းနေကြပြီလို့ ပြောတာမို့၊ ကိုယ်တို့လည်း
+      နောက်မကျသင့်ဘူးလို့ သူ ထင်ပါတယ်။
+      [[mark:n-pain]] မောင်မောင် မှာ တကယ့် အခက်အခဲလည်း ရှိပါတယ်။
+      [[mark:n-rel]] release က တစ်ပတ်မှာ တစ်ခါပဲ ရှိပြီး၊ တခြား team
+      ရဲ့ bug ကြောင့် သူ့ team ရဲ့ အလုပ်ပါ ထွက်မရတာ မကြာခဏ ဖြစ်နေလို့ပါ။
+      [[mark:n-arch]] architect အနေနဲ့ ဒီ အဆိုပြုချက်ကို ကောင်းတယ်၊ မကောင်းဘူးလို့ ချက်ချင်း မဖြေသင့်ပါဘူး။
+      လူတိုင်း ပြောင်းနေတယ် ဆိုတာက အကြောင်းပြချက် မဟုတ်လို့ပါ။ ခွဲလိုက်ရင် ဘာတွေ ရမလဲ၊ ဘာတွေ ပေးရမလဲ ဆိုတာကို
+      အရင် ချကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: n-conf },
+          path: notebook/16-reasons-to-distribute.md,
+        }
+      - id: sel-prop
+        type: editor.select
+        at: { mark: n-prop }
+        target:
+          {
+            file: notebook/16-reasons-to-distribute.md,
+            text: "- Booking team: app ကို microservices အဖြစ် ခွဲချင်တယ်",
+          }
+      - { id: open-readme, type: workspace.openFile, at: { mark: n-pain }, path: README.md }
+      - id: sel-release
+        type: editor.select
+        at: { mark: n-rel }
+        target:
+          { file: README.md, text: "- release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်" }
+
+  - id: families
+    chapter: Deploy တစ်ခုလား၊ အများကြီးလား
+    narration: >
+      [[mark:f-open]] architecture style တွေကို အကြမ်းဖျင်း အုပ်စု နှစ်စု ခွဲလို့ရပါတယ်။ architecture style ဆိုတာ
+      system တစ်ခုလုံးကို ဖွဲ့စည်းတဲ့ ပုံစံ အမျိုးအစားပါ။
+      [[mark:f-mono]] ပထမ အုပ်စုက monolith ပါ။ code အားလုံးကို app တစ်ခုတည်းအဖြစ် တစ်ခါတည်း အတူ deploy
+      လုပ်ရတဲ့ ပုံစံပါ။ အထဲက အပိုင်းတွေက တစ်ခုကို တစ်ခု ခေါ်တဲ့အခါ function ခေါ်သလို တိုက်ရိုက် ခေါ်ကြပါတယ်။
+      ခရီးဖော် ရဲ့ အခု system က ဒီအုပ်စုထဲမှာပါ။
+      [[mark:f-dist]] ဒုတိယ အုပ်စုက distributed architecture ပါ။ system ကို သီးခြား deploy လုပ်တဲ့ အပိုင်းတွေအဖြစ်
+      ခွဲထားတဲ့ ပုံစံပါ။
+      [[mark:f-net]] အဲဒီ အပိုင်းတွေက network ပေါ်ကနေ တစ်ခုနဲ့တစ်ခု ဆက်သွယ်ကြပါတယ်။ microservices က
+      ဒီအုပ်စုထဲက ပုံစံ တစ်မျိုးပါ။
+      [[mark:f-diff]] နှစ်စုကြားက အဓိက ကွာခြားချက်က အပိုင်း အရေအတွက် မဟုတ်ပါဘူး။ အပိုင်းတွေကြားမှာ network
+      ရှိလာတာပါ။ ရမယ့် အကျိုးက အပိုင်းတွေကို သီးခြား deploy လုပ်နိုင်တာကနေ လာပြီး၊ ပေးရမယ့် တန်ဖိုးကတော့ ဒီ
+      network ကနေ လာပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-f-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          open: true,
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f-mono,
+          type: whiteboard.apply,
+          at: { mark: f-mono },
+          upsertIds: [f-mono, f-mono-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-f-dist,
+          type: whiteboard.apply,
+          at: { mark: f-dist },
+          upsertIds: [f-s1, f-s1-l, f-s2, f-s2-l, f-s3, f-s3-l, f-s4, f-s4-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-f-net,
+          type: whiteboard.apply,
+          at: { mark: f-net },
+          upsertIds: [f-w1, f-w2, f-w3],
+          drawMs: 1200,
+        }
+
+  - id: gains
+    chapter: ခွဲလိုက်ရင် ရနိုင်တာ
+    narration: >
+      [[mark:close-f]] ဒါဆို ခွဲလိုက်ရင် ဘာတွေ ရနိုင်မလဲ ဆိုတာကို အရင် ကြည့်ရအောင်။
+      [[mark:buy-open]] distributed လုပ်လိုက်ရင် ရနိုင်တာ လေးခု ရှိပါတယ်။
+      [[mark:buy-1]] ပထမက သီးခြား deploy လုပ်နိုင်တာပါ။ Booking မှာ ပြင်ထားတာကို တခြား team တွေကို မစောင့်ဘဲ
+      Booking တစ်ခုတည်း ထုတ်လို့ရပါတယ်။ မောင်မောင် လိုချင်နေတာက ဒါပါ။
+      [[mark:buy-2]] ဒုတိယက သီးခြား scale လုပ်နိုင်တာပါ။ သင်္ကြန်မနက်မှာ load များတဲ့ Search အတွက်ပဲ server တွေ
+      တိုးပေးပြီး၊ ကျန်တာကို အရင်အတိုင်း ထားလို့ရပါတယ်။
+      [[mark:buy-3]] တတိယက ပျက်တာကို ကန့်ထားနိုင်တာပါ။ Report အပိုင်း ပျက်သွားလည်း လက်မှတ် ရောင်းတာကတော့
+      ဆက်အလုပ်လုပ်နေနိုင်ပါတယ်။
+      [[mark:buy-4]] စတုတ္ထက team တွေရဲ့ လွတ်လပ်မှုပါ။ team တစ်ခုစီက သူ့ service ကို သူ့အချိန်ဇယားနဲ့သူ
+      ဆုံးဖြတ်ပြီး လုပ်နိုင်ပါတယ်။ team တွေ များလာလေ ဒီအချက်က အရေးကြီးလာလေပါ။
+      [[mark:buy-can]] ဒါပေမဲ့ သတိထားရမှာက ဒီ လေးခုက ရနိုင်တာတွေပဲ ရှိပါသေးတယ်။ ခွဲလိုက်တိုင်း အလိုအလျောက်
+      ရတာ မဟုတ်ပါဘူး။ ခွဲလိုက်တာနဲ့ သေချာပေါက် ပါလာတာကတော့ ပေးရမယ့် တန်ဖိုးပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-f, type: whiteboard.apply, at: { mark: close-f }, open: false }
+      - {
+          id: show-gains,
+          type: slide.show,
+          at: { mark: buy-open, offsetMs: -1200 },
+          slideId: four-gains,
+        }
+      - { id: point-gain-1, type: slide.point, at: { mark: buy-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-gain-2, type: slide.point, at: { mark: buy-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-gain-3, type: slide.point, at: { mark: buy-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-gain-4, type: slide.point, at: { mark: buy-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: costs
+    chapter: ခွဲလိုက်ရင် အမြဲ ပေးရတာ
+    narration: >
+      [[mark:c-open]] ပေးရမယ့် တန်ဖိုးကို နားလည်ဖို့ call တစ်ခုတည်းကို ကြည့်ရအောင်။
+      [[mark:c-two]] လက်မှတ် ဝယ်တဲ့အခါ Booking က Payment ကို ငွေဖြတ်ခိုင်းရပါတယ်။ monolith ထဲမှာဆိုရင် ဒါက function
+      တစ်ခု ခေါ်လိုက်တာပါပဲ။
+      [[mark:c-net]] ခွဲလိုက်ရင်တော့ ဒီ call က network ကို ဖြတ်သွားရပါတော့တယ်။
+      [[mark:c-1]] network ကို ဖြတ်ရတဲ့ call က function ခေါ်တာထက် အများကြီး နှေးပြီး၊ တစ်ခါတလေ ပြတ်လည်း
+      ပြတ်တတ်ပါတယ်။
+      [[mark:c-2]] ပိုဆိုးတာက အဖြေ ပြန်မလာတဲ့အခါပါ။ သတ်မှတ်ထားတဲ့ အချိန်အထိ စောင့်ပြီး အဖြေ မရတာကို time out
+      ဖြစ်တယ်လို့ ခေါ်ပါတယ်။ အဲဒီအခါ Payment က ငွေ ဖြတ်ပြီးသွားပြီလား၊ မဖြတ်ရသေးဘူးလား ဆိုတာကို Booking က
+      မသိနိုင်ပါဘူး။ ထပ်ခေါ်ရင် နှစ်ခါ ဖြတ်မိနိုင်ပြီး၊ မခေါ်ရင်လည်း ငွေမရဘဲ လက်မှတ် ထွက်သွားနိုင်ပါတယ်။
+      [[mark:c-3]] data ကလည်း နေရာ နှစ်ခုမှာ ကွဲသွားပါပြီ။ အရင်က ထိုင်ခုံ ယူတာနဲ့ ငွေဖြတ်တာကို transaction
+      တစ်ခုတည်းနဲ့ လုပ်လို့ရခဲ့ပါတယ်။ transaction ဆိုတာ အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ လုပ်ဆောင်ချက်
+      အစုပါ။ အခုတော့ တစ်ဝက်ပဲ ဖြစ်သွားတဲ့ အခြေအနေကို code နဲ့ ကိုယ်တိုင် ဖြေရှင်းရပါတော့မယ်။
+      [[mark:c-4]] service တွေကို တစ်ပြိုင်တည်း မထုတ်တော့တာမို့၊ version အဟောင်းနဲ့ အသစ် အတူရှိနေတဲ့
+      အချိန်တွေလည်း ရှိလာပါတယ်။ Payment အသစ်က Booking အဟောင်းနဲ့လည်း အလုပ်လုပ်နိုင်ရပါမယ်။
+      [[mark:c-5]] နောက်ဆုံးတစ်ခုက ပြဿနာ ဖြစ်တဲ့အခါ log တွေက service တစ်ခုစီမှာ ပြန့်နေတာပါ။ ဘာဖြစ်ခဲ့လဲ
+      လိုက်ရှာရတာ အများကြီး ပိုခက်လာပါတယ်။
+      [[mark:c-always]] ဒီ ငါးချက်က ကံမကောင်းမှ ကြုံရတာတွေ မဟုတ်ပါဘူး။ အပိုင်းတွေကြားမှာ network ရှိတာနဲ့
+      အမြဲ ပါလာတာတွေပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-gains, type: slide.close, at: { mark: c-open } }
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open, offsetMs: 1500 },
+          open: true,
+          clear: true,
+          upsertIds: [c-title],
+        }
+      - {
+          id: draw-c-two,
+          type: whiteboard.apply,
+          at: { mark: c-two },
+          upsertIds: [c-book, c-book-l, c-pay, c-pay-l],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-c-net,
+          type: whiteboard.apply,
+          at: { mark: c-net },
+          upsertIds: [c-net, c-net-l, c-wire],
+          drawMs: 1400,
+        }
+      - { id: draw-c-1, type: whiteboard.apply, at: { mark: c-1 }, upsertIds: [c-k1], drawMs: 900 }
+      - { id: draw-c-2, type: whiteboard.apply, at: { mark: c-2 }, upsertIds: [c-k2], drawMs: 900 }
+      - { id: draw-c-3, type: whiteboard.apply, at: { mark: c-3 }, upsertIds: [c-k3], drawMs: 900 }
+      - { id: draw-c-4, type: whiteboard.apply, at: { mark: c-4 }, upsertIds: [c-k4], drawMs: 900 }
+      - { id: draw-c-5, type: whiteboard.apply, at: { mark: c-5 }, upsertIds: [c-k5], drawMs: 900 }
+      - {
+          id: point-net,
+          type: whiteboard.point,
+          at: { mark: c-always },
+          target: { assetId: c-net },
+        }
+
+  - id: checklist
+    chapter: ခရီးဖော် အတွက် checklist
+    narration: >
+      [[mark:k-close]] ဒါဆို မောင်မောင် ရဲ့ အဆိုပြုချက်ကို ဘယ်လို ဖြေမလဲ။ ရနိုင်တဲ့ လေးခုကို တစ်ခုချင်း ယူပြီး၊ ခရီးဖော်
+      မှာ အခု တကယ် လိုနေလား၊ အထောက်အထား ဘာရှိလဲ ဆိုတာကို ရိုးရိုးသားသား ဖြေကြည့်ရအောင်။
+      [[mark:k-1]] သီးခြား deploy လုပ်ဖို့ကတော့ လိုနေပါတယ်။ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားနေတာက
+      အထောက်အထားပါ။
+      [[mark:k-2]] သီးခြား scale လုပ်ဖို့ကလည်း Search အတွက်တော့ လိုပါတယ်။ သင်္ကြန်မှာ ပုံမှန်ရဲ့ ၂၀ ဆ load ကို
+      အများဆုံး ခံရမှာက Search ဖြစ်နေလို့ပါ။
+      [[mark:k-3]] ပျက်တာကို ကန့်ထားဖို့ လိုလား ဆိုတာကတော့ မသိသေးပါဘူး။ အပိုင်း တစ်ခုကြောင့် app တစ်ခုလုံး
+      ပျက်တာ ဘယ်နှခါ ဖြစ်ခဲ့လဲ ဆိုတာကို ဘယ်သူမှ မှတ်မထားလို့ပါ။ မသိတာကို မသိဘူးလို့ပဲ ရေးထားရပါမယ်။
+      [[mark:k-4]] team တွေ မစောင့်ရဖို့ကတော့ မလိုသေးပါဘူး။ team က သုံးခုပဲ ရှိပြီး၊ အခန်း တစ်ခန်းတည်းမှာ
+      ထိုင်ညှိလို့ ရသေးတာမို့ပါ။
+      [[mark:k-sum]] ရလဒ်ကတော့ အကြောင်းပြချက် နှစ်ခု ရှိတယ် ဆိုတာပါ။ လူတိုင်း ပြောင်းနေလို့ ဆိုတာကတော့ ဒီ
+      စာရင်းထဲမှာ မပါပါဘူး။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-c, type: whiteboard.apply, at: { mark: k-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-c },
+          path: notebook/16-reasons-to-distribute.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: k-1 }
+        cadence: line-by-line
+        target:
+          { file: notebook/16-reasons-to-distribute.md, after: "| အထောက်အထား |\n|---|---|---|\n" }
+        text: "| သီးခြား deploy | လိုတယ် | team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ် |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: k-2 }
+        cadence: line-by-line
+        target: { file: notebook/16-reasons-to-distribute.md, after: "အားလုံးရဲ့ release ကို တားတယ် |\n" }
+        text: "| သီးခြား scale | Search အတွက် လိုတယ် | သင်္ကြန် 20 ဆ ကို အများဆုံး ခံရမှာ Search |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: k-3 }
+        cadence: line-by-line
+        target: { file: notebook/16-reasons-to-distribute.md, after: "အများဆုံး ခံရမှာ Search |\n" }
+        text: "| ပျက်တာ ကန့်ထား | မသိသေး | ဘယ်နှခါ ဖြစ်ခဲ့လဲ မှတ်မထားဘူး |\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: k-4 }
+        cadence: line-by-line
+        target: { file: notebook/16-reasons-to-distribute.md, after: "ဘယ်နှခါ ဖြစ်ခဲ့လဲ မှတ်မထားဘူး |\n" }
+        text: "| team လွတ်လပ်မှု | မလိုသေး | team 3 ခုပဲ၊ ထိုင်ညှိလို့ ရသေးတယ် |\n"
+      - id: type-sum
+        type: editor.type
+        at: { mark: k-sum }
+        cadence: line-by-line
+        target: { file: notebook/16-reasons-to-distribute.md, after: "ထိုင်ညှိလို့ ရသေးတယ် |\n" }
+        text: "\nအကြောင်းပြချက်: 2 ခု\nလူတိုင်း ပြောင်းနေလို့ ဆိုတာ မပါဘူး\n"
+      - id: expect-sum
+        type: expect.file
+        at: { afterAction: type-sum }
+        path: notebook/16-reasons-to-distribute.md
+        contains: "| သီးခြား scale | Search အတွက် လိုတယ် | သင်္ကြန် 20 ဆ ကို အများဆုံး ခံရမှာ Search |\n"
+
+  - id: rule
+    chapter: အကြောင်းပြချက် မရှိမချင်း တစ်ခုတည်း
+    narration: >
+      [[mark:rule]] ဒီနေရာမှာ architect လိုက်နာသင့်တဲ့ စည်းမျဉ်း တစ်ခု ရှိပါတယ်။ နာမည်တပ်ပြနိုင်တဲ့ အကြောင်းပြချက်
+      တစ်ခုက မတွန်းမချင်း deploy တစ်ခုတည်းနဲ့ပဲ နေပါ ဆိုတာပါ။ ခွဲတဲ့အခါ ပေးရမယ့် တန်ဖိုးက သေချာပြီး၊ ရမယ့်
+      အကျိုးကတော့ မသေချာလို့ပါ။
+      [[mark:rule-2]] ခရီးဖော် မှာ အကြောင်းပြချက် နှစ်ခု ရှိနေပါပြီ။ ဒါပေမဲ့ အဲဒီ နှစ်ခုအတွက် app တစ်ခုလုံးကို service
+      အများကြီး ခွဲပစ်စရာ မလိုပါဘူး။ release ပြဿနာကို deploy တစ်ခုတည်းထဲမှာပဲ ဖြေရှင်းလို့ ရမလား၊ Search
+      တစ်ခုတည်းကိုပဲ ခွဲထုတ်ရင် လုံလောက်မလား ဆိုတာတွေကို အရင် စဉ်းစားရပါမယ်။
+      [[mark:rule-3]] မောင်မောင် ကို ပြန်ဖြေရမှာက ဘယ်တော့မှ မလုပ်ဘူး ဆိုတာ မဟုတ်ပါဘူး။ အခုအတွက်တော့ app
+      တစ်ခုတည်းနဲ့ပဲ ဆက်သွားမယ်။ ဘယ်အကြောင်းပြချက်အတွက် ဘယ်လောက်အထိ ခွဲမလဲ ဆိုတာကိုတော့ အထောက်အထားနဲ့ အတူ
+      ဆုံးဖြတ်ကြမယ် ဆိုတာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-reasons
+        type: editor.select
+        at: { mark: rule }
+        target: { file: notebook/16-reasons-to-distribute.md, text: "အကြောင်းပြချက်: 2 ခု" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ developer တစ်ယောက်က ဒီလို ပြောတယ် ဆိုပါစို့။ ကိုယ်တို့ code တွေက
+      တစ်ခုနဲ့တစ်ခု ရောထွေးနေပြီ၊ ဒါကြောင့် microservices ကို ပြောင်းဖို့ လိုတယ် တဲ့။
+      [[mark:q-opts]] ဒီ ကောက်ချက်က ခိုင်လုံလား၊ မခိုင်လုံဘူးလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ မခိုင်လုံပါဘူး။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ code ရောနေတာက အပိုင်းတွေကြားက နယ်နိမိတ် မရှင်းလို့ပါ။ နယ်နိမိတ်
+      မရှင်းသေးဘဲ service တွေ ခွဲလိုက်ရင် အဲဒီ ရောထွေးမှုက ပျောက်မသွားပါဘူး။ network ပေါ်ကို ရွှေ့သွားရုံပါပဲ။
+      အရင်က function ခေါ်တာတွေနဲ့ ရောနေတာက အခု network call တွေနဲ့ ရောနေတော့မှာမို့၊ ပြင်ရတာ ပိုတောင်
+      ခက်သွားပါတယ်။
+      [[mark:q-more]] monolith ဆိုတိုင်း ရှုပ်နေတာ မဟုတ်သလို၊ distributed ဆိုတိုင်းလည်း သပ်ရပ်နေတာ မဟုတ်ပါဘူး။
+      ဒါကြောင့် အပိုင်းတွေရဲ့ နယ်နိမိတ်ကို app တစ်ခုတည်းထဲမှာ အရင် ရှင်းအောင် လုပ်ရပါတယ်။ လိုအပ်လာမှ ခွဲတာက
+      ပိုစိတ်ချရတဲ့ လမ်းပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title, z-s1, z-s2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-q-opts,
+          type: whiteboard.apply,
+          at: { mark: q-opts },
+          upsertIds: [z-a, z-b],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [z-why],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာလည်း service တွေ ခွဲကြရအောင် ဆိုတဲ့ စကားက တစ်ချိန်ချိန်မှာ
+      ပေါ်လာမှာပါ။ ပေါ်ပြီးသားလည်း ဖြစ်နိုင်ပါတယ်။ lesson ကို pause လုပ်ပြီး ဒီ checklist ထဲမှာ ကိုယ့် system
+      အတွက် လေးကြောင်းလုံးကို ရိုးရိုးသားသား ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] အထောက်အထား နေရာမှာတော့ တကယ် ဖြစ်ခဲ့တဲ့ အဖြစ်အပျက်၊ ဒါမှမဟုတ် ဂဏန်း တစ်ခုခုကိုပဲ ရေးပါ။
+      ဖြစ်လာနိုင်တယ်လို့ ထင်တာမျိုးကိုတော့ အထောက်အထားလို့ မယူပါနဲ့။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-head
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/16-reasons-to-distribute.md,
+            text: "| ရချင်တာ | ခရီးဖော် မှာ အခု လိုလား | အထောက်အထား |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ monolith က အားလုံးကို အတူ deploy လုပ်တဲ့ ပုံစံပါ။ distributed architecture
+      ကတော့ အပိုင်းတွေကို ခွဲပြီး network ပေါ်ကနေ ဆက်သွယ်တဲ့ ပုံစံပါ။ ခွဲလိုက်ရင် သီးခြား deploy လုပ်နိုင်တာ၊
+      သီးခြား scale လုပ်နိုင်တာ၊ ပျက်တာကို ကန့်ထားနိုင်တာနဲ့ team လွတ်လပ်မှုတွေ ရနိုင်ပါတယ်။
+      [[mark:recap-2]] ပေးရတာကတော့ network ရဲ့ နှေးမှုနဲ့ မသေချာမှု၊ ကွဲသွားတဲ့ data နဲ့ ပိုခက်လာတဲ့
+      ပြဿနာရှာဖွေမှုတွေပါ။ ဒါကြောင့် နာမည်တပ်ပြနိုင်တဲ့ အကြောင်းပြချက် မရှိမချင်း deploy တစ်ခုတည်းနဲ့ပဲ
+      နေရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ deploy တစ်ခုတည်းနဲ့ နေမယ်ဆိုရင် အထဲကို ဘယ်လို ဖွဲ့စည်းမလဲ ဆိုတာကို
+      ကြည့်ပါမယ်။ အလွှာလိုက် ခွဲတဲ့ layered style နဲ့၊ business ရဲ့ လုပ်ငန်းအလိုက် အပိုင်းခွဲတဲ့ modular monolith ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-last
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/16-reasons-to-distribute.md, text: "လူတိုင်း ပြောင်းနေလို့ ဆိုတာ မပါဘူး" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
