@@ -1,0 +1,913 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-49-diagrams
+  title: "Architect Path 49: Diagram နဲ့ တင်ပြခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/49-diagram-checklist.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/49-diagram-checklist.md: |
+        # Diagram မမျှခင် စစ်ဆေးရန်
+
+        ## ပုံ
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the diagram nobody can read: ten of its sixty boxes (blue = parts
+    # of the system), and the one question the partners' engineers keep asking.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 720,
+        height: 45,
+        text: "Box 60 ပါတဲ့ architecture diagram",
+        fontSize: 36,
+      }
+    - { id: n-x1, kind: rectangle, x: 290, y: 245, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x2, kind: rectangle, x: 440, y: 245, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x3, kind: rectangle, x: 590, y: 245, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x4, kind: rectangle, x: 740, y: 245, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x5, kind: rectangle, x: 890, y: 245, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x6, kind: rectangle, x: 290, y: 320, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x7, kind: rectangle, x: 440, y: 320, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x8, kind: rectangle, x: 590, y: 320, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x9, kind: rectangle, x: 740, y: 320, width: 120, height: 50, strokeColor: "#1971c2" }
+    - { id: n-x10, kind: rectangle, x: 890, y: 320, width: 120, height: 50, strokeColor: "#1971c2" }
+    - {
+        id: n-more,
+        kind: text,
+        x: 290,
+        y: 395,
+        width: 300,
+        height: 35,
+        text: "... နောက်ထပ် box 50",
+        fontSize: 28,
+      }
+    - {
+        id: n-q,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 520,
+        height: 35,
+        text: "ကိုယ့် system က ဘယ်မှာ ချိတ်ရမလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer, orange the
+    # three questions the three audiences ask.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ပုံတစ်ပုံတည်းနဲ့ လူတိုင်းအတွက်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 700,
+        height: 35,
+        text: "က) ရှင်းအောင် ပြန်ဆွဲပြီး တစ်ပုံတည်း ထား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 700,
+        height: 35,
+        text: "ခ) မေးခွန်း တစ်ခုအတွက် ပုံတစ်ပုံ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 320,
+        width: 420,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 735,
+        y: 308,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-cto,
+        kind: text,
+        x: 290,
+        y: 410,
+        width: 700,
+        height: 35,
+        text: "CTO: ဘယ်မှာ ငွေနဲ့ risk များလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-partner,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 700,
+        height: 35,
+        text: "Partner: ဘယ်မှာ ချိတ်ရမလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-oncall,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 700,
+        height: 35,
+        text: "On-call: ဘာပျက်ရင် ဘာလိုက်ပျက်မလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — the context view: ခရီးဖော် as one box (orange: what the picture is
+    # about), its users (white), the outside systems it talks to (blue), violet
+    # for what passes between them.
+    - {
+        id: c-sys,
+        kind: rectangle,
+        x: 395,
+        y: 335,
+        width: 240,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-sys-l,
+        kind: text,
+        align: center,
+        x: 395,
+        y: 365,
+        width: 240,
+        height: 40,
+        text: "ခရီးဖော်",
+        fontSize: 32,
+      }
+    - {
+        id: c-users,
+        kind: text,
+        x: 391,
+        y: 185,
+        width: 270,
+        height: 35,
+        text: "ခရီးသည်၊ ကောင်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: c-users-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 495,
+        y: 232,
+        width: 40,
+        height: 92,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-wallet,
+        kind: rectangle,
+        x: 760,
+        y: 305,
+        width: 220,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-wallet-l,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 322,
+        width: 220,
+        height: 35,
+        text: "wallet API",
+        fontSize: 28,
+      }
+    - {
+        id: c-wallet-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 647,
+        y: 320,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-sms,
+        kind: rectangle,
+        x: 760,
+        y: 395,
+        width: 220,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-sms-l,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 412,
+        width: 220,
+        height: 35,
+        text: "SMS gateway",
+        fontSize: 28,
+      }
+    - {
+        id: c-sms-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 647,
+        y: 410,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-partner,
+        kind: rectangle,
+        x: 395,
+        y: 545,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-partner-l,
+        kind: text,
+        align: center,
+        x: 395,
+        y: 567,
+        width: 240,
+        height: 35,
+        text: "ကားလိုင်း system",
+        fontSize: 28,
+      }
+    - {
+        id: c-partner-up,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 450,
+        y: 447,
+        width: 40,
+        height: 86,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-partner-down,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 540,
+        y: 447,
+        width: 40,
+        height: 86,
+        strokeColor: "#6741d9",
+      }
+    # Board 4 — the zoom: the dashed line is ခရီးဖော်'s boundary, blue the two
+    # deployable parts the partner's system touches, violet lines labelled with
+    # what flows and whether the caller waits; the last line is the key.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 500,
+        height: 45,
+        text: "ကားလိုင်း system ချိတ်ပုံ",
+        fontSize: 36,
+      }
+    - {
+        id: z-partner,
+        kind: rectangle,
+        x: 262,
+        y: 385,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-partner-l,
+        kind: text,
+        align: center,
+        x: 262,
+        y: 407,
+        width: 240,
+        height: 35,
+        text: "ကားလိုင်း system",
+        fontSize: 28,
+      }
+    - {
+        id: z-bound,
+        kind: rectangle,
+        x: 640,
+        y: 225,
+        width: 440,
+        height: 405,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: z-bound-l,
+        kind: text,
+        x: 660,
+        y: 237,
+        width: 150,
+        height: 35,
+        text: "ခရီးဖော်",
+        fontSize: 28,
+      }
+    - {
+        id: z-op,
+        kind: rectangle,
+        x: 800,
+        y: 290,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-op-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 312,
+        width: 240,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: z-in,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 512,
+        y: 335,
+        width: 278,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: z-in-l,
+        kind: text,
+        x: 270,
+        y: 285,
+        width: 365,
+        height: 35,
+        text: "ခရီးစဉ်၊ ဈေး တင် (စောင့်)",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: z-bk,
+        kind: rectangle,
+        x: 800,
+        y: 480,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: z-bk-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 502,
+        width: 240,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: z-out,
+        kind: freedraw,
+        stroke: arrow-up-left,
+        x: 512,
+        y: 455,
+        width: 278,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: z-out-l,
+        kind: text,
+        x: 270,
+        y: 525,
+        width: 320,
+        height: 35,
+        text: "ရောင်းပြီး ခုံ (မစောင့်)",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: z-key,
+        kind: text,
+        x: 270,
+        y: 600,
+        width: 360,
+        height: 35,
+        text: "စောင့် = အဖြေ ရမှ ဆက်သွား",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8149
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Box 60 ပါတဲ့ diagram
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ system ရဲ့ အပိုင်း တစ်ခုစီမှာ risk ဘယ်လောက် ရှိလဲ ဆိုတာကို ထိခိုက်မှုနဲ့ ဖြစ်နိုင်ခြေ
+      တွဲပြီး အကဲဖြတ်ခဲ့ပါတယ်။
+      [[mark:n-open]] ဒီနေ့ကတော့ product manager လှလှ က ပြဿနာ တစ်ခု ယူလာပါတယ်။ ခရီးဖော် နဲ့ စချိတ်မယ့်
+      ကားလိုင်း အသစ်တွေမှာ ကိုယ်ပိုင် system ရှိကြပါတယ်။ သူတို့ဘက်က engineer တွေကို ကိုယ်တို့ရဲ့ architecture
+      diagram ကို ပေးထားပါတယ်။
+      [[mark:n-boxes]] အဲဒီ ပုံက architect team က ဂရုတစိုက် ဆွဲထားတာပါ။ service တိုင်း၊ database တိုင်း၊ queue
+      တိုင်း ပါပြီး box ပေါင်း ၆၀ ရှိပါတယ်။ မှားတာ တစ်ခုမှ မပါပါဘူး။ ပြည့်စုံလေ ကောင်းလေလို့ ကိုယ်တို့
+      ထင်ခဲ့ကြတာပါ။
+      [[mark:n-q]] ဒါပေမဲ့ ကားလိုင်းဘက်က engineer တွေကတော့ မေးခွန်း တစ်ခုတည်းကိုပဲ ထပ်ခါထပ်ခါ မေးနေကြပါတယ်။
+      ကိုယ့် system က ဘယ်နေရာမှာ ချိတ်ရမှာလဲ တဲ့။ ပုံထဲမှာ အဖြေ ပါပေမဲ့၊ box ၆၀ ကြားထဲမှာ ဘယ်သူမှ
+      ရှာမတွေ့ကြပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-boxes,
+          type: whiteboard.apply,
+          at: { mark: n-boxes },
+          upsertIds: [n-x1, n-x2, n-x3, n-x4, n-x5, n-x6, n-x7, n-x8, n-x9, n-x10],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-n-more,
+          type: whiteboard.apply,
+          at: { mark: n-boxes, offsetMs: 6500 },
+          upsertIds: [n-more],
+          drawMs: 900,
+        }
+      - {
+          id: draw-n-q,
+          type: whiteboard.apply,
+          at: { mark: n-q, offsetMs: 6500 },
+          upsertIds: [n-q],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီ ပုံကို ကြည့်နေတာ ကားလိုင်းဘက်က engineer တွေချည်း မဟုတ်ပါဘူး။ CTO
+      ဖြစ်တဲ့ အောင်အောင် လည်း ကြည့်သလို၊ ညဘက် system ပျက်ရင် ထကြည့်ရတဲ့ on call engineer လည်း ကြည့်ပါတယ်။
+      [[mark:quiz-a]] ပထမ နည်းက ပုံကို ရှင်းအောင် ပြန်ဆွဲပြီး၊ လူတိုင်းအတွက် တစ်ပုံတည်း ထားတာပါ။ Booking team lead
+      မောင်မောင် က ဒီနည်းကို ကြိုက်ပါတယ်။ ပုံ များလာရင် ထိန်းရတာ ခက်မှာကို သူ စိုးရိမ်လို့ပါ။
+      [[mark:quiz-b]] ဒုတိယ နည်းက မေးခွန်း တစ်ခုအတွက် ပုံတစ်ပုံစီ ဆွဲတာပါ။ ဘယ်နည်းက ပိုသင့်တော်မလဲ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ သုံးယောက်က မေးခွန်း သုံးခုကို
+      မေးနေကြလို့ပါ။
+      [[mark:q-cto]] အောင်အောင် က ဘယ်အပိုင်းမှာ ငွေ အများဆုံး ကုန်ပြီး၊ ဘယ်မှာ risk ရှိလဲ သိချင်ပါတယ်။
+      [[mark:q-partner]] ကားလိုင်းဘက်က engineer က သူ့ system ကို ဘယ်မှာ ချိတ်ရမလဲ သိချင်ပါတယ်။
+      [[mark:q-oncall]] on call engineer ကတော့ အပိုင်း တစ်ခု ပျက်ရင် ဘာတွေ လိုက်ပျက်မလဲ သိချင်ပါတယ်။
+      [[mark:q-rule]] ပုံတစ်ပုံတည်းနဲ့ သုံးခုလုံးကို ဖြေဖို့ ကြိုးစားရင် box ၆၀ ပုံကိုပဲ ပြန်ရမှာပါ။ ဒါကြောင့်
+      diagram တစ်ခုက လူတစ်မျိုးအတွက်၊ မေးခွန်း တစ်ခုကိုပဲ ဖြေရပါတယ်။ မောင်မောင် စိုးရိမ်တာလည်း မမှားပါဘူး။
+      ပုံ တစ်ခုစီကို သေးသေးနဲ့ ရှင်းရှင်း ထားမှ ပြန်ဆွဲရတာ သက်သာမှာပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [q-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [q-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-cto,
+          type: whiteboard.apply,
+          at: { mark: q-cto },
+          upsertIds: [q-cto],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-q-partner,
+          type: whiteboard.apply,
+          at: { mark: q-partner },
+          upsertIds: [q-partner],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-q-oncall,
+          type: whiteboard.apply,
+          at: { mark: q-oncall },
+          upsertIds: [q-oncall],
+          drawMs: 1000,
+        }
+
+  - id: context
+    chapter: Context view ကို တစ်ဆင့်ချင်း ဆွဲခြင်း
+    narration: >
+      [[mark:c-open]] ဒါဆို ကားလိုင်းဘက်က engineer တွေရဲ့ မေးခွန်းအတွက် ပုံကို အစကနေ ဆွဲကြည့်ရအောင်။ အရင်ဆုံး
+      ခရီးဖော် တစ်ခုလုံးကို box တစ်ခုတည်းအဖြစ် အလယ်မှာ ထားပါမယ်။ အထဲမှာ service ဘယ်နှခု ရှိလဲ ဆိုတာ ဒီ
+      မေးခွန်းအတွက် မလိုသေးပါဘူး။
+      [[mark:c-users]] ပြီးရင် သုံးတဲ့သူတွေကို ထည့်ပါမယ်။ app ကနေ ဝယ်တဲ့ ခရီးသည်နဲ့ ကားဂိတ်က ကောင်တာ
+      ဝန်ထမ်းတွေပါ။
+      [[mark:c-wallet]] နောက်တစ်ခုက ခရီးဖော် က လှမ်းခေါ်ရတဲ့ အပြင်က system တွေပါ။ ငွေချေဖို့ wallet ကုမ္ပဏီရဲ့ API
+      ကို ခေါ်ရပါတယ်။
+      [[mark:c-sms]] လက်မှတ် ရောင်းပြီးရင်တော့ SMS gateway ကနေ SMS ပို့ပါတယ်။
+      [[mark:c-partner]] နောက်ဆုံးမှာမှ ဒီ ပုံရဲ့ အဓိက ဖြစ်တဲ့ ကားလိုင်းရဲ့ ကိုယ်ပိုင် system ကို ထည့်ပါမယ်။
+      သူတို့ဘက်က ခရီးဖော် ကို လှမ်းခေါ်တာ ရှိသလို၊ ခရီးဖော် ဘက်က သူတို့ဆီ ပြန်ပို့တာလည်း ရှိပါတယ်။
+      [[mark:c-name]] system တစ်ခုကို သူ့ကို သုံးတဲ့သူတွေနဲ့၊ ဆက်သွယ်ရတဲ့ အပြင်က system တွေကြားမှာ ပြတဲ့ ဒီလို
+      ပုံကို context view လို့ ခေါ်ပါတယ်။ box ၆၀ မဟုတ်တော့ဘဲ လေးခုပဲ ရှိတာမို့၊ ကားလိုင်းဘက်က engineer က သူ့
+      system ကို တစ်ချက်ကြည့်ရုံနဲ့ တွေ့နိုင်ပါပြီ။
+      [[mark:c-left]] ပုံထဲမှာ မပါတာတွေကလည်း တမင် ချန်ထားတာပါ။ report တွေ၊ database တွေက တကယ် ရှိပေမဲ့ ဒီ
+      မေးခွန်းအတွက် မလိုပါဘူး။ မြေပုံ တစ်ခုလိုပါပဲ။ အရာအားလုံးကို ထည့်ထားတဲ့ မြေပုံက လမ်းမပြနိုင်တော့ပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "The C4 model for visualising software architecture", url: "https://c4model.com/" }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open, offsetMs: 5500 },
+          clear: true,
+          upsertIds: [c-sys, c-sys-l],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-users,
+          type: whiteboard.apply,
+          at: { mark: c-users },
+          upsertIds: [c-users, c-users-a],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-wallet,
+          type: whiteboard.apply,
+          at: { mark: c-wallet, offsetMs: 3500 },
+          upsertIds: [c-wallet-a, c-wallet, c-wallet-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-sms,
+          type: whiteboard.apply,
+          at: { mark: c-sms },
+          upsertIds: [c-sms-a, c-sms, c-sms-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-partner,
+          type: whiteboard.apply,
+          at: { mark: c-partner },
+          upsertIds: [c-partner, c-partner-l],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-c-lines,
+          type: whiteboard.apply,
+          at: { mark: c-partner, offsetMs: 6500 },
+          upsertIds: [c-partner-up, c-partner-down],
+          drawMs: 1200,
+        }
+      - {
+          id: point-c-sys,
+          type: whiteboard.point,
+          at: { mark: c-name },
+          target: { assetId: c-sys },
+        }
+
+  - id: zoom
+    chapter: ချဲ့ကြည့်ခြင်းနဲ့ မျဉ်းတွေရဲ့ အဓိပ္ပာယ်
+    narration: >
+      [[mark:z-point]] ကားလိုင်းဘက်က engineer အတွက် နောက်ထပ် သိချင်တာက ဒီ မျဉ်းနှစ်ကြောင်းက တကယ်တော့ ဘာတွေလဲ
+      ဆိုတာပါ။ ဒါကြောင့် ဒီနေရာကို ချဲ့ကြည့်ပါမယ်။ မချဲ့ခင် တစ်ခုလုံးထဲက ဘယ်နေရာကို ချဲ့မှာလဲ ဆိုတာ အရင်
+      ပြတာကို သတိထားပါ။
+      [[mark:z-open]] ချဲ့လိုက်ရင် ခရီးဖော် ရဲ့ အတွင်းဘက်ကို သီးခြား deploy လုပ်တဲ့ အပိုင်းတွေအနေနဲ့ မြင်ရပါတယ်။
+      ဒါပေမဲ့ အားလုံးကို မပြဘဲ၊ ကားလိုင်း system နဲ့ ဆိုင်တဲ့ နှစ်ခုကိုပဲ ပြပါမယ်။
+      [[mark:z-in]] ကားလိုင်း system က ခရီးစဉ်နဲ့ ဈေးနှုန်းတွေကို Operator service ဆီ တင်ပါတယ်။ ဒီမျဉ်းမှာ ဘာ
+      စီးသွားလဲ ဆိုတာနဲ့အတူ၊ ခေါ်တဲ့ဘက်က အဖြေကို စောင့်တယ် ဆိုတာပါ ရေးထားပါတယ်။
+      [[mark:z-out]] ပြန်လာတဲ့ မျဉ်းကတော့ Booking service က ထိုင်ခုံ တစ်ခုံ ရောင်းပြီးတိုင်း ကားလိုင်း system ဆီ
+      အကြောင်းကြားတာပါ။ ဒီတစ်ခါတော့ Booking က အဖြေကို မစောင့်ဘဲ ဆက်သွားပါတယ်။
+      [[mark:z-lines]] diagram တစ်ခုမှာ အဓိပ္ပာယ်ကို သယ်ထားတာက box တွေထက် မျဉ်းတွေပါ။ box တွေချည်း ဆိုရင် ဘာတွေ
+      ရှိလဲ ဆိုတာပဲ ပြောနိုင်ပြီး၊ ဘယ်လို အလုပ်လုပ်လဲ ဆိုတာကိုတော့ မျဉ်းတွေက ပြောတာပါ။
+      [[mark:z-wait]] ဥပမာ စောင့်ရတဲ့ call ဆိုရင် အဖြေ မလာတဲ့အခါ ဘာလုပ်မလဲ ဆိုတာ ကားလိုင်းဘက်က engineer က
+      စဉ်းစားထားရပါမယ်။ မစောင့်ဘဲ ပို့တဲ့ အကြောင်းကြားချက်ဆိုရင်တော့ နောက်ကျပြီး ရောက်လာတာ၊ နှစ်ခါ ရောက်လာတာကို
+      သူ့ system က ခံနိုင်ရပါမယ်။ မျဉ်းပေါ်က စာလုံး နှစ်လုံးက သူ့ design ကို ပြောင်းစေတာပါ။
+      [[mark:z-key]] ကျန်တာက အသေးအဖွဲလို့ ထင်ရပေမဲ့ မပါရင် မဖြစ်တဲ့ အရာ သုံးခုပါ။ ဘယ်သူ့အတွက် ဘာပုံလဲ ပြောတဲ့
+      ခေါင်းစဉ်၊ shape တစ်မျိုးကို အဓိပ္ပာယ် တစ်မျိုးတည်းနဲ့ သုံးတာနဲ့၊ သင်္ကေတတွေရဲ့ အဓိပ္ပာယ်ကို ရှင်းပြတဲ့ key ပါ။
+      [[mark:z-level]] ဒီထက် ထပ်ချဲ့ရင် Booking service ထဲက component တွေ၊ ဆိုလိုတာက လုပ်ငန်း တစ်ခုစီကို
+      တာဝန်ယူတဲ့ အစိတ်အပိုင်းတွေကို မြင်ရမှာပါ။ အဲဒါကတော့ Booking team အတွက် ပုံ ဖြစ်သွားပါပြီ။
+      [[mark:z-mix]] context၊ deploy လုပ်တဲ့ အပိုင်းတွေနဲ့ component တွေ ဆိုတဲ့ အဆင့် သုံးဆင့်ကို ပုံတစ်ပုံထဲမှာ
+      ရောမဆွဲပါနဲ့။ ပုံတစ်ပုံမှာ အဆင့် တစ်ဆင့်ပဲ ထားပါ။ box ၆၀ ပုံရဲ့ ပြဿနာက အဆင့် သုံးဆင့်လုံး တစ်ပုံတည်းမှာ
+      ရောနေတာပါပဲ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "The C4 model for visualising software architecture", url: "https://c4model.com/" }
+    actions:
+      - {
+          id: point-partner,
+          type: whiteboard.point,
+          at: { mark: z-point },
+          target: { assetId: c-partner },
+        }
+      - {
+          id: draw-z-open,
+          type: whiteboard.apply,
+          at: { mark: z-open },
+          clear: true,
+          upsertIds: [z-title, z-partner, z-partner-l, z-bound, z-bound-l],
+          drawMs: 2500,
+        }
+      - {
+          id: draw-z-in,
+          type: whiteboard.apply,
+          at: { mark: z-in },
+          upsertIds: [z-op, z-op-l, z-in, z-in-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-z-out,
+          type: whiteboard.apply,
+          at: { mark: z-out },
+          upsertIds: [z-bk, z-bk-l, z-out, z-out-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-z-key,
+          type: whiteboard.apply,
+          at: { mark: z-key, offsetMs: 9000 },
+          upsertIds: [z-key],
+          drawMs: 1200,
+        }
+      - { id: point-z-bk, type: whiteboard.point, at: { mark: z-level }, target: { assetId: z-bk } }
+
+  - id: checklist
+    chapter: မမျှခင် စစ်ဆေးရန်
+    narration: >
+      [[mark:k-close]] အခု လုပ်ခဲ့တာတွေကို diagram တစ်ခု မမျှခင်တိုင်း စစ်လို့ရတဲ့ စာရင်းတိုလေး အဖြစ်
+      ချရေးပါမယ်။
+      [[mark:k-who]] ပထမဆုံး စစ်ရမှာက ဒီပုံက ဘယ်သူ့အတွက်လဲ၊ ဘာမေးခွန်းကို ဖြေတာလဲ ဆိုတာပါ။ တစ်ကြောင်းတည်းနဲ့
+      မဖြေနိုင်ရင် ပုံက နှစ်ပုံ ဖြစ်သင့်နေပါပြီ။
+      [[mark:k-level]] ဒုတိယက ပုံက အဆင့် တစ်ဆင့်တည်းမှာ ရှိရဲ့လား ဆိုတာပါ။ context လား၊ deploy လုပ်တဲ့
+      အပိုင်းတွေလား၊ component တွေလား ဆိုတာ တစ်ခုပဲ ရွေးပါ။
+      [[mark:k-lines]] တတိယက မျဉ်းတိုင်းမှာ ဘာ စီးလဲ၊ ခေါ်သူက စောင့်လား ဆိုတာ ရေးထားရဲ့လား စစ်ပါ။ ဘာမှ
+      ရေးမထားတဲ့ မျဉ်းက ဆက်ထားတယ် ဆိုတာလောက်ပဲ ပြောပါတယ်။ ဒီနေ့ ဆွဲခဲ့တဲ့ context view ကိုလည်း မမျှခင်
+      မျဉ်းတွေမှာ စာ ထည့်ရပါဦးမယ်။
+      [[mark:k-key]] စတုတ္ထက shape တွေကို တသမတ်တည်း သုံးထားပြီး key ပါရဲ့လား ဆိုတာပါ။ မှားဖတ်နိုင်တဲ့ ပုံက
+      ပုံ မရှိတာထက် ပိုဆိုးနိုင်ပါတယ်။
+      [[mark:k-sketch]] နောက်ဆုံးက သေသေသပ်သပ် မဆွဲခင် ပုံကြမ်းနဲ့ တစ်ယောက်ယောက်ကို ပြပြီးပြီလား ဆိုတာပါ။ ဒီနေ့
+      ဆွဲခဲ့တဲ့ ပုံတွေကလည်း လက်နဲ့ ဆွဲထားတဲ့ ပုံကြမ်းတွေပါပဲ။ ပုံကြမ်းဆိုရင် မှားနေတာကို ကြည့်တဲ့သူက ထောက်ပြရဲပြီး၊
+      ဆွဲတဲ့သူကလည်း ဖျက်ပြီး ပြန်ဆွဲဖို့ ဝန်မလေးပါဘူး။ tool နဲ့ နာရီပေါင်းများစွာ အချိန်ကုန်ခံ ဆွဲထားတဲ့
+      ပုံကျတော့၊ မှားနေမှန်း သိရင်တောင် မပြင်ချင်တော့တာ လူ့သဘာဝပါ။
+      [[mark:p-open]] ပုံ ကောင်းရုံနဲ့ မပြီးသေးပါဘူး။ တင်ပြတဲ့ ပုံစံကလည်း အရေးကြီးပါတယ်။ ဒီနေ့ ကိုယ်တို့
+      ဘယ်လို လုပ်ခဲ့လဲ ပြန်ကြည့်ရအောင်။
+      [[mark:p-purpose]] ကားလိုင်းဘက်က engineer ရဲ့ မေးခွန်း၊ ဆိုလိုတာက ရည်ရွယ်ချက်ကနေ စခဲ့ပါတယ်။ service
+      စာရင်းကနေ မစခဲ့ပါဘူး။
+      [[mark:p-build]] ပုံကိုလည်း တစ်ခါတည်း အပြည့် မပြဘဲ၊ တစ်ပိုင်းချင်း တည်ဆောက်ပြခဲ့ပါတယ်။ ကြည့်တဲ့သူက
+      ကိုယ် ပြောနေတဲ့ အပိုင်းကိုပဲ ကြည့်နိုင်အောင်ပါ။
+      [[mark:p-where]] ချဲ့တဲ့အခါမှာလည်း တစ်ခုလုံးထဲက ဘယ်နေရာလဲ ဆိုတာ အရင် ပြခဲ့ပါတယ်။ ဒါမှ ကြည့်တဲ့သူက
+      လမ်းမပျောက်မှာပါ။
+      [[mark:p-deck]] နောက်တစ်ခု သတိထားစရာက တင်ပြဖို့ slide နဲ့ ဖတ်ဖို့ စာက မတူတာပါ။ တင်ပြတဲ့အခါ ကိုယ်က ဘေးကနေ
+      ရှင်းပြနေတာမို့ slide ပေါ်မှာ စာ နည်းနည်းပဲ လိုပါတယ်။ ကိုယ် မရှိဘဲ ဖတ်ရမယ့်သူအတွက်ကတော့ အပြည့်အစုံ
+      ရေးထားတဲ့ စာတစ်စောင် သီးခြား လိုပါတယ်။ slide တွေကို စာအပြည့် ဖြည့်ပြီး နှစ်မျိုးလုံးအတွက် သုံးရင်၊
+      နှစ်မျိုးလုံးမှာ အဆင်မပြေပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-zoom, type: whiteboard.apply, at: { mark: k-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-zoom },
+          path: notebook/49-diagram-checklist.md,
+        }
+      - id: type-who
+        type: editor.type
+        at: { mark: k-who }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "## ပုံ\n" }
+        text: "- [ ] ဘယ်သူ့အတွက်လဲ၊ ဘာမေးခွန်းကို ဖြေတာလဲ (ခေါင်းစဉ်မှာ ရေးထား)\n"
+      - id: type-level
+        type: editor.type
+        at: { mark: k-level }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "(ခေါင်းစဉ်မှာ ရေးထား)\n" }
+        text: "- [ ] အဆင့် တစ်ဆင့်တည်းလား: context / deploy လုပ်တဲ့ အပိုင်း / component\n"
+      - id: type-lines
+        type: editor.type
+        at: { mark: k-lines }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "/ component\n" }
+        text: "- [ ] မျဉ်းတိုင်းမှာ ဘာ စီးလဲ၊ ခေါ်သူ စောင့်လား ရေးထားလား\n"
+      - id: type-key
+        type: editor.type
+        at: { mark: k-key }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "စောင့်လား ရေးထားလား\n" }
+        text: "- [ ] shape တစ်မျိုး = အဓိပ္ပာယ် တစ်မျိုးလား၊ key ပါလား\n"
+      - id: type-sketch
+        type: editor.type
+        at: { mark: k-sketch }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "key ပါလား\n" }
+        text: "- [ ] ပုံကြမ်းနဲ့ အရင် ပြပြီးပြီလား\n"
+      - id: type-present
+        type: editor.type
+        at: { mark: p-open }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "အရင် ပြပြီးပြီလား\n" }
+        text: "\n## တင်ပြတဲ့အခါ\n"
+      - id: type-purpose
+        type: editor.type
+        at: { mark: p-purpose }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "## တင်ပြတဲ့အခါ\n" }
+        text: "- [ ] ရည်ရွယ်ချက်ကနေ စ\n"
+      - id: type-build
+        type: editor.type
+        at: { mark: p-build }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "ရည်ရွယ်ချက်ကနေ စ\n" }
+        text: "- [ ] ပုံကို တစ်ပိုင်းချင်း တည်ဆောက်ပြ\n"
+      - id: type-where
+        type: editor.type
+        at: { mark: p-where }
+        cadence: line-by-line
+        target: { file: notebook/49-diagram-checklist.md, after: "တစ်ပိုင်းချင်း တည်ဆောက်ပြ\n" }
+        text: "- [ ] မချဲ့ခင် တစ်ခုလုံးထဲက ဘယ်နေရာလဲ အရင်ပြ\n"
+      - id: expect-who
+        type: expect.file
+        at: { afterAction: type-where }
+        path: notebook/49-diagram-checklist.md
+        contains: "- [ ] ဘယ်သူ့အတွက်လဲ၊ ဘာမေးခွန်းကို ဖြေတာလဲ (ခေါင်းစဉ်မှာ ရေးထား)\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ စာရွက် တစ်ရွက်ပေါ်မှာ ကိုယ့် system ရဲ့ context
+      view ကို ဆွဲကြည့်ပါ။ ကိုယ့် system ကို အလယ်မှာ box တစ်ခုတည်း ထားပြီး၊ သုံးတဲ့သူတွေနဲ့ ဆက်သွယ်ရတဲ့ အပြင်က
+      system တွေကို ပတ်ပတ်လည်မှာ ထည့်ပါ။
+      [[mark:turn-2]] ပြီးရင် ဒီ စာရင်းထဲက ပထမ ငါးချက်နဲ့ စစ်ကြည့်ပါ။ ဘယ်သူ့အတွက်လဲ ဆိုတဲ့ ပထမ အချက်မှာတင်
+      ရပ်သွားရင်လည်း၊ အဲဒါက အရေးကြီးဆုံး တွေ့ရှိချက်ပါပဲ။
+      [[mark:turn-3]] နောက်ဆုံး စမ်းသပ်ချက် တစ်ခုလည်း လုပ်ကြည့်ပါ။ ပုံကို တစ်ယောက်ယောက်ကို ငါးစက္ကန့်လောက်ပဲ
+      ပြပြီး ဘာမြင်လိုက်လဲ မေးပါ။ သူ ပြန်ပြောတာက ကိုယ် ပြချင်တာနဲ့ တူရင်၊ အဲဒီပုံက အလုပ်ဖြစ်ပါပြီ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-checks
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          file: notebook/49-diagram-checklist.md
+          text: "- [ ] ဘယ်သူ့အတွက်လဲ၊ ဘာမေးခွန်းကို ဖြေတာလဲ (ခေါင်းစဉ်မှာ ရေးထား)\n- [ ] အဆင့် တစ်ဆင့်တည်းလား: context / deploy လုပ်တဲ့ အပိုင်း / component\n- [ ] မျဉ်းတိုင်းမှာ ဘာ စီးလဲ၊ ခေါ်သူ စောင့်လား ရေးထားလား\n- [ ] shape တစ်မျိုး = အဓိပ္ပာယ် တစ်မျိုးလား၊ key ပါလား\n- [ ] ပုံကြမ်းနဲ့ အရင် ပြပြီးပြီလား"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ diagram တစ်ခုက လူတစ်မျိုးအတွက် မေးခွန်း တစ်ခုကိုပဲ ဖြေရပါတယ်။ ပုံတစ်ပုံမှာ အဆင့်
+      တစ်ဆင့်ပဲ ထားပြီး၊ မျဉ်းတိုင်းမှာ ဘာ စီးလဲ၊ စောင့်လား ဆိုတာ ရေးပါ။ ပုံကြမ်းနဲ့ အရင် ပြပါ။ တင်ပြတဲ့အခါ
+      ရည်ရွယ်ချက်ကနေ စပြီး၊ တစ်ပိုင်းချင်း တည်ဆောက်ပြပါ။ box ၆၀ ပါတဲ့ ပုံက မမှားပေမဲ့၊ ဘယ်သူ့မေးခွန်းကိုမှ
+      မဖြေခဲ့တာပါ။
+      [[mark:next]] ဒီ lesson နဲ့ဆို architecture ကို စောင့်ရှောက်တာ၊ မှတ်တမ်းတင်တာ၊ ပြသတာတွေ ပြီးပါပြီ။ ကျန်တာက
+      လူတွေနဲ့ အလုပ်လုပ်တဲ့ အပိုင်းပါ။ နောက် lesson မှာတော့ architect တစ်ယောက်က development team နဲ့ ဘယ်လောက်
+      နီးနီးကပ်ကပ် အလုပ်လုပ်သင့်လဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
