@@ -1,0 +1,682 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-21-microservices
+  title: "Architect Path 21: Microservices"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/21-readiness.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/21-readiness.md: |+
+        # Microservices readiness · ခရီးဖော်
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the reason this time: what Booking has today (neutral) and what
+    # it wants (orange, the thing the lesson is about).
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Booking team ရဲ့ အကြောင်းပြချက်",
+        fontSize: 36,
+      }
+    - {
+        id: w-now,
+        kind: text,
+        x: 290,
+        y: 280,
+        width: 760,
+        height: 40,
+        text: "အခု: release တစ်ပတ် တစ်ခါ",
+        fontSize: 32,
+      }
+    - {
+        id: w-want,
+        kind: text,
+        x: 290,
+        y: 370,
+        width: 760,
+        height: 40,
+        text: "လိုချင်တာ: deploy တစ်ရက် 10 ခါ",
+        fontSize: 32,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the microservices shape: three small services (blue), each with
+    # its own database (blue ellipse), each inside a dashed boundary that is also
+    # a team's boundary.
+    - {
+        id: v-seat,
+        kind: rectangle,
+        x: 280,
+        y: 215,
+        width: 250,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-seat-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 235,
+        width: 250,
+        height: 35,
+        text: "Seat inventory",
+        fontSize: 28,
+      }
+    - {
+        id: v-pay,
+        kind: rectangle,
+        x: 550,
+        y: 215,
+        width: 250,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-pay-l,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 235,
+        width: 250,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: v-tic,
+        kind: rectangle,
+        x: 820,
+        y: 215,
+        width: 250,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-tic-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 235,
+        width: 250,
+        height: 35,
+        text: "Ticket",
+        fontSize: 28,
+      }
+    - {
+        id: v-seat-db,
+        kind: ellipse,
+        x: 285,
+        y: 345,
+        width: 240,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-pay-db,
+        kind: ellipse,
+        x: 555,
+        y: 345,
+        width: 240,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-tic-db,
+        kind: ellipse,
+        x: 825,
+        y: 345,
+        width: 240,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: v-seat-b,
+        kind: rectangle,
+        x: 275,
+        y: 195,
+        width: 260,
+        height: 260,
+        strokeStyle: dashed,
+      }
+    - { id: v-pay-b, kind: rectangle, x: 545, y: 195, width: 260, height: 260, strokeStyle: dashed }
+    - { id: v-tic-b, kind: rectangle, x: 815, y: 195, width: 260, height: 260, strokeStyle: dashed }
+    - {
+        id: v-cap,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 480,
+        width: 820,
+        height: 35,
+        text: "service တစ်ခု · database တစ်ခု · team တစ်ခု",
+        fontSize: 28,
+      }
+    # Board 3 — the same services and databases (kept), and what sharing nothing
+    # costs: a copy of someone else's data (orange, the thing to notice), the
+    # three steps of one purchase (violet), and the step that fails with no
+    # automatic rollback (red).
+    - {
+        id: k-copy,
+        kind: text,
+        align: center,
+        x: 825,
+        y: 372,
+        width: 240,
+        height: 35,
+        text: "ကားလိုင်း မိတ္တူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: k-a1,
+        kind: freedraw,
+        stroke: arrow-arc-right,
+        x: 405,
+        y: 158,
+        width: 270,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-a2,
+        kind: freedraw,
+        stroke: arrow-arc-right,
+        x: 675,
+        y: 158,
+        width: 270,
+        height: 50,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-fail-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 775,
+        y: 158,
+        width: 70,
+        height: 44,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: k-fail-l,
+        kind: text,
+        align: center,
+        x: 420,
+        y: 480,
+        width: 520,
+        height: 35,
+        text: "ပြန်ဖျက်တာကို ကိုယ်တိုင် ရေးရတယ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange
+    # reason, red cost.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "အမြဲ အတူတူ deploy လုပ်ရတဲ့ service 2 ခု",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) microservice 2 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) service 1 ခု၊ အလယ်မှာ network ခံထား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 910,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 780,
+        height: 35,
+        text: "သီးခြား deploy မလုပ်နိုင်ရင် microservice မဟုတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-r2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "နှစ်ဖက်စလုံးရဲ့ အဆိုးကို ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8121
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: တစ်ရက် ဆယ်ခါ deploy
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အပိုင်းတွေကို ဖြစ်ပြီးသား အကြောင်းအရာ၊ event တွေနဲ့ ဆက်သွယ်စေတဲ့ event driven
+      architecture ကို လေ့လာပြီး၊ အဖြေကို ချက်ချင်း လိုတဲ့ နေရာမှာတော့ တိုက်ရိုက် ခေါ်တာကိုပဲ ဆက်သုံးခဲ့ပါတယ်။
+      [[mark:readme]] ဒီနေ့ Booking team lead မောင်မောင် က system ကို service သေးသေးလေးတွေအဖြစ် ခွဲတဲ့ microservices အကြောင်း ထပ်ပြောလာပါတယ်။ အရင်တစ်ခါတုန်းက သူ့
+      အကြောင်းပြချက်က ကုမ္ပဏီတိုင်း ပြောင်းနေကြပြီ ဆိုတာပါ။ ဒီတစ်ခါတော့ မတူပါဘူး။
+      [[mark:n-why]] သင်္ကြန် မတိုင်ခင် အပတ်တွေမှာ Booking team က ခရီးစဉ် ရှာတဲ့အပိုင်းနဲ့ ထိုင်ခုံ ရွေးတဲ့အပိုင်းကို
+      တစ်ရက်ကို အကြိမ်ကြိမ် ချိန်ညှိချင်ပါတယ်။ ဘယ်လို ပြရင် ခရီးသည်တွေ ပိုမြန်မြန် ရွေးနိုင်လဲ ဆိုတာကို
+      ပြောင်းကြည့်လိုက်၊ တိုင်းကြည့်လိုက် လုပ်ချင်လို့ပါ။
+      [[mark:n-now]] အခုတော့ ပြင်ဆင်မှု သေးသေးလေး တစ်ခုကတောင် တစ်ပတ် တစ်ခါ ထွက်တဲ့
+      release ကို စောင့်ရပါတယ်။
+      [[mark:n-want]] သူ လိုချင်တာက တစ်ရက်ကို ဆယ်ခါ deploy လုပ်နိုင်ဖို့ပါ။
+      [[mark:n-plan]] ဒါက နာမည်တပ်ပြနိုင်တဲ့ အကြောင်းပြချက်ပါ။ ဒါကြောင့် microservices က ဘာအတွက်လဲ၊ ဘာတွေ
+      တောင်းဆိုလဲ၊ ကိုယ်တို့ အဆင်သင့် ဖြစ်ပြီလား ဆိုတာကို ရိုးရိုးသားသား စစ်ကြည့်ရပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: readme }, path: README.md }
+      - id: sel-teams
+        type: editor.select
+        at: { mark: readme, offsetMs: 1500 }
+        target:
+          { file: README.md, text: "- developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment" }
+      - {
+          id: draw-w-now,
+          type: whiteboard.apply,
+          at: { mark: n-now },
+          open: true,
+          upsertIds: [w-title, w-now],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-w-want,
+          type: whiteboard.apply,
+          at: { mark: n-want },
+          upsertIds: [w-want],
+          drawMs: 900,
+        }
+
+  - id: what
+    chapter: Microservices ဆိုတာ
+    narration: >
+      microservices ဆိုတာ system ကို service သေးသေးလေးတွေ အများကြီးနဲ့ ဖွဲ့စည်းတဲ့ ပုံစံ၊ architecture style
+      တစ်မျိုးပါ။ မောင်မောင် ရဲ့ အဆိုပြုချက်ထဲက service သုံးခုကို ဥပမာ ကြည့်ရအောင်။
+      [[mark:m-svc]] ထိုင်ခုံတွေကို ထိန်းတဲ့ Seat inventory၊ ငွေချေတဲ့ Payment၊ လက်မှတ် ထုတ်တဲ့ Ticket ပါ။ service တစ်ခုမှာ
+      ရည်ရွယ်ချက် တစ်ခုတည်းပဲ ရှိပါတယ်။ သေးတယ် ဆိုတာ code နည်းတာကို ပြောတာ မဟုတ်ဘဲ၊ တာဝန်ယူထားတဲ့ အလုပ်က
+      တစ်ခုတည်းမို့ အပြင်ကို ဖွင့်ပေးထားတဲ့ interface က သေးတာကို ပြောတာပါ။
+      [[mark:m-db]] service တစ်ခုစီမှာ ကိုယ်ပိုင် database ရှိပါတယ်။ တခြား service က အဲဒီ database ကို ဖတ်ခွင့်တောင်
+      မရှိပါဘူး။ ဖတ်ခွင့် ပေးလိုက်တာနဲ့ table ရဲ့ ပုံစံကို အပြင်က သိသွားပြီး၊ ပိုင်ရှင်က လွတ်လွတ်လပ်လပ်
+      မပြောင်းနိုင်တော့လို့ပါ။ လိုချင်တာ ရှိရင် service ရဲ့ interface ကို ခေါ်ရပါတယ်၊ ဒါမှမဟုတ် သူ ကြေညာတဲ့ event ကို
+      နားထောင်ရပါတယ်။ database ကို မျှသုံးခဲ့တဲ့ service based ပုံစံနဲ့ အဓိက ကွာတာက ဒီအချက်ပါ။
+      [[mark:m-team]] service တစ်ခုကို team တစ်ခုက အစအဆုံး ပိုင်ပါတယ်။ code လည်း သူတို့ဟာ၊ database လည်း သူတို့ဟာ၊
+      production မှာ ပျက်ရင် ထပြင်ရတာလည်း သူတို့ပါပဲ။
+      [[mark:m-why]] ဘာကိုမှ မမျှသုံးထားတော့ team တစ်ခုက တခြား team တွေကို မမေး၊ မစောင့်ဘဲ ကိုယ့် service ကို ပြင်ပြီး
+      deploy လုပ်နိုင်ပါတယ်။ တစ်ရက် ဆယ်ခါလည်း ရပါတယ်။ ဝန်များတဲ့ service တစ်ခုတည်းကိုပဲ စက်တိုးပေးလို့ ရသလို၊
+      တစ်ခု ကျသွားလည်း ကျန်တာတွေ ဆက်အလုပ်လုပ်နိုင်ပါတယ်။
+      [[mark:m-org]] ဒါကြောင့် microservices က နည်းပညာ ရွေးချယ်မှု ဖြစ်သလောက် အဖွဲ့အစည်း ရွေးချယ်မှုလည်း
+      ဖြစ်ပါတယ်။ team ဆယ်ဂဏန်း ရှိပြီး တစ်ဖွဲ့ကိုတစ်ဖွဲ့ စောင့်နေရတာက အကြီးဆုံး ပြဿနာ ဖြစ်နေတဲ့ ကုမ္ပဏီတွေမှာ
+      အကျိုးအများဆုံး ပေးတတ်ပါတယ်။ ခရီးဖော် မှာတော့ team က သုံးခုပဲ ရှိပါသေးတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-m-svc,
+          type: whiteboard.apply,
+          at: { mark: m-svc },
+          clear: true,
+          upsertIds: [v-seat, v-seat-l, v-pay, v-pay-l, v-tic, v-tic-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-m-db,
+          type: whiteboard.apply,
+          at: { mark: m-db },
+          upsertIds: [v-seat-db, v-pay-db, v-tic-db],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-m-team,
+          type: whiteboard.apply,
+          at: { mark: m-team },
+          upsertIds: [v-seat-b, v-pay-b, v-tic-b, v-cap],
+          drawMs: 2200,
+        }
+      - {
+          id: point-v-tic,
+          type: whiteboard.point,
+          at: { mark: m-why },
+          target: { assetId: v-tic-b },
+        }
+      - { id: point-v-cap, type: whiteboard.point, at: { mark: m-org }, target: { assetId: v-cap } }
+
+  - id: cost
+    chapter: ဘာမှ မမျှသုံးခြင်းရဲ့ တန်ဖိုး
+    narration: >
+      [[mark:c-open]] service တွေကြားက call တိုင်း network ကို ဖြတ်ရတာအပြင်၊ ဘာကိုမှ မမျှသုံးတဲ့အတွက် တန်ဖိုး နှစ်ခု
+      ထပ်ပေးရပါတယ်။ ပထမက ထပ်နေတာကို လက်ခံရတာပါ။
+      [[mark:c-dup]] Ticket service က လက်မှတ်ပေါ်မှာ ကားလိုင်း နာမည်ကို ပြချင်ရင်၊ ကားလိုင်း data ရဲ့ မိတ္တူ တစ်ခုကို
+      ကိုယ့် database ထဲမှာ သိမ်းထားရပါတယ်။ ငွေပမာဏကို စစ်တဲ့ code လိုမျိုးကိုလည်း မျှသုံးတဲ့ library တစ်ခုထဲ
+      မထည့်ဘဲ၊ service တစ်ခုစီမှာ ကူးထားတတ်ပါတယ်။ မျှသုံးလိုက်တာနဲ့ အဲဒီ အရာကို ပြောင်းတိုင်း အားလုံး အတူတူ
+      ပြောင်းရလို့ပါ။
+      [[mark:c-old]] ဒါက အရင် မျိုးဆက်ရဲ့ သင်ခန်းစာကနေ လာတာပါ။ အဲဒီတုန်းက ကုမ္ပဏီကြီးတွေက code ကို တစ်ခါပဲ ရေးပြီး
+      အားလုံး ပြန်သုံးနိုင်အောင် ဗဟို service တွေ ဆောက်ခဲ့ကြပါတယ်။ ပြန်သုံးတာ အများဆုံး ဖြစ်လာတဲ့အခါ၊ အားလုံးက
+      အဲဒီ ဗဟိုကို မှီခိုသွားပြီး coupling လည်း အများဆုံး ဖြစ်လာခဲ့ပါတယ်။ coupling ဆိုတာ အပိုင်း နှစ်ခုက တစ်ခုအကြောင်း
+      တစ်ခု ဘယ်လောက် သိနေရလဲ ဆိုတာပါ။ microservices က ဆန့်ကျင်ဘက်ကို ရွေးတာပါ။ ထပ်တာကို ခံပြီး လွတ်လပ်မှုကို
+      ယူတာပါ။
+      [[mark:c-tx]] ဒုတိယ တန်ဖိုးက transaction ပါ။ transaction ဆိုတာ အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့
+      လုပ်ဆောင်ချက် အစုပါ။ လက်မှတ် တစ်စောင် ဝယ်တာမှာ ထိုင်ခုံကို ယူရတယ်၊ ငွေကို ဖြတ်ရတယ်၊ လက်မှတ်ကို ထုတ်ရတယ်။
+      database တစ်ခုတည်းတုန်းက ဒီ သုံးခုက transaction တစ်ခုတည်းပါ။
+      [[mark:c-fail]] အခုတော့ database သုံးခု ဖြစ်သွားပါပြီ။ ငွေ ဖြတ်ပြီးမှ လက်မှတ် ထုတ်တာ ပျက်သွားရင်၊ database က
+      အလိုအလျောက် ပြန်မဖျက်ပေးတော့ပါဘူး။ ငွေပြန်အမ်းတဲ့ အဆင့်၊ ထိုင်ခုံ ပြန်လွှတ်တဲ့ အဆင့်တွေကို ကိုယ်တိုင်
+      ရေးရပါတယ်။ ထိုင်ခုံကို နှစ်ခါ မရောင်းမိဖို့ ဆိုတဲ့ ခရီးဖော် ရဲ့ အရေးအကြီးဆုံး ကတိကို ဒီလို ပိုခက်တဲ့ နည်းနဲ့
+      ထိန်းရမှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: keep-services,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds:
+            [v-seat, v-seat-l, v-pay, v-pay-l, v-tic, v-tic-l, v-seat-db, v-pay-db, v-tic-db],
+        }
+      - {
+          id: draw-c-dup,
+          type: whiteboard.apply,
+          at: { mark: c-dup, offsetMs: 4500 },
+          upsertIds: [k-copy],
+          drawMs: 900,
+        }
+      - {
+          id: point-k-copy,
+          type: whiteboard.point,
+          at: { mark: c-old, offsetMs: 21000 },
+          target: { assetId: k-copy },
+        }
+      - {
+          id: draw-c-tx,
+          type: whiteboard.apply,
+          at: { mark: c-tx, offsetMs: 8500 },
+          upsertIds: [k-a1, k-a2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-fail,
+          type: whiteboard.apply,
+          at: { mark: c-fail, offsetMs: 3500 },
+          upsertIds: [k-fail-x, k-fail-l],
+          drawMs: 1500,
+        }
+
+  - id: readiness
+    chapter: အဆင်သင့် ဖြစ်ပြီလား
+    narration: >
+      [[mark:d-open]] microservices က ကတိပေးတဲ့ အကျိုးတွေကို ရဖို့ အရင် ရှိထားရမယ့် အရာတွေ ရှိပါတယ်။ app
+      တစ်ခုတည်းတုန်းက deploy လုပ်စရာ တစ်ခု၊ ကြည့်စရာ log တစ်နေရာပဲ ရှိခဲ့တာပါ။ service တွေ များလာတာနဲ့ အဲဒီ
+      အလုပ်တွေက အဆပေါင်းများစွာ တိုးလာပြီး၊ လူအားနဲ့ လိုက်လုပ်လို့ မနိုင်တော့ပါဘူး။ ဒါကြောင့် ခရီးဖော် အတွက်
+      မေးခွန်း လေးခုနဲ့ စစ်ကြည့်ရအောင်။
+      [[mark:type-head]] ပထမ မေးခွန်းက deploy လုပ်တာ automate ဖြစ်ပြီလား ဆိုတာပါ။ service ဆယ်ခုကို တစ်ရက် ဆယ်ခါစီ
+      deploy လုပ်မယ်ဆိုရင် လူက လက်နဲ့ လိုက်လုပ်နေလို့ မရပါဘူး။ ခရီးဖော် မှာတော့ app တစ်ခုတည်းကိုတောင် လက်နဲ့
+      အဆင့် ၁၂ ဆင့် လုပ်ပြီးမှ production ရောက်ပါတယ်။
+      [[mark:type-row-2]] ဒုတိယက service တစ်ခုချင်းစီကို monitor လုပ်နိုင်လား ဆိုတာပါ။ request တစ်ခုက service
+      ငါးခုကို ဖြတ်သွားတဲ့အခါ ဘယ်နေရာမှာ နှေးနေလဲ၊ ဘယ်နေရာမှာ ပျက်နေလဲ ဆိုတာကို မြင်ရမှ ပြင်နိုင်မှာပါ။ အခုတော့
+      server ရဲ့ log ကို ဝင်ဖတ်နေရတဲ့ အဆင့်ပဲ ရှိပါသေးတယ်။
+      [[mark:type-row-3]] တတိယက team တစ်ခုက service တစ်ခုကို အစအဆုံး ပိုင်နိုင်လား ဆိုတာပါ။ ခရီးဖော် မှာ production
+      ကို ကြည့်ပေးနေတာက operations engineer တစ်ယောက်တည်းပါ။ team တွေက code ကို ပိုင်ပေမဲ့၊ ညဘက် ပျက်ရင် ထပြင်တဲ့
+      တာဝန်ကိုတော့ မယူရသေးပါဘူး။
+      [[mark:type-row-4]] စတုတ္ထက data ကို ခွဲလို့ ရပြီလား ဆိုတာပါ။ table တွေကို ပိုင်ရှင်အလိုက် ခွဲတာတောင်
+      မပြီးသေးတော့၊ database တွေအဖြစ် ခွဲဖို့က အများကြီး လိုပါသေးတယ်။
+      [[mark:type-verdict]] လေးခုထဲက တစ်ခုမှ အပြည့် မဖြစ်သေးပါဘူး။ ဒါကြောင့် အခု မသွားသေးဘူးလို့ ဆုံးဖြတ်ပါတယ်။
+      ဒါပေမဲ့ မောင်မောင် လိုချင်တဲ့ အရာကိုတော့ မငြင်းပါဘူး။ ဒီ table က ဘာကို အရင် လုပ်ရမလဲ ဆိုတာကို ပြနေပါတယ်။
+      deploy ကို automate လုပ်တာက microservices ဆီ မသွားဖြစ်ရင်တောင် အကျိုးရှိတဲ့ ပထမ ခြေလှမ်းပါ။
+      [[mark:d-cto]] CTO ဖြစ်တဲ့ အောင်အောင် ကို ပြရမှာလည်း ဒီ table ပါပဲ။ မသွားဘူးလို့ ပြောတာ မဟုတ်ဘဲ၊ ဘာတွေ
+      ပြည့်စုံမှ သွားမယ် ဆိုတာကို ပြောတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-cost, type: whiteboard.apply, at: { mark: d-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-cost },
+          path: notebook/21-readiness.md,
+        }
+      - id: type-head
+        type: editor.type
+        at: { mark: type-head }
+        cadence: line-by-line
+        target: { file: notebook/21-readiness.md, after: "# Microservices readiness · ခရီးဖော်\n\n" }
+        text: "| မေးခွန်း | ခရီးဖော် အခု | အဖြေ |\n|---|---|---|\n| Deploy က automate ဖြစ်ပြီလား | လက်နဲ့ အဆင့် 12 ဆင့်၊ တစ်ပတ် တစ်ခါ | မဖြစ်သေး |\n"
+      - id: type-row-2
+        type: editor.type
+        at: { mark: type-row-2 }
+        cadence: line-by-line
+        target: { file: notebook/21-readiness.md, after: "တစ်ပတ် တစ်ခါ | မဖြစ်သေး |\n" }
+        text: "| Service တစ်ခုချင်းကို monitor လုပ်နိုင်လား | server log ကို ဝင်ဖတ်ရတုန်း | မဖြစ်သေး |\n"
+      - id: type-row-3
+        type: editor.type
+        at: { mark: type-row-3 }
+        cadence: line-by-line
+        target: { file: notebook/21-readiness.md, after: "ဝင်ဖတ်ရတုန်း | မဖြစ်သေး |\n" }
+        text: "| Team က service ကို အစအဆုံး ပိုင်လား | operations ကို တစ်ယောက်တည်းက ကြည့် | တစ်ဝက် |\n"
+      - id: type-row-4
+        type: editor.type
+        at: { mark: type-row-4 }
+        cadence: line-by-line
+        target: { file: notebook/21-readiness.md, after: "| တစ်ဝက် |\n" }
+        text: "| Data ကို ခွဲလို့ ရပြီလား | table ပိုင်ရှင် ခွဲနေဆဲ | မဖြစ်သေး |\n"
+      - id: type-verdict
+        type: editor.type
+        at: { mark: type-verdict }
+        cadence: line-by-line
+        target: { file: notebook/21-readiness.md, after: "table ပိုင်ရှင် ခွဲနေဆဲ | မဖြစ်သေး |\n" }
+        text: "\nဆုံးဖြတ်ချက်: အခု မသွားသေးဘူး။ အရင်ဆုံး deploy ကို automate လုပ်မယ်\n"
+      - id: sel-answers
+        type: editor.select
+        at: { mark: d-cto }
+        target: { file: notebook/21-readiness.md, text: "ဆုံးဖြတ်ချက်: အခု မသွားသေးဘူး။" }
+      - id: expect-data
+        type: expect.file
+        at: { afterAction: type-verdict }
+        path: notebook/21-readiness.md
+        contains: "| Data ကို ခွဲလို့ ရပြီလား | table ပိုင်ရှင် ခွဲနေဆဲ | မဖြစ်သေး |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကုမ္ပဏီ တစ်ခုမှာ Seat inventory နဲ့ Ticket ဆိုတဲ့ service နှစ်ခု
+      ရှိပါတယ်။ repository လည်း သီးခြား၊ database လည်း သီးခြားပါ။ ဒါပေမဲ့ တစ်ခုကို ပြင်တိုင်း နောက်တစ်ခုကိုပါ
+      လိုက်ပြင်ရပြီး၊ နှစ်ခုလုံးကို အမြဲ အတူတူ deploy လုပ်ရပါတယ်။ ဒါတွေက တကယ်တော့ ဘာလဲ။
+      [[mark:q-a]] ပထမ အဖြေက သီးခြားစီ ဆောက်ထားတာမို့ microservice နှစ်ခုပဲ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေကတော့ service တစ်ခုတည်းကို အလယ်ကနေ network နဲ့ ဖြတ်ထားတာ ဆိုတာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ microservice ရဲ့ အဓိပ္ပာယ်က တစ်ခုတည်း
+      သီးခြား ပြင်နိုင်၊ deploy လုပ်နိုင်တာ ဖြစ်လို့ပါ။ အမြဲ အတူတူ ပြောင်းရတဲ့ အရာ နှစ်ခုက အစကတည်းက အရာ
+      တစ်ခုတည်းပါ။
+      [[mark:q-cost]] ဒီလို ခွဲမှားရင် နှစ်ဖက်စလုံးရဲ့ အဆိုးကိုပဲ ရပါတယ်။ app တစ်ခုတည်းတုန်းကလို အတူတူ release
+      လုပ်ရသေးတဲ့အပြင်၊ network ပျက်တာ၊ transaction ခွဲထားရတာတွေကိုပါ ထမ်းရလို့ပါ။ အဲဒီလို service နှစ်ခုကို
+      ပြန်ပေါင်းလိုက်တာက နောက်ပြန်ဆုတ်တာ မဟုတ်ဘဲ၊ မှန်တဲ့ ပြင်ဆင်မှု ဖြစ်တတ်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok, q-r1],
+          drawMs: 1700,
+        }
+      - {
+          id: draw-cost,
+          type: whiteboard.apply,
+          at: { mark: q-cost },
+          upsertIds: [q-r2],
+          drawMs: 900,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် အဖွဲ့အစည်းအတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ရဲ့ အလယ် column မှာ ကိုယ့် အဖွဲ့အစည်းရဲ့
+      အခြေအနေကို ရေးကြည့်ပါ။ ကိုယ့် team မှာ deploy က ဘယ်လောက် automate ဖြစ်နေပြီလဲ၊ ဘာကို monitor လုပ်နိုင်လဲ၊ team
+      တွေက ဘယ်အထိ ပိုင်လဲ၊ data ကို ခွဲလို့ ရမလား ဆိုတာပါ။
+      [[mark:turn-2]] အဖြေတွေကို ဖြစ်ချင်တဲ့အတိုင်း မဟုတ်ဘဲ၊ ဒီနေ့ တကယ် ရှိနေတဲ့အတိုင်း ရေးပါ။ ရိုးသားတဲ့ အဖြေ
+      လေးခုက နောက်ထပ် ဆွေးနွေးပွဲ အများကြီးကို သက်သာစေပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target: { file: notebook/21-readiness.md, text: "| မေးခွန်း | ခရီးဖော် အခု | အဖြေ |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ microservices က ရည်ရွယ်ချက် တစ်ခုစီ ရှိတဲ့ service သေးသေးလေးတွေကို data တစ်ခုစီ ပိုင်စေပြီး၊
+      team အများကြီး တစ်ဖွဲ့ကိုတစ်ဖွဲ့ မစောင့်ဘဲ deploy လုပ်နိုင်ဖို့အတွက်ပါ။
+      [[mark:recap-2]] အဲဒီအတွက် ထပ်နေတဲ့ code နဲ့ data ကို လက်ခံရတယ်၊ transaction တစ်ခုတည်းနဲ့ မပြီးတော့တဲ့ အလုပ်တွေကို
+      ကိုင်တွယ်ရတယ်၊ automate လုပ်ထားတဲ့ deploy နဲ့ monitoring လည်း အရင် ရှိထားရပါတယ်။ ခရီးဖော် ကတော့ အခု အဆင်သင့်
+      မဖြစ်သေးပါဘူး။
+      [[mark:next]] နောက် lesson မှာတော့ အခုထိ လေ့လာခဲ့တဲ့ style တွေထဲက ခရီးဖော် အတွက် တစ်ခုကို ဘယ်လို အဆင့်တွေနဲ့
+      ရွေးချယ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-verdict
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          {
+            file: notebook/21-readiness.md,
+            text: "ဆုံးဖြတ်ချက်: အခု မသွားသေးဘူး။ အရင်ဆုံး deploy ကို automate လုပ်မယ်",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
