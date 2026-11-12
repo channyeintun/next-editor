@@ -1,0 +1,856 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-55-organisation
+  title: "Architect Path 55: အဖွဲ့အစည်းကို system လို မြင်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/55-teams.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/55-teams.md: |
+        # ပါဆယ် လုပ်ငန်းအတွက် team ဖွဲ့ပုံ
+
+        - မေးခွန်း: ပါဆယ်အတွက် team တွေကို ဘယ်လို ဖွဲ့မလဲ?
+        - အခု: team တိုင်း အလုပ်ပြည့်နေတယ်၊ feature အသစ်တွေ လနဲ့ချီ ကြာတယ်
+
+        | Team | ပိုင်တာ | တခြားသူဆီက လိုတာ | စောင့်ရတာ |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: autonomy
+      contentType: html
+      name: ကိုယ်တိုင် ဆုံးဖြတ်နိုင်ဖို့ လိုတာ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Team တစ်ခု ကိုယ်တိုင် ဆုံးဖြတ်နိုင်ဖို့ လိုတာ သုံးခု</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term orange">ဦးတည်ချက်</span>ဘာလုပ်ရမလဲ မဟုတ်၊ ဘာကို ရချင်တာလဲ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term violet">Feedback</span>ကိုယ်ဆောက်တာရဲ့ ရလဒ်ကို ကိုယ်တိုင် မြင်ရ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term blue">Platform</span>မှန်တဲ့ နည်းက အလွယ်ဆုံး နည်း ဖြစ်နေ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the quiz: white question and options, green answer and reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "ပိုမြန်ချင်ရင် ဘာလုပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-ctx,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 790,
+        height: 35,
+        text: "လူတိုင်း အလုပ်ပြည့်နေ၊ feature က လနဲ့ချီ ကြာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 600,
+        height: 35,
+        text: "က) developer ထပ်ခန့်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 600,
+        height: 35,
+        text: "ခ) စောင့်ရတဲ့ တန်းကို တိုအောင် လုပ်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 480,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 800,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 490,
+        width: 790,
+        height: 35,
+        text: "ကြာတာက လုပ်ချိန်ကြောင့် မဟုတ်၊ စောင့်ချိန်ကြောင့်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — one piece of work as a line of 45 working days, drawn to scale:
+    # the long red bar is waiting (the cost), the small blue blocks are the days
+    # somebody worked on it, orange the sum the board is about.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ပါဆယ် လက်ခံတဲ့ screen · 45 ရက်",
+        fontSize: 36,
+      }
+    - { id: w-bar, kind: rectangle, x: 270, y: 300, width: 818, height: 60, strokeColor: "#e03131" }
+    - {
+        id: w-w1,
+        kind: text,
+        x: 276,
+        y: 250,
+        width: 175,
+        height: 35,
+        text: "စောင့် 10 ရက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-s1,
+        kind: rectangle,
+        x: 452,
+        y: 300,
+        width: 36,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: w-t1,
+        kind: text,
+        x: 350,
+        y: 375,
+        width: 250,
+        height: 35,
+        text: "Operator · 2 ရက်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-w2,
+        kind: text,
+        x: 530,
+        y: 250,
+        width: 175,
+        height: 35,
+        text: "စောင့် 14 ရက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-s2,
+        kind: rectangle,
+        x: 743,
+        y: 300,
+        width: 36,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: w-t2,
+        kind: text,
+        x: 625,
+        y: 375,
+        width: 230,
+        height: 35,
+        text: "Booking · 2 ရက်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-w3,
+        kind: text,
+        x: 830,
+        y: 250,
+        width: 175,
+        height: 35,
+        text: "စောင့် 15 ရက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-s3,
+        kind: rectangle,
+        x: 1052,
+        y: 300,
+        width: 36,
+        height: 60,
+        strokeColor: "#1971c2",
+        backgroundColor: "#a5d8ff",
+      }
+    - {
+        id: w-t3,
+        kind: text,
+        x: 864,
+        y: 375,
+        width: 230,
+        height: 35,
+        text: "Payment · 2 ရက်",
+        fontSize: 28,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-sum,
+        kind: text,
+        x: 270,
+        y: 480,
+        width: 700,
+        height: 35,
+        text: "အလုပ်လုပ်တာ 6 ရက်၊ စောင့်တာ 39 ရက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Boards 3 and 4 — teams in the top row (white text), the system in the bottom
+    # row (blue services), the same shape. Orange is the ပါဆယ် work: on board 3 a
+    # slice through every team and so through every service; on board 4 one
+    # team and one part of its own.
+    - {
+        id: c-title-a,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "team ပုံစံအတိုင်း system ဖြစ်လာတယ်",
+        fontSize: 36,
+      }
+    - {
+        id: c-t1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 245,
+        width: 190,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-t2,
+        kind: text,
+        align: center,
+        x: 475,
+        y: 245,
+        width: 190,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: c-t3,
+        kind: text,
+        align: center,
+        x: 680,
+        y: 245,
+        width: 190,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: c-band1,
+        kind: rectangle,
+        x: 270,
+        y: 295,
+        width: 600,
+        height: 44,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-band1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 300,
+        width: 600,
+        height: 35,
+        text: "ပါဆယ် အလုပ်",
+        fontSize: 28,
+      }
+    - {
+        id: c-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 550,
+        y: 350,
+        width: 40,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-s1,
+        kind: rectangle,
+        x: 270,
+        y: 440,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-s1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 462,
+        width: 190,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-s2,
+        kind: rectangle,
+        x: 475,
+        y: 440,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-s2-l,
+        kind: text,
+        align: center,
+        x: 475,
+        y: 462,
+        width: 190,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: c-s3,
+        kind: rectangle,
+        x: 680,
+        y: 440,
+        width: 190,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-s3-l,
+        kind: text,
+        align: center,
+        x: 680,
+        y: 462,
+        width: 190,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: c-band2,
+        kind: rectangle,
+        x: 270,
+        y: 535,
+        width: 600,
+        height: 44,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-title-b,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "လိုချင်တဲ့ system အတိုင်း team ကို ဖွဲ့",
+        fontSize: 36,
+      }
+    - {
+        id: c-t4,
+        kind: text,
+        align: center,
+        x: 895,
+        y: 245,
+        width: 195,
+        height: 35,
+        text: "ပါဆယ် team",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-s4,
+        kind: rectangle,
+        x: 895,
+        y: 440,
+        width: 195,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: c-s4-l,
+        kind: text,
+        align: center,
+        x: 895,
+        y: 462,
+        width: 195,
+        height: 35,
+        text: "Parcel",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8155
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ပါဆယ်အတွက် team ဘယ်လို ဖွဲ့မလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ architecture ရဲ့ တန်ဖိုးကို ဒါရိုက်တာအဖွဲ့ နားလည်တဲ့ စကားနဲ့၊ နောက်မှ လုပ်နိုင်ခွင့်တွေအဖြစ်
+      ရှင်းပြပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] အဲဒီ လုပ်နိုင်ခွင့်တွေထဲက တစ်ခုက ပါဆယ် လုပ်ငန်းသစ်ပါ။ ခရီးဖော် ရဲ့ ကားတွေနဲ့ ပါဆယ်
+      ပို့ပေးတဲ့ လုပ်ငန်းကို စတော့မှာပါ။
+      [[mark:sel-q]] CTO ဖြစ်တဲ့ အောင်အောင် က ပါဆယ်အတွက် team တွေကို ဘယ်လို ဖွဲ့မလဲလို့ ကိုယ့်ကို မေးပါတယ်။
+      ပထမဆုံး ပေါ်လာတဲ့ အကြံက team အသစ် မဖွဲ့ဘဲ၊ ပါဆယ် အလုပ်တွေကို ရှိပြီးသား team တွေဆီ ခွဲပေးဖို့ပါ။ ငွေချေတာကို
+      Payment team က အသိဆုံး၊ ကောင်တာ screen ကို Operator team က အသိဆုံးမို့ ကျိုးကြောင်း ဆီလျော်ပါတယ်။
+      [[mark:sel-busy]] ဒါပေမဲ့ အခု အခြေအနေက ဒီလိုပါ။ team တိုင်းက အလုပ် ပြည့်နေပါတယ်။ ဘယ်သူမှ အားမနေပါဘူး။
+      ဒါနဲ့တောင် feature အသစ် တစ်ခုက လနဲ့ချီ ကြာနေပါတယ်။ product manager လှလှ ကလည်း လူတွေ ဒီလောက်
+      အလုပ်များနေတာ ဘာလို့ ဒီလောက် နှေးရတာလဲလို့ မေးနေပါတယ်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/55-teams.md,
+        }
+      - id: sel-q
+        type: editor.select
+        at: { mark: sel-q }
+        target: { file: notebook/55-teams.md, text: "- မေးခွန်း: ပါဆယ်အတွက် team တွေကို ဘယ်လို ဖွဲ့မလဲ?" }
+      - id: sel-busy
+        type: editor.select
+        at: { mark: sel-busy }
+        target:
+          {
+            file: notebook/55-teams.md,
+            text: "- အခု: team တိုင်း အလုပ်ပြည့်နေတယ်၊ feature အသစ်တွေ လနဲ့ချီ ကြာတယ်",
+          }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ developer တိုင်း အချိန်ပြည့် အလုပ်လုပ်နေပြီး၊ feature တွေကတော့
+      လနဲ့ချီ ကြာနေတယ် ဆိုပါစို့။ ပိုမြန်ချင်ရင် ဘာလုပ်မလဲ။
+      [[mark:q-a]] ပထမ နည်းက developer တွေ ထပ်ခန့်တာပါ။
+      [[mark:q-b]] ဒုတိယ နည်းက အလုပ်တွေ စောင့်နေရတဲ့ တန်းတွေကို တိုအောင် လုပ်တာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ တန်းတွေကို တိုအောင် လုပ်တာပါ။ ဘာကြောင့်လဲဆိုတော့ အလုပ် တစ်ခု ကြာတာက လူတွေ
+      လုပ်နေတဲ့ အချိန်ကြောင့် မဟုတ်ဘဲ၊ ဘယ်သူမှ မထိဘဲ စောင့်နေရတဲ့ အချိန်ကြောင့် ဖြစ်တတ်လို့ပါ။
+      [[mark:q-r]] လူတိုင်း အချိန်ပြည့် အလုပ်များနေတယ် ဆိုတာက၊ အလုပ်အသစ် ရောက်လာတိုင်း လက်ခံမယ့်သူ မရှိဘဲ
+      တန်းစီရတယ်လို့ ဆိုလိုတာပါ။ လူ ထပ်ထည့်လိုက်ရင် team တစ်ခုချင်းစီက ပိုလုပ်နိုင်လာပေမဲ့၊ team တွေကြားက
+      တန်းတွေကတော့ ဒီအတိုင်း ကျန်နေတတ်ပါတယ်။ ဒါကို ခရီးဖော် ရဲ့ အလုပ် တစ်ခုနဲ့ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          upsertIds: [q-title, q-ctx],
+          drawMs: 2000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 1000 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: draw-q-r, type: whiteboard.apply, at: { mark: q-r }, upsertIds: [q-r], drawMs: 1300 }
+
+  - id: waiting
+    chapter: အလုပ်က ဘယ်မှာ အချိန်ကုန်သလဲ
+    narration: >
+      [[mark:w-open]] ကောင်တာမှာ ပါဆယ် လက်ခံတဲ့ screen တစ်ခုကို စမ်းလုပ်ကြည့်ခဲ့ပါတယ်။ စတောင်းတဲ့နေ့ကနေ
+      production ရောက်တဲ့နေ့အထိ အလုပ်လုပ်ရက် ၄၅ ရက် ကြာပါတယ်။ အဲဒီ ၄၅ ရက်ကို မျဉ်းတစ်ကြောင်းအဖြစ်
+      ဆွဲကြည့်ရအောင်။
+      [[mark:w-op]] အလုပ်က Operator team ရဲ့ လုပ်စရာ စာရင်းထဲမှာ ဆယ်ရက် စောင့်ပါတယ်။ ပြီးမှ screen ကို နှစ်ရက်
+      ရေးပါတယ်။
+      [[mark:w-bk]] နောက်တစ်ဆင့်က ပါဆယ်ကို ဘယ်ကားနဲ့ ထည့်မလဲ ဆိုတာပါ။ Booking team ရဲ့ အလှည့်ကို ၁၄ ရက် စောင့်ပြီး၊
+      နှစ်ရက် လုပ်ပါတယ်။
+      [[mark:w-pay]] နောက်ဆုံး ငွေကောက်ဖို့ Payment team ကို ၁၅ ရက် စောင့်ပြီး၊ နှစ်ရက် လုပ်ပါတယ်။
+      [[mark:w-sum]] ပေါင်းကြည့်ရင် တကယ် အလုပ်လုပ်တာက ခြောက်ရက်ပဲ ရှိပါတယ်။ ကျန်တဲ့ ၃၉ ရက်မှာ အလုပ်က team
+      တွေကြားမှာ ဘယ်သူမှ မထိဘဲ စောင့်နေတာပါ။
+      [[mark:w-point]] team သုံးခုလုံးက အဲဒီ ၄၅ ရက်လုံး အလုပ်များနေခဲ့ကြပါတယ်။ ဘယ်သူမှ ပျင်းနေတာ မဟုတ်ပါဘူး။
+      ဒါကြောင့် အဖွဲ့အစည်း တစ်ခု ဘာလို့ နှေးလဲ သိချင်ရင် လူတွေ ဘယ်လောက် အလုပ်များလဲ မကြည့်ဘဲ၊ အလုပ်တွေ
+      ဘယ်မှာ စောင့်နေလဲ ဆိုတာကို ကြည့်ရပါတယ်။ မြန်ချင်ရင်လည်း လူတိုင်းကို အလုပ်ပြည့်အောင် ထားတာနဲ့ မရပါဘူး။
+      လူတိုင်း အလုပ်ပြည့်နေရင် အလုပ်အသစ်က စောင့်ရတတ်လို့ပါ။ တန်းတွေကို တိုအောင် လုပ်မှ ရပါတယ်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          clear: true,
+          upsertIds: [w-title, w-bar],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-w-op,
+          type: whiteboard.apply,
+          at: { mark: w-op },
+          upsertIds: [w-w1, w-s1, w-t1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-w-bk,
+          type: whiteboard.apply,
+          at: { mark: w-bk },
+          upsertIds: [w-w2, w-s2, w-t2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-w-pay,
+          type: whiteboard.apply,
+          at: { mark: w-pay },
+          upsertIds: [w-w3, w-s3, w-t3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-w-sum,
+          type: whiteboard.apply,
+          at: { mark: w-sum },
+          upsertIds: [w-sum],
+          drawMs: 1300,
+        }
+      - {
+          id: point-w-bar,
+          type: whiteboard.point,
+          at: { mark: w-point },
+          target: { assetId: w-bar },
+        }
+
+  - id: conway
+    chapter: Team ပုံစံအတိုင်း system ဖြစ်လာတယ်
+    narration: >
+      [[mark:c-open]] တန်းတွေက team တွေကြားမှာ ရှိတာမို့၊ team တွေကို ဘယ်လို ဖွဲ့လဲ ဆိုတာက အရေးကြီးလာပါတယ်။
+      ဒီနေရာမှာ Conway's law ဆိုတဲ့ သဘောတရား တစ်ခု ရှိပါတယ်။ system ရဲ့ ပုံစံက အဲဒါကို ဆောက်တဲ့ team တွေရဲ့
+      ဆက်သွယ်ပုံကို လိုက်တူသွားတယ် ဆိုတာပါ။ team တစ်ခုထဲက လူတွေက နေ့တိုင်း စကားပြောကြတာမို့ သူတို့ရဲ့ code တွေက
+      နီးနီးကပ်ကပ် ချိတ်နေတတ်ပါတယ်။ team နှစ်ခုကြားမှာတော့ စကားပြောရ ခက်တာမို့၊ အဲဒီနေရာမှာ interface တစ်ခု
+      ပေါ်လာတတ်ပါတယ်။
+      [[mark:c-teams]] ပါဆယ် အလုပ်ကို ရှိပြီးသား team တွေဆီ ခွဲပေးလိုက်တယ် ဆိုပါစို့။ team တိုင်းမှာ ပါဆယ် အလုပ်
+      နည်းနည်းစီ ရှိလာပါမယ်။
+      [[mark:c-system]] အဲဒီအခါ system ကလည်း အဲဒီပုံအတိုင်း ဖြစ်လာတတ်ပါတယ်။ service တိုင်းထဲမှာ ပါဆယ် code နည်းနည်းစီ
+      ပြန့်နေမှာပါ။
+      [[mark:c-cost]] ပါဆယ် feature အများစုက team သုံးခုရဲ့ တန်းကို ဖြတ်ရပါမယ်။ ပါဆယ် လုပ်ငန်း မအောင်မြင်လို့
+      ပြန်ဖြုတ်ချင်တဲ့နေ့မှာလည်း service တိုင်းကို လိုက်ပြင်ရပါမယ်။ ဒါရိုက်တာအဖွဲ့ကို ပေးထားတဲ့ ကတိနဲ့
+      ပြောင်းပြန်ပါ။
+      [[mark:c-flip]] ဒါကြောင့် Conway's law ကို ပြောင်းပြန် သုံးရပါတယ်။ လိုချင်တဲ့ system ပုံစံကို အရင် ဆုံးဖြတ်ပြီး၊
+      အဲဒီပုံအတိုင်း team ကို ဖွဲ့တာပါ။
+      [[mark:c-parcel]] ခရီးဖော် လိုချင်တာက လက်မှတ် system နဲ့ သီးခြား ရပ်တည်တဲ့ ပါဆယ် အပိုင်းပါ။ ဒါဆို ပါဆယ်
+      လက်ခံတာကနေ ပေးအပ်တာအထိ အစအဆုံး ပိုင်တဲ့ ပါဆယ် team တစ်ခုကို ဖွဲ့ရပါမယ်။ screen ရေးမယ့်သူ၊ ငွေကောက်တာကို
+      ချိတ်မယ့်သူ၊ production မှာ စောင့်ကြည့်မယ့်သူ အားလုံး အဲဒီ team ထဲမှာပဲ ရှိရပါမယ်။ အလုပ်အများစုက team ထဲမှာပဲ
+      ပြီးတာမို့ team တွေကြားမှာ တန်းစီစရာ သိပ်မလိုတော့ပါဘူး။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title-a],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-teams,
+          type: whiteboard.apply,
+          at: { mark: c-teams },
+          upsertIds: [c-t1, c-t2, c-t3, c-band1, c-band1-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-c-system,
+          type: whiteboard.apply,
+          at: { mark: c-system },
+          upsertIds: [c-arrow, c-s1, c-s1-l, c-s2, c-s2-l, c-s3, c-s3-l, c-band2],
+          drawMs: 3200,
+        }
+      - {
+          id: point-c-band2,
+          type: whiteboard.point,
+          at: { mark: c-cost },
+          target: { assetId: c-band2 },
+        }
+      - {
+          id: draw-c-flip,
+          type: whiteboard.apply,
+          at: { mark: c-flip },
+          clear: true,
+          upsertIds:
+            [c-title-b, c-t1, c-t2, c-t3, c-arrow, c-s1, c-s1-l, c-s2, c-s2-l, c-s3, c-s3-l],
+        }
+      - {
+          id: draw-c-parcel,
+          type: whiteboard.apply,
+          at: { mark: c-parcel },
+          upsertIds: [c-s4, c-s4-l, c-t4],
+          drawMs: 1800,
+        }
+
+  - id: table
+    chapter: ဘာကို ပိုင်၊ ဘာကို စောင့်ရလဲ
+    narration: >
+      [[mark:t-close]] ဒါကို team တစ်ခုစီက ဘာကို ပိုင်လဲ၊ တခြားသူဆီက ဘာလိုလဲ၊ ဘာကို စောင့်ရလဲ ဆိုတဲ့ table နဲ့
+      ချရေးကြည့်ရအောင်။
+      [[mark:type-parcel]] ပါဆယ် team က လက်ခံတာကနေ ပေးအပ်တာအထိ ပိုင်ပါတယ်။ တခြားသူဆီက လိုတာက နှစ်ခုပဲ
+      ရှိပါတယ်။ ငွေကောက်ဖို့ Payment ရဲ့ API နဲ့၊ ဘယ်ကား ဘယ်အချိန် ထွက်မလဲ သိဖို့ ခရီးစဉ် event ပါ။ နှစ်ခုလုံးက
+      ရှိပြီးသား API နဲ့ event တွေမို့၊ ပါဆယ် team က ကိုယ်တိုင် ချိတ်နိုင်ပြီး တခြား team ရဲ့ အလှည့်ကို စောင့်စရာ
+      မလိုသလောက်ပါ။
+      [[mark:type-old]] ရှိပြီးသား team တွေကိုလည်း ထည့်ကြည့်တော့၊ နောက်ဆုံး column က တန်းတွေ ဘယ်မှာ ရှိလဲ ဆိုတာကို
+      ပြပါတယ်။ Operator က Booking ကို စောင့်ရတယ်၊ Booking က Payment ကို စောင့်ရတယ်။ ဒီ column ကို တိုအောင်
+      လုပ်ပေးတာက architect ရဲ့ အလုပ်ပါ။
+      [[mark:type-platform]] Platform team ကတော့ team ၁၂ ခုလုံးရဲ့ တောင်းဆိုမှုတွေကို လက်ခံနေရတာမို့ တန်း
+      အရှည်ဆုံးပါ။ ဒီတန်းကို လူထပ်ခန့်ပြီး မဖြေရှင်းဘဲ၊ team တွေက တောင်းစရာ မလိုဘဲ ကိုယ်တိုင် ယူသုံးနိုင်အောင်
+      လုပ်ပေးပါမယ်။
+      [[mark:type-std]] နောက်ဆုံး တစ်ကြောင်းက ဘာကို စံထားမလဲ ဆိုတာပါ။ team တစ်ခုစီရဲ့ အတွင်းပိုင်းကို စံမထားပါဘူး။
+      ပါဆယ် team က data ကို ဘယ်လို သိမ်းမလဲ ကိုယ်တိုင် ရွေးနိုင်ပါတယ်။ စံထားတာက team တွေကြား ချိတ်ဆက်တဲ့
+      နေရာတွေပါ။ API ရဲ့ ပုံစံ၊ event ရဲ့ ပုံစံနဲ့ production ဆီ သွားတဲ့ လမ်းကြောင်းပါ။ ချိတ်ဆက်ပုံ တူနေရင်
+      အထဲမှာ ဘယ်လိုပဲ ကွဲကွဲ အတူ အလုပ်လုပ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - { id: close-conway, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-conway },
+          path: notebook/55-teams.md,
+        }
+      - id: type-parcel
+        type: editor.type
+        at: { mark: type-parcel }
+        cadence: line-by-line
+        target: { file: notebook/55-teams.md, after: "|---|---|---|---|\n" }
+        text: "| ပါဆယ် (အသစ်) | လက်ခံတာကနေ ပေးအပ်တာအထိ အစအဆုံး | Payment API၊ ခရီးစဉ် event | မရှိအောင် ဖွဲ့ထား |\n"
+      - id: type-old
+        type: editor.type
+        at: { mark: type-old }
+        cadence: line-by-line
+        target: { file: notebook/55-teams.md, after: "| မရှိအောင် ဖွဲ့ထား |\n" }
+        text: "| Operator | ကားလိုင်းနဲ့ ကောင်တာ screen | Booking API | Booking ရဲ့ အလှည့်ကို 14 ရက် |\n| Booking | ခရီးစဉ်၊ ထိုင်ခုံ၊ လက်မှတ် | Payment API | Payment ရဲ့ အလှည့်ကို 15 ရက် |\n"
+      - id: type-platform
+        type: editor.type
+        at: { mark: type-platform }
+        cadence: line-by-line
+        target: { file: notebook/55-teams.md, after: "| Payment ရဲ့ အလှည့်ကို 15 ရက် |\n" }
+        text: "| Platform | deploy၊ monitor၊ event stream | — | team 12 ခုရဲ့ တောင်းဆိုမှု → self-service |\n"
+      - id: expect-parcel
+        type: expect.file
+        at: { afterAction: type-platform }
+        path: notebook/55-teams.md
+        contains: "| ပါဆယ် (အသစ်) | လက်ခံတာကနေ ပေးအပ်တာအထိ အစအဆုံး | Payment API၊ ခရီးစဉ် event | မရှိအောင် ဖွဲ့ထား |\n"
+      - id: type-std
+        type: editor.type
+        at: { mark: type-std }
+        cadence: line-by-line
+        target: { file: notebook/55-teams.md, after: "တောင်းဆိုမှု → self-service |\n" }
+        text: "\nစံထားတာ: team တွေကြား ချိတ်ဆက်ပုံ (API၊ event၊ deploy လမ်းကြောင်း)။ team အတွင်းပိုင်းက လွတ်လပ်တယ်။\n"
+
+  - id: autonomy
+    chapter: ကိုယ်တိုင် ဆုံးဖြတ်တဲ့ team အတွက် လိုတာ
+    narration: >
+      [[mark:a-open]] အစအဆုံး ပိုင်တဲ့ team ဆိုတာ ကိုယ်တိုင် ဆုံးဖြတ်ရတဲ့ team ပါ။ အဲဒီလို team တစ်ခု အလုပ်ဖြစ်ဖို့
+      အရာ သုံးခု လိုပါတယ်။
+      [[mark:a-intent]] ပထမက ရှင်းလင်းတဲ့ ဦးတည်ချက်ပါ။ ဘာလုပ်ရမယ် ဆိုတဲ့ စာရင်း မဟုတ်ဘဲ၊ ဘာကို ရချင်တာလဲ
+      ဆိုတာပါ။ ပါဆယ် team အတွက်ဆိုရင် ခြောက်လအတွင်း မြို့ငါးမြို့မှာ စမ်းပြီး၊ ကားလိုင်းတွေအတွက် ဝင်ငွေအသစ်
+      ဖြစ်မဖြစ် သိချင်တယ် ဆိုတာပါ။ ဦးတည်ချက် မရှိဘဲ လွတ်လပ်ခွင့်ပဲ ပေးထားရင် team တိုင်းက ကိုယ်ထင်ရာ
+      သွားတတ်ကြပါတယ်။
+      [[mark:a-feedback]] ဒုတိယက feedback ပါ။ team က ကိုယ်ဆောက်တာကို production မှာ ကိုယ်တိုင် ကြည့်ရပြီး၊ တစ်ရက်
+      ပါဆယ် ဘယ်နှခု လက်ခံလဲ၊ ဘယ်နှခု နောက်ကျလဲ ဆိုတာကို နေ့တိုင်း မြင်ရပါမယ်။
+      [[mark:a-up]] feedback က အပေါ်ကိုလည်း ရောက်ရပါတယ်။ အပေါ်က အမိန့်ပေးပြီး လုပ်ခိုင်းတဲ့ ပုံစံက၊ အောက်က
+      အမှန်အတိုင်း ပြန်ပြောတဲ့အခါမှပဲ အလုပ်ဖြစ်ပါတယ်။ အစီရင်ခံစာတိုင်းမှာ အားလုံး အဆင်ပြေပါတယ်လို့ပဲ
+      ရေးလာရင်၊ အပေါ်က ထိန်းနေတယ် ထင်ရပေမဲ့ တကယ်တော့ မျက်စိမှိတ် မောင်းနေတာပါ။
+      [[mark:a-platform]] တတိယက platform ပါ။ မှန်တဲ့ နည်းက အလွယ်ဆုံး နည်း ဖြစ်နေအောင် လုပ်ပေးတာပါ။ service အသစ်
+      တစ်ခုကို template ကနေ စလိုက်တာနဲ့ production ဆီ သွားတဲ့ လမ်းကြောင်းရော၊ dashboard တွေရော တစ်ခါတည်း
+      ပါလာရင်၊ ဘယ်သူမှ စည်းကမ်းကို ရှောင်စရာ မလိုတော့ပါဘူး။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: show-autonomy,
+          type: slide.show,
+          at: { mark: a-open, offsetMs: -1200 },
+          slideId: autonomy,
+        }
+      - {
+          id: point-intent,
+          type: slide.point,
+          at: { mark: a-intent },
+          target: { x: 0.15, y: 0.43 },
+        }
+      - {
+          id: point-feedback,
+          type: slide.point,
+          at: { mark: a-feedback },
+          target: { x: 0.15, y: 0.59 },
+        }
+      - {
+          id: point-platform,
+          type: slide.point,
+          at: { mark: a-platform },
+          target: { x: 0.15, y: 0.75 },
+        }
+
+  - id: change
+    chapter: အတွင်းကနေ ပြောင်းလဲခြင်း
+    narration: >
+      [[mark:ch-close]] ဒါပေမဲ့ team တွေကို အမိန့်နဲ့ ပြန်ဖွဲ့လို့ မရပါဘူး။ အဖွဲ့အစည်းကို အတွင်းကနေ၊ လက်တွေ့
+      ပြသပြီး ပြောင်းရတာပါ။
+      [[mark:ch-cost]] ပထမ ပြရမှာက မပြောင်းရင် ဘယ်လောက် ကုန်နေလဲ ဆိုတာပါ။ ၄၅ ရက်ထဲက ခြောက်ရက် ဆိုတဲ့ ပုံကို
+      အောင်အောင် နဲ့ team lead တွေကို ပြလိုက်တော့၊ ဘယ်သူ့ကိုမှ အပြစ်တင်စရာ မလိုဘဲ ပြဿနာကို အားလုံး
+      မြင်သွားပါတယ်။
+      [[mark:ch-win]] ဒုတိယက မြင်သာတဲ့ အောင်မြင်မှု သေးသေး တစ်ခုပါ။ team အားလုံးကို မပြောင်းဘဲ ပါဆယ် team
+      တစ်ခုတည်းကို ဒီပုံစံနဲ့ စပါတယ်။ သူတို့ မြန်တာကို မြင်ရင် တခြား team တွေက ကိုယ်တိုင် လိုချင်လာတတ်ပါတယ်။
+      တတိယက စိတ်ရှည်တာပါ။ နှစ်နဲ့ချီ တည်ဆောက်ခဲ့တဲ့ အလေ့အထက တစ်လနဲ့ မပြောင်းပါဘူး။
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မကြာသေးခင်က ပြီးခဲ့တဲ့ အလုပ် တစ်ခုကို ရွေးပါ။ lesson ကို pause
+      လုပ်ပြီး၊ အဲဒီအလုပ်က စတောင်းတဲ့နေ့ကနေ ပြီးတဲ့နေ့အထိ ဘယ်နေရာမှာ အကြာဆုံး စောင့်ခဲ့ရလဲ ဆိုတာကို
+      မျဉ်းတစ်ကြောင်း ဆွဲကြည့်ပါ။
+      [[mark:turn-col]] ပြီးရင် ဒီ table ရဲ့ နောက်ဆုံး column မှာ ကိုယ့် team အတွက် ရေးကြည့်ပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-autonomy, type: slide.close, at: { mark: ch-close } }
+      - id: sel-parcel
+        type: editor.select
+        at: { mark: ch-win }
+        target: { file: notebook/55-teams.md, text: "| ပါဆယ် (အသစ်) | လက်ခံတာကနေ ပေးအပ်တာအထိ အစအဆုံး |" }
+      - id: sel-waits
+        type: editor.select
+        at: { mark: turn-col }
+        target: { file: notebook/55-teams.md, text: "စောင့်ရတာ" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ အဖွဲ့အစည်း တစ်ခုကိုလည်း system တစ်ခုလို ကြည့်လို့ ရပါတယ်။ အလုပ်တွေ ဘယ်မှာ စောင့်နေလဲ
+      ဆိုတာက ဘာလို့ နှေးလဲကို ပြပြီး၊ team တွေ ဘယ်လို ဖွဲ့ထားလဲ ဆိုတာက system ရဲ့ ပုံစံကို ပြပါတယ်။
+      [[mark:recap-2]] ဒါကြောင့် လိုချင်တဲ့ architecture အတိုင်း team ကို ဖွဲ့ပါ။ ဦးတည်ချက်၊ feedback နဲ့ platform ကို
+      ပေးပါ။ လူတိုင်း အလုပ်များအောင် မဟုတ်ဘဲ၊ တန်းတွေ တိုအောင် လုပ်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ ဒီ course ရဲ့ နောက်ဆုံး အနေနဲ့၊ သင်္ကြန် မနက်က developer တစ်ယောက်ကနေ chief
+      architect အထိ လျှောက်ခဲ့တဲ့ ခရီးလမ်းကို ပြန်ကြည့်ပြီး၊ ကိုယ့်ရဲ့ ရှေ့ခရီးအတွက် အစီအစဉ် တစ်ခုကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
