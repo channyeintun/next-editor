@@ -17,11 +17,12 @@
  * Exits 1 when any script has an error: a schedule or compile failure at any
  * rate, a Burmese dialog over the VoxCPM2 request limit, a pale whiteboard
  * colour, or a label under 28px. Warnings are advisory — fix each one, or
- * keep it on purpose.
+ * keep it on purpose; they include a slide or a preview the narration talks
+ * over while the pointer never shows which part it means.
  *
  * All pure logic lives in src/studio/** where it is type-checked and tested
  * (script/estimatedCompile.ts, script/narrationLint.ts,
- * whiteboardLegibility.ts); this file is the thin I/O shell.
+ * whiteboardLegibility.ts, pointingLint.ts); this file is the thin I/O shell.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -34,6 +35,7 @@ import {
   estimateByCharacters,
   narrationOf,
 } from "../src/studio/script/estimatedCompile.ts";
+import { pointingGaps } from "../src/studio/pointingLint.ts";
 import { narrationIssues } from "../src/studio/script/narrationLint.ts";
 import { parseLessonScript } from "../src/studio/script/schema.ts";
 import {
@@ -105,14 +107,19 @@ function checkScript(file: string, rates: number[]): CheckResult {
 
   // The plan validates its own timeline (overlaps, narration end), so a rate
   // that does not fit throws here exactly as it would at render.
+  // Where the pointer leaves the learner without a clue is judged once, on
+  // the typical narrator (the middle rate): whether a slide outstays its
+  // welcome is about the lesson, not about which rate found it first.
+  const typicalRate = [...rates].sort((a, b) => a - b)[Math.floor(rates.length / 2)];
   for (const msPerChar of rates) {
     try {
-      const { schedule, warnings } = compileWithEstimatedNarration(
+      const { schedule, plan, warnings } = compileWithEstimatedNarration(
         script,
         estimateByCharacters(msPerChar),
         narration,
       );
       result.rates.push({ msPerChar, totalMs: schedule.totalDurationMs, warnings });
+      if (msPerChar === typicalRate) result.warnings.push(...pointingGaps(plan));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       result.rates.push({ msPerChar, totalMs: 0, warnings: [], error: message });
