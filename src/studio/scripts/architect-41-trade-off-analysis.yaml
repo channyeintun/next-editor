@@ -1,0 +1,915 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-41-trade-off-analysis
+  title: "Architect Path 41: Trade-off analysis လုပ်နည်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/41-analysis.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/41-analysis.md: |+
+        # Trade-off analysis: လက်မှတ် ရောင်းပြီးကြောင်း ဘယ်လို ကြေညာမလဲ
+
+        မေးခွန်း: topic တစ်ခုတည်းမှာ ကြေညာမလား၊ consumer တစ်ခုစီအတွက် queue သီးသန့် ထားမလား
+
+        | Scenario | Topic တစ်ခု | Queue သီးသန့် | အထောက်အထား |
+        |---|---|---|---|
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: method
+      contentType: html
+      name: Analysis အဆင့် သုံးဆင့်
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Trade-off analysis အဆင့် 3 ဆင့်</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term blue">ရှာ</span>ဘာတွေက တစ်ခုနဲ့တစ်ခု ချည်နေလဲ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term orange">ကြည့်</span>ဘယ်လို ချည်နေလဲ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term green">ပြောင်းကြည့်</span>တစ်ခုကို ပြောင်းရင် ကျန်တာ ဘာဖြစ်လဲ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — option 1, one topic: blue services, violet the topic and the
+    # event going into it, a dashed box for the consumer that does not exist yet.
+    - {
+        id: a-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "ရွေးစရာ 1: topic တစ်ခုတည်း",
+        fontSize: 36,
+      }
+    - {
+        id: a-book,
+        kind: rectangle,
+        x: 270,
+        y: 222,
+        width: 810,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-book-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 237,
+        width: 810,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 655,
+        y: 291,
+        width: 40,
+        height: 46,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-topic,
+        kind: rectangle,
+        x: 270,
+        y: 342,
+        width: 810,
+        height: 54,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-topic-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 352,
+        width: 810,
+        height: 35,
+        text: "topic: TicketSold",
+        fontSize: 28,
+      }
+    - { id: a-brace, kind: freedraw, stroke: brace-up, x: 290, y: 402, width: 770, height: 42 }
+    - {
+        id: a-n,
+        kind: rectangle,
+        x: 270,
+        y: 455,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-n-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 473,
+        width: 250,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    - {
+        id: a-s,
+        kind: rectangle,
+        x: 550,
+        y: 455,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-s-l,
+        kind: text,
+        align: center,
+        x: 550,
+        y: 473,
+        width: 250,
+        height: 35,
+        text: "Settlement",
+        fontSize: 28,
+      }
+    - {
+        id: a-new,
+        kind: rectangle,
+        x: 830,
+        y: 455,
+        width: 250,
+        height: 70,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-new-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 473,
+        width: 250,
+        height: 35,
+        text: "consumer အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: a-note,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 700,
+        height: 35,
+        text: "Booking က ဘယ်သူ နားထောင်လဲ မသိ",
+        fontSize: 28,
+      }
+    # Board 2 — option 2, a queue per consumer: three violet queues from Booking
+    # down to each consumer; red what a new consumer costs.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 760,
+        height: 45,
+        text: "ရွေးစရာ 2: consumer တစ်ခုစီကို queue",
+        fontSize: 36,
+      }
+    - { id: b-q1, kind: rectangle, x: 373, y: 292, width: 44, height: 157, strokeColor: "#6741d9" }
+    - { id: b-q-l, kind: text, x: 430, y: 352, width: 120, height: 35, text: "queue", fontSize: 28 }
+    - { id: b-q2, kind: rectangle, x: 653, y: 292, width: 44, height: 157, strokeColor: "#6741d9" }
+    - {
+        id: b-q3,
+        kind: rectangle,
+        x: 933,
+        y: 292,
+        width: 44,
+        height: 157,
+        strokeStyle: dashed,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-note,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 700,
+        height: 35,
+        text: "consumer အသစ်တိုင်း Booking ကို ပြင်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — scenarios as rows, options as columns; green where an option
+    # copes, red where it costs.
+    - { id: m-h1, kind: text, x: 560, y: 180, width: 200, height: 35, text: "Topic", fontSize: 28 }
+    - { id: m-h2, kind: text, x: 830, y: 180, width: 200, height: 35, text: "Queue", fontSize: 28 }
+    - {
+        id: m-r1,
+        kind: text,
+        x: 270,
+        y: 260,
+        width: 270,
+        height: 35,
+        text: "consumer အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: m-r2,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 270,
+        height: 35,
+        text: "consumer နှေး",
+        fontSize: 28,
+      }
+    - {
+        id: m-r3,
+        kind: text,
+        x: 270,
+        y: 440,
+        width: 270,
+        height: 35,
+        text: "event မပျောက်ရ",
+        fontSize: 28,
+      }
+    - {
+        id: m-r4,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 270,
+        height: 35,
+        text: "ပုံစံ ပြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: m-c11,
+        kind: text,
+        x: 560,
+        y: 260,
+        width: 250,
+        height: 35,
+        text: "Booking မထိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-c12,
+        kind: text,
+        x: 830,
+        y: 260,
+        width: 250,
+        height: 35,
+        text: "Booking ပြင်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-c21,
+        kind: text,
+        x: 560,
+        y: 350,
+        width: 250,
+        height: 35,
+        text: "ကျန်တာ မထိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-c22,
+        kind: text,
+        x: 830,
+        y: 350,
+        width: 250,
+        height: 35,
+        text: "ကျန်တာ မထိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-c31,
+        kind: text,
+        x: 560,
+        y: 440,
+        width: 250,
+        height: 35,
+        text: "Booking က မသိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-c32,
+        kind: text,
+        x: 830,
+        y: 440,
+        width: 250,
+        height: 35,
+        text: "စောင့်ကြည့်နိုင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-c41,
+        kind: text,
+        x: 560,
+        y: 530,
+        width: 250,
+        height: 35,
+        text: "အားလုံး ထိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-c42,
+        kind: text,
+        x: 830,
+        y: 530,
+        width: 250,
+        height: 35,
+        text: "လိုသူပဲ ထိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz: white options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "CTO ဆီ ဘာကို ယူသွားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 700,
+        height: 35,
+        text: "က) ကောင်းကွက်၊ ဆိုးကွက် 12 ချက် စာရင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 700,
+        height: 35,
+        text: "ခ) အဖြေပေးလို့ရတဲ့ မေးခွန်း တစ်ခု",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 480,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 790,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 700,
+        height: 35,
+        text: "ရလဒ်ကို မေး၊ နည်းပညာကို မမေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-why2,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 700,
+        height: 35,
+        text: "အသေးစိတ်က မှတ်စုထဲမှာ ကျန်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8141
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Article တွေက အဖြေ မပေးတဲ့ မေးခွန်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ service တွေကြား မျှသုံးမယ့် အရာ တစ်ခုစီကို ဘယ်လောက် ပြောင်းလဲ မေးပြီး၊ မျှသုံးနည်းကို
+      ရွေးပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ပြီးခဲ့တဲ့ lesson အနည်းငယ်မှာ ခွဲမလား ပေါင်းမလား၊ ဘယ်သူ ပိုင်မလဲ၊ မျှမလား ကူးမလား ဆိုတဲ့
+      ဆုံးဖြတ်ချက်တွေကို ချခဲ့ပါတယ်။ ဒီနေ့တော့ အဲဒီလို ဆုံးဖြတ်ချက်တွေအတွက် သုံးခဲ့တဲ့ နည်းကိုယ်တိုင်ကို
+      ကြည့်ပါမယ်။
+      [[mark:sel-question]] ဒီအပတ်ရဲ့ မေးခွန်းက လက်မှတ် တစ်စောင် ရောင်းပြီးတိုင်း Booking က တခြား service တွေကို ဘယ်လို
+      အသိပေးမလဲ ဆိုတာပါ။ အခုက event stream ပေါ်က topic တစ်ခုတည်းမှာ ကြေညာပြီး၊ လိုတဲ့သူတိုင်းက လာနားထောင်ပါတယ်။
+      [[mark:camps]] Settlement team ကတော့ သူတို့အတွက် queue သီးသန့် လိုချင်ပါတယ်။ event တွေ လွတ်သွားလို့ ကားလိုင်း
+      တစ်ခုကို ငွေလျော့ပေးမိခဲ့ဖူးတာကြောင့်၊ နောက်တစ်ခါ မဖြစ်စေချင်လို့ပါ။
+      [[mark:camp-2]] Booking team lead မောင်မောင် ကတော့ topic တစ်ခုတည်းကိုပဲ
+      ဆက်ထားချင်ပါတယ်။ consumer တိုးတိုင်း Booking ကို မပြင်ချင်လို့ပါ။ နှစ်ဖက်လုံးက ကိုယ့်ဘက်ကို ထောက်ခံတဲ့ article
+      တွေကို ပို့လာကြပါတယ်။
+      [[mark:cto]] CTO ဖြစ်တဲ့ အောင်အောင် ကတော့ ဘယ်ဟာ မှန်လဲလို့ ကိုယ့်ကို မေးပါတယ်။ ဒါပေမဲ့ ခရီးဖော် ရဲ့ အခြေအနေနဲ့
+      ကိုက်တဲ့ အဖြေကို ဘယ် article ကမှ ရေးမထားပါဘူး။ တကယ့် ဆုံးဖြတ်ချက် တော်တော်များများက ဒီလိုပါပဲ။ ဒါကြောင့် trade off
+      analysis ကို ကိုယ်တိုင် လုပ်တတ်ဖို့ လိုပါတယ်။ trade off ဆိုတာ တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတာပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/41-analysis.md,
+        }
+      - id: sel-question
+        type: editor.select
+        at: { mark: sel-question }
+        target:
+          {
+            file: notebook/41-analysis.md,
+            text: "မေးခွန်း: topic တစ်ခုတည်းမှာ ကြေညာမလား၊ consumer တစ်ခုစီအတွက် queue သီးသန့် ထားမလား",
+          }
+      - id: sel-queue
+        type: editor.select
+        at: { mark: camps }
+        target: { file: notebook/41-analysis.md, text: "consumer တစ်ခုစီအတွက် queue သီးသန့် ထားမလား" }
+      - id: sel-topic
+        type: editor.select
+        at: { mark: camp-2 }
+        target: { file: notebook/41-analysis.md, text: "topic တစ်ခုတည်းမှာ ကြေညာမလား" }
+      - id: sel-header
+        type: editor.select
+        at: { mark: cto }
+        target: { file: notebook/41-analysis.md, text: "| Topic တစ်ခု | Queue သီးသန့် |" }
+
+  - id: options
+    chapter: ရွေးစရာ နှစ်ခု
+    narration: >
+      [[mark:a-open]] ပထမဆုံး ရွေးစရာတွေကို တန်းတူ ထားပြီး ဆွဲကြည့်ပါမယ်။
+      [[mark:a-topic]] ပထမ ရွေးစရာမှာ Booking က topic တစ်ခုတည်းဆီ event ကို တစ်ခါ ပို့ပါတယ်။ topic ဆိုတာ
+      စိတ်ဝင်စားသူတိုင်း လာနားထောင်လို့ရတဲ့ လမ်းကြောင်း တစ်ခုပါ။
+      [[mark:a-cons]] Notification၊ Settlement နဲ့ နောင်လာမယ့် consumer တွေက အဲဒီ topic ကို နားထောင်ပါတယ်။ consumer
+      ဆိုတာ event ကို ယူပြီး ကိုယ့်အလုပ် လုပ်တဲ့ service ပါ။
+      [[mark:a-note]] Booking ကတော့ ဘယ်သူတွေ နားထောင်နေလဲ မသိပါဘူး။ ဒါက topic ရဲ့ အားသာချက်လည်း ဟုတ်သလို၊ နောက်မှ
+      မြင်ရမယ့် အားနည်းချက်လည်း ဟုတ်ပါတယ်။
+      [[mark:b-open]] ဒုတိယ ရွေးစရာမှာတော့ consumer တစ်ခုစီအတွက် queue တစ်ခုစီ ထားပါတယ်။ queue ဆိုတာ လက်ခံသူ
+      တစ်ယောက်တည်းအတွက် တန်းစီထားတဲ့ message တွေပါ။
+      [[mark:b-q]] Booking က Notification အတွက် တစ်ခု၊ Settlement အတွက် တစ်ခု ဆိုပြီး queue တစ်ခုစီထဲ သီးခြား
+      ထည့်ပေးပါတယ်။
+      [[mark:b-new]] consumer အသစ် တစ်ခု ပေါ်လာရင် queue အသစ် တစ်ခုနဲ့၊ Booking ထဲမှာ ပို့တဲ့ code အသစ် လိုပါတယ်။
+      [[mark:b-fair]] နှိုင်းယှဉ်တဲ့အခါ စည်းကမ်း နှစ်ခု ရှိပါတယ်။ အမျိုးအစား တူတာချင်း နှိုင်းရပါမယ်။ ဒီ နှစ်ခုလုံးက
+      message broker တစ်ခုတည်းပေါ်က ပုံစံ နှစ်မျိုးပါ။ ပြီးတော့ တကယ် ဖြစ်နိုင်တဲ့ ရွေးစရာ အားလုံး ပါရပါမယ်။ တတိယ
+      ရွေးစရာ ဖြစ်တဲ့ service တစ်ခုစီကို တိုက်ရိုက် လှမ်းခေါ်တာကိုတော့၊ SMS နှေးလို့ လက်မှတ် ဝယ်တာပါ
+      နှေးခဲ့ဖူးတာကြောင့် ကြိုဖယ်ထားပါတယ်။
+      [[mark:b-nofav]] ကိုယ်တိုင်ကလည်း ဘယ်ဘက်ကိုမှ ကြိုမရွေးထားရပါဘူး။ ကြိုက်တဲ့ဘက် ရှိနေရင် analysis က အဲဒီဘက်အတွက်
+      အကြောင်းပြချက် ရှာတာပဲ ဖြစ်သွားပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-a-open,
+          type: whiteboard.apply,
+          at: { mark: a-open },
+          open: true,
+          upsertIds: [a-title, a-book, a-book-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-topic,
+          type: whiteboard.apply,
+          at: { mark: a-topic },
+          upsertIds: [a-arrow, a-topic, a-topic-l],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-a-cons,
+          type: whiteboard.apply,
+          at: { mark: a-cons },
+          upsertIds: [a-brace, a-n, a-n-l, a-s, a-s-l, a-new, a-new-l],
+          drawMs: 3000,
+        }
+      - {
+          id: draw-a-note,
+          type: whiteboard.apply,
+          at: { mark: a-note },
+          upsertIds: [a-note],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          clear: true,
+          upsertIds: [b-title, a-book, a-book-l, a-n, a-n-l, a-s, a-s-l, a-new, a-new-l],
+        }
+      - {
+          id: draw-b-q,
+          type: whiteboard.apply,
+          at: { mark: b-q },
+          upsertIds: [b-q1, b-q-l, b-q2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-b-new,
+          type: whiteboard.apply,
+          at: { mark: b-new },
+          upsertIds: [b-q3, b-note],
+          drawMs: 1600,
+        }
+      - {
+          id: point-b-book,
+          type: whiteboard.point,
+          at: { mark: b-fair },
+          target: { assetId: a-book },
+        }
+
+  - id: method
+    chapter: Analysis အဆင့် သုံးဆင့်
+    narration: >
+      [[mark:m-open]] analysis လုပ်တဲ့ နည်းက အဆင့် သုံးဆင့်ပါ။
+      [[mark:m-1]] ပထမ အဆင့်က ဘာတွေက တစ်ခုနဲ့တစ်ခု ချည်နေလဲ ရှာတာပါ။ ဒီမှာ ချည်နေတာက Booking နဲ့ consumer တွေပါ။
+      [[mark:m-2]] ဒုတိယ အဆင့်က ဘယ်လို ချည်နေလဲ ကြည့်တာပါ။ သုံးနေရာမှာ ချည်နေပါတယ်။ Booking က consumer တွေကို
+      သိရလား၊ event ရဲ့ ပုံစံကို ဘယ်နှယောက် မျှသုံးလဲ၊ event တစ်ခု ရောက်မရောက်ကို ဘယ်သူ တာဝန်ယူလဲ ဆိုတာပါ။
+      [[mark:m-3]] တတိယ အဆင့်က တစ်ခုကို ပြောင်းကြည့်ပြီး ကျန်တာတွေ ဘာဖြစ်လဲ ကြည့်တာပါ။ ဒါကို စိတ်ကူးနဲ့ မလုပ်ဘဲ၊
+      ခရီးဖော် မှာ တကယ် ဖြစ်နိုင်တဲ့ scenario လေးခုကို ရွေးစရာ တစ်ခုစီထဲ ဖြတ်ပြေးကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: close-options,
+          type: whiteboard.apply,
+          at: { mark: m-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-method,
+          type: slide.show,
+          at: { mark: m-open, offsetMs: -1000 },
+          slideId: method,
+        }
+      - { id: point-m1, type: slide.point, at: { mark: m-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-m2, type: slide.point, at: { mark: m-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-m3, type: slide.point, at: { mark: m-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: scenarios
+    chapter: Scenario လေးခုနဲ့ စမ်းခြင်း
+    narration: >
+      [[mark:s-open]] ပထမ scenario က consumer အသစ် တစ်ခု ပေါ်လာတာပါ။ product manager လှလှ ရဲ့ အမှတ်ပေး အစီအစဉ်က လက်မှတ်
+      ရောင်းတိုင်း သိချင်ပါတယ်။
+      [[mark:s-1]] topic ဆိုရင် အသစ်က လာနားထောင်ရုံပါပဲ။ Booking ကို မထိပါဘူး။ queue သီးသန့်ဆိုရင်တော့ Booking ကို
+      ပြင်ပြီး deploy လုပ်ရပါမယ်။
+      [[mark:s-2]] ဒုတိယ scenario က consumer တစ်ခု နှေးသွားတာပါ။ queue ကို ထောက်ခံတဲ့ article တွေက queue သီးသန့်ဆိုမှ
+      တစ်ခု နှေးတာက ကျန်တာကို မထိဘူးလို့ ဆိုကြပါတယ်။
+      [[mark:s-2b]] ဒါပေမဲ့ ခရီးဖော် ရဲ့ event stream မှာ consumer တစ်ခုစီက ကိုယ့်အရှိန်နဲ့ကိုယ် ဖတ်တာမို့၊ topic မှာလည်း
+      ကျန်တာကို မထိပါဘူး။ ယေဘုယျ ကောင်းကွက်၊ ဆိုးကွက် စာရင်းက ကိုယ့် အခြေအနေမှာ မမှန်တတ်တာကြောင့်၊ တစ်ချက်စီကို
+      ကိုယ့် system ထဲမှာ ပြန်ချိန်ရပါတယ်။
+      [[mark:s-3]] တတိယ scenario က settlement အတွက် event တစ်ခုမှ မပျောက်ရဘူး ဆိုတာပါ။ topic မှာ Booking က ဘယ်သူတွေ
+      နားထောင်နေလဲ မသိတာမို့၊ Settlement ဘက်က event တစ်ခုကို မဖတ်မိခဲ့ရင် Booking ဘက်က သိစရာ မရှိပါဘူး။ Settlement
+      ကိုယ်တိုင် မစစ်ထားရင် တနင်္လာနေ့ ငွေရှင်းတဲ့အထိ မသိဘဲ ကျန်နိုင်ပါတယ်။
+      [[mark:s-3b]] queue သီးသန့်ဆိုရင်တော့ အဲဒီ queue တစ်ခုတည်းကို စောင့်ကြည့်ပြီး alarm ထားလို့ ရပါတယ်။
+      [[mark:s-4]] စတုတ္ထ scenario က event ရဲ့ ပုံစံ ပြောင်းတာပါ။ topic မှာ ပုံစံ တစ်ခုတည်းကို အားလုံး မျှသုံးတာမို့
+      ပြောင်းတိုင်း consumer အားလုံးကို ထိနိုင်ပါတယ်။
+      [[mark:s-4b]] queue သီးသန့်မှာတော့ လိုတဲ့သူရဲ့ ပုံစံကိုပဲ ပြောင်းရပါတယ်။
+      [[mark:s-sum]] ကြည့်လိုက်ရင် ဘယ်ရွေးစရာကမှ အားလုံးမှာ မနိုင်ပါဘူး။ trade off analysis ရဲ့ ရလဒ်က အနိုင်ရသူ
+      မဟုတ်ဘဲ၊ ဘာကို ရဖို့ ဘာကို ပေးရမလဲ ဆိုတဲ့ ပုံပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-method, type: slide.close, at: { mark: s-open } }
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-method },
+          open: true,
+          clear: true,
+          upsertIds: [m-h1, m-h2, m-r1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-1,
+          type: whiteboard.apply,
+          at: { mark: s-1 },
+          upsertIds: [m-c11, m-c12],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-2,
+          type: whiteboard.apply,
+          at: { mark: s-2 },
+          upsertIds: [m-r2, m-c22],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-2b,
+          type: whiteboard.apply,
+          at: { mark: s-2b, offsetMs: 4000 },
+          upsertIds: [m-c21],
+          drawMs: 900,
+        }
+      - { id: draw-s-3, type: whiteboard.apply, at: { mark: s-3 }, upsertIds: [m-r3], drawMs: 900 }
+      - {
+          id: draw-s-3a,
+          type: whiteboard.apply,
+          at: { mark: s-3, offsetMs: 6000 },
+          upsertIds: [m-c31],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-3b,
+          type: whiteboard.apply,
+          at: { mark: s-3b },
+          upsertIds: [m-c32],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-4,
+          type: whiteboard.apply,
+          at: { mark: s-4 },
+          upsertIds: [m-r4, m-c41],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-s-4b,
+          type: whiteboard.apply,
+          at: { mark: s-4b },
+          upsertIds: [m-c42],
+          drawMs: 900,
+        }
+
+  - id: evidence
+    chapter: ကိန်းဂဏန်းနဲ့ ဆင်ခြင်ချက်
+    narration: >
+      [[mark:t-close]] ဒီ ရလဒ်ကို မှတ်စုထဲ ချရေးတဲ့အခါ column တစ်ခု ထပ်ထည့်ပါမယ်။ အထောက်အထားပါ။
+      [[mark:type-1]] ကိန်းဂဏန်း ရှိတဲ့ နေရာမှာ ကိန်းဂဏန်းကို ရေးပါတယ်။ consumer အသစ်က တစ်နှစ်မှာ နှစ်ခုလောက်ပဲ
+      ပေါ်ပါတယ်။ consumer နှေးတဲ့ scenario မှာတော့ နှစ်ဖက် တူနေတာမို့၊ ဒီ row က ဆုံးဖြတ်ချက်ကို မပြောင်းတော့ပါဘူး။
+      [[mark:type-2]] event ပျောက်တာအတွက်တော့ ယုံရတဲ့ ကိန်းဂဏန်း မရှိပါဘူး။ အရင်တစ်ခါ ဖြစ်ခဲ့တဲ့ အကြောင်းရင်းကို ပြင်ပြီးသားမို့၊
+      နောက်တစ်ခါ ဘယ်လောက် ဖြစ်နိုင်လဲ မသိနိုင်ပါဘူး။ မသိတဲ့အခါ ဟန်ဆောင်ပြီး မတပ်ဘဲ၊ ဆင်ခြင်ပြီး
+      နှိုင်းထားတာလို့ ရိုးရိုးသားသား ရေးပါတယ်။ event ပုံစံကတော့ မနှစ်က ခြောက်ခါ ပြောင်းခဲ့ပါတယ်။
+      [[mark:weigh]] ဘယ်လောက် မကြာခဏ ဖြစ်လဲ ဆိုတာအပြင်၊ ဖြစ်ရင် ဘယ်လောက် နာမလဲ ဆိုတာကိုလည်း တွဲကြည့်ရပါတယ်။ consumer
+      အသစ်အတွက် Booking ကို တစ်နှစ် နှစ်ခါ ပြင်ရတာက သက်သာပါတယ်။ settlement event တစ်ခု ပျောက်တာကတော့ ရှားပေမဲ့၊
+      ဖြစ်ရင် ကားလိုင်းရဲ့ ယုံကြည်မှုကို ထိပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-matrix, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-matrix },
+          path: notebook/41-analysis.md,
+        }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/41-analysis.md, after: "|---|---|---|---|\n" }
+        text: "| consumer အသစ် ထပ်လာ | Booking မထိ | Booking ပြင်ပြီး deploy | တစ်နှစ် 2 ခု |\n| consumer တစ်ခု နှေး | ကျန်တာ မထိ | ကျန်တာ မထိ | stream က consumer အလိုက် ဖတ် |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/41-analysis.md, after: "| stream က consumer အလိုက် ဖတ် |\n" }
+        text: "| settlement event မပျောက်ရ | ပျောက်လည်း Booking မသိ | queue အလိုက် စောင့်ကြည့်နိုင် | ကိန်းဂဏန်း မရှိ၊ ဆင်ခြင်ချက် |\n| event ပုံစံ ပြောင်း | consumer အားလုံး ထိ | လိုတဲ့သူပဲ ထိ | မနှစ်က 6 ခါ |\n"
+      - id: sel-lost
+        type: editor.select
+        at: { mark: weigh, offsetMs: 9000 }
+        target:
+          {
+            file: notebook/41-analysis.md,
+            text: "| settlement event မပျောက်ရ | ပျောက်လည်း Booking မသိ |",
+          }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ analysis ပြီးပါပြီ။ အခု အောင်အောင် ဆီ ဘာကို ယူသွားမလဲ။
+      [[mark:q-a]] ပထမ နည်းက ရွေးစရာ နှစ်ခုရဲ့ ကောင်းကွက်၊ ဆိုးကွက် ၁၂ ချက်လုံးကို စာရင်းလုပ်ပြီး ပြတာပါ။ ဘာမှ မကျန်အောင်
+      စဉ်းစားထားကြောင်း မြင်ရပါတယ်။
+      [[mark:q-b]] ဒုတိယ နည်းက မေးခွန်း တစ်ခုတည်း မေးတာပါ။ settlement event တစ်ခုမှ မပျောက်တာနဲ့၊ Booking ကို မထိဘဲ
+      consumer အသစ် ထည့်နိုင်တာ၊ ဘယ်ဟာကို ပိုလိုချင်လဲ ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ မေးခွန်း တစ်ခုတည်း မေးတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ဆုံးဖြတ်မယ့်သူက business အတွက် ဘယ်ရလဒ်က
+      ပိုအရေးကြီးလဲ ဆိုတာကိုတော့ ကိုယ့်ထက် ပိုသိလို့ပါ။ ၁၂ ချက် စာရင်းက သူ့ကို ကိုယ့်နေရာမှာ ဝင်ပြီး analysis
+      ပြန်လုပ်ခိုင်းတာနဲ့ အတူတူပါပဲ။
+      [[mark:q-why2]] ကျန်တဲ့ အသေးစိတ်တွေကတော့ မပျောက်ပါဘူး။ သူ မေးလာရင် ပြဖို့ မှတ်စုထဲမှာ ရှိနေပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 1200 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 1200 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-why2,
+          type: whiteboard.apply,
+          at: { mark: q-why2 },
+          upsertIds: [q-why2],
+          drawMs: 1200,
+        }
+
+  - id: bottom-line
+    chapter: မေးခွန်း တစ်ခုတည်းနဲ့ ဆုံးဖြတ်ချက်
+    narration: >
+      [[mark:bl-close]] ဒါကြောင့် table အောက်မှာ အောင်အောင် အတွက် မေးခွန်းကို ရေးပါမယ်။
+      [[mark:type-q]] analysis တစ်ခုလုံးကို ဒီ တစ်ကြောင်းအဖြစ် ချုံ့လိုက်တာပါ။ နှစ်ဖက်လုံးက နည်းပညာ စကား မဟုတ်ဘဲ business
+      ရလဒ် ဖြစ်နေတာကို သတိထားကြည့်ပါ။
+      [[mark:answer]] အောင်အောင် ရဲ့ အဖြေက မြန်ပါတယ်။ ကားလိုင်းကို ငွေလျော့ပေးမိတာက ဘယ်လိုမှ လက်မခံနိုင်ပါဘူး။ consumer
+      အသစ်ကတော့ တစ်နှစ် နှစ်ခုပဲမို့ စောင့်နိုင်ပါတယ်။
+      [[mark:type-d]] ဒီအဖြေနဲ့ဆို ဆုံးဖြတ်ချက်က ရှင်းသွားပါပြီ။ topic ကို ဆက်ထားပြီး၊ ငွေနဲ့ ဆိုင်တဲ့ Settlement
+      တစ်ခုတည်းအတွက် queue သီးသန့် ထပ်ထည့်ပါမယ်။ analysis က ရွေးစရာ နှစ်ခုထဲက တစ်ခုကို ရွေးခိုင်းတာ မဟုတ်ဘဲ၊ ဘယ်
+      consumer က ဘာလိုလဲ ဆိုတာကို ပြလိုက်တာပါ။ မောင်မောင် နဲ့ Settlement team ကိုလည်း ဒီ table ကိုပဲ ပြပါတယ်။ ဘာကြောင့်
+      ဒီလို ဆုံးဖြတ်လဲ ဆိုတာ မြင်ရတော့ နှစ်ဖက်လုံး လက်ခံရ ပိုလွယ်သွားပါတယ်။
+      [[mark:type-r]] နောက်ဆုံး တစ်ကြောင်းက ဒီဆုံးဖြတ်ချက်ကို ဘယ်တော့ ပြန်စစ်မလဲ ဆိုတာပါ။ ငွေနဲ့ ဆိုင်တဲ့ consumer အသစ်
+      ပေါ်လာရင် အခြေအနေ ပြောင်းသွားပါပြီ။ topic ကို ကြိုက်လို့၊ queue ကို ကြိုက်လို့ ရွေးခဲ့တာ မဟုတ်တဲ့အတွက်၊
+      အခြေအနေ ပြောင်းရင် အဖြေလည်း ပြောင်းနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: bl-close }, open: false }
+      - id: type-q
+        type: editor.type
+        at: { mark: type-q }
+        cadence: line-by-line
+        target: { file: notebook/41-analysis.md, after: "| လိုတဲ့သူပဲ ထိ | မနှစ်က 6 ခါ |\n" }
+        text: "\nအောင်အောင် အတွက် မေးခွန်း: settlement event တစ်ခုမှ မပျောက်တာနဲ့ Booking ကို မထိဘဲ consumer အသစ် ထည့်နိုင်တာ၊ ဘယ်ဟာ ပိုအရေးကြီးလဲ\n"
+      - id: type-d
+        type: editor.type
+        at: { mark: type-d }
+        cadence: line-by-line
+        target: { file: notebook/41-analysis.md, after: "ဘယ်ဟာ ပိုအရေးကြီးလဲ\n" }
+        text: "ဆုံးဖြတ်ချက်: topic ကို ဆက်ထား\nထပ်တိုး: Settlement အတွက်ပဲ queue သီးသန့်\n"
+      - id: type-r
+        type: editor.type
+        at: { mark: type-r }
+        cadence: line-by-line
+        target: { file: notebook/41-analysis.md, after: "ထပ်တိုး: Settlement အတွက်ပဲ queue သီးသန့်\n" }
+        text: "ပြန်စစ်မယ့်အချိန်: ငွေနဲ့ ဆိုင်တဲ့ consumer အသစ် ပေါ်လာရင်\n"
+      - id: expect-question
+        type: expect.file
+        at: { afterAction: type-r }
+        path: notebook/41-analysis.md
+        contains: "အောင်အောင် အတွက် မေးခွန်း: settlement event တစ်ခုမှ မပျောက်တာနဲ့ Booking ကို မထိဘဲ consumer အသစ် ထည့်နိုင်တာ၊ ဘယ်ဟာ ပိုအရေးကြီးလဲ\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ အငြင်းပွားနေတဲ့၊ ဒါမှမဟုတ် ကိုယ်တိုင် ဆုံးဖြတ်ရမယ့် ကိစ္စ တစ်ခုကို
+      ရွေးပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ မေးခွန်း စာကြောင်းနေရာမှာ ကိုယ့် project အတွက် ဆုံးဖြတ်မယ့်သူကို မေးမယ့်
+      မေးခွန်း တစ်ခုကို ရေးကြည့်ပါ။
+      [[mark:turn-2]] နှစ်ဖက်လုံးက business ရလဒ် ဖြစ်ရပါမယ်။ ရေးလို့ မရသေးရင်တော့ scenario တွေကို အရင် ပြေးကြည့်ဖို့
+      လိုသေးတာပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-bottom
+        type: editor.select
+        at: { mark: turn, offsetMs: 9000 }
+        target: { file: notebook/41-analysis.md, text: "အောင်အောင် အတွက် မေးခွန်း:" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ ကိုယ့် အခြေအနေနဲ့ ကိုက်တဲ့ အဖြေကို ဘယ်သူမှ ရေးမထားတဲ့အခါ trade off analysis ကို
+      ကိုယ်တိုင် လုပ်ရပါတယ်။ ချည်နေတာတွေကို ရှာ၊ ဘယ်လို ချည်နေလဲ ကြည့်၊ တကယ့် scenario တွေနဲ့ ပြောင်းကြည့်ပါ။ ပြီးရင်
+      ရလဒ်ကို ဆုံးဖြတ်မယ့်သူ ဖြေနိုင်တဲ့ မေးခွန်း တစ်ခုတည်းအဖြစ် ချုံ့ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ system တွေ production မှာ ဘယ်လို ပျက်တတ်လဲ၊ အမှား အသေးလေး တစ်ခုက ဘယ်လို
+      ကြီးထွားသွားလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap }
+        target:
+          {
+            file: notebook/41-analysis.md,
+            text: "# Trade-off analysis: လက်မှတ် ရောင်းပြီးကြောင်း ဘယ်လို ကြေညာမလဲ",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
