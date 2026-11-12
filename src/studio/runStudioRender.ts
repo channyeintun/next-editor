@@ -567,6 +567,7 @@ export async function runStudioRender(
     const semantics = await extractRenderSemantics(artifactRecording, receipts, {
       audioSha256: audioHash,
       planSha256: planHash,
+      dependencies: plan.dependencies,
     });
     const allChecksOk = checks.every((check) => check.ok);
     const outcome = allChecksOk ? "passed" : "failed";

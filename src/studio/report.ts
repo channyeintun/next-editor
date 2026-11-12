@@ -116,20 +116,28 @@ export function timingGateCheck(timing: TimingStats | null, maxP95Ms: number): S
   };
 }
 
-export function computeTimingStats(
+/**
+ * How far each timed action started from where it was due, in ms (positive is
+ * late), by action id. The one definition of "due" for the timing gate and the
+ * repeatability comparison alike.
+ *
+ * `dependencies` are the plan's afterAction dependencies (dependent id →
+ * predecessor id). A dependent is due when its predecessor actually
+ * acknowledged; deterministic edit chains also carry a modeled planned time,
+ * while runtime and preview waits use a placeholder. This keeps a WebContainer
+ * runtime chain (start → waitForReady → preview.open) from failing a gate by
+ * construction when dependency install, readiness or a page load takes an
+ * unbounded, unknowable time (STUDIO-03). Falls back to the planned time when
+ * the predecessor's ack is unavailable (e.g. it never finished).
+ *
+ * expect.* actions are QA gates whose start waits on prior completions, not
+ * lesson content — they are not timed (§5), and neither is an action that did
+ * not run.
+ */
+export function actionStartDriftsMs(
   receipts: readonly ActionReceipt[],
-  /**
-   * afterAction dependencies (dependent id → predecessor id) from the plan.
-   * Their drift is measured against when the predecessor actually acknowledged;
-   * deterministic edit chains also carry a modeled planned time, while runtime
-   * and preview waits use a placeholder. This keeps a WebContainer runtime chain
-   * (start → waitForReady → preview.open) from failing the gate by construction
-   * when dependency install/readiness takes an unbounded, unknowable time
-   * (STUDIO-03). Falls back to the planned time when the predecessor's ack is
-   * unavailable (e.g. it never finished).
-   */
   dependencies?: Readonly<Record<string, string>>,
-): TimingStats | null {
+): Record<string, number> {
   const endedById = new Map(receipts.map((receipt) => [receipt.actionId, receipt.endedAtMs]));
   const referenceFor = (receipt: ActionReceipt): number => {
     const predecessorId = dependencies?.[receipt.actionId];
@@ -141,16 +149,28 @@ export function computeTimingStats(
     }
     return receipt.plannedAtMs;
   };
-  const deltas = receipts
-    // expect.* actions are QA gates whose start waits on prior completions,
-    // not lesson content — they don't belong in the timing distribution (§5).
-    .filter(
-      (receipt) =>
-        receipt.status === "ok" &&
-        receipt.startedAtMs !== null &&
-        !receipt.actionType.startsWith("expect."),
-    )
-    .map((receipt) => Math.abs((receipt.startedAtMs as number) - referenceFor(receipt)))
+  return Object.fromEntries(
+    receipts
+      .filter(
+        (receipt) =>
+          receipt.status === "ok" &&
+          receipt.startedAtMs !== null &&
+          !receipt.actionType.startsWith("expect."),
+      )
+      .map((receipt) => [
+        receipt.actionId,
+        (receipt.startedAtMs as number) - referenceFor(receipt),
+      ]),
+  );
+}
+
+export function computeTimingStats(
+  receipts: readonly ActionReceipt[],
+  /** The plan's afterAction dependencies — see {@link actionStartDriftsMs}. */
+  dependencies?: Readonly<Record<string, string>>,
+): TimingStats | null {
+  const deltas = Object.values(actionStartDriftsMs(receipts, dependencies))
+    .map(Math.abs)
     .sort((left, right) => left - right);
 
   if (deltas.length === 0) {

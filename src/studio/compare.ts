@@ -1,6 +1,6 @@
 import type { Recording } from "../core/src";
 import { resolveLatestRuntimeSnapshot } from "../core/src/runtimeTrack";
-import type { ActionReceipt, StudioCheckResult } from "./report";
+import { actionStartDriftsMs, type ActionReceipt, type StudioCheckResult } from "./report";
 import { finalWorkspaceHashOf } from "./recordingWorkspace";
 
 /**
@@ -21,6 +21,12 @@ export interface RenderSemantics {
   planSha256: string;
   actionSequence: { actionId: string; actionType: string; status: string }[];
   actionStartsMs: Record<string, number | null>;
+  /**
+   * How far each timed action started from where it was due
+   * (actionStartDriftsMs). Missing on a baseline stored before this was
+   * recorded; the comparison then falls back to the raw starts.
+   */
+  actionDriftsMs?: Record<string, number>;
   finalWorkspaceHash: string;
   captionText: string;
   audioSha256: string;
@@ -128,7 +134,16 @@ function normalizePreviewInteractions(
 export async function extractRenderSemantics(
   recording: Recording,
   receipts: readonly ActionReceipt[],
-  { audioSha256, planSha256 }: { audioSha256: string; planSha256: string },
+  {
+    audioSha256,
+    planSha256,
+    dependencies,
+  }: {
+    audioSha256: string;
+    planSha256: string;
+    /** The plan's afterAction dependencies (dependent id → predecessor id). */
+    dependencies?: Readonly<Record<string, string>>;
+  },
 ): Promise<RenderSemantics> {
   const lastRuntimeSnapshot =
     recording.runtimeSnapshot ?? resolveLatestRuntimeSnapshot(recording.runtimeEvents);
@@ -143,6 +158,7 @@ export async function extractRenderSemantics(
     actionStartsMs: Object.fromEntries(
       receipts.map((receipt) => [receipt.actionId, receipt.startedAtMs]),
     ),
+    actionDriftsMs: actionStartDriftsMs(receipts, dependencies),
     finalWorkspaceHash: await finalWorkspaceHashOf(recording),
     captionText: (recording.captions ?? [])
       .flatMap((track) => track.cues.map((cue) => cue.text))
@@ -250,21 +266,51 @@ export function compareRenderSemantics(
       : "recorded preview interaction sequences differ",
   });
 
+  // Two renders are compared on how far each action started from where it was
+  // due, not on the raw start: an action chained after a preview load or a
+  // runtime wait starts when that finishes, which no two renders agree on, and
+  // an expectation is a gate, not a part of the lesson (actionStartDriftsMs).
+  // What a learner would notice still shows: an action the wait made late for
+  // its place in the narration is late against its own planned time.
+  const firstDrifts = first.actionDriftsMs;
+  const secondDrifts = second.actionDriftsMs;
   let worstStartDeltaMs = 0;
+  let worstActionId: string | null = null;
   let comparableStarts = true;
+  const widen = (actionId: string, deltaMs: number) => {
+    if (deltaMs > worstStartDeltaMs) {
+      worstStartDeltaMs = deltaMs;
+      worstActionId = actionId;
+    }
+  };
   for (const [actionId, firstStart] of Object.entries(first.actionStartsMs)) {
     const secondStart = second.actionStartsMs[actionId];
     if (firstStart === null || secondStart === null || secondStart === undefined) {
       comparableStarts = comparableStarts && firstStart === (secondStart ?? null);
       continue;
     }
-    worstStartDeltaMs = Math.max(worstStartDeltaMs, Math.abs(firstStart - secondStart));
+    if (!firstDrifts || !secondDrifts) {
+      widen(actionId, Math.abs(firstStart - secondStart));
+      continue;
+    }
+    const firstDrift = firstDrifts[actionId];
+    const secondDrift = secondDrifts[actionId];
+    if (firstDrift === undefined || secondDrift === undefined) {
+      // Timed in one render and not the other: it ran in one and failed in
+      // the other, which the action sequence already reports.
+      comparableStarts = comparableStarts && firstDrift === secondDrift;
+      continue;
+    }
+    widen(actionId, Math.abs(firstDrift - secondDrift));
   }
   const timingOk = comparableStarts && worstStartDeltaMs <= options.actionStartToleranceMs;
   results.push({
     id: "repeat.actionTiming",
     ok: timingOk,
-    detail: `worst action-start delta ${Math.round(worstStartDeltaMs)}ms (tolerance ${options.actionStartToleranceMs}ms)`,
+    detail:
+      `worst action-start delta ${Math.round(worstStartDeltaMs)}ms` +
+      (worstActionId === null ? "" : ` at "${worstActionId}"`) +
+      ` (tolerance ${options.actionStartToleranceMs}ms)`,
   });
 
   const durationDeltaMs = Math.abs(first.durationMs - second.durationMs);

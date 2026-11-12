@@ -89,4 +89,52 @@ describe("compareRenderSemantics", () => {
       "repeat.previewInteractions",
     ]);
   });
+
+  describe("action timing against where each action was due", () => {
+    // A preview that loads in 1.8 s in one render and 4.3 s in the other: the
+    // expectation chained after it starts 2.5 s apart, and so does the dock
+    // collapse chained after that. Neither is late for anything.
+    const chain = (previewLoadMs: number, selectDriftMs = 0): Partial<RenderSemantics> => ({
+      actionSequence: [
+        { actionId: "open-preview", actionType: "preview.open", status: "ok" },
+        { actionId: "expect-title", actionType: "expect.preview", status: "ok" },
+        { actionId: "collapse-dock", actionType: "runtime.collapseDock", status: "ok" },
+        { actionId: "select-state", actionType: "editor.select", status: "ok" },
+      ],
+      actionStartsMs: {
+        "open-preview": 74_000,
+        "expect-title": 74_000 + previewLoadMs,
+        "collapse-dock": 74_010 + previewLoadMs,
+        "select-state": 80_000 + selectDriftMs,
+      },
+      actionDriftsMs: { "open-preview": 5, "collapse-dock": 2, "select-state": selectDriftMs },
+    });
+
+    it("passes when only an action chained after a preview load starts at another time", () => {
+      const checks = compareRenderSemantics(
+        makeSemantics(chain(1_830)),
+        makeSemantics(chain(4_340)),
+      );
+      expect(failedIds(checks)).toEqual([]);
+    });
+
+    it("fails, and names the action, when the wait made a narrated action late", () => {
+      const checks = compareRenderSemantics(
+        makeSemantics(chain(1_830)),
+        makeSemantics(chain(4_340, 1_900)),
+      );
+      expect(failedIds(checks)).toEqual(["repeat.actionTiming"]);
+      expect(checks.find((check) => check.id === "repeat.actionTiming")?.detail).toBe(
+        'worst action-start delta 1900ms at "select-state" (tolerance 300ms)',
+      );
+    });
+
+    it("compares raw starts against a baseline stored without drifts", () => {
+      const { actionDriftsMs: _dropped, ...stored } = makeSemantics(chain(1_830));
+      const checks = compareRenderSemantics(stored, makeSemantics(chain(4_340)));
+      expect(checks.find((check) => check.id === "repeat.actionTiming")?.detail).toBe(
+        'worst action-start delta 2510ms at "expect-title" (tolerance 300ms)',
+      );
+    });
+  });
 });
