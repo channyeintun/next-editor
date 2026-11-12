@@ -7,9 +7,14 @@ type Actions = StudioPlan["actions"];
 const base = { timeoutMs: 10_000 };
 const retry = { maxAttempts: 1, delayMs: 0 };
 
-function planOf(actions: Actions, durationMs = 60_000): Pick<StudioPlan, "actions" | "narration"> {
+function planOf(
+  actions: Actions,
+  durationMs = 60_000,
+  slides: StudioPlan["slides"] = [],
+): Pick<StudioPlan, "actions" | "narration" | "slides"> {
   return {
     actions,
+    slides,
     narration: { expectedDurationMs: durationMs } as StudioPlan["narration"],
   };
 }
@@ -111,5 +116,27 @@ describe("pointingGaps", () => {
       { ...base, id: "route", at: 12_000, type: "expect.preview", route: "/", retry },
     ];
     expect(pointingGaps(planOf(actions))).toEqual([]);
+  });
+
+  it("flags a markdown slide that is pointed at, once, and leaves html and deck slides alone", () => {
+    const actions: Actions = [
+      show("s1", "notes", 1_000),
+      pointSlide("p1", 2_000),
+      pointSlide("p2", 4_000),
+      show("s2", "styled", 6_000),
+      pointSlide("p3", 7_000),
+      show("s3", "deck", 9_000),
+      pointSlide("p4", 10_000),
+      { ...base, id: "close", at: 12_000, type: "slide.close" },
+    ];
+    const slides: StudioPlan["slides"] = [
+      { id: "notes", contentType: "markdown", content: "# Notes" },
+      { id: "styled", contentType: "html", content: "<p>Styled</p>" },
+      { id: "deck", contentType: "google-svg", content: "<svg/>" },
+    ];
+
+    expect(pointingGaps(planOf(actions, 60_000, slides))).toEqual([
+      expect.stringMatching(/^slide "notes" is markdown and is pointed at/),
+    ]);
   });
 });

@@ -168,8 +168,8 @@ under 28px. Warnings are advisory — fix each one or keep it on purpose: a long
 dialog, a Burmese dialog that stops mid-clause instead of at `။` or `၊`,
 code-like characters in narration, a box outside the visible area, a board
 whose shapes share one colour, a slide that stays up more than 8 seconds with
-no `slide.point` on it, or a preview whose elements the lesson checks but
-never points at (see The pointer).
+no `slide.point` on it, a `slide.point` on a markdown slide, or a preview
+whose elements the lesson checks but never points at (see The pointer).
 
 `studio-verify-lesson` is for WebContainer (Vite) lessons. It replays every
 action in plan order through the Performer's own dispatch, against the pinned
@@ -782,6 +782,20 @@ slide. Read the spot off the deck's own layout (a 720 × 405 pt page: `x = pt /
 720`, `y = pt / 405`) and aim just below the words the narration is on. One
 point per bullet as the narration reaches it turns a slide the learner has to
 read alone into one that is read to them.
+
+A fraction only names the same spot on every screen when the slide scales with
+its box, as a deck page does. An `html` slide does if you lay it out in `vw`
+and `vh` (its frame is the slide's box, so `1vw` is 1% of the slide's width):
+give it one full-frame element (`width: 100vw; height: 100vh`), place each
+line absolutely with `left`/`top` in `vw`/`vh`, and size the text in `vw`. The
+target then reads straight off the CSS: for a word that starts `13vw` from the
+left on a line at `top: 36vh; height: 10vh`, `{ x: 0.16, y: 0.45 }` rests a
+little inside the word, just under its text.
+Sizes in `px` or `rem`, or content left to the frame's default centring, put
+the words somewhere else on a smaller screen than where you measured them. A
+`markdown` slide is laid out that way — its text keeps its size while the
+slide shrinks — so do not point at one; write the slide as `html` instead
+(compile-check warns).
 
 Deck SVGs embed font data, and painting them briefly stalls the render's
 main thread at each show/close — actions scheduled right next to a

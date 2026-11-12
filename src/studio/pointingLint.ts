@@ -23,13 +23,19 @@ const seconds = (ms: number): string => `${Math.round(ms / 1000)}s`;
 
 /**
  * One warning per slide that stays up longer than {@link SLIDE_UNPOINTED_MAX_MS}
- * with no `slide.point` on it, and one when the preview is open and the
- * pointer never points into it. `plan` is a compiled plan, so the times are
+ * with no `slide.point` on it, one per markdown slide that is pointed at, and
+ * one when the preview is open and the pointer never points into it. `plan` is a compiled plan, so the times are
  * the narration's.
  */
-export function pointingGaps(plan: Pick<StudioPlan, "actions" | "narration">): string[] {
+export function pointingGaps(plan: Pick<StudioPlan, "actions" | "narration" | "slides">): string[] {
   const warnings: string[] = [];
   const endMs = plan.narration.expectedDurationMs;
+  // A markdown slide's text keeps its size while the slide's box scales, so a
+  // fraction of the box is a different word on a smaller screen.
+  const markdownSlideIds = new Set(
+    plan.slides.filter((slide) => slide.contentType === "markdown").map((slide) => slide.id),
+  );
+  const warnedMarkdown = new Set<string>();
 
   let showing: { slideId: string; at: number; pointed: boolean } | null = null;
   const closeSlide = (at: number) => {
@@ -55,7 +61,14 @@ export function pointingGaps(plan: Pick<StudioPlan, "actions" | "narration">): s
         closeSlide(action.at);
         break;
       case "slide.point":
-        if (showing) showing.pointed = true;
+        if (!showing) break;
+        showing.pointed = true;
+        if (markdownSlideIds.has(showing.slideId) && !warnedMarkdown.has(showing.slideId)) {
+          warnedMarkdown.add(showing.slideId);
+          warnings.push(
+            `slide "${showing.slideId}" is markdown and is pointed at — its text keeps its size while the slide scales, so the pointer rests on other words on a smaller screen; write the slide as html laid out in vw/vh`,
+          );
+        }
         break;
       case "preview.open":
         previewOpenedAt ??= action.at;
