@@ -1,0 +1,955 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-46-governance-as-code
+  title: "Architect Path 46: Governance ကို automate လုပ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/46-rollout.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/46-rollout.md: |
+        # Module boundary check · rollout plan
+
+        ပထမဆုံး run: violation 340 (team 12 ခုလုံးမှာ)
+
+        | Quarter | Limit | ကျော်ရင် ဘာဖြစ်မလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: too-much
+      contentType: html
+      name: Governance များလွန်းရင်
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Governance များလွန်းရင်: ထောင်ချောက် သုံးခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term wide red">Stack တစ်ခုတည်း</span>ပြဿနာတိုင်းအတွက် tool အတူတူ</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term wide red">Vendor ဗဟိုထား</span>product မလုပ်နိုင်တာ ကိုယ်လည်း မလုပ်နိုင်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term wide red">90 % tool</span>ကျန်တဲ့ 10 % မှာ ပိတ်မိ</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term wide green">လွယ်တဲ့ လမ်း</span>template နဲ့ platform: မှန်တာက အလွယ်ဆုံး</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the allowed number of violations falling over four quarters.
+    # Red = today's number, orange = the limits being tightened, green = the
+    # goal.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "ခွင့်ပြုတဲ့ violation အရေအတွက်",
+        fontSize: 36,
+      }
+    - { id: s-b1, kind: rectangle, x: 300, y: 260, width: 150, height: 300, strokeColor: "#e03131" }
+    - {
+        id: s-n1,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 218,
+        width: 150,
+        height: 35,
+        text: "340",
+        fontSize: 28,
+      }
+    - {
+        id: s-q1,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 572,
+        width: 150,
+        height: 35,
+        text: "Q1 (အခု)",
+        fontSize: 28,
+      }
+    - { id: s-b2, kind: rectangle, x: 490, y: 340, width: 150, height: 220, strokeColor: "#f08c00" }
+    - {
+        id: s-n2,
+        kind: text,
+        align: center,
+        x: 490,
+        y: 298,
+        width: 150,
+        height: 35,
+        text: "250",
+        fontSize: 28,
+      }
+    - {
+        id: s-q2,
+        kind: text,
+        align: center,
+        x: 490,
+        y: 572,
+        width: 150,
+        height: 35,
+        text: "Q2",
+        fontSize: 28,
+      }
+    - { id: s-b3, kind: rectangle, x: 680, y: 454, width: 150, height: 106, strokeColor: "#f08c00" }
+    - {
+        id: s-n3,
+        kind: text,
+        align: center,
+        x: 680,
+        y: 412,
+        width: 150,
+        height: 35,
+        text: "120",
+        fontSize: 28,
+      }
+    - {
+        id: s-q3,
+        kind: text,
+        align: center,
+        x: 680,
+        y: 572,
+        width: 150,
+        height: 35,
+        text: "Q3",
+        fontSize: 28,
+      }
+    - { id: s-b4, kind: rectangle, x: 870, y: 550, width: 150, height: 10, strokeColor: "#2f9e44" }
+    - {
+        id: s-n4,
+        kind: text,
+        align: center,
+        x: 870,
+        y: 508,
+        width: 150,
+        height: 35,
+        text: "0",
+        fontSize: 28,
+      }
+    - {
+        id: s-q4,
+        kind: text,
+        align: center,
+        x: 870,
+        y: 572,
+        width: 150,
+        height: 35,
+        text: "Q4",
+        fontSize: 28,
+      }
+    # Board 2 — the quiz, asked before "never worse than yesterday".
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Limit အောက်မှာ violation အသစ် တစ်ခု",
+        fontSize: 36,
+      }
+    - {
+        id: q-sub,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 780,
+        height: 35,
+        text: "limit 250 · စုစုပေါင်း 240 → 241",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 760,
+        height: 35,
+        text: "က) limit မကျော်သေးလို့ pass",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 395,
+        width: 760,
+        height: 35,
+        text: "ခ) limit အောက်မှာ ရှိလည်း fail",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 400,
+        width: 400,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 720,
+        y: 388,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-rule,
+        kind: text,
+        x: 290,
+        y: 490,
+        width: 780,
+        height: 35,
+        text: "ဘယ်နေ့မဆို မနေ့ကထက် မဆိုးရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — checks placed along the pipeline by how long they take.
+    # Blue = places in the pipeline, orange = the duration that decides the
+    # place, violet = the direction of the pipeline.
+    - {
+        id: l-d1,
+        kind: text,
+        x: 270,
+        y: 200,
+        width: 220,
+        height: 35,
+        text: "စက္ကန့်ပိုင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-b1,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 273,
+        width: 220,
+        height: 35,
+        text: "change တိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: l-e1,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 280,
+        height: 35,
+        text: "boundary, cycle",
+        fontSize: 28,
+      }
+    - {
+        id: l-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 500,
+        y: 270,
+        width: 55,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-d2,
+        kind: text,
+        x: 565,
+        y: 200,
+        width: 220,
+        height: 35,
+        text: "နာရီနဲ့ချီ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-b2,
+        kind: rectangle,
+        x: 565,
+        y: 250,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b2-l,
+        kind: text,
+        align: center,
+        x: 565,
+        y: 273,
+        width: 220,
+        height: 35,
+        text: "ညတိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: l-e2,
+        kind: text,
+        x: 565,
+        y: 350,
+        width: 220,
+        height: 35,
+        text: "load test",
+        fontSize: 28,
+      }
+    - {
+        id: l-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 795,
+        y: 270,
+        width: 55,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: l-d3,
+        kind: text,
+        x: 860,
+        y: 200,
+        width: 220,
+        height: 35,
+        text: "အမြဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-b3,
+        kind: rectangle,
+        x: 860,
+        y: 250,
+        width: 220,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-b3-l,
+        kind: text,
+        align: center,
+        x: 860,
+        y: 273,
+        width: 220,
+        height: 35,
+        text: "production",
+        fontSize: 28,
+      }
+    - {
+        id: l-e3,
+        kind: text,
+        x: 860,
+        y: 350,
+        width: 230,
+        height: 35,
+        text: "instance ပိတ်",
+        fontSize: 28,
+      }
+    # Board 4 — old and new side by side on the same data. Blue = the old
+    # part, orange = the new part this board is about, violet = data moving,
+    # green = what is trusted, red = the differences.
+    - {
+        id: r-old,
+        kind: rectangle,
+        x: 555,
+        y: 220,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-old-l,
+        kind: text,
+        align: center,
+        x: 555,
+        y: 243,
+        width: 250,
+        height: 35,
+        text: "အဟောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: r-new,
+        kind: rectangle,
+        x: 555,
+        y: 430,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: r-new-l,
+        kind: text,
+        align: center,
+        x: 555,
+        y: 453,
+        width: 250,
+        height: 35,
+        text: "အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: r-in,
+        kind: text,
+        x: 270,
+        y: 347,
+        width: 160,
+        height: 35,
+        text: "data အတူတူ",
+        fontSize: 28,
+      }
+    - {
+        id: r-a1,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 435,
+        y: 270,
+        width: 110,
+        height: 65,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-a2,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 435,
+        y: 395,
+        width: 110,
+        height: 65,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-pay-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 815,
+        y: 240,
+        width: 90,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-pay,
+        kind: text,
+        x: 915,
+        y: 243,
+        width: 170,
+        height: 35,
+        text: "တကယ် ပေး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-c1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 660,
+        y: 305,
+        width: 40,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-c2,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 660,
+        y: 391,
+        width: 40,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-diff,
+        kind: text,
+        align: center,
+        x: 555,
+        y: 347,
+        width: 250,
+        height: 35,
+        text: "မတူတာ 23",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-trust,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 800,
+        height: 35,
+        text: "မတူတာ 0 ဖြစ်မှ အသစ်ကို ပြောင်းသုံး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8146
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ချိုးဖောက်မှု ၃၄၀
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ architecture စည်းကမ်း တစ်ခုကို ဂဏန်းနဲ့ အောင်မအောင် ဆုံးဖြတ်တဲ့ အလိုအလျောက် စစ်ဆေးချက်၊
+      fitness function အဖြစ် ပြောင်းပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] module တစ်ခုက တခြား module ရဲ့ table ကို မထိရဘူး ဆိုတဲ့ စစ်ဆေးချက်ကို၊ ခရီးဖော် ရဲ့ code
+      အားလုံးပေါ်မှာ ပထမဆုံး run ကြည့်လိုက်ပါတယ်။
+      [[mark:sel-340]] ရလဒ်က စည်းကမ်း ချိုးထားတဲ့ နေရာ ၃၄၀ ပါ။ team ၁၂ ခုလုံးမှာ ရှိနေပါတယ်။
+      [[mark:n-two]] ဘာလုပ်မလဲ ဆိုတာမှာ အမြင် နှစ်မျိုး ကွဲပါတယ်။ architect တစ်ယောက်က စည်းကမ်းက စည်းကမ်းပဲ၊
+      ဒီနေ့ကစပြီး gate ကို ဖွင့်လိုက်မယ်လို့ ဆိုပါတယ်။ Booking team lead မောင်မောင် ကတော့ အဲဒီလိုဆို team ၁၂ ခုလုံး
+      ဘာမှ deploy လုပ်လို့ မရတော့ဘူး၊ တစ်ပတ်မပြည့်ခင် gate ကို ပြန်ပိတ်ခိုင်းကြလိမ့်မယ်လို့ ထောက်ပြပါတယ်။
+      [[mark:n-both]] နှစ်ယောက်လုံး မှန်ပါတယ်။ gate ကို ချက်ချင်း ဖွင့်ရင် delivery ရပ်သွားပြီး၊ စစ်ဆေးချက်ကိုယ်တိုင်
+      အပိတ်ခံရပါမယ်။ သတိပေးရုံပဲ ထားရင်တော့ ၃၄၀ က ၄၀၀ ဖြစ်လာနိုင်ပါတယ်။ ဒီ lesson မှာ ချိုးဖောက်ပြီးသား စည်းကမ်း
+      တစ်ခုကို delivery မရပ်စေဘဲ တဖြည်းဖြည်း တင်းကျပ်သွားတဲ့ နည်းကို ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/46-rollout.md,
+        }
+      - id: sel-340
+        type: editor.select
+        at: { mark: sel-340 }
+        target: { file: notebook/46-rollout.md, text: "ပထမဆုံး run: violation 340 (team 12 ခုလုံးမှာ)" }
+
+  - id: staircase
+    chapter: Limit ကို တစ်ဆင့်ချင်း လျှော့ချခြင်း
+    narration: >
+      [[mark:g-open]] သဘောတူထားတဲ့ စည်းကမ်းတွေ တကယ် လိုက်နာမနာ ကြည့်တာကို governance လို့ ခေါ်ပါတယ်။ အဲဒါကို
+      architect တွေက code လိုက်ဖတ်ပြီး လုပ်ရင် လူကို စောင့်ကြည့်တဲ့ အလုပ် ဖြစ်သွားပါတယ်။ pipeline က လုပ်ရင်တော့
+      လူကို မဟုတ်ဘဲ change ကိုပဲ စစ်တာမို့၊ ဘယ်သူ့အတွက်မဆို တူညီပါတယ်။ ဒါပေမဲ့ pipeline ကို ဘယ်လောက်
+      တင်းကျပ်ခိုင်းမလဲ ဆိုတာကတော့ ကိုယ်တို့ ဆုံးဖြတ်ရမှာပါ။
+      [[mark:g-today]] ပထမ အဆင့်က ဒီနေ့ရဲ့ ဂဏန်းကို မှတ်ထားတာပါ။ ၃၄၀ ပါ။ ဒါက အပြစ်တင်ဖို့ မဟုတ်ဘဲ၊ စမှတ် တစ်ခု
+      ဖြစ်ပါတယ်။
+      [[mark:g-q2]] ပြီးရင် ခွင့်ပြုတဲ့ အရေအတွက်ကို သုံးလတစ်ခါ လျှော့ချသွားပါမယ်။ နောက် သုံးလပတ်မှာ ၂၅၀ ပါ။
+      [[mark:g-q3]] အဲဒီနောက် သုံးလပတ်မှာတော့ ထက်ဝက်အောက်၊ ၁၂၀ အထိ လျှော့ပါမယ်။
+      [[mark:g-q4]] တစ်နှစ်ပြည့်တဲ့အခါ သုည ပါ။ အဲဒီအချိန်ကျမှ စစ်ဆေးချက်က gate အပြည့်အဝ ဖြစ်လာပါမယ်။
+      [[mark:g-why]] ဒီလို လှေကားထစ်လို လျှော့ချတာက team တွေကို အချိန် ပေးပါတယ်။ feature အလုပ်တွေကြားမှာ
+      သုံးလကို ၁၀၀ လောက်စီ ပြင်သွားရုံပါ။ ဂဏန်းတွေကိုလည်း team lead တွေနဲ့ အတူ သတ်မှတ်တာမို့၊ တကယ် လုပ်နိုင်တဲ့
+      အတိုင်းအတာ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-g-open,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-g-today,
+          type: whiteboard.apply,
+          at: { mark: g-today },
+          upsertIds: [s-b1, s-n1, s-q1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-q2,
+          type: whiteboard.apply,
+          at: { mark: g-q2 },
+          upsertIds: [s-b2, s-n2, s-q2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-q3,
+          type: whiteboard.apply,
+          at: { mark: g-q3 },
+          upsertIds: [s-b3, s-n3, s-q3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-g-q4,
+          type: whiteboard.apply,
+          at: { mark: g-q4 },
+          upsertIds: [s-b4, s-n4, s-q4],
+          drawMs: 1500,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] ဒီအစီအစဉ်မှာ ကွက်လပ် တစ်ခု ကျန်ပါသေးတယ်။ မေးခွန်း တစ်ခု မေးပါရစေ။
+      [[mark:q-sub]] ဒုတိယ သုံးလပတ်မှာ limit က ၂၅၀ ဖြစ်ပြီး၊ လက်ရှိ စုစုပေါင်းက ၂၄၀ ပဲ ရှိတယ် ဆိုပါစို့။ team
+      တစ်ခုက ချိုးဖောက်မှု အသစ် တစ်ခု ပါတဲ့ change ကို တင်လိုက်ပါတယ်။ စုစုပေါင်းက ၂၄၁ ဖြစ်သွားပေမဲ့ limit
+      အောက်မှာပဲ ရှိပါသေးတယ်။ ဒီ change ကို pipeline က ဘာလုပ်သင့်သလဲ။
+      [[mark:q-a]] ပထမ အဖြေက limit မကျော်သေးလို့ ဖြတ်ခွင့် ပေးလိုက်တာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေကတော့ limit အောက်မှာ ရှိလည်း ရပ်လိုက်တာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ရပ်လိုက်တာပါ။ ဘာကြောင့်လဲဆိုတော့ limit ဆိုတာ ရှိပြီးသား ချိုးဖောက်မှုတွေကို
+      ရှင်းဖို့ ပေးထားတဲ့ အချိန်ပါ။ အသစ် ထပ်ထည့်ဖို့ ပေးထားတဲ့ ခွင့်ပြုချက် မဟုတ်ပါဘူး။
+      [[mark:q-rule]] ဒါကြောင့် စည်းကမ်း နောက်တစ်ခု လိုပါတယ်။ ဘယ်နေ့မှာမဆို မနေ့ကထက် မဆိုးရဘူး ဆိုတာပါ။
+      ပြင်တဲ့သူတွေက ဂဏန်းကို လျှော့နေချိန်မှာ တခြားသူတွေက ပြန်တိုးနေရင်၊ သုညကို ရောက်ဖို့ ခက်သွားပါတယ်။
+      ဒီစည်းကမ်းကတော့ ပထမနေ့ကတည်းက အသက်ဝင်ပါတယ်။ အဟောင်းတွေအတွက် အချိန်ပေးပြီး၊ အသစ်တွေကိုတော့ လုံးဝ
+      မပေးဝင်တာပါ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-sub,
+          type: whiteboard.apply,
+          at: { mark: q-sub },
+          upsertIds: [q-sub],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-rule],
+          drawMs: 1200,
+        }
+
+  - id: placement
+    chapter: စစ်ဆေးချက်ကို နေရာချခြင်း
+    narration: >
+      gate တွေ များလာရင် deploy နှေးသွားမလား ဆိုတာကလည်း မောင်မောင် စိုးရိမ်တဲ့ အချက်ပါ။ အဖြေက
+      စစ်ဆေးချက်တွေကို ကြာချိန်အလိုက် pipeline တစ်လျှောက် နေရာချထားတာပါ။
+      [[mark:l-fast]] စက္ကန့်ပိုင်းနဲ့ ပြီးတဲ့ စစ်ဆေးချက်တွေကို change တိုင်းမှာ run ပါတယ်။ module boundary နဲ့ cycle
+      စစ်တာတွေက ဒီမှာပါ။ developer က အဖြေကို ချက်ချင်း ရပါတယ်။
+      [[mark:l-slow]] နာရီနဲ့ချီ ကြာတဲ့ load test လို စစ်ဆေးချက်တွေကိုတော့ change တိုင်းမှာ မ run ဘဲ၊ ညတိုင်း တစ်ခါ
+      run ပါတယ်။
+      [[mark:l-prod]] တချို့ စစ်ဆေးချက်တွေကတော့ production ထဲမှာ အမြဲ run နေပါတယ်။ ရှာတာ ဘယ်လောက် မြန်လဲ
+      တိုင်းတာက တစ်ခုပါ။ ပျက်တာကို တမင် လေ့ကျင့်တဲ့ စမ်းသပ်မှုလည်း ဒီအမျိုးအစားပါ။ instance တစ်ခုကို အပတ်စဉ် တမင်
+      ပိတ်ကြည့်တာက၊ ဆက်သုံးလို့ ရမရ၊ data ပျောက်မပျောက်၊ အချက်ပေးတာ အလုပ်လုပ်မလုပ် ဆိုတဲ့ အရည်အသွေး သုံးခုကို
+      တစ်ခါတည်း စစ်ပေးတာပါ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-fast },
+          clear: true,
+          upsertIds: [l-d1, l-b1, l-b1-l, l-e1],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-l-slow,
+          type: whiteboard.apply,
+          at: { mark: l-slow },
+          upsertIds: [l-a1, l-d2, l-b2, l-b2-l, l-e2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-l-prod,
+          type: whiteboard.apply,
+          at: { mark: l-prod },
+          upsertIds: [l-a2, l-d3, l-b3, l-b3-l, l-e3],
+          drawMs: 2200,
+        }
+
+  - id: parallel
+    chapter: အဟောင်းနဲ့ အသစ်ကို ယှဉ် run ခြင်း
+    narration: >
+      [[mark:r-open]] governance က code ကို စစ်တာတင် မဟုတ်ပါဘူး။ အပိုင်းအဟောင်း တစ်ခုကို အသစ်နဲ့ လဲတဲ့အခါလည်း
+      လိုပါတယ်။ ခရီးဖော် မှာ ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့ settlement တွက်ချက်မှုကို အသစ် ပြန်ရေးနေပါတယ်။
+      အဟောင်းက နှစ်တွေကြာလာတော့၊ အထဲမှာ ဘယ်လို စည်းကမ်းတွေ ပါလဲ ဆိုတာ ဘယ်သူမှ အကုန် မသိတော့ပါဘူး။
+      [[mark:r-both]] ဒါကြောင့် တစ်ခါတည်း မလဲဘဲ၊ တနင်္လာနေ့တိုင်း အဟောင်းရော အသစ်ရော နှစ်ခုလုံးကို data အတူတူနဲ့
+      run ပါတယ်။
+      [[mark:r-old]] ကားလိုင်းတွေဆီ တကယ် ပေးတာကတော့ အဟောင်းရဲ့ အဖြေပါပဲ။
+      [[mark:r-compare]] အသစ်ရဲ့ အဖြေကိုတော့ အဟောင်းနဲ့ တိုက်ကြည့်ပြီး၊ မတူတာတွေကို မှတ်တမ်းတင်ထားပါတယ်။ ပထမ
+      အပတ်မှာ ကားလိုင်း ၅၀၀ ထဲက ၂၃ ခုမှာ အဖြေ မတူခဲ့ပါဘူး။ တစ်ခုချင်း လိုက်ကြည့်တော့ ဘယ်မှာမှ ရေးမထားတဲ့
+      စည်းကမ်းတွေကို တွေ့ရပါတယ်။
+      [[mark:r-trust]] မတူတာ သုည ဖြစ်တဲ့ အပတ်တွေ ဆက်တိုက် ရလာမှ အသစ်ကို ယုံပြီး ပြောင်းသုံးပါတယ်။ ဒီမှာလည်း
+      ယုံမယုံကို ခံစားချက်နဲ့ မဟုတ်ဘဲ ဂဏန်းနဲ့ ဆုံးဖြတ်တာပါ။ system အဟောင်းက အသစ်အတွက် test ဖြစ်ပေးသွားတာပါ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          clear: true,
+          upsertIds: [r-old, r-old-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-both,
+          type: whiteboard.apply,
+          at: { mark: r-both },
+          upsertIds: [r-new, r-new-l, r-in, r-a1, r-a2],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-r-old,
+          type: whiteboard.apply,
+          at: { mark: r-old },
+          upsertIds: [r-pay-a, r-pay],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-compare,
+          type: whiteboard.apply,
+          at: { mark: r-compare },
+          upsertIds: [r-c1, r-c2, r-diff],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-trust,
+          type: whiteboard.apply,
+          at: { mark: r-trust },
+          upsertIds: [r-trust],
+          drawMs: 1200,
+        }
+
+  - id: too-much
+    chapter: Governance များလွန်းရင်
+    narration: >
+      [[mark:s-open]] governance ကို automate လုပ်လို့ ရတာက အားသာချက်ပါ။ ဒါပေမဲ့ များလွန်းတဲ့ governance ကလည်း
+      ပျက်စီးမှု တစ်မျိုးပါပဲ။ ထောင်ချောက် သုံးခုကို သတိထားရပါမယ်။
+      [[mark:s-stack]] ပထမက ပြဿနာတိုင်းအတွက် stack တစ်ခုတည်းကို သတ်မှတ်လိုက်တာပါ။ service တိုင်းက database
+      တစ်မျိုးတည်း၊ framework တစ်မျိုးတည်း သုံးရမယ် ဆိုရင်၊ စာရင်းလေး တစ်ခု ပြရုံ service သေးသေးလေးကလည်း အခက်ဆုံး
+      ပြဿနာအတွက် ရွေးထားတဲ့ tool ကြီးတွေကို ထမ်းရပါတယ်။ လုံးဝ လွှတ်ပေးတာလည်း မဟုတ်ဘဲ၊ ရွေးစရာ နှစ်ခု သုံးခုလောက်
+      ပေးထားတာက အလယ်လမ်းပါ။
+      [[mark:s-vendor]] ဒုတိယက vendor တစ်ခုရဲ့ product ကို ဗဟိုထားပြီး system ကို ပတ်ဆောက်တာပါ။ အဲဒီအခါ product က
+      မလုပ်နိုင်တာကို ကိုယ့် business ကလည်း မလုပ်နိုင်တော့ပါဘူး။ ဘယ် product ကိုမဆို ဗဟို မဟုတ်ဘဲ၊ ဆက်ထားတဲ့ အပိုင်း
+      တစ်ခုအနေနဲ့ပဲ ထားပါ။
+      [[mark:s-ninety]] တတိယက အလုပ်ရဲ့ ၉၀ ရာခိုင်နှုန်းလောက်ကို မြန်မြန် ပြီးစေပြီး၊ ကျန်တဲ့ အပိုင်းမှာ ပိတ်မိစေတဲ့
+      tool တွေပါ။ ဒီလို tool ကို စမ်းတဲ့အခါ အလွယ်ဆုံး အလုပ်နဲ့ မစမ်းဘဲ၊ ကိုယ့်မှာ ရှိတဲ့ အခက်ဆုံး အလုပ်နဲ့ အရင်
+      စမ်းကြည့်ပါ။
+      [[mark:s-easy]] governance က အထိရောက်ဆုံး ဖြစ်တာကတော့ တားတဲ့အခါ မဟုတ်ပါဘူး။ မှန်တဲ့ လမ်းကို အလွယ်ဆုံး လမ်း
+      ဖြစ်အောင် လုပ်ပေးတဲ့အခါပါ။ ခရီးဖော် မှာ service အသစ် စတဲ့ team က platform ရဲ့ template ကို ယူလိုက်တာနဲ့၊
+      pipeline ရော၊ architecture gate ရော၊ monitor တွေပါ အဆင်သင့် ပါလာပါတယ်။ စည်းကမ်းကို လိုက်နာဖို့ ဘာမှ ထပ်လုပ်စရာ
+      မလိုတဲ့အခါ၊ လူတွေက များသောအားဖြင့် လိုက်နာကြပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: close-parallel,
+          type: whiteboard.apply,
+          at: { mark: s-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-too-much,
+          type: slide.show,
+          at: { mark: s-open, offsetMs: -1000 },
+          slideId: too-much,
+        }
+      - { id: point-stack, type: slide.point, at: { mark: s-stack }, target: { x: 0.15, y: 0.39 } }
+      - {
+          id: point-vendor,
+          type: slide.point,
+          at: { mark: s-vendor },
+          target: { x: 0.15, y: 0.53 },
+        }
+      - {
+          id: point-ninety,
+          type: slide.point,
+          at: { mark: s-ninety },
+          target: { x: 0.15, y: 0.67 },
+        }
+      - { id: point-easy, type: slide.point, at: { mark: s-easy }, target: { x: 0.15, y: 0.81 } }
+
+  - id: plan
+    chapter: Rollout plan
+    narration: >
+      [[mark:d-close]] ဒါဆို module boundary စစ်ဆေးချက်အတွက် rollout plan ကို ချရေးကြည့်ရအောင်။ သုံးလပတ်
+      တစ်ခုစီမှာ limit က ဘယ်လောက်လဲ၊ ကျော်သွားရင် ဘာဖြစ်မလဲ ဆိုတာ ပါရပါမယ်။
+      [[mark:type-q1]] အခု သုံးလပတ်မှာ limit က ဒီနေ့ တွေ့တဲ့ ၃၄၀ ပါပဲ။ ဘယ်သူ့ကိုမှ မပိတ်သေးပါဘူး။
+      [[mark:type-q2]] နောက် သုံးလပတ်မှာ ၂၅၀ ကို ကျော်နေရင် build တိုင်းမှာ သတိပေးချက် ပြပြီး၊ team lead တွေနဲ့
+      ဘာက အခက်အခဲလဲ ဆွေးနွေးပါမယ်။ ပိတ်တာတော့ မဟုတ်သေးပါဘူး။
+      [[mark:type-q3]] တတိယ သုံးလပတ်မှာ ၁၂၀ ကို ကျော်နေတဲ့ team ရဲ့ change တွေကို merge မလုပ်ခင် architect
+      တစ်ယောက်က ကြည့်ပေးပါမယ်။ နည်းနည်း ပိုတင်းကျပ်လာတာပါ။
+      [[mark:type-q4]] စတုတ္ထ သုံးလပတ်မှာ limit က သုည ဖြစ်ပြီး၊ ချိုးဖောက်မှု တစ်ခု ရှိတာနဲ့ build က fail
+      ဖြစ်ပါမယ်။ သတိပေးတာကနေ စပြီး တဖြည်းဖြည်း တင်းကျပ်လာတာမို့၊ ဒီနေ့ ရောက်တဲ့အခါ ဘယ်သူမှ အံ့ဩစရာ
+      မရှိတော့ပါဘူး။
+      [[mark:type-rule]] table ရဲ့ အောက်မှာ နေ့တိုင်း အသက်ဝင်တဲ့ စည်းကမ်းကို ရေးထားပါမယ်။ ချိုးဖောက်မှု အသစ် ထည့်တဲ့
+      change ကတော့ limit ဘယ်လောက်ပဲ ဖြစ်ဖြစ် ပထမနေ့ကတည်းက fail ပါ။ ဒီ plan ကို CTO ဖြစ်တဲ့ အောင်အောင် ဆီ
+      တင်ပြတဲ့အခါ၊ delivery မရပ်ဘဲ တစ်နှစ်အတွင်း သုည ရောက်မယ် ဆိုတာကို စာတစ်မျက်နှာတည်းနဲ့ ပြနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - { id: close-too-much, type: slide.close, at: { mark: d-close } }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-too-much },
+          path: notebook/46-rollout.md,
+        }
+      - id: type-q1
+        type: editor.type
+        at: { mark: type-q1 }
+        cadence: line-by-line
+        target: { file: notebook/46-rollout.md, after: "|---|---|---|\n" }
+        text: "| Q1 (အခု) | 340 | ဒီနေ့ ဂဏန်းကို မှတ်ထား၊ ဘာမှ မပိတ်သေး |\n"
+      - id: type-q2
+        type: editor.type
+        at: { mark: type-q2 }
+        cadence: line-by-line
+        target: { file: notebook/46-rollout.md, after: "ဘာမှ မပိတ်သေး |\n" }
+        text: "| Q2 | 250 | build တိုင်းမှာ warning၊ team lead တွေနဲ့ ဆွေးနွေး |\n"
+      - id: type-q3
+        type: editor.type
+        at: { mark: type-q3 }
+        cadence: line-by-line
+        target: { file: notebook/46-rollout.md, after: "team lead တွေနဲ့ ဆွေးနွေး |\n" }
+        text: "| Q3 | 120 | ကျော်တဲ့ team ရဲ့ merge ကို architect က ကြည့်ပေး |\n"
+      - id: type-q4
+        type: editor.type
+        at: { mark: type-q4 }
+        cadence: line-by-line
+        target: { file: notebook/46-rollout.md, after: "architect က ကြည့်ပေး |\n" }
+        text: "| Q4 | 0 | build fail: check က gate အပြည့်အဝ ဖြစ်ပြီ |\n"
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        cadence: line-by-line
+        target: { file: notebook/46-rollout.md, after: "gate အပြည့်အဝ ဖြစ်ပြီ |\n" }
+        text: "\nနေ့တိုင်း: violation အသစ် ထည့်တဲ့ change က ပထမနေ့ကတည်းက fail (မနေ့ကထက် မဆိုးရ)\n"
+      - id: expect-rule
+        type: expect.file
+        at: { afterAction: type-rule }
+        path: notebook/46-rollout.md
+        contains: "နေ့တိုင်း: violation အသစ် ထည့်တဲ့ change က ပထမနေ့ကတည်းက fail (မနေ့ကထက် မဆိုးရ)\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် project ရဲ့ code က ဒီနေ့ ချိုးဖောက်နေတဲ့ စည်းကမ်း တစ်ခုကို ရွေးပါ။
+      test မပါတဲ့ module တွေ၊ ရှည်လွန်းတဲ့ function တွေ၊ သုံးခွင့် မရှိတဲ့ library ကို သုံးထားတာတွေ ဘာပဲဖြစ်ဖြစ်
+      ရပါတယ်။
+      [[mark:turn-2]] lesson ကို pause လုပ်ပြီး၊ ဒီ table ရဲ့ ပထမ စာကြောင်းနေရာမှာ ကိုယ့် system ရဲ့ ဒီနေ့ ဂဏန်းကို
+      ပထမဆုံး limit အဖြစ် ရေးကြည့်ပါ။ မရေတွက်ရသေးရင် အရင် ရေတွက်ပါ။ ဂဏန်း မသိဘဲနဲ့ တင်းကျပ်ဖို့ plan ဆွဲလို့
+      မရပါဘူး။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: turn }
+        target: { file: notebook/46-rollout.md, text: "Module boundary check · rollout plan" }
+      - id: sel-q1
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          { file: notebook/46-rollout.md, text: "| Q1 (အခု) | 340 | ဒီနေ့ ဂဏန်းကို မှတ်ထား၊ ဘာမှ မပိတ်သေး |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ချိုးဖောက်ပြီးသား စည်းကမ်း တစ်ခုကို အလိုအလျောက် စစ်တော့မယ်ဆိုရင်၊ တစ်ခါတည်း ပိတ်တာလည်း
+      မဟုတ်၊ လွှတ်ထားတာလည်း မဟုတ်ပါဘူး။ ဒီနေ့ရဲ့ ဂဏန်းကို မှတ်ထားပြီး၊ မနေ့ကထက် မဆိုးစေဘဲ၊ limit ကို တစ်ဆင့်ချင်း
+      လျှော့ချသွားတာပါ။ စစ်ဆေးချက်တွေကို ကြာချိန်အလိုက် နေရာချထားပြီး၊ မှန်တဲ့ လမ်းကို အလွယ်ဆုံး ဖြစ်အောင်
+      လုပ်ပေးနိုင်ရင် governance က delivery ကို မတားတော့ပါဘူး။
+      [[mark:next]] နောက် lesson မှာတော့ ဆုံးဖြတ်ချက် တစ်ခုကို ဘာကြောင့် ချခဲ့လဲ ဆိုတာ နှစ်တွေကြာလည်း မပျောက်အောင်
+      ရေးမှတ်ထားတဲ့ architecture decision record ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
