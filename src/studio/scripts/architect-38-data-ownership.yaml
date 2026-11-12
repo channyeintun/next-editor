@@ -1,0 +1,884 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-38-data-ownership
+  title: "Architect Path 38: Data ကို ဘယ်သူ ပိုင်သလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/38-ownership.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/38-ownership.md: |
+        # Data ownership: table တစ်ခုစီကို ဘယ်သူ ပိုင်လဲ
+
+        ဖြစ်ရပ်: ခရီးစဉ် တစ်ခုရဲ့ ကျန်တဲ့ခုံက 3 ခုံကနေ 12 ခုံ ပြန်ဖြစ်သွား (trips ကို Booking ရော Operator ရော ရေးနေ)
+
+        | Table | ရေးသူ | ပိုင်ရှင် | တခြားသူ ဖတ်ပုံ |
+        |---|---|---|---|
+
+        စည်းမျဉ်း: table တစ်ခု၊ ရေးသူ တစ်ယောက်
+        ကျန်တဲ့သူက ပိုင်ရှင်ဆီကနေပဲ ရမယ်
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: two-writers
+      contentType: html
+      name: ရေးသူ နှစ်ယောက်
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ရေးသူ နှစ်ယောက်ရှိရင် ဖြေရှင်းနည်း 3 မျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide blue">ပိုင်ရှင် တစ်ယောက်</span>ကျန်သူက ပိုင်ရှင်ကို တောင်းဆိုပြီး ရေးခိုင်း</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide orange">Table ကို ခွဲ</span>column ခွဲပြီး တစ်ယောက် တစ်ခုစီ ပိုင်</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide violet">Boundary ကို ချဲ့</span>နှစ်ခုလုံးကို အစု တစ်ခုအဖြစ် လက်ခံ</div>
+        </div>
+    - id: four-reads
+      contentType: html
+      name: ဖတ်နည်း လေးမျိုး
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ကိုယ်မပိုင်တဲ့ data ကို ဖတ်နည်း 4 မျိုး</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term wide green">Memory ထဲ မိတ္တူ</span>အမြန်ဆုံး၊ data သေးပြီး ပြောင်းခဲမှ</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term wide orange">Column ကူးထား</span>မြန်၊ ပိုင်ရှင်ကို မမှီခို၊ ခဏ ဟောင်းနိုင်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term wide blue">လိုတဲ့အချိန် မေး</span>အလတ်ဆတ်ဆုံး၊ ပိုင်ရှင် ပျက်ရင် ကိုယ်ပါ ပျက်</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term wide violet">Table မျှသုံး</span>ရိုးရှင်း၊ boundary ကျယ်သွား</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — two services writing one table: blue parts, violet writes, red
+    # the symptom, orange the rule and the question it leaves open.
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "trips ကို ဘယ်သူ ပိုင်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: o-book,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-book-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 273,
+        width: 240,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: o-op,
+        kind: rectangle,
+        x: 270,
+        y: 430,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-op-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 453,
+        width: 240,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: o-trips,
+        kind: ellipse,
+        x: 720,
+        y: 320,
+        width: 300,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: o-trips-l,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 363,
+        width: 300,
+        height: 35,
+        text: "trips",
+        fontSize: 28,
+      }
+    - {
+        id: o-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 525,
+        y: 295,
+        width: 185,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: o-a2,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 525,
+        y: 405,
+        width: 185,
+        height: 60,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: o-w1,
+        kind: text,
+        x: 540,
+        y: 240,
+        width: 200,
+        height: 35,
+        text: "ကျန်တဲ့ခုံ ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: o-w2,
+        kind: text,
+        x: 540,
+        y: 490,
+        width: 320,
+        height: 35,
+        text: "ခရီးစဉ် တစ်ခုလုံး သိမ်း",
+        fontSize: 28,
+      }
+    - {
+        id: o-bug,
+        kind: text,
+        x: 880,
+        y: 455,
+        width: 210,
+        height: 35,
+        text: "ခုံ 3 → 12",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: o-rule,
+        kind: text,
+        x: 270,
+        y: 575,
+        width: 360,
+        height: 35,
+        text: "ရေးတဲ့ service က ပိုင်တယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-q,
+        kind: text,
+        x: 680,
+        y: 575,
+        width: 320,
+        height: 35,
+        text: "ရေးသူ နှစ်ယောက်ဆိုရင်?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the table split: each service writes its own table; green is
+    # what the split buys.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "trips ကို ခွဲလိုက်ရင်",
+        fontSize: 36,
+      }
+    - {
+        id: d-op,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-op-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 263,
+        width: 240,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: d-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 525,
+        y: 260,
+        width: 105,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-trips,
+        kind: ellipse,
+        x: 645,
+        y: 225,
+        width: 360,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-trips-l,
+        kind: text,
+        align: center,
+        x: 645,
+        y: 263,
+        width: 360,
+        height: 35,
+        text: "trips: အချိန်၊ ဈေး",
+        fontSize: 28,
+      }
+    - {
+        id: d-book,
+        kind: rectangle,
+        x: 270,
+        y: 390,
+        width: 240,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-book-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 413,
+        width: 240,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: d-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 525,
+        y: 410,
+        width: 105,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-seats,
+        kind: ellipse,
+        x: 645,
+        y: 375,
+        width: 360,
+        height: 110,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-seats-l,
+        kind: text,
+        align: center,
+        x: 645,
+        y: 413,
+        width: 360,
+        height: 35,
+        text: "seat_counts",
+        fontSize: 28,
+      }
+    - {
+        id: d-r1,
+        kind: text,
+        x: 270,
+        y: 525,
+        width: 700,
+        height: 35,
+        text: "schema ပြောင်းရင် ကိုယ့် table ပဲ ထိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-r2,
+        kind: text,
+        x: 270,
+        y: 585,
+        width: 700,
+        height: 35,
+        text: "scale မတူ: တစ်ရက် 80,000 နဲ့ ရာဂဏန်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the quiz: white givens and options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Search က ကားလိုင်း နာမည် လိုတယ်",
+        fontSize: 36,
+      }
+    - {
+        id: q-g,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 720,
+        height: 35,
+        text: "ကားလိုင်း 300၊ တစ်လ တစ်ခါလောက်ပဲ ပြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 700,
+        height: 35,
+        text: "က) ရှာတိုင်း Operator ကို လှမ်းမေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 700,
+        height: 35,
+        text: "ခ) Search ဘက်မှာ မိတ္တူ ထား",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 400,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 715,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 475,
+        width: 700,
+        height: 35,
+        text: "data က သေးတယ်၊ ပြောင်းခဲတယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-why2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 700,
+        height: 35,
+        text: "Operator ပျက်လည်း Search မပျက်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8138
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ကျန်တဲ့ခုံ ပြန်တိုးလာတဲ့ နေ့
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ service တစ်ခုကို ခွဲမလား၊ ပေါင်းမလား ဆိုတာကို အားတွေ ချိန်ပြီး ဆုံးဖြတ်ပုံကို
+      လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] service တွေ ခွဲပြီးတဲ့နောက်မှာတော့ data နဲ့ ပတ်သက်တဲ့ ပြဿနာ တစ်မျိုး ပေါ်လာပါတယ်။
+      [[mark:sel-incident]] ပြီးခဲ့တဲ့အပတ်က ရန်ကုန်ကနေ မန္တလေး သွားတဲ့ ခရီးစဉ် တစ်ခုမှာ ကျန်တဲ့ခုံ အရေအတွက်က
+      သုံးခုံကနေ ၁၂ ခုံကို ရုတ်တရက် ပြန်တက်သွားပါတယ်။ ရောင်းပြီးသား ခုံတွေကို လွတ်နေတယ်လို့ ပြနေတာပါ။
+      [[mark:cause]] အကြောင်းရင်းက trips ဆိုတဲ့ ခရီးစဉ် table ပါ။ လက်မှတ် တစ်စောင် ရောင်းတိုင်း Booking က အဲဒီ table
+      ထဲက ကျန်တဲ့ခုံ အရေအတွက်ကို လျှော့ပါတယ်။ ကားလိုင်းတွေ သုံးတဲ့ Operator ဘက်က screen ကလည်း ထွက်ချိန်
+      ပြင်တဲ့အခါ ခရီးစဉ် တစ်ခုလုံးကို ပြန်သိမ်းပါတယ်။ ကားလိုင်း ဝန်ထမ်း တစ်ယောက် ထွက်ချိန် ပြင်နေတုန်း
+      ရောင်းလိုက်တဲ့ ခုံတွေကို၊ သူ သိမ်းလိုက်တဲ့ အရေအတွက် အဟောင်းက ဖုံးသွားတာပါ။
+      [[mark:whose]] Booking team lead မောင်မောင် ကတော့ Operator ဘက်က Booking ရဲ့ data ကို ဖျက်တယ်လို့ ဆိုပါတယ်။
+      Operator team ကတော့ trips က သူတို့ table ပါလို့ ဆိုပါတယ်။ ဒီ table ကို တကယ် ဘယ်သူ ပိုင်တာလဲ ဆိုတာ ဘယ်သူမှ မပြောနိုင်ပါဘူး။ ဒီကြားထဲ Report ကလည်း table အားလုံးကို
+      တိုက်ရိုက် ဖတ်နေတာမို့၊ ဘယ် table ကိုမှ စိတ်ချလက်ချ ပြောင်းလို့ မရပါဘူး။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/38-ownership.md,
+        }
+      - id: sel-incident
+        type: editor.select
+        at: { mark: sel-incident }
+        target: { file: notebook/38-ownership.md, text: "ခရီးစဉ် တစ်ခုရဲ့ ကျန်တဲ့ခုံက 3 ခုံကနေ 12 ခုံ ပြန်ဖြစ်သွား" }
+      - id: sel-cause
+        type: editor.select
+        at: { mark: cause }
+        target: { file: notebook/38-ownership.md, text: "trips ကို Booking ရော Operator ရော ရေးနေ" }
+
+  - id: owner
+    chapter: ရေးတဲ့သူက ပိုင်တယ်
+    narration: >
+      [[mark:o-open]] trips ကို ဘယ်သူတွေ ရေးနေလဲ ဆိုတာ အရင် ကြည့်ရအောင်။
+      [[mark:o-book]] Booking က trips ထဲက ကျန်တဲ့ခုံ အရေအတွက်ကို ရေးပါတယ်။
+      [[mark:o-op]] Operator ကလည်း အဲဒီ table ကိုပဲ ခရီးစဉ် တစ်ခုလုံး သိမ်းတဲ့ပုံစံနဲ့ ရေးပါတယ်။
+      [[mark:o-bug]] တစ်ခုချင်းစီက မှန်ပေမဲ့၊ နှစ်ခု ပေါင်းလိုက်တော့ သုံးခုံက ၁၂ ခုံ ဖြစ်သွားတာပါ။
+      [[mark:o-rule]] service တွေကို ခွဲတဲ့အခါ လိုက်နာရတဲ့ စည်းမျဉ်း တစ်ခု ရှိပါတယ်။ table တစ်ခုကို ရေးတဲ့ service က
+      အဲဒီ table ကို ပိုင်တယ် ဆိုတာပါ။ ပိုင်တယ်ဆိုတာက schema ကို ပြောင်းခွင့်ရှိပြီး၊ data မှန်ကန်ဖို့
+      တာဝန်ယူရတာကို ဆိုလိုပါတယ်။ schema ဆိုတာ data ရဲ့ ပုံစံပါ။
+      [[mark:o-q]] ရေးတဲ့သူ တစ်ယောက်တည်းဆိုရင် ဒီစည်းမျဉ်းက ရှင်းပါတယ်။ ဒါပေမဲ့ trips မှာလို ရေးတဲ့သူ နှစ်ယောက်
+      ရှိနေရင်တော့ ပိုင်ရှင်ကို ရွေးပေးရပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-o-open,
+          type: whiteboard.apply,
+          at: { mark: o-open },
+          open: true,
+          upsertIds: [o-title],
+        }
+      - {
+          id: draw-o-book,
+          type: whiteboard.apply,
+          at: { mark: o-book },
+          upsertIds: [o-book, o-book-l, o-trips, o-trips-l, o-a1, o-w1],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-o-op,
+          type: whiteboard.apply,
+          at: { mark: o-op },
+          upsertIds: [o-op, o-op-l, o-a2, o-w2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-o-bug,
+          type: whiteboard.apply,
+          at: { mark: o-bug },
+          upsertIds: [o-bug],
+          drawMs: 900,
+        }
+      - {
+          id: draw-o-rule,
+          type: whiteboard.apply,
+          at: { mark: o-rule, offsetMs: 3500 },
+          upsertIds: [o-rule],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-o-q,
+          type: whiteboard.apply,
+          at: { mark: o-q, offsetMs: 4000 },
+          upsertIds: [o-q],
+          drawMs: 900,
+        }
+
+  - id: resolutions
+    chapter: ရေးသူ နှစ်ယောက်ရှိရင်
+    narration: >
+      [[mark:r-open]] ရေးသူ နှစ်ယောက် ရှိတဲ့အခါ ဖြေရှင်းနည်း သုံးမျိုး ရှိပါတယ်။
+      [[mark:r-1]] ပထမ နည်းက ပိုင်ရှင် တစ်ယောက်ကိုပဲ သတ်မှတ်ပြီး၊ ကျန်တဲ့သူက ပိုင်ရှင်ကို တောင်းဆိုပြီး ရေးခိုင်းတာပါ။
+      Operator ကို ပိုင်ရှင် ထားမယ်ဆိုရင်၊ Booking က လက်မှတ် ရောင်းတိုင်း ခုံအရေအတွက် လျှော့ပေးဖို့ Operator ကို
+      လှမ်းခေါ်ရပါမယ်။ data က တစ်နေရာတည်းမှာ မှန်နေပါတယ်။ ပေးရတာက လက်မှတ် ရောင်းတာ နှေးသွားပြီး၊ Operator
+      ပျက်ရင် လက်မှတ်ပါ ရောင်းမရတော့တာပါ။
+      [[mark:r-2]] ဒုတိယ နည်းက table ကို ခွဲတာပါ။ တစ်ယောက် ရေးတဲ့ column တွေကို table တစ်ခု၊ နောက်တစ်ယောက် ရေးတဲ့
+      column တွေကို နောက် table တစ်ခု ခွဲပြီး၊ တစ်ယောက် တစ်ခုစီ ပိုင်တာပါ။ ပေးရတာက အရင်က join တစ်ခုနဲ့ ရတဲ့
+      data ကို အခု နှစ်နေရာက ယူရတာပါ။
+      [[mark:r-3]] တတိယ နည်းက boundary ကို ချဲ့တာပါ။ service နှစ်ခုလုံးက အဲဒီ table ကို အတူ ပိုင်တယ်လို့
+      လက်ခံလိုက်တာပါ။ ဘာမှ ပြောင်းစရာ မလိုပေမဲ့၊ schema ပြောင်းတိုင်း team နှစ်ခု ညှိရပြီး၊ service နှစ်ခုကလည်း
+      တကယ်တော့ အစု တစ်ခုတည်း ဖြစ်သွားပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: close-owner,
+          type: whiteboard.apply,
+          at: { mark: r-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-writers,
+          type: slide.show,
+          at: { mark: r-open, offsetMs: -1000 },
+          slideId: two-writers,
+        }
+      - { id: point-r1, type: slide.point, at: { mark: r-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-r2, type: slide.point, at: { mark: r-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-r3, type: slide.point, at: { mark: r-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: decide
+    chapter: trips ကို ခွဲခြင်း
+    narration: >
+      [[mark:d-open]] ဘယ်နည်းကို ရွေးမလဲ ဆိုတာကို data ကို ပေါင်းထားဖို့ အကြောင်းတွေနဲ့ ခွဲဖို့ အကြောင်းတွေ ချိန်ပြီး
+      ဆုံးဖြတ်ပါတယ်။ ပေါင်းထားဖို့ အကြောင်းက နှစ်ခုပါ။ table တွေကြားက relation နဲ့၊ အကုန်ဖြစ် ဒါမှမဟုတ် တစ်ခုမှ
+      မဖြစ် ဆိုတဲ့ transaction ပါ။ ထွက်ချိန် ပြင်တာနဲ့ ခုံအရေအတွက် လျှော့တာကတော့ transaction တစ်ခုတည်းမှာ
+      ဖြစ်စရာ မလိုပါဘူး။
+      [[mark:d-op]] ဒါကြောင့် table ကို ခွဲပါမယ်။ ထွက်ချိန်၊ ဈေးနှုန်းလို ကားလိုင်းက သတ်မှတ်တဲ့ အရာတွေက trips ထဲမှာ
+      ကျန်ခဲ့ပြီး Operator က ပိုင်ပါတယ်။
+      [[mark:d-book]] ကျန်တဲ့ခုံ အရေအတွက်ကိုတော့ table အသစ် တစ်ခုထဲ ခွဲထုတ်ပြီး Booking က ပိုင်ပါတယ်။ ထိုင်ခုံနဲ့ ပတ်သက်သမျှက Booking ရဲ့ အလုပ်မို့ပါ။ အခုဆို Operator ဘက်က ခရီးစဉ် တစ်ခုလုံးကို ပြန်သိမ်းလည်း၊
+      ခုံအရေအတွက်က အဲဒီ table ထဲမှာ မရှိတော့တာမို့ ဖုံးမိစရာ မရှိတော့ပါဘူး။
+      [[mark:d-why1]] ခွဲဖို့ အကြောင်းတွေကတော့ သုံးခုပါ။ ပထမက schema ပြောင်းရင် ဘယ်သူ ထိမလဲ ဆိုတာပါ။ အခု Operator က
+      သူ့ schema ကို ပြောင်းရင် Booking ကို မထိတော့ပါဘူး။ ဒုတိယက ပျက်တာကို ကန့်ထားနိုင်တာပါ။ တစ်ဖက်ရဲ့ အမှားက
+      နောက်တစ်ဖက်ရဲ့ data ကို မဖျက်နိုင်တော့ပါဘူး။
+      [[mark:d-why2]] တတိယက scale မတူတာပါ။ ခုံအရေအတွက်ကို တစ်ရက် ၈ သောင်းလောက် ရေးရပြီး၊ ခရီးစဉ်ကိုတော့ တစ်ရက်
+      ရာဂဏန်းလောက်ပဲ ပြင်တာပါ။
+      [[mark:d-keep]] လက်မှတ်၊ ထိုင်ခုံနဲ့ seat hold table တွေကတော့ လက်မှတ် တစ်စောင် ရောင်းတိုင်း transaction
+      တစ်ခုတည်းမှာ အတူ ပြောင်းရတာမို့၊ Booking တစ်ခုတည်းအောက်မှာ အတူ ရှိနေရပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-writers, type: slide.close, at: { mark: d-open } }
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-writers },
+          open: true,
+          clear: true,
+          upsertIds: [d-title, d-op, d-op-l, d-book, d-book-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-d-op,
+          type: whiteboard.apply,
+          at: { mark: d-op },
+          upsertIds: [d-a1, d-trips, d-trips-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-d-book,
+          type: whiteboard.apply,
+          at: { mark: d-book },
+          upsertIds: [d-a2, d-seats, d-seats-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-d-why1,
+          type: whiteboard.apply,
+          at: { mark: d-why1, offsetMs: 3000 },
+          upsertIds: [d-r1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-d-why2,
+          type: whiteboard.apply,
+          at: { mark: d-why2 },
+          upsertIds: [d-r2],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ပိုင်ရှင် သတ်မှတ်ပြီးတာနဲ့ နောက်ပြဿနာ တစ်ခု ပေါ်လာပါတယ်။ ကိုယ်မပိုင်တဲ့
+      data ကို လိုအပ်တဲ့အခါ ဘယ်လို ရမလဲ ဆိုတာပါ။ ခရီးစဉ် ရှာပေးတဲ့ Search က ရလဒ်တိုင်းမှာ ကားလိုင်းရဲ့ နာမည်ကို
+      ပြရပါတယ်။ ကားလိုင်း data ကို ပိုင်တာကတော့ Operator ပါ။
+      [[mark:q-g]] ကားလိုင်းက ၃၀၀ ပဲ ရှိပြီး၊ နာမည်တွေကလည်း တစ်လ တစ်ခါလောက်ပဲ ပြောင်းပါတယ်။
+      [[mark:q-a]] Search က ရှာတိုင်း Operator ကို လှမ်းမေးမလား။
+      [[mark:q-b]] ဒါမှမဟုတ် Search ဘက်မှာ မိတ္တူ တစ်ခု ထားမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ Search ဘက်မှာ မိတ္တူ ထားတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ဒီ data က သေးပြီး ပြောင်းခဲလို့ပါ။ မိတ္တူကို ငါးမိနစ်တစ်ခါ ပြန်ယူရင်တောင်၊
+      နာမည် အဟောင်း ပြမိမယ့် အချိန်က တစ်လမှာ မိနစ်ပိုင်းပဲ ရှိပါတယ်။
+      [[mark:q-why2]] လှမ်းမေးနေရင်တော့ ရှာတာတိုင်း နှေးသလို၊ Operator ပျက်တဲ့နေ့မှာ ခရီးစဉ် ရှာတာပါ
+      ပျက်ပါလိမ့်မယ်။ မိတ္တူ ထားရင် Operator ပျက်နေလည်း Search က ဆက်အလုပ်လုပ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-g, type: whiteboard.apply, at: { mark: q-g }, upsertIds: [q-g], drawMs: 1200 }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-why2,
+          type: whiteboard.apply,
+          at: { mark: q-why2, offsetMs: 6000 },
+          upsertIds: [q-why2],
+          drawMs: 1200,
+        }
+
+  - id: reading
+    chapter: ကိုယ်မပိုင်တဲ့ data ကို ဖတ်နည်း
+    narration: >
+      [[mark:w-open]] ကိုယ်မပိုင်တဲ့ data ကို ဖတ်တဲ့နည်းက လေးမျိုး ရှိပါတယ်။
+      [[mark:w-1]] ပထမက ခုနက ကားလိုင်း နာမည်တွေအတွက် ရွေးခဲ့တဲ့ နည်းပါ။ data တစ်ခုလုံးကို service ရဲ့ memory ထဲမှာ
+      မိတ္တူ ထားတာပါ။ အမြန်ဆုံး ဖြစ်ပေမဲ့ data သေးပြီး ပြောင်းခဲမှ သင့်တော်ပါတယ်။
+      [[mark:w-2]] ဒုတိယက ကိုယ်လိုတဲ့ column တွေကိုပဲ ကိုယ့်ဘက်မှာ ကူးထားတာပါ။ ပိုင်ရှင်က ပြောင်းတိုင်း event နဲ့
+      အသိပေးပြီး၊ ကိုယ်က ကိုယ့်မိတ္တူကို လိုက်ပြင်ပါတယ်။ မြန်ပြီး ပိုင်ရှင်ကို မမှီခိုတော့ပါဘူး။ ပေးရတာက မိတ္တူက
+      ခဏ ဟောင်းနေနိုင်တာပါ။
+      [[mark:w-3]] တတိယက လိုတဲ့အချိန်မှာ ပိုင်ရှင်ကို လှမ်းမေးတာပါ။ ရိုးရှင်းပြီး ပိုင်ရှင်ဆီက အလတ်ဆတ်ဆုံး data ကို
+      ရပါတယ်။ ပေးရတာက ကိုယ့် availability ကို ပိုင်ရှင်ရဲ့ availability နဲ့ ချည်လိုက်ရတာပါ။ availability ဆိုတာ
+      သုံးချင်တဲ့အချိန် သုံးလို့ရနေတာပါ။
+      [[mark:w-4]] စတုတ္ထက table ကိုပဲ မျှသုံးတာပါ။ ရိုးရှင်းပြီး join လည်း လုပ်လို့ ရပါတယ်။ ပေးရတာက boundary
+      ကျယ်သွားတာပါ။ ပိုင်ရှင်က schema ပြောင်းတိုင်း ဖတ်နေသူတွေ အားလုံး ပျက်နိုင်ပါတယ်။ ခရီးဖော် ရဲ့ Report က အခု ဒီနည်းနဲ့
+      ဖတ်နေတာပါ။
+      [[mark:w-choose]] ဘယ်နည်းကို ရွေးမလဲ ဆိုတာကို မေးခွန်း သုံးခုနဲ့ ဆုံးဖြတ်ပါတယ်။ data က ဘယ်လောက် လတ်ဆတ်ဖို့
+      လိုလဲ၊ ဘယ်လောက် များလဲ၊ ဘယ်လောက် မကြာခဏ ပြောင်းလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: w-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-reads,
+          type: slide.show,
+          at: { mark: w-open, offsetMs: -1000 },
+          slideId: four-reads,
+        }
+      - { id: point-w1, type: slide.point, at: { mark: w-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-w2, type: slide.point, at: { mark: w-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-w3, type: slide.point, at: { mark: w-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-w4, type: slide.point, at: { mark: w-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: table
+    chapter: Ownership table
+    narration: >
+      [[mark:t-close]] ဒီ ဆုံးဖြတ်ချက်တွေကို table တစ်ခုစီအတွက် ချရေးကြည့်ရအောင်။
+      [[mark:type-trips]] trips ကို Operator တစ်ယောက်တည်း ရေးပါတယ်။ Search က ထွက်ချိန်နဲ့ ဈေးနှုန်းလို သူလိုတဲ့ column
+      တွေကို event တွေကနေ ကူးထားပါတယ်။ ရှာတဲ့ request က အရမ်း များပြီး၊ ဒီ data က စက္ကန့်ပိုင်း ဟောင်းလည်း ရလို့ပါ။
+      [[mark:type-seats]] ကျန်တဲ့ခုံ အရေအတွက်ကတော့ Booking ပိုင်တဲ့ table အသစ်ထဲ ရောက်သွားပါပြီ။ ဒါက စက္ကန့်တိုင်း
+      ပြောင်းနေတာမို့၊ Search က ရှာတိုင်း Booking ကို လှမ်းမေးပါတယ်။ လတ်ဆတ်တာကို ရဖို့ Search ရဲ့ availability ကို
+      Booking နဲ့ ချည်ထားရတာပါ။ သိသိနဲ့ ပေးထားတဲ့ ဈေးမို့ table ထဲမှာ မှတ်ထားပါတယ်။
+      [[mark:type-holds]] seat hold ကလည်း အဲဒီလိုပါပဲ။ Payment က ငွေမဖြတ်ခင် hold က သက်တမ်း ရှိသေးလား ဆိုတာကို Booking
+      ဆီ အဲဒီအချိန်မှာပဲ လှမ်းမေးပါတယ်။ တစ်စက္ကန့် ဟောင်းတာတောင် လက်မခံနိုင်လို့ပါ။
+      [[mark:type-ops]] ကားလိုင်း table ကိုတော့ ခုနက ဆုံးဖြတ်ခဲ့တဲ့အတိုင်း Search ရဲ့ memory ထဲမှာ မိတ္တူ
+      ထားပါတယ်။
+      [[mark:type-tickets]] နောက်ဆုံးက Report ပါ။ Report က table တွေရဲ့ ညစဉ် မိတ္တူကို မျှသုံးပြီး ဖတ်ပါတယ်။ boundary
+      ကျယ်တယ်ဆိုတာ သိသိနဲ့ ရွေးတာပါ။ report တွေက တစ်ရက် ဟောင်းလည်း ရပြီး၊ join အများကြီး လိုလို့ပါ။ အဲဒီအတွက်
+      ပိုင်ရှင်တွေက schema မပြောင်းခင် Report ကို ကြိုပြောရပါမယ်။
+      [[mark:sel-rule]] အောက်ဆုံးက စည်းမျဉ်းကတော့ table အသစ်တိုင်းအတွက်ပါ။ table တစ်ခုကို service တစ်ခုတည်းက
+      ရေးပြီး၊ ကျန်တဲ့သူက ပိုင်ရှင်ဆီကနေပဲ ရရပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-reads, type: slide.close, at: { mark: t-close } }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-reads },
+          path: notebook/38-ownership.md,
+        }
+      - id: type-trips
+        type: editor.type
+        at: { mark: type-trips }
+        cadence: line-by-line
+        target: { file: notebook/38-ownership.md, after: "|---|---|---|---|\n" }
+        text: "| trips | Operator | Operator | Search: လိုတဲ့ column ကူးထား |\n"
+      - id: type-seats
+        type: editor.type
+        at: { mark: type-seats }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/38-ownership.md,
+            after: "| trips | Operator | Operator | Search: လိုတဲ့ column ကူးထား |\n",
+          }
+        text: "| seat_counts (trips က ခွဲထုတ်) | Booking | Booking | Search: ရှာတိုင်း Booking ကို မေး (လတ်ဆတ်ဖို့) |\n"
+      - id: type-holds
+        type: editor.type
+        at: { mark: type-holds }
+        cadence: line-by-line
+        target:
+          { file: notebook/38-ownership.md, after: "| Search: ရှာတိုင်း Booking ကို မေး (လတ်ဆတ်ဖို့) |\n" }
+        text: "| seat_holds | Booking | Booking | Payment: ငွေမဖြတ်ခင် Booking ကို မေး |\n"
+      - id: type-ops
+        type: editor.type
+        at: { mark: type-ops }
+        cadence: line-by-line
+        target: { file: notebook/38-ownership.md, after: "| Payment: ငွေမဖြတ်ခင် Booking ကို မေး |\n" }
+        text: "| operators | Operator | Operator | Search: memory ထဲမှာ မိတ္တူ |\n"
+      - id: type-tickets
+        type: editor.type
+        at: { mark: type-tickets }
+        cadence: line-by-line
+        target: { file: notebook/38-ownership.md, after: "| Search: memory ထဲမှာ မိတ္တူ |\n" }
+        text: "| tickets | Booking | Booking | Report: ညစဉ် မိတ္တူကို မျှသုံး (schema မပြောင်းခင် ကြိုပြော) |\n"
+      - id: expect-split
+        type: expect.file
+        at: { afterAction: type-tickets }
+        path: notebook/38-ownership.md
+        contains: "| seat_counts (trips က ခွဲထုတ်) | Booking | Booking | Search: ရှာတိုင်း Booking ကို မေး (လတ်ဆတ်ဖို့) |\n"
+      - id: sel-rule
+        type: editor.select
+        at: { mark: sel-rule }
+        target:
+          {
+            file: notebook/38-ownership.md,
+            text: "စည်းမျဉ်း: table တစ်ခု၊ ရေးသူ တစ်ယောက်\nကျန်တဲ့သူက ပိုင်ရှင်ဆီကနေပဲ ရမယ်",
+          }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာ service နှစ်ခု၊ ဒါမှမဟုတ် code ရဲ့ အပိုင်း နှစ်ခုက
+      ရေးနေတဲ့ table တစ်ခုကို ရှာပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် project အတွက် row တစ်ခု
+      ရေးကြည့်ပါ။
+      [[mark:turn-2]] ပိုင်ရှင် တစ်ယောက် သတ်မှတ်မလား၊ table ကို ခွဲမလား၊ boundary ကို ချဲ့မလား ဆိုတာ ရွေးပြီး၊
+      ကျန်တဲ့သူက ဘယ်လို ဖတ်မလဲ ဆိုတာပါ ဖြည့်ပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 5000 }
+        target: { file: notebook/38-ownership.md, text: "| Table | ရေးသူ | ပိုင်ရှင် | တခြားသူ ဖတ်ပုံ |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ table တစ်ခုကို ရေးတဲ့ service က ပိုင်ပါတယ်။ ရေးသူ နှစ်ယောက် ရှိလာရင် ပိုင်ရှင်
+      တစ်ယောက် သတ်မှတ်တာ၊ table ကို ခွဲတာ၊ boundary ကို ချဲ့တာထဲက တစ်ခုကို ရွေးပါ။ ကိုယ်မပိုင်တဲ့ data ကိုတော့
+      ဘယ်လောက် လတ်ဆတ်ဖို့ လိုလဲ၊ ဘယ်လောက် များလဲ၊ ဘယ်လောက် ပြောင်းလဲ ဆိုတာ ကြည့်ပြီး ဖတ်နည်းကို ရွေးပါ။ ပိုင်ရှင်
+      မရှိတဲ့ table ဆိုတာ မှားသွားရင် ဘယ်သူမှ တာဝန်မယူတဲ့ table ပါပဲ။
+      [[mark:next]] နောက် lesson မှာတော့ service တစ်ခုထက် ပိုတဲ့ နေရာက data တွေကို အတူ ပြောင်းရတဲ့
+      လုပ်ငန်းစဉ်တွေအတွက် distributed transaction နဲ့ saga ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/38-ownership.md, text: "# Data ownership: table တစ်ခုစီကို ဘယ်သူ ပိုင်လဲ" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
