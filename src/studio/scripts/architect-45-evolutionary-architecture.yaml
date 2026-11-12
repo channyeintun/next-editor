@@ -1,0 +1,841 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-45-evolutionary-architecture
+  title: "Architect Path 45: Evolutionary architecture နဲ့ fitness function"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/45-fitness-functions.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      examples/module-boundaries.test.js: |
+        // Example: module boundary ကို စစ်တဲ့ fitness function (ဥပမာ သက်သက်ပါ)
+        import test from "node:test";
+        import assert from "node:assert";
+        import { findTableAccess } from "./tools/table-access.js";
+
+        // module တစ်ခုစီ ပိုင်တဲ့ table
+        const owns = {
+          booking: ["tickets", "seat_holds", "seat_counts"],
+          payment: ["payments", "refunds"],
+          parcel: ["parcels"],
+        };
+
+        test("module တစ်ခုက တခြား module ရဲ့ table ကို မထိရ", () => {
+          const violations = findTableAccess("src").filter(
+            (use) => !owns[use.module].includes(use.table),
+          );
+          assert.equal(violations.length, 0);
+        });
+      notebook/45-fitness-functions.md: |
+        # Fitness function စာရင်း
+
+        ## Wiki ထဲက စည်းကမ်း (ရေးထားတာ 2 နှစ်ကျော်ပြီ)
+        - module တစ်ခုက တခြား module ရဲ့ table ကို တိုက်ရိုက် မထိရ
+        - ခရီးစဉ် ရှာတာ မြန်ရမယ်
+        - code ကို ကောင်းကောင်း ဖွဲ့စည်းထားရမယ်
+
+        ## Fitness function
+        | ကာကွယ်တဲ့ အရာ | စစ်ဆေးချက် | ဘယ်အချိန် run | Threshold |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — everything around the system changes; what must not be lost
+    # sits in the middle. Orange = the characteristics this board is about,
+    # violet = the changes pressing on them, green = the guard.
+    - {
+        id: e-core,
+        kind: rectangle,
+        x: 470,
+        y: 330,
+        width: 400,
+        height: 130,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: e-c1,
+        kind: text,
+        align: center,
+        x: 470,
+        y: 348,
+        width: 400,
+        height: 35,
+        text: "ခုံ နှစ်ခါ မရောင်းရ",
+        fontSize: 28,
+      }
+    - {
+        id: e-c2,
+        kind: text,
+        align: center,
+        x: 470,
+        y: 405,
+        width: 400,
+        height: 35,
+        text: "ရှာတာ p95 1 s အောက်",
+        fontSize: 28,
+      }
+    - {
+        id: e-biz,
+        kind: text,
+        x: 270,
+        y: 185,
+        width: 480,
+        height: 35,
+        text: "business: ပါဆယ် လုပ်ငန်း အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: e-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 430,
+        y: 232,
+        width: 90,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-tech,
+        kind: text,
+        x: 750,
+        y: 185,
+        width: 320,
+        height: 35,
+        text: "tech: platform အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: e-a2,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 820,
+        y: 232,
+        width: 90,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-team,
+        kind: text,
+        x: 490,
+        y: 570,
+        width: 380,
+        height: 35,
+        text: "team: developer 45 → 90",
+        fontSize: 28,
+      }
+    - {
+        id: e-a3,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 650,
+        y: 484,
+        width: 40,
+        height: 76,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-guard,
+        kind: freedraw,
+        stroke: box,
+        x: 452,
+        y: 318,
+        width: 436,
+        height: 154,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: e-guard-l,
+        kind: text,
+        x: 545,
+        y: 275,
+        width: 265,
+        height: 35,
+        text: "fitness function",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — the quiz, asked before "objective" and "threshold" are taught.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ဒါက fitness function ဖြစ်နိုင်လား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-rule,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 790,
+        height: 35,
+        text: "“code ကို ကောင်းကောင်း ဖွဲ့စည်းထားရမယ်”",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - { id: q-a, kind: text, x: 290, y: 325, width: 760, height: 35, text: "က) ရတယ်", fontSize: 28 }
+    - { id: q-b, kind: text, x: 290, y: 395, width: 760, height: 35, text: "ခ) မရဘူး", fontSize: 28 }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 400,
+        width: 150,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 470,
+        y: 388,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 790,
+        height: 35,
+        text: "အောင်၊ ကျ ဆုံးဖြတ်စရာ အချက် မရှိ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-fix,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 790,
+        height: 35,
+        text: "module တွေကြား cycle = 0 ဆိုရင် စစ်လို့ရ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — a pipeline with gates, top to bottom. Blue = the usual stages,
+    # orange = the architecture gate this board is about, violet = a change
+    # moving through, red = the change that is stopped, green = the benefit.
+    - {
+        id: p-build,
+        kind: rectangle,
+        x: 270,
+        y: 195,
+        width: 350,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-build-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 210,
+        width: 350,
+        height: 35,
+        text: "build",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 425,
+        y: 264,
+        width: 40,
+        height: 31,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-test,
+        kind: rectangle,
+        x: 270,
+        y: 300,
+        width: 350,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-test-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 315,
+        width: 350,
+        height: 35,
+        text: "test",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 425,
+        y: 369,
+        width: 40,
+        height: 31,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-arch,
+        kind: rectangle,
+        x: 270,
+        y: 405,
+        width: 350,
+        height: 64,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: p-arch-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 420,
+        width: 350,
+        height: 35,
+        text: "architecture check",
+        fontSize: 28,
+      }
+    - {
+        id: p-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 425,
+        y: 474,
+        width: 40,
+        height: 31,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-deploy,
+        kind: rectangle,
+        x: 270,
+        y: 510,
+        width: 350,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-deploy-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 525,
+        width: 350,
+        height: 35,
+        text: "deploy",
+        fontSize: 28,
+      }
+    - {
+        id: p-red,
+        kind: text,
+        x: 650,
+        y: 420,
+        width: 420,
+        height: 35,
+        text: "ပါဆယ် → Booking table: ရပ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-cut,
+        kind: freedraw,
+        stroke: strike,
+        x: 390,
+        y: 480,
+        width: 110,
+        height: 20,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-fast,
+        kind: text,
+        x: 650,
+        y: 475,
+        width: 420,
+        height: 35,
+        text: "ရေးပြီး မိနစ်ပိုင်းအတွင်း သိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8145
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Wiki ထဲက စည်းကမ်းတွေ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ service အသစ် တစ်ခုက production အတွက် အဆင်သင့် ဖြစ်မဖြစ်ကို မေးခွန်း လေးခုနဲ့ စစ်ပုံကို
+      လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] အဲဒီနောက် နှစ်နှစ် ထပ်ကြာသွားပါပြီ။ ခရီးဖော် မှာ developer ၉၀၊ team ၁၂ ခု ရှိလာပြီး၊
+      ကားတွေနဲ့ ပါဆယ် ပို့ပေးတဲ့ လုပ်ငန်း အသစ်လည်း စထားပါပြီ။ ကိုယ်ကတော့ chief architect ဖြစ်လာပြီး၊ တခြား
+      architect သုံးယောက်နဲ့ အတူ အလုပ်လုပ်နေပါတယ်။
+      [[mark:sel-rules]] ကုမ္ပဏီ ကြီးလာပေမဲ့ architecture စည်းကမ်းတွေကတော့ နှစ်နှစ်ကျော်က ရေးထားတဲ့ wiki
+      စာမျက်နှာ တစ်ခုထဲမှာပဲ ရှိနေတုန်းပါ။ code ကို အုပ်စုဖွဲ့ထားတဲ့ အပိုင်း၊ module တစ်ခုက တခြား module ရဲ့ table ကို
+      တိုက်ရိုက် မထိရဘူး၊ ခရီးစဉ်
+      ရှာတာ မြန်ရမယ် ဆိုတာမျိုးတွေပါ။
+      [[mark:late]] ပြီးခဲ့တဲ့ အပတ်က architect တစ်ယောက်က ပါဆယ် team ရဲ့ code ကို ကြည့်ရင်း၊ Booking ရဲ့ table
+      တွေကို တိုက်ရိုက် ဖတ်နေတဲ့ နေရာ ၃၀ ကျော်ကို တွေ့ပါတယ်။ ပထမဆုံး တစ်ခုက လေးလလောက်က ရေးခဲ့တာပါ။ ရေးတဲ့
+      developer က အဲဒီ wiki ကို တစ်ခါမှ မဖတ်ဖူးပါဘူး။
+      [[mark:late-cost]] အခု Booking team က သူတို့ table တစ်ခုကို ပြင်ချင်တဲ့အခါ၊ ပါဆယ် ဘက်က code တွေ ပျက်မှာ
+      စိုးလို့ မပြင်ရဲတော့ပါဘူး။ စည်းကမ်း ချိုးထားတာကို နောက်ကျမှ တွေ့ရင် ပြင်ရတဲ့ စရိတ်က ဒီလို ကြီးလာတာပါ။
+      [[mark:late-2]] ဒါကို ရေးတဲ့သူရဲ့ အမှားလို့ ပြောလို့ မရပါဘူး။ developer ၉၀ ရေးသမျှ code ကို architect လေးယောက်နဲ့
+      လိုက်ဖတ်ဖို့ မဖြစ်နိုင်သလို၊ wiki ထဲက စည်းကမ်းကလည်း ဘယ်သူ့ကိုမှ မတားနိုင်ပါဘူး။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/45-fitness-functions.md,
+        }
+      - id: sel-rules
+        type: editor.select
+        at: { mark: sel-rules }
+        target:
+          {
+            file: notebook/45-fitness-functions.md,
+            text: "- module တစ်ခုက တခြား module ရဲ့ table ကို တိုက်ရိုက် မထိရ\n- ခရီးစဉ် ရှာတာ မြန်ရမယ်",
+          }
+
+  - id: evolve
+    chapter: အမြဲ ပြောင်းနေတဲ့ ပတ်ဝန်းကျင်
+    narration: >
+      [[mark:e-open]] ဒီလို ဖြစ်တာက လူတွေ ပေါ့ဆလို့ မဟုတ်ပါဘူး။ system တစ်ခုရဲ့ ပတ်ဝန်းကျင်က အမြဲ
+      ပြောင်းနေလို့ပါ။ ကိုယ်တို့ မပျောက်စေချင်တဲ့ အရာ နှစ်ခုကနေ စကြည့်ရအောင်။ ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ
+      မရောင်းမိတာနဲ့ ရှာတာ မြန်တာပါ။
+      [[mark:e-biz]] business က ပြောင်းပါတယ်။ လက်မှတ် ရောင်းတဲ့ ကုမ္ပဏီကနေ ပါဆယ်ပါ ပို့ပေးတဲ့ ကုမ္ပဏီ
+      ဖြစ်လာပါတယ်။
+      [[mark:e-tech]] technology ကလည်း ပြောင်းပါတယ်။ service တွေ အားလုံးကို team တိုင်း သုံးတဲ့ platform အသစ်ပေါ်
+      ရွှေ့ခဲ့ရပါတယ်။
+      [[mark:e-team]] team ကလည်း ပြောင်းပါတယ်။ နှစ်နှစ်အတွင်း developer ၄၅ ယောက်ကနေ ၉၀ ဖြစ်လာတာမို့၊ တစ်ဝက်က
+      စည်းကမ်းတွေ သဘောတူခဲ့တုန်းက မရှိခဲ့တဲ့သူတွေပါ။
+      [[mark:e-core]] ဒီတော့ architecture ကို တစ်ခါ ဆွဲပြီး အဲဒီအတိုင်း ထားလို့ မရပါဘူး။ ပြောင်းလဲမှုကို
+      အဆင့်သေးသေးလေးတွေနဲ့ တဖြည်းဖြည်း လက်ခံနိုင်အောင် ဆောက်ရပါတယ်။ ဒါကို evolutionary architecture လို့
+      ခေါ်ပါတယ်။ ပါဆယ် လုပ်ငန်းကို ထည့်တုန်းကလည်း system ကို အစကနေ ပြန်မရေးဘဲ၊ service အသစ်တွေကို တစ်ခုချင်း
+      ထည့်ခဲ့တာပါ။
+      [[mark:e-keep]] ဒါပေမဲ့ ပြောင်းရင်းနဲ့ ဒီ နှစ်ခုကတော့ မပျောက်သွားဖို့ လိုပါတယ်။ အဲဒါတွေက ကိုယ်တို့ ရွေးထားတဲ့
+      architecture characteristic၊ ဆိုလိုတာက system က ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ ဆိုတဲ့ အရည်အသွေးတွေပါ။
+      [[mark:e-guard]] အဲဒီ characteristic တစ်ခု ပျက်မပျက်ကို လူက လိုက်ကြည့်မနေဘဲ၊ အလိုအလျောက် စစ်ပေးတဲ့
+      စစ်ဆေးချက်ကို fitness function လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { mark: e-open },
+          open: true,
+          clear: true,
+          upsertIds: [e-core, e-c1, e-c2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-e-biz,
+          type: whiteboard.apply,
+          at: { mark: e-biz },
+          upsertIds: [e-biz, e-a1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-tech,
+          type: whiteboard.apply,
+          at: { mark: e-tech },
+          upsertIds: [e-tech, e-a2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-team,
+          type: whiteboard.apply,
+          at: { mark: e-team },
+          upsertIds: [e-team, e-a3],
+          drawMs: 1200,
+        }
+      - {
+          id: point-e-core,
+          type: whiteboard.point,
+          at: { mark: e-keep },
+          target: { assetId: e-core },
+        }
+      - {
+          id: draw-e-guard,
+          type: whiteboard.apply,
+          at: { mark: e-guard },
+          upsertIds: [e-guard, e-guard-l],
+          drawMs: 1500,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ wiki ထဲမှာ စည်းကမ်း နောက်တစ်ခု ရှိပါသေးတယ်။
+      [[mark:q-rule]] code ကို ကောင်းကောင်း ဖွဲ့စည်းထားရမယ် ဆိုတာပါ။ ဒီ စည်းကမ်းကို ဒီအတိုင်း fitness function
+      တစ်ခု လုပ်လို့ ရမလား။
+      [[mark:q-a]] ပထမ အဖြေက ရတယ် ဆိုတာပါ။ စည်းကမ်း ဖြစ်နေပြီးသားမို့ စစ်ခိုင်းလိုက်ရုံပဲ ဆိုတဲ့ အမြင်ပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေကတော့ မရဘူး ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ မရဘူး ဆိုတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ကောင်းကောင်း ဆိုတာ လူတစ်ယောက်နဲ့ တစ်ယောက် မတူလို့ပါ။ စစ်ဆေးချက် တစ်ခုက
+      အောင်တယ်၊ ကျတယ်လို့ ဆုံးဖြတ်နိုင်ဖို့၊ ဘယ်သူ စစ်စစ် အဖြေတူမယ့် အချက် တစ်ခု လိုပါတယ်။
+      [[mark:q-fix]] ဒါကြောင့် စည်းကမ်းကို တိုင်းလို့ရတဲ့ ပုံစံနဲ့ ပြန်ရေးရပါတယ်။ ဥပမာ module တွေကြားမှာ
+      အပြန်အလှန် မှီခိုနေတဲ့ cycle မရှိရဘူး ဆိုရင်၊ cycle အရေအတွက်ကို ရေတွက်လို့ ရပါပြီ။ သုညဆိုရင် အောင်ပြီး၊
+      တစ်ခု ရှိတာနဲ့ ကျပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-rule,
+          type: whiteboard.apply,
+          at: { mark: q-rule },
+          upsertIds: [q-rule],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-fix,
+          type: whiteboard.apply,
+          at: { mark: q-fix },
+          upsertIds: [q-fix],
+          drawMs: 1200,
+        }
+
+  - id: pipeline
+    chapter: Pipeline ထဲက architecture gate
+    narration: >
+      [[mark:p-open]] ဒီလို စစ်ဆေးချက်တွေကို ဘယ်မှာ ထားမလဲ။ developer တစ်ယောက်ရဲ့ change တိုင်းက production
+      မရောက်ခင် pipeline တစ်ခုကို ဖြတ်ရပါတယ်။ build လုပ်တယ်၊ ပြီးရင် test တွေ run ပါတယ်။
+      [[mark:p-gate]] အဲဒီနောက်မှာ gate အသစ် တစ်ခု ထည့်ပါမယ်။ architecture စည်းကမ်းတွေကို စစ်တဲ့ အဆင့်ပါ။
+      [[mark:p-deploy]] ဒီအဆင့်ကို အောင်မှ deploy လုပ်ခွင့် ရပါတယ်။
+      [[mark:p-stop]] ပါဆယ် team က Booking ရဲ့ table ကို ဖတ်တဲ့ code တစ်ကြောင်း ထပ်ရေးလိုက်တယ် ဆိုပါစို့။ အဲဒီ
+      change က architecture gate မှာ ရပ်သွားပြီး၊ ဘယ်စည်းကမ်းကို ဘယ်နေရာမှာ ချိုးထားလဲ ဆိုတာပါ ပြောပြပါတယ်။
+      [[mark:p-fast]] အရေးကြီးတာက အချိန်ပါ။ အရင်က လေးလကြာမှ လူတစ်ယောက်က တွေ့ခဲ့တာကို၊ အခု developer ကိုယ်တိုင်
+      ရေးပြီး မိနစ်ပိုင်းအတွင်း သိရပါတယ်။ အဲဒီအချိန်မှာ ပြင်ရတာက တစ်ကြောင်းတည်းပါ။ နေရာ ၃၀ မဟုတ်တော့ပါဘူး။ ဒါက
+      developer ကို အပြစ်ရှာတာ မဟုတ်ဘဲ၊ မသိဘဲ စည်းကျော်မိတာကို စောစော သတိပေးတာပါ။
+      [[mark:p-worry]] Booking team lead မောင်မောင် ကတော့ gate တစ်ခု ထပ်တိုးတာက team တွေကို နှေးစေမှာကို
+      စိုးရိမ်ပါတယ်။ သူ့ စိုးရိမ်ချက်က အကြောင်းမဲ့ မဟုတ်ပါဘူး။ ဘာကြောင့် ရှိလဲ မသိတဲ့ စစ်ဆေးချက်ကို developer တွေက
+      အတားအဆီးလို့ပဲ မြင်ပြီး၊ ကျော်ဖို့ နည်းလမ်း ရှာကြမှာပါ။
+      [[mark:p-why]] ဒါကြောင့် စစ်ဆေးချက်တိုင်းမှာ ဘာကို ကာကွယ်ဖို့လဲ
+      ဆိုတာကို တစ်ကြောင်း ရေးထားပြီး၊ ကျတဲ့အခါ ဘယ်လို ပြင်ရမလဲပါ ပြောပြရပါတယ်။ စစ်ဆေးချက်တွေကို architect တွေချည်း
+      မရေးဘဲ၊ team တွေနဲ့ အတူ ရေးတာကလည်း အထောက်အကူ ဖြစ်ပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-build, p-build-l, p-a1, p-test, p-test-l],
+          drawMs: 2500,
+        }
+      - {
+          id: draw-p-gate,
+          type: whiteboard.apply,
+          at: { mark: p-gate },
+          upsertIds: [p-a2, p-arch, p-arch-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-deploy,
+          type: whiteboard.apply,
+          at: { mark: p-deploy },
+          upsertIds: [p-a3, p-deploy, p-deploy-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-stop,
+          type: whiteboard.apply,
+          at: { mark: p-stop },
+          upsertIds: [p-red, p-cut],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-fast,
+          type: whiteboard.apply,
+          at: { mark: p-fast },
+          upsertIds: [p-fast],
+          drawMs: 1000,
+        }
+      - {
+          id: point-p-arch,
+          type: whiteboard.point,
+          at: { mark: p-worry },
+          target: { assetId: p-arch },
+        }
+
+  - id: example
+    chapter: စစ်ဆေးချက် တစ်ခုရဲ့ ပုံစံ
+    narration: >
+      [[mark:x-open]] ဒီ gate ထဲက စစ်ဆေးချက် တစ်ခုက ဘယ်လို ပုံစံ ရှိမလဲ ဆိုတာကို ဥပမာ တစ်ခုနဲ့ ကြည့်ရအောင်။ ဒါက
+      ဥပမာအနေနဲ့ ရေးပြထားတဲ့ test တစ်ခုပါ။
+      [[mark:x-owns]] ပထမ အပိုင်းက module တစ်ခုစီက ဘယ် table တွေကို ပိုင်လဲ ဆိုတာပါ။ wiki ထဲမှာ စာနဲ့ ရေးထားတဲ့
+      သဘောတူညီချက်ကို၊ စက်က ဖတ်လို့ရတဲ့ ပုံစံနဲ့ ရေးလိုက်တာပါ။
+      [[mark:x-find]] ဒုတိယ အပိုင်းက code တစ်ခုလုံးထဲမှာ module တစ်ခုက သူ မပိုင်တဲ့ table ကို သုံးထားတဲ့
+      နေရာတွေကို ရှာပါတယ်။
+      [[mark:x-zero]] နောက်ဆုံး တစ်ကြောင်းက အရေးအကြီးဆုံးပါ။ တွေ့တဲ့ အရေအတွက်က သုည ဖြစ်ရမယ်လို့ ဆိုထားပါတယ်။ ဒါက
+      threshold ပါ။ ဘယ်လောက်ထိ လက်ခံမလဲ ဆိုတဲ့ ကန့်သတ်ချက်ကို ဂဏန်းနဲ့ ရေးထားမှ၊ စက်က အောင်တယ် ကျတယ်
+      ဆုံးဖြတ်နိုင်တာပါ။ နည်းနိုင်သမျှ နည်းရမယ်လို့ ရေးထားရင်တော့ ဘယ်တော့မှ ကျမှာ မဟုတ်ပါဘူး။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-pipeline, type: whiteboard.apply, at: { mark: x-open }, open: false }
+      - {
+          id: open-example,
+          type: workspace.openFile,
+          at: { afterAction: close-pipeline },
+          path: examples/module-boundaries.test.js,
+        }
+      - id: sel-owns
+        type: editor.select
+        at: { mark: x-owns }
+        target:
+          {
+            file: examples/module-boundaries.test.js,
+            text: "const owns = {\n  booking: [\"tickets\", \"seat_holds\", \"seat_counts\"],\n  payment: [\"payments\", \"refunds\"],\n  parcel: [\"parcels\"],\n};",
+          }
+      - id: sel-find
+        type: editor.select
+        at: { mark: x-find }
+        target:
+          {
+            file: examples/module-boundaries.test.js,
+            text: "(use) => !owns[use.module].includes(use.table)",
+          }
+      - id: sel-zero
+        type: editor.select
+        at: { mark: x-zero }
+        target:
+          { file: examples/module-boundaries.test.js, text: "assert.equal(violations.length, 0);" }
+
+  - id: table
+    chapter: Fitness function စာရင်း
+    narration: >
+      [[mark:d-open]] ဒါဆို ခရီးဖော် အတွက် fitness function တွေကို table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။ တစ်ခုစီအတွက်
+      ဘယ်အချိန်မှာ run မလဲ ဆိုတာနဲ့၊ ဘယ်ဂဏန်းမှာ ကျမလဲ ဆိုတာကို ဆုံးဖြတ်ရပါမယ်။
+      [[mark:type-boundary]] ပထမ နှစ်ခုက code ရဲ့ ဖွဲ့စည်းပုံကို ကာကွယ်တာပါ။ တခြား module ရဲ့ table ကို
+      ထိတာနဲ့ module တွေကြားက cycle ပါ။ နှစ်ခုလုံးက change တိုင်းမှာ pipeline ထဲ run ပြီး၊ threshold က သုညပါ။
+      [[mark:type-perf]] တတိယ တစ်ခုကတော့ pipeline ထဲမှာ စစ်ရုံနဲ့ မလုံလောက်ပါဘူး။ ရှာတာ ဘယ်လောက် မြန်လဲ ဆိုတာက
+      production ရဲ့ တကယ့် load အောက်မှာမှ သိရတာပါ။ ဒါကြောင့် production မှာ အမြဲ တိုင်းနေပါတယ်။ request ၁၀၀ မှာ
+      ၉၅ ခုက တစ်စက္ကန့်အတွင်း ပြီးရမယ် ဆိုတဲ့ ပစ်မှတ်ကို မမီတော့တာနဲ့ အချက်ပေးပါတယ်။
+      [[mark:t-monitor]] fitness function ဆိုတာ test တစ်မျိုးတည်း မဟုတ်ပါဘူး။ ဂဏန်းနဲ့ အချက်ပေးတဲ့ monitor လည်း
+      ဖြစ်နိုင်ပါတယ်။ ဒါပေမဲ့ dashboard ပေါ်မှာ graph တစ်ခု ပြထားရုံနဲ့တော့ မလုံလောက်ပါဘူး။ ဘယ်ဂဏန်းကို ကျော်ရင်
+      ကျတယ်လို့ သတ်မှတ်ပြီး၊ ကျတာနဲ့ တစ်ယောက်ယောက်ဆီ အချက်ပေးမှ fitness function ဖြစ်တာပါ။
+      [[mark:type-contract]] စတုတ္ထက team တွေကြားက contract၊ ဆိုလိုတာက နှစ်ဖက် သဘောတူထားတဲ့ data ပုံစံကို
+      ကာကွယ်တာပါ။ Booking က လက်မှတ် ရောင်းပြီးတိုင်း ထုတ်တဲ့ event ကို သုံးနေတဲ့ team တွေက သူတို့ လိုအပ်တာကို
+      test အဖြစ် ရေးပေးထားပါတယ်။ Booking က event ကို ပြင်တိုင်း အဲဒီ test တွေ တစ်ခုမှ မကျရပါဘူး။
+      [[mark:type-load]] နောက်ဆုံး တစ်ခုက characteristic နှစ်ခုကို အတူတူ စစ်တာပါ။ သင်္ကြန် မတိုင်ခင် ၂၀ ဆ load
+      test မှာ load ကို ခံနိုင်မနိုင်တင် မဟုတ်ဘဲ၊ ထိုင်ခုံ နှစ်ခါ ရောင်းမိတာ ရှိမရှိပါ စစ်ပါတယ်။ တစ်ခုချင်း ခွဲစစ်တုန်းက
+      နှစ်ခုလုံး အောင်ပြီး၊ အတူ စစ်မှ ပေါ်တဲ့ ပြဿနာမျိုး ရှိတတ်လို့ပါ။ ဒီ test ကို လူက စပေးရပေမဲ့၊ အောင်မအောင်ကိုတော့ ဂဏန်းနဲ့ပဲ
+      ဆုံးဖြတ်ပါတယ်။
+      [[mark:d-start]] စည်းကမ်း ရှိသမျှကို တစ်ခါတည်း fitness function လုပ်ဖို့ မလိုပါဘူး။ အခု အနာကျင်ဆုံး နေရာကနေ
+      စပါ။ ခရီးဖော် မှာတော့ module boundary ပါ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { mark: d-open },
+          path: notebook/45-fitness-functions.md,
+        }
+      - id: type-boundary
+        type: editor.type
+        at: { mark: type-boundary }
+        cadence: line-by-line
+        target: { file: notebook/45-fitness-functions.md, after: "|---|---|---|---|\n" }
+        text: "| module boundary | တခြား module ရဲ့ table ထိတဲ့ code ရှာတဲ့ test | change တိုင်း | 0 |\n| module ဖွဲ့စည်းပုံ | module တွေကြားက cycle ရေတွက်တဲ့ test | change တိုင်း | 0 |\n"
+      - id: expect-boundary
+        type: expect.file
+        at: { afterAction: type-boundary }
+        path: notebook/45-fitness-functions.md
+        contains: "| module boundary | တခြား module ရဲ့ table ထိတဲ့ code ရှာတဲ့ test | change တိုင်း | 0 |\n"
+      - id: type-perf
+        type: editor.type
+        at: { mark: type-perf }
+        cadence: line-by-line
+        target:
+          { file: notebook/45-fitness-functions.md, after: "cycle ရေတွက်တဲ့ test | change တိုင်း | 0 |\n" }
+        text: "| performance (ရှာတာ) | response time monitor + alert | production မှာ အမြဲ | p95 1 s အောက် |\n"
+      - id: type-contract
+        type: editor.type
+        at: { mark: type-contract }
+        cadence: line-by-line
+        target: { file: notebook/45-fitness-functions.md, after: "| p95 1 s အောက် |\n" }
+        text: "| contract (Booking event) | သုံးတဲ့ team တွေ ရေးတဲ့ contract test | change တိုင်း | fail 0 |\n"
+      - id: type-load
+        type: editor.type
+        at: { mark: type-load }
+        cadence: line-by-line
+        target: { file: notebook/45-fitness-functions.md, after: "| change တိုင်း | fail 0 |\n" }
+        text: "| elasticity + data integrity | 20 ဆ load test | သင်္ကြန် မတိုင်ခင် (လူက စ) | error 1 % အောက်၊ နှစ်ခါရောင်း 0 |\n"
+      - id: sel-first
+        type: editor.select
+        at: { mark: d-start }
+        target: { file: notebook/45-fitness-functions.md, text: "| module boundary |" }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာလည်း လူတိုင်း သိတယ်လို့ ထင်ရပေမဲ့ ဘယ်သူမှ မစစ်တဲ့ စည်းကမ်း
+      တစ်ခုတော့ ရှိမှာပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ စည်းကမ်း တစ်ခုကို
+      စစ်ဆေးချက်နဲ့ threshold အဖြစ် ရေးကြည့်ပါ။
+      [[mark:turn-2]] threshold ကို ရေးတဲ့အခါ ဂဏန်း တစ်ခု ပါရပါမယ်။ ဂဏန်း ရေးလို့ မရသေးရင်၊ စည်းကမ်းက
+      မရှင်းသေးလို့ပါ။ အဲဒါကို သိလိုက်ရတာကိုက တန်ဖိုး ရှိပါတယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/45-fitness-functions.md,
+            text: "| ကာကွယ်တဲ့ အရာ | စစ်ဆေးချက် | ဘယ်အချိန် run | Threshold |",
+          }
+      - id: sel-vague
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/45-fitness-functions.md, text: "- code ကို ကောင်းကောင်း ဖွဲ့စည်းထားရမယ်" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ business ရော၊ technology ရော၊ team ပါ အမြဲ ပြောင်းနေတာမို့၊ architecture ကို
+      အဆင့်သေးသေးလေးတွေနဲ့ ပြောင်းနိုင်အောင် ဆောက်ရပါတယ်။ ပြောင်းရင်းနဲ့ မပျောက်ရမယ့် characteristic တွေကိုတော့
+      fitness function တွေက စောင့်ပေးပါတယ်။
+      [[mark:recap-2]] fitness function ဆိုတာ ဘယ်သူ စစ်စစ် အဖြေတူပြီး၊ threshold ကို ဂဏန်းနဲ့ ရေးထားတဲ့ စစ်ဆေးချက်ပါ။
+      ဖြစ်နိုင်သမျှ လူက စပေးစရာ မလိုဘဲ အလိုအလျောက် run အောင် လုပ်ထားရပါတယ်။ wiki ထဲမှာပဲ ရှိတဲ့ စည်းကမ်းကို
+      ချိုးမိတာက လေးလကြာမှ ပေါ်ခဲ့ပေမဲ့၊ pipeline ထဲက စစ်ဆေးချက်ကတော့ မိနစ်ပိုင်းအတွင်း ပြောပြပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ဒီ စစ်ဆေးချက်ကို ပထမဆုံး run လိုက်တဲ့အခါ ချိုးဖောက်မှု ရာနဲ့ချီ တွေ့ရင်
+      ဘာလုပ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - id: sel-threshold
+        type: editor.select
+        at: { mark: recap-2 }
+        target: { file: notebook/45-fitness-functions.md, text: "Threshold" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
