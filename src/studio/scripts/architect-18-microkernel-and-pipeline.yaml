@@ -1,0 +1,858 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-18-microkernel-and-pipeline
+  title: "Architect Path 18: Microkernel နဲ့ pipeline"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/18-plugin-contract.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/18-plugin-contract.md: |+
+        # Plug-in contract · လက်မှတ် ဖျက်ခ စည်းမျဉ်း
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — one piece of code holding every ကားလိုင်း's cancellation rule.
+    # Blue is the code; the rules are neutral; red is the pile that keeps growing.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ကားလိုင်း 120၊ စည်းမျဉ်း 120",
+        fontSize: 36,
+      }
+    - {
+        id: n-box,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 760,
+        height: 370,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-box-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 250,
+        width: 760,
+        height: 35,
+        text: "လက်မှတ် ဖျက်တဲ့ code",
+        fontSize: 28,
+      }
+    - {
+        id: n-a,
+        kind: text,
+        x: 330,
+        y: 325,
+        width: 600,
+        height: 35,
+        text: "ကားလိုင်း A ဆိုရင် → 10 % ဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: n-b,
+        kind: text,
+        x: 330,
+        y: 385,
+        width: 600,
+        height: 35,
+        text: "ကားလိုင်း B ဆိုရင် → 2,000 ကျပ် ဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: n-c,
+        kind: text,
+        x: 330,
+        y: 445,
+        width: 600,
+        height: 35,
+        text: "ကားလိုင်း C ဆိုရင် → ပြန်မအမ်း",
+        fontSize: 28,
+      }
+    - {
+        id: n-more,
+        kind: text,
+        x: 330,
+        y: 520,
+        width: 600,
+        height: 35,
+        text: "… နောက်ထပ် 117 ခု",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the microkernel shape. Orange is the core the board is about;
+    # blue parts (registry, plug-ins; dashed = not written yet); the dashed white
+    # bar is the contract, a boundary; violet is the one call across it.
+    - {
+        id: k-core,
+        kind: rectangle,
+        x: 270,
+        y: 230,
+        width: 290,
+        height: 150,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: k-core-t,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 250,
+        width: 290,
+        height: 38,
+        text: "Core",
+        fontSize: 30,
+      }
+    - {
+        id: k-core-s,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 315,
+        width: 290,
+        height: 35,
+        text: "ဖျက်တဲ့ လုပ်ငန်းစဉ်",
+        fontSize: 28,
+      }
+    - {
+        id: k-pa,
+        kind: rectangle,
+        x: 735,
+        y: 215,
+        width: 300,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-pa-l,
+        kind: text,
+        align: center,
+        x: 735,
+        y: 235,
+        width: 300,
+        height: 35,
+        text: "A: 10 % ဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: k-pb,
+        kind: rectangle,
+        x: 735,
+        y: 315,
+        width: 300,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-pb-l,
+        kind: text,
+        align: center,
+        x: 735,
+        y: 335,
+        width: 300,
+        height: 35,
+        text: "B: 2,000 ကျပ် ဖြတ်",
+        fontSize: 28,
+      }
+    - { id: k-con, kind: rectangle, x: 670, y: 215, width: 50, height: 370, strokeStyle: dashed }
+    - {
+        id: k-con-l,
+        kind: text,
+        x: 628,
+        y: 170,
+        width: 140,
+        height: 35,
+        text: "contract",
+        fontSize: 28,
+      }
+    - {
+        id: k-call,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 572,
+        y: 285,
+        width: 88,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: k-reg,
+        kind: rectangle,
+        x: 270,
+        y: 430,
+        width: 290,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-reg-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 450,
+        width: 290,
+        height: 35,
+        text: "registry",
+        fontSize: 28,
+      }
+    - {
+        id: k-new,
+        kind: rectangle,
+        x: 735,
+        y: 440,
+        width: 300,
+        height: 76,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-new-l,
+        kind: text,
+        align: center,
+        x: 735,
+        y: 460,
+        width: 300,
+        height: 35,
+        text: "ကားလိုင်း အသစ်",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "အိတ် အပိုကြေး စည်းမျဉ်းကို ဘယ်မှာ ရေးမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) core ထဲမှာ if တစ်ကြောင်း ထည့်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) plug-in အသစ် တစ်ခု ရေးမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 440,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 750,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "core ကို မထိရင် ကျန် ကားလိုင်းတွေ မထိခိုက်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 4 — the Monday settlement as four one-way steps. Blue steps, violet
+    # flow; red is the direction a pipeline cannot go.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "တနင်္လာနေ့တိုင်း settlement တွက်ပုံ",
+        fontSize: 36,
+      }
+    - {
+        id: p-b1,
+        kind: rectangle,
+        x: 310,
+        y: 235,
+        width: 620,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l1,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 250,
+        width: 620,
+        height: 35,
+        text: "ဖတ်: တစ်ပတ်စာ ရောင်းပြီး လက်မှတ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 303,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b2,
+        kind: rectangle,
+        x: 310,
+        y: 340,
+        width: 620,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l2,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 355,
+        width: 620,
+        height: 35,
+        text: "စစ်: ဖျက်ထားတာတွေကို ဖယ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 408,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b3,
+        kind: rectangle,
+        x: 310,
+        y: 445,
+        width: 620,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l3,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 460,
+        width: 620,
+        height: 35,
+        text: "တွက်: commission 5 % နုတ်၊ ပေါင်း",
+        fontSize: 28,
+      }
+    - {
+        id: p-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 600,
+        y: 513,
+        width: 40,
+        height: 33,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: p-b4,
+        kind: rectangle,
+        x: 310,
+        y: 550,
+        width: 620,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-l4,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 565,
+        width: 620,
+        height: 35,
+        text: "ရေး: ကားလိုင်း အလိုက် ငွေစာရင်း",
+        fontSize: 28,
+      }
+    - {
+        id: p-back,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 985,
+        y: 250,
+        width: 40,
+        height: 350,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-back-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 965,
+        y: 395,
+        width: 80,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8118
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ကားလိုင်း ၁၂၀၊ စည်းမျဉ်း ၁၂၀
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ app တစ်ခုတည်းကို နည်းပညာ အလွှာအလိုက် ခွဲတဲ့ layered ပုံစံနဲ့၊ business ရဲ့
+      လုပ်ငန်းနယ်ပယ်အလိုက် module တွေ ခွဲတဲ့ modular monolith ကို လေ့လာပြီး၊ ခရီးဖော် အတွက် modular monolith ကို
+      ရွေးခဲ့ပါတယ်။
+      [[mark:readme]] ဒါပေမဲ့ module တစ်ခု၊ ဆိုလိုတာက အတူ ပြောင်းလဲတတ်တဲ့ code အုပ်စု တစ်ခုရဲ့ အထဲမှာတောင်
+      သူ့ပုံစံနဲ့သူ ဖြေရှင်းရတဲ့ ပြဿနာတွေ ရှိပါသေးတယ်။ ဒီနေ့
+      အဲဒီလို ပြဿနာ နှစ်ခုကို ကြည့်ပါမယ်။ ပထမ တစ်ခုက လက်မှတ် ဖျက်တဲ့ ကိစ္စပါ။ ခရီးဖော် မှာ ကားလိုင်း ၁၂၀
+      ရှိပြီး၊ ခရီးသည်က လက်မှတ်ကို ဖျက်ရင် ဘယ်လောက် ဖြတ်မလဲ ဆိုတဲ့ စည်းမျဉ်းက ကားလိုင်း တစ်ခုနဲ့ တစ်ခု
+      မတူပါဘူး။
+      [[mark:n-board]] ဒီ စည်းမျဉ်းတွေ အားလုံးကို Booking module ထဲက လက်မှတ် ဖျက်တဲ့ code တစ်နေရာတည်းမှာ
+      စုရေးထားပါတယ်။
+      [[mark:n-a]] ကားလိုင်း တစ်ခုဆိုရင် လက်မှတ်ဈေးရဲ့ ၁၀ ရာခိုင်နှုန်းကို ဖြတ်ပါတယ်။
+      [[mark:n-b]] နောက်တစ်ခုဆိုရင် ဘယ်အချိန် ဖျက်ဖျက် ၂၀၀၀ ကျပ် ဖြတ်ပါတယ်။
+      [[mark:n-c]] တချို့ဆိုရင်တော့ ကား မထွက်ခင် ခြောက်နာရီအတွင်း ဖျက်ရင် ငွေ လုံးဝ ပြန်မအမ်းပါဘူး။
+      [[mark:n-more]] ဒီလိုနဲ့ ကားလိုင်း ၁၂၀ အတွက် if တွေ တန်းစီနေတာပါ။ ကားလိုင်း အသစ် တစ်ခု ဝင်လာတိုင်း အဲဒီ
+      code ကို ဝင်ပြင်ရပြီး၊ တစ်ခုအတွက် ပြင်လိုက်တာက ကျန်တဲ့ ကားလိုင်းတွေရဲ့ ဖျက်ခကိုပါ မှားသွားစေနိုင်ပါတယ်။
+      Booking team lead မောင်မောင် ကတော့ အဲဒီ file ကို ဘယ်သူမှ မထိချင်ကြတော့ဘူးလို့ ပြောပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: readme }, path: README.md }
+      - id: sel-operators
+        type: editor.select
+        at: { mark: readme, offsetMs: 12000 }
+        target: { file: README.md, text: "- ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်" }
+      - {
+          id: draw-n-board,
+          type: whiteboard.apply,
+          at: { mark: n-board },
+          open: true,
+          upsertIds: [n-title, n-box, n-box-l],
+          drawMs: 1500,
+        }
+      - { id: draw-n-a, type: whiteboard.apply, at: { mark: n-a }, upsertIds: [n-a], drawMs: 900 }
+      - { id: draw-n-b, type: whiteboard.apply, at: { mark: n-b }, upsertIds: [n-b], drawMs: 900 }
+      - { id: draw-n-c, type: whiteboard.apply, at: { mark: n-c }, upsertIds: [n-c], drawMs: 900 }
+      - {
+          id: draw-n-more,
+          type: whiteboard.apply,
+          at: { mark: n-more },
+          upsertIds: [n-more],
+          drawMs: 800,
+        }
+
+  - id: microkernel
+    chapter: Core နဲ့ plug-in
+    narration: >
+      [[mark:k-core]] ဒီ code ကို သေချာ ကြည့်ရင် အပိုင်း နှစ်မျိုး ရောနေတာကို တွေ့ရပါတယ်။ တစ်မျိုးက
+      ကားလိုင်းတိုင်းအတွက် အတူတူပဲ ဖြစ်တဲ့ အပိုင်းပါ။ လက်မှတ်ကို ရှာတယ်၊ ဖျက်ခကို နုတ်ပြီး ကျန်တဲ့ငွေကို
+      ပြန်အမ်းတယ်၊ ထိုင်ခုံကို ပြန်လွှတ်ပေးတယ် ဆိုတဲ့ လုပ်ငန်းစဉ်ပါ။ ဒီအပိုင်းကို core လို့ ခေါ်ပါမယ်။
+      [[mark:k-plug]] နောက်တစ်မျိုးက ကားလိုင်း အလိုက် မတူတဲ့ အပိုင်း၊ ဆိုလိုတာက ဖျက်ခ ဘယ်လောက်လဲ ဆိုတဲ့
+      တွက်နည်းပါ။ ဒါတွေကို core ထဲကနေ ဆွဲထုတ်ပြီး၊ ကားလိုင်း တစ်ခုရဲ့ စည်းမျဉ်းကို အပိုင်းလေး တစ်ခုအဖြစ်
+      သီးခြား ရေးပါတယ်။ ဒီ အပိုင်းလေးတွေကို plug in လို့ ခေါ်ပါတယ်။
+      [[mark:k-contract]] core က plug in တိုင်းကို မေးခွန်း တစ်ခုတည်းပဲ မေးပါတယ်။ ဒီ လက်မှတ်ကို အခု ဖျက်ရင်
+      ဘယ်လောက် ဖြတ်မလဲ ဆိုတာပါ။ မေးတဲ့ ပုံစံရော၊ ဖြေတဲ့ ပုံစံရော plug in တိုင်းအတွက် အတူတူပါပဲ။ ဒီလို နှစ်ဖက်
+      သဘောတူထားတဲ့ ပုံစံကို contract လို့ ခေါ်ပါတယ်။
+      [[mark:k-registry]] ဘယ် ကားလိုင်းအတွက် ဘယ် plug in ကို သုံးရမလဲ ဆိုတာကိုတော့ registry လို့ ခေါ်တဲ့ စာရင်း
+      တစ်ခုထဲမှာ မှတ်ထားပါတယ်။ core ရဲ့ code ထဲမှာ ကားလိုင်း နာမည် တစ်ခုမှ မပါတော့ဘဲ၊ registry ထဲမှာ ရှာပြီး
+      တွေ့တဲ့ plug in ကို ခေါ်လိုက်ရုံပါပဲ။
+      [[mark:k-new]] ကားလိုင်း အသစ် တစ်ခုက သူ့ ဖျက်ခ စည်းမျဉ်းနဲ့ ဝင်လာရင်၊ plug in အသစ် တစ်ခု ရေးပြီး registry ထဲ
+      ထည့်လိုက်ရင် ရပါပြီ။
+      [[mark:k-name]] ဒီလို သေးသေးနဲ့ တည်ငြိမ်တဲ့ core တစ်ခုကို plug in တွေ ဝိုင်းတပ်ထားတဲ့ ပုံစံကို microkernel
+      architecture လို့ ခေါ်ပါတယ်။ ကိုယ်တို့ နေ့တိုင်း သုံးနေတဲ့ code editor တွေမှာ extension တွေ ထပ်တပ်လို့ရတာလည်း
+      ဒီ ပုံစံပါပဲ။ product က တစ်ခုတည်း၊ ဒါပေမဲ့ customer အလိုက် စည်းမျဉ်းတွေ ကွဲနေတဲ့ ပြဿနာမျိုးနဲ့ အံကိုက်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-k-core,
+          type: whiteboard.apply,
+          at: { mark: k-core, offsetMs: 5000 },
+          clear: true,
+          upsertIds: [k-core, k-core-t, k-core-s],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-k-plug,
+          type: whiteboard.apply,
+          at: { mark: k-plug, offsetMs: 5500 },
+          upsertIds: [k-pa, k-pa-l, k-pb, k-pb-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-k-contract,
+          type: whiteboard.apply,
+          at: { mark: k-contract },
+          upsertIds: [k-call, k-con, k-con-l],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-k-registry,
+          type: whiteboard.apply,
+          at: { mark: k-registry },
+          upsertIds: [k-reg, k-reg-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-k-new,
+          type: whiteboard.apply,
+          at: { mark: k-new },
+          upsertIds: [k-new, k-new-l],
+          drawMs: 1200,
+        }
+      - {
+          id: point-k-core,
+          type: whiteboard.point,
+          at: { mark: k-name },
+          target: { assetId: k-core },
+        }
+
+  - id: cost
+    narration: >
+      [[mark:c-contract]] ဒီ ပုံစံမှာလည်း ပေးဆပ်ရတာ ရှိပါတယ်။ အကြီးဆုံးကတော့ contract ပါ။ plug in ၁၂၀ လုံးက
+      contract တစ်ခုတည်းကို မှီခိုနေတာမို့၊ နောက်မှ contract ကို ပြောင်းချင်ရင် plug in အားလုံးကို လိုက်ပြင်ရပါမယ်။
+      ဒါကြောင့် contract ကို အစကတည်းက သေးသေးလေး ဖြစ်အောင်၊ သေသေချာချာ စဉ်းစားပြီးမှ သတ်မှတ်ဖို့ လိုပါတယ်။
+      [[mark:c-plug]] plug in တွေ အချင်းချင်း မမှီခိုမိအောင်လည်း ထိန်းရပါတယ်။ plug in တစ်ခုက နောက်တစ်ခုကို
+      ခေါ်သုံးနေရင်၊ တစ်ခုကို ဖြုတ်လိုက်တာနဲ့ နောက်တစ်ခုပါ ပျက်သွားမှာမို့ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: point-k-con,
+          type: whiteboard.point,
+          at: { mark: c-contract, offsetMs: 2500 },
+          target: { assetId: k-con },
+        }
+      - { id: point-k-pb, type: whiteboard.point, at: { mark: c-plug }, target: { assetId: k-pb } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကားလိုင်း အသစ် တစ်ခု ဝင်လာပါတယ်။ သူ့မှာ တခြား ဘယ်ကားလိုင်းမှာမှ
+      မရှိတဲ့ စည်းမျဉ်း တစ်ခု ပါလာပါတယ်။ အိတ်က ကီလို ၂၀ ထက် ပိုလေးရင် အပိုကြေး ယူမယ် ဆိုတာပါ။ ဖျက်ခနဲ့
+      မဆိုင်တဲ့ စည်းမျဉ်းမို့ အခု ရှိတဲ့ contract ထဲမှာလည်း မပါပါဘူး။
+      [[mark:q-a]] ပထမ နည်းက ကားလိုင်း တစ်ခုတည်းအတွက်မို့ core ထဲမှာ if တစ်ကြောင်း ထည့်လိုက်တာပါ။ ဆယ်မိနစ်နဲ့
+      ပြီးပါတယ်။
+      [[mark:q-b]] ဒုတိယ နည်းကတော့ အိတ် အပိုကြေးအတွက် contract သေးသေး တစ်ခု ထပ်သတ်မှတ်ပြီး၊ plug in အသစ် တစ်ခု
+      ရေးတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ ဖျက်ခ code ထဲက if ၁၂၀ ကလည်း အဲဒီလို
+      တစ်ကြောင်းတည်းကနေ စခဲ့တာမို့ပါ။
+      [[mark:q-why]] core ဆိုတာ ကားလိုင်းတိုင်းရဲ့ လက်မှတ်တွေ ဖြတ်သွားရတဲ့ code ပါ။ အဲဒါကို မထိဘဲ ထားနိုင်မှ
+      ကားလိုင်း တစ်ခုအတွက် အပြောင်းအလဲက ကျန်တဲ့ ကားလိုင်းတွေကို မထိခိုက်မှာပါ။ ဒါကြောင့် microkernel မှာ core
+      ကို သေးသေးနဲ့ တည်တည်ငြိမ်ငြိမ် ထိန်းထားတာက အရေးအကြီးဆုံး စည်းကမ်းပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why, offsetMs: 4500 },
+          upsertIds: [q-r1],
+          drawMs: 1000,
+        }
+
+  - id: pipeline
+    chapter: Pipeline
+    narration: >
+      [[mark:p-open]] ဒုတိယ ပြဿနာကတော့ ငွေစာရင်း ရှင်းတဲ့ ကိစ္စပါ။ ခရီးဖော် က လက်မှတ်ဖိုးထဲက commission ၅ ရာခိုင်နှုန်းကို
+      ယူပြီး၊ ကျန်တာကို တနင်္လာနေ့တိုင်း ကားလိုင်းတွေဆီ ရှင်းပေးရပါတယ်။ ဒီ settlement ကို တွက်တဲ့ code က အခုတော့
+      function ရှည်ကြီး တစ်ခုတည်းပါ။ ဒါကို အဆင့် လေးဆင့် ခွဲကြည့်ရအောင်။
+      [[mark:p-1]] ပထမ အဆင့်က ဖတ်တာပါ။ အဲဒီ တစ်ပတ်အတွင်း ရောင်းခဲ့တဲ့ လက်မှတ်တွေကို ဆွဲထုတ်ပါတယ်။
+      [[mark:p-2]] ဒုတိယ အဆင့်က စစ်တာပါ။ ဖျက်ထားတဲ့ လက်မှတ်တွေနဲ့ ငွေပြန်အမ်းပြီးသား လက်မှတ်တွေကို
+      ဖယ်ထုတ်ပါတယ်။
+      [[mark:p-3]] တတိယ အဆင့်က တွက်တာပါ။ commission ကို နုတ်ပြီး ကားလိုင်း တစ်ခုချင်းစီအတွက် ပေါင်းပါတယ်။
+      [[mark:p-4]] နောက်ဆုံး အဆင့်က ရေးတာပါ။ ကားလိုင်း တစ်ခုစီအတွက် ငွေစာရင်းကို ထုတ်ပေးပါတယ်။
+      [[mark:p-name]] အဆင့်တိုင်းက အလုပ် တစ်ခုတည်းကိုပဲ လုပ်ပြီး၊ ရလဒ်ကို နောက်အဆင့်ဆီ လက်ဆင့်ကမ်းပါတယ်။ data က
+      တစ်ဖက်တည်းကိုပဲ စီးသွားပြီး၊ အဆင့် တစ်ခုက တခြား အဆင့်တွေ အထဲမှာ ဘာလုပ်နေလဲ မသိပါဘူး။ ဒီ ပုံစံကို pipeline
+      architecture လို့ ခေါ်ပါတယ်။
+      [[mark:p-gain]] ရတဲ့ အကျိုးက အဆင့် တစ်ခုချင်းစီကို သီးခြား test လုပ်လို့ ရတာပါ။ စစ်တဲ့ အဆင့်ကို လက်မှတ်
+      ဆယ်စောင်လောက် ထည့်ပေးပြီး ထွက်လာတာကို ကြည့်ရုံပါပဲ။ အဆင့် အသစ် တစ်ခုကို ကြားမှာ ထည့်ချင်ရင်လည်း၊ အဆင့်တွေကြား
+      လက်ဆင့်ကမ်းတဲ့ data ပုံစံ မပြောင်းသရွေ့ ကျန်တဲ့ အဆင့်တွေကို ပြင်စရာ မလိုပါဘူး။ ဥပမာ promo code နဲ့ လျှော့ပေးထားတဲ့ ငွေကို ဘယ်သူ ခံမလဲ ခွဲတဲ့ အဆင့်ကို
+      စစ်တာနဲ့ တွက်တာ ကြားမှာ ထည့်လိုက်လို့ ရပါတယ်။
+      [[mark:p-bad]] မသင့်တော်တဲ့ နေရာကတော့ အပြန်အလှန် ဆက်သွယ်ရတဲ့ အလုပ်တွေပါ။ ခရီးသည်က ထိုင်ခုံ ရွေးလိုက်၊
+      system က ပြန်ဖြေလိုက်၊ ခရီးသည်က ပြောင်းရွေးလိုက် လုပ်ရတဲ့ လက်မှတ် ဝယ်တဲ့ လုပ်ငန်းစဉ်မျိုးကို တစ်ဖက်တည်း
+      စီးတဲ့ pipeline နဲ့ ဆောက်လို့ မကောင်းပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-1,
+          type: whiteboard.apply,
+          at: { mark: p-1 },
+          upsertIds: [p-b1, p-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-2,
+          type: whiteboard.apply,
+          at: { mark: p-2 },
+          upsertIds: [p-a1, p-b2, p-l2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-3,
+          type: whiteboard.apply,
+          at: { mark: p-3 },
+          upsertIds: [p-a2, p-b3, p-l3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-4,
+          type: whiteboard.apply,
+          at: { mark: p-4 },
+          upsertIds: [p-a3, p-b4, p-l4],
+          drawMs: 1500,
+        }
+      - {
+          id: point-p-2,
+          type: whiteboard.point,
+          at: { mark: p-gain, offsetMs: 4500 },
+          target: { assetId: p-b2 },
+        }
+      - {
+          id: draw-p-back,
+          type: whiteboard.apply,
+          at: { mark: p-bad },
+          upsertIds: [p-back, p-back-x],
+          drawMs: 1300,
+        }
+
+  - id: contract
+    chapter: Contract ကို ချရေးခြင်း
+    narration: >
+      [[mark:d-open]] ဒီ ပုံစံ နှစ်ခုကို မှတ်စုထဲမှာ ချရေးကြည့်ရအောင်။ microkernel မှာ အရေးကြီးဆုံး
+      စာရွက်စာတမ်းက contract ပါ။
+      [[mark:type-in]] ပထမဆုံး core က plug in ကို ဘာတွေ ပေးမလဲ ဆိုတာ သတ်မှတ်ပါတယ်။ ဖျက်ခ တွက်ဖို့ လိုသလောက်ကိုပဲ
+      ပေးတာပါ။ ခရီးသည်ရဲ့ နာမည်၊ ဖုန်းနံပါတ်လို မလိုတဲ့ data တွေကို မပေးပါဘူး။ တစ်ခါ ပေးလိုက်ပြီးသား အရာကို
+      နောက်မှ ပြန်ရုပ်သိမ်းဖို့ ခက်လို့ပါ။
+      [[mark:type-out]] plug in ဘက်က ပြန်ပေးရမှာက ဖြတ်မယ့် ငွေပမာဏ တစ်ခုတည်းပါ။ ငွေပြန်အမ်းတာ၊ ထိုင်ခုံ
+      ပြန်လွှတ်တာတွေက core ရဲ့ အလုပ်မို့ plug in က ဝင်မလုပ်ရပါဘူး။
+      [[mark:type-not]] plug in မလုပ်ရတာတွေကိုလည်း ရေးထားပါတယ်။ database ကို တိုက်ရိုက် မထိရဘူး၊ တခြား plug in ကို
+      မခေါ်ရဘူး ဆိုတာပါ။ ဒီ တားမြစ်ချက် နှစ်ခုကြောင့် plug in တစ်ခုက ဘယ်လောက်ပဲ မှားမှား၊ ထိခိုက်မှာက သူ့
+      ကားလိုင်း တစ်ခုတည်းပါ။
+      [[mark:type-pipe]] pipeline အတွက်ကတော့ အဆင့် လေးဆင့်ကို အစဉ်အတိုင်း ရေးထားပါတယ်။ အဆင့် တစ်ခုစီက ဘာကို
+      လက်ခံပြီး ဘာကို ထုတ်ပေးလဲ ဆိုတာ ရှင်းနေမှ၊ အဆင့်တွေကို တစ်ယောက်တစ်ခု ခွဲရေးလို့ ရမှာပါ။
+      [[mark:d-inside]] သတိပြုစရာ တစ်ခုက ဒီ ပုံစံ နှစ်ခုလုံးဟာ ခရီးဖော် system တစ်ခုလုံးရဲ့ ပုံစံ မဟုတ်တာပါ။
+      ဖျက်ခ plug in တွေက Booking module ရဲ့ အထဲမှာ ရှိပြီး၊ settlement pipeline ကလည်း module တစ်ခုရဲ့ အထဲမှာပဲ
+      ရှိပါတယ်။ app တစ်ခုလုံးကတော့ modular monolith အတိုင်းပါပဲ။ system ကို ဖွဲ့စည်းတဲ့ ပုံစံတွေ၊ architecture style
+      တွေကို ဒီလို ပြဿနာရဲ့ ပုံသဏ္ဌာန်နဲ့ ကိုက်တဲ့ နေရာမှာ ရောသုံးတာက ပုံမှန်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-pipe, type: whiteboard.apply, at: { mark: d-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-pipe },
+          path: notebook/18-plugin-contract.md,
+        }
+      - id: type-in
+        type: editor.type
+        at: { mark: type-in }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/18-plugin-contract.md,
+            after: "# Plug-in contract · လက်မှတ် ဖျက်ခ စည်းမျဉ်း\n\n",
+          }
+        text: "## Core က ပေးတာ (input)\n- လက်မှတ် ဈေး၊ ကား ထွက်မယ့် အချိန်၊ ဖျက်တဲ့ အချိန်\n\n"
+      - id: type-out
+        type: editor.type
+        at: { mark: type-out }
+        cadence: line-by-line
+        target: { file: notebook/18-plugin-contract.md, after: "ဖျက်တဲ့ အချိန်\n\n" }
+        text: "## Plug-in က ပြန်ပေးတာ (output)\n- ဖြတ်မယ့် ငွေ (ကျပ်)\n\n"
+      - id: type-not
+        type: editor.type
+        at: { mark: type-not }
+        cadence: line-by-line
+        target: { file: notebook/18-plugin-contract.md, after: "- ဖြတ်မယ့် ငွေ (ကျပ်)\n\n" }
+        text: "## Plug-in မလုပ်ရတာ\n- database ကို တိုက်ရိုက် မဖတ်၊ မရေးရ\n- တခြား plug-in ကို မခေါ်ရ\n\n"
+      - id: type-pipe
+        type: editor.type
+        at: { mark: type-pipe }
+        cadence: line-by-line
+        target: { file: notebook/18-plugin-contract.md, after: "- တခြား plug-in ကို မခေါ်ရ\n\n" }
+        text: "## Settlement pipeline (တနင်္လာနေ့တိုင်း)\n1. ဖတ်: တစ်ပတ်စာ ရောင်းပြီး လက်မှတ်တွေ\n2. စစ်: ဖျက်ထားတာ၊ ငွေပြန်အမ်းထားတာတွေကို ဖယ်\n3. တွက်: commission 5 % နုတ်၊ ကားလိုင်း အလိုက် ပေါင်း\n4. ရေး: ကားလိုင်း တစ်ခုစီအတွက် ငွေစာရင်း\n"
+      - id: expect-not
+        type: expect.file
+        at: { afterAction: type-pipe }
+        path: notebook/18-plugin-contract.md
+        contains: "## Plug-in မလုပ်ရတာ\n- database ကို တိုက်ရိုက် မဖတ်၊ မရေးရ\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာ ဒီ customer ဆိုရင် ဒီလို၊ ဟို customer ဆိုရင် ဟိုလို
+      ဆိုပြီး if တွေ တန်းစီနေတဲ့ နေရာ တစ်ခုကို ရှာကြည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ contract ရဲ့ ခေါင်းစဉ်
+      သုံးခုအောက်မှာ ကိုယ့် project အတွက် ပြန်ရေးကြည့်ပါ။ core က ဘာပေးမလဲ၊ plug in က ဘာပြန်ပေးမလဲ၊ ဘာကို
+      မလုပ်ရဘူးလဲ ဆိုတာပါ။
+      [[mark:turn-2]] ရေးရတာ ခက်နေရင်၊ အားလုံးအတွက် တူတဲ့ အပိုင်းနဲ့ customer အလိုက် မတူတဲ့ အပိုင်းကို မခွဲရသေးလို့
+      ဖြစ်နိုင်ပါတယ်။ အဲဒါကို သိလိုက်ရတာကိုက ပထမ ခြေလှမ်းပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-contract
+        type: editor.select
+        at: { mark: turn, offsetMs: 9000 }
+        target:
+          file: notebook/18-plugin-contract.md
+          text: "## Core က ပေးတာ (input)\n- လက်မှတ် ဈေး၊ ကား ထွက်မယ့် အချိန်၊ ဖျက်တဲ့ အချိန်\n\n## Plug-in က ပြန်ပေးတာ (output)\n- ဖြတ်မယ့် ငွေ (ကျပ်)\n\n## Plug-in မလုပ်ရတာ"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ product တစ်ခုတည်းမှာ customer အလိုက် စည်းမျဉ်းတွေ ကွဲနေရင် microkernel က အံကိုက်ပါတယ်။
+      အားလုံးအတွက် တူတာကို သေးသေး တည်ငြိမ်တဲ့ core ထဲ ထားပြီး၊ မတူတာတွေကို contract တစ်ခုတည်းရဲ့ နောက်က plug in
+      တွေအဖြစ် ခွဲထုတ်တာပါ။
+      [[mark:recap-2]] အလုပ်က တစ်ဖက်တည်း စီးတဲ့ အဆင့်တွေ ဆိုရင်တော့ pipeline က အံကိုက်ပါတယ်။ အဆင့်တိုင်းက အလုပ်
+      တစ်ခုတည်း လုပ်တာမို့ တစ်ခုချင်း စစ်လို့ရပြီး၊ အစီအစဉ်ကိုလည်း ပြောင်းစီလို့ ရပါတယ်။ နှစ်ခုလုံးက system တစ်ခုလုံးထက် module တစ်ခုရဲ့
+      အထဲမှာ ပိုတွေ့ရတဲ့ ပုံစံတွေပါ။
+      [[mark:next]] နောက် lesson မှာတော့ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားနေတဲ့ ပြဿနာအတွက်၊ app ကို
+      service ကြီးကြီး အနည်းငယ်အဖြစ် ခွဲတဲ့ service based architecture ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-pipeline
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          { file: notebook/18-plugin-contract.md, text: "## Settlement pipeline (တနင်္လာနေ့တိုင်း)" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
