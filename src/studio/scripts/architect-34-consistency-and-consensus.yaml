@@ -1,0 +1,1031 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-34-consistency-and-consensus
+  title: "Architect Path 34: Consistency နဲ့ consensus"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/34-consistency.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/34-consistency.md: |
+        # ဘယ်နေရာမှာ ခဏလေးတောင် မမှားရဘူးလဲ
+
+        တောင်းဆိုချက် (လှလှ): ကားဂိတ်မှာ internet ပြတ်နေလည်း ကောင်တာက အလုပ် ဆက်လုပ်နိုင်ရမယ်
+
+        | Operation | Strong consistency လိုလား | ဘာကြောင့် | လက်ခံတဲ့ စရိတ် |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — three copies that behave as one. Blue = the databases, orange
+    # = the guarantee the board is about.
+    - { id: o-p, kind: ellipse, x: 300, y: 240, width: 230, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: o-p-l,
+        kind: text,
+        align: center,
+        x: 300,
+        y: 262,
+        width: 230,
+        height: 35,
+        text: "primary",
+        fontSize: 28,
+      }
+    - { id: o-r1, kind: ellipse, x: 565, y: 240, width: 230, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: o-r1-l,
+        kind: text,
+        align: center,
+        x: 565,
+        y: 262,
+        width: 230,
+        height: 35,
+        text: "replica 1",
+        fontSize: 28,
+      }
+    - { id: o-r2, kind: ellipse, x: 830, y: 240, width: 230, height: 80, strokeColor: "#1971c2" }
+    - {
+        id: o-r2-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 262,
+        width: 230,
+        height: 35,
+        text: "replica 2",
+        fontSize: 28,
+      }
+    - {
+        id: o-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "Strong consistency = မိတ္တူ တစ်ခုတည်းလို",
+        fontSize: 36,
+      }
+    - {
+        id: o-wrap,
+        kind: rectangle,
+        x: 280,
+        y: 225,
+        width: 800,
+        height: 110,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-wrap-l,
+        kind: text,
+        x: 280,
+        y: 345,
+        width: 600,
+        height: 35,
+        text: "အပြင်ကကြည့်ရင် မိတ္တူ တစ်ခုတည်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: o-ev,
+        kind: text,
+        x: 280,
+        y: 420,
+        width: 800,
+        height: 35,
+        text: "eventual consistency: ခဏ ကွာ၊ နောက်ဆုံး တူ",
+        fontSize: 28,
+      }
+    - {
+        id: o-win,
+        kind: text,
+        x: 280,
+        y: 500,
+        width: 800,
+        height: 35,
+        text: "တစ်ယောက်ပဲ အနိုင်ရရမယ်: ခုံ၊ username၊ lock",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: o-race,
+        kind: text,
+        x: 280,
+        y: 570,
+        width: 800,
+        height: 35,
+        text: "လမ်းကြောင်း နှစ်ခု အပြိုင်: SMS နဲ့ စာမျက်နှာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — the two costs, and the counter cut off from the primary. Blue
+    # = the parts, violet = the link, red = the costs, orange = the point.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "Strong consistency ရဲ့ စရိတ်",
+        fontSize: 36,
+      }
+    - {
+        id: p-c1,
+        kind: text,
+        x: 290,
+        y: 225,
+        width: 780,
+        height: 35,
+        text: "1 နေ့တိုင်း: request တိုင်း ပိုနှေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-ctr,
+        kind: rectangle,
+        x: 290,
+        y: 295,
+        width: 230,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-ctr-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 317,
+        width: 230,
+        height: 35,
+        text: "ကောင်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: p-link,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 315,
+        width: 250,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: p-db, kind: ellipse, x: 800, y: 290, width: 290, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: p-db-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 317,
+        width: 290,
+        height: 35,
+        text: "primary database",
+        fontSize: 28,
+      }
+    - {
+        id: p-cut,
+        kind: freedraw,
+        stroke: scribble,
+        x: 630,
+        y: 305,
+        width: 60,
+        height: 60,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-c2,
+        kind: text,
+        x: 290,
+        y: 400,
+        width: 780,
+        height: 35,
+        text: "2 network ပြတ်ချိန်: ဖြေမလား၊ မှန်မလား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-ch1,
+        kind: text,
+        x: 290,
+        y: 465,
+        width: 780,
+        height: 35,
+        text: "ဖြေမယ် = ရောင်းလိုက်၊ မှားနိုင်",
+        fontSize: 28,
+      }
+    - {
+        id: p-ch2,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 780,
+        height: 35,
+        text: "မှန်မယ် = ငြင်းထား၊ အလုပ်ရပ်",
+        fontSize: 28,
+      }
+    - {
+        id: p-each,
+        kind: text,
+        x: 290,
+        y: 590,
+        width: 780,
+        height: 35,
+        text: "operation တစ်ခုချင်းစီအတွက် ရွေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — ခရီးဖော်'s operations in two columns. Orange = the few that
+    # must be right now; white = the many that may catch up later.
+    - {
+        id: k-left,
+        kind: rectangle,
+        x: 270,
+        y: 215,
+        width: 400,
+        height: 410,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: k-left-h,
+        kind: text,
+        x: 290,
+        y: 232,
+        width: 370,
+        height: 38,
+        text: "အခုချက်ချင်း မှန်ရမယ်",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    - { id: k-right, kind: rectangle, x: 700, y: 215, width: 390, height: 410, strokeStyle: dashed }
+    - {
+        id: k-right-h,
+        kind: text,
+        x: 720,
+        y: 232,
+        width: 360,
+        height: 38,
+        text: "နောက်မှ လိုက်မီလည်း ရ",
+        fontSize: 30,
+      }
+    - {
+        id: k-seat,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 370,
+        height: 35,
+        text: "ခုံ ရောင်းတာ",
+        fontSize: 28,
+      }
+    - {
+        id: k-leader,
+        kind: text,
+        x: 290,
+        y: 380,
+        width: 370,
+        height: 35,
+        text: "primary ရွေးတာ",
+        fontSize: 28,
+      }
+    - {
+        id: k-lock,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 370,
+        height: 35,
+        text: "settlement job ရဲ့ lock",
+        fontSize: 28,
+      }
+    - {
+        id: k-list,
+        kind: text,
+        x: 720,
+        y: 310,
+        width: 360,
+        height: 35,
+        text: "ခရီးသည် စာရင်း ကြည့်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: k-reprint,
+        kind: text,
+        x: 720,
+        y: 380,
+        width: 360,
+        height: 35,
+        text: "လက်မှတ် ပြန်ထုတ်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: k-dash,
+        kind: text,
+        x: 720,
+        y: 450,
+        width: 360,
+        height: 35,
+        text: "dashboard နဲ့ report",
+        fontSize: 28,
+      }
+    # Board 4 — three questions that are one problem, and a majority of three.
+    # Orange = consensus, green = the machines that agree, red = the one cut
+    # off and the thing not to do.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 820,
+        height: 45,
+        text: "တစ်ယောက်ပဲ အနိုင်ရရမယ် = consensus",
+        fontSize: 36,
+      }
+    - {
+        id: n-p1,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 340,
+        height: 35,
+        text: "ဒီခုံက ဘယ်သူ့ဟာလဲ?",
+        fontSize: 28,
+      }
+    - {
+        id: n-p2,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 340,
+        height: 35,
+        text: "primary က ဘယ်စက်လဲ?",
+        fontSize: 28,
+      }
+    - {
+        id: n-p3,
+        kind: text,
+        x: 290,
+        y: 375,
+        width: 340,
+        height: 35,
+        text: "lock က ဘယ်သူ့မှာလဲ?",
+        fontSize: 28,
+      }
+    - {
+        id: n-brace,
+        kind: freedraw,
+        stroke: brace-right,
+        x: 640,
+        y: 240,
+        width: 36,
+        height: 175,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-box,
+        kind: rectangle,
+        x: 720,
+        y: 285,
+        width: 330,
+        height: 85,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: n-box-l,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 310,
+        width: 330,
+        height: 35,
+        text: "consensus",
+        fontSize: 28,
+      }
+    - { id: n-n1, kind: ellipse, x: 300, y: 470, width: 150, height: 70, strokeColor: "#2f9e44" }
+    - { id: n-n2, kind: ellipse, x: 480, y: 470, width: 150, height: 70, strokeColor: "#2f9e44" }
+    - {
+        id: n-n3,
+        kind: ellipse,
+        x: 660,
+        y: 470,
+        width: 150,
+        height: 70,
+        strokeStyle: dashed,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-major,
+        kind: text,
+        x: 300,
+        y: 565,
+        width: 760,
+        height: 35,
+        text: "3 လုံးမှာ 2 လုံး သဘောတူရင် ဆုံးဖြတ်နိုင်",
+        fontSize: 28,
+      }
+    - {
+        id: n-own,
+        kind: text,
+        x: 850,
+        y: 488,
+        width: 240,
+        height: 35,
+        text: "ကိုယ်တိုင် မရေးနဲ့",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 5 — the quiz: white question and options, green answer and reason,
+    # orange the column it belongs to.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 820,
+        height: 45,
+        text: "ရောင်းပြီးသား ခုံကို ရှာတဲ့အခါ လွတ်လို့ ပြ",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 760,
+        height: 35,
+        text: "က) လက်ခံနိုင်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 760,
+        height: 35,
+        text: "ခ) ပြင်ရမယ့် အမှား",
+        fontSize: 28,
+      }
+    - {
+        id: q-a-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 260,
+        width: 250,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-a-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 570,
+        y: 248,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 780,
+        height: 35,
+        text: "မှန်ရမယ့်အချိန် = ဝယ်တဲ့အချိန်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-cost,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 780,
+        height: 35,
+        text: "ရှာတာက နောက်မှ လိုက်မီလည်း ရ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8134
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: သုံးခုထဲက နှစ်ခု ရွေးရမှာလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ distributed system တစ်ခုမှာ network၊ နာရီနဲ့ process တွေကို မယုံရပုံနဲ့၊ ထပ်ပို့လည်း
+      အန္တရာယ် မရှိတဲ့ call ကို design ဆွဲပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီအပတ်မှာတော့ design အစည်းအဝေး တစ်ခုက ရှေ့မတိုးဘဲ ရပ်နေပါတယ်။
+      [[mark:sel-ask]] အစက product manager လှလှ ရဲ့ တောင်းဆိုချက်ပါ။ ကားဂိတ်တွေမှာ internet က မကြာခဏ
+      ပြတ်တတ်ပြီး၊ ပြတ်တိုင်း ကောင်တာ ဝန်ထမ်းတွေက ဘာမှ လုပ်မရ ဖြစ်နေပါတယ်။ internet ပြတ်နေလည်း ကောင်တာက အလုပ်
+      ဆက်လုပ်နိုင်အောင် လုပ်ပေးပါ ဆိုတာပါ။
+      [[mark:cap]] အစည်းအဝေးမှာ developer တစ်ယောက်က CAP theorem ကို ကိုးကားပါတယ်။ data အမြဲ မှန်နေတဲ့
+      consistency၊ အမြဲ သုံးလို့ရနေတဲ့ availability နဲ့၊ network ပြတ်တာကို ခံနိုင်တဲ့ partition tolerance ဆိုတဲ့
+      သုံးခုထဲက နှစ်ခုကိုပဲ ရွေးလို့ရတာမို့၊ ကိုယ်တို့က availability ကို ရွေးရမယ်လို့ ဆိုပါတယ်။
+      [[mark:mm]] Booking team lead မောင်မောင် ကတော့ ထိုင်ခုံ ရောင်းတဲ့ system မှာ consistency ကို လက်မလွှတ်နိုင်ဘူးလို့ ပြန်ပြောပါတယ်။
+      တစ်နာရီလုံးလုံး အဲဒီ စကားလုံး သုံးလုံးပေါ်မှာပဲ ငြင်းနေကြပါတယ်။
+      [[mark:real-q]] နှစ်ယောက်လုံး မမှားပါဘူး။ မေးခွန်းက ကျယ်လွန်းနေတာပါ။ တကယ် မေးရမယ့် မေးခွန်းက၊ ခရီးဖော် က
+      ဘယ်နေရာတွေမှာ ခဏလေးတောင် မမှားရဘူးလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - { title: "CAP theorem (Wikipedia)", url: "https://en.wikipedia.org/wiki/CAP_theorem" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/34-consistency.md,
+        }
+      - id: sel-ask
+        type: editor.select
+        at: { mark: sel-ask }
+        target:
+          {
+            file: notebook/34-consistency.md,
+            text: "ကားဂိတ်မှာ internet ပြတ်နေလည်း ကောင်တာက အလုပ် ဆက်လုပ်နိုင်ရမယ်",
+          }
+
+  - id: one-copy
+    chapter: မိတ္တူ တစ်ခုတည်း ရှိသလို
+    narration: >
+      [[mark:o-copies]] ခရီးဖော် ရဲ့ data က primary database တစ်ခုနဲ့ ဖတ်ဖို့သက်သက် မိတ္တူ၊ read replica နှစ်ခုမှာ
+      ရှိပါတယ်။ replica တွေက primary နောက်မှာ ခဏ ကျန်နေတတ်ပါတယ်။
+      [[mark:o-one]] CAP ထဲက consistency ဆိုတာ အားအကောင်းဆုံး အာမခံချက်ဖြစ်တဲ့ strong consistency ပါ။ မိတ္တူ ဘယ်နှခု ရှိရှိ၊ အပြင်ကကြည့်ရင် မိတ္တူ
+      တစ်ခုတည်း ရှိသလို ပြုမူတာကို ဆိုလိုပါတယ်။ ရေးတာ တစ်ခု ပြီးတာနဲ့၊ နောက်ဖတ်တဲ့သူတိုင်းက ဘယ်ကနေ ဖတ်ဖတ် အဲဒီ
+      တန်ဖိုးအသစ်ကို မြင်ရပါတယ်။ ဒါကို linearizability လို့လည်း ခေါ်ပါတယ်။
+      [[mark:o-eventual]] သူ့ရဲ့ တစ်ဖက်စွန်းက eventual consistency ပါ။ မိတ္တူတွေက ခဏ ကွာနေနိုင်ပေမဲ့ နောက်ဆုံးမှာ
+      တူသွားမယ် ဆိုတဲ့ အာမခံချက်ပါ။
+      [[mark:o-who]] strong consistency ကို တကယ် လိုတာက ကိစ္စ အနည်းငယ်ပါပဲ။ ပထမ အမျိုးအစားက တစ်ယောက်ပဲ
+      အနိုင်ရရမယ့် ကိစ္စတွေပါ။ ထိုင်ခုံ တစ်ခုံကို တစ်ယောက်ပဲ ရရမယ်၊ username တစ်ခုကို တစ်ယောက်ပဲ ယူရမယ်၊ lock
+      တစ်ခုကို တစ်ယောက်ပဲ ကိုင်ရမယ် ဆိုတာမျိုးပါ။ နှစ်ယောက်လုံးက ကိုယ်ရပြီလို့ ခဏလေး ထင်သွားတာနဲ့ ပြန်ပြင်ရ
+      ခက်ပါပြီ။
+      [[mark:o-race]] ဒုတိယ အမျိုးအစားက လမ်းကြောင်း နှစ်ခုက အပြိုင် ပြေးတဲ့ ကိစ္စပါ။ ဥပမာ လက်မှတ် ရပြီ ဆိုတဲ့ SMS က
+      ခရီးသည်ဆီ ရောက်နေပြီ၊ သူ ဖွင့်ကြည့်တဲ့ စာမျက်နှာက နောက်ကျနေတဲ့ replica ကနေ ဖတ်ရင် လက်မှတ် မပေါ်သေးတာမျိုးပါ။ ဝယ်ပြီး တစ်မိနစ်အတွင်း primary ကနေ ဖတ်ခိုင်းထားတာ ဒါကြောင့်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-o-copies,
+          type: whiteboard.apply,
+          at: { mark: o-copies },
+          open: true,
+          upsertIds: [o-p, o-p-l, o-r1, o-r1-l, o-r2, o-r2-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-o-one,
+          type: whiteboard.apply,
+          at: { mark: o-one },
+          upsertIds: [o-title, o-wrap, o-wrap-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-o-eventual,
+          type: whiteboard.apply,
+          at: { mark: o-eventual },
+          upsertIds: [o-ev],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-who,
+          type: whiteboard.apply,
+          at: { mark: o-who },
+          upsertIds: [o-win],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-o-race,
+          type: whiteboard.apply,
+          at: { mark: o-race },
+          upsertIds: [o-race],
+          drawMs: 1200,
+        }
+
+  - id: price
+    chapter: ဖြေမလား၊ မှန်မလား
+    narration: >
+      [[mark:p-open]] ဒီအာမခံချက်က အလကား မရပါဘူး။ စရိတ် နှစ်မျိုး ပေးရပါတယ်။
+      [[mark:p-latency]] ပထမ စရိတ်ကို နေ့တိုင်း ပေးရပါတယ်။ မိတ္တူ တစ်ခုတည်းလို ပြုမူဖို့ဆိုရင်၊ ဖြေမယ့် စက်က သူ့မှာ
+      ရှိတာ နောက်ဆုံး တန်ဖိုး ဟုတ်မဟုတ် တခြားစက်တွေနဲ့ အရင် ညှိရပါတယ်။ ညှိရတဲ့ အချိန်က network ကောင်းနေတဲ့ နေ့မှာတောင်
+      request တိုင်းရဲ့ တုံ့ပြန်ချိန်ထဲ ပေါင်းပါသွားပါတယ်။
+      [[mark:p-split]] ဒုတိယ စရိတ်ကတော့ network ပြတ်တဲ့အခါမှ ပေးရပါတယ်။ ကားဂိတ်က ကောင်တာနဲ့ primary database
+      ကြားက လမ်းကြောင်း ပြတ်သွားပြီ ဆိုပါစို့။ ကောင်တာ ဝန်ထမ်းက ခုံ တစ်ခုံကို ရောင်းချင်ပါတယ်။
+      [[mark:p-choice]] ဒီအခါ ရွေးစရာ နှစ်ခုပဲ ရှိပါတယ်။ ဖြေမလား၊ မှန်မလား ဆိုတာပါ။
+      [[mark:p-ans]] ကောင်တာက သူ့ဆီမှာ ရှိတဲ့ data နဲ့ ရောင်းလိုက်ရင် အလုပ်တော့ ဆက်ဖြစ်ပါတယ်။ ဒါပေမဲ့ အဲဒီခုံကို
+      app ကနေ တစ်ယောက်က ဝယ်ပြီးသား ဖြစ်နေနိုင်ပါတယ်။
+      [[mark:p-right]] မှားမခံနိုင်ဘူးဆိုရင်တော့ ကောင်တာက လမ်းကြောင်း ပြန်ရတဲ့အထိ ငြင်းထားရပါမယ်။
+      [[mark:p-cap]] CAP theorem က တကယ် ပြောတာ ဒါပါပဲ။ သုံးခုထဲက နှစ်ခု ရွေးတာ မဟုတ်ပါဘူး။ network ပြတ်တာက ကိုယ်
+      ရွေးလို့ရတဲ့ အရာ မဟုတ်ဘဲ၊ တစ်နေ့နေ့ ဖြစ်လာမယ့် အရာပါ။ ပြတ်တဲ့ အချိန်ရောက်မှ ဖြေမလား မှန်မလား နှစ်ခုထဲက
+      တစ်ခုကို ရွေးရတာပါ။
+      [[mark:p-each]] အရေးကြီးတာက ဒီရွေးချယ်မှုကို system တစ်ခုလုံးအတွက် တစ်ခါတည်း ရွေးစရာ မလိုတာပါ။ operation တစ်ခုစီအတွက် ရွေးလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - { title: "CAP theorem (Wikipedia)", url: "https://en.wikipedia.org/wiki/CAP_theorem" }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-latency,
+          type: whiteboard.apply,
+          at: { mark: p-latency },
+          upsertIds: [p-c1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-split,
+          type: whiteboard.apply,
+          at: { mark: p-split },
+          upsertIds: [p-ctr, p-ctr-l, p-link, p-db, p-db-l, p-cut],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-p-choice,
+          type: whiteboard.apply,
+          at: { mark: p-choice },
+          upsertIds: [p-c2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-ans,
+          type: whiteboard.apply,
+          at: { mark: p-ans },
+          upsertIds: [p-ch1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-right,
+          type: whiteboard.apply,
+          at: { mark: p-right },
+          upsertIds: [p-ch2],
+          drawMs: 1200,
+        }
+      - { id: point-p-c2, type: whiteboard.point, at: { mark: p-cap }, target: { assetId: p-c2 } }
+      - {
+          id: draw-p-each,
+          type: whiteboard.apply,
+          at: { mark: p-each },
+          upsertIds: [p-each],
+          drawMs: 1200,
+        }
+
+  - id: columns
+    chapter: အုပ်စု နှစ်စု ခွဲခြင်း
+    narration: >
+      [[mark:k-open]] ဒါဆို ခရီးဖော် ရဲ့ operation တွေကို အုပ်စု နှစ်စု ခွဲကြည့်ရအောင်။ အခုချက်ချင်း မှန်ရမယ့်
+      အုပ်စုနဲ့၊ နောက်မှ လိုက်မီလည်း ရတဲ့ အုပ်စုပါ။
+      [[mark:k-seat]] ခုံ ရောင်းတာက ပထမ အုပ်စုပါ။ app ကပဲ ရောင်းရောင်း၊ ကောင်တာကပဲ ရောင်းရောင်း၊ တစ်ယောက်ပဲ
+      အနိုင်ရရမယ့် ကိစ္စမို့ပါ။
+      [[mark:k-leader]] primary database ကို ရွေးတာလည်း ပထမ အုပ်စုပါ။ primary ပျက်လို့ replica တစ်ခုကို
+      အစားထိုးတဲ့အခါ၊ primary နှစ်ခု တစ်ပြိုင်တည်း ရှိသွားရင် data က နှစ်ခြမ်း ကွဲသွားမှာပါ။
+      [[mark:k-lock]] ပြီးခဲ့တဲ့ lesson က settlement job ရဲ့ lock လည်း ဒီအုပ်စုထဲမှာပါ။
+      [[mark:k-list]] ဒုတိယ အုပ်စုကို ကြည့်ရအောင်။ ကောင်တာ ဝန်ထမ်းက ဒီနေ့ ထွက်မယ့် ကားရဲ့ ခရီးသည် စာရင်းကို
+      ကြည့်တာ၊ ရောင်းပြီးသား လက်မှတ်ကို ပြန်ထုတ်ပေးတာတွေက မိနစ်အနည်းငယ် ဟောင်းနေလည်း ဘာမှ မဖြစ်ပါဘူး။
+      [[mark:k-dash]] ကားလိုင်းတွေ ကြည့်တဲ့ ရောင်းအား dashboard နဲ့ report တွေလည်း အဲဒီလိုပါပဲ။
+      [[mark:k-count]] ရေတွက်ကြည့်ရင် အခုချက်ချင်း မှန်ရမယ့် ကိစ္စက လက်ချိုးရေလို့ ရပါတယ်။ ကျန်တာ အများစုက နောက်မှ
+      လိုက်မီလည်း ရပါတယ်။ ဒါကြောင့် နည်းတဲ့ဘက်ကို အမှတ်အသား လုပ်ထားပြီး၊ ကျန်တာကို eventual consistency နဲ့
+      ထားလိုက်ရင် စရိတ် အများကြီး သက်သာပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-k-open,
+          type: whiteboard.apply,
+          at: { mark: k-open },
+          clear: true,
+          upsertIds: [k-left, k-left-h, k-right, k-right-h],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-k-seat,
+          type: whiteboard.apply,
+          at: { mark: k-seat },
+          upsertIds: [k-seat],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-leader,
+          type: whiteboard.apply,
+          at: { mark: k-leader },
+          upsertIds: [k-leader],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-lock,
+          type: whiteboard.apply,
+          at: { mark: k-lock },
+          upsertIds: [k-lock],
+          drawMs: 900,
+        }
+      - {
+          id: draw-k-list,
+          type: whiteboard.apply,
+          at: { mark: k-list },
+          upsertIds: [k-list, k-reprint],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-k-dash,
+          type: whiteboard.apply,
+          at: { mark: k-dash },
+          upsertIds: [k-dash],
+          drawMs: 900,
+        }
+      - {
+          id: point-k-left,
+          type: whiteboard.point,
+          at: { mark: k-count },
+          target: { assetId: k-left-h },
+        }
+
+  - id: consensus
+    chapter: Consensus ကို ကိုယ်တိုင် မရေးပါနဲ့
+    narration: >
+      [[mark:n-open]] ပထမ အုပ်စုထဲက ကိစ္စတွေကို သေချာကြည့်ရင် ပုံစံ တစ်ခုတည်းပါ။ ဒီခုံက ဘယ်သူ့ဟာလဲ၊ primary က
+      ဘယ်စက်လဲ၊ lock က ဘယ်သူ့လက်ထဲမှာလဲ ဆိုတာတွေပါ။ စက်တွေ အများကြီးက အဖြေ တစ်ခုတည်းကို သဘောတူရတာပါ။
+      [[mark:n-name]] စက်တွေ အများစု တစ်ခုတည်းကို သဘောတူအောင် လုပ်တာကို consensus လို့ ခေါ်ပါတယ်။ ပြဿနာ တစ်ခုမှာ
+      တစ်ယောက်ပဲ အနိုင်ရရမယ် ဆိုတဲ့ ပုံစံ ပေါ်လာတာနဲ့၊ အဲဒါ consensus ပြဿနာ ဖြစ်နေပြီလို့ မှတ်ပါ။
+      [[mark:n-hard]] consensus က ခက်ပါတယ်။ ပျောက်တဲ့ message၊ မတူတဲ့ နာရီ၊ ရပ်သွားတဲ့ process တွေ အားလုံးကြားထဲမှာ
+      မှန်အောင် လုပ်ရလို့ပါ။ ကောင်းတာက ဒါကို ဖြေရှင်းပြီးသား ဖြစ်နေတာပါ။ စမ်းသပ်ခံထားပြီးသား algorithm တွေနဲ့
+      အဲဒါတွေကို သုံးထားတဲ့ system တွေ ရှိပါတယ်။
+      [[mark:n-nodes]] အဲဒီ system တွေက စက် အများစုရဲ့ သဘောတူညီချက်နဲ့ ဆုံးဖြတ်ပါတယ်။ စက် သုံးလုံး ထားရင် နှစ်လုံး
+      သဘောတူတာနဲ့ ဆုံးဖြတ်နိုင်လို့၊ တစ်လုံး ပျက်တာကို ခံနိုင်ပါတယ်။ ငါးလုံး ထားရင် နှစ်လုံး ပျက်တာအထိ ခံနိုင်ပါတယ်။
+      အများစုဘက်မှာ မပါတဲ့ စက်ကတော့ မဖြေဘဲ ရပ်နေရပါတယ်။
+      [[mark:n-own]] ဒါကြောင့် စည်းကမ်း တစ်ခုကို မှတ်ထားပါ။ consensus ကို ကိုယ်တိုင် မရေးပါနဲ့။ primary ပျက်ရင် replica
+      ကို အစားထိုးပေးမယ့် script လေး တစ်ခု ကိုယ်တိုင် ရေးလိုက်တာက၊ မသိလိုက်ဘဲ consensus ကို ကိုယ်တိုင် ရေးနေတာပါ။
+      သက်သေပြပြီးသား system ကိုပဲ သုံးပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          clear: true,
+          upsertIds: [n-p1, n-p2, n-p3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-n-name,
+          type: whiteboard.apply,
+          at: { mark: n-name },
+          upsertIds: [n-brace, n-box, n-box-l, n-title],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-n-nodes,
+          type: whiteboard.apply,
+          at: { mark: n-nodes },
+          upsertIds: [n-n1, n-n2, n-n3, n-major],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-n-own,
+          type: whiteboard.apply,
+          at: { mark: n-own },
+          upsertIds: [n-own],
+          drawMs: 1000,
+        }
+
+  - id: table
+    chapter: အစည်းအဝေးအတွက် အဖြေ
+    narration: >
+      [[mark:t-close]] အခု အစည်းအဝေးကို ပြန်သွားဖို့ operation တစ်ခုချင်းစီကို table နဲ့ ချရေးပါမယ်။
+      [[mark:type-seat]] ခုံ ရောင်းတာက strong consistency လိုပါတယ်။ လက်ခံရတဲ့ စရိတ်က internet ပြတ်နေတဲ့ ကောင်တာက
+      ခုံအသစ် မရောင်းနိုင်တာပါ။
+      [[mark:type-primary]] primary ရွေးတာလည်း လိုပါတယ်။ စက် သုံးလုံးနဲ့ run တဲ့ သက်သေပြပြီးသား system တစ်ခုကို
+      သုံးမယ်၊ ရွေးနေတဲ့ စက္ကန့်ပိုင်းမှာ ရေးတာ ခဏ ရပ်တာကို လက်ခံမယ်။
+      [[mark:type-list]] ကောင်တာက ခရီးသည် စာရင်း ကြည့်တာနဲ့ လက်မှတ် ပြန်ထုတ်တာကတော့ မလိုပါဘူး။ ကောင်တာမှာ
+      သိမ်းထားတဲ့ မိတ္တူကနေ ပြပေးရင် internet ပြတ်လည်း ဆက်လုပ်နိုင်ပါတယ်။
+      [[mark:type-answer]] ဒါဆို လှလှ အတွက် အဖြေ ထွက်လာပါပြီ။ internet ပြတ်ချိန်မှာ ကောင်တာက စာရင်းကြည့်တာ၊ လက်မှတ်
+      ပြန်ထုတ်တာတွေ ဆက်လုပ်နိုင်ပါမယ်။ ခုံအသစ် ရောင်းတာကိုတော့ ရပ်ထားပါမယ်။
+      [[mark:type-quota]] ပြတ်ချိန်မှာပါ ရောင်းနိုင်စေချင်ရင်တော့ ကောင်တာ တစ်ခုစီအတွက် ခုံ တချို့ကို ကြိုတင်
+      ခွဲပေးထားရပါမယ်။ ကြိုခွဲထားတဲ့ ခုံဆိုရင် ဘယ်သူ ရမလဲ ဆိုတာ ဆုံးဖြတ်ပြီးသားမို့ ညှိစရာ မလိုတော့ပါဘူး။ ဒါပေမဲ့
+      ခွဲထားတဲ့ ခုံတွေကို app က မရောင်းနိုင်တော့တာမို့၊ ဒါက လှလှ နဲ့ ကားလိုင်းတွေ ဆုံးဖြတ်ရမယ့် business
+      ဆုံးဖြတ်ချက်ပါ။ ကိုယ့်တာဝန်က ရွေးစရာနဲ့ စရိတ်ကို ရှင်းရှင်း ပြပေးဖို့ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-consensus, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-consensus },
+          path: notebook/34-consistency.md,
+        }
+      - id: type-seat
+        type: editor.type
+        at: { mark: type-seat }
+        cadence: line-by-line
+        target: { file: notebook/34-consistency.md, after: "|---|---|---|---|\n" }
+        text: "| ခုံ ရောင်းတာ | လို | တစ်ယောက်ပဲ ရရမယ် | internet ပြတ်တဲ့ ကောင်တာ မရောင်းနိုင် |\n"
+      - id: type-primary
+        type: editor.type
+        at: { mark: type-primary }
+        cadence: line-by-line
+        target: { file: notebook/34-consistency.md, after: "ကောင်တာ မရောင်းနိုင် |\n" }
+        text: "| primary database ရွေးတာ | လို | primary နှစ်ခု မရှိရ | စက် 3 လုံး၊ ရွေးနေတုန်း ရေးတာ ခဏ ရပ် |\n"
+      - id: type-list
+        type: editor.type
+        at: { mark: type-list }
+        cadence: line-by-line
+        target: { file: notebook/34-consistency.md, after: "ရေးတာ ခဏ ရပ် |\n" }
+        text: "| ကောင်တာ: စာရင်းကြည့်၊ လက်မှတ် ပြန်ထုတ် | မလို | နောက်မှ လိုက်မီလည်း ရ | မိနစ်ပိုင်း ဟောင်းနိုင် |\n"
+      - id: type-answer
+        type: editor.type
+        at: { mark: type-answer }
+        cadence: line-by-line
+        target: { file: notebook/34-consistency.md, after: "| မိနစ်ပိုင်း ဟောင်းနိုင် |\n" }
+        text: "\n## လှလှ အတွက် အဖြေ\n- internet ပြတ်ချိန်: စာရင်းကြည့်၊ လက်မှတ် ပြန်ထုတ် ဆက်ရမယ်\n- ပြတ်ချိန်မှာ ခုံအသစ် မရောင်းဘူး\n"
+      - id: expect-answer
+        type: expect.file
+        at: { afterAction: type-answer }
+        path: notebook/34-consistency.md
+        contains: "- ပြတ်ချိန်မှာ ခုံအသစ် မရောင်းဘူး\n"
+      - id: type-quota
+        type: editor.type
+        at: { mark: type-quota }
+        cadence: line-by-line
+        target: { file: notebook/34-consistency.md, after: "- ပြတ်ချိန်မှာ ခုံအသစ် မရောင်းဘူး\n" }
+        text: "- ပြတ်ချိန်မှာပါ ရောင်းချင်ရင်: ကောင်တာအတွက် ခုံ ကြိုခွဲမလား၊ business က ဆုံးဖြတ်\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခရီးစဉ် ရှာတဲ့ စာမျက်နှာက လွန်ခဲ့တဲ့ နှစ်စက္ကန့်က ရောင်းပြီးသွားတဲ့ ခုံ
+      တစ်ခုံကို လွတ်နေတယ်လို့ ပြနေပါတယ်။ ခရီးသည်က အဲဒီခုံကို ရွေးပြီး ဝယ်ဖို့ ကြိုးစားတော့၊ ဒီခုံ ကုန်သွားပါပြီ၊
+      တခြားခုံ ရွေးပေးပါလို့ ယဉ်ယဉ်ကျေးကျေး ပြန်ပြောပါတယ်။
+      [[mark:q-a]] ဒါက လက်ခံနိုင်တဲ့ အပြုအမူလား။
+      [[mark:q-b]] ဒါမှမဟုတ် ပြင်ရမယ့် အမှားလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ လက်ခံနိုင်တယ် ဆိုတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ မှန်ရမယ့် အချိန်က ဝယ်တဲ့ အချိန်ဖြစ်ပြီး၊ အဲဒီမှာ system က မှန်မှန်ကန်ကန်
+      ငြင်းခဲ့လို့ပါ။ နှစ်စက္ကန့် ဟောင်းတဲ့ ရှာဖွေမှု ရလဒ်ကြောင့် ဘယ်သူမှ မနစ်နာပါဘူး။
+      [[mark:q-cost]] ရှာတာက နောက်မှ လိုက်မီလည်း ရတဲ့ အုပ်စုထဲမှာပါ။ ရှာတာကိုပါ အမြဲ မှန်အောင် လုပ်မယ်ဆိုရင်၊ ရှာတဲ့
+      request တိုင်းက primary ကို သွားမေးရပြီး၊ ပြန်ရတာကတော့ ဘာမှ မရှိသလောက်ပါပဲ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-a-line, q-a-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-cost,
+          type: whiteboard.apply,
+          at: { mark: q-cost },
+          upsertIds: [q-cost],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] ရှာတာကိုလည်း table ထဲ ထည့်လိုက်ပါမယ်။
+      [[mark:type-search]] strong consistency မလိုဘူး၊ ရောင်းပြီးသား ခုံကို ခဏ လွတ်တယ်လို့ ပြမိတာကို လက်ခံတယ်
+      ဆိုတာလည်း ရေးထားရမယ့် ဆုံးဖြတ်ချက် တစ်ခုပါ။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system ထဲက တစ်ယောက်ပဲ အနိုင်ရရမယ့်
+      operation တွေကို ဒီ table ထဲမှာ စာရင်းလုပ်ကြည့်ပါ။
+      [[mark:turn-2]] တစ်ခုတည်းပဲ ရှိရမယ့် နာမည်၊ တစ်ခါပဲ သုံးလို့ရတဲ့ code၊ တစ်ယောက်ပဲ ယူလို့ရတဲ့ ပစ္စည်း စတာတွေကို
+      ရှာကြည့်ပါ။ စာရင်းက ကိုယ် ထင်ထားတာထက် တိုနေပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-search
+        type: editor.type
+        at: { mark: type-search }
+        cadence: line-by-line
+        target: { file: notebook/34-consistency.md, after: "| မိနစ်ပိုင်း ဟောင်းနိုင် |\n" }
+        text: "| ခရီးစဉ် ရှာတာ | မလို | မှန်ရမယ့်အချိန်က ဝယ်တဲ့အချိန် | ရောင်းပြီးသား ခုံ ခဏ လွတ်ပြနိုင် |\n"
+      - id: sel-seat
+        type: editor.select
+        at: { mark: turn-you }
+        target: { file: notebook/34-consistency.md, text: "| ခုံ ရောင်းတာ | လို | တစ်ယောက်ပဲ ရရမယ် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ strong consistency ဆိုတာ မိတ္တူ တစ်ခုတည်း ရှိသလို ပြုမူတာပါ။ တစ်ယောက်ပဲ အနိုင်ရရမယ့်
+      ကိစ္စ အနည်းငယ်အတွက်ပဲ တကယ် လိုပြီး၊ စရိတ်ကတော့ နေ့တိုင်း နှေးတာနဲ့ network ပြတ်ချိန်မှာ ငြင်းရတာပါ။
+      [[mark:recap-2]] ဒါကြောင့် သုံးခုထဲက နှစ်ခု ရွေးဖို့ မငြင်းဘဲ၊ operation တစ်ခုချင်းစီအတွက် ဘယ်နေရာမှာ ခဏလေးတောင်
+      မမှားရဘူးလဲ မေးပါ။ တစ်ယောက်ပဲ အနိုင်ရရမယ့် ပုံစံကို တွေ့ရင် consensus ပြဿနာလို့ မှတ်ပြီး၊ သက်သေပြပြီးသား
+      system ကို သုံးပါ။
+      [[mark:next]] ကျန်တဲ့ operation အများစုကတော့ နောက်မှ လိုက်မီတဲ့ data နဲ့ပဲ အလုပ်လုပ်ပါတယ်။ အဲဒီ data တွေကို
+      မူရင်းနဲ့ ဘယ်လို လိုက်မီအောင် ထားမလဲ။ နောက် lesson မှာတော့ event stream နဲ့၊ မူရင်းကနေ ထုတ်ယူထားတဲ့ derived
+      data ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          {
+            file: notebook/34-consistency.md,
+            text: "| Operation | Strong consistency လိုလား | ဘာကြောင့် | လက်ခံတဲ့ စရိတ် |",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
