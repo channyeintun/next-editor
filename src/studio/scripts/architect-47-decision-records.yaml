@@ -1,0 +1,858 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-47-decision-records
+  title: "Architect Path 47: Architecture decision record"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/47-adr-seat-uniqueness.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/47-adr-seat-uniqueness.md: |
+        # ADR-014
+
+        ## Status
+
+        ## Context
+
+        ## Decision
+
+        ## Consequences
+
+        ## Compliance
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: worth-an-adr
+      contentType: html
+      name: ADR ရေးထိုက်တဲ့ ဆုံးဖြတ်ချက်များ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ADR ရေးထိုက်တဲ့ ဆုံးဖြတ်ချက် 5 မျိုး</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide orange">Characteristic</span>ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် ကာတာ</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide violet">Interface</span>ကားလိုင်းတွေ ခေါ်တဲ့ API ကို ပြောင်းတာ</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide red">Dependency</span>wallet ကုမ္ပဏီ အသစ် ထပ်ချိတ်တာ</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide blue">Structure</span>Booking ကို service အဖြစ် ခွဲထုတ်တာ</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide green">ဆောက်ပုံ</span>pipeline ထဲ စစ်ဆေးချက် အသစ် ထည့်တာ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the same debate, three times over. Red = the cost (a meeting that
+    # was held again), green = the option kept each time, orange = the question now.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Constraint လား၊ lock service လား?",
+        fontSize: 36,
+      }
+    - {
+        id: n-b1,
+        kind: rectangle,
+        x: 270,
+        y: 235,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 250,
+        width: 400,
+        height: 35,
+        text: "Booking ကို ခွဲထုတ်တုန်းက",
+        fontSize: 28,
+      }
+    - { id: n-a1, kind: freedraw, stroke: arrow-down, x: 450, y: 303, width: 40, height: 33 }
+    - {
+        id: n-b2,
+        kind: rectangle,
+        x: 270,
+        y: 340,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-l2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 355,
+        width: 400,
+        height: 35,
+        text: "သင်္ကြန် ပြင်ဆင်တုန်းက",
+        fontSize: 28,
+      }
+    - { id: n-a2, kind: freedraw, stroke: arrow-down, x: 450, y: 408, width: 40, height: 33 }
+    - {
+        id: n-b3,
+        kind: rectangle,
+        x: 270,
+        y: 445,
+        width: 400,
+        height: 64,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 460,
+        width: 400,
+        height: 35,
+        text: "Platform ရွှေ့တုန်းက",
+        fontSize: 28,
+      }
+    - { id: n-brace, kind: freedraw, stroke: brace-right, x: 684, y: 235, width: 34, height: 274 }
+    - {
+        id: n-same,
+        kind: text,
+        x: 735,
+        y: 325,
+        width: 350,
+        height: 35,
+        text: "သုံးခါလုံး constraint ပဲ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: n-why,
+        kind: text,
+        x: 735,
+        y: 385,
+        width: 350,
+        height: 35,
+        text: "ဘာကြောင့်လဲ: ရေးမထား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: n-q,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 500,
+        height: 35,
+        text: "အခု: လေးခါမြောက် ငြင်းမလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — three ways a decision goes wrong (red), each with what it looks
+    # like at ခရီးဖော် (white); green = the one habit that helps all three.
+    - {
+        id: f-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ဆုံးဖြတ်ချက် ပျက်ပုံ သုံးမျိုး",
+        fontSize: 36,
+      }
+    - {
+        id: f-b1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 330,
+        height: 76,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 260,
+        width: 330,
+        height: 35,
+        text: "ကြောက်လို့ မဆုံးဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: f-e1,
+        kind: text,
+        x: 630,
+        y: 260,
+        width: 440,
+        height: 35,
+        text: "ပါဆယ် ငွေချေမှု: 3 လ ဆိုင်းငံ့",
+        fontSize: 28,
+      }
+    - {
+        id: f-b2,
+        kind: rectangle,
+        x: 270,
+        y: 345,
+        width: 330,
+        height: 76,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-l2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 365,
+        width: 330,
+        height: 35,
+        text: "ဘာကြောင့်လဲ ပျောက်",
+        fontSize: 28,
+      }
+    - {
+        id: f-e2,
+        kind: text,
+        x: 630,
+        y: 365,
+        width: 440,
+        height: 35,
+        text: "ထိုင်ခုံ constraint: 3 ခါ ငြင်း",
+        fontSize: 28,
+      }
+    - {
+        id: f-b3,
+        kind: rectangle,
+        x: 270,
+        y: 450,
+        width: 330,
+        height: 76,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 470,
+        width: 330,
+        height: 35,
+        text: "chat ထဲမှာ မြုပ်",
+        fontSize: 28,
+      }
+    - {
+        id: f-e3,
+        kind: text,
+        x: 630,
+        y: 470,
+        width: 440,
+        height: 35,
+        text: "message 200 ကျော်တဲ့ thread",
+        fontSize: 28,
+      }
+    - {
+        id: f-fix,
+        kind: text,
+        x: 270,
+        y: 575,
+        width: 560,
+        height: 35,
+        text: "စာတို တစ်စောင်၊ နေရာ တစ်ခုတည်းမှာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the quiz: white question and options, green answer; then the old
+    # record (dashed: no longer in force) linked to the new one (green), orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "ဆုံးဖြတ်ချက် ပြောင်းသွားရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 700,
+        height: 35,
+        text: "က) ADR-014 ကို ပြန်ဖွင့်ပြီး ပြင်ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 700,
+        height: 35,
+        text: "ခ) အဟောင်းကို မထိဘဲ ADR အသစ် ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 460,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 790,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-old,
+        kind: rectangle,
+        x: 290,
+        y: 450,
+        width: 360,
+        height: 70,
+        rounded: true,
+        strokeStyle: dashed,
+      }
+    - {
+        id: q-old-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 467,
+        width: 360,
+        height: 35,
+        text: "ADR-014 · Superseded",
+        fontSize: 28,
+      }
+    - { id: q-arrow, kind: freedraw, stroke: arrow-right, x: 662, y: 465, width: 90, height: 40 }
+    - {
+        id: q-new,
+        kind: rectangle,
+        x: 764,
+        y: 450,
+        width: 320,
+        height: 70,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-new-l,
+        kind: text,
+        align: center,
+        x: 764,
+        y: 467,
+        width: 320,
+        height: 35,
+        text: "ADR-031 · Accepted",
+        fontSize: 28,
+      }
+    - {
+        id: q-reason,
+        kind: text,
+        x: 290,
+        y: 570,
+        width: 600,
+        height: 35,
+        text: "သမိုင်းကြောင်းက ADR ရဲ့ တန်ဖိုး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8147
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: မေးခွန်း တစ်ခုတည်း၊ လေးခါမြောက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ စည်းကမ်း တစ်ခုကို ချိုးဖောက်နေပြီးသား system ထဲမှာ၊ အလိုအလျောက် စစ်ဆေးချက်ကို
+      တစ်ဆင့်ချင်း တင်းကျပ်သွားပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:n-open]] ဒီအပတ်မှာတော့ ပြီးခဲ့တဲ့လကမှ ဝင်လာတဲ့ architect အသစ်က မေးခွန်း တစ်ခု မေးလာပါတယ်။
+      ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းမိအောင် database ရဲ့ constraint ကိုပဲ ဘာလို့ အားကိုးထားတာလဲ၊ lock service
+      သီးခြား တစ်ခု ဘာလို့ မသုံးတာလဲ တဲ့။ ကိုယ် အပါအဝင် ကျန်တဲ့ architect သုံးယောက်လုံး အဖြေကို ချက်ချင်း
+      မပြောနိုင်ခဲ့ပါဘူး။
+      [[mark:n-1]] Booking team lead မောင်မောင် ကတော့ ဒီ အငြင်းအခုံကို မှတ်မိနေပါတယ်။ Booking ကို service
+      အဖြစ် ခွဲထုတ်တုန်းက တစ်ခါ ငြင်းခဲ့ကြဖူးတာပါ။
+      [[mark:n-2]] သင်္ကြန် peak အတွက် ပြင်ဆင်တုန်းကလည်း တစ်ခါ ထပ်ငြင်းခဲ့ကြပါတယ်။
+      [[mark:n-3]] မနှစ်က service တွေကို platform အသစ်ပေါ် ရွှေ့တုန်းကလည်း နောက်တစ်ခါ ငြင်းခဲ့ကြပါသေးတယ်။
+      [[mark:n-same]] သုံးခါလုံး နှစ်နာရီလောက် ဆွေးနွေးပြီး၊ constraint ကိုပဲ ဆက်သုံးမယ်လို့ အဆုံးသတ်ခဲ့တာပါ။
+      [[mark:n-why]] ဒါပေမဲ့ ဘာကြောင့် အဲဒီလို ဆုံးဖြတ်ခဲ့လဲ ဆိုတာကိုတော့ ဘယ်မှာမှ ရေးမထားခဲ့ပါဘူး။
+      [[mark:n-q]] ဆိုတော့ အခု လေးခါမြောက် ထပ်ငြင်းရတော့မလို ဖြစ်နေပါပြီ။ ဒီ သံသရာကို ဘယ်လို ဖြတ်မလဲ
+      ဆိုတာ ဒီနေ့ ကြည့်ကြရအောင်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-1,
+          type: whiteboard.apply,
+          at: { mark: n-1 },
+          upsertIds: [n-b1, n-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-n-2,
+          type: whiteboard.apply,
+          at: { mark: n-2 },
+          upsertIds: [n-a1, n-b2, n-l2],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-n-3,
+          type: whiteboard.apply,
+          at: { mark: n-3 },
+          upsertIds: [n-a2, n-b3, n-l3],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-n-same,
+          type: whiteboard.apply,
+          at: { mark: n-same },
+          upsertIds: [n-brace, n-same],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-n-why,
+          type: whiteboard.apply,
+          at: { mark: n-why },
+          upsertIds: [n-why],
+          drawMs: 900,
+        }
+      - { id: draw-n-q, type: whiteboard.apply, at: { mark: n-q }, upsertIds: [n-q], drawMs: 1000 }
+
+  - id: three-ways
+    chapter: ဆုံးဖြတ်ချက် ပျက်ပုံ သုံးမျိုး
+    narration: >
+      [[mark:f-open]] ဒါက ခရီးဖော် တစ်ခုတည်းမှာ ဖြစ်တာ မဟုတ်ပါဘူး။ architecture ဆုံးဖြတ်ချက်တွေက ပုံစံ
+      သုံးမျိုးနဲ့ ပျက်တတ်ပါတယ်။
+      [[mark:f-1]] ပထမ တစ်မျိုးက မှားသွားမှာ ကြောက်လို့ မဆုံးဖြတ်ဘဲ ရွှေ့နေတာပါ။ ခရီးဖော် မှာဆိုရင် ပါဆယ်
+      လုပ်ငန်းအတွက် ငွေချေတာကို ရှိပြီးသား Payment service နဲ့ပဲ လုပ်မလား၊ သီးသန့် ဆောက်မလား ဆိုတာ သုံးလ
+      ရှိပါပြီ။ ဘယ်သူမှ မဆုံးဖြတ်ရဲသေးပါဘူး။ အဲဒီ ကြားထဲမှာ ပါဆယ် ဘက်က developer တွေက ယာယီ code တွေ
+      ရေးနေရပါပြီ။
+      [[mark:f-2]] ဒုတိယ တစ်မျိုးက ဆုံးဖြတ်ပြီးသားကို ထပ်ခါထပ်ခါ ပြန်ငြင်းရတာပါ။ ဘာကြောင့် ဆိုတဲ့
+      အကြောင်းပြချက် ပျောက်သွားတဲ့အခါ၊ လူအသစ် တစ်ယောက် မေးတိုင်း အစကနေ ပြန်စရပါတယ်။ ထိုင်ခုံ constraint
+      ကိစ္စက ဒီ အမျိုးအစားပါ။
+      [[mark:f-3]] တတိယ တစ်မျိုးက ဆုံးဖြတ်ချက်က chat ထဲမှာ မြုပ်နေတာပါ။ မောင်မောင် နဲ့ အတူ ပြန်ရှာကြည့်တော့
+      အရင် ဆွေးနွေးချက် တစ်ခုကို message နှစ်ရာကျော်တဲ့ chat thread တစ်ခုထဲမှာ တွေ့ပါတယ်။ အဲဒီ channel ထဲမှာ
+      မပါခဲ့တဲ့သူတွေကတော့ ဆုံးဖြတ်ချက် ရှိမှန်းတောင် မသိကြပါဘူး။
+      [[mark:f-fix]] သုံးမျိုးလုံးကို သက်သာစေတဲ့ အလေ့အထ တစ်ခု ရှိပါတယ်။ ဆုံးဖြတ်ချက် တစ်ခုကို စာတို တစ်စောင်နဲ့၊
+      လူတိုင်း ရှာတွေ့နိုင်တဲ့ နေရာ တစ်ခုတည်းမှာ ရေးမှတ်ထားတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-f-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          clear: true,
+          upsertIds: [f-title],
+        }
+      - {
+          id: draw-f-1,
+          type: whiteboard.apply,
+          at: { mark: f-1 },
+          upsertIds: [f-b1, f-l1, f-e1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-f-2,
+          type: whiteboard.apply,
+          at: { mark: f-2 },
+          upsertIds: [f-b2, f-l2, f-e2],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-f-3,
+          type: whiteboard.apply,
+          at: { mark: f-3 },
+          upsertIds: [f-b3, f-l3, f-e3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-f-fix,
+          type: whiteboard.apply,
+          at: { mark: f-fix },
+          upsertIds: [f-fix],
+          drawMs: 1200,
+        }
+
+  - id: adr-context
+    chapter: ADR ကို မဆုံးဖြတ်ခင် ရေးခြင်း
+    narration: >
+      [[mark:a-close]] အဲဒီ စာတိုကို architecture decision record၊ အတိုကောက် ADR လို့ ခေါ်ပါတယ်။ ဘာကို
+      ဘာကြောင့် ဆုံးဖြတ်ခဲ့လဲ ဆိုတာ ရေးမှတ်ထားတဲ့ စာတစ်မျက်နှာ၊ နှစ်မျက်နှာလောက်ပါပဲ။ code နဲ့အတူ
+      repository ထဲမှာ text file အဖြစ် ထားတာမို့၊ code ကို ဖတ်တဲ့သူက ဘေးနားမှာတင် တွေ့ရပါတယ်။
+      [[mark:a-parts]] ပုံစံကလည်း တိုပါတယ်။ ခေါင်းစဉ် တစ်ကြောင်းနဲ့ အပိုင်း ငါးပိုင်းပဲ ရှိပါတယ်။ ထိုင်ခုံ
+      ကိစ္စအတွက် တစ်ပိုင်းချင်း ဖြည့်ကြည့်ရအောင်။
+      [[mark:a-status]] ပထမဆုံး Status ကို Proposed၊ ဆိုလိုတာက အဆိုပြုထားဆဲလို့ ရေးပါမယ်။ ဒီတစ်ခါတော့
+      အရင် ငြင်းပြီးမှ မှတ်တမ်းတင်တာ မဟုတ်ဘဲ၊ မဆုံးဖြတ်ခင်မှာ စာနဲ့ အရင် ရေးကြည့်တာပါ။
+      ရေးကြည့်မှ ကိုယ့် အတွေးထဲက ကွက်လပ်တွေကို မြင်ရတာမို့၊ ADR က မှတ်တမ်း တစ်ခုတင် မဟုတ်ဘဲ စဉ်းစားဖို့
+      ကိရိယာ တစ်ခုလည်း ဖြစ်ပါတယ်။
+      [[mark:a-forces]] Context အောက်မှာ ဒီ ဆုံးဖြတ်ချက်ကို ဘာတွေက ဖိအားပေးနေလဲ ဆိုတာ အရင် ရေးပါတယ်။ ထိုင်ခုံ
+      တစ်ခုံကို app ကပဲ ရောင်းရောင်း၊ ကောင်တာကပဲ ရောင်းရောင်း နှစ်ခါ ရောင်းမိလို့ မရပါဘူး။ ပြီးတော့ သင်္ကြန်
+      လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်လို အချိန်မျိုးမှာ ပျက်နိုင်တဲ့ အပိုင်း နည်းလေ ကောင်းလေပါ။
+      [[mark:a-options]] ပြီးရင် ရွေးစရာတွေကို ရေးပါတယ်။ ပထမ ရွေးစရာက အခု သုံးနေတဲ့အတိုင်း၊ ခရီးစဉ် တစ်ခုရဲ့
+      ထိုင်ခုံ တစ်ခုံအတွက် row တစ်ခုပဲ ရှိခွင့်ပေးတဲ့ database ရဲ့ unique constraint ပါ။ ဒုတိယ ရွေးစရာက architect
+      အသစ် အဆိုပြုတဲ့ lock service ပါ။ ထိုင်ခုံကို မရောင်းခင် ရောင်းခွင့်ကို အရင် တောင်းရတဲ့ သီးခြား service
+      တစ်ခုပါ။ ရွေးစရာ တစ်ခုတည်းပဲ ရေးထားတဲ့ ADR ဆိုရင်တော့၊ တကယ် စဉ်းစားခဲ့တာ ဟုတ်ရဲ့လားလို့ သံသယ
+      ဝင်စရာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-three, type: whiteboard.apply, at: { mark: a-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-three },
+          path: notebook/47-adr-seat-uniqueness.md,
+        }
+      - id: sel-parts
+        type: editor.select
+        at: { mark: a-parts }
+        target:
+          file: notebook/47-adr-seat-uniqueness.md
+          text: "## Status\n\n## Context\n\n## Decision\n\n## Consequences\n\n## Compliance"
+      - id: type-status
+        type: editor.type
+        at: { mark: a-status }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "## Status\n" }
+        text: "Proposed\n"
+      - id: type-forces
+        type: editor.type
+        at: { mark: a-forces }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "## Context\n" }
+        text: "- ထိုင်ခုံ တစ်ခုံကို app ကရော ကောင်တာကရော နှစ်ခါ ရောင်းလို့ မရဘူး\n- သင်္ကြန် peak မှာ ပျက်နိုင်တဲ့ အပိုင်း နည်းလေ ကောင်းလေ\n"
+      - id: type-options
+        type: editor.type
+        at: { mark: a-options }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "နည်းလေ ကောင်းလေ\n" }
+        text: "- Option 1: database ရဲ့ unique constraint (ခရီးစဉ် + ထိုင်ခုံ = row တစ်ခု)\n- Option 2: lock service သီးခြား တစ်ခု (မရောင်းခင် ရောင်းခွင့် တောင်း)\n"
+
+  - id: adr-decision
+    chapter: Decision၊ Consequences နဲ့ Compliance
+    narration: >
+      [[mark:d-decision]] Decision ကို ကိုယ်တို့ ဘာလုပ်မယ် ဆိုတဲ့ ပုံစံနဲ့၊ ဘာကြောင့်လဲ ဆိုတာပါ တွဲပြီး
+      ရေးပါတယ်။ ဆုံးဖြတ်ချက်က unique constraint ကို ဆက်သုံးမယ် ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ constraint က
+      data ရှိတဲ့ နေရာမှာပဲ၊ ရေးတဲ့ အချိန်မှာပဲ စစ်ပေးလို့ပါ။
+      [[mark:d-why]] lock service မှာတော့ ရောင်းခွင့် ရထားတဲ့ process တစ်ခုက ခဏ ရပ်သွားပြီး၊ ရောင်းခွင့်
+      သက်တမ်းကုန်မှ ပြန်နိုးလာတာမျိုး ဖြစ်နိုင်ပါတယ်။ အဲဒီအခါ data သိမ်းတဲ့ဘက်က နောက်ဆုံး တစ်ခါ
+      ထပ်စစ်ပေးမှ စိတ်ချရပါတယ်။ ဆိုတော့ lock service ထည့်လည်း database ရဲ့ စစ်ဆေးမှုကို အစားမထိုးနိုင်ဘဲ၊
+      ထိန်းရမယ့် အပိုင်း တစ်ခုပဲ တိုးလာမှာပါ။
+      [[mark:d-cons]] Consequences အောက်မှာ ရတာရော ပေးရတာပါ ရေးရပါတယ်။ ရတာက ထိန်းရမယ့် system အသစ်
+      မတိုးတာနဲ့၊ ဘယ် code ကပဲ ရေးရေး ကာကွယ်ပြီးသား ဖြစ်တာပါ။
+      [[mark:d-minus]] ပေးရတာကတော့ ထိုင်ခုံ ရောင်းတဲ့ write အားလုံးက database ရဲ့ ရေးခွင့်ရှိတဲ့ မိတ္တူ၊ leader
+      တစ်ခုတည်းကို ဖြတ်ရတာပါ။ ပြီးတော့ database က ငြင်းလိုက်တဲ့ write ကို ခုံ မရတော့ဘူးလို့ ပြပေးဖို့ code
+      ဘက်က handle လုပ်ပေးရပါတယ်။ အားနည်းချက်ကို ရိုးရိုးသားသား ရေးထားမှ၊ နောက် နှစ်နှစ်မှာ ဖတ်တဲ့သူက
+      အခြေအနေ ပြောင်းပြီလား ဆိုတာ ကိုယ်တိုင် အကဲဖြတ်နိုင်မှာပါ။
+      [[mark:d-comp]] နောက်ဆုံး အပိုင်း Compliance က ဒီ ဆုံးဖြတ်ချက်ကို တကယ် လိုက်နာနေလား ဘယ်လို စစ်မလဲ
+      ဆိုတာပါ။ စာထဲမှာ ရေးထားရုံနဲ့ဆို တစ်နေ့ တစ်ယောက်ယောက်က constraint ကို မသိဘဲ ဖြုတ်မိနိုင်ပါတယ်။
+      ဒါကြောင့် pipeline ထဲမှာ ခုံ တစ်ခုံတည်းကို ပြိုင်တူ နှစ်ခါ ရောင်းကြည့်တဲ့ test တစ်ခု ထားပြီး၊ ညတိုင်းလည်း
+      နှစ်ခါ ရောင်းမိတဲ့ ခုံ မရှိဘူး ဆိုတာ တိုက်စစ်ပါမယ်။ ဒီလို အလိုအလျောက် စစ်ဆေးချက်၊ fitness function
+      တွေက ADR ထဲက ဆုံးဖြတ်ချက်ကို စောင့်ပေးတာပါ။
+      [[mark:d-title]] အားလုံး ရေးပြီးမှ ခေါင်းစဉ်ကို ဆုံးဖြတ်ချက် တစ်ကြောင်းနဲ့ ဖြည့်ပါမယ်။ ခေါင်းစဉ်ကို
+      ဖတ်ရုံနဲ့ ဘာ ဆုံးဖြတ်ထားလဲ သိရပါမယ်။ ADR တစ်စောင်မှာ ဆုံးဖြတ်ချက် တစ်ခုပဲ ပါရပါတယ်။ ထိုင်ခုံကို
+      ဆယ်မိနစ် hold လုပ်တာလို ကိစ္စကတော့ သီးခြား ADR တစ်စောင် ဖြစ်ရပါမယ်။
+      [[mark:d-advice]] Status က Proposed ပဲ ရှိသေးတာမို့၊ ဒီ draft ကို team lead တွေနဲ့ operations engineer
+      တွေဆီ ပို့ပြီး တစ်ပတ် အကြံတောင်းပါမယ်။ အစည်းအဝေးမှာဆို အသံကျယ်တဲ့သူရဲ့ အမြင်က နိုင်သွားတတ်ပေမဲ့၊
+      စာထဲမှာတော့ မတူတဲ့ အမြင်တွေကို အေးအေးဆေးဆေး ထည့်ရေးနိုင်ပါတယ်။ သဘောတူပြီဆိုမှ Accepted ဖြစ်မှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: type-decision
+        type: editor.type
+        at: { mark: d-decision }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "## Decision\n" }
+        text: "- ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် database ရဲ့ unique constraint ကို သုံးမယ်\n"
+      - id: type-why
+        type: editor.type
+        at: { mark: d-why }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "unique constraint ကို သုံးမယ်\n" }
+        text: "- ဘာကြောင့်: ရေးတဲ့ အချိန်မှာ data ဘေးမှာတင် စစ်တယ်။ lock service ပါလည်း database က ထပ်စစ်ရတုန်းပဲ\n"
+      - id: type-plus
+        type: editor.type
+        at: { mark: d-cons }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "## Consequences\n" }
+        text: "+ ထိန်းရမယ့် system အသစ် မတိုးဘူး\n+ ဘယ် code ကပဲ ရေးရေး ကာကွယ်ပြီးသား\n"
+      - id: type-minus
+        type: editor.type
+        at: { mark: d-minus }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "ကာကွယ်ပြီးသား\n" }
+        text: "− ထိုင်ခုံ write အားလုံး leader တစ်ခုတည်းကို ဖြတ်ရတယ်\n− database ငြင်းတဲ့ write ကို ခုံ မရတော့ဘူးလို့ ပြဖို့ code က handle လုပ်ရတယ်\n"
+      - id: type-compliance
+        type: editor.type
+        at: { mark: d-comp }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "## Compliance\n" }
+        text: "- pipeline test: ခုံ တစ်ခုံကို ပြိုင်တူ 2 ခါ ရောင်းကြည့်၊ 1 ခါပဲ အောင်ရမယ်\n- ညတိုင်း reconciliation: နှစ်ခါ ရောင်းမိတဲ့ ခုံ = 0\n"
+      - id: type-title
+        type: editor.type
+        at: { mark: d-title }
+        cadence: line-by-line
+        target: { file: notebook/47-adr-seat-uniqueness.md, after: "# ADR-014" }
+        text: " · ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် database constraint ကို သုံးမယ်"
+      - id: expect-title
+        type: expect.file
+        at: { afterAction: type-title }
+        path: notebook/47-adr-seat-uniqueness.md
+        contains: "# ADR-014 · ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် database constraint ကို သုံးမယ်\n"
+      - id: sel-proposed
+        type: editor.select
+        at: { mark: d-advice }
+        target: { file: notebook/47-adr-seat-uniqueness.md, text: "Proposed" }
+
+  - id: worth
+    chapter: ဘယ် ဆုံးဖြတ်ချက်တွေ ADR ရေးထိုက်သလဲ
+    narration: >
+      [[mark:w-open]] ဒါဆို ဆုံးဖြတ်ချက်တိုင်းအတွက် ADR ရေးရမလား။ မရေးရပါဘူး။ ADR ရေးထိုက်တာက architecture ကို
+      ထိတဲ့ ဆုံးဖြတ်ချက် ငါးမျိုးပါ။
+      [[mark:w-1]] ပထမက architecture characteristic၊ system က ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ ဆိုတဲ့
+      အရည်အသွေးကို ထိတဲ့ ဆုံးဖြတ်ချက်ပါ။ ထိုင်ခုံ constraint က ဒီထဲမှာ ပါပါတယ်။
+      [[mark:w-2]] ဒုတိယက interface ပါ။ ကားလိုင်းတွေရဲ့ system က လှမ်းခေါ်နေတဲ့ API လို၊ တခြားသူတွေ
+      အားကိုးနေတဲ့ ပုံစံကို ပြောင်းတော့မယ် ဆိုရင်ပါ။
+      [[mark:w-3]] တတိယက dependency ပါ။ wallet ကုမ္ပဏီ အသစ် တစ်ခုလို၊ ကိုယ် မထိန်းနိုင်တဲ့ အရာ တစ်ခုကို
+      ထပ်မှီခိုတော့မယ် ဆိုရင်ပါ။
+      [[mark:w-4]] စတုတ္ထက structure၊ ဆိုလိုတာက system ကို ဘယ်လို အပိုင်းခွဲပြီး ဘယ်လို ဆက်ထားလဲ ဆိုတာကို
+      ပြောင်းတဲ့ ဆုံးဖြတ်ချက်ပါ။ Booking ကို service အဖြစ် ခွဲထုတ်ခဲ့တာမျိုးပါ။
+      [[mark:w-5]] နောက်ဆုံးက system ကို ဘယ်လို ဆောက်ပြီး production ဆီ ဘယ်လို ပို့လဲ ဆိုတဲ့ နည်းကို
+      ပြောင်းတာပါ။ pipeline ထဲမှာ စစ်ဆေးချက် အသစ် ထည့်တာမျိုးပါ။ function နာမည် ပေးတာ၊ unit test tool
+      ရွေးတာလို ကိစ္စတွေကတော့ team ထဲမှာပဲ ဆုံးဖြတ်လိုက်ရုံပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: show-worth,
+          type: slide.show,
+          at: { mark: w-open, offsetMs: -1200 },
+          slideId: worth-an-adr,
+        }
+      - { id: point-w-1, type: slide.point, at: { mark: w-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-w-2, type: slide.point, at: { mark: w-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-w-3, type: slide.point, at: { mark: w-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-w-4, type: slide.point, at: { mark: w-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-w-5, type: slide.point, at: { mark: w-5 }, target: { x: 0.15, y: 0.83 } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ နှစ်နှစ်လောက် ကြာတော့ အခြေအနေ ပြောင်းလို့ ထိုင်ခုံ ဆုံးဖြတ်ချက်ကို
+      ပြောင်းရတော့မယ် ဆိုပါစို့။
+      [[mark:quiz-a]] ပထမ နည်းက ADR နံပါတ် ဆယ့်လေးကို ပြန်ဖွင့်ပြီး၊ ဆုံးဖြတ်ချက် အသစ်နဲ့ ပြင်ရေးလိုက်တာပါ။
+      [[mark:quiz-b]] ဒုတိယ နည်းက အဟောင်းကို မထိဘဲ ADR အသစ် တစ်စောင် ရေးတာပါ။ ဘယ်နည်းကို ရွေးမလဲ။ lesson
+      ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ ADR ရဲ့ တန်ဖိုးက သမိုင်းကြောင်းမှာ
+      ရှိလို့ပါ။ အဟောင်းကို ပြင်ရေးလိုက်ရင် အရင်က ဘာကို သိထားပြီး ဘာကြောင့် အဲဒီလို ဆုံးဖြတ်ခဲ့လဲ ဆိုတာ
+      ပျောက်သွားပါတယ်။ ဒီနေ့ ကိုယ်တို့ ကြုံခဲ့တဲ့ ပြဿနာကို ကိုယ်တိုင် ပြန်ဖန်တီးမိမှာပါ။
+      [[mark:quiz-link]] ဒါကြောင့် လက်ခံပြီးသား ADR ကို ဘယ်တော့မှ ပြင်မရေးပါဘူး။ အဟောင်းမှာ Status
+      တစ်ကြောင်းကိုပဲ Superseded၊ ဆိုလိုတာက အစားထိုးခံရပြီလို့ ပြောင်းပြီး၊ ADR အသစ်ဆီ ညွှန်းပေးထားပါတယ်။
+      ဖတ်တဲ့သူက နှစ်စောင်လုံးကို ဖတ်ပြီး၊ ဘာကြောင့် ပြောင်းခဲ့လဲ ဆိုတာပါ သိနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-worth, type: slide.close, at: { mark: quiz } }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { afterAction: close-worth },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [q-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [q-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer, offsetMs: 2600 },
+          upsertIds: [q-reason],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-link,
+          type: whiteboard.apply,
+          at: { mark: quiz-link },
+          upsertIds: [q-old, q-old-l, q-arrow, q-new, q-new-l],
+          drawMs: 2400,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာလည်း လူတိုင်း လိုက်နာနေပေမဲ့၊ ဘာကြောင့်လဲ ဆိုတာ
+      ဘယ်မှာမှ ရေးမထားတဲ့ ဆုံးဖြတ်ချက် တစ်ခုခု ရှိမှာပါ။
+      [[mark:turn-ctx]] lesson ကို pause လုပ်ပြီး၊ အဲဒီ ဆုံးဖြတ်ချက်အတွက် ခေါင်းစဉ် တစ်ကြောင်းနဲ့ ဒီ Context
+      အပိုင်းကို ကိုယ့်ဟာနဲ့ အစားထိုး ရေးကြည့်ပါ။ ဘာတွေက ဖိအားပေးခဲ့လဲ၊ ဘာ ရွေးစရာတွေ ရှိခဲ့လဲ ဆိုတာပါ။
+      [[mark:turn-2]] ရေးရင်း ဘာကြောင့်လဲ ဆိုတာ ကိုယ်တိုင်လည်း မသိတာ တွေ့ရင်၊ သိနိုင်မယ့်သူ တစ်ယောက်ကို
+      ဒီအပတ်ထဲမှာပဲ မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-title
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/47-adr-seat-uniqueness.md,
+            text: "# ADR-014 · ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် database constraint ကို သုံးမယ်",
+          }
+      - id: sel-context
+        type: editor.select
+        at: { mark: turn-ctx, offsetMs: 2500 }
+        target:
+          file: notebook/47-adr-seat-uniqueness.md
+          text: "## Context\n- ထိုင်ခုံ တစ်ခုံကို app ကရော ကောင်တာကရော နှစ်ခါ ရောင်းလို့ မရဘူး\n- သင်္ကြန် peak မှာ ပျက်နိုင်တဲ့ အပိုင်း နည်းလေ ကောင်းလေ\n- Option 1: database ရဲ့ unique constraint (ခရီးစဉ် + ထိုင်ခုံ = row တစ်ခု)\n- Option 2: lock service သီးခြား တစ်ခု (မရောင်းခင် ရောင်းခွင့် တောင်း)"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ဆုံးဖြတ်ချက်တွေက ကြောက်လို့ မချတာ၊ ဘာကြောင့်လဲ ပျောက်လို့ ထပ်ငြင်းရတာ၊ chat ထဲမှာ
+      မြုပ်နေတာ ဆိုတဲ့ ပုံစံ သုံးမျိုးနဲ့ ပျက်တတ်ပါတယ်။ ADR က ဆုံးဖြတ်ချက် တစ်ခုရဲ့ Context၊ Decision၊
+      Consequences နဲ့ Compliance ကို တိုတိုရေးထားတဲ့ စာပါ။ မဆုံးဖြတ်ခင် ရေးရင် စဉ်းစားဖို့ရော အကြံတောင်းဖို့ပါ
+      အသုံးဝင်ပြီး၊ ပြောင်းစရာ ရှိရင်လည်း အဟောင်းကို မပြင်ဘဲ အသစ်နဲ့ အစားထိုးရပါတယ်။
+      [[mark:two-years]] နောက် နှစ်နှစ်မှာ လူအသစ် တစ်ယောက်က ဘယ်သူ့ကိုမှ မမေးဘဲ ဖတ်ပြီး နားလည်နိုင်ရင်၊ အဲဒီ
+      ADR က သူ့အလုပ်ကို လုပ်ပြီးပါပြီ။
+      [[mark:next]] နောက် lesson မှာတော့ သင်္ကြန် မတိုင်ခင် system ရဲ့ ဘယ်အပိုင်းမှာ အန္တရာယ် အများဆုံးလဲ
+      ဆိုတာကို လူတိုင်း မြင်အောင် ကြည့်တဲ့နည်း၊ risk ကို အကဲဖြတ်တာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
