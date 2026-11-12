@@ -1,0 +1,884 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-10-balanced-coupling
+  title: "Architect Path 10: Coupling ကို ချိန်ညှိခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/10-balance.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/10-balance.md: |
+        # Coupling ကို ချိန်ညှိခြင်း · ခရီးဖော်
+
+        | ဆက်သွယ်မှု | အား | အကွာအဝေး | ပြောင်းလဲနှုန်း | လုပ်မယ့်အရာ |
+        |---|---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: three-moves
+      contentType: html
+      name: မညီရင် လုပ်စရာ သုံးမျိုး
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">မညီရင် လုပ်စရာ သုံးမျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term green">အသိကို လျှော့</span>သီးသန့် contract တစ်ခု ရေးပေးမယ်</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term blue">နီးအောင် ရွှေ့</span>module တစ်ခုတည်းထဲ စုမယ်</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term orange">လက်ခံထား</span>မပြောင်းသလောက် ဒီအတိုင်း ထားမယ်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the slogan and the proposal: one app (dashed = a deployment),
+    # two parts that need each other (violet call), the question (orange).
+    - {
+        id: n-slogan,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Decouple everything!",
+        fontSize: 36,
+      }
+    - {
+        id: n-app,
+        kind: rectangle,
+        x: 290,
+        y: 240,
+        width: 780,
+        height: 210,
+        strokeStyle: dashed,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: n-app-l,
+        kind: text,
+        x: 312,
+        y: 250,
+        width: 300,
+        height: 35,
+        text: "app တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - {
+        id: n-b,
+        kind: rectangle,
+        x: 330,
+        y: 325,
+        width: 240,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-b-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 352,
+        width: 240,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: n-p,
+        kind: rectangle,
+        x: 790,
+        y: 325,
+        width: 240,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-p-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 352,
+        width: 240,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: n-call,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 582,
+        y: 350,
+        width: 196,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: n-ask,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 760,
+        height: 35,
+        text: "Payment ကို service သီးသန့် ခွဲမလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-none,
+        kind: text,
+        x: 290,
+        y: 555,
+        width: 760,
+        height: 38,
+        text: "coupling မရှိရင် system လည်း မရှိ",
+        fontSize: 30,
+      }
+    # Board 2 — distance as a scale: near (green) to far (red); the cost of a
+    # joint change grows along it (red arrow).
+    - {
+        id: a-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Distance: ဘယ်လောက် ဝေးလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: a-scale,
+        kind: rectangle,
+        x: 290,
+        y: 325,
+        width: 780,
+        height: 16,
+        strokeColor: "#1e1e1e",
+      }
+    - {
+        id: a-s1,
+        kind: text,
+        x: 290,
+        y: 275,
+        width: 150,
+        height: 35,
+        text: "function",
+        fontSize: 28,
+      }
+    - { id: a-s2, kind: text, x: 455, y: 275, width: 130, height: 35, text: "module", fontSize: 28 }
+    - {
+        id: a-s3,
+        kind: text,
+        x: 610,
+        y: 275,
+        width: 140,
+        height: 35,
+        text: "service",
+        fontSize: 28,
+      }
+    - { id: a-s4, kind: text, x: 785, y: 275, width: 100, height: 35, text: "team", fontSize: 28 }
+    - { id: a-s5, kind: text, x: 950, y: 275, width: 130, height: 35, text: "ကုမ္ပဏီ", fontSize: 28 }
+    - {
+        id: a-near,
+        kind: text,
+        x: 290,
+        y: 355,
+        width: 80,
+        height: 35,
+        text: "နီး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-far,
+        kind: text,
+        x: 1010,
+        y: 355,
+        width: 80,
+        height: 35,
+        text: "ဝေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-cost,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 290,
+        y: 430,
+        width: 780,
+        height: 40,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-cost-l,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 760,
+        height: 35,
+        text: "အတူ ပြင်ရတဲ့ ကုန်ကျစရိတ် တက်လာ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: a-life,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 760,
+        height: 35,
+        text: "နီးရင်: deploy အတူ၊ ပျက်လည်း အတူ",
+        fontSize: 28,
+      }
+    # Board 3 — strength × distance. Green cells are balanced, red cells are
+    # not; orange marks where volatility makes it hurt.
+    - { id: b-tl, kind: rectangle, x: 290, y: 220, width: 380, height: 180, strokeColor: "#2f9e44" }
+    - { id: b-tr, kind: rectangle, x: 670, y: 220, width: 380, height: 180, strokeColor: "#e03131" }
+    - { id: b-bl, kind: rectangle, x: 290, y: 400, width: 380, height: 180, strokeColor: "#e03131" }
+    - { id: b-br, kind: rectangle, x: 670, y: 400, width: 380, height: 180, strokeColor: "#2f9e44" }
+    - {
+        id: b-tl-c,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 238,
+        width: 380,
+        height: 35,
+        text: "အားကောင်း · နီး",
+        fontSize: 28,
+      }
+    - {
+        id: b-tl-n,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 295,
+        width: 380,
+        height: 35,
+        text: "အတူ ရှိသင့်လို့ အတူ ရှိ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-tr-c,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 238,
+        width: 380,
+        height: 35,
+        text: "အားကောင်း · ဝေး",
+        fontSize: 28,
+      }
+    - {
+        id: b-tr-n,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 295,
+        width: 380,
+        height: 35,
+        text: "ဝေးနေတဲ့ ရှုပ်ထွေးမှု",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-tr-v,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 350,
+        width: 380,
+        height: 35,
+        text: "မကြာခဏ ပြောင်းရင် နာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-bl-c,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 418,
+        width: 380,
+        height: 35,
+        text: "အားပျော့ · နီး",
+        fontSize: 28,
+      }
+    - {
+        id: b-bl-n,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 475,
+        width: 380,
+        height: 35,
+        text: "မဆိုင်တာတွေ စုပုံထား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-bl-v,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 530,
+        width: 380,
+        height: 35,
+        text: "မကြာခဏ ပြောင်းရင် နာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-br-c,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 418,
+        width: 380,
+        height: 35,
+        text: "အားပျော့ · ဝေး",
+        fontSize: 28,
+      }
+    - {
+        id: b-br-n,
+        kind: text,
+        align: center,
+        x: 670,
+        y: 475,
+        width: 380,
+        height: 35,
+        text: "သီးခြား လွတ်လပ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "မပြင်ဘဲ service ခွဲလိုက်ရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-ctx,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 760,
+        height: 35,
+        text: "Payment → booking table (တိုက်ရိုက် ဖတ်)",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 600,
+        height: 35,
+        text: "က) ပိုကောင်းသွားမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 600,
+        height: 35,
+        text: "ခ) ပိုဆိုးသွားမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 260,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 580,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 760,
+        height: 35,
+        text: "အား: အရင်အတိုင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 760,
+        height: 35,
+        text: "အကွာအဝေး: app တစ်ခုတည်း → service နှစ်ခု",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8110
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အရာအားလုံးကို decouple လုပ်ရမလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အပိုင်း နှစ်ခုက တစ်ခုအကြောင်း တစ်ခု သိထားရတဲ့ အသိ၊ coupling ရဲ့ အားကို အဆင့်
+      လေးဆင့်နဲ့ တိုင်းတာကို လေ့လာခဲ့ပါတယ်။
+      [[mark:n-slogan]] ဒီအပတ်ထဲမှာ team ထဲက developer မောင်မောင် က conference တစ်ခုကနေ စကားတစ်ခွန်း
+      သယ်လာပါတယ်။
+      [[mark:n-say]] အရာအားလုံးကို decouple လုပ်ပါ တဲ့။ အပိုင်းတွေ တစ်ခုနဲ့တစ်ခု မမှီခိုအောင် ခွဲထုတ်ပါ ဆိုတဲ့
+      သဘောပါ။
+      [[mark:n-app]] ခရီးဖော် ရဲ့ code အားလုံးက အခု app တစ်ခုတည်းထဲမှာ ရှိနေပါတယ်။
+      [[mark:n-ask]] ဆိုတော့ သူ့ အကြံက Payment ကို service သီးသန့် တစ်ခုအဖြစ် ခွဲထုတ်ဖို့ပါ။ Payment က Booking ရဲ့
+      table ကို တိုက်ရိုက် ဖတ်ထားလို့ ငွေပြန်အမ်းတာတွေ ပျက်ခဲ့ဖူးတာကို တွေးရင် ဒီအကြံက ယုတ္တိရှိပါတယ်။ ခွဲလိုက်ရင် ပိုကောင်းသွားမလား၊ ပိုဆိုးသွားမလား။ ဒီ မေးခွန်းကို lesson အဆုံးပိုင်းမှာ ပြန်ဖြေပါမယ်။
+      [[mark:n-none]] အရင်ဆုံး ရှင်းထားစရာ တစ်ခု ရှိပါတယ်။ coupling က ရန်သူ မဟုတ်ပါဘူး။
+      [[mark:n-call]] Booking က Payment ကို
+      လုံးဝ မသိရင် လက်မှတ်ဖိုး ဖြတ်လို့ မရပါဘူး။ အပိုင်းတွေကြားမှာ ဆက်သွယ်မှု လုံးဝ မရှိရင် အဲဒါ system မဟုတ်တော့ဘဲ၊ သီးခြား program တွေ စုထားတာပဲ ဖြစ်သွားပါမယ်။
+      [[mark:n-three]] ဒါကြောင့် မေးရမှာက coupling ကို ဘယ်လို ဖယ်မလဲ မဟုတ်ဘဲ၊ ဘယ်လို ချိန်ညှိမလဲ ဆိုတာပါ။
+      ချိန်ညှိဖို့ ကြည့်ရမယ့် အရာ သုံးခု ရှိပြီး၊ ပထမ တစ်ခုဖြစ်တဲ့ အားကိုတော့ သိပြီးသားပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-n-slogan,
+          type: whiteboard.apply,
+          at: { mark: n-say },
+          open: true,
+          upsertIds: [n-slogan],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-n-app,
+          type: whiteboard.apply,
+          at: { mark: n-app },
+          upsertIds: [n-app, n-app-l, n-b, n-b-l, n-p, n-p-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-n-ask,
+          type: whiteboard.apply,
+          at: { mark: n-ask },
+          upsertIds: [n-ask],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-n-call,
+          type: whiteboard.apply,
+          at: { mark: n-call },
+          upsertIds: [n-call],
+          drawMs: 700,
+        }
+      - {
+          id: draw-n-none,
+          type: whiteboard.apply,
+          at: { mark: n-three },
+          upsertIds: [n-none],
+          drawMs: 1200,
+        }
+
+  - id: distance
+    chapter: Distance — အကွာအဝေး
+    narration: >
+      [[mark:d-open]] ဒုတိယ တစ်ခုက အကွာအဝေး၊ distance ပါ။ ဆက်သွယ်နေတဲ့ အပိုင်း နှစ်ခုက တစ်ခုနဲ့တစ်ခု ဘယ်လောက်
+      ဝေးလဲ ဆိုတာပါ။
+      [[mark:d-near]] အနီးဆုံးက function တစ်ခုတည်းထဲမှာ အတူ ရှိတာပါ။ နည်းနည်း ဝေးသွားရင် module နှစ်ခု ဖြစ်ပါမယ်။
+      [[mark:d-far]] ပိုဝေးရင် သီးခြား deploy လုပ်ရတဲ့ service နှစ်ခု၊ ပြီးရင် team နှစ်ခု၊ အဝေးဆုံးကတော့
+      ကုမ္ပဏီ နှစ်ခုပါ။
+      [[mark:d-cost]] အကွာအဝေးက ဘာကြောင့် အရေးကြီးလဲဆိုတော့၊ နှစ်ခုလုံးကို အတူ ပြင်ရတဲ့နေ့မှာ ဝေးလေ ကုန်ကျစရိတ်
+      များလေ ဖြစ်လို့ပါ။ function တစ်ခုထဲမှာဆိုရင် မျက်စိရှေ့မှာတင် နှစ်ကြောင်းလုံး ပြင်လိုက်ရုံပါ။ service
+      နှစ်ခုဆိုရင် deploy နှစ်ခါကို အစီအစဉ်တကျ လုပ်ရပါမယ်။ team နှစ်ခု ခြားနေရင် အစည်းအဝေး တစ်ခု ထိုင်ရပါမယ်။ ကုမ္ပဏီ နှစ်ခုဆိုရင်တော့ wallet ကုမ္ပဏီဆီ စာပို့ပြီး
+      အပတ်နဲ့ချီ စောင့်ရတာမျိုးပါ။
+      [[mark:d-life]] တစ်ဖက်မှာတော့ နီးနေတဲ့ အရာတွေက deploy လည်း အတူ လုပ်ရ၊ ပျက်ရင်လည်း အတူ ပျက်ရပါတယ်။ ဆိုတော့
+      ဝေးတာ၊ နီးတာ သူ့ချည်းသက်သက်က ကောင်းတာ၊ ဆိုးတာ မဟုတ်ပါဘူး။
+      [[mark:d-people]] သတိထားစရာက အကွာအဝေးကို code ရဲ့ နေရာတစ်ခုတည်းနဲ့ တိုင်းလို့ မရတာပါ။ code နှစ်ခုက folder
+      တစ်ခုတည်းထဲမှာ ရှိနေတာတောင်၊ ပိုင်တဲ့ team က မတူရင် အတူ ပြင်ဖို့ လူချင်း ညှိရတာမို့ ဝေးသွားပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-a-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          clear: true,
+          upsertIds: [a-title, a-scale],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-a-near,
+          type: whiteboard.apply,
+          at: { mark: d-near },
+          upsertIds: [a-s1, a-s2, a-near],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-far,
+          type: whiteboard.apply,
+          at: { mark: d-far },
+          upsertIds: [a-s3, a-s4, a-s5, a-far],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-a-cost,
+          type: whiteboard.apply,
+          at: { mark: d-cost },
+          upsertIds: [a-cost, a-cost-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-a-life,
+          type: whiteboard.apply,
+          at: { mark: d-life },
+          upsertIds: [a-life],
+          drawMs: 1200,
+        }
+
+  - id: balance
+    chapter: အားနဲ့ အကွာအဝေးကို တွဲကြည့်ခြင်း
+    narration: >
+      [[mark:b-open]] အားနဲ့ အကွာအဝေးကို တွဲကြည့်လိုက်ရင် ဖြစ်နိုင်တာ လေးမျိုး ထွက်လာပါတယ်။
+      [[mark:b-tl]] အသိ အများကြီး မျှထားပြီး နီးနီးလေး ရှိနေတာက ပြဿနာ မဟုတ်ပါဘူး။ အတူ ပြောင်းရမယ့် အရာတွေ အတူ
+      ရှိနေတာမို့၊ ပြင်ရတာလည်း တစ်နေရာတည်းမှာ ပြီးပါတယ်။ ထိုင်ခုံကို ထိန်းတာနဲ့ ပြန်လွှတ်တာလို၊ စည်းမျဉ်းတွေ အများကြီး မျှထားရတဲ့ code တွေက module တစ်ခုတည်းထဲမှာ
+      ရှိနေသင့်တာပါ။ cohesion ကောင်းတယ်လို့ ပြောတာ ဒါပါပဲ။
+      [[mark:b-br]] အသိ နည်းနည်းပဲ မျှထားပြီး ဝေးဝေး ရှိနေတာလည်း အဆင်ပြေပါတယ်။ ခရီးဖော် နဲ့ wallet ကုမ္ပဏီလိုပါ။
+      တစ်ဖက်က အတွင်းပိုင်းကို ဘာပြောင်းပြောင်း၊ ကြားက contract မပြောင်းသရွေ့ နောက်တစ်ဖက် မထိခိုက်ပါဘူး။
+      [[mark:b-tr]] ပြဿနာ ပထမ တစ်မျိုးက အသိ အများကြီး မျှထားရက်နဲ့ ဝေးနေတာပါ။ ပြောင်းစရာ တစ်ခု ပေါ်တိုင်း ဝေးဝေးက
+      နှစ်နေရာကို အတူ ပြင်၊ အတူ deploy လုပ်ရပြီး၊ တစ်နေရာ မေ့ကျန်ခဲ့တတ်ပါတယ်။
+      [[mark:b-bl]] ဒုတိယ တစ်မျိုးကတော့ ပြောင်းပြန်ပါ။ တစ်ခုနဲ့တစ်ခု ဘာမှ မဆိုင်တဲ့ အရာတွေကို တစ်နေရာတည်းမှာ
+      စုပုံထားတာပါ။ စာကြောင်း ၄၀၀၀ ရှိတဲ့ utils folder က ဒီအကွက်ထဲမှာပါ။ မဆိုင်တဲ့ code ကို ပြင်တာတောင် အတူ ဖတ်ရ၊
+      အတူ deploy လုပ်ရပါတယ်။
+      [[mark:b-rule]] ဒီကနေ စည်းမျဉ်း တစ်ကြောင်း ရပါတယ်။ အသိ များများ မျှထားရတဲ့ အရာတွေကို နီးနီး ထားပါ။ ဝေးဝေး
+      ထားရမယ့် အရာတွေကြားမှာတော့ အသိ နည်းနည်းပဲ မျှပါ။
+      [[mark:b-vol]] ဒါပေမဲ့ တတိယ တစ်ခု ကျန်ပါသေးတယ်။ ပြောင်းလဲနှုန်း၊ volatility ပါ။
+      [[mark:b-vol-2]] ဆိုးတဲ့ အကွက် နှစ်ကွက်ထဲ
+      ရောက်နေတာတောင်၊ အဲဒီ အပိုင်းက ဘယ်တော့မှ မပြောင်းရင် ဘာမှ မနာပါဘူး။ မကြာခဏ ပြောင်းမှ နာတာပါ။ နှစ်နဲ့ချီ ဘယ်သူမှ မပြင်ရတဲ့ code ဟောင်း တစ်ခုက ဘယ်လောက်ပဲ ရှုပ်နေနေ၊
+      ဒီအတိုင်း ထားလို့ ရပါတယ်။
+      [[mark:b-core]] ဘယ်အပိုင်းက မကြာခဏ ပြောင်းမလဲ ဆိုတာလည်း ခန့်မှန်းလို့ ရပါတယ်။ ကုမ္ပဏီကို ပြိုင်ဘက်တွေနဲ့
+      ကွာစေတဲ့ အဓိက လုပ်ငန်းက အများဆုံး ပြောင်းတတ်ပါတယ်။ ခရီးဖော် အတွက်ဆိုရင် ထိုင်ခုံ ရောင်းတဲ့ အပိုင်းပါ။ commission တွက်ပုံလို အပိုင်းကတော့ နှစ်နဲ့ချီ မပြောင်းတတ်ပါဘူး။
+      [[mark:b-close]] အား၊ အကွာအဝေးနဲ့ ပြောင်းလဲနှုန်း။ ဒီ သုံးခုကို အတူ ကြည့်မှ ဆက်သွယ်မှု တစ်ခုက ညီမညီ
+      ပြောနိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          clear: true,
+          upsertIds: [b-tl, b-tr, b-bl, b-br],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-b-tl,
+          type: whiteboard.apply,
+          at: { mark: b-tl },
+          upsertIds: [b-tl-c, b-tl-n],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-b-br,
+          type: whiteboard.apply,
+          at: { mark: b-br },
+          upsertIds: [b-br-c, b-br-n],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-b-tr,
+          type: whiteboard.apply,
+          at: { mark: b-tr },
+          upsertIds: [b-tr-c, b-tr-n],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-b-bl,
+          type: whiteboard.apply,
+          at: { mark: b-bl },
+          upsertIds: [b-bl-c, b-bl-n],
+          drawMs: 1400,
+        }
+      - {
+          id: point-b-tl,
+          type: whiteboard.point,
+          at: { mark: b-rule },
+          target: { assetId: b-tl-n },
+        }
+      - {
+          id: draw-b-vol,
+          type: whiteboard.apply,
+          at: { mark: b-vol-2 },
+          upsertIds: [b-tr-v, b-bl-v],
+          drawMs: 1600,
+        }
+      - { id: close-b, type: whiteboard.apply, at: { mark: b-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-b },
+          path: notebook/10-balance.md,
+        }
+      - id: sel-three
+        type: editor.select
+        at: { mark: b-close, offsetMs: 1200 }
+        target: { file: notebook/10-balance.md, text: "| အား | အကွာအဝေး | ပြောင်းလဲနှုန်း |" }
+
+  - id: moves
+    chapter: မညီရင် လုပ်စရာ သုံးမျိုး
+    narration: >
+      [[mark:s-open]] ဆက်သွယ်မှု တစ်ခုက မညီဘူး ဆိုရင် လုပ်လို့ရတာ သုံးမျိုး ရှိပါတယ်။
+      [[mark:s-1]] ပထမက မျှထားတဲ့ အသိကို လျှော့တာပါ။ အတွင်းပိုင်းကို တိုက်ရိုက် သိခွင့် မပေးတော့ဘဲ၊ ဆက်သွယ်ဖို့
+      သီးသန့် ရေးထားတဲ့ ပုံစံ၊ contract တစ်ခုကိုပဲ ပေးသုံးတာပါ။ wallet ကုမ္ပဏီက သူတို့ database ကို မပေးဘဲ API ကိုပဲ ပေးသုံးတာနဲ့ သဘောချင်း အတူတူပါပဲ။ ဝေးဝေး ထားရမယ့် အပိုင်းတွေအတွက် သင့်တော်ပါတယ်။
+      [[mark:s-2]] ဒုတိယက အကွာအဝေးကို တိုလိုက်တာပါ။ အတူ ပြောင်းနေရတဲ့ အရာတွေကို module တစ်ခုတည်းထဲ စုလိုက်တာပါ။
+      ခွဲထားတာကို ပြန်ပေါင်းတာက နောက်ပြန်ဆုတ်တာ မဟုတ်ပါဘူး။
+      [[mark:s-3]] တတိယကတော့ ဒီအတိုင်း လက်ခံထားတာပါ။ အဲဒီ အပိုင်းက မပြောင်းသလောက် ဖြစ်နေရင် ပြင်ဖို့ ကုန်မယ့်
+      အချိန်က မတန်ပါဘူး။ နေရာတိုင်းကို ပြီးပြည့်စုံအောင် လုပ်ဖို့ထက်၊ နာတဲ့ နေရာကို ရွေးပြင်ဖို့က architect ရဲ့
+      အလုပ်ပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: show-moves,
+          type: slide.show,
+          at: { mark: s-open, offsetMs: -1200 },
+          slideId: three-moves,
+        }
+      - { id: point-move-1, type: slide.point, at: { mark: s-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-move-2, type: slide.point, at: { mark: s-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-move-3, type: slide.point, at: { mark: s-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: table
+    chapter: ခရီးဖော် ရဲ့ ဆက်သွယ်မှုတွေကို ချိန်ကြည့်ခြင်း
+    narration: >
+      [[mark:t-open]] ဒီ သုံးခုနဲ့ ခရီးဖော် ရဲ့ ဆက်သွယ်မှုတွေကို ချိန်ကြည့်ရအောင်။ တစ်ခုစီအတွက် အား၊ အကွာအဝေး၊
+      ပြောင်းလဲနှုန်းကို ဖြည့်ပြီးမှ ဘာလုပ်မလဲ ဆုံးဖြတ်ပါမယ်။
+      [[mark:type-seat]] ပထမ တစ်ခုက code ထဲမှာ ငါးနေရာ ပြန့်နေတဲ့ ထိုင်ခုံ စည်းမျဉ်းတွေပါ။ စည်းမျဉ်း တစ်ခုတည်းကို
+      ငါးနေရာလုံးက သိနေရတာမို့ အားကောင်းပါတယ်။ folder သုံးခု ခြားနေပြီး၊ အဓိက လုပ်ငန်းမို့ မကြာခဏလည်း ပြောင်းပါတယ်။
+      သုံးခုလုံး မြင့်နေတော့ ဒါက အနာဆုံး နေရာပါ။ ရွေးတဲ့ နည်းက နီးအောင် ရွှေ့ပြီး module တစ်ခုထဲ စုဖို့ပါ။
+      [[mark:type-commission]] ဒုတိယက Payment နဲ့ Report နှစ်နေရာမှာ ရေးထားတဲ့ ငွေပြန်အမ်း စည်းမျဉ်းပါ။ အားကတော့
+      ကောင်းပါတယ်။ ဒါပေမဲ့ app တစ်ခုတည်းထဲမှာ ရှိပြီး၊ ၂၄ နာရီ စည်းမျဉ်း ဆိုတာလည်း နှစ်နှစ်လုံး တစ်ခါမှ
+      မပြောင်းဖူးပါဘူး။ ဒါကြောင့် အခုတော့ လက်ခံထားပါမယ်။
+      [[mark:type-wallet]] တတိယက Payment နဲ့ wallet ကုမ္ပဏီရဲ့ API ပါ။ ကုမ္ပဏီ နှစ်ခု ခြားနေတာမို့ အဝေးဆုံးဖြစ်ပြီး၊
+      ဟိုဘက်ကလည်း မကြာခဏ ပြောင်းတတ်ပါတယ်။ ဒါပေမဲ့ မျှထားတာက contract တစ်ခုတည်းမို့ အားပျော့ပါတယ်။ ညီနေပြီမို့
+      ဘာမှ လုပ်စရာ မလိုပါဘူး။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-moves, type: slide.close, at: { mark: t-open } }
+      - id: type-seat
+        type: editor.type
+        at: { mark: type-seat }
+        cadence: line-by-line
+        target: { file: notebook/10-balance.md, after: "|---|---|---|---|---|\n" }
+        text: "| ထိုင်ခုံ စည်းမျဉ်း (5 နေရာ) | အားကောင်း | folder 3 ခု ခြား | များ | module တစ်ခုထဲ စုမယ် |\n"
+      - id: type-commission
+        type: editor.type
+        at: { mark: type-commission }
+        cadence: line-by-line
+        target: { file: notebook/10-balance.md, after: "| များ | module တစ်ခုထဲ စုမယ် |\n" }
+        text: "| Payment ↔ Report (ပြန်အမ်း) | အားကောင်း | app တစ်ခုတည်း | နည်း | လက်ခံထားမယ် |\n"
+      - id: type-wallet
+        type: editor.type
+        at: { mark: type-wallet }
+        cadence: line-by-line
+        target: { file: notebook/10-balance.md, after: "| နည်း | လက်ခံထားမယ် |\n" }
+        text: "| Payment → wallet API | အားပျော့ | ကုမ္ပဏီ ခြား | များ | ညီနေပြီ၊ မပြင်ဘူး |\n"
+      - id: expect-seat
+        type: expect.file
+        at: { afterAction: type-wallet }
+        path: notebook/10-balance.md
+        contains: "| ထိုင်ခုံ စည်းမျဉ်း (5 နေရာ) | အားကောင်း | folder 3 ခု ခြား | များ | module တစ်ခုထဲ စုမယ် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ အစက မေးခွန်းဆီ ပြန်သွားကြည့်ရအောင်။
+      [[mark:q-ctx]] Payment က Booking ရဲ့ table တွေကို တိုက်ရိုက် ဖတ်နေတုန်းပါ။ အဲဒါကို မပြင်ဘဲ၊ Payment ကို
+      service သီးသန့် တစ်ခုအဖြစ် ခွဲထုတ်လိုက်မယ် ဆိုရင် အခြေအနေက ဘယ်လို ဖြစ်သွားမလဲ။
+      [[mark:q-a]] ပထမ အဖြေက ပိုကောင်းသွားမယ် ဆိုတာပါ။ service ခွဲလိုက်ပြီမို့ တစ်ခုနဲ့တစ်ခု လွတ်သွားပြီလို့
+      ယူဆတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက ပိုဆိုးသွားမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ပိုဆိုးသွားမယ် ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ service ခွဲလိုက်တာက အကွာအဝေးကိုပဲ
+      တိုးလိုက်တာ ဖြစ်ပြီး၊ မျှသိထားတဲ့ အသိကတော့ နည်းနည်းမှ မလျော့လို့ပါ။ Payment က table ရဲ့ column နာမည်တွေကို
+      အရင်အတိုင်း သိနေရတုန်းပါ။
+      [[mark:q-move]] အရင်က အားကောင်းပြီး နီးတဲ့ အကွက်ထဲမှာ ရှိခဲ့တာက၊ အခု အားကောင်းပြီး ဝေးတဲ့ အကွက်ထဲ
+      ရောက်သွားပါပြီ။ column နာမည် တစ်ခု ပြောင်းမိရင်၊ အရင်က app တစ်ခုထဲမှာ တစ်ခါတည်း ပြင်လို့ ရခဲ့ပေမဲ့၊ အခုတော့
+      service နှစ်ခုကို အချိန်ကိုက် deploy လုပ်မှ ရပါတော့မယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-ctx,
+          type: whiteboard.apply,
+          at: { mark: q-ctx },
+          upsertIds: [q-ctx],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-test,
+          type: whiteboard.apply,
+          at: { mark: q-move },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] မောင်မောင် ရဲ့ အကြံက မှားတာ မဟုတ်ဘဲ၊ လုပ်မယ့် အစီအစဉ်ကိုပဲ ပြောင်းရမှာပါ။
+      [[mark:type-payment]] အရင် လုပ်ရမှာက မျှထားတဲ့ အသိကို လျှော့ဖို့ပါ။ Booking က ငွေပြန်အမ်းဖို့ လိုတဲ့
+      အချက်အလက်လောက်ကိုပဲ ပေးတဲ့ contract တစ်ခု ရေးပေးပြီး၊ Payment က အဲဒါကိုပဲ သုံးရပါမယ်။ အဲဒါ ပြီးမှ service
+      ခွဲမလား ဆိုတာက သီးခြား ဆုံးဖြတ်ချက် တစ်ခု ဖြစ်လာပါတယ်။ ခရီးဖော် က team ကို တိုးချဲ့ဖို့ ပြင်နေပြီမို့၊
+      အကွာအဝေးက မကြာခင် သူ့အလိုလို တိုးလာပါလိမ့်မယ်။ contract ကို အခုကတည်းက ရေးထားရတာ အဲဒါကြောင့်ပါ။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system ထဲက ဆက်သွယ်မှု တစ်ခုကို ဒီ
+      table ထဲမှာ ထပ်ရေးကြည့်ပါ။ အား၊ အကွာအဝေး၊ ပြောင်းလဲနှုန်း သုံးခုကို ဖြည့်ပြီး၊ အသိကို လျှော့မလား၊ နီးအောင်
+      ရွှေ့မလား၊ လက်ခံထားမလား တစ်ခု ရွေးပါ။
+      [[mark:turn-2]] သုံးခုလုံး မြင့်နေတဲ့ ဆက်သွယ်မှုကို တွေ့ရင်တော့ အဲဒါက အရင်ဆုံး ပြင်သင့်တဲ့ နေရာပါပဲ။ အကွာအဝေးကို ဖြည့်တဲ့အခါ code ရဲ့ နေရာအပြင်၊ ဘယ် team က ပိုင်လဲ
+      ဆိုတာကိုပါ ထည့်စဉ်းစားပါ။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-payment
+        type: editor.type
+        at: { mark: type-payment }
+        cadence: line-by-line
+        target: { file: notebook/10-balance.md, after: "| များ | ညီနေပြီ၊ မပြင်ဘူး |\n" }
+        text: "| Payment → booking table | အားကောင်း | app တစ်ခုတည်း | များ | contract အရင် ရေးမယ် |\n"
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn-you }
+        target:
+          { file: notebook/10-balance.md, text: "| ဆက်သွယ်မှု | အား | အကွာအဝေး | ပြောင်းလဲနှုန်း | လုပ်မယ့်အရာ |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ coupling က ရန်သူ မဟုတ်ဘဲ ချိန်ညှိရမယ့် အရာပါ။ အသိ များများ မျှထားရတဲ့ အရာတွေကို နီးနီး
+      ထား၊ ဝေးဝေး ထားရမယ့် အရာတွေကြားမှာ အသိ နည်းနည်းပဲ မျှပါ။ မညီတာ တွေ့ရင်လည်း အဲဒီ အပိုင်းက မကြာခဏ ပြောင်းမှ
+      ပြင်ဖို့ တန်ပါတယ်။ ပြင်မယ်ဆိုရင် အသိကို လျှော့တာ၊ နီးအောင် ရွှေ့တာ၊ လက်ခံထားတာ သုံးမျိုးထဲက ရွေးရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ system တစ်ခုလုံးကို ဘယ်လို အစိတ်အပိုင်းတွေ ခွဲမလဲ၊ component တွေကို
+      ဘယ်လို ရှာဖွေမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
