@@ -1,0 +1,916 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-29-schema-evolution
+  title: "Architect Path 29: Schema evolution နဲ့ contract"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/29-changes.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/29-changes.md: |
+        # Schema ပြောင်းလဲမှု လမ်းညွှန်
+
+        ဖြစ်ရပ်: Booking က TicketSold event ထဲ promoCode field ထည့်တော့ Notification အဟောင်း crash ဖြစ်၊ SMS 40 မိနစ် မထွက်
+
+        | ပြောင်းလဲမှု | အဟောင်းက အသစ်ကို ဖတ် | အသစ်က အဟောင်းကို ဖတ် | လုံခြုံတဲ့ နည်း |
+        |---|---|---|---|
+
+        ## စည်းကမ်း
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — a change is checked in two directions. Violet = data moving,
+    # blue = code (a part of the system), red = what broke this week.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "စစ်ရမယ့် ဦးတည်ရာ နှစ်ဖက်",
+        fontSize: 36,
+      }
+    - {
+        id: d-a-data,
+        kind: rectangle,
+        x: 270,
+        y: 245,
+        width: 300,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-a-data-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 260,
+        width: 300,
+        height: 35,
+        text: "data အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: d-a-ar,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 257,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-a-code,
+        kind: rectangle,
+        x: 690,
+        y: 245,
+        width: 300,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-a-code-l,
+        kind: text,
+        align: center,
+        x: 690,
+        y: 260,
+        width: 300,
+        height: 35,
+        text: "code အဟောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: d-a-name,
+        kind: text,
+        x: 270,
+        y: 320,
+        width: 420,
+        height: 35,
+        text: "forward compatibility",
+        fontSize: 28,
+      }
+    - {
+        id: d-a-crash,
+        kind: text,
+        x: 1002,
+        y: 260,
+        width: 90,
+        height: 35,
+        text: "crash",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-b-data,
+        kind: rectangle,
+        x: 270,
+        y: 435,
+        width: 300,
+        height: 64,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-b-data-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 450,
+        width: 300,
+        height: 35,
+        text: "data အဟောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: d-b-ar,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 580,
+        y: 447,
+        width: 100,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: d-b-code,
+        kind: rectangle,
+        x: 690,
+        y: 435,
+        width: 300,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: d-b-code-l,
+        kind: text,
+        align: center,
+        x: 690,
+        y: 450,
+        width: 300,
+        height: 35,
+        text: "code အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: d-b-name,
+        kind: text,
+        x: 270,
+        y: 510,
+        width: 420,
+        height: 35,
+        text: "backward compatibility",
+        fontSize: 28,
+      }
+    # Board 2 — a breaking change done in three steps. Orange = the steps this
+    # board is about; violet = moving on to the next step.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "ချိုးတဲ့ ပြောင်းလဲမှုကို သုံးဆင့် ခွဲ",
+        fontSize: 36,
+      }
+    - {
+        id: s1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 200,
+        height: 66,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 255,
+        width: 200,
+        height: 35,
+        text: "1 ထည့်",
+        fontSize: 28,
+      }
+    - {
+        id: s1-e,
+        kind: text,
+        x: 500,
+        y: 255,
+        width: 560,
+        height: 35,
+        text: "departureAt ထည့်၊ နှစ်ခုလုံး ရေး",
+        fontSize: 28,
+      }
+    - {
+        id: s-ar1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 350,
+        y: 312,
+        width: 40,
+        height: 42,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s2,
+        kind: rectangle,
+        x: 270,
+        y: 360,
+        width: 200,
+        height: 66,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s2-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 375,
+        width: 200,
+        height: 35,
+        text: "2 ရွှေ့",
+        fontSize: 28,
+      }
+    - {
+        id: s2-e,
+        kind: text,
+        x: 500,
+        y: 375,
+        width: 560,
+        height: 35,
+        text: "ဖတ်သူ အားလုံး departureAt ဆီ ရွှေ့",
+        fontSize: 28,
+      }
+    - {
+        id: s-ar2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 350,
+        y: 432,
+        width: 40,
+        height: 42,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s3,
+        kind: rectangle,
+        x: 270,
+        y: 480,
+        width: 200,
+        height: 66,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s3-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 495,
+        width: 200,
+        height: 35,
+        text: "3 ဖယ်",
+        fontSize: 28,
+      }
+    - {
+        id: s3-e,
+        kind: text,
+        x: 500,
+        y: 495,
+        width: 560,
+        height: 35,
+        text: "မသုံးတော့မှ departure ဖယ်",
+        fontSize: 28,
+      }
+    # Board 3 — a contract from strict to loose (a scale), where Notification
+    # stood (red) and moves to (green), and the consumer's test.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "Contract: တင်းတာကနေ လျော့တာအထိ",
+        fontSize: 36,
+      }
+    - { id: c-bar, kind: rectangle, x: 290, y: 262, width: 780, height: 16, strokeColor: "#1e1e1e" }
+    - {
+        id: c-strict-l,
+        kind: text,
+        x: 290,
+        y: 296,
+        width: 380,
+        height: 35,
+        text: "တင်း: အတိအကျ တူရမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: c-loose-l,
+        kind: text,
+        x: 790,
+        y: 296,
+        width: 290,
+        height: 35,
+        text: "လျော့: လိုတာပဲ ယူ",
+        fontSize: 28,
+      }
+    - { id: c-was, kind: ellipse, x: 310, y: 250, width: 40, height: 40, strokeColor: "#e03131" }
+    - { id: c-now, kind: ellipse, x: 930, y: 250, width: 40, height: 40, strokeColor: "#2f9e44" }
+    - {
+        id: c-need-l,
+        kind: text,
+        x: 290,
+        y: 372,
+        width: 600,
+        height: 35,
+        text: "Notification လိုတာ: field 4 ခုပဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-n,
+        kind: rectangle,
+        x: 290,
+        y: 480,
+        width: 300,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-n-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 498,
+        width: 300,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    - {
+        id: c-ar,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 600,
+        y: 495,
+        width: 120,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-test-l,
+        kind: text,
+        x: 560,
+        y: 436,
+        width: 240,
+        height: 35,
+        text: "contract test",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-b,
+        kind: rectangle,
+        x: 730,
+        y: 480,
+        width: 340,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-b-l,
+        kind: text,
+        align: center,
+        x: 730,
+        y: 498,
+        width: 340,
+        height: 35,
+        text: "Booking pipeline",
+        fontSize: 28,
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange the
+    # reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "seatNo → seatNumber လို့ နာမည်ပြောင်းမယ်",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) release တစ်ခါတည်းနဲ့ ရတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) အဆင့်ခွဲ လုပ်ရမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 290,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 610,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 780,
+        height: 35,
+        text: "code အဟောင်းရော အသစ်ရော ရှာမတွေ့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 780,
+        height: 35,
+        text: "ထည့် → ရွှေ့ → ဖယ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8129
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Field တစ်ခု ထည့်လိုက်ရုံနဲ့
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ data store တစ်ခုစီကို system of record လား၊ derived data လား တံဆိပ်ကပ်ပြီး၊ data
+      ရဲ့ ပုံသဏ္ဌာန်နဲ့ ကိုက်တဲ့ model ကို ရွေးပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီအပတ်မှာတော့ data ရဲ့ ပုံစံကို ပြောင်းလိုက်မိလို့ ပြဿနာ တစ်ခု ဖြစ်ခဲ့ပါတယ်။
+      [[mark:sel-incident]] ခရီးဖော် မှာ လက်မှတ် တစ်စောင် ရောင်းပြီးတိုင်း Booking service က event တစ်ခု
+      ထုတ်ပါတယ်။ Notification service က အဲဒါကို ဖတ်ပြီး ခရီးသည်ဆီ SMS ပို့ပေးပါတယ်။
+      [[mark:added-field]] Booking team က အဲဒီ event ထဲကို promo code အတွက် field အသစ် တစ်ခု ထည့်လိုက်ပါတယ်။
+      ထည့်ရုံပဲမို့ ဘာမှ မဖြစ်နိုင်ဘူးလို့ ထင်ခဲ့ကြတာပါ။ ဒါပေမဲ့ version အဟောင်းနဲ့ run နေတဲ့ Notification
+      service က event အသစ်တွေကို ဖတ်မရဘဲ crash ဖြစ်ပြီး၊ SMS တွေ မိနစ် ၄၀ လောက် မထွက်ခဲ့ပါဘူး။ ငွေချေပြီးသား
+      ခရီးသည်တွေက လက်မှတ် ရမရ မသေချာလို့ ဖုန်းတွေ ဆက်တိုက် ဆက်လာကြပါတယ်။
+      [[mark:both-right]] Booking team lead မောင်မောင် ကတော့ field ထည့်တာက အန္တရာယ် မရှိတဲ့ ပြောင်းလဲမှုလို့
+      ပြောပါတယ်။ Notification team ကလည်း မသိတဲ့ ပုံစံနဲ့ data ဝင်လာရင် လက်မခံတာက မှန်တဲ့ အလေ့အထလို့ ပြောပါတယ်။
+      နှစ်ဖက်လုံးမှာ အကြောင်းပြချက် ရှိပါတယ်။ မရှိခဲ့တာက data ရဲ့ ပုံစံ၊ ဆိုလိုတာက schema ကို ဘယ်လို
+      ပြောင်းကြမလဲ ဆိုတဲ့ သဘောတူညီချက်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/29-changes.md,
+        }
+      - id: sel-incident
+        type: editor.select
+        at: { mark: sel-incident }
+        target:
+          {
+            file: notebook/29-changes.md,
+            text: "Booking က TicketSold event ထဲ promoCode field ထည့်တော့ Notification အဟောင်း crash ဖြစ်၊ SMS 40 မိနစ် မထွက်",
+          }
+
+  - id: directions
+    chapter: Code အဟောင်းနဲ့ အသစ် တစ်ချိန်တည်း
+    narration: >
+      [[mark:d-open]] ပထမဆုံး လက်ခံရမယ့် အချက်က၊ system ထဲမှာ code အဟောင်းနဲ့ code အသစ်က တစ်ချိန်တည်း run နေတတ်တယ် ဆိုတာပါ။ service တွေ အားလုံးကို တစ်ပြိုင်တည်း deploy လုပ်လို့ မရပါဘူး။ ခရီးသည်တွေရဲ့ ဖုန်းထဲက
+      mobile app version အဟောင်းတွေကလည်း လနဲ့ချီပြီး ဆက်ရှိနေပါတယ်။ data ကတော့ code ထက် အသက်ရှည်ပါတယ်။
+      သုံးနှစ်တုန်းက ရေးခဲ့တဲ့ လက်မှတ် row တွေကို ဒီနေ့ code က ဖတ်နေရတုန်းပါ။ ဒါကြောင့် ပြောင်းလဲမှု တစ်ခုကို
+      ဦးတည်ရာ နှစ်ဖက်ကနေ စစ်ရပါတယ်။
+      [[mark:d-fwd]] ပထမ တစ်ဖက်က code အဟောင်းက data အသစ်ကို ဖတ်နိုင်ရမယ် ဆိုတာပါ။ forward compatibility လို့
+      ခေါ်ပါတယ်။ Notification အဟောင်းက promo code ပါတဲ့ event ကို ဖတ်ရတာ၊ app အဟောင်းက API အသစ်ရဲ့ အဖြေကို
+      ဖတ်ရတာတွေပါ။
+      [[mark:d-crash]] ဒီအပတ် ပျက်သွားတာက ဒီဘက်ပါ။ ဒီဘက်ကို လုံခြုံစေတဲ့ စည်းကမ်းကတော့၊ ဖတ်တဲ့ code က
+      ကိုယ်မသိတဲ့ field ကို တွေ့ရင် error မပစ်ဘဲ ကျော်သွားဖို့ပါ။
+      [[mark:d-keep]] ကျော်ရုံနဲ့လည်း မပြီးသေးပါဘူး။ code အဟောင်းက record တစ်ခုကို ဖတ်၊ ပြင်ပြီး
+      ပြန်သိမ်းတဲ့အခါ ကိုယ်မသိတဲ့ field ကို ဖြုတ်ချလိုက်မိရင်၊ data က error တစ်ခုမှ မပြဘဲ တိတ်တိတ်လေး
+      ပျောက်သွားပါတယ်။ ဒါကြောင့် မသိတဲ့ field ကို မထိဘဲ ရှိတဲ့အတိုင်း ပြန်သိမ်းပေးရပါတယ်။
+      [[mark:d-bwd]] ဒုတိယ တစ်ဖက်က code အသစ်က data အဟောင်းကို ဖတ်နိုင်ရမယ် ဆိုတာပါ။ backward compatibility လို့
+      ခေါ်ပါတယ်။ Notification အသစ်က promo code မပါတဲ့ မနေ့က event တွေကို ဖတ်ရတာမျိုးပါ။ ဒီဘက်ကတော့ သက်သာပါတယ်။
+      code အသစ်ကို ရေးတဲ့သူက data အဟောင်းရဲ့ ပုံစံကို သိပြီးသားမို့၊ field မပါလာရင် default တန်ဖိုး တစ်ခု
+      သုံးလိုက်ရုံပါပဲ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          upsertIds: [d-title],
+        }
+      - {
+          id: draw-d-fwd,
+          type: whiteboard.apply,
+          at: { mark: d-fwd },
+          upsertIds: [d-a-data, d-a-data-l, d-a-ar, d-a-code, d-a-code-l, d-a-name],
+          drawMs: 2600,
+        }
+      - {
+          id: draw-d-crash,
+          type: whiteboard.apply,
+          at: { mark: d-crash },
+          upsertIds: [d-a-crash],
+          drawMs: 700,
+        }
+      - {
+          id: draw-d-bwd,
+          type: whiteboard.apply,
+          at: { mark: d-bwd },
+          upsertIds: [d-b-data, d-b-data-l, d-b-ar, d-b-code, d-b-code-l, d-b-name],
+          drawMs: 2600,
+        }
+
+  - id: steps
+    chapter: ထည့်၊ ရွှေ့၊ ဖယ်
+    narration: >
+      [[mark:s-open]] ဒီ နှစ်ဖက်နဲ့ စစ်ကြည့်ရင် ပြောင်းလဲမှုတွေက နှစ်မျိုး ကွဲသွားပါတယ်။ optional field အသစ် တစ်ခု ထည့်တာက၊ ဖတ်တဲ့ code က မသိတဲ့ field ကို ကျော်တတ်သရွေ့ နှစ်ဖက်လုံးမှာ လုံခြုံပါတယ်။ field တစ်ခုကို ဖယ်တာ၊ field တစ်ခုရဲ့ အဓိပ္ပာယ်ကို
+      ပြောင်းတာတွေကတော့ တစ်ဖက်ဖက်ကို ချိုးပါတယ်။
+      [[mark:s-example]] ဥပမာ ခရီးစဉ်ရဲ့ ထွက်ချိန် field ကို ကြည့်ရအောင်။ အခုက နာရီနဲ့ မိနစ်ပဲ ပါပါတယ်။
+      ညသန်းခေါင်ကျော် ထွက်တဲ့ ကားတွေအတွက် ရက်စွဲပါ ပါတဲ့ ပုံစံကို ပြောင်းချင်ပါတယ်။ field အဟောင်းထဲကိုပဲ
+      ပုံစံအသစ် ထည့်လိုက်ရင် code အဟောင်းတိုင်းက အချိန်ကို မှားဖတ်ပါလိမ့်မယ်။ field တစ်ခုကို အဓိပ္ပာယ် အသစ်နဲ့ ပြန်သုံးတာက အထူး အန္တရာယ်များပါတယ်။ code အဟောင်းက error မပြဘဲ မှားတဲ့ တန်ဖိုးကို ဆက်ယုံသွားမှာမို့ပါ။
+      [[mark:s-three]] ဒီလို ပြောင်းလဲမှုမျိုးကို အဆင့် သုံးဆင့် ခွဲလုပ်ရပါတယ်။
+      [[mark:s-add]] ပထမ အဆင့်မှာ field အသစ်ကို နာမည်အသစ်နဲ့ ထည့်ပြီး၊ ရေးတဲ့ code က အဟောင်းရော အသစ်ရော
+      နှစ်ခုလုံးကို ရေးပေးပါတယ်။ ဒီအဆင့်မှာ ဘယ်သူမှ မပျက်ပါဘူး။
+      [[mark:s-move]] ဒုတိယ အဆင့်မှာ ဖတ်တဲ့သူ အားလုံးကို field အသစ်ဆီ တစ်ခုပြီးတစ်ခု ပြောင်းခိုင်းပါတယ်။
+      ဒီအဆင့်က အကြာဆုံးပါ။ mobile app အဟောင်းတွေ ပျောက်တဲ့အထိ လနဲ့ချီ စောင့်ရနိုင်ပါတယ်။ database column
+      ဆိုရင်တော့ ဒီအဆင့်မှာ row အဟောင်းတွေကိုပါ ပုံစံအသစ်ဆီ ကူးပေးရပါတယ်။
+      [[mark:s-remove]] field အဟောင်းကို ဘယ်သူမှ မဖတ်တော့ဘူး ဆိုတာ သေချာမှ တတိယ အဆင့်အနေနဲ့ ဖယ်ပါတယ်။ သေချာတယ်
+      ဆိုတာက ခန့်မှန်းတာ မဟုတ်ဘဲ၊ တိုင်းကြည့်လို့ သိတာ ဖြစ်ရပါမယ်။ field အဟောင်းကို ဖတ်နေသေးတဲ့ request ဘယ်နှခု
+      ကျန်လဲ ဆိုတာကို ရေတွက်ကြည့်ပြီး၊ သုည ဖြစ်မှ ဖယ်တာပါ။
+      [[mark:s-cost]] ဒီနည်းအတွက် ပေးရတာကတော့ အချိန်ပါ။ release တစ်ခါနဲ့ ပြီးမယ့် အလုပ်က သုံးခါ ဖြစ်သွားပြီး၊
+      ကြားကာလမှာ field နှစ်ခုလုံးကို ထိန်းထားရပါတယ်။ ရတာကတော့ ဘယ်အဆင့်မှာမှ ဘယ်သူမှ မပျက်တာပါ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: point-s-fwd,
+          type: whiteboard.point,
+          at: { mark: s-open },
+          target: { assetId: d-a-name },
+        }
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-three },
+          clear: true,
+          upsertIds: [s-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-add,
+          type: whiteboard.apply,
+          at: { mark: s-add },
+          upsertIds: [s1, s1-l, s1-e],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-move,
+          type: whiteboard.apply,
+          at: { mark: s-move },
+          upsertIds: [s-ar1, s2, s2-l, s2-e],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-s-remove,
+          type: whiteboard.apply,
+          at: { mark: s-remove },
+          upsertIds: [s-ar2, s3, s3-l, s3-e],
+          drawMs: 2000,
+        }
+
+  - id: contract
+    chapter: Contract ကို ဘယ်လောက် တင်းမလဲ
+    narration: >
+      [[mark:c-open]] service နှစ်ခုကြား သဘောတူထားတဲ့ data ပုံစံကို contract လို့ ခေါ်ပါတယ်။ contract တွေက
+      တင်းတာကနေ လျော့တာအထိ အမျိုးမျိုး ရှိပါတယ်။
+      [[mark:c-strict]] တင်းတဲ့ contract မှာ field တိုင်းက အတိအကျ တူရပြီး၊ မတူရင် လက်မခံပါဘူး။ အမှားကို စောစော
+      ဖမ်းမိပေမဲ့၊ တစ်ဖက်က နည်းနည်း ပြောင်းတာနဲ့ နောက်တစ်ဖက်က ပျက်ပါတယ်။ Notification က ဒီလို ဖတ်ခဲ့တာပါ။
+      [[mark:c-loose]] လျော့တဲ့ contract မှာတော့ ဖတ်တဲ့ဘက်က ကိုယ်လိုတဲ့ field တွေကိုပဲ ယူပြီး၊ ကျန်တာကို
+      ဂရုမစိုက်ပါဘူး။ ပြောင်းရ လွယ်ပေမဲ့၊ လိုတဲ့ field ပျောက်သွားတာကို ဘယ်သူမှ မစစ်ပေးတော့ပါဘူး။
+      [[mark:c-need]] Notification က SMS ပို့ဖို့ တကယ် လိုတာက လက်မှတ် နံပါတ်၊ ဖုန်းနံပါတ်၊ ခရီးစဉ်နဲ့ ထိုင်ခုံ
+      ဆိုတဲ့ field လေးခုပါပဲ။ ဒါကြောင့် အဲဒီ လေးခုကိုပဲ ယူပြီး ကျန်တာကို ကျော်တဲ့ဘက်ကို ရွှေ့ပါမယ်။
+      ပို့တဲ့ဘက်ကလည်း consumer လိုတာထက် ပိုမပို့သင့်ပါဘူး။ ပို့သမျှ field တိုင်းက နောက်မှ ပြောင်းရခက်မယ့် ကတိ
+      တစ်ခုစီ ဖြစ်သွားလို့ပါ။
+      [[mark:c-test]] လျော့လိုက်လို့ ပျောက်သွားတဲ့ စစ်ဆေးမှုကိုတော့ test နဲ့ ပြန်ဖြည့်ပါတယ်။ Notification team
+      က ကိုယ် အားကိုးနေတဲ့ field လေးခုကို စစ်တဲ့ test တစ်ခု ရေးပြီး Booking team ကို ပေးထားပါတယ်။ Booking က
+      release မလုပ်ခင်တိုင်း အဲဒီ test ကို run ပါတယ်။ Booking က လိုတဲ့ field တစ်ခုကို ဖယ်မိရင် production
+      မရောက်ခင် Booking ရဲ့ pipeline မှာတင် test ကျပါလိမ့်မယ်။ test အောင်နေသရွေ့တော့ ကျန်တာကို လွတ်လွတ်လပ်လပ်
+      ပြောင်းလို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Consumer-Driven Contracts (Martin Fowler)",
+          url: "https://martinfowler.com/articles/consumerDrivenContracts.html",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title, c-bar],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-strict,
+          type: whiteboard.apply,
+          at: { mark: c-strict },
+          upsertIds: [c-strict-l, c-was],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-loose,
+          type: whiteboard.apply,
+          at: { mark: c-loose },
+          upsertIds: [c-loose-l],
+          drawMs: 800,
+        }
+      - {
+          id: draw-c-need,
+          type: whiteboard.apply,
+          at: { mark: c-need },
+          upsertIds: [c-need-l, c-now],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-c-test,
+          type: whiteboard.apply,
+          at: { mark: c-test },
+          upsertIds: [c-n, c-n-l, c-ar, c-test-l, c-b, c-b-l],
+          drawMs: 2600,
+        }
+
+  - id: table
+    chapter: ပြောင်းလဲမှု လမ်းညွှန်
+    narration: >
+      [[mark:t-close]] ဒါတွေကို နောက်တစ်ခါ schema ပြောင်းမယ့်သူတိုင်း ကြည့်နိုင်အောင် table တစ်ခုနဲ့
+      ချရေးထားရအောင်။ ပြောင်းလဲမှု တစ်မျိုးစီအတွက် ဦးတည်ရာ နှစ်ဖက်လုံးကို စစ်ပြီး၊ လုံခြုံတဲ့ နည်းကို ရေးပါမယ်။
+      [[mark:type-add]] optional field အသစ် ထည့်တာက နှစ်ဖက်လုံး အဆင်ပြေပါတယ်။
+      [[mark:sel-cond]] ဒါပေမဲ့ code အဟောင်းက မသိတဲ့ field ကို ကျော်တတ်မှ ဆိုတဲ့ အခြေအနေ ပါပါတယ်။ ဒီအပတ်
+      ဖြစ်ရပ်က အဲဒီ အခြေအနေ မပြည့်ခဲ့တာပါ။
+      [[mark:type-remove]] field ဖယ်တာကတော့ code အဟောင်းကို ချိုးပါတယ်။ ဖတ်တဲ့သူ အားလုံး မသုံးတော့မှ ဖယ်ရပါမယ်။
+      [[mark:type-meaning]] အဓိပ္ပာယ် ပြောင်းတာက နှစ်ဖက်လုံးကို ချိုးတာမို့ အဆင့် သုံးဆင့်နဲ့ပဲ လုပ်ရပါမယ်။
+      [[mark:type-rules]] table အောက်မှာ team အားလုံး လိုက်နာမယ့် စည်းကမ်း သုံးခုကိုလည်း ရေးထားပါမယ်။
+      ဖတ်တဲ့ team၊ ရေးတဲ့ team နဲ့ release မလုပ်ခင် pipeline မှာ စည်းကမ်း တစ်ခုစီ ရှိတာပါ။ နောက်တစ်ခါ တစ်ခုခု ပျက်ရင် ဒီ သုံးခုထဲက ဘယ်ဟာ လွတ်သွားလဲ ဆိုတာနဲ့ ပြန်စစ်လို့ ရပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - { id: close-contract, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - id: type-add
+        type: editor.type
+        at: { mark: type-add }
+        cadence: line-by-line
+        target: { file: notebook/29-changes.md, after: "|---|---|---|---|\n" }
+        text: "| optional field ထည့် | ✓ မသိတာကို ကျော်တတ်မှ | ✓ default သုံး | တိုက်ရိုက် လုပ်လို့ရ |\n"
+      - id: sel-cond
+        type: editor.select
+        at: { mark: sel-cond }
+        target: { file: notebook/29-changes.md, text: "✓ မသိတာကို ကျော်တတ်မှ" }
+      - id: type-remove
+        type: editor.type
+        at: { mark: type-remove }
+        cadence: line-by-line
+        target: { file: notebook/29-changes.md, after: "| တိုက်ရိုက် လုပ်လို့ရ |\n" }
+        text: "| field ဖယ် | ✗ | ✓ | ဖတ်သူ အားလုံး မသုံးတော့မှ ဖယ် |\n"
+      - id: type-meaning
+        type: editor.type
+        at: { mark: type-meaning }
+        cadence: line-by-line
+        target: { file: notebook/29-changes.md, after: "မသုံးတော့မှ ဖယ် |\n" }
+        text: "| အဓိပ္ပာယ် ပြောင်း | ✗ | ✗ | field အသစ် ထည့် → ရွှေ့ → အဟောင်း ဖယ် |\n"
+      - id: type-rules
+        type: editor.type
+        at: { mark: type-rules }
+        cadence: line-by-line
+        target: { file: notebook/29-changes.md, after: "## စည်းကမ်း\n" }
+        text: "- ဖတ်တဲ့ဘက်: မသိတဲ့ field ကို ကျော်၊ လိုတာပဲ ယူ\n- ရေးတဲ့ဘက်: field ကို အဓိပ္ပာယ် အသစ်နဲ့ ပြန်မသုံး\n- release မလုပ်ခင်: consumer ရဲ့ contract test ကို run\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ developer တစ်ယောက်က ထိုင်ခုံ နံပါတ် field ရဲ့ နာမည်က
+      တိုလွန်းတယ်ဆိုပြီး၊ ပိုရှင်းတဲ့ နာမည်ကို ပြောင်းချင်ပါတယ်။ အဓိပ္ပာယ်လည်း မပြောင်း၊ တန်ဖိုးလည်း မပြောင်းဘဲ
+      နာမည်ပဲ ပြောင်းတာပါ။
+      [[mark:q-a]] ဒါကို release တစ်ခါတည်းနဲ့ ပြောင်းလိုက်လို့ ရမလား။
+      [[mark:q-b]] ဒါမှမဟုတ် ဒါလည်း အဆင့်ခွဲ လုပ်ရမလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ အဆင့်ခွဲ လုပ်ရမယ် ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ ဖတ်တဲ့ code အတွက်
+      နာမည်ပြောင်းတာဆိုတာ၊ field အဟောင်း ပျောက်သွားပြီး မသိတဲ့ field အသစ် တစ်ခု ပေါ်လာတာနဲ့ အတူတူပဲမို့ပါ။
+      [[mark:q-both]] code အဟောင်းက နာမည်အဟောင်းကို ရှာမတွေ့တော့သလို၊ code အသစ်ကလည်း data အဟောင်းထဲမှာ
+      နာမည်အသစ်ကို ရှာမတွေ့ပါဘူး။ နှစ်ဖက်လုံး ကျိုးပါတယ်။
+      [[mark:q-how]] ဒါကြောင့် နာမည်အသစ်နဲ့ field ကို အရင် ထည့်၊ ဖတ်သူ အားလုံးကို ရွှေ့၊ ပြီးမှ နာမည်အဟောင်းကို
+      ဖယ်ရပါတယ်။ ကြည့်ရတာ သေးသေးလေး ပြောင်းလဲမှုက တကယ်တော့ release သုံးခါ လိုတဲ့ ပြောင်းလဲမှု ဖြစ်နေတာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-both },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-how,
+          type: whiteboard.apply,
+          at: { mark: q-how },
+          upsertIds: [q-r],
+          drawMs: 1000,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] ဒီ အဖြေကိုလည်း table ထဲ ထည့်ထားလိုက်ပါမယ်။
+      [[mark:type-rename]] နာမည်ပြောင်းတာက နှစ်ဖက်လုံး မရတဲ့ အတန်းထဲမှာ ပါပါတယ်။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ လုပ်ဖို့ စီစဉ်ထားတဲ့ schema ပြောင်းလဲမှု တစ်ခုကို
+      ရွေးပါ။ database column တစ်ခု ဖြစ်ဖြစ်၊ API ရဲ့ field တစ်ခု ဖြစ်ဖြစ် ရပါတယ်။ lesson ကို pause လုပ်ပြီး၊
+      ဒီ table ထဲမှာ အဲဒီ ပြောင်းလဲမှုအတွက် အတန်း တစ်ခု ရေးကြည့်ပါ။
+      [[mark:turn-2]] နှစ်ဖက်ထဲက တစ်ဖက်ဖက် မရဘူးဆိုရင် ထည့်၊ ရွှေ့၊ ဖယ် ဆိုတဲ့ အဆင့် သုံးဆင့်ကို ဘယ် release
+      မှာ ဘာလုပ်မလဲ ခွဲရေးပါ။
+    sources:
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-rename
+        type: editor.type
+        at: { mark: type-rename }
+        cadence: line-by-line
+        target: { file: notebook/29-changes.md, after: "→ အဟောင်း ဖယ် |\n" }
+        text: "| rename (seatNo → seatNumber) | ✗ | ✗ | ထည့် → ရွှေ့ → ဖယ်၊ release 3 ခါ |\n"
+      - id: expect-rename
+        type: expect.file
+        at: { afterAction: type-rename }
+        path: notebook/29-changes.md
+        contains: "| rename (seatNo → seatNumber) | ✗ | ✗ | ထည့် → ရွှေ့ → ဖယ်၊ release 3 ခါ |\n"
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn-you }
+        target:
+          {
+            file: notebook/29-changes.md,
+            text: "| ပြောင်းလဲမှု | အဟောင်းက အသစ်ကို ဖတ် | အသစ်က အဟောင်းကို ဖတ် | လုံခြုံတဲ့ နည်း |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ data က code ထက် အသက်ရှည်ပြီး၊ code အဟောင်းနဲ့ အသစ်က တစ်ချိန်တည်း run နေတတ်ပါတယ်။
+      ဒါကြောင့် schema ပြောင်းတိုင်း code အဟောင်းက data အသစ်ကို ဖတ်နိုင်လား၊ code အသစ်က data အဟောင်းကို
+      ဖတ်နိုင်လား ဆိုတာ နှစ်ဖက်လုံး စစ်ပါ။ တစ်ဖက်ဖက် မရရင် ထည့်၊ ရွှေ့၊ ဖယ် ဆိုပြီး အဆင့်ခွဲ လုပ်ပါ။
+      [[mark:recap-steps]] contract ကိုတော့ consumer လိုတာလောက်ပဲ ထားပြီး၊ test နဲ့ စောင့်ကြည့်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ data အတူတူကို စက် အများကြီးမှာ မိတ္တူထားတဲ့ replication နဲ့၊ အဲဒီကနေ
+      ပေါ်လာတဲ့ ပြဿနာတွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-rules
+        type: editor.select
+        at: { mark: recap-steps }
+        target:
+          {
+            file: notebook/29-changes.md,
+            text: "- ဖတ်တဲ့ဘက်: မသိတဲ့ field ကို ကျော်၊ လိုတာပဲ ယူ\n- ရေးတဲ့ဘက်: field ကို အဓိပ္ပာယ် အသစ်နဲ့ ပြန်မသုံး\n- release မလုပ်ခင်: consumer ရဲ့ contract test ကို run",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
