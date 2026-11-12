@@ -1,0 +1,909 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-32-transactions
+  title: "Architect Path 32: Transaction နဲ့ isolation"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/32-invariants.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/32-invariants.md: |
+        # မပျက်ရမယ့် စည်းကမ်းတွေ (invariant)
+
+        - စည်းကမ်းအသစ် (လှလှ): ခရီးသည် တစ်ယောက်ကို သင်္ကြန် လက်မှတ် 4 စောင်ထက် ပိုမရောင်းဘူး
+
+        | မပျက်ရမယ့် စည်းကမ်း | ဘာက ဖျက်နိုင်လဲ | ကာကွယ်ပုံ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: levels
+      contentType: html
+      name: Isolation level သုံးခု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Isolation level ကို စာချုပ်လို ဖတ်ပါ</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide red">Read committed</span>commit မလုပ်ရသေးတာကို မမြင်ရအောင်ပဲ ကာ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide orange">Snapshot isolation</span>အချိန်တစ်ခုရဲ့ ပုံကို မြင်ရ၊ write skew မကာ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide green">Serializable</span>တစ်ခုပြီးမှ တစ်ခု run သလို၊ အကုန် ကာ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the quiz, asked before the rule is stated: white question and
+    # options, green answer, then the two promises (green = kept in full,
+    # orange = the one this lesson is about).
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 820,
+        height: 45,
+        text: "Transaction ထဲမှာဆို နှစ်ခါ မရောင်းမိတော့ဘူး?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 760,
+        height: 35,
+        text: "က) ဟုတ်တယ်၊ transaction က ကာပေးတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 760,
+        height: 35,
+        text: "ခ) မဟုတ်ဘူး၊ ဒီလောက်နဲ့ မသေချာဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 330,
+        width: 470,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 790,
+        y: 318,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-1,
+        kind: text,
+        x: 290,
+        y: 455,
+        width: 600,
+        height: 35,
+        text: "ကတိ 1: အကုန်ဖြစ် / တစ်ခုမှ မဖြစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-1-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 790,
+        y: 448,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-2,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 700,
+        height: 35,
+        text: "ကတိ 2: isolation က level အလိုက်ပဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — two transactions on seat 12, left to right in time. Blue =
+    # what each transaction does, violet = time passing, orange = the gap the
+    # board is about, red = the result.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "ခုံ 12 အတွက် transaction နှစ်ခု",
+        fontSize: 36,
+      }
+    - { id: s-app, kind: text, x: 270, y: 262, width: 120, height: 35, text: "app", fontSize: 28 }
+    - {
+        id: s-ctr,
+        kind: text,
+        x: 270,
+        y: 432,
+        width: 140,
+        height: 35,
+        text: "ကောင်တာ",
+        fontSize: 28,
+      }
+    - {
+        id: s-r1,
+        kind: rectangle,
+        x: 420,
+        y: 240,
+        width: 290,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-r1-l,
+        kind: text,
+        align: center,
+        x: 420,
+        y: 262,
+        width: 290,
+        height: 35,
+        text: "ဖတ်: ခုံ လွတ်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: s-r2,
+        kind: rectangle,
+        x: 420,
+        y: 410,
+        width: 290,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-r2-l,
+        kind: text,
+        align: center,
+        x: 420,
+        y: 432,
+        width: 290,
+        height: 35,
+        text: "ဖတ်: ခုံ လွတ်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 722,
+        y: 260,
+        width: 86,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 722,
+        y: 430,
+        width: 86,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-w1,
+        kind: rectangle,
+        x: 820,
+        y: 240,
+        width: 270,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-w1-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 262,
+        width: 270,
+        height: 35,
+        text: "ရေး: ရောင်းပြီ",
+        fontSize: 28,
+      }
+    - {
+        id: s-w2,
+        kind: rectangle,
+        x: 820,
+        y: 410,
+        width: 270,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-w2-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 432,
+        width: 270,
+        height: 35,
+        text: "ရေး: ရောင်းပြီ",
+        fontSize: 28,
+      }
+    - {
+        id: s-gap,
+        kind: text,
+        x: 560,
+        y: 347,
+        width: 420,
+        height: 35,
+        text: "ဖတ်ပြီးမှ ရေးတဲ့ ကြားကာလ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-res,
+        kind: text,
+        x: 420,
+        y: 550,
+        width: 500,
+        height: 38,
+        text: "ခုံ 1 ခုံ၊ လက်မှတ် 2 စောင်",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — the same two lanes for the 4-ticket rule: both count 3, each
+    # adds its own new row. Red = the broken rule, orange = its name.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "တစ်ယောက်ကို 4 စောင် စည်းကမ်း",
+        fontSize: 36,
+      }
+    - { id: w-ph, kind: text, x: 270, y: 262, width: 120, height: 35, text: "ဖုန်း", fontSize: 28 }
+    - {
+        id: w-r1-l,
+        kind: text,
+        align: center,
+        x: 420,
+        y: 262,
+        width: 290,
+        height: 35,
+        text: "ရေတွက်: 3 စောင်",
+        fontSize: 28,
+      }
+    - {
+        id: w-r2-l,
+        kind: text,
+        align: center,
+        x: 420,
+        y: 432,
+        width: 290,
+        height: 35,
+        text: "ရေတွက်: 3 စောင်",
+        fontSize: 28,
+      }
+    - {
+        id: w-w1-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 262,
+        width: 270,
+        height: 35,
+        text: "row အသစ် ထည့်",
+        fontSize: 28,
+      }
+    - {
+        id: w-w2-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 432,
+        width: 270,
+        height: 35,
+        text: "row အသစ် ထည့်",
+        fontSize: 28,
+      }
+    - {
+        id: w-res,
+        kind: text,
+        x: 420,
+        y: 550,
+        width: 330,
+        height: 38,
+        text: "စုစုပေါင်း 5 စောင်",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-name,
+        kind: text,
+        x: 820,
+        y: 550,
+        width: 250,
+        height: 38,
+        text: "write skew",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    # Board 4 — the ladder of protections, cheapest at the bottom. Blue = what
+    # the database is asked to do, red = the cost that grows upward.
+    - {
+        id: g-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "ကာကွယ်နည်း လေးဆင့်",
+        fontSize: 36,
+      }
+    - {
+        id: g-cost,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 820,
+        y: 255,
+        width: 40,
+        height: 335,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: g-cost-l,
+        kind: text,
+        x: 875,
+        y: 405,
+        width: 200,
+        height: 35,
+        text: "စရိတ် ပိုကြီး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - { id: g-1, kind: rectangle, x: 330, y: 520, width: 470, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: g-1-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 540,
+        width: 470,
+        height: 35,
+        text: "unique constraint",
+        fontSize: 28,
+      }
+    - { id: g-2, kind: rectangle, x: 330, y: 430, width: 470, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: g-2-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 450,
+        width: 470,
+        height: 35,
+        text: "atomic update",
+        fontSize: 28,
+      }
+    - { id: g-3, kind: rectangle, x: 330, y: 340, width: 470, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: g-3-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 360,
+        width: 470,
+        height: 35,
+        text: "ကိုယ်တိုင် lock ချ",
+        fontSize: 28,
+      }
+    - { id: g-4, kind: rectangle, x: 330, y: 250, width: 470, height: 75, strokeColor: "#1971c2" }
+    - {
+        id: g-4-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 270,
+        width: 470,
+        height: 35,
+        text: "serializable level",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8132
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Transaction ထဲမှာဆို စိတ်ချရပြီလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ sharding က ဘာကို ဖြေရှင်းပေးပြီး ဘာတွေ ပေးဆပ်ရလဲ ဆိုတာနဲ့၊ မလုပ်သေးဘူးလို့
+      ဆုံးဖြတ်ရင် ပြန်စဉ်းစားရမယ့် ကိန်းဂဏန်းကိုပါ ရေးထားရပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] database တစ်ခုတည်းမှာ ဆက်နေမယ်ဆိုတော့ transaction ကို အရင်လိုပဲ သုံးနိုင်ပါသေးတယ်။
+      transaction ဆိုတာ အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ လုပ်ဆောင်ချက် အစုပါ။
+      [[mark:sel-rule]] ဒီနှစ် သင်္ကြန် မတိုင်ခင် product manager လှလှ က စည်းကမ်းအသစ် တစ်ခု ယူလာပါတယ်။
+      လက်မှတ်တွေကို အများကြီး ဝယ်သိမ်းပြီး ဈေးတင် ပြန်ရောင်းတဲ့သူတွေ ရှိလာလို့၊ ခရီးသည် တစ်ယောက်ကို သင်္ကြန်
+      လက်မှတ် လေးစောင်ထက် ပိုမရောင်းချင်တာပါ။
+      [[mark:mm]] Booking team lead မောင်မောင် ကတော့ ဒါကို အလုပ် သေးသေးလေးလို့ မြင်ပါတယ်။ transaction
+      တစ်ခုထဲမှာ အဲဒီ ခရီးသည် ဝယ်ထားတဲ့ လက်မှတ်တွေကို ရေတွက်မယ်၊ လေးစောင် မပြည့်သေးရင် အသစ် ထည့်မယ်။
+      transaction ထဲမှာ လုပ်တာမို့ မှားစရာ မရှိဘူးလို့ သူက ဆိုပါတယ်။
+      [[mark:doubt]] ကိုယ်ကတော့ ချက်ချင်း သဘောမတူနိုင်သေးပါဘူး။ လွန်ခဲ့တဲ့ သုံးနှစ်က သင်္ကြန် လက်မှတ်
+      ဖွင့်ရောင်းတဲ့ မနက်မှာ ထိုင်ခုံ ၃၁၂ ခုံကို နှစ်ခါ ရောင်းမိခဲ့တာကို သတိရနေလို့ပါ။ 
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/32-invariants.md,
+        }
+      - id: sel-rule
+        type: editor.select
+        at: { mark: sel-rule }
+        target:
+          { file: notebook/32-invariants.md, text: "ခရီးသည် တစ်ယောက်ကို သင်္ကြန် လက်မှတ် 4 စောင်ထက် ပိုမရောင်းဘူး" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ထိုင်ခုံ လွတ်မလွတ် စစ်တာနဲ့ လက်မှတ် ရေးတာကို transaction တစ်ခုထဲမှာ
+      ထည့်ထားရင်၊ ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ ရောင်းမိတာ မဖြစ်နိုင်တော့ဘူးလို့ ပြောလို့ ရမလား။
+      [[mark:q-a]] ပထမ အဖြေက ဟုတ်တယ်၊ transaction က ကာပေးတယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မဟုတ်ဘူး၊ transaction သုံးထားရုံနဲ့ မသေချာဘူး ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ သုံးနှစ်တုန်းက app ဘက်မှာရော
+      ကောင်တာဘက်မှာရော၊ ထိုင်ခုံ စစ်တာနဲ့ ရေးတာက transaction တစ်ခုစီထဲမှာပဲ ရှိခဲ့လို့ပါ။ ဒါတောင် ၃၁၂ ခုံ နှစ်ခါ ရောင်းမိခဲ့ပါတယ်။
+      [[mark:p-1]] transaction က ကတိ နှစ်ခု ပေးပါတယ်။ ပထမ ကတိက အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတာပါ။
+      တစ်ဝက်မှာ တစ်ခုခု ပျက်သွားရင် database က အားလုံးကို မလုပ်ခဲ့သလို ပြန်ဖျက်ပေးတော့၊ app က စိတ်ချလက်ချ
+      အစကနေ ပြန်လုပ်နိုင်ပါတယ်။ ဒီကတိကို database က အပြည့် တည်ပါတယ်။
+      [[mark:p-2]] ဒုတိယ ကတိက isolation ပါ။ isolation ဆိုတာ အတူတူ run နေတဲ့ transaction တွေ တစ်ခုနဲ့တစ်ခု
+      မနှောင့်ယှက်အောင် ကာပေးတာပါ။ ဒီကတိကတော့ အပြည့် မဟုတ်ဘဲ အဆင့်ဆင့် ခွဲထားပါတယ်။ ဘယ်လောက်ထိ ကာပေးမလဲ
+      ဆိုတာ isolation level နဲ့ ကာရမယ့် စည်းကမ်းပေါ် မူတည်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-p-1,
+          type: whiteboard.apply,
+          at: { mark: p-1 },
+          upsertIds: [p-1, p-1-ok],
+          drawMs: 1500,
+        }
+      - { id: draw-p-2, type: whiteboard.apply, at: { mark: p-2 }, upsertIds: [p-2], drawMs: 1200 }
+
+  - id: seat-12
+    chapter: ခုံ ၁၂ မှာ တကယ် ဖြစ်ခဲ့တာ
+    narration: >
+      [[mark:s-open]] ဒါဆို သုံးနှစ်တုန်းက တကယ် ဘာဖြစ်ခဲ့လဲ ဆိုတာကို အချိန်လိုက် ဆွဲကြည့်ရအောင်။ ခုံ နံပါတ် ၁၂
+      ကို app ထဲက ခရီးသည် တစ်ယောက်နဲ့ ကားဂိတ်က ကောင်တာ ဝန်ထမ်း တစ်ယောက်က တစ်စက္ကန့်အတွင်းမှာ ရောင်းဖို့
+      ကြိုးစားကြတာပါ။
+      [[mark:s-read1]] app ဘက်က transaction က ခုံ ၁၂ ကို ဖတ်ကြည့်တော့ လွတ်နေပါတယ်။
+      [[mark:s-read2]] ကောင်တာဘက်က transaction ကလည်း အဲဒီအချိန်မှာပဲ ဖတ်ကြည့်ပါတယ်။ app ဘက်က ဘာမှ
+      မရေးရသေးတော့ သူလည်း လွတ်နေတာကိုပဲ မြင်ရပါတယ်။
+      [[mark:s-write1]] အဲဒီနောက် app ဘက်က ခုံကို ရောင်းပြီးပြီလို့ ရေးပြီး commit လုပ်ပါတယ်။
+      [[mark:s-write2]] ကောင်တာဘက်ကလည်း သူ ဖတ်ထားတဲ့ အတိုင်း ယုံပြီး ရောင်းပြီးပြီလို့ ထပ်ရေးပါတယ်။ app ဘက်က
+      ရေးထားတာကို သူ့ရေးတာက ဖုံးသွားပြီး၊ နှစ်ဖက်လုံးကတော့ လက်မှတ် ထုတ်ပေးလိုက်ကြပါပြီ။
+      [[mark:s-result]] ခုံက တစ်ခုံတည်း၊ လက်မှတ်က နှစ်စောင် ဖြစ်သွားပါတယ်။
+      [[mark:s-gap]] transaction နှစ်ခုလုံးက တစ်ခုချင်းစီ ကြည့်ရင် မှန်ပါတယ်။ ပြဿနာက ဖတ်တာနဲ့ ရေးတာကြားက
+      ကြားကာလမှာ ရှိတာပါ။ ဖတ်ထားတဲ့ အချက်က ရေးတဲ့အချိန်ကျတော့ မမှန်တော့ပါဘူး။ ခရီးဖော် ရဲ့ database က
+      အဲဒီတုန်းက ဒီ ကြားကာလကို ကာမပေးခဲ့ပါဘူး။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title, s-app, s-ctr],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-read1,
+          type: whiteboard.apply,
+          at: { mark: s-read1 },
+          upsertIds: [s-r1, s-r1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-read2,
+          type: whiteboard.apply,
+          at: { mark: s-read2 },
+          upsertIds: [s-r2, s-r2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-write1,
+          type: whiteboard.apply,
+          at: { mark: s-write1 },
+          upsertIds: [s-a1, s-w1, s-w1-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-write2,
+          type: whiteboard.apply,
+          at: { mark: s-write2 },
+          upsertIds: [s-a2, s-w2, s-w2-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-s-result,
+          type: whiteboard.apply,
+          at: { mark: s-result },
+          upsertIds: [s-res],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-gap,
+          type: whiteboard.apply,
+          at: { mark: s-gap },
+          upsertIds: [s-gap],
+          drawMs: 1000,
+        }
+
+  - id: limit-4
+    chapter: Write skew
+    narration: >
+      [[mark:w-open]] ခုံ ၁၂ မှာတော့ နှစ်ဖက်လုံးက row တစ်ခုတည်းကို ရေးကြတာပါ။ လှလှ ရဲ့ စည်းကမ်းအသစ်မှာတော့
+      ပိုသိမ်မွေ့တဲ့ ပုံစံ တစ်မျိုး ဖြစ်နိုင်ပါတယ်။
+      [[mark:w-count]] ခရီးသည် တစ်ယောက်က လက်မှတ် သုံးစောင် ဝယ်ထားပြီးသား ဆိုပါစို့။ သူက ဖုန်းကနေ တစ်စောင်၊
+      သူ့ မိတ်ဆွေက ကောင်တာကနေ သူ့နာမည်နဲ့ တစ်စောင် တစ်ပြိုင်တည်း ဝယ်ကြပါတယ်။ transaction နှစ်ခုလုံးက
+      ရေတွက်ကြည့်တော့ သုံးစောင်လို့ တွေ့ပါတယ်။ လေးစောင် မပြည့်သေးတော့ နှစ်ခုလုံး ဆက်သွားပါတယ်။
+      [[mark:w-insert]] ဒီတစ်ခါ နှစ်ဖက်လုံးက လက်မှတ် row အသစ် တစ်ခုစီ ထည့်ကြပါတယ်။ ရေးတဲ့ row က မတူတော့
+      database အမြင်မှာ တိုက်နေတာ ဘာမှ မရှိပါဘူး။
+      [[mark:w-result]] ဒါပေမဲ့ ပေါင်းလိုက်ရင် ငါးစောင် ဖြစ်သွားပြီး စည်းကမ်း ပျက်သွားပါပြီ။
+      [[mark:w-name]] ဒီလို transaction နှစ်ခုက တူတဲ့ အခြေအနေကို ဖတ်ပြီး၊ မတူတဲ့နေရာ ရေးလို့ စည်းကမ်း
+      ပျက်သွားတာကို write skew လို့ ခေါ်ပါတယ်။ row အများကြီးကို ဖြတ်ပြီး မှန်နေရမယ့်
+      စည်းကမ်းတိုင်းမှာ ဖြစ်နိုင်ပါတယ်။ စုစုပေါင်း ဘယ်လောက်ထက် မပိုရဘူး၊ အချိန် မထပ်ရဘူး ဆိုတဲ့
+      စည်းကမ်းမျိုးတွေပါ။ အမြဲ မှန်နေရမယ့် ဒီလို စည်းကမ်းတွေကို invariant လို့ ခေါ်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          clear: true,
+          upsertIds: [w-title, w-ph, s-ctr],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-count,
+          type: whiteboard.apply,
+          at: { mark: w-count },
+          upsertIds: [s-r1, w-r1-l, s-r2, w-r2-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-w-insert,
+          type: whiteboard.apply,
+          at: { mark: w-insert },
+          upsertIds: [s-a1, s-w1, w-w1-l, s-a2, s-w2, w-w2-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-w-result,
+          type: whiteboard.apply,
+          at: { mark: w-result },
+          upsertIds: [w-res],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-name,
+          type: whiteboard.apply,
+          at: { mark: w-name },
+          upsertIds: [w-name],
+          drawMs: 900,
+        }
+
+  - id: levels
+    chapter: Isolation level ကို စာချုပ်လို ဖတ်ခြင်း
+    narration: >
+      [[mark:l-open]] ဒါကြောင့် isolation level တစ်ခုကို နာမည်နဲ့ မမှတ်ဘဲ၊ စာချုပ် တစ်စောင်လို ဖတ်ရပါတယ်။
+      database ဘက်က ဘာကို ကာပေးမယ်၊ ဘာကိုတော့ ကိုယ့်ဘက်မှာ ချန်ထားမယ် ဆိုတဲ့ စာချုပ်ပါ။ အသုံးများတဲ့ level
+      သုံးခုကို ကြည့်ရအောင်။
+      [[mark:l-rc]] read committed level မှာ commit မလုပ်ရသေးတဲ့ data ကို တခြား transaction က မမြင်ရပါဘူး။
+      အဓိက ကာပေးတာ ဒါပါပဲ။ ဖတ်ပြီးမှ ရေးတဲ့ ကြားကာလရော၊ write skew ရော ကိုယ့်ဘက်မှာ ကျန်ပါတယ်။
+      [[mark:l-snap]] snapshot isolation မှာတော့ transaction တစ်ခုလုံးက အချိန် တစ်ခုတည်းမှာ ရိုက်ထားတဲ့
+      ဓာတ်ပုံလို data ကို မြင်ရပါတယ်။ ဒါပေမဲ့ write skew
+      ကိုတော့ ကာမပေးပါဘူး။
+      [[mark:l-ser]] serializable level ရောက်မှ transaction တွေကို တစ်ခုပြီးမှ တစ်ခု run သလို ရလဒ်မျိုး ရအောင်
+      database က အာမခံပါတယ်။ ပြောခဲ့တဲ့ ပြဿနာတွေ အားလုံး မဖြစ်နိုင်တော့ပါဘူး။ ဒါပေမဲ့
+      transaction တချို့ကို စောင့်ခိုင်းရ၊ ပယ်ချရတာမို့၊ တစ်စက္ကန့်မှာ လုပ်ပေးနိုင်တဲ့ အရေအတွက်၊
+      ဆိုလိုတာက throughput ကျသွားပါတယ်။
+      [[mark:l-default]] သတိထားစရာက database အများစုက အတင်းကျပ်ဆုံး level ကို default အဖြစ် မထားတာပါ။ level တွေရဲ့ နာမည်ကလည်း database တစ်မျိုးနဲ့တစ်မျိုး အဓိပ္ပာယ် မတူတတ်ပါဘူး။ ဒါကြောင့် ကိုယ့်
+      database ရဲ့ default ကို သိထားပြီး၊ session နှစ်ခု ဖွင့်ပြီး တစ်ပြိုင်တည်း run ကြည့်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: close-skew,
+          type: whiteboard.apply,
+          at: { mark: l-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-levels,
+          type: slide.show,
+          at: { mark: l-open, offsetMs: -1000 },
+          slideId: levels,
+        }
+      - { id: point-rc, type: slide.point, at: { mark: l-rc }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-snap, type: slide.point, at: { mark: l-snap }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-ser, type: slide.point, at: { mark: l-ser }, target: { x: 0.15, y: 0.75 } }
+
+  - id: protections
+    chapter: ကာကွယ်နည်း လေးဆင့်
+    narration: >
+      [[mark:g-open]] စာချုပ်ထဲမှာ မပါတဲ့ စည်းကမ်းတွေကို ကာကွယ်ဖို့ နည်းလမ်း လေးမျိုး ရှိပါတယ်။ အထက်ကို တက်လေ
+      စရိတ် ပိုကြီးလေမို့၊ အောက်ဆုံးကနေ စပြီး ကြည့်ရအောင်။
+      [[mark:g-unique]] ပထမ နည်းက တစ်ခုတည်းပဲ ရှိရမယ် ဆိုတာကို database ကိုယ်တိုင်ကို ထိန်းခိုင်းတာပါ။ ခရီးစဉ်
+      တစ်ခုရဲ့ ခုံ တစ်ခုံအတွက် လက်မှတ် row တစ်ခုပဲ ရှိခွင့်ပြုတဲ့ unique constraint ကို ထည့်ထားရင်၊ ဒုတိယ
+      ရေးတဲ့သူကို database က ငြင်းလိုက်ပါတယ်။ isolation level ဘာပဲဖြစ်ဖြစ် အလုပ်လုပ်ပါတယ်။ သင်္ကြန် ဖြစ်ရပ်
+      အပြီးမှာ ခရီးဖော် ထည့်ခဲ့တာလည်း ဒါပါပဲ။
+      [[mark:g-atomic]] ဒုတိယ နည်းက atomic update ပါ။ တန်ဖိုးကို ဖတ်၊ app ထဲမှာ တွက်၊ ပြီးမှ ပြန်ရေးမယ့်အစား၊
+      database ကို အဆင့် တစ်ဆင့်တည်းနဲ့ လုပ်ခိုင်းတာပါ။ ဥပမာ ကျန်တဲ့ ခုံအရေအတွက်ကို တစ်ခု လျှော့ပေးပါလို့ပဲ
+      ခိုင်းလိုက်ရင်၊ ဖတ်တာနဲ့ ရေးတာကြားမှာ ကြားကာလ မရှိတော့ပါဘူး။
+      [[mark:g-lock]] တတိယ နည်းက ကိုယ်တိုင် lock ချတာပါ။ လေးစောင် စည်းကမ်းလို row အများကြီးနဲ့ ဆိုင်တဲ့
+      စည်းကမ်းဆိုရင်၊ ရေတွက်တာ မစခင် အဲဒီ ခရီးသည်ရဲ့ row ကို အရင် lock ချထားပါတယ်။ ဒုတိယ transaction က ပထမ
+      တစ်ခု ပြီးတဲ့အထိ စောင့်ရပြီး၊ သူ ရေတွက်တဲ့အခါ လေးစောင်လို့ မြင်ရပါလိမ့်မယ်။ စရိတ်ကတော့ စောင့်ရတာနဲ့၊ ဒီ
+      စည်းကမ်းကို ထိတဲ့ code တိုင်းက အဲဒီ lock ကို ယူဖို့ မမေ့ရတာပါ။
+      [[mark:g-ser]] နောက်ဆုံး နည်းက isolation level ကို serializable အထိ မြှင့်တာပါ။ ကိုယ့်ဘက်က စဉ်းစားရတာ
+      အနည်းဆုံးပါ။ ဒါပေမဲ့ throughput ကို အများဆုံး ပေးရပြီး၊ ပယ်ချခံရတဲ့ transaction တွေကို app က retry
+      လုပ်ပေးရပါတယ်။
+      [[mark:g-rule]] ဒါကြောင့် အောက်ဆုံးကနေ စပြီး၊ စည်းကမ်းကို ကာနိုင်တဲ့ အနိမ့်ဆုံး အဆင့်မှာ ရပ်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-levels, type: slide.close, at: { mark: g-open, offsetMs: -1200 } }
+      - {
+          id: draw-g-open,
+          type: whiteboard.apply,
+          at: { mark: g-open },
+          open: true,
+          clear: true,
+          upsertIds: [g-title, g-cost, g-cost-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-g-unique,
+          type: whiteboard.apply,
+          at: { mark: g-unique },
+          upsertIds: [g-1, g-1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-g-atomic,
+          type: whiteboard.apply,
+          at: { mark: g-atomic },
+          upsertIds: [g-2, g-2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-g-lock,
+          type: whiteboard.apply,
+          at: { mark: g-lock },
+          upsertIds: [g-3, g-3-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-g-ser,
+          type: whiteboard.apply,
+          at: { mark: g-ser },
+          upsertIds: [g-4, g-4-l],
+          drawMs: 1200,
+        }
+      - { id: point-g-1, type: whiteboard.point, at: { mark: g-rule }, target: { assetId: g-1 } }
+
+  - id: table
+    chapter: ခရီးဖော် ရဲ့ စည်းကမ်းတွေ
+    narration: >
+      [[mark:t-close]] အခု ခရီးဖော် ရဲ့ မပျက်ရမယ့် စည်းကမ်းတွေကို table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။ 
+      [[mark:type-default]] အရင်ဆုံး ကိုယ်တို့ database ရဲ့ default level ကို session နှစ်ခုနဲ့ စမ်းကြည့်ပြီး
+      ရေးထားပါတယ်။ read committed ပါ။ database ဘက်က ကာပေးတာ အနည်းဆုံး level မို့၊ ကျန်တာကို
+      ကိုယ်တိုင် ကာရပါမယ်။
+      [[mark:type-seat]] ပထမ စည်းကမ်းက ခုံ တစ်ခုံကို လက်မှတ် တစ်စောင်ပဲ ဆိုတာပါ။ unique constraint နဲ့
+      ကာထားပြီးသားပါ။
+      [[mark:type-left]] ဒုတိယက ခရီးစဉ် ရှာတဲ့အခါ ပြတဲ့ ကျန်ခုံ အရေအတွက်ပါ။ နှစ်ယောက်က ငါးခုံလို့ ဖတ်ပြီး
+      နှစ်ယောက်လုံး လေးခုံလို့ ပြန်ရေးရင် တစ်ခုံ ပျောက်သွားမှာမို့၊ atomic update နဲ့ ကာပါမယ်။
+      [[mark:type-limit]] တတိယက လှလှ ရဲ့ စည်းကမ်းအသစ်ပါ။ မောင်မောင် အဆိုပြုတဲ့ ရေတွက်ပြီးမှ ထည့်တဲ့ ပုံစံကို
+      ဆက်သုံးပါမယ်။ ဒါပေမဲ့ ရေတွက်တာ မစခင် ခရီးသည်ရဲ့ row ကို lock ချတဲ့ အဆင့် တစ်ခု ထပ်ထည့်ပါမယ်။
+      [[mark:type-decision]] database တစ်ခုလုံးကို serializable ပြောင်းတာကိုတော့ မရွေးပါဘူး။ သင်္ကြန်နေ့မှာ
+      ပုံမှန်ရဲ့ အဆ ၂၀ ဝင်လာမယ့် load အတွက် throughput ကို မပေးချင်သလို၊ စည်းကမ်း သုံးခုလုံးကို အောက်က
+      အဆင့်တွေနဲ့ ကာနိုင်နေလို့ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-ladder, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-ladder },
+          path: notebook/32-invariants.md,
+        }
+      - id: type-default
+        type: editor.type
+        at: { mark: type-default }
+        cadence: line-by-line
+        target: { file: notebook/32-invariants.md, after: "4 စောင်ထက် ပိုမရောင်းဘူး\n" }
+        text: "- Database ရဲ့ default isolation level: read committed (session နှစ်ခုနဲ့ စမ်းထား)\n"
+      - id: type-seat
+        type: editor.type
+        at: { mark: type-seat }
+        cadence: line-by-line
+        target: { file: notebook/32-invariants.md, after: "|---|---|---|\n" }
+        text: "| ခရီးစဉ် တစ်ခုရဲ့ ခုံ တစ်ခုံ = လက်မှတ် တစ်စောင် | နှစ်ယောက် တစ်ပြိုင်တည်း စစ်ပြီး ရောင်း | unique constraint |\n"
+      - id: type-left
+        type: editor.type
+        at: { mark: type-left }
+        cadence: line-by-line
+        target: { file: notebook/32-invariants.md, after: "| unique constraint |\n" }
+        text: "| ကျန်ခုံ အရေအတွက် မှန်ရမယ် | နှစ်ယောက် ဖတ်ပြီး တန်ဖိုးဟောင်းနဲ့ ပြန်ရေး | atomic update |\n"
+      - id: type-limit
+        type: editor.type
+        at: { mark: type-limit }
+        cadence: line-by-line
+        target: { file: notebook/32-invariants.md, after: "| atomic update |\n" }
+        text: "| တစ်ယောက်ကို သင်္ကြန် လက်မှတ် 4 စောင်ထက် မပို | နှစ်နေရာက ရေတွက်ပြီး row အသစ်စီ ထည့် (write skew) | ခရီးသည် row ကို lock |\n"
+      - id: expect-limit
+        type: expect.file
+        at: { afterAction: type-limit }
+        path: notebook/32-invariants.md
+        contains: "(write skew) | ခရီးသည် row ကို lock |\n"
+      - id: type-decision
+        type: editor.type
+        at: { mark: type-decision }
+        cadence: line-by-line
+        target: { file: notebook/32-invariants.md, after: "| ခရီးသည် row ကို lock |\n" }
+        text: "\n## ဆုံးဖြတ်ချက်\n- ကာနိုင်တဲ့ အောက်ဆုံး အဆင့်မှာ ရပ်မယ်\n- database တစ်ခုလုံးကို serializable မပြောင်းဘူး\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system မှာလည်း row အများကြီးကို ဖြတ်ပြီး
+      မှန်နေရမယ့် စည်းကမ်း တစ်ခုတော့ ရှိမှာပါ။ lesson ကို pause လုပ်ပြီး၊ အဲဒီ စည်းကမ်းကို ဒီ table ထဲမှာ ရေးပြီး
+      အခု ဘယ်လို ကာထားလဲ ဆိုတာကို ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] ကာကွယ်ပုံ အကွက်မှာ transaction ထဲမှာ လုပ်ထားတယ်လို့ပဲ ရေးမိရင်၊ ကိုယ့် database ရဲ့ isolation
+      level က ဘာလဲ၊ အဲဒီ level က ဒီစည်းကမ်းကို တကယ် ကာပေးသလား ဆိုတာကို ဆက်မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-limit
+        type: editor.select
+        at: { mark: turn }
+        target: { file: notebook/32-invariants.md, text: "| တစ်ယောက်ကို သင်္ကြန် လက်မှတ် 4 စောင်ထက် မပို |" }
+      - id: sel-protect
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/32-invariants.md, text: "ကာကွယ်ပုံ |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ transaction က အကုန်ဖြစ် ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတာကိုတော့ အပြည့် ကတိပေးပါတယ်။ အတူ
+      run နေတဲ့ transaction တွေကြားက isolation ကိုတော့ level အလိုက်ပဲ ပေးတာမို့၊ level တစ်ခုကို စာချုပ်လို
+      ဖတ်ပြီး ဘယ်စည်းကမ်းကို မကာပေးလဲ ဆိုတာ ရှာရပါတယ်။
+      [[mark:recap-2]] မကာပေးတဲ့ စည်းကမ်းတွေအတွက် unique constraint၊ atomic update၊ lock နဲ့ serializable level
+      ဆိုပြီး စရိတ်နည်းတာကနေ စပြီး ရွေးပါ။
+      [[mark:next]] ဒါတွေ အားလုံးက database တစ်ခုတည်းအတွင်းမှာ ဖြစ်တာတွေပါ။ service တစ်ခုက နောက် service
+      တစ်ခုကို network ပေါ်ကနေ ခေါ်ရတဲ့အခါကျတော့ ပိုခက်တဲ့ ပြဿနာတွေ ပေါ်လာပါတယ်။ နောက် lesson မှာတော့
+      distributed system တွေမှာ ကြုံရတဲ့ အဲဒီ ဒုက္ခတွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-decision
+        type: editor.select
+        at: { mark: recap-2 }
+        target: { file: notebook/32-invariants.md, text: "- ကာနိုင်တဲ့ အောက်ဆုံး အဆင့်မှာ ရပ်မယ်" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
