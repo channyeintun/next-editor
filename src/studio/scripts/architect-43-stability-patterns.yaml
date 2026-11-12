@@ -1,0 +1,878 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-43-stability-patterns
+  title: "Architect Path 43: Stability pattern များ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/43-protections.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/43-protections.md: |
+        # အကာအကွယ် စာရင်း
+
+        အရင် ဖြစ်ရပ်: wallet API 30 စက္ကန့်ကြာမှ ဖြေ → 20 မိနစ်လုံး ဝယ်မရ၊ ရှာမရ
+
+        | Integration point | အကာအကွယ် | Setting | ခရီးသည် မြင်ရတာ |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: own-side
+      contentType: html
+      name: ကိုယ့်ဘက်ကို ကာကွယ်ခြင်း
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ကိုယ့်ဘက်ကို ကာကွယ်တဲ့ နည်း သုံးခု</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide orange">Fail fast</span>မလုပ်နိုင်ရင် အစကတည်းက ငြင်း</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide violet">Back pressure</span>queue ပြည့်ရင် ပို့တဲ့ဘက်ကို နှေးခိုင်း</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide green">ရှင်းပြီး ပြန်စ</span>ပုံလာတာကို အလိုအလျောက် ရှင်း</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — a time limit on the call. Blue = ခရီးဖော်'s part, red = the
+    # failing side and the costs, violet = the call, orange = the limit this
+    # board is about, green = what it buys.
+    - {
+        id: t-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "စောင့်ချိန်ကို ကန့်သတ်ခြင်း",
+        fontSize: 36,
+      }
+    - {
+        id: t-pay,
+        kind: rectangle,
+        x: 290,
+        y: 275,
+        width: 280,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: t-pay-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 298,
+        width: 280,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: t-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 585,
+        y: 295,
+        width: 110,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: t-wal,
+        kind: rectangle,
+        x: 710,
+        y: 275,
+        width: 290,
+        height: 80,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: t-wal-l,
+        kind: text,
+        align: center,
+        x: 710,
+        y: 298,
+        width: 290,
+        height: 35,
+        text: "wallet API",
+        fontSize: 28,
+      }
+    - {
+        id: t-lim,
+        kind: text,
+        x: 500,
+        y: 225,
+        width: 400,
+        height: 35,
+        text: "2 စက္ကန့်ထိပဲ စောင့်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: t-free,
+        kind: text,
+        x: 290,
+        y: 400,
+        width: 780,
+        height: 35,
+        text: "စောင့်နေတဲ့ thread: 50 မဟုတ်တော့ဘဲ 4",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: t-cost,
+        kind: text,
+        x: 290,
+        y: 465,
+        width: 780,
+        height: 35,
+        text: "တိုလွန်းရင် ကောင်းနေတာကိုပါ ဖြတ်မိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: t-unk,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 780,
+        height: 35,
+        text: "ငွေ ဖြတ်ပြီးမပြီး နောက်မှ ပြန်စစ်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the quiz, asked before the circuit breaker is named.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "wallet API ပျက်နေတုန်း ဘာလုပ်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) မရတိုင်း ချက်ချင်း ထပ်ခေါ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 780,
+        height: 35,
+        text: "ခ) ခဏ မခေါ်တော့ဘဲ ချက်ချင်း ဖြေ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 440,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 780,
+        height: 35,
+        text: "load ထပ်မပုံနဲ့၊ အဖြေကို မြန်မြန်ပေး",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — the circuit breaker's three states as a loop. Green = calls
+    # go through, red = cut off, orange = the trial call, violet = the moves.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 320,
+        height: 45,
+        text: "Circuit breaker",
+        fontSize: 36,
+      }
+    - {
+        id: b-c,
+        kind: rectangle,
+        x: 280,
+        y: 235,
+        width: 330,
+        height: 80,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-c-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 258,
+        width: 330,
+        height: 35,
+        text: "closed · ပုံမှန် ခေါ်",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 625,
+        y: 255,
+        width: 110,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-a1-l,
+        kind: text,
+        x: 600,
+        y: 195,
+        width: 200,
+        height: 35,
+        text: "5 ခါ ဆက်ပျက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-o,
+        kind: rectangle,
+        x: 750,
+        y: 235,
+        width: 330,
+        height: 80,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-o-l,
+        kind: text,
+        align: center,
+        x: 750,
+        y: 258,
+        width: 330,
+        height: 35,
+        text: "open · မခေါ်တော့",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 760,
+        y: 325,
+        width: 100,
+        height: 155,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-a2-l,
+        kind: text,
+        x: 870,
+        y: 385,
+        width: 200,
+        height: 35,
+        text: "30 s ကြာရင်",
+        fontSize: 28,
+      }
+    - {
+        id: b-h,
+        kind: rectangle,
+        x: 420,
+        y: 490,
+        width: 520,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-h-l,
+        kind: text,
+        align: center,
+        x: 420,
+        y: 513,
+        width: 520,
+        height: 35,
+        text: "half-open · တစ်ခုတည်း စမ်းခေါ်",
+        fontSize: 28,
+      }
+    - {
+        id: b-a3,
+        kind: freedraw,
+        stroke: arrow-up-left,
+        x: 470,
+        y: 325,
+        width: 100,
+        height: 155,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-a3-l,
+        kind: text,
+        x: 280,
+        y: 385,
+        width: 190,
+        height: 35,
+        text: "အောင်မြင်ရင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — one set of threads split into two pools. The dashed box is the
+    # old app; blue = its pools, red = the flood and the cost, green = what
+    # keeps working.
+    - { id: p-app, kind: rectangle, x: 280, y: 190, width: 800, height: 300, strokeStyle: dashed }
+    - {
+        id: p-app-l,
+        kind: text,
+        x: 305,
+        y: 205,
+        width: 500,
+        height: 35,
+        text: "app အဟောင်း · thread 400",
+        fontSize: 28,
+      }
+    - {
+        id: p-s,
+        kind: rectangle,
+        x: 310,
+        y: 270,
+        width: 350,
+        height: 100,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-s-l,
+        kind: text,
+        align: center,
+        x: 310,
+        y: 303,
+        width: 350,
+        height: 35,
+        text: "ရှာတဲ့ pool · 300",
+        fontSize: 28,
+      }
+    - {
+        id: p-b,
+        kind: rectangle,
+        x: 700,
+        y: 270,
+        width: 350,
+        height: 100,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-b-l,
+        kind: text,
+        align: center,
+        x: 700,
+        y: 303,
+        width: 350,
+        height: 35,
+        text: "ဝယ်တဲ့ pool · 100",
+        fontSize: 28,
+      }
+    - {
+        id: p-b-s,
+        kind: text,
+        x: 700,
+        y: 395,
+        width: 350,
+        height: 35,
+        text: "စောင့်ရင်း ပြည့်နေ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-s-s,
+        kind: text,
+        x: 310,
+        y: 395,
+        width: 350,
+        height: 35,
+        text: "ဆက်အလုပ်လုပ်နေ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-cost,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 780,
+        height: 35,
+        text: "ဝယ်တာက 100 ထက် ပိုသုံးလို့ မရတော့",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8143
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: နောက်တစ်ခါ နှေးရင်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ wallet API နှေးသွားတာ တစ်ခုတည်းက ခရီးဖော် တစ်ခုလုံးကို ဘယ်လို ရပ်သွားစေခဲ့လဲ
+      ဆိုတာနဲ့၊ တခြား system ကို ခေါ်တဲ့ နေရာ၊ integration point တွေကို စာရင်းလုပ်ပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] အဲဒီ ဖြစ်ရပ်ပြီးတော့ CTO ဖြစ်တဲ့ အောင်အောင် က မေးခွန်း တစ်ခုတည်း မေးပါတယ်။ wallet API
+      နောက်တစ်ခါ နှေးရင် ဘာဖြစ်မလဲ ဆိုတာပါ။
+      [[mark:sel-past]] wallet ကုမ္ပဏီရဲ့ system ကို ကိုယ်တို့ ပြင်ပေးလို့ မရပါဘူး။ နောက်တစ်ခါ မနှေးစေရဘူးလို့လည်း
+      ဘယ်သူမှ အာမ မခံနိုင်ပါဘူး။ ကိုယ်တို့ ဆုံးဖြတ်နိုင်တာက အဲဒီလို ဖြစ်လာတဲ့အခါ ပြဿနာက ဘယ်နေရာမှာ ရပ်မလဲ
+      ဆိုတာပါပဲ။ ဒါကြောင့် ဒီ lesson မှာ အဲဒီ သောကြာနေ့ ညနေကို အကာအကွယ်တွေ တစ်ခုချင်း တပ်ပြီး
+      ပြန်ကြည့်ပါမယ်။ ဒီလို အကာအကွယ်တွေကို stability pattern လို့ ခေါ်ကြပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/43-protections.md,
+        }
+      - id: sel-past
+        type: editor.select
+        at: { mark: sel-past }
+        target:
+          {
+            file: notebook/43-protections.md,
+            text: "အရင် ဖြစ်ရပ်: wallet API 30 စက္ကန့်ကြာမှ ဖြေ → 20 မိနစ်လုံး ဝယ်မရ၊ ရှာမရ",
+          }
+
+  - id: timeout
+    chapter: စောင့်ချိန်ကို ကန့်သတ်ခြင်း
+    narration: >
+      [[mark:t-open]] ပထမဆုံး အကာအကွယ်က time out ပါ။ အဖြေကို ဘယ်လောက်ထိပဲ စောင့်မယ် ဆိုတဲ့ ကန့်သတ်ချက်ပါ။
+      [[mark:t-limit]] Payment က wallet API ကို ခေါ်တဲ့အခါ ၂ စက္ကန့်ထိပဲ စောင့်မယ်လို့ သတ်မှတ်လိုက်ပါမယ်။ ၂
+      စက္ကန့်ကျော်ရင် မစောင့်တော့ဘဲ၊ မရဘူးလို့ပဲ ယူဆပြီး thread ကို ပြန်လွှတ်လိုက်ပါတယ်။
+      [[mark:t-free]] အဲဒီ ညနေက တစ်စက္ကန့်ကို ငွေချေမှု နှစ်ခုလောက် ဝင်နေတာမို့၊ တစ်ချိန်တည်းမှာ စောင့်နေရတဲ့
+      thread က လေးခုလောက်ပဲ ရှိပါတော့မယ်။ thread ၅၀ လုံး ကုန်သွားတာမျိုး မဖြစ်တော့ပါဘူး။
+      [[mark:t-cost]] ဒါပေမဲ့ အကာအကွယ်တိုင်းမှာ ပေးရတဲ့ တန်ဖိုး ရှိပါတယ်။ ကန့်သတ်ချက်ကို တိုလွန်းအောင် ထားရင်
+      နည်းနည်းလေး နှေးရုံနဲ့ ကောင်းနေတဲ့ ငွေချေမှုတွေကိုပါ ဖြတ်မိပါလိမ့်မယ်။ ရှည်လွန်းရင်တော့ ကာကွယ်ရာ
+      မရောက်ပါဘူး။ ဒါကြောင့် ဒီဂဏန်းကို ခန့်မှန်းပြီး မထားဘဲ၊ တိုင်းတာထားတာကနေ ရွေးရပါတယ်။ wallet API က
+      ပုံမှန်အချိန်မှာ request တွေရဲ့ ၉၉ ရာခိုင်နှုန်းကို တစ်စက္ကန့်ခွဲအတွင်း ဖြေတယ်လို့ တိုင်းထားလို့၊ ၂
+      စက္ကန့်ကို ရွေးတာပါ။
+      [[mark:t-unknown]] နောက်ထပ် တန်ဖိုး တစ်ခုက မသေချာမှုပါ။ ၂ စက္ကန့်မှာ ဖြတ်လိုက်တဲ့ ငွေချေမှုက wallet
+      ဘက်မှာ ငွေ ဖြတ်ပြီးသွားပြီလား၊ မဖြတ်ရသေးဘူးလား ဆိုတာ ကိုယ်တို့ မသိပါဘူး။ ဒါကြောင့် နောက်မှ ပြန်စစ်ပေးတဲ့
+      အလုပ် တစ်ခု ထပ်လိုလာပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-t-open,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          open: true,
+          clear: true,
+          upsertIds: [t-title],
+        }
+      - {
+          id: draw-t-limit,
+          type: whiteboard.apply,
+          at: { mark: t-limit },
+          upsertIds: [t-pay, t-pay-l, t-arrow, t-wal, t-wal-l, t-lim],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-t-free,
+          type: whiteboard.apply,
+          at: { mark: t-free },
+          upsertIds: [t-free],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-cost,
+          type: whiteboard.apply,
+          at: { mark: t-cost },
+          upsertIds: [t-cost],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-unk,
+          type: whiteboard.apply,
+          at: { mark: t-unknown },
+          upsertIds: [t-unk],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] time out ရှိသွားတော့ Payment က မရပ်တော့ပါဘူး။ ဒါပေမဲ့ wallet API ကတော့ နှေးနေတုန်းမို့၊
+      ခေါ်သမျှက မအောင်မြင်ဘဲ ပြန်လာနေပါတယ်။ ဒီနေရာမှာ မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီလို ပျက်နေတဲ့ အတောအတွင်း
+      ဝင်လာတဲ့ ငွေချေမှုတွေကို Payment က ဘယ်လို လုပ်သင့်သလဲ။
+      [[mark:q-a]] ပထမ နည်းက မရတိုင်း ချက်ချင်း ထပ်ခါထပ်ခါ ခေါ်ကြည့်တာပါ။
+      [[mark:q-b]] ဒုတိယ နည်းကတော့ wallet API ကို ခဏ လုံးဝ မခေါ်တော့ဘဲ၊ ဝင်လာသမျှကို မရသေးဘူးလို့ ချက်ချင်း
+      ပြန်ဖြေတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ ပျက်နေတဲ့ဘက်ကို ထပ်ခါထပ်ခါ ခေါ်တာက
+      သူ့အပေါ် load ထပ်ပုံပေးတာပဲ ဖြစ်ပြီး၊ ပြန်ကောင်းလာဖို့ကို ပိုကြာစေပါတယ်။
+      [[mark:q-why]] ခရီးသည်ကလည်း ခေါ်တိုင်း ၂ စက္ကန့်စီ စောင့်ပြီးမှ မရဘူး ဆိုတာ သိရပါတယ်။ မခေါ်တော့ရင်
+      wallet API ကိုလည်း နားချိန် ပေးရာရောက်ပြီး၊ ခရီးသည်ကိုလည်း ချက်ချင်း အဖြေပေးနိုင်ပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+
+  - id: breaker
+    chapter: Circuit breaker
+    narration: >
+      [[mark:b-open]] ဒီ အပြုအမူကို အလိုအလျောက် လုပ်ပေးတဲ့ အကာအကွယ်ကို circuit breaker လို့ ခေါ်ပါတယ်။
+      ပျက်နေတဲ့ဘက်ကို ဆက်မခေါ်တော့အောင် ဖြတ်ထားပေးတဲ့ ခလုတ်ပါ။ သူ့မှာ အခြေအနေ သုံးမျိုး ရှိပါတယ်။
+      [[mark:b-closed]] ပုံမှန်အချိန်မှာ closed အခြေအနေမှာ ရှိပြီး၊ ဝင်လာတဲ့ request တိုင်းကို wallet API ဆီ
+      ပို့ပေးပါတယ်။ ပို့ရင်း ဘယ်နှခါ ပျက်လဲ ဆိုတာကိုလည်း ရေတွက်ထားပါတယ်။
+      [[mark:b-trip]] ဆက်တိုက် ငါးခါ ပျက်တာနဲ့ open အခြေအနေကို ပြောင်းသွားပါတယ်။ ဒီအခြေအနေမှာ wallet API ကို
+      လုံးဝ မခေါ်တော့ဘဲ၊ ဝင်လာသမျှကို မရသေးဘူးလို့ ချက်ချင်း ဖြေပါတယ်။
+      [[mark:b-half]] စက္ကန့် ၃၀ ကြာရင် half open အခြေအနေကို ရောက်ပါတယ်။ request တစ်ခုတည်းကိုပဲ စမ်းပြီး
+      ပို့ကြည့်တာပါ။
+      [[mark:b-back]] အဲဒီ တစ်ခု အောင်မြင်ရင် closed ကို ပြန်သွားပြီး ပုံမှန်အတိုင်း ဆက်ခေါ်ပါတယ်။
+      မအောင်မြင်ရင်တော့ open ကို ပြန်သွားပြီး နောက်ထပ် စက္ကန့် ၃၀ စောင့်ပါတယ်။
+      [[mark:b-retry]] ဒါဆို retry က လုံးဝ မလုပ်သင့်တဲ့ အရာလားလို့ မေးစရာ ရှိပါတယ်။ မဟုတ်ပါဘူး။ network ခဏ
+      ပြတ်တာလို အမှားမျိုးအတွက် retry က အသုံးဝင်ပါတယ်။ ဒါပေမဲ့ ချက်ချင်း မဟုတ်ဘဲ၊ တစ်ခါထက်တစ်ခါ စောင့်ချိန်ကို
+      တိုးပြီးမှ ထပ်ခေါ်ရပါတယ်။ စောင့်ချိန်ထဲမှာ ကျပန်း အချိန်လေး ရောထည့်ထားရင်၊ ခေါ်တဲ့သူ အားလုံး
+      တစ်ချိန်တည်း ပြန်ခေါ်တာမျိုး မဖြစ်တော့ပါဘူး။ အများဆုံး ဘယ်နှခါ ဆိုတဲ့ အကန့်အသတ်လည်း ထားရပါတယ်။ ငွေချေတာကိုတော့ request id
+      ပါမှ ငွေ နှစ်ခါ မဖြတ်မိဘဲ ထပ်ခေါ်လို့ ရပါတယ်။
+      [[mark:b-cost]] circuit breaker အတွက် ပေးရတဲ့ တန်ဖိုးကတော့ business ဆုံးဖြတ်ချက် တစ်ခု လိုလာတာပါ။
+      ဖြတ်ထားတုန်းမှာ ခရီးသည်ကို ဘာပြမလဲ ဆိုတာကို product manager လှလှ နဲ့ အတူ ဆုံးဖြတ်ရပါတယ်။ ခရီးဖော်
+      မှာတော့ ငွေချေတာ ခဏ မရသေးကြောင်း ပြပြီး၊ ရွေးထားတဲ့ ထိုင်ခုံကို ၁၀ မိနစ် ဆက်ထိန်းထားပေးဖို့
+      ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          clear: true,
+          upsertIds: [b-title],
+        }
+      - {
+          id: draw-b-closed,
+          type: whiteboard.apply,
+          at: { mark: b-closed },
+          upsertIds: [b-c, b-c-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-trip,
+          type: whiteboard.apply,
+          at: { mark: b-trip },
+          upsertIds: [b-a1, b-a1-l, b-o, b-o-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-b-half,
+          type: whiteboard.apply,
+          at: { mark: b-half },
+          upsertIds: [b-a2, b-a2-l, b-h, b-h-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-b-back,
+          type: whiteboard.apply,
+          at: { mark: b-back },
+          upsertIds: [b-a3, b-a3-l],
+          drawMs: 1200,
+        }
+      - { id: point-b-open, type: whiteboard.point, at: { mark: b-cost }, target: { assetId: b-o } }
+
+  - id: pools
+    chapter: Pool ကို ခွဲထားခြင်း
+    narration: >
+      [[mark:p-open]] အခုထိ အကာအကွယ်တွေက ခေါ်တဲ့ နေရာ တစ်ခုချင်းစီအတွက်ပါ။ နောက်တစ်မျိုးကတော့ service တစ်ခုရဲ့
+      အထဲမှာ အခန်းကန့်တာပါ။ bulkhead လို့ ခေါ်ပြီး၊ အပိုင်း တစ်ခု ပျက်လည်း ကျန်တာ မနစ်အောင် ကန့်ထားတာကို
+      ဆိုလိုပါတယ်။
+      [[mark:p-app]] app အဟောင်းမှာ thread ၄၀၀ ရှိပါတယ်။ အရင်က အလုပ်အားလုံးက ဒီ ၄၀၀ ကို အတူတူ သုံးကြတာမို့၊
+      Booking ကို စောင့်ရတဲ့ request တွေက ၄၀၀ လုံးကို ယူသွားနိုင်ခဲ့ပါတယ်။
+      [[mark:p-split]] ဒါကို pool နှစ်ခု ခွဲလိုက်ပါမယ်။ ခရီးစဉ် ရှာတဲ့ အလုပ်အတွက် ၃၀၀၊ ဝယ်တာနဲ့ ဆိုင်တဲ့
+      အလုပ်အတွက် ၁၀၀ ပါ။
+      [[mark:p-flood]] ဝယ်တဲ့ဘက်က ဘယ်လောက်ပဲ ပိတ်နေပါစေ၊ သူ့ရဲ့ ၁၀၀ ကိုပဲ ကုန်စေနိုင်ပါတယ်။ ရှာတဲ့ဘက်ရဲ့ ၃၀၀
+      ကတော့ ဆက်အလုပ်လုပ်နေပါတယ်။
+      [[mark:p-cost]] ဒီမှာလည်း ပေးရတဲ့ တန်ဖိုး ရှိပါတယ်။ ရှာတဲ့ဘက်မှာ thread တွေ အားနေလည်း၊ ဝယ်တဲ့ဘက်က ၁၀၀
+      ထက် ပိုသုံးလို့ မရတော့ပါဘူး။ ဘယ်လို ခွဲမလဲ ဆိုတာကိုလည်း သင်္ကြန်လို နေ့မျိုးမှာ တိုင်းထားတဲ့ ဂဏန်းတွေနဲ့
+      ရွေးရပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-app, p-app-l],
+          drawMs: 1200,
+        }
+      - {
+          id: point-p-app,
+          type: whiteboard.point,
+          at: { mark: p-app },
+          target: { assetId: p-app-l },
+        }
+      - {
+          id: draw-p-split,
+          type: whiteboard.apply,
+          at: { mark: p-split },
+          upsertIds: [p-s, p-s-l, p-b, p-b-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-p-flood,
+          type: whiteboard.apply,
+          at: { mark: p-flood },
+          upsertIds: [p-b-s, p-s-s],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-p-cost,
+          type: whiteboard.apply,
+          at: { mark: p-cost },
+          upsertIds: [p-cost],
+          drawMs: 1000,
+        }
+
+  - id: own-side
+    chapter: ကိုယ့်ဘက်ကို ကာကွယ်ခြင်း
+    narration: >
+      [[mark:s-open]] အခုထိ ပြောခဲ့တာတွေက ကိုယ်က ခေါ်တဲ့ဘက်ကို သတိထားတာပါ။ ကိုယ့်ကို ခေါ်တဲ့သူတွေ
+      များလွန်းလာတဲ့အခါနဲ့၊ အချိန်ကြာလာတဲ့အခါအတွက်လည်း အကာအကွယ် လိုပါတယ်။
+      [[mark:s-refuse]] ပထမက fail fast ပါ။ လုပ်ပေးလို့ မရမှန်း ကြိုသိရင် တစ်ဝက်တစ်ပျက် လုပ်မနေဘဲ၊ အစကတည်းက
+      ငြင်းလိုက်တာပါ။ ဥပမာ circuit breaker ဖြတ်ထားတုန်းမှာ ခရီးသည်ကို နာမည်တွေ ဖြည့်ခိုင်းပြီးမှ ငွေချေမရဘူးလို့
+      မပြောသင့်ပါဘူး။ load က နိုင်တာထက် ပိုလာတဲ့အခါလည်း ဒီသဘောပါပဲ။ လူတိုင်းကို နှေးသွားစေမယ့်အစား၊ ပိုလာတဲ့
+      request တွေကို ငြင်းပြီး ကျန်တဲ့သူတွေကို ပုံမှန်အတိုင်း ဆက်ဝန်ဆောင်မှု ပေးပါတယ်။
+      [[mark:s-queue]] ဒုတိယက back pressure ပါ။ လက်မခံနိုင်တော့ရင် ပို့တဲ့ဘက်ကို နှေးခိုင်းတာပါ။ Notification ရဲ့ SMS
+      queue ကို အကန့်အသတ်မရှိ ထားရင်၊ ပို့တဲ့ဘက်က မြန်နေသမျှ queue က ရှည်သထက် ရှည်လာပြီး၊ နောက်ဆုံးမှ ဝင်တဲ့
+      လက်မှတ် SMS က နာရီနဲ့ချီ ကြာမှ ရောက်ပါလိမ့်မယ်။ queue ကို အရွယ်အစား သတ်မှတ်ထားပြီး၊ ပြည့်ရင် ပို့တဲ့ဘက်ကို စောင့်ခိုင်းတာက
+      ပြဿနာကို စောစော မြင်ရစေပါတယ်။
+      [[mark:s-clean]] တတိယက အချိန်နဲ့အမျှ ပုံလာတဲ့ အရာတွေအတွက်ပါ။ log file တွေ၊ သက်တမ်းကုန်ပြီးသား seat
+      hold တွေလို data ဟောင်းတွေက နေ့တိုင်း နည်းနည်းစီ တိုးလာပြီး၊ တစ်နေ့မှာ disk ပြည့်သွားပါတယ်။ ဒါကြောင့်
+      ပုံလာတဲ့ အရာတိုင်းအတွက် အလိုအလျောက် ရှင်းပေးတဲ့ အလုပ် တစ်ခုကို တွဲထားရပါတယ်။
+      [[mark:s-restart]] service တစ်ခုက အခြေအနေ
+      မကောင်းတော့ရင်လည်း၊ တစ်ဝက်တစ်ပျက် ဆက် run ခိုင်းမယ့်အစား အသစ်ကနေ သန့်သန့်ရှင်းရှင်း ပြန်စလိုက်တာက
+      များသောအားဖြင့် ပိုစိတ်ချရပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: close-pools,
+          type: whiteboard.apply,
+          at: { mark: s-open, offsetMs: -1500 },
+          open: false,
+        }
+      - { id: show-own, type: slide.show, at: { mark: s-open, offsetMs: -1000 }, slideId: own-side }
+      - {
+          id: point-refuse,
+          type: slide.point,
+          at: { mark: s-refuse },
+          target: { x: 0.15, y: 0.43 },
+        }
+      - { id: point-queue, type: slide.point, at: { mark: s-queue }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-clean, type: slide.point, at: { mark: s-clean }, target: { x: 0.15, y: 0.75 } }
+
+  - id: table
+    chapter: အကာအကွယ် စာရင်း
+    narration: >
+      [[mark:d-close]] ဒါဆို ခရီးဖော် ရဲ့ integration point တစ်ခုချင်းစီအတွက် အကာအကွယ်ကို ရွေးပြီး
+      ချရေးကြည့်ရအောင်။ ခရီးသည် ဘာမြင်ရမလဲ ဆိုတာအထိ တစ်ခါတည်း ဆုံးဖြတ်ပါမယ်။
+      [[mark:type-wallet]] wallet API အတွက် time out နဲ့ circuit breaker နှစ်ခုလုံး တပ်ပါမယ်။ ခရီးသည်ကတော့
+      နားမလည်နိုင်တဲ့ error စာတန်း မဟုတ်ဘဲ၊ ငွေချေတာ ခဏ မရသေးကြောင်းနဲ့ ထိုင်ခုံကို ထိန်းထားပေးကြောင်း
+      မြင်ရပါမယ်။
+      [[mark:type-seats]] ရှာတဲ့ စာမျက်နှာက ခုံအရေအတွက် မေးတဲ့ နေရာမှာတော့ time out ကို အရမ်းတိုတို ထားပါမယ်။
+      မီလီစက္ကန့် ၃၀၀ အတွင်း အဖြေ မရရင် ခုံအရေအတွက် မပါဘဲ ခရီးစဉ်တွေကိုပဲ ပြလိုက်ပါမယ်။ ရှာတာ လုံးဝ
+      ရပ်သွားတာထက်၊ အချက်အလက် တစ်ခု လျော့ပြီး ပြတာက ခရီးသည်အတွက် ပိုအသုံးဝင်ပါတယ်။
+      [[mark:type-pool]] app အဟောင်းရဲ့ thread တွေကိုလည်း ရှာတာနဲ့ ဝယ်တာအတွက် pool ခွဲထားပါမယ်။
+      [[mark:type-peak]] နောက်ဆုံး တစ်ခုက သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်အတွက်ပါ။ အဲဒီနေ့မှာ ပုံမှန်ရဲ့ အဆ
+      ၂၀ ဝင်လာမှာမို့၊ load test မှာ တိုင်းထားတဲ့ ပမာဏထက် ပိုလာတဲ့သူတွေကို စောင့်ဆိုင်းတဲ့ စာမျက်နှာ ပြပြီး
+      အလှည့်ကျ ဝင်ခိုင်းပါမယ်။ လူတိုင်းအတွက် နာရီနဲ့ချီ နှေးနေတာထက်၊ တချို့က ခဏ စောင့်ရတာက ပိုလက်ခံနိုင်စရာ
+      ရှိပါတယ်။
+      [[mark:d-replay]] ဒီအကာအကွယ်တွေနဲ့ဆို အဲဒီ သောကြာနေ့ ညနေက ဘယ်လို ဖြစ်မလဲ။ wallet API က မိနစ် ၂၀
+      နှေးနေတုန်းပါပဲ။ wallet နဲ့ ငွေချေတာကတော့ အဲဒီ မိနစ် ၂၀ မှာ မရပါဘူး။ ဒါပေမဲ့ ခရီးစဉ် ရှာတာနဲ့ ကောင်တာက
+      ရောင်းတာတွေကတော့ ပုံမှန်အတိုင်း ဆက်သွားနေမှာပါ။ ပြဿနာက ရှိနေတုန်းပါပဲ။ ပြောင်းသွားတာက သူ ရပ်တဲ့
+      နေရာပါ။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - { id: close-own, type: slide.close, at: { mark: d-close } }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-own },
+          path: notebook/43-protections.md,
+        }
+      - id: type-wallet
+        type: editor.type
+        at: { mark: type-wallet }
+        cadence: line-by-line
+        target: { file: notebook/43-protections.md, after: "|---|---|---|---|\n" }
+        text: "| Payment → wallet API | time out | 2 s (p99 က 1.5 s) | \"ငွေချေတာ ခဏ မရသေးပါ\" |\n| Payment → wallet API | circuit breaker | 5 ခါ ဆက်ပျက်ရင် 30 s ဖြတ် | ခုံကို 10 မိနစ် ဆက်ထိန်းထား |\n"
+      - id: expect-breaker
+        type: expect.file
+        at: { afterAction: type-wallet }
+        path: notebook/43-protections.md
+        contains: "| Payment → wallet API | circuit breaker | 5 ခါ ဆက်ပျက်ရင် 30 s ဖြတ် | ခုံကို 10 မိနစ် ဆက်ထိန်းထား |\n"
+      - id: type-seats
+        type: editor.type
+        at: { mark: type-seats }
+        cadence: line-by-line
+        target: { file: notebook/43-protections.md, after: "ခုံကို 10 မိနစ် ဆက်ထိန်းထား |\n" }
+        text: "| app → Booking (ကျန်တဲ့ ခုံ) | time out | 300 ms | ခုံအရေအတွက် မပါဘဲ ခရီးစဉ် ပြ |\n"
+      - id: type-pool
+        type: editor.type
+        at: { mark: type-pool }
+        cadence: line-by-line
+        target: { file: notebook/43-protections.md, after: "ခုံအရေအတွက် မပါဘဲ ခရီးစဉ် ပြ |\n" }
+        text: "| app အဟောင်းရဲ့ thread | pool ခွဲ (bulkhead) | ရှာတာ 300 · ဝယ်တာ 100 | ရှာတာ ဆက်ရ |\n"
+      - id: type-peak
+        type: editor.type
+        at: { mark: type-peak }
+        cadence: line-by-line
+        target: { file: notebook/43-protections.md, after: "ဝယ်တာ 100 | ရှာတာ ဆက်ရ |\n" }
+        text: "| သင်္ကြန် မနက် အဝင် | ပိုလာရင် စောစော ငြင်း | load test က ပြတဲ့ ပမာဏ ကျော်ရင် | စောင့်ဆိုင်း စာမျက်နှာ |\n"
+      - id: sel-past-2
+        type: editor.select
+        at: { mark: d-replay }
+        target:
+          {
+            file: notebook/43-protections.md,
+            text: "အရင် ဖြစ်ရပ်: wallet API 30 စက္ကန့်ကြာမှ ဖြေ → 20 မိနစ်လုံး ဝယ်မရ၊ ရှာမရ",
+          }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ပြီးခဲ့တဲ့ lesson မှာ ကိုယ့် system ထဲက စောင့်ချိန် ကန့်သတ်မထားတဲ့ call
+      တစ်ခုကို ရှာထားခဲ့ပါတယ်။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ အဲဒီ call အတွက် အကာအကွယ် တစ်ခုကို
+      ရွေးပြီး ရေးကြည့်ပါ။
+      [[mark:turn-2]] setting ကို ရေးတဲ့အခါ ခန့်မှန်းထားတဲ့ ဂဏန်းလား၊ တိုင်းထားတဲ့ ဂဏန်းလား ဆိုတာကို
+      သတိထားပါ။ နောက်ဆုံး column ကိုလည်း မချန်ပါနဲ့။ အဲဒီ အကာအကွယ် အလုပ်လုပ်တဲ့အချိန်မှာ ကိုယ့် user က
+      ဘာမြင်ရမလဲ ဆိုတာပါ။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/43-protections.md,
+            text: "| Integration point | အကာအကွယ် | Setting | ခရီးသည် မြင်ရတာ |",
+          }
+      - id: sel-setting
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/43-protections.md, text: "2 s (p99 က 1.5 s)" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ stability pattern တွေက ပြဿနာကို ပျောက်အောင် လုပ်ပေးတာ မဟုတ်ဘဲ၊ ပြဿနာက ဘယ်နေရာမှာ
+      ရပ်မလဲ ဆိုတာကို ကိုယ်က ရွေးနိုင်အောင် လုပ်ပေးတာပါ။ time out က စောင့်တာကို ကန့်သတ်၊ circuit breaker က
+      ပျက်နေတဲ့ဘက်ကို ဆက်မခေါ်အောင် ဖြတ်၊ bulkhead က အခန်းကန့်ပေးပါတယ်။ တစ်ခုစီမှာ ပေးရတဲ့ တန်ဖိုးနဲ့၊
+      တိုင်းတာပြီး ရွေးရတဲ့ setting ရှိသလို၊ ခရီးသည် ဘာမြင်ရမလဲ ဆိုတာကိုလည်း အတူ ဆုံးဖြတ်ရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ service အသစ် တစ်ခုက production မှာ run ဖို့၊ ကြည့်ဖို့၊ ပြောင်းဖို့
+      အဆင်သင့် ဖြစ်မဖြစ် ဘယ်လို စစ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
