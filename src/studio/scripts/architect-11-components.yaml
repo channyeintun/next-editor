@@ -1,0 +1,740 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-11-components
+  title: "Architect Path 11: Component တွေကို ရှာဖွေခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/11-components.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/11-components.md: |
+        # Component တွေကို ရှာဖွေခြင်း · ခရီးဖော်
+
+        | Actor | Action | Component |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: component-loop
+      contentType: html
+      name: Component ရှာတဲ့ ပတ်လမ်း
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Component ရှာတာက ပတ်လမ်း တစ်ခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term wide blue">မူကြမ်း ချ</span>actor နဲ့ action ကနေ စာရင်း ရေး</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term wide violet">requirement ခွဲပေး</span>တစ်ခုစီကို component တစ်ခုဆီ ပို့</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term wide orange">အရည်အသွေး စစ်</span>လိုအပ်ချက် ကွာတာတွေကို ခွဲ</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term wide green">ပြန်ပြင်</span>ခွဲ၊ ပေါင်း၊ နာမည် ပြောင်း၊ ပြန်စ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — one system cut two ways: rows of layers and columns of domains
+    # (blue parts); the orange strips are one feature, the student discount.
+    - { id: r-1, kind: rectangle, x: 270, y: 230, width: 290, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: r-1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 257,
+        width: 290,
+        height: 35,
+        text: "Frontend",
+        fontSize: 28,
+      }
+    - { id: r-2, kind: rectangle, x: 270, y: 330, width: 290, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: r-2-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 357,
+        width: 290,
+        height: 35,
+        text: "Backend",
+        fontSize: 28,
+      }
+    - { id: r-3, kind: rectangle, x: 270, y: 430, width: 290, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: r-3-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 457,
+        width: 290,
+        height: 35,
+        text: "Database",
+        fontSize: 28,
+      }
+    - { id: d-1, kind: rectangle, x: 620, y: 230, width: 150, height: 290, strokeColor: "#1971c2" }
+    - {
+        id: d-1-l,
+        kind: text,
+        align: center,
+        x: 620,
+        y: 245,
+        width: 150,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - { id: d-2, kind: rectangle, x: 780, y: 230, width: 150, height: 290, strokeColor: "#1971c2" }
+    - {
+        id: d-2-l,
+        kind: text,
+        align: center,
+        x: 780,
+        y: 245,
+        width: 150,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - { id: d-3, kind: rectangle, x: 940, y: 230, width: 150, height: 290, strokeColor: "#1971c2" }
+    - {
+        id: d-3-l,
+        kind: text,
+        align: center,
+        x: 940,
+        y: 245,
+        width: 150,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: f-l,
+        kind: rectangle,
+        x: 497,
+        y: 215,
+        width: 45,
+        height: 320,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: f-r,
+        kind: rectangle,
+        x: 640,
+        y: 400,
+        width: 110,
+        height: 90,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    # Board 2 — who does what: actor (white), action (violet), the component
+    # that takes the responsibility (blue).
+    - {
+        id: x-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "ဘယ်သူက ဘာလုပ်လဲ?",
+        fontSize: 36,
+      }
+    - { id: x-a1, kind: text, x: 290, y: 267, width: 240, height: 35, text: "ခရီးသည်", fontSize: 28 }
+    - {
+        id: x-v1,
+        kind: text,
+        x: 545,
+        y: 267,
+        width: 240,
+        height: 35,
+        text: "→ ခရီးစဉ် ရှာ →",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: x-c1,
+        kind: rectangle,
+        x: 800,
+        y: 245,
+        width: 270,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: x-c1-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 267,
+        width: 270,
+        height: 35,
+        text: "Search",
+        fontSize: 28,
+      }
+    - {
+        id: x-a2,
+        kind: text,
+        x: 290,
+        y: 377,
+        width: 240,
+        height: 35,
+        text: "ကောင်တာ ဝန်ထမ်း",
+        fontSize: 28,
+      }
+    - {
+        id: x-v2,
+        kind: text,
+        x: 545,
+        y: 377,
+        width: 240,
+        height: 35,
+        text: "→ ထိုင်ခုံ ရောင်း →",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: x-c2,
+        kind: rectangle,
+        x: 800,
+        y: 355,
+        width: 270,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: x-c2-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 377,
+        width: 270,
+        height: 35,
+        text: "Seat inventory",
+        fontSize: 28,
+      }
+    - { id: x-a3, kind: text, x: 290, y: 487, width: 240, height: 35, text: "system", fontSize: 28 }
+    - {
+        id: x-v3,
+        kind: text,
+        x: 545,
+        y: 487,
+        width: 240,
+        height: 35,
+        text: "→ SMS ပို့ →",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: x-c3,
+        kind: rectangle,
+        x: 800,
+        y: 465,
+        width: 270,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: x-c3-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 487,
+        width: 270,
+        height: 35,
+        text: "Notification",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 820,
+        height: 45,
+        text: "Seat manager က component ကောင်းလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-ctx,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 760,
+        height: 35,
+        text: "seat row ကို ထည့်၊ ဖတ်၊ ပြင်၊ ဖျက်",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 320,
+        width: 600,
+        height: 35,
+        text: "က) ကောင်းတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 600,
+        height: 35,
+        text: "ခ) မကောင်းဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 210,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 530,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-t1,
+        kind: text,
+        x: 290,
+        y: 485,
+        width: 760,
+        height: 35,
+        text: "table ကနေ မရှာ၊ action ကနေ ရှာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-t2,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 760,
+        height: 35,
+        text: "ထိန်း · ရောင်း · ပြန်လွှတ် = component",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8111
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အလုပ်ကို ဘယ်လို ခွဲပေးမလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အပိုင်းတွေကြားက ဆက်နွယ်မှု၊ coupling ကို အား၊ အကွာအဝေးနဲ့ ပြောင်းလဲနှုန်း သုံးခုနဲ့ ချိန်ညှိတာကို လေ့လာခဲ့ပါတယ်။
+      [[mark:n-grow]] ခရီးဖော် က ကြီးထွားလာပါပြီ။ CTO ဖြစ်တဲ့ အောင်အောင် က developer အသစ်တွေ ခေါ်တော့မယ်လို့
+      ပြောပြီး၊ ကိုယ့်ကို မေးခွန်း တစ်ခု မေးပါတယ်။ လူတွေ များလာရင် အလုပ်ကို ဘယ်လို ခွဲပေးမလဲ ဆိုတာပါ။ team ထဲမှာ
+      အမြင် နှစ်မျိုး ရှိပါတယ်။
+      [[mark:n-layer]] team ထဲက developer မောင်မောင် ကတော့ frontend၊ backend၊ database ဆိုပြီး ကျွမ်းကျင်မှုအလိုက်
+      ခွဲချင်ပါတယ်။
+      [[mark:n-domain]] product manager လှလှ ကတော့ လက်မှတ် ရောင်းတာ၊ ငွေချေတာ၊ ကားလိုင်းဘက် ဆိုပြီး လုပ်ငန်းအလိုက်
+      ခွဲစေချင်ပါတယ်။
+      [[mark:n-comp]] ဒီ မေးခွန်းကို ဖြေဖို့ အရင်ဆုံး system ကို ဘယ်လို အစိတ်အပိုင်းတွေနဲ့ ဖွဲ့ထားလဲ ဆိုတာ
+      သိဖို့ လိုပါတယ်။ အဲဒီ အစိတ်အပိုင်းတွေကို component လို့ ခေါ်ပါတယ်။ component ဆိုတာ system ရဲ့ လုပ်ငန်း
+      တစ်ခုကို တာဝန်ယူတဲ့ အစိတ်အပိုင်းပါ။ code ထဲမှာတော့ folder တစ်ခု၊ ဒါမှမဟုတ် namespace တစ်ခုအဖြစ် မြင်ရပါတယ်။
+      [[mark:n-logical]] သတိထားစရာက component ဆိုတာ သီးခြား deploy လုပ်တဲ့ service ကို ပြောတာ မဟုတ်ပါဘူး။ app
+      တစ်ခုတည်းအဖြစ် deploy လုပ်ထားလည်း အထဲမှာ component တွေ ရှိပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-rows,
+          type: whiteboard.apply,
+          at: { mark: n-layer },
+          open: true,
+          upsertIds: [r-1, r-1-l, r-2, r-2-l, r-3, r-3-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-cols,
+          type: whiteboard.apply,
+          at: { mark: n-domain },
+          upsertIds: [d-1, d-1-l, d-2, d-2-l, d-3, d-3-l],
+          drawMs: 2400,
+        }
+
+  - id: partition
+    chapter: အလွှာအလိုက်လား၊ domain အလိုက်လား
+    narration: >
+      component တွေကို အပေါ်ဆုံး အဆင့်မှာ ဘယ်လို ခွဲမလဲ ဆိုတာက အခုန အမြင် နှစ်မျိုးနဲ့
+      တူတူပါပဲ။
+      [[mark:p-layer]] ပထမ နည်းက နည်းပညာ အလွှာအလိုက် ခွဲတာပါ။
+      [[mark:p-dom]] ဒုတိယ နည်းက business ရဲ့ လုပ်ငန်းနယ်ပယ်၊ domain အလိုက်
+      ခွဲတာပါ။ နှစ်နည်းလုံးက system တစ်ခုတည်းကို လှီးတာ ဖြစ်ပြီး၊ လှီးတဲ့ ဦးတည်ရာပဲ ကွာပါတယ်။
+      [[mark:p-feature]] ကွာခြားချက်ကို feature တစ်ခုနဲ့ စမ်းကြည့်ရအောင်။ လှလှ က ကျောင်းသားတွေအတွက် discount
+      ထည့်ပေးဖို့ တောင်းတယ် ဆိုပါစို့။
+      [[mark:p-feature-l]] အလွှာအလိုက် ခွဲထားရင် ဒီ feature တစ်ခုက အလွှာ သုံးခုလုံးကို ဖြတ်သွားပါတယ်။
+      screen မှာ ပြရမယ်၊ ဈေးနှုန်း စည်းမျဉ်း ပြင်ရမယ်၊ table မှာ column ထည့်ရမယ်။
+      [[mark:p-feature-d]] domain အလိုက် ခွဲထားရင်တော့ အဲဒီ သုံးမျိုးလုံးက Booking ဆိုတဲ့ အပိုင်း တစ်ခုတည်းထဲမှာ
+      ပြီးပါတယ်။
+      [[mark:p-conway]] ဒါက code ရဲ့ ကိစ္စတင် မဟုတ်ပါဘူး။ system တစ်ခုရဲ့ ပုံစံက အဲဒါကို ဆောက်တဲ့ team တွေ
+      အချင်းချင်း ဆက်သွယ်ပုံနဲ့ တူသွားတတ်ပါတယ်။ ဒါကို Conway's law လို့ ခေါ်ပါတယ်။
+      [[mark:p-teams]] team ကို frontend၊ backend၊
+      database ဆိုပြီး ခွဲလိုက်ရင် code ကလည်း အဲဒီအတိုင်း အလွှာ သုံးလွှာ ဖြစ်လာပြီး၊ feature တစ်ခုတိုင်းအတွက် team
+      သုံးခု ညှိရပါမယ်။ ဆိုတော့ component ခွဲတာက team ခွဲတဲ့ ဆုံးဖြတ်ချက်လည်း ဖြစ်နေပါတယ်။
+      [[mark:p-choose]] အလွှာအလိုက် ခွဲတာက မှားတယ်လို့ ဆိုလိုတာ မဟုတ်ပါဘူး။ ကျွမ်းကျင်မှု တူသူတွေ အတူ ရှိတာမို့၊
+      ပြောင်းလဲမှု အများစုက အလွှာ တစ်ခုထဲမှာပဲ ပြီးတဲ့ system မျိုးအတွက် သင့်တော်ပါတယ်။
+      [[mark:p-fit]] ခရီးဖော် မှာတော့ လှလှ
+      တောင်းတဲ့ feature တိုင်းလိုလိုက အလွှာ သုံးခုလုံးကို ဖြတ်နေတာမို့၊ ဒီ အခြေအနေအတွက် domain အလိုက် ခွဲတာက
+      ပိုသင့်တော်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - { title: "Conway's law (Wikipedia)", url: "https://en.wikipedia.org/wiki/Conway%27s_law" }
+    actions:
+      - { id: point-rows, type: whiteboard.point, at: { mark: p-layer }, target: { assetId: r-3 } }
+      - { id: point-cols, type: whiteboard.point, at: { mark: p-dom }, target: { assetId: d-2 } }
+      - {
+          id: draw-f-l,
+          type: whiteboard.apply,
+          at: { mark: p-feature-l },
+          upsertIds: [f-l],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-r,
+          type: whiteboard.apply,
+          at: { mark: p-feature-d },
+          upsertIds: [f-r],
+          drawMs: 900,
+        }
+      - {
+          id: point-conway,
+          type: whiteboard.point,
+          at: { mark: p-teams },
+          target: { assetId: r-2 },
+        }
+      - { id: point-choose, type: whiteboard.point, at: { mark: p-fit }, target: { assetId: d-1 } }
+
+  - id: actors
+    chapter: ဘယ်သူက ဘာလုပ်လဲ
+    narration: >
+      [[mark:a-open]] domain အလိုက် ခွဲမယ်ဆိုရင် component တွေကို ဘယ်က စရှာမလဲ။ အသုံးများတဲ့ နည်း တစ်ခုက system ကို
+      သုံးတဲ့သူတွေ ဘယ်သူတွေလဲ၊ သူတို့ ဘာလုပ်ကြလဲ ဆိုတာကို စာရင်း ချတာပါ။ သုံးတဲ့သူကို actor၊ သူ လုပ်တဲ့အရာကို
+      action လို့ ခေါ်ပါတယ်။
+      [[mark:a-1]] ဥပမာ ခရီးသည်က ခရီးစဉ် ရှာပါတယ်။ ရှာပေးတဲ့ တာဝန်ကို ယူမယ့် component တစ်ခု လိုပါတယ်။ Search ပါ။
+      [[mark:a-2]] ကောင်တာ ဝန်ထမ်းက ထိုင်ခုံ ရောင်းပါတယ်။ ထိုင်ခုံတွေရဲ့ အခြေအနေကို ထိန်းသိမ်းပေးတဲ့ Seat
+      inventory ဆိုတဲ့ component လိုပါတယ်။
+      [[mark:a-3]] လူ မဟုတ်တဲ့ actor လည်း ရှိပါတယ်။ ဘယ်သူမှ မနှိပ်ဘဲ system က သူ့အလိုလို လုပ်တဲ့ အလုပ်တွေပါ။
+      [[mark:a-3b]] လက်မှတ် ရောင်းပြီးတိုင်း SMS ပို့တာက ဥပမာပါ။ ဒါအတွက် Notification ဆိုတဲ့ component ရပါတယ်။
+      [[mark:a-flow]] ဒုတိယ နည်း တစ်ခုကတော့ အရေးကြီးတဲ့ လုပ်ငန်းစဉ် တစ်ခုကို အစကနေ အဆုံးအထိ လိုက်ကြည့်တာပါ။
+      လက်မှတ် တစ်စောင် ဝယ်တာကို လိုက်ကြည့်ရင် ခုံရွေးတာ၊ ငွေချေတာ၊ လက်မှတ် ထုတ်တာတွေကို အစဉ်လိုက် ဆက်ပေးမယ့်
+      အပိုင်း တစ်ခု လိုတာကို တွေ့ရပါတယ်။ actor စာရင်းထဲမှာ မပေါ်ခဲ့တဲ့ component တွေကို ဒီနည်းနဲ့ ရှာတွေ့တတ်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-x-open,
+          type: whiteboard.apply,
+          at: { mark: a-open },
+          clear: true,
+          upsertIds: [x-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-x-1,
+          type: whiteboard.apply,
+          at: { mark: a-1 },
+          upsertIds: [x-a1, x-v1, x-c1, x-c1-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-x-2,
+          type: whiteboard.apply,
+          at: { mark: a-2 },
+          upsertIds: [x-a2, x-v2, x-c2, x-c2-l],
+          drawMs: 2000,
+        }
+      - { id: draw-x-3, type: whiteboard.apply, at: { mark: a-3 }, upsertIds: [x-a3], drawMs: 700 }
+      - {
+          id: draw-x-3b,
+          type: whiteboard.apply,
+          at: { mark: a-3b },
+          upsertIds: [x-v3, x-c3, x-c3-l],
+          drawMs: 1500,
+        }
+
+  - id: draft
+    chapter: Component စာရင်း မူကြမ်း
+    narration: >
+      [[mark:d-close]] ခရီးဖော် အတွက် အပြည့်အစုံ ချရေးကြည့်ရအောင်။
+      [[mark:d-sel]] actor တစ်ယောက်စီ၊ သူ့ရဲ့ action နဲ့ တာဝန်ယူမယ့် component ဆိုပြီး သုံးတိုင် ခွဲရေးပါမယ်။
+      [[mark:type-passenger]] ခရီးသည်က ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးပြီး ငွေချေတယ်။ ဒီကနေ Search၊ Seat inventory နဲ့
+      Payment ကို ရပါတယ်။
+      [[mark:type-staff]] ကောင်တာ ဝန်ထမ်းရဲ့ action ကလည်း Seat inventory ဆီကိုပဲ ရောက်ပါတယ်။ actor နှစ်ယောက်က
+      component တစ်ခုတည်းကို သုံးတာက ကောင်းတဲ့ လက္ခဏာပါ။ app ဘက်နဲ့ ကောင်တာဘက်က ထိုင်ခုံ စည်းမျဉ်း တစ်ခုတည်းကို
+      သုံးရတော့မှာမို့ပါ။ ကားလိုင်းကတော့ ခရီးစဉ် တင်တာနဲ့ ရောင်းအား ကြည့်တာအတွက် Operator နဲ့ Report ကို ရပါတယ်။
+      [[mark:type-system]] system ကိုယ်တိုင် လုပ်တဲ့ အလုပ်တွေကနေ Ticket၊ Notification နဲ့ တနင်္လာနေ့တိုင်း
+      ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့ Settlement ကို ရပါတယ်။
+      [[mark:type-list]] ဝယ်တဲ့ လုပ်ငန်းစဉ်ကို ဆက်ပေးတဲ့ Booking ကိုပါ ထည့်လိုက်ရင် component ကိုးခု ရပါတယ်။ ဒါက
+      ပထမ မူကြမ်းပါ။
+      [[mark:d-teams]] ဒီ စာရင်း ရှိပြီဆိုရင် အောင်အောင် ရဲ့ မေးခွန်းကို ဖြေလို့ ရပါပြီ။ team အသစ်တွေကို
+      အလွှာအလိုက် မဟုတ်ဘဲ၊ ဆက်စပ်တဲ့ component အစုလိုက် ခွဲပေးပါမယ်။ Booking နဲ့ Seat inventory လို အတူ ပြောင်းတတ်တဲ့ component တွေကိုတော့ team
+      တစ်ခုတည်းကို ပေးပါမယ်။ ဒါဆိုရင် team တစ်ခုက feature တစ်ခုကို အစကနေ
+      အဆုံးအထိ ကိုယ်တိုင် ပြီးအောင် လုပ်နိုင်ပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - { id: close-x, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-x },
+          path: notebook/11-components.md,
+        }
+      - id: sel-head
+        type: editor.select
+        at: { mark: d-sel }
+        target: { file: notebook/11-components.md, text: "| Actor | Action | Component |" }
+      - id: type-passenger
+        type: editor.type
+        at: { mark: type-passenger }
+        cadence: line-by-line
+        target: { file: notebook/11-components.md, after: "|---|---|---|\n" }
+        text: "| ခရီးသည် | ခရီးစဉ် ရှာတယ် | Search |\n| ခရီးသည် | ထိုင်ခုံ ရွေးပြီး ငွေချေတယ် | Seat inventory, Payment |\n"
+      - id: type-staff
+        type: editor.type
+        at: { mark: type-staff }
+        cadence: line-by-line
+        target: { file: notebook/11-components.md, after: "| Seat inventory, Payment |\n" }
+        text: "| ကောင်တာ ဝန်ထမ်း | ထိုင်ခုံ ရောင်းတယ် | Seat inventory |\n| ကားလိုင်း | ခရီးစဉ် တင်တယ်၊ ရောင်းအား ကြည့်တယ် | Operator, Report |\n"
+      - id: type-system
+        type: editor.type
+        at: { mark: type-system }
+        cadence: line-by-line
+        target: { file: notebook/11-components.md, after: "| Operator, Report |\n" }
+        text: "| system | လက်မှတ် ထုတ်ပြီး SMS ပို့တယ် | Ticket, Notification |\n| system | တနင်္လာနေ့တိုင်း ငွေစာရင်း ရှင်းတယ် | Settlement |\n"
+      - id: type-list
+        type: editor.type
+        at: { mark: type-list }
+        cadence: line-by-line
+        target: { file: notebook/11-components.md, after: "| Settlement |\n" }
+        text: "\n## Component စာရင်း (မူကြမ်း 1)\n\nSearch · Booking · Seat inventory · Payment · Ticket · Notification · Operator · Report · Settlement\n"
+      - id: expect-list
+        type: expect.file
+        at: { afterAction: type-list }
+        path: notebook/11-components.md
+        contains: "Search · Booking · Seat inventory · Payment · Ticket · Notification · Operator · Report · Settlement\n"
+
+  - id: loop
+    chapter: တစ်ခါတည်းနဲ့ မပြီးတဲ့ အလုပ်
+    narration: >
+      [[mark:l-open]] ပထမ မူကြမ်းက ဘယ်တော့မှ အပြီးသတ် မဟုတ်ပါဘူး။ component ရှာတာက အဆင့် လေးဆင့်ကို ပတ်ချာလည်
+      လုပ်ရတဲ့ အလုပ်ပါ။
+      [[mark:l-1]] ပထမ အဆင့်က အခုလို မူကြမ်း စာရင်း တစ်ခု ချလိုက်တာပါ။
+      [[mark:l-2]] ဒုတိယ အဆင့်မှာ လှလှ ဆီက requirement တွေကို တစ်ခုချင်း ယူပြီး၊ ဘယ် component က တာဝန်ယူမလဲ
+      ခွဲပေးကြည့်ပါတယ်။ ဘယ် component မှာမှ မဆံ့တဲ့ requirement ကို တွေ့ရင် component တစ်ခု လိုနေသေးတာပါ။ component
+      တစ်ခုတည်းမှာ အရမ်း စုပြုံနေရင်တော့ ခွဲဖို့ လိုပါပြီ။
+      [[mark:l-3]] တတိယ အဆင့်မှာ component တစ်ခုစီက ဘယ်လောက် ကောင်းကောင်း အလုပ်လုပ်နိုင်ရမလဲ ဆိုတာကို စစ်ပါတယ်။
+      ဥပမာ Search က သင်္ကြန် လက်မှတ် ဖွင့်တဲ့နေ့မှာ ၁၅ ဆ ဝင်လာတာကို ခံနိုင်ရပါမယ်။ Settlement ကတော့ တစ်ပတ်မှာ
+      တစ်ခါပဲ run ပေမဲ့ ငွေစာရင်း တစ်ပြားမှ မမှားရပါဘူး။ လိုအပ်ချက် ဒီလောက် ကွာတဲ့ နှစ်ခုကို component
+      တစ်ခုတည်းထဲမှာ ထည့်ထားလို့ မသင့်တော်ပါဘူး။
+      [[mark:l-4]] စတုတ္ထ အဆင့်မှာ တွေ့ရတာတွေအတိုင်း ခွဲတာ၊ ပေါင်းတာ၊ နာမည် ပြောင်းတာတွေ လုပ်ပြီး ပထမ အဆင့်ကို
+      ပြန်သွားပါတယ်။ feature အသစ် လာတိုင်း ဒီ ပတ်လမ်းကို တစ်ပတ် ပြန်လှည့်ရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: show-loop,
+          type: slide.show,
+          at: { mark: l-open, offsetMs: -1200 },
+          slideId: component-loop,
+        }
+      - { id: point-loop-1, type: slide.point, at: { mark: l-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-loop-2, type: slide.point, at: { mark: l-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-loop-3, type: slide.point, at: { mark: l-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-loop-4, type: slide.point, at: { mark: l-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မူကြမ်းကို ကြည့်ပြီး မောင်မောင် က နာမည် တစ်ခု ပြင်ချင်ပါတယ်။
+      [[mark:q-ctx]] Seat inventory အစား Seat manager လို့ ခေါ်ပြီး၊ seat table ထဲက row တွေကို ထည့်တာ၊ ဖတ်တာ၊
+      ပြင်တာ၊ ဖျက်တာ လေးမျိုးကိုပဲ လုပ်ပေးတဲ့ component အဖြစ် ထားမယ် ဆိုတာပါ။ ဒါက ကောင်းတဲ့ component ဖြစ်မလား။
+      [[mark:q-a]] ပထမ အဖြေက ကောင်းတယ် ဆိုတာပါ။ table တစ်ခုကို component တစ်ခုက ပိုင်တာမို့ ရှင်းတယ်လို့
+      ယူဆတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက မကောင်းဘူး ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ မကောင်းဘူး ဆိုတာပါ။ ဘာကြောင့်လဲဆိုတော့ အဲဒါက component မဟုတ်ဘဲ၊
+      နာမည်တပ်ထားတဲ့ table တစ်ခုပဲ ဖြစ်နေလို့ပါ။ row ကို ဖတ်ရေးရုံပဲ လုပ်ပေးရင်၊ ခုံကို ဘယ်အချိန် ထိန်းမလဲ၊
+      ဘယ်အချိန် ပြန်လွှတ်မလဲ ဆိုတဲ့ စည်းမျဉ်းတွေက ခေါ်သုံးတဲ့ နေရာ အသီးသီးမှာ ပြန့်နေဦးမှာပါ။
+      [[mark:q-test]] component ကို table ကနေ မရှာဘဲ action ကနေ ရှာရတာ ဒါကြောင့်ပါ။ ထိုင်ခုံအတွက်ဆိုရင် ထိန်းတာ၊
+      ရောင်းတာ၊ ပြန်လွှတ်တာ ဆိုတဲ့ လုပ်ဆောင်ချက်တွေကိုက component ပါ။ table တစ်ခုကို component တစ်ခု လုပ်မိတာက
+      အဖြစ်များတဲ့ ထောင်ချောက် တစ်ခုပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-loop, type: slide.close, at: { mark: quiz } }
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { afterAction: close-loop },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-ctx,
+          type: whiteboard.apply,
+          at: { mark: q-ctx },
+          upsertIds: [q-ctx],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-test,
+          type: whiteboard.apply,
+          at: { mark: q-test },
+          upsertIds: [q-t1, q-t2],
+          drawMs: 1600,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] ဒါကို မူကြမ်းထဲမှာ တာဝန် တစ်ကြောင်းအဖြစ် မှတ်ထားလိုက်ပါမယ်။
+      [[mark:type-seat]] Seat inventory ရဲ့ တာဝန်က ခုံကို ထိန်းတာ၊ ရောင်းတာနဲ့ ပြန်လွှတ်တာပါ။ component တစ်ခုစီအတွက်
+      ဒီလို တစ်ကြောင်း ရေးကြည့်ရင်၊ table ကို နာမည်တပ်ထားရုံ ဖြစ်နေတဲ့ component တွေကို ချက်ချင်း မြင်ရပါတယ်။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system ရဲ့ အပိုင်း တစ်ခုကို ရွေးပါ။
+      ပြီးရင် ဒီ table ထဲမှာ အဲဒီ အပိုင်းကို သုံးတဲ့ actor တွေနဲ့ သူတို့ရဲ့ action တွေကို ရေးပြီး၊ action တစ်ခုစီကို
+      ဘယ် component က တာဝန်ယူလဲ ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] တာဝန်ယူမယ့် component ကို ရှာမတွေ့တဲ့ action တစ်ခုခု ထွက်လာရင်၊ အဲဒါက ကိုယ့် system မှာ နာမည်
+      မပေးရသေးတဲ့ component ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-seat
+        type: editor.type
+        at: { mark: type-seat }
+        cadence: line-by-line
+        target: { file: notebook/11-components.md, after: "· Operator · Report · Settlement\n" }
+        text: "\n- Seat inventory ရဲ့ တာဝန်: ခုံကို ထိန်း၊ ရောင်း၊ ပြန်လွှတ် (table ကို ဖတ်ရေးရုံ မဟုတ်)\n"
+      - id: sel-turn
+        type: editor.select
+        at: { mark: turn-you }
+        target: { file: notebook/11-components.md, text: "| Actor | Action | Component |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ component ဆိုတာ system ရဲ့ လုပ်ငန်း တစ်ခုကို တာဝန်ယူတဲ့ အစိတ်အပိုင်းပါ။ အပေါ်ဆုံး
+      အဆင့်မှာ အလွှာအလိုက် ဖြစ်ဖြစ်၊ domain အလိုက် ဖြစ်ဖြစ် ခွဲနိုင်ပြီး၊ အဲဒီ ရွေးချယ်မှုက team ကို ဘယ်လို ခွဲမလဲ
+      ဆိုတာကိုပါ သတ်မှတ်ပေးပါတယ်။ component တွေကိုတော့ table ကနေ မဟုတ်ဘဲ၊ ဘယ်သူက ဘာလုပ်လဲ ဆိုတာကနေ ရှာပြီး၊
+      မူကြမ်းကို ထပ်ခါထပ်ခါ ပြန်ပြင်ရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ခရီးဖော် က team သုံးခု ဖြစ်လာတဲ့ အချိန်ကို ရောက်ပါမယ်။ အဲဒီမှာ system က
+      ဘာလုပ်ပေးလဲ မဟုတ်ဘဲ၊ ဘယ်လောက် ကောင်းကောင်း လုပ်ပေးနိုင်ရမလဲ ဆိုတဲ့ architecture characteristic ကို
+      လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
