@@ -1,0 +1,714 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-56-your-path
+  title: "Architect Path 56: Architect ခရီးလမ်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/56-my-path.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/56-my-path.md: |
+        # ကိုယ့် ခရီးလမ်း · လာမယ့် 3 လ
+
+        ကိုယ် အခု ရှိတဲ့ အဆင့်: စတင်သူ / လုပ်ကိုင်သူ / ဦးဆောင်သူ
+
+        ## ရေးမယ့် artefact တစ်ခု
+        ရာထူး မလိုဘဲ စလို့ရတာ: ADR တစ်ခု · characteristic တစ်ခုကို တိုင်း · risk session တစ်ခု · context view တစ်ပုံ
+
+        ## စမယ့် အလေ့အထ တစ်ခု
+
+        ## လုပ်မယ့် စကားဝိုင်း တစ်ခု
+
+        ## အမြဲ ယူသွားဖို့ သုံးချက်
+        - အကောင်းဆုံး မရှိဘူး၊ ဒီ အခြေအနေအတွက် trade-off ပဲ ရှိတယ်
+        - ဘယ်လို ဆိုတာထက် ဘာကြောင့် ဆိုတာက ပိုအရေးကြီးတယ်
+        - architect ရဲ့ ထွက်ကုန်က တခြားသူ နားလည်ပြီး လုပ်နိုင်တဲ့ ဆုံးဖြတ်ချက်
+
+        ## ပိုနက်နက် လေ့လာဖို့ စာအုပ် 10 အုပ်
+        1. Fundamentals of Software Architecture, 2nd ed. (Richards, Ford)
+        2. Balancing Coupling in Software Design (Khononov)
+        3. Learning Domain-Driven Design (Khononov)
+        4. Designing Data-Intensive Applications, 2nd ed. (Kleppmann, Riccomini)
+        5. Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)
+        6. Release It!, 2nd ed. (Nygard)
+        7. Building Evolutionary Architectures, 2nd ed. (Ford, Parsons, Kua, Sadalage)
+        8. Facilitating Software Architecture (Harmel-Law)
+        9. The Software Architect Elevator (Hohpe)
+        10. The Pragmatic Programmer, 20th Anniversary ed. (Thomas, Hunt)
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: books-1
+      contentType: html
+      name: စာအုပ်များ (1)
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ပိုနက်နက် လေ့လာဖို့ စာအုပ်များ (1)</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term wide blue">Fundamentals</span>architect အလုပ် တစ်ခုလုံးရဲ့ အခြေခံ</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term wide blue">Balancing Coupling</span>coupling ကို တိုင်းပြီး ချိန်ညှိဖို့</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term wide orange">Learning DDD</span>business နဲ့ ကိုက်အောင် ပိုင်းခြားဖို့</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term wide orange">Data-Intensive</span>data နဲ့ ဆိုင်တဲ့ ဆုံးဖြတ်ချက်တွေအတွက်</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term wide orange">The Hard Parts</span>system ကို service တွေအဖြစ် ခွဲတဲ့အခါ</div>
+        </div>
+    - id: books-2
+      contentType: html
+      name: စာအုပ်များ (2)
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ပိုနက်နက် လေ့လာဖို့ စာအုပ်များ (2)</div>
+          <div class="row" style="top: 26vh"><span class="num">6</span><span class="term wide orange">Release It!</span>production မှာ မပြိုအောင် ဆောက်ဖို့</div>
+          <div class="row" style="top: 38vh"><span class="num">7</span><span class="term wide green">Evolutionary Arch.</span>ပြောင်းလဲရင်း အရေးကြီးတာ မပျက်အောင်</div>
+          <div class="row" style="top: 50vh"><span class="num">8</span><span class="term wide green">Facilitating Arch.</span>ဆုံးဖြတ်ခွင့်ကို team တွေဆီ ဖြန့်ဖို့</div>
+          <div class="row" style="top: 62vh"><span class="num">9</span><span class="term wide green">Architect Elevator</span>ထိပ်ပိုင်းနဲ့ စက်ခန်းကို ဆက်ပေးဖို့</div>
+          <div class="row" style="top: 74vh"><span class="num">10</span><span class="term wide violet">Pragmatic Prog.</span>နေ့စဉ် အလေ့အထနဲ့ စဉ်းစားပုံ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the path as a ladder of three stages, the first at the bottom.
+    # Stages are neutral (white); orange is the stage ကိုယ် has reached in the
+    # story and the question the board asks the learner.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "Architect ခရီးလမ်း",
+        fontSize: 36,
+      }
+    - { id: p-r1, kind: rectangle, x: 270, y: 490, width: 820, height: 75 }
+    - { id: p-r1-n, kind: text, x: 290, y: 510, width: 170, height: 35, text: "စတင်သူ", fontSize: 28 }
+    - {
+        id: p-r1-t,
+        kind: text,
+        x: 470,
+        y: 510,
+        width: 610,
+        height: 35,
+        text: "trade-off · အကျယ် · structure",
+        fontSize: 28,
+      }
+    - { id: p-r2, kind: rectangle, x: 270, y: 400, width: 820, height: 75 }
+    - {
+        id: p-r2-n,
+        kind: text,
+        x: 290,
+        y: 420,
+        width: 170,
+        height: 35,
+        text: "လုပ်ကိုင်သူ",
+        fontSize: 28,
+      }
+    - {
+        id: p-r2-t,
+        kind: text,
+        x: 470,
+        y: 420,
+        width: 610,
+        height: 35,
+        text: "characteristic · style · domain · data",
+        fontSize: 28,
+      }
+    - {
+        id: p-r3,
+        kind: rectangle,
+        x: 270,
+        y: 310,
+        width: 820,
+        height: 75,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: p-r3-n,
+        kind: text,
+        x: 290,
+        y: 330,
+        width: 170,
+        height: 35,
+        text: "ဦးဆောင်သူ",
+        fontSize: 28,
+      }
+    - {
+        id: p-r3-t,
+        kind: text,
+        x: 470,
+        y: 330,
+        width: 610,
+        height: 35,
+        text: "governance · လူ · အဖွဲ့အစည်း",
+        fontSize: 28,
+      }
+    - {
+        id: p-legs,
+        kind: text,
+        x: 270,
+        y: 240,
+        width: 800,
+        height: 35,
+        text: "အဆင့်တိုင်းမှာ: skill + impact + leadership",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-where,
+        kind: text,
+        x: 270,
+        y: 590,
+        width: 600,
+        height: 35,
+        text: "ကိုယ် အခု ဘယ်အဆင့်မှာလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the recap: the same morning seven years apart. Years and team
+    # counts are neutral, violet is the passing of time, red what went wrong in
+    # year 2, green what holds in year 7.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်",
+        fontSize: 36,
+      }
+    - { id: s-y2, kind: text, x: 290, y: 240, width: 120, height: 35, text: "နှစ် 2", fontSize: 28 }
+    - {
+        id: s-t1,
+        kind: text,
+        x: 270,
+        y: 340,
+        width: 180,
+        height: 35,
+        text: "team 1 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: s-red1,
+        kind: text,
+        x: 270,
+        y: 430,
+        width: 350,
+        height: 35,
+        text: "app 2 နာရီ နှေး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-red2,
+        kind: text,
+        x: 270,
+        y: 485,
+        width: 350,
+        height: 35,
+        text: "312 ခုံ နှစ်ခါ ရောင်းမိ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 270,
+        y: 285,
+        width: 820,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: s-y3, kind: text, x: 500, y: 240, width: 120, height: 35, text: "နှစ် 3", fontSize: 28 }
+    - {
+        id: s-t3,
+        kind: text,
+        x: 480,
+        y: 340,
+        width: 180,
+        height: 35,
+        text: "team 3 ခု",
+        fontSize: 28,
+      }
+    - { id: s-y5, kind: text, x: 710, y: 240, width: 120, height: 35, text: "နှစ် 5", fontSize: 28 }
+    - {
+        id: s-t6,
+        kind: text,
+        x: 690,
+        y: 340,
+        width: 180,
+        height: 35,
+        text: "team 6 ခု",
+        fontSize: 28,
+      }
+    - { id: s-y7, kind: text, x: 920, y: 240, width: 120, height: 35, text: "နှစ် 7", fontSize: 28 }
+    - {
+        id: s-t12,
+        kind: text,
+        x: 900,
+        y: 340,
+        width: 180,
+        height: 35,
+        text: "team 12 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: s-g1,
+        kind: text,
+        x: 700,
+        y: 430,
+        width: 350,
+        height: 35,
+        text: "app မနှေးဘူး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-g2,
+        kind: text,
+        x: 700,
+        y: 485,
+        width: 350,
+        height: 35,
+        text: "နှစ်ခါ ရောင်းမိတဲ့ ခုံ 0",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8156
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: path
+    chapter: ခုနစ်နှစ် ခရီးလမ်း
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ အဖွဲ့အစည်း တစ်ခုကို system တစ်ခုလို ကြည့်ပြီး၊ လိုချင်တဲ့ architecture အတိုင်း team တွေကို
+      ဖွဲ့ပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:p-open]] ဒီ lesson ကတော့ ဒီ course ရဲ့ နောက်ဆုံး lesson ပါ။ ခရီးဖော် မှာ ခုနစ်နှစ် ရှိပါပြီ။ developer
+      ခြောက်ယောက်ထဲက senior developer တစ်ယောက်အနေနဲ့ စခဲ့တဲ့ ကိုယ်က၊ အခု developer ၉၀ ရှိတဲ့ ကုမ္ပဏီရဲ့ chief
+      architect ပါ။ အဲဒီ ခရီးလမ်းကို ပြန်ကြည့်ရင် အဆင့် သုံးဆင့် ရှိပြီး၊ အဆင့် တစ်ခုစီက ကိုယ့်ဆီက မတူတဲ့ အရာကို
+      တောင်းဆိုပါတယ်။
+      [[mark:p-1]] ပထမ အဆင့်က စတင်သူ အဆင့်ပါ။ ဒီအဆင့်မှာ လိုတာက developer အမြင်ကနေ architect အမြင်ဆီ ကူးတာပါ။
+      ဆုံးဖြတ်ချက်တိုင်းရဲ့ trade off၊ ဆိုလိုတာက တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတာကို မြင်တတ်တာ၊ တစ်ခုတည်းကို နက်နက် သိတာအပြင် အများကြီးကို ကျယ်ကျယ် သိတာနဲ့၊
+      code ရဲ့ ဖွဲ့စည်းပုံကို အကဲဖြတ်တတ်တာတွေပါ။
+      [[mark:p-2]] ဒုတိယ အဆင့်က လက်တွေ့ လုပ်ကိုင်သူ အဆင့်ပါ။ ဒီအဆင့်က တောင်းဆိုတာက system တစ်ခုအတွက် တာဝန်ယူပြီး
+      ဆုံးဖြတ်တာပါ။ system က ဘယ်လောက် ကောင်းရမလဲ၊ ဘယ်ပုံစံနဲ့ ဖွဲ့မလဲ၊ business နဲ့ ကိုက်အောင် ဘယ်လို ပိုင်းမလဲ၊
+      data ကို ဘယ်လို ထားမလဲ ဆိုတာတွေပါ။
+      [[mark:p-3]] တတိယ အဆင့်က ဦးဆောင်သူ အဆင့်ပါ။ ဒီအဆင့်မှာတော့ ကိုယ်တိုင် ဆုံးဖြတ်တာ နည်းလာပြီး၊ တခြားသူတွေ
+      ကောင်းကောင်း ဆုံးဖြတ်နိုင်အောင် လုပ်ပေးရတာ များလာပါတယ်။ သဘောတူထားတာတွေ တကယ် လိုက်နာမနာ စောင့်ကြည့်တာ၊
+      လူတွေနဲ့ ညှိတာ၊ အဖွဲ့အစည်းကို ပုံဖော်တာတွေပါ။ ကိုယ် အခု ရောက်နေတာက ဒီအဆင့်ပါ။
+      [[mark:p-legs]] အဆင့် သုံးဆင့်လုံးမှာ အတူ ကြီးထွားရတဲ့ အရာ သုံးခု ရှိပါတယ်။ သိတာကို နေရာမှန်မှာ သုံးတတ်တဲ့
+      skill၊ business အတွက် တကယ် အကျိုးရှိသွားတဲ့ impact နဲ့၊ တခြားသူတွေကို လက်တွဲခေါ်တဲ့ leadership ပါ။
+      [[mark:p-stop]] တစ်ခုတည်းကိုပဲ ကြီးအောင် လုပ်ရင် ခရီးက အဲဒီမှာ ရပ်သွားတတ်ပါတယ်။ သိတာ များပေမဲ့ အကျိုး မထွက်ရင်
+      စာတွေ့ပဲ ဖြစ်နေမှာပါ။ အကျိုးထွက်ပေမဲ့ တခြားသူကို မခေါ်ရင်လည်း၊ ကိုယ်တစ်ယောက်တည်း လုပ်နိုင်သလောက်မှာပဲ
+      ရပ်နေမှာပါ။
+      [[mark:p-where]] ကိုယ် အခု ဘယ်အဆင့်မှာလဲ ဆိုတာက ရာထူးနဲ့ မဆိုင်ပါဘူး။ ကိုယ် နေ့စဉ် ချနေတဲ့ ဆုံးဖြတ်ချက်တွေက
+      ဘယ်လောက် ကျယ်လဲ ဆိုတာနဲ့ပဲ ဆိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          open: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-1,
+          type: whiteboard.apply,
+          at: { mark: p-1 },
+          upsertIds: [p-r1, p-r1-n, p-r1-t],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-p-2,
+          type: whiteboard.apply,
+          at: { mark: p-2 },
+          upsertIds: [p-r2, p-r2-n, p-r2-t],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-p-3,
+          type: whiteboard.apply,
+          at: { mark: p-3 },
+          upsertIds: [p-r3, p-r3-n, p-r3-t],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-p-legs,
+          type: whiteboard.apply,
+          at: { mark: p-legs },
+          upsertIds: [p-legs],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-p-where,
+          type: whiteboard.apply,
+          at: { mark: p-where },
+          upsertIds: [p-where],
+          drawMs: 1200,
+        }
+
+  - id: no-title
+    chapter: ရာထူး မလိုဘဲ စလို့ရတယ်
+    narration: >
+      [[mark:d-close]] ဒါဆို ရှေ့ဆက်ဖို့ ဘာလုပ်ရမလဲ။ လာမယ့် သုံးလအတွက် အစီအစဉ် တိုတို တစ်ခု ရေးကြည့်ရအောင်။
+      သုံးကြောင်းပဲ ပါပါတယ်။ ရေးမယ့် artefact တစ်ခု၊ စမယ့် အလေ့အထ တစ်ခုနဲ့ လုပ်မယ့် စကားဝိုင်း တစ်ခုပါ။
+      [[mark:sel-options]] ပထမ စာကြောင်းအတွက် သိထားရမှာက architect အလုပ်ကို လေ့ကျင့်ဖို့ architect ဆိုတဲ့ ရာထူး
+      မလိုဘူး ဆိုတာပါ။ ဒီ course ထဲမှာ ရေးခဲ့တဲ့ စာရွက်စာတမ်းတွေကို ဘယ် developer မဆို မနက်ဖြန်ကစပြီး ရေးလို့
+      ရပါတယ်။
+      [[mark:options-2]] ကိုယ့် team ချခဲ့တဲ့ ဆုံးဖြတ်ချက် တစ်ခုကို ဘာကြောင့်လဲ ဆိုတာနဲ့အတူ ရေးမှတ်တာ၊ system ရဲ့
+      အရည်အသွေး တစ်ခုကို ကိန်းဂဏန်းနဲ့ တိုင်းကြည့်တာ၊ ဘာတွေ မှားနိုင်လဲ ဆိုတာကို team နဲ့အတူ ထိုင်စစ်တာ၊ ကိုယ့်
+      system က ဘယ်သူတွေနဲ့ ဆက်နေလဲ ဆိုတဲ့ ပုံတစ်ပုံ ဆွဲတာတွေပါ။ ဒါတွေကို လုပ်နေတဲ့သူကို လူတွေက architect လို့
+      အလိုလို မြင်လာတတ်ကြပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-path, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-path },
+          path: notebook/56-my-path.md,
+        }
+      - id: sel-options
+        type: editor.select
+        at: { mark: sel-options }
+        target:
+          {
+            file: notebook/56-my-path.md,
+            text: "ရာထူး မလိုဘဲ စလို့ရတာ: ADR တစ်ခု · characteristic တစ်ခုကို တိုင်း · risk session တစ်ခု · context view တစ်ပုံ",
+          }
+
+  - id: plan
+    chapter: သုံးလအတွက် အစီအစဉ်
+    narration: >
+      [[mark:type-artefact]] ကိုယ့်ရဲ့ လာမယ့် သုံးလအတွက် artefact ကတော့ architecture decision record၊ အတိုကောက်
+      ADR တစ်ခုပါ။ ADR ဆိုတာ ဘာကို ဘာကြောင့်
+      ဆုံးဖြတ်ခဲ့လဲ ရေးမှတ်ထားတဲ့ စာတိုလေးပါ။ ခရီးသည်တွေရဲ့ data ထဲက ဘာတွေကို စုထားမလဲ၊ ဘယ်လောက် ကြာကြာ
+      သိမ်းမလဲ ဆိုတဲ့ ဆုံးဖြတ်ချက်အတွက်ပါ။
+      [[mark:data]] အဆင့် မြင့်လာလေ ကိုယ့် ဆုံးဖြတ်ချက်က လူ ပိုများများကို ထိလေပါ။ ခရီးဖော် မှာ ခရီးသည် သန်းနဲ့ချီရဲ့
+      ဖုန်းနံပါတ်နဲ့ ခရီးသွား မှတ်တမ်းတွေ ရှိနေပါပြီ။ စုထားတဲ့ ကိုယ်ရေး အချက်အလက်ဆိုတာ ပိုင်ဆိုင်မှု တစ်ခုတည်း
+      မဟုတ်ဘဲ၊ ပေါက်ကြားသွားရင် ကိုယ်တို့ ခံရမယ့် တာဝန် တစ်ခုလည်း ဖြစ်ပါတယ်။ မလိုတာကို မစုဘဲ၊ မလိုတော့တာကို
+      ဖျက်ပစ်တာက system က ဝန်ဆောင်မှုပေးနေတဲ့ လူတွေကို ကာကွယ်တာပါ။ ဒါကို စဉ်းစားပေးရမယ့်သူတွေထဲမှာ architect လည်း ပါပါတယ်။
+      [[mark:type-habit]] ဒုတိယ စာကြောင်းက အလေ့အထပါ။ ခုနစ်နှစ်အတွင်း ကိုယ် သိခဲ့တာတွေထဲက အများကြီးက ဟောင်းသွားပါပြီ။
+      ကိုယ် ကျွမ်းကျင်ခဲ့တဲ့ web framework ကို အခု team တွေ မသုံးတော့ပါဘူး။ technology အကြောင်း သိထားတာတွေက
+      အချိန်တန်ရင် ဟောင်းတာမို့၊ တစ်ခါ သင်ပြီး ပြီးသွားတာ မဟုတ်ဘဲ နေ့စဉ် နည်းနည်းစီ ဖြည့်နေရပါတယ်။ ကိုယ်ကတော့
+      မနက်တိုင်း မိနစ် ၂၀ ဖတ်တဲ့ အလေ့အထကို ဆက်ထားပြီး၊ သုံးလတစ်ခါ ကိုယ်ပိုင် radar ကို ပြန်စစ်ပါမယ်။
+      [[mark:type-talk]] တတိယ စာကြောင်းက စကားဝိုင်းပါ။ architecture ကို တစ်ယောက်တည်း စဉ်းစားပြီး မရပါဘူး။
+      ကိုယ့်အတွက်ကတော့ မကြာသေးခင်က ရောက်လာတဲ့ architect အသစ်နဲ့ အပတ်စဉ် တစ်နာရီ ထိုင်ပြီး၊ သူရေးတဲ့ ADR ကို
+      အတူ ဖတ်ဖို့ပါ။ ကိုယ် မရှိတော့တဲ့နေ့မှာ ကိုယ့်နေရာကို ယူနိုင်မယ့်သူကို ပြုစုပေးတာက ဦးဆောင်သူ အဆင့်ရဲ့
+      အရေးကြီးတဲ့ အလုပ်တွေထဲက တစ်ခုပါ။
+      [[mark:talk-2]] စတင်သူ အဆင့်မှာဆိုရင်တော့ ဒီ စာကြောင်းက ကိုယ့်ထက် အတွေ့အကြုံ ရှိတဲ့သူ တစ်ယောက်ကို မေးခွန်း
+      တစ်ခု သွားမေးဖို့ ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - id: type-artefact
+        type: editor.type
+        at: { mark: type-artefact }
+        cadence: line-by-line
+        target: { file: notebook/56-my-path.md, after: "context view တစ်ပုံ\n" }
+        text: "- ခရီးသည် data ဘာတွေ စုမလဲ၊ ဘယ်လောက်ကြာ သိမ်းမလဲ ဆိုတဲ့ ADR တစ်ခု\n"
+      - id: type-habit
+        type: editor.type
+        at: { mark: type-habit }
+        cadence: line-by-line
+        target: { file: notebook/56-my-path.md, after: "## စမယ့် အလေ့အထ တစ်ခု\n" }
+        text: "- မနက်တိုင်း 20 မိနစ် ဖတ်မယ်၊ 3 လတစ်ခါ ကိုယ်ပိုင် radar ကို ပြန်စစ်မယ်\n"
+      - id: type-talk
+        type: editor.type
+        at: { mark: type-talk }
+        cadence: line-by-line
+        target: { file: notebook/56-my-path.md, after: "## လုပ်မယ့် စကားဝိုင်း တစ်ခု\n" }
+        text: "- architect အသစ်နဲ့ အပတ်စဉ် 1 နာရီ ထိုင်ပြီး သူ့ ADR ကို အတူ ဖတ်မယ်\n"
+      - id: expect-plan
+        type: expect.file
+        at: { afterAction: type-talk }
+        path: notebook/56-my-path.md
+        contains: "- ခရီးသည် data ဘာတွေ စုမလဲ၊ ဘယ်လောက်ကြာ သိမ်းမလဲ ဆိုတဲ့ ADR တစ်ခု\n"
+
+  - id: books
+    chapter: စာအုပ် ဆယ်အုပ်
+    narration: >
+      [[mark:b-open]] ဒီ course က architecture လောကမှာ လူသိများတဲ့ စာအုပ် ဆယ်အုပ်ထဲက အတွေးအခေါ်တွေကို အခြေခံထားတယ်လို့
+      ပထမ lesson မှာ ပြောခဲ့ပါတယ်။ ပိုနက်နက် လေ့လာချင်တဲ့အခါ ဘယ်စာအုပ်ကို ဘယ်အချိန်မှာ ဖတ်သင့်လဲ ကြည့်ရအောင်။
+      အဆင့် သုံးဆင့်အလိုက် စီထားပါတယ်။
+      [[mark:b-1]] ပထမ စာအုပ်က architect အလုပ် တစ်ခုလုံးကို ခြုံပြီး ပြပေးတာမို့ အရင်ဆုံး ဖတ်ဖို့ သင့်တော်ပါတယ်။
+      [[mark:b-2]] ဒုတိယက code အပိုင်းတွေ တစ်ခုနဲ့တစ်ခု ဘယ်လောက် ချည်နှောင်နေလဲ ဆိုတာကို တိုင်းပြီး
+      ချိန်ညှိချင်တဲ့အခါအတွက်ပါ။
+      [[mark:b-3]] တတိယက system ကို business ရဲ့ ပုံစံနဲ့ ကိုက်အောင် ပိုင်းခြားချင်တဲ့အခါ ဖတ်ရမှာပါ။
+      [[mark:b-4]] စတုတ္ထက data ကို ဘယ်လို သိမ်းမလဲ၊ ဘယ်လို မိတ္တူပွားမလဲ ဆိုတဲ့ ဆုံးဖြတ်ချက်တွေအတွက်ပါ။
+      [[mark:b-5]] ငါးအုပ်မြောက်ကတော့ system ကို service တွေအဖြစ် ခွဲတော့မယ့် အချိန်မှာ ဖတ်ဖို့ပါ။
+      [[mark:b-6]] ခြောက်အုပ်မြောက်က production မှာ အပိုင်း တစ်ခု ပျက်တာနဲ့ အားလုံး မပြိုအောင် ဘယ်လို ဆောက်မလဲ ဆိုတာပါ။
+      [[mark:b-7]] ခုနစ်အုပ်မြောက်က architecture ကို အချိန်နဲ့အမျှ ပြောင်းရင်း၊ အရေးကြီးတာတွေ မပျက်အောင် ထိန်းပုံပါ။
+      [[mark:b-8]] ရှစ်အုပ်မြောက်က ဆုံးဖြတ်ခွင့်ကို team တွေဆီ ဘယ်လို စိတ်ချလက်ချ ဖြန့်ပေးမလဲ ဆိုတာပါ။
+      [[mark:b-9]] ကိုးအုပ်မြောက်က ကုမ္ပဏီရဲ့ ထိပ်ပိုင်းနဲ့ စက်ခန်းကို ဆက်ပေးတဲ့ architect အကြောင်းပါ။
+      [[mark:b-10]] နောက်ဆုံး တစ်အုပ်ကတော့ architect ဖြစ်ဖြစ်၊ developer ဖြစ်ဖြစ် နေ့စဉ် လိုတဲ့ အလေ့အထနဲ့
+      စဉ်းစားပုံတွေအတွက်ပါ။
+      [[mark:b-end]] စာအုပ်တွေရဲ့ နာမည် အပြည့်အစုံကို မှတ်စုရဲ့ အောက်ဆုံးမှာ ထည့်ထားပါတယ်။ ဆယ်အုပ်လုံးကို တစ်ခါတည်း
+      ဖတ်ဖို့ မလိုပါဘူး။ ကိုယ် အခု ကြုံနေတဲ့ ပြဿနာနဲ့ ဆိုင်တဲ့ တစ်အုပ်ကနေ စပါ။ ဖတ်တဲ့အခါလည်း ရေးထားတာက ဘယ်လို အခြေအနေအတွက်
+      မှန်တာလဲ၊ ကိုယ့် အခြေအနေနဲ့ တူရဲ့လား ဆိုတာကို အမြဲ မေးပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Balancing Coupling in Software Design (Khononov)",
+          url: "https://www.informit.com/store/balancing-coupling-in-software-design-universal-design-9780137353484",
+        }
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: show-books-1,
+          type: slide.show,
+          at: { mark: b-open, offsetMs: -1200 },
+          slideId: books-1,
+        }
+      - { id: point-b-1, type: slide.point, at: { mark: b-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-b-2, type: slide.point, at: { mark: b-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-b-3, type: slide.point, at: { mark: b-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-b-4, type: slide.point, at: { mark: b-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-b-5, type: slide.point, at: { mark: b-5 }, target: { x: 0.15, y: 0.83 } }
+      - { id: show-books-2, type: slide.show, at: { mark: b-6, offsetMs: -1200 }, slideId: books-2 }
+      - { id: point-b-6, type: slide.point, at: { mark: b-6 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-b-7, type: slide.point, at: { mark: b-7 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-b-8, type: slide.point, at: { mark: b-8 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-b-9, type: slide.point, at: { mark: b-9 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-b-10, type: slide.point, at: { mark: b-10 }, target: { x: 0.15, y: 0.83 } }
+
+  - id: recap
+    chapter: သင်္ကြန် မနက်ကို ပြန်ကြည့်ခြင်း
+    narration: >
+      [[mark:s-open]] ဒါဆို ပြန်ချုပ်ရရင်၊ ဒီ course တစ်ခုလုံးကို ခရီးဖော် ရဲ့ ဇာတ်လမ်းနဲ့ ပြန်ကြည့်ရအောင်။
+      [[mark:s-then]] ကုမ္ပဏီ သက်တမ်း နှစ်နှစ်မှာ သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်ကို မှတ်မိမှာပါ။ ဝင်သုံးသူ ၁၅ ဆ
+      တက်လာတော့ app က နှစ်နာရီ နှေးပြီး၊ ထိုင်ခုံ ၃၁၂ ခုံကို နှစ်ခါ ရောင်းမိခဲ့ပါတယ်။ မှားနေတဲ့ code တစ်ကြောင်းမှ
+      မရှိခဲ့ပါဘူး။ အဲဒီလို နေ့မျိုးမှာ system က ဘယ်လို ပြုမူရမလဲ ဆိုတာကို ဘယ်သူမှ မဆုံးဖြတ်ခဲ့တာပါ။
+      [[mark:s-1]] အဲဒီနေ့ကစပြီး ကိုယ်တို့ ပထမဆုံး သင်ခဲ့တာက ဆုံးဖြတ်ချက်တိုင်းမှာ trade off ပါတယ် ဆိုတာနဲ့၊ code ကို
+      ပြောင်းရ လွယ်အောင် အပိုင်းတွေ ခွဲတာပါ။
+      [[mark:s-2]] team သုံးခု ဖြစ်လာတော့ system က ဘယ်လောက် ကောင်းရမလဲ ဆိုတာကို ကိန်းဂဏန်းနဲ့ သဘောတူပြီး၊ business
+      ရဲ့ ပုံစံအတိုင်း ပိုင်းခြားခဲ့ပါတယ်။
+      [[mark:s-3]] team ခြောက်ခု ဖြစ်လာတော့ data ကို ဘယ်မှာ ထားမလဲ၊ service တွေကို ဘယ်လို ခွဲမလဲ၊ ပျက်တဲ့အခါ
+      ဘယ်လို ခံမလဲ ဆိုတာတွေကို ဆုံးဖြတ်ခဲ့ပါတယ်။
+      [[mark:s-4]] team ၁၂ ခု ဖြစ်လာတော့ ကိုယ်တစ်ယောက်တည်း ဆုံးဖြတ်လို့ မနိုင်တော့ဘဲ၊ တခြားသူတွေ ကောင်းကောင်း
+      ဆုံးဖြတ်နိုင်အောင် လုပ်ပေးခဲ့ရပါတယ်။
+      [[mark:s-now]] ဒီနှစ် သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်မှာတော့ ဝင်သုံးသူက အဲဒီတုန်းကထက် အများကြီး
+      ပိုများပါတယ်။ ဒါပေမဲ့ app က မနှေးပါဘူး။ ထိုင်ခုံ တစ်ခုံကိုမှ နှစ်ခါ မရောင်းမိပါဘူး။
+      [[mark:s-me]] အဲဒီ မနက်မှာ ကိုယ် ဘာမှ ဝင်လုပ်စရာ မလိုခဲ့ပါဘူး။ team တွေက ကိုယ်တိုင် ကြည့်၊ ကိုယ်တိုင်
+      ဆုံးဖြတ်သွားကြတာပါ။ architect တစ်ယောက်ရဲ့ အလုပ် အောင်မြင်နေတဲ့ လက္ခဏာ တစ်ခုက အဲဒါပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-books, type: slide.close, at: { mark: s-open, offsetMs: -1200 } }
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-books },
+          open: true,
+          clear: true,
+          upsertIds: [s-title],
+        }
+      - {
+          id: draw-s-then,
+          type: whiteboard.apply,
+          at: { mark: s-then },
+          upsertIds: [s-y2, s-t1, s-red1, s-red2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-s-1,
+          type: whiteboard.apply,
+          at: { mark: s-1 },
+          upsertIds: [s-arrow],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-2,
+          type: whiteboard.apply,
+          at: { mark: s-2 },
+          upsertIds: [s-y3, s-t3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-3,
+          type: whiteboard.apply,
+          at: { mark: s-3 },
+          upsertIds: [s-y5, s-t6],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-4,
+          type: whiteboard.apply,
+          at: { mark: s-4 },
+          upsertIds: [s-y7, s-t12],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-now,
+          type: whiteboard.apply,
+          at: { mark: s-now },
+          upsertIds: [s-g1, s-g2],
+          drawMs: 1500,
+        }
+      - { id: point-s-12, type: whiteboard.point, at: { mark: s-me }, target: { assetId: s-t12 } }
+
+  - id: your-turn
+    chapter: ကိုယ့် ခရီးလမ်း
+    narration: >
+      [[mark:turn]] အခု နောက်ဆုံး အနေနဲ့ ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ မှတ်စုထဲမှာ ကိုယ် ရောက်နေတဲ့ အဆင့်ကို
+      အရင် ရွေးပါ။ ပြီးရင် ကိုယ့် project အတွက် သုံးကြောင်းကို ဖြည့်ပါ။ လာမယ့် သုံးလအတွင်း ရေးမယ့် artefact တစ်ခု၊ စမယ့် အလေ့အထ
+      တစ်ခု၊ လုပ်မယ့် စကားဝိုင်း တစ်ခုပါ။
+      [[mark:threads]] ဖြည့်တဲ့အခါ lesson တိုင်းမှာ ပါခဲ့တဲ့ အချက် သုံးချက်ကို ယူသွားပါ။
+      [[mark:th-1]] architecture မှာ အကောင်းဆုံးဆိုတာ မရှိပါဘူး။ ဒီ အခြေအနေအတွက် သင့်တော်တဲ့ trade off ပဲ ရှိပါတယ်။
+      [[mark:th-2]] ဘယ်လို လုပ်မလဲ ဆိုတာထက်၊ ဘာကြောင့် လုပ်တာလဲ ဆိုတာက ပိုအရေးကြီးပါတယ်။
+      [[mark:th-3]] architect ရဲ့ ထွက်ကုန်က ပုံတွေ မဟုတ်ဘဲ၊ တခြားသူတွေ နားလည်ပြီး လက်တွေ့ လုပ်နိုင်တဲ့
+      ဆုံးဖြတ်ချက်တွေပါ။
+      [[mark:bye]] ခရီးဖော် ရဲ့ ဇာတ်လမ်းက ဒီမှာ ပြီးပါပြီ။ ကိုယ့် ခရီးလမ်းကတော့ ကိုယ့် project ထဲမှာ ဆက်ရှိနေမှာပါ။
+      ဒီ course ကို အဆုံးအထိ လိုက်ပါခဲ့တဲ့အတွက် ကျေးဇူးတင်ပါတယ် ခင်ဗျာ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-story, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-stage
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target: { file: notebook/56-my-path.md, text: "ကိုယ် အခု ရှိတဲ့ အဆင့်: စတင်သူ / လုပ်ကိုင်သူ / ဦးဆောင်သူ" }
+      - id: sel-th-1
+        type: editor.select
+        at: { mark: th-1 }
+        target:
+          { file: notebook/56-my-path.md, text: "- အကောင်းဆုံး မရှိဘူး၊ ဒီ အခြေအနေအတွက် trade-off ပဲ ရှိတယ်" }
+      - id: sel-th-2
+        type: editor.select
+        at: { mark: th-2 }
+        target: { file: notebook/56-my-path.md, text: "- ဘယ်လို ဆိုတာထက် ဘာကြောင့် ဆိုတာက ပိုအရေးကြီးတယ်" }
+      - id: sel-th-3
+        type: editor.select
+        at: { mark: th-3 }
+        target:
+          {
+            file: notebook/56-my-path.md,
+            text: "- architect ရဲ့ ထွက်ကုန်က တခြားသူ နားလည်ပြီး လုပ်နိုင်တဲ့ ဆုံးဖြတ်ချက်",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
