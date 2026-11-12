@@ -164,6 +164,10 @@ describe("studio plan schema", () => {
       strokeColor: "#ffffff",
       backgroundColor: "transparent",
       fontSize: 20,
+      rounded: false,
+      strokeStyle: "solid",
+      fillStyle: "solid",
+      align: "left",
     });
     plan.actions.splice(3, 0, {
       id: "draw-diagram",

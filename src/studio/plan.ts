@@ -515,14 +515,40 @@ export type StudioSlide = z.infer<typeof studioSlideSchema>;
  * Hand-drawn annotation strokes. Each is generated inside the asset's box as
  * one continuous freedraw path, so it can be revealed point by point the way a
  * presenter draws it.
+ *
+ * - Marks on a word or a box: `underline`, `double-underline`, `wavy`,
+ *   `strike`, `scribble`, `circle`, `box`, `check`.
+ * - Arrows, tip in the named direction: a straight one runs along the middle
+ *   of the box (`arrow-right`, `arrow-left`, `arrow-up`, `arrow-down`) or
+ *   across its diagonal (`arrow-up-right`, …); `arrow-arc-right` bows over the
+ *   top of the box from its bottom-left to its bottom-right, and
+ *   `arrow-arc-left` comes back under it from its top-right to its top-left.
+ * - Braces that gather several things into one: the point of `brace-right`
+ *   faces right (the things are on its left), and so on.
  */
 export const studioWhiteboardStrokeSchema = z.enum([
   "underline",
+  "double-underline",
+  "wavy",
   "strike",
+  "scribble",
   "circle",
+  "box",
   "check",
   "arrow-right",
+  "arrow-left",
+  "arrow-up",
   "arrow-down",
+  "arrow-up-right",
+  "arrow-down-right",
+  "arrow-up-left",
+  "arrow-down-left",
+  "arrow-arc-right",
+  "arrow-arc-left",
+  "brace-left",
+  "brace-right",
+  "brace-up",
+  "brace-down",
 ]);
 export type StudioWhiteboardStroke = z.infer<typeof studioWhiteboardStrokeSchema>;
 
@@ -532,7 +558,7 @@ export type StudioWhiteboardStroke = z.infer<typeof studioWhiteboardStrokeSchema
  */
 export const studioWhiteboardAssetSchema = z.object({
   id: z.string().min(1),
-  kind: z.enum(["rectangle", "ellipse", "text", "freedraw"]),
+  kind: z.enum(["rectangle", "ellipse", "diamond", "text", "freedraw"]),
   x: z.number().finite(),
   y: z.number().finite(),
   width: z.number().finite().positive(),
@@ -549,6 +575,29 @@ export const studioWhiteboardAssetSchema = z.object({
   backgroundColor: z.string().default("transparent"),
   /** 28px is the smallest label that stays readable in the recorded lesson. */
   fontSize: z.number().finite().positive().default(28),
+  /**
+   * Shapes only: round the corners. Off by default, because boxes drawn edge
+   * to edge (the cells of an array, the frames of a stack) must meet squarely;
+   * turn it on for a card or a node that stands alone.
+   */
+  rounded: z.boolean().default(false),
+  /**
+   * Shapes only: the outline. `dashed` reads as "not real yet" — a planned
+   * step, an optional part, a boundary rather than a thing.
+   */
+  strokeStyle: z.enum(["solid", "dashed", "dotted"]).default("solid"),
+  /**
+   * Shapes only, with a `backgroundColor`: how the fill is drawn. `hachure`
+   * and `cross-hatch` are sketched in pen strokes and keep a label inside the
+   * shape readable; `solid` is a flat block of colour.
+   */
+  fillStyle: z.enum(["solid", "hachure", "cross-hatch", "zigzag"]).default("solid"),
+  /**
+   * `text` only: where the text sits in its box. `center` keeps it centred on
+   * the middle of the box however wide its glyphs turn out, so a label given
+   * its shape's `x` and `width` is centred in the shape without measuring it.
+   */
+  align: z.enum(["left", "center", "right"]).default("left"),
 });
 export type StudioWhiteboardAsset = z.infer<typeof studioWhiteboardAssetSchema>;
 

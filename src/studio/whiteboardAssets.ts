@@ -42,6 +42,10 @@ const COMMON_ELEMENT_FIELDS = {
   locked: false,
 } as const;
 
+/** Excalidraw's hand-drawn font (Virgil) and line height: what every board label is set in. */
+export const WHITEBOARD_TEXT_FONT_FAMILY = 1;
+export const WHITEBOARD_TEXT_LINE_HEIGHT = 1.25;
+
 /**
  * Recorded step between draw frames. 100 ms is what human capture flushes at
  * while a stroke is in progress, and replay only animates the last 150 ms
@@ -144,6 +148,55 @@ function waver(points: Point[], random: () => number): Point[] {
   });
 }
 
+/** Shaft from `from` to `to`, then both barbs — one continuous motion, as a quick arrow is scribbled. */
+function arrowCorners(from: Point, to: Point, shaft: readonly Point[] = [from]): Point[] {
+  const angle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+  const reach = shaft
+    .slice(1)
+    .reduce(
+      (sum, [x, y], index) => sum + Math.hypot(x - shaft[index][0], y - shaft[index][1]),
+      Math.hypot(to[0] - shaft[shaft.length - 1][0], to[1] - shaft[shaft.length - 1][1]),
+    );
+  const barb = Math.min(26, Math.max(10, reach * 0.22));
+  const barbAt = (side: 1 | -1): Point => [
+    to[0] - Math.cos(angle + side * 0.5) * barb,
+    to[1] - Math.sin(angle + side * 0.5) * barb,
+  ];
+  return [...shaft, to, barbAt(-1), to, barbAt(1)];
+}
+
+/** An arrow that bows from `from` to `to` around `control` (a quadratic curve), landing along the curve. */
+function arcArrowCorners(from: Point, control: Point, to: Point): Point[] {
+  const steps = 24;
+  const shaft: Point[] = [];
+  for (let step = 0; step < steps; step++) {
+    const t = step / steps;
+    const u = 1 - t;
+    shaft.push([
+      u * u * from[0] + 2 * u * t * control[0] + t * t * to[0],
+      u * u * from[1] + 2 * u * t * control[1] + t * t * to[1],
+    ]);
+  }
+  // The barbs follow the direction the curve arrives in, not the chord.
+  return arrowCorners(control, to, shaft);
+}
+
+// A curly brace along a span: `along` runs 0–1 from one arm to the other,
+// `out` 0–1 from the arms to the point.
+const BRACE_PROFILE: readonly Point[] = [
+  [0, 0],
+  [0.03, 0.3],
+  [0.08, 0.45],
+  [0.42, 0.5],
+  [0.47, 0.62],
+  [0.5, 1],
+  [0.53, 0.62],
+  [0.58, 0.5],
+  [0.92, 0.45],
+  [0.97, 0.3],
+  [1, 0],
+];
+
 /** Corner path of each stroke preset, in box-local coordinates. */
 function strokeCorners(stroke: StudioWhiteboardStroke, width: number, height: number): Point[] {
   switch (stroke) {
@@ -152,16 +205,54 @@ function strokeCorners(stroke: StudioWhiteboardStroke, width: number, height: nu
         [0, height * 0.86],
         [width, height * 0.9],
       ];
+    case "double-underline":
+      // Out along the first line, back along the second — the pen never lifts.
+      return [
+        [0, height * 0.74],
+        [width, height * 0.77],
+        [width * 0.985, height * 0.9],
+        [width * 0.03, height * 0.93],
+      ];
+    case "wavy": {
+      const amplitude = Math.min(5, Math.max(2.5, height * 0.12));
+      const waves = Math.max(2, Math.round(width / 22));
+      const steps = waves * 8;
+      const corners: Point[] = [];
+      for (let step = 0; step <= steps; step++) {
+        const t = step / steps;
+        corners.push([width * t, height * 0.84 + Math.sin(t * waves * Math.PI * 2) * amplitude]);
+      }
+      return corners;
+    }
     case "strike":
       return [
         [0, height * 0.52],
         [width, height * 0.48],
       ];
+    case "scribble": {
+      // A fast zigzag across the whole box: crossing something out for good.
+      const teeth = Math.max(3, Math.round(width / Math.max(14, height * 0.6)));
+      const corners: Point[] = [];
+      for (let tooth = 0; tooth <= teeth; tooth++) {
+        corners.push([(width * tooth) / teeth, tooth % 2 === 0 ? height * 0.9 : height * 0.1]);
+      }
+      return corners;
+    }
     case "check":
       return [
         [width * 0.08, height * 0.52],
         [width * 0.38, height * 0.88],
         [width * 0.96, height * 0.08],
+      ];
+    case "box":
+      // Round the box once and run a little past the corner it started from —
+      // a looser frame than a rectangle, for "these belong together".
+      return [
+        [0, height * 0.04],
+        [width, 0],
+        [width * 0.995, height],
+        [width * 0.01, height * 0.985],
+        [0, -height * 0.04],
       ];
     case "arrow-right":
       // Shaft, then back up for the top barb, back to the tip, then down —
@@ -173,6 +264,14 @@ function strokeCorners(stroke: StudioWhiteboardStroke, width: number, height: nu
         [width, height * 0.5],
         [width * 0.74, height * 0.76],
       ];
+    case "arrow-left":
+      return [
+        [width, height * 0.5],
+        [0, height * 0.5],
+        [width * 0.26, height * 0.24],
+        [0, height * 0.5],
+        [width * 0.26, height * 0.76],
+      ];
     case "arrow-down":
       return [
         [width * 0.5, 0],
@@ -181,6 +280,42 @@ function strokeCorners(stroke: StudioWhiteboardStroke, width: number, height: nu
         [width * 0.5, height],
         [width * 0.76, height * 0.74],
       ];
+    case "arrow-up":
+      return [
+        [width * 0.5, height],
+        [width * 0.5, 0],
+        [width * 0.24, height * 0.26],
+        [width * 0.5, 0],
+        [width * 0.76, height * 0.26],
+      ];
+    case "arrow-up-right":
+      return arrowCorners([0, height], [width, 0]);
+    case "arrow-down-right":
+      return arrowCorners([0, 0], [width, height]);
+    case "arrow-up-left":
+      return arrowCorners([width, height], [0, 0]);
+    case "arrow-down-left":
+      return arrowCorners([width, 0], [0, height]);
+    case "arrow-arc-right":
+      // Up and over: leaves the bottom-left corner, tops out on the box's top
+      // edge, lands on the bottom-right corner.
+      return arcArrowCorners([0, height], [width * 0.5, -height], [width, height]);
+    case "arrow-arc-left":
+      // Back underneath: leaves the top-right corner, dips to the bottom edge,
+      // lands on the top-left corner.
+      return arcArrowCorners([width, 0], [width * 0.5, height * 2], [0, 0]);
+    case "brace-right":
+      return BRACE_PROFILE.map(([along, out]) => [out * width, along * height] satisfies Point);
+    case "brace-left":
+      return BRACE_PROFILE.map(
+        ([along, out]) => [(1 - out) * width, along * height] satisfies Point,
+      );
+    case "brace-down":
+      return BRACE_PROFILE.map(([along, out]) => [along * width, out * height] satisfies Point);
+    case "brace-up":
+      return BRACE_PROFILE.map(
+        ([along, out]) => [along * width, (1 - out) * height] satisfies Point,
+      );
     case "circle": {
       // Starts at the left, sweeps a little past a full turn — a circled word
       // never closes exactly where it started.
@@ -216,14 +351,47 @@ function buildStrokePath(
   };
 }
 
+/** The seeded values an asset's element is built from, in the order they are drawn. */
+function assetSeeds(asset: StudioWhiteboardAsset, planSeed: number) {
+  const random = createSeededRandom(planSeed ^ hashId(asset.id));
+  const seed = Math.floor(random() * 2_000_000_000) + 1;
+  const versionNonce = Math.floor(random() * 2_000_000_000) + 1;
+  return { random, seed, versionNonce };
+}
+
+/** How many of a stroke's points are on the board at `progress`. */
+function drawnPointCount(pointCount: number, progress: number): number {
+  return Math.min(pointCount, Math.max(2, Math.ceil(pointCount * progress)));
+}
+
+/** The text of a `text` asset typed so far at `progress`. */
+export function whiteboardTextAt(asset: StudioWhiteboardAsset, progress: number): string {
+  const full = asset.text ?? "";
+  return progress >= 1 ? full : full.slice(0, Math.max(1, Math.ceil(full.length * progress)));
+}
+
+/**
+ * Where the pen tip is, in scene coordinates, once `progress` of a `freedraw`
+ * asset's stroke is drawn — the last point {@link buildWhiteboardElement}
+ * puts on the board at that progress, or the stroke's first point at 0.
+ */
+export function whiteboardStrokeTip(
+  asset: StudioWhiteboardAsset,
+  planSeed: number,
+  progress: number,
+): { x: number; y: number } {
+  const { points, offsetX, offsetY } = buildStrokePath(asset, assetSeeds(asset, planSeed).random);
+  const drawn = progress > 0 ? drawnPointCount(points.length, Math.min(1, progress)) : 1;
+  const [x, y] = points[drawn - 1];
+  return { x: asset.x + offsetX + x, y: asset.y + offsetY + y };
+}
+
 export function buildWhiteboardElement(
   asset: StudioWhiteboardAsset,
   planSeed: number,
   frame?: WhiteboardElementFrame,
 ): WhiteboardElementJSON {
-  const random = createSeededRandom(planSeed ^ hashId(asset.id));
-  const seed = Math.floor(random() * 2_000_000_000) + 1;
-  const versionNonce = Math.floor(random() * 2_000_000_000) + 1;
+  const { random, seed, versionNonce } = assetSeeds(asset, planSeed);
   // A fixed timestamp: `updated` feeds Excalidraw bookkeeping only, and a
   // wall-clock value here would break byte-identical repeat renders.
   const updated = 1;
@@ -247,20 +415,18 @@ export function buildWhiteboardElement(
   if (asset.kind === "text") {
     // Text is typed, not drawn — a partial frame is a prefix of the string.
     // Width and height stay final so the surrounding layout never shifts.
-    const full = asset.text ?? "";
-    const text =
-      progress >= 1 ? full : full.slice(0, Math.max(1, Math.ceil(full.length * progress)));
+    const text = whiteboardTextAt(asset, progress);
     return {
       ...base,
       type: "text",
       text,
       originalText: text,
       fontSize: asset.fontSize,
-      fontFamily: 1,
-      textAlign: "left",
+      fontFamily: WHITEBOARD_TEXT_FONT_FAMILY,
+      textAlign: asset.align,
       verticalAlign: "top",
       containerId: null,
-      lineHeight: 1.25,
+      lineHeight: WHITEBOARD_TEXT_LINE_HEIGHT,
       autoResize: true,
     };
   }
@@ -270,7 +436,7 @@ export function buildWhiteboardElement(
     // the same stroke — this is also the shape replay interpolates between
     // recorded steps to draw the stroke point by point.
     const { points, offsetX, offsetY } = buildStrokePath(asset, random);
-    const drawn = points.slice(0, Math.max(2, Math.ceil(points.length * progress)));
+    const drawn = points.slice(0, drawnPointCount(points.length, progress));
     const xs = drawn.map(([x]) => x);
     const ys = drawn.map(([, y]) => y);
     return {
@@ -301,5 +467,11 @@ export function buildWhiteboardElement(
     type: asset.kind,
     width: progress >= 1 ? asset.width : Math.max(1, asset.width * progress),
     height: progress >= 1 ? asset.height : Math.max(1, asset.height * progress),
+    strokeStyle: asset.strokeStyle,
+    fillStyle: asset.fillStyle,
+    // Excalidraw's own corner rule per shape: a rectangle's radius adapts to
+    // its size (3), a diamond's is proportional (2). An ellipse has no corners.
+    roundness:
+      asset.rounded && asset.kind !== "ellipse" ? { type: asset.kind === "diamond" ? 2 : 3 } : null,
   };
 }
