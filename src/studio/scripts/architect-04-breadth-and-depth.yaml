@@ -1,0 +1,866 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-04-breadth-and-depth
+  title: "Architect Path 04: အကျယ်နဲ့ အနက်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/04-my-radar.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/04-my-radar.md: |+
+        # ကိုယ့် radar (ခရီးဖော် အတွက်)
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: habits
+      contentType: html
+      name: အလေ့အထ လေးခု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">အသိပညာကို ရင်းနှီးမြှုပ်နှံပုံ</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term blue">ပုံမှန် ထည့်</span>နေ့တိုင်း မနက် အလုပ်မစခင် 20 မိနစ်</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term orange">ဖြန့်ထား</span>ကိုယ် မသုံးဖူးတဲ့ နယ်ပယ်တွေပါ ဖတ်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term green">စိစစ်</span>ဘယ်သူ ပြောတာလဲ၊ ဘယ်အခြေအနေအတွက်လဲ</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term violet">ပြန်ကြည့်</span>သုံးလ တစ်ခါ radar ကို ပြင်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — what I know against this week's questions. Blue is the part of
+    # the system I know, orange the questions, red the limit.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "မေးခွန်းတွေ ပြောင်းသွားပြီ",
+        fontSize: 36,
+      }
+    - {
+        id: n-me,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 300,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: n-me-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 272,
+        width: 300,
+        height: 35,
+        text: "web framework",
+        fontSize: 28,
+      }
+    - {
+        id: n-me-s,
+        kind: text,
+        x: 270,
+        y: 345,
+        width: 300,
+        height: 35,
+        text: "ကိုယ် ကျွမ်းတာ",
+        fontSize: 28,
+      }
+    - {
+        id: n-q1,
+        kind: text,
+        x: 620,
+        y: 250,
+        width: 470,
+        height: 35,
+        text: "SMS အတွက် message broker?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-q2,
+        kind: text,
+        x: 620,
+        y: 320,
+        width: 470,
+        height: 35,
+        text: "15 ဆ နေ့မှာ database?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-q3,
+        kind: text,
+        x: 620,
+        y: 390,
+        width: 470,
+        height: 35,
+        text: "internet ပြတ်ချိန် ကောင်တာ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-gap,
+        kind: text,
+        x: 270,
+        y: 500,
+        width: 800,
+        height: 38,
+        text: "အားလုံးကို နက်နက် သိဖို့ အချိန် မရှိ",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — three bands of knowledge, narrow to wide. The middle band is
+    # the one the board is about (orange); the unknown band is dashed; green
+    # arrows widen the middle.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "အသိပညာ အလွှာ သုံးလွှာ",
+        fontSize: 36,
+      }
+    - { id: p-top, kind: rectangle, x: 470, y: 225, width: 300, height: 75 }
+    - {
+        id: p-top-l,
+        kind: text,
+        align: center,
+        x: 470,
+        y: 245,
+        width: 300,
+        height: 35,
+        text: "ကောင်းကောင်း သိတာ",
+        fontSize: 28,
+      }
+    - {
+        id: p-mid,
+        kind: rectangle,
+        x: 370,
+        y: 310,
+        width: 500,
+        height: 75,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: p-mid-l,
+        kind: text,
+        align: center,
+        x: 370,
+        y: 330,
+        width: 500,
+        height: 35,
+        text: "ရှိမှန်း သိတာ",
+        fontSize: 28,
+      }
+    - { id: p-bot, kind: rectangle, x: 270, y: 395, width: 700, height: 75, strokeStyle: dashed }
+    - {
+        id: p-bot-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 415,
+        width: 700,
+        height: 35,
+        text: "ရှိမှန်းတောင် မသိတာ",
+        fontSize: 28,
+      }
+    - { id: p-deep, kind: freedraw, stroke: arrow-down, x: 790, y: 230, width: 40, height: 66 }
+    - {
+        id: p-dev,
+        kind: text,
+        x: 270,
+        y: 500,
+        width: 800,
+        height: 35,
+        text: "developer: အပေါ်ဆုံး အလွှာကို နက်အောင်",
+        fontSize: 28,
+      }
+    - {
+        id: p-wl,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 270,
+        y: 327,
+        width: 90,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-wr,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 880,
+        y: 327,
+        width: 90,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: p-arch,
+        kind: text,
+        x: 270,
+        y: 555,
+        width: 800,
+        height: 35,
+        text: "architect: အလယ် အလွှာကို ကျယ်အောင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — a personal radar: four rings from the centre out. Green is what
+    # I rely on, orange what I am still asking about, red what I do not start.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "ကိုယ်ပိုင် radar",
+        fontSize: 36,
+      }
+    - {
+        id: r-adopt,
+        kind: ellipse,
+        x: 430,
+        y: 370,
+        width: 100,
+        height: 100,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-adopt-l,
+        kind: text,
+        align: center,
+        x: 430,
+        y: 403,
+        width: 100,
+        height: 35,
+        text: "Adopt",
+        fontSize: 28,
+      }
+    - {
+        id: r-l1,
+        kind: text,
+        x: 720,
+        y: 250,
+        width: 370,
+        height: 35,
+        text: "Adopt · စိတ်ချ သုံးနေတာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - { id: r-trial, kind: ellipse, x: 380, y: 320, width: 200, height: 200 }
+    - {
+        id: r-trial-l,
+        kind: text,
+        align: center,
+        x: 380,
+        y: 327,
+        width: 200,
+        height: 35,
+        text: "Trial",
+        fontSize: 28,
+      }
+    - {
+        id: r-l2,
+        kind: text,
+        x: 720,
+        y: 320,
+        width: 370,
+        height: 35,
+        text: "Trial · စမ်းသုံးနေတာ",
+        fontSize: 28,
+      }
+    - {
+        id: r-assess,
+        kind: ellipse,
+        x: 330,
+        y: 270,
+        width: 300,
+        height: 300,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: r-assess-l,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 277,
+        width: 300,
+        height: 35,
+        text: "Assess",
+        fontSize: 28,
+      }
+    - {
+        id: r-l3,
+        kind: text,
+        x: 720,
+        y: 390,
+        width: 370,
+        height: 35,
+        text: "Assess · ဖတ်ကြည့်နေတာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - { id: r-hold, kind: ellipse, x: 280, y: 220, width: 400, height: 400, strokeColor: "#e03131" }
+    - {
+        id: r-hold-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 227,
+        width: 400,
+        height: 35,
+        text: "Hold",
+        fontSize: 28,
+      }
+    - {
+        id: r-l4,
+        kind: text,
+        x: 720,
+        y: 460,
+        width: 370,
+        height: 35,
+        text: "Hold · အသစ် မစတော့တာ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "တစ်ပတ်မှာ တစ်နာရီပဲ အားရင်?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ကျွမ်းပြီးသား framework ကို ပိုနက်အောင်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) message broker သုံးမျိုးက ဘာအတွက်လဲ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 600,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 930,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "ဒါက ဘယ်အလွှာကို ကျယ်စေမလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8104
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: questions
+    chapter: မေးခွန်းတွေ ပြောင်းသွားပြီ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဘယ်နည်းက ပိုကောင်းလဲ ဆိုတဲ့ မေးခွန်းကို ရတာနဲ့ ပေးရတာ ပါတဲ့ trade off table အဖြစ်
+      ပြောင်းကြည့်ခဲ့ပါတယ်။ trade off ဆိုတာ တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတာပါ။
+      [[mark:n-open]] ဒါပေမဲ့ table ထဲမှာ ရွေးစရာတွေကို ထည့်နိုင်ဖို့ဆိုရင် အဲဒီ ရွေးစရာတွေ ရှိမှန်း အရင်
+      သိထားရပါတယ်။ ဒီအပတ်မှာ ကိုယ် အဲဒီ ပြဿနာနဲ့ ကြုံရပါတယ်။
+      [[mark:n-me]] ကိုယ်က ခရီးဖော် မှာ သုံးနေတဲ့ web framework ကို team ထဲမှာ အကျွမ်းဆုံးပါ။ နှစ်နှစ်လုံးလုံး
+      framework နဲ့ ပတ်သက်တဲ့ မေးခွန်းမှန်သမျှ ကိုယ့်ဆီ ရောက်လာပြီး၊ ကိုယ်လည်း ဖြေနိုင်ခဲ့ပါတယ်။
+      [[mark:n-q1]] အခုတော့ မေးခွန်းတွေက ပြောင်းသွားပါပြီ။ team ထဲက developer မောင်မောင် က လက်မှတ် SMS ကို
+      နောက်ကွယ်ကနေ ပို့ဖို့ message broker သုံးရမလားလို့ မေးပါတယ်။ message broker ဆိုတာ ပို့စရာ message တွေကို
+      လက်ခံ တန်းစီထားပြီး လက်ဆင့်ကမ်းပေးတဲ့ software ပါ။
+      [[mark:n-q2]] CTO ဖြစ်တဲ့ အောင်အောင် ကတော့ နောက်နှစ် သင်္ကြန်မှာ ဝင်သုံးသူ ၁၅ ဆ တက်လာရင် database က
+      ခံနိုင်ပါ့မလားလို့ မေးပါတယ်။
+      [[mark:n-q3]] product manager လှလှ ကလည်း ကားဂိတ်မှာ internet ပြတ်နေတဲ့အချိန် ကောင်တာက ဘယ်လို
+      ဆက်ရောင်းမလဲလို့ မေးလာပါတယ်။
+      [[mark:n-gap]] ဒီ သုံးခုလုံးက framework နဲ့ မဆိုင်တော့ပါဘူး။ သုံးခုလုံးကို framework လောက် နက်နက်နဲနဲ
+      သိအောင် လေ့လာဖို့ကလည်း ဘယ်သူ့မှာမှ အချိန် မရှိပါဘူး။ ဒါဆို architect တစ်ယောက်က ဘာကို ဘယ်လောက်
+      သိထားရမှာလဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          clear: true,
+          upsertIds: [n-title],
+        }
+      - {
+          id: draw-n-me,
+          type: whiteboard.apply,
+          at: { mark: n-me },
+          upsertIds: [n-me, n-me-l, n-me-s],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-n-q1,
+          type: whiteboard.apply,
+          at: { mark: n-q1 },
+          upsertIds: [n-q1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-n-q2,
+          type: whiteboard.apply,
+          at: { mark: n-q2 },
+          upsertIds: [n-q2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-n-q3,
+          type: whiteboard.apply,
+          at: { mark: n-q3 },
+          upsertIds: [n-q3],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-n-gap,
+          type: whiteboard.apply,
+          at: { mark: n-gap },
+          upsertIds: [n-gap],
+          drawMs: 1000,
+        }
+
+  - id: three-bands
+    chapter: အသိပညာ အလွှာ သုံးလွှာ
+    narration: >
+      [[mark:p-open]] လူတစ်ယောက်ရဲ့ အသိပညာကို အလွှာ သုံးလွှာ ခွဲကြည့်လို့ ရပါတယ်။
+      [[mark:p-top]] အပေါ်ဆုံး အလွှာက ကိုယ် ကောင်းကောင်း သိပြီး နေ့တိုင်း သုံးနေတာတွေပါ။ ကိုယ့်အတွက်ဆိုရင် web
+      framework ပါ။
+      [[mark:p-mid]] အလယ် အလွှာက ရှိမှန်း သိပေမဲ့ ကိုယ်တိုင် မကျွမ်းတာတွေပါ။ ဥပမာ database ကို ဖတ်ဖို့သက်သက်
+      မိတ္တူပွားထားလို့ ရတယ် ဆိုတာလောက်ကို သိထားတာမျိုးပါ။
+      [[mark:p-bottom]] အောက်ဆုံး အလွှာကတော့ ရှိမှန်းတောင် မသိတာတွေပါ။ ဒီ အလွှာက အကြီးဆုံး ဖြစ်ပြီး၊
+      မသိမှန်းတောင် မသိတာမို့ မေးခွန်းတောင် မမေးတတ်ပါဘူး။
+      [[mark:p-dev]] developer တစ်ယောက်အနေနဲ့ တိုးတက်တယ် ဆိုတာ အပေါ်ဆုံး အလွှာကို ပိုနက်အောင် လုပ်တာပါ။
+      code ကို ကောင်းကောင်း ရေးဖို့ အနက် လိုတာမို့ အဲဒါက မှန်ပါတယ်။
+      [[mark:p-arch]] architect အတွက်တော့ အလယ် အလွှာကို ကျယ်အောင် လုပ်ဖို့က ပိုအရေးကြီးလာပါတယ်။
+      ဘာကြောင့်လဲဆိုတော့ ဆုံးဖြတ်ချက် တစ်ခုမှာ ကိုယ် ရွေးနိုင်တာက ရှိမှန်း သိထားတဲ့ ရွေးစရာတွေထဲကပဲ
+      ဖြစ်လို့ပါ။ ထိုင်ခုံကို အချိန် ကန့်သတ်ပြီး ခဏ ထိန်းထားတဲ့ seat hold ဆိုတဲ့ နည်း ရှိမှန်း မသိခဲ့ရင်၊
+      ပြီးခဲ့တဲ့ lesson က table ထဲမှာ ရွေးစရာ နှစ်ခုပဲ ရှိခဲ့မှာပါ။
+      [[mark:p-cheap]] ကောင်းတာက အလယ် အလွှာထဲ တစ်ခု ထည့်ဖို့ အများကြီး မကုန်ပါဘူး။ အဲဒီ အရာက ဘာအတွက်လဲ၊
+      ဘယ်အခါ သင့်တော်လဲ၊ ဘာ ပေးရလဲ ဆိုတာ သိရင် လုံလောက်ပါပြီ။ ဘယ်လို တပ်ဆင်ရလဲ ဆိုတဲ့ အသေးစိတ်ကိုတော့
+      တကယ် ရွေးဖြစ်တဲ့နေ့ကျမှ လေ့လာလို့ ရပါတယ်။
+      [[mark:p-stale]] အနက်ကို လုံးဝ စွန့်ရမယ်လို့ မဆိုလိုပါဘူး။ ဒါပေမဲ့ ထောင်ချောက် တစ်ခု ရှိပါတယ်။ ကိုယ်
+      နေ့တိုင်း မသုံးတော့တဲ့ အသိက တဖြည်းဖြည်း ဟောင်းသွားပါတယ်။ framework က version အသစ်တွေ ထွက်နေချိန်မှာ
+      နှစ်နှစ်အရင်က သိခဲ့တာနဲ့ပဲ ကျွမ်းကျင်သူလို ဆက်ပြောနေရင်၊ ဟောင်းနေတဲ့ အချက်အလက်ပေါ်မှာ ဆုံးဖြတ်ချက်
+      ချမိပါလိမ့်မယ်။
+      [[mark:p-keep]] ဒါက ဘယ်သူမဆို ကျနိုင်တဲ့ ထောင်ချောက်ပါ။ ဒါကြောင့် ဆက်ထိန်းထားမယ့် အနက်ကို တစ်ခု နှစ်ခုပဲ
+      ရွေးပြီး၊ ကျန်တာကိုတော့ သိသိကြီးနဲ့ လွှတ်ချလိုက်ရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-p-open,
+          type: whiteboard.apply,
+          at: { mark: p-open },
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-p-top,
+          type: whiteboard.apply,
+          at: { mark: p-top },
+          upsertIds: [p-top, p-top-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-mid,
+          type: whiteboard.apply,
+          at: { mark: p-mid },
+          upsertIds: [p-mid, p-mid-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-bottom,
+          type: whiteboard.apply,
+          at: { mark: p-bottom },
+          upsertIds: [p-bot, p-bot-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-p-dev,
+          type: whiteboard.apply,
+          at: { mark: p-dev },
+          upsertIds: [p-deep, p-dev],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-p-arch,
+          type: whiteboard.apply,
+          at: { mark: p-arch },
+          upsertIds: [p-wl, p-wr, p-arch],
+          drawMs: 1800,
+        }
+      - {
+          id: point-p-mid,
+          type: whiteboard.point,
+          at: { mark: p-cheap },
+          target: { assetId: p-mid },
+        }
+      - {
+          id: point-p-top,
+          type: whiteboard.point,
+          at: { mark: p-stale },
+          target: { assetId: p-top },
+        }
+
+  - id: portfolio
+    chapter: အသိပညာကို ရင်းနှီးမြှုပ်နှံခြင်း
+    narration: >
+      [[mark:f-open]] ဒါဆို အလယ် အလွှာကို ဘယ်လို ကျယ်အောင် လုပ်မလဲ။ အသိပညာကို ငွေ ရင်းနှီးမြှုပ်နှံသလို
+      သဘောထားရင် အလေ့အထ လေးခု ထွက်လာပါတယ်။
+      [[mark:f-1]] ပထမက ပုံမှန် ထည့်တာပါ။ တစ်ခါတည်း အများကြီး ထည့်တာထက် နည်းနည်းစီ မပျက်မကွက် ထည့်တာက
+      ပိုအကျိုးရှိပါတယ်။ ကိုယ်ကတော့ မနက် ရုံးရောက်ရောက်ချင်း chat နဲ့ email မဖွင့်ခင် မိနစ် ၂၀ ကို ဒီအတွက်
+      သီးသန့် ထားပါတယ်။ နေ့လယ်ပိုင်း ရောက်ရင် အလုပ်တွေကြားမှာ အချိန် မကျန်တော့လို့ပါ။
+      [[mark:f-2]] ဒုတိယက ဖြန့်ထားတာပါ။ ကိုယ် သုံးနေကျ နယ်ပယ်ကိုပဲ ဖတ်နေရင် အပေါ်ဆုံး အလွှာပဲ နက်လာမှာပါ။
+      database၊ network၊ လူတွေနဲ့ အလုပ်လုပ်ပုံ စသဖြင့် ကိုယ် မသုံးဖူးတဲ့ ဘက်တွေကိုပါ ဖတ်မှ အလယ် အလွှာ
+      ကျယ်လာပါတယ်။
+      [[mark:f-3]] တတိယက စိစစ်တာပါ။ ဖတ်သမျှကို အမှန်လို့ မယူဘဲ မေးခွန်း နှစ်ခု မေးပါ။ ဒါကို ဘယ်သူ ပြောတာလဲ၊
+      ဘယ်လို အခြေအနေအတွက် ပြောတာလဲ ဆိုတာပါ။ developer ရာနဲ့ချီ ရှိတဲ့ ကုမ္ပဏီကြီး တစ်ခုမှာ အောင်မြင်ခဲ့တဲ့
+      နည်းက developer ခြောက်ယောက်ပဲ ရှိတဲ့ ခရီးဖော် အတွက် မှန်ချင်မှ မှန်မှာပါ။ ပစ္စည်း ရောင်းချင်တဲ့သူက
+      ရေးထားတာဆိုရင်လည်း ပေးရတာတွေကို ချန်ထားတတ်ပါတယ်။
+      [[mark:f-4]] စတုတ္ထက ပြန်ကြည့်တာပါ။ သုံးလ တစ်ခါလောက် ကိုယ် ဘာတွေ သိလာပြီလဲ၊ ဘာတွေ ဟောင်းသွားပြီလဲ
+      ဆိုတာ ပြန်စစ်ပါ။ အဲဒီလို ပြန်စစ်ဖို့ ကိုယ်ပိုင် radar တစ်ခု ဆွဲထားရင် အဆင်ပြေပါတယ်။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: close-bands,
+          type: whiteboard.apply,
+          at: { mark: f-open, offsetMs: -1200 },
+          open: false,
+        }
+      - { id: show-habits, type: slide.show, at: { afterAction: close-bands }, slideId: habits }
+      - { id: point-habit-1, type: slide.point, at: { mark: f-1 }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-habit-2, type: slide.point, at: { mark: f-2 }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-habit-3, type: slide.point, at: { mark: f-3 }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-habit-4, type: slide.point, at: { mark: f-4 }, target: { x: 0.15, y: 0.81 } }
+
+  - id: radar
+    chapter: ကိုယ်ပိုင် radar
+    narration: >
+      [[mark:r-open]] radar ဆိုတာ technology တစ်ခုစီက ကိုယ့်အတွက် ဘယ်အဆင့်မှာ ရှိလဲ ဆိုတာကို စက်ဝိုင်း
+      လေးထပ်နဲ့ ပြတဲ့ ပုံပါ။
+      [[mark:r-adopt]] အလယ်ဗဟိုက Adopt ပါ။ ကိုယ် စိတ်ချလက်ချ သုံးနေပြီး၊ တခြားသူကိုလည်း သုံးဖို့
+      အကြံပေးနိုင်တဲ့ အရာတွေကို ထည့်ပါတယ်။
+      [[mark:r-trial]] ဒုတိယ အဝိုင်းက Trial ပါ။ အလားအလာ ရှိတယ်လို့ ယူဆလို့၊ ပျက်သွားလည်း အထိမနာတဲ့ အလုပ်
+      သေးသေး တစ်ခုမှာ စမ်းသုံးကြည့်နေတာတွေပါ။
+      [[mark:r-assess]] တတိယ အဝိုင်းက Assess ပါ။ မသုံးသေးဘဲ၊ ဘာအတွက်လဲ၊ ဘာ ပေးရလဲ ဆိုတာ နားလည်အောင်
+      ဖတ်ကြည့်နေတာတွေပါ။ အသိပညာရဲ့ အလယ် အလွှာကို ကျယ်စေတာ ဒီ အဝိုင်းပါပဲ။
+      [[mark:r-hold]] အပြင်ဆုံး အဝိုင်းက Hold ပါ။ အလုပ်အသစ်မှာ မစတော့ဘူးလို့ ဆုံးဖြတ်ထားတာတွေပါ။
+      မကောင်းလို့ချည်း မဟုတ်ဘဲ၊ ကိုယ့် အခြေအနေနဲ့ မကိုက်သေးတာလည်း ဖြစ်နိုင်ပါတယ်။
+      [[mark:r-why]] ဒီပုံရဲ့ တန်ဖိုးက ကြားဖူးသမျှ technology တိုင်းအတွက် ဘယ်အဝိုင်းထဲ ထည့်မလဲလို့
+      ကိုယ့်ကိုယ်ကို ဆုံးဖြတ်ခိုင်းတာပါ။ ဆုံးဖြတ်ဖို့ဆိုရင် အနည်းဆုံး အဲဒါက ဘာအတွက်လဲ ဆိုတာလောက်တော့
+      သိအောင် ဖတ်ရပါတော့တယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-habits, type: slide.close, at: { mark: r-open, offsetMs: -1200 } }
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-habits },
+          open: true,
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-adopt,
+          type: whiteboard.apply,
+          at: { mark: r-adopt },
+          upsertIds: [r-adopt, r-adopt-l, r-l1],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-r-trial,
+          type: whiteboard.apply,
+          at: { mark: r-trial },
+          upsertIds: [r-trial, r-trial-l, r-l2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-r-assess,
+          type: whiteboard.apply,
+          at: { mark: r-assess },
+          upsertIds: [r-assess, r-assess-l, r-l3],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-r-hold,
+          type: whiteboard.apply,
+          at: { mark: r-hold },
+          upsertIds: [r-hold, r-hold-l, r-l4],
+          drawMs: 1600,
+        }
+
+  - id: my-radar
+    chapter: ခရီးဖော် အတွက် ကိုယ့် radar
+    narration: >
+      [[mark:t-close]] ဒီအပတ် မေးခွန်း သုံးခုကို အခြေခံပြီး ကိုယ့် radar ကို ရေးကြည့်ရအောင်။
+      [[mark:type-adopt]] Adopt အောက်မှာ ခရီးဖော် က အခု သုံးနေပြီး ကိုယ်လည်း ယုံကြည်တဲ့ အရာ နှစ်ခုပဲ
+      ထည့်ထားပါတယ်။ ကိုယ် တကယ် အာမခံနိုင်တာတွေပဲ ဖြစ်ရမှာမို့ ဒီ အဝိုင်းက သေးသင့်ပါတယ်။
+      [[mark:type-trial]] Trial အောက်မှာတော့ load test ကို ထည့်ထားပါတယ်။ ဝင်သုံးသူ ၁၅ ဆ တက်လာရင် ဘာဖြစ်မလဲ
+      ဆိုတာကို သင်္ကြန် မရောက်ခင် ကြိုသိချင်လို့ပါ။ စမ်းကြည့်လို့ အဆင်မပြေရင်လည်း ခရီးသည်တွေကို
+      မထိခိုက်ပါဘူး။
+      [[mark:type-assess]] Assess အောက်မှာ ဒီအပတ် မေးခွန်း သုံးခုနဲ့ ဆိုင်တဲ့ အရာတွေ ရောက်နေပါတယ်။ internet
+      မရှိချိန် data ကို စက်ထဲမှာ သိမ်းထားပြီး နောက်မှ ပြန်ညှိတဲ့ offline sync နဲ့၊ database ကို ဖတ်ဖို့သက်သက်
+      မိတ္တူပွားထားတဲ့ read replica တို့ ပါပါတယ်။ ဒါတွေကို ကိုယ် မကျွမ်းသေးပါဘူး။ ဒါပေမဲ့ ဒီလထဲမှာ တစ်ခုစီက
+      ဘာအတွက်လဲ၊ ဘာ ပေးရလဲ ဆိုတာ ပြောနိုင်အောင် ဖတ်မယ်လို့ ကိုယ့်ကိုယ်ကို ကတိပေးလိုက်တာပါ။
+      [[mark:type-hold]] Hold အောက်မှာတော့ နှစ်ခု ထည့်ထားပါတယ်။ တစ်ခုက microservices ပါ။ system ကို သီးခြား
+      deploy လုပ်နိုင်တဲ့ service သေးသေးတွေအဖြစ် ခွဲတဲ့ ပုံစံမျိုးပါ။ developer ခြောက်ယောက်ပဲ ရှိတဲ့
+      အခုအချိန်မှာ ရတာထက် ပေးရတာက ပိုများမယ်လို့ ကိုယ် ယူဆပါတယ်။
+      [[mark:sel-stale]] နောက်တစ်ခုကတော့ ကိုယ် အရင်က ကျွမ်းခဲ့တဲ့ framework version အဟောင်းရဲ့ ရေးနည်းတွေပါ။
+      ကိုယ် ကြိုက်ခဲ့တဲ့ အရာကို Hold ထဲ ထည့်ရတာ စိတ်မသက်သာပေမဲ့၊ ဟောင်းသွားတဲ့ အသိကို ဟောင်းပြီလို့
+      ဝန်ခံတာလည်း radar ရဲ့ အလုပ်ပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-radar, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-radar },
+          path: notebook/04-my-radar.md,
+        }
+      - id: type-adopt
+        type: editor.type
+        at: { mark: type-adopt }
+        cadence: line-by-line
+        target: { file: notebook/04-my-radar.md, after: "# ကိုယ့် radar (ခရီးဖော် အတွက်)\n\n" }
+        text: "## Adopt — စိတ်ချ သုံးနေတာ\n- web framework၊ relational database\n\n"
+      - id: type-trial
+        type: editor.type
+        at: { mark: type-trial }
+        cadence: line-by-line
+        target: { file: notebook/04-my-radar.md, after: "relational database\n\n" }
+        text: "## Trial — အသေးစားနဲ့ စမ်းမယ်\n- load test: သင်္ကြန် မတိုင်ခင် 15 ဆ ကို ကြိုစမ်းဖို့\n\n"
+      - id: type-assess
+        type: editor.type
+        at: { mark: type-assess }
+        cadence: line-by-line
+        target: { file: notebook/04-my-radar.md, after: "15 ဆ ကို ကြိုစမ်းဖို့\n\n" }
+        text: "## Assess — ဘာအတွက်လဲ နားလည်အောင် ဖတ်မယ်\n- message broker: SMS ကို နောက်ကွယ်ကနေ ပို့ဖို့\n- offline sync: internet ပြတ်ချိန် ကောင်တာ အတွက်\n- read replica: 15 ဆ နေ့မှာ database အတွက်\n\n"
+      - id: type-hold
+        type: editor.type
+        at: { mark: type-hold }
+        cadence: line-by-line
+        target: { file: notebook/04-my-radar.md, after: "15 ဆ နေ့မှာ database အတွက်\n\n" }
+        text: "## Hold — အလုပ်အသစ်မှာ မစဘူး\n- microservices: developer 6 ယောက်နဲ့ စောလွန်းတယ်\n- framework version အဟောင်းရဲ့ ရေးနည်းတွေ\n"
+      - id: sel-stale
+        type: editor.select
+        at: { mark: sel-stale }
+        target: { file: notebook/04-my-radar.md, text: "- framework version အဟောင်းရဲ့ ရေးနည်းတွေ" }
+      - id: expect-assess
+        type: expect.file
+        at: { afterAction: sel-stale }
+        path: notebook/04-my-radar.md
+        contains: "## Assess — ဘာအတွက်လဲ နားလည်အောင် ဖတ်မယ်\n- message broker: SMS ကို နောက်ကွယ်ကနေ ပို့ဖို့\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ architect တစ်ယောက်မှာ တစ်ပတ်ကို လေ့လာဖို့ အချိန် တစ်နာရီပဲ အားတယ်
+      ဆိုပါစို့။ ဘယ်ဟာက သူ့ကို ပိုအကျိုးပြုမလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက သူ ကျွမ်းပြီးသား framework ကို ပိုနက်အောင် ဆက်လေ့လာတာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုကတော့ message broker အမျိုးအစား သုံးမျိုးက ဘာအတွက် သုံးလဲ ဆိုတာလောက်ကို
+      လေ့လာတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ကျွမ်းပြီးသား အရာမှာ တစ်နာရီ
+      ထပ်ထည့်ရင် နက်ပြီးသား အလွှာက နည်းနည်းပဲ ပိုနက်လာမှာပါ။ အဲဒီ အနက်ကလည်း နေ့စဉ် အလုပ်ထဲမှာ အလိုလို
+      တိုးနေပြီးသားပါ။
+      [[mark:q-r]] message broker အတွက် သုံးတဲ့ တစ်နာရီကတော့ ရှိမှန်းတောင် မသိခဲ့တဲ့ ရွေးစရာ သုံးခုကို ရှိမှန်း
+      သိတဲ့ အလွှာထဲ ရွှေ့ပေးပါတယ်။ SMS ကို ဘယ်လို ပို့မလဲလို့ ဆုံးဖြတ်ရမယ့်နေ့မှာ table ထဲ ထည့်စရာ
+      ရွေးစရာတွေ ရှိလာမှာပါ။
+      [[mark:q-test]] ဆိုတော့ လေ့လာစရာ တစ်ခု ရွေးတိုင်း ဒါက ဘယ်အလွှာကို ကျယ်စေမှာလဲလို့ မေးကြည့်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-test,
+          type: whiteboard.apply,
+          at: { mark: q-test },
+          upsertIds: [q-r],
+          drawMs: 1000,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် radar
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ ခေါင်းစဉ် လေးခုအောက်က ခရီးဖော် အတွက်
+      ရေးထားတာတွေကို ဖျက်ပြီး၊ ကိုယ့် project အတွက် တစ်ခုစီ ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] Assess အောက်မှာ ရေးစရာ အများဆုံး ဖြစ်နေရင် ကောင်းတဲ့ လက္ခဏာပါ။ ကိုယ် မသိသေးတာတွေကို
+      မြင်နေရပြီ ဆိုတဲ့ သဘောမို့ပါ။ Hold အောက်မှာ ဘာမှ ရေးစရာ မရှိရင်တော့၊ ဟောင်းနေတာ တစ်ခုခုကို
+      မမြင်သေးတာ ဖြစ်နိုင်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-rings
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/04-my-radar.md
+          text: "## Adopt — စိတ်ချ သုံးနေတာ\n- web framework၊ relational database\n\n## Trial — အသေးစားနဲ့ စမ်းမယ်\n- load test: သင်္ကြန် မတိုင်ခင် 15 ဆ ကို ကြိုစမ်းဖို့\n\n## Assess — ဘာအတွက်လဲ နားလည်အောင် ဖတ်မယ်"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ architect အတွက် အရေးကြီးတာက အရာတစ်ခုကို အနက်ဆုံး သိတာထက်၊ ရွေးစရာတွေ ရှိမှန်း
+      ကျယ်ကျယ် သိထားတာပါ။ ဆုံးဖြတ်ချက်မှာ ရွေးနိုင်တာက ရှိမှန်း သိထားတာတွေထဲကပဲ ဖြစ်လို့ပါ။
+      [[mark:recap-2]] အဲဒီအတွက် မနက်တိုင်း မိနစ် ၂၀ ပုံမှန် ဖတ်ပါ။ ဖတ်တာကို စိစစ်ပြီး၊ ကိုယ်ပိုင် radar နဲ့ သုံးလ
+      တစ်ခါ ပြန်ကြည့်ပါ။ အနက်ကိုတော့ ဆက်သုံးနေတဲ့ တစ်ခု နှစ်ခုမှာပဲ ထိန်းထားပါ။
+      [[mark:next]] နောက် lesson မှာတော့ design တစ်ခု ကောင်းမကောင်းကို နောက်တစ်ခါ ပြင်ရတာ လွယ်မလွယ်နဲ့
+      ဘယ်လို အကဲဖြတ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
