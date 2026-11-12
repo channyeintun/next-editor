@@ -1,0 +1,1061 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-17-layered-and-modular-monolith
+  title: "Architect Path 17: Layered နဲ့ modular monolith"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/17-adr-modular-monolith.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/17-adr-modular-monolith.md: |
+        # ADR-001 · Modular monolith ကို အရင် ရွေးမယ်
+
+        ## Status
+        Accepted · team lead 3 ယောက်နဲ့ သဘောတူပြီး
+
+        ## Context
+        - team 3 ခုက app တစ်ခုတည်းကို ပြင်ပြီး အတူတူ deploy လုပ်နေရတယ်
+        - code ကို layer အလိုက် ခွဲထားလို့ promo code လို အပြောင်းအလဲ တစ်ခုက layer တိုင်းကို ထိတယ်
+
+        ## Decision
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the app cut into layers, and what one promo-code change touches.
+    # Blue parts; red is the cost: every place the change lands, and its path.
+    - {
+        id: l-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Promo code တစ်ခု ထည့်လိုက်ရင်",
+        fontSize: 36,
+      }
+    - {
+        id: l-pres,
+        kind: rectangle,
+        x: 380,
+        y: 225,
+        width: 410,
+        height: 76,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-pres-l,
+        kind: text,
+        align: center,
+        x: 380,
+        y: 245,
+        width: 410,
+        height: 35,
+        text: "Presentation",
+        fontSize: 28,
+      }
+    - { id: l-biz, kind: rectangle, x: 380, y: 315, width: 410, height: 76, strokeColor: "#1971c2" }
+    - {
+        id: l-biz-l,
+        kind: text,
+        align: center,
+        x: 380,
+        y: 335,
+        width: 410,
+        height: 35,
+        text: "Business",
+        fontSize: 28,
+      }
+    - {
+        id: l-data,
+        kind: rectangle,
+        x: 380,
+        y: 405,
+        width: 410,
+        height: 76,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: l-data-l,
+        kind: text,
+        align: center,
+        x: 380,
+        y: 425,
+        width: 410,
+        height: 35,
+        text: "Data access",
+        fontSize: 28,
+      }
+    - { id: l-db, kind: ellipse, x: 455, y: 505, width: 260, height: 84, strokeColor: "#1971c2" }
+    - {
+        id: l-db-l,
+        kind: text,
+        align: center,
+        x: 455,
+        y: 529,
+        width: 260,
+        height: 35,
+        text: "database",
+        fontSize: 28,
+      }
+    - {
+        id: l-c1,
+        kind: text,
+        x: 875,
+        y: 245,
+        width: 220,
+        height: 35,
+        text: "အကွက် အသစ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-c2,
+        kind: text,
+        x: 875,
+        y: 335,
+        width: 220,
+        height: 35,
+        text: "ဈေး တွက်နည်း",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-c3,
+        kind: text,
+        x: 875,
+        y: 425,
+        width: 220,
+        height: 35,
+        text: "query အသစ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-c4,
+        kind: text,
+        x: 875,
+        y: 529,
+        width: 220,
+        height: 35,
+        text: "column အသစ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-cut,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 815,
+        y: 235,
+        width: 40,
+        height: 345,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — the same three layers (kept), what the style is good at (green), three teams all working in every layer
+    # (white people), and a request that passes straight through (violet flow).
+    - {
+        id: y-good,
+        kind: text,
+        x: 380,
+        y: 172,
+        width: 420,
+        height: 35,
+        text: "စရ လွယ်၊ ကုန်ကျစရိတ် နည်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - { id: y-brace, kind: freedraw, stroke: brace-left, x: 812, y: 235, width: 36, height: 240 }
+    - {
+        id: y-t1,
+        kind: text,
+        x: 865,
+        y: 245,
+        width: 230,
+        height: 35,
+        text: "Booking team",
+        fontSize: 28,
+      }
+    - {
+        id: y-t2,
+        kind: text,
+        x: 865,
+        y: 335,
+        width: 230,
+        height: 35,
+        text: "Operator team",
+        fontSize: 28,
+      }
+    - {
+        id: y-t3,
+        kind: text,
+        x: 865,
+        y: 425,
+        width: 230,
+        height: 35,
+        text: "Payment team",
+        fontSize: 28,
+      }
+    - {
+        id: y-sink,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 305,
+        y: 235,
+        width: 40,
+        height: 240,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: y-sink-l,
+        kind: text,
+        x: 270,
+        y: 520,
+        width: 520,
+        height: 35,
+        text: "ဘာမှ မလုပ်ဘဲ ဖြတ်သွားတဲ့ request",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    # Board 3 — the same app cut by domain: three modules inside one deployment
+    # boundary (dashed); green is the promo-code change staying in one module.
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Domain အလိုက် ခွဲထားတဲ့ app",
+        fontSize: 36,
+      }
+    - {
+        id: m-bk,
+        kind: rectangle,
+        x: 305,
+        y: 250,
+        width: 230,
+        height: 280,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-bk-l,
+        kind: text,
+        align: center,
+        x: 305,
+        y: 262,
+        width: 230,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: m-op,
+        kind: rectangle,
+        x: 565,
+        y: 250,
+        width: 230,
+        height: 280,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-op-l,
+        kind: text,
+        align: center,
+        x: 565,
+        y: 262,
+        width: 230,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: m-pay,
+        kind: rectangle,
+        x: 825,
+        y: 250,
+        width: 230,
+        height: 280,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-pay-l,
+        kind: text,
+        align: center,
+        x: 825,
+        y: 262,
+        width: 230,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - { id: m-bound, kind: rectangle, x: 280, y: 225, width: 800, height: 330, strokeStyle: dashed }
+    - {
+        id: m-bound-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 570,
+        width: 800,
+        height: 35,
+        text: "deploy လုပ်ရတာ app တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - {
+        id: m-p1,
+        kind: text,
+        align: center,
+        x: 305,
+        y: 322,
+        width: 230,
+        height: 35,
+        text: "အကွက် အသစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-p2,
+        kind: text,
+        align: center,
+        x: 305,
+        y: 370,
+        width: 230,
+        height: 35,
+        text: "ဈေး တွက်နည်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-p3,
+        kind: text,
+        align: center,
+        x: 305,
+        y: 418,
+        width: 230,
+        height: 35,
+        text: "query အသစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: m-p4,
+        kind: text,
+        align: center,
+        x: 305,
+        y: 466,
+        width: 230,
+        height: 35,
+        text: "column အသစ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ကားလိုင်း နာမည်ကို ဘယ်လို ယူမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) Operator ရဲ့ table ကို တိုက်ရိုက် query လုပ်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) Operator ရဲ့ interface ကနေ တောင်းမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 590,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 900,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 700,
+        height: 35,
+        text: "table က module ရဲ့ အတွင်းပိုင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-r2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "column နာမည် ပြောင်းရင် Booking ပျက်မယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 5 — the rule between two modules: each reads and writes its own
+    # tables (violet flow); the interface is the allowed way in; the direct way
+    # into another module's tables is struck out in red.
+    - {
+        id: r-bk,
+        kind: rectangle,
+        x: 280,
+        y: 210,
+        width: 320,
+        height: 84,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-bk-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 234,
+        width: 320,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: r-op,
+        kind: rectangle,
+        x: 760,
+        y: 210,
+        width: 320,
+        height: 84,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-op-l,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 234,
+        width: 320,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: r-bk-db,
+        kind: ellipse,
+        x: 280,
+        y: 420,
+        width: 320,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-bk-db-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 452,
+        width: 320,
+        height: 35,
+        text: "Booking table တွေ",
+        fontSize: 28,
+      }
+    - {
+        id: r-op-db,
+        kind: ellipse,
+        x: 760,
+        y: 420,
+        width: 320,
+        height: 100,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-op-db-l,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 452,
+        width: 320,
+        height: 35,
+        text: "Operator table တွေ",
+        fontSize: 28,
+      }
+    - {
+        id: r-bk-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 420,
+        y: 304,
+        width: 40,
+        height: 106,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-op-a,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 900,
+        y: 304,
+        width: 40,
+        height: 106,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-ok-a,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 612,
+        y: 232,
+        width: 136,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-ok-l,
+        kind: text,
+        x: 605,
+        y: 168,
+        width: 155,
+        height: 35,
+        text: "interface",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-no-a,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 612,
+        y: 304,
+        width: 136,
+        height: 126,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: r-no-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 625,
+        y: 335,
+        width: 110,
+        height: 64,
+        strokeColor: "#e03131",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8117
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Promo code တစ်ခုရဲ့ ခရီး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ system ကို network ပေါ်က service တွေအဖြစ် ခွဲလိုက်ရင် ဘာတွေ ရပြီး ဘာတွေ
+      ပေးဆပ်ရလဲ ဆိုတာ ကြည့်ပြီး၊ ခိုင်လုံတဲ့ အကြောင်းပြချက် မရှိသေးသရွေ့ app တစ်ခုတည်းနဲ့ပဲ ဆက်သွားမယ်လို့
+      ဆုံးဖြတ်ခဲ့ပါတယ်။
+      [[mark:readme]] ဒါဆို အဲဒီ app တစ်ခုတည်းရဲ့ အထဲကိုကော ဘယ်လို ပုံစံနဲ့ ဖွဲ့စည်းထားသင့်လဲ။ ဒီ မေးခွန်းက
+      အလုပ် တစ်ခုကနေ ပေါ်လာတာပါ။ product manager လှလှ က ခရီးသည်တွေ လက်မှတ် ဝယ်တဲ့အခါ
+      promo code ထည့်ပြီး ဈေးလျှော့ရအောင် လုပ်ပေးဖို့ တောင်းဆိုခဲ့ပါတယ်။ ကြားရတာတော့ အလုပ်သေးသေး
+      တစ်ခုပါပဲ။ Booking team lead မောင်မောင် ကလည်း နှစ်ရက်လောက်နဲ့ ပြီးမယ်လို့ ခန့်မှန်းခဲ့ပါတယ်။
+      [[mark:l-open]] ခရီးဖော် ရဲ့ code ကို အစကတည်းက အလွှာ သုံးလွှာ ခွဲပြီး ရေးလာခဲ့ကြပါတယ်။
+      [[mark:l-pres]] အပေါ်ဆုံး အလွှာက presentation ပါ။ ခရီးသည်နဲ့ ကောင်တာ ဝန်ထမ်းတွေ မြင်ရတဲ့ screen တွေ၊
+      API တွေ ရှိတဲ့ နေရာပါ။
+      [[mark:l-biz]] အလယ်က business အလွှာမှာတော့ ဈေး ဘယ်လို တွက်မလဲ၊ ထိုင်ခုံကို ဘယ်လောက်ကြာ ကြိုယူထားပေးမလဲ
+      ဆိုတဲ့ စည်းမျဉ်းတွေ ရှိပါတယ်။
+      [[mark:l-data]] အောက်ဆုံးက data access အလွှာကတော့ database ထဲက data ကို ဖတ်တာ၊ ရေးတာတွေကို
+      တာဝန်ယူပါတယ်။
+      [[mark:l-c1]] promo code ကို ထည့်ဖို့ Booking team က ဘာတွေ ပြင်ရလဲ ကြည့်ရအောင်။ presentation အလွှာမှာ code
+      ရိုက်ထည့်ဖို့ အကွက် အသစ် တစ်ခု ထည့်ရပါတယ်။
+      [[mark:l-c2]] business အလွှာမှာ ဈေး တွက်နည်းကို ပြင်ရပါတယ်။
+      [[mark:l-c3]] data access အလွှာမှာ query အသစ် ရေးရပြီး၊ database မှာလည်း column အသစ် တစ်ခု ထည့်ရပါတယ်။
+      [[mark:l-cut]] အလုပ်သေးသေး တစ်ခုက အပေါ်ဆုံးကနေ အောက်ဆုံးအထိ အလွှာတိုင်းကို ဖြတ်သွားတာပါ။ အဲဒီ
+      အလွှာတွေထဲက file တွေကို Operator team နဲ့ Payment team ကလည်း အဲဒီအပတ်ထဲမှာပဲ ပြင်နေကြတော့၊ code တွေ
+      တိုက်မိပြီး နှစ်ရက်လို့ မှန်းထားတဲ့ အလုပ်က တစ်ပတ်ကျော် ကြာသွားခဲ့ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: readme }, path: README.md }
+      - id: sel-one-app
+        type: editor.select
+        at: { afterAction: open-readme }
+        target:
+          file: README.md
+          text: "- deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ"
+      - {
+          id: draw-l-open,
+          type: whiteboard.apply,
+          at: { mark: l-open },
+          open: true,
+          upsertIds: [l-title],
+        }
+      - {
+          id: draw-l-pres,
+          type: whiteboard.apply,
+          at: { mark: l-pres },
+          upsertIds: [l-pres, l-pres-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-biz,
+          type: whiteboard.apply,
+          at: { mark: l-biz },
+          upsertIds: [l-biz, l-biz-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-l-data,
+          type: whiteboard.apply,
+          at: { mark: l-data },
+          upsertIds: [l-data, l-data-l, l-db, l-db-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-l-c1,
+          type: whiteboard.apply,
+          at: { mark: l-c1, offsetMs: 3500 },
+          upsertIds: [l-c1],
+          drawMs: 700,
+        }
+      - {
+          id: draw-l-c2,
+          type: whiteboard.apply,
+          at: { mark: l-c2 },
+          upsertIds: [l-c2],
+          drawMs: 700,
+        }
+      - {
+          id: draw-l-c3,
+          type: whiteboard.apply,
+          at: { mark: l-c3 },
+          upsertIds: [l-c3, l-c4],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-l-cut,
+          type: whiteboard.apply,
+          at: { mark: l-cut },
+          upsertIds: [l-cut],
+          drawMs: 900,
+        }
+
+  - id: layered
+    chapter: Layered architecture
+    narration: >
+      [[mark:y-name]] ဒီလို code ကို သူ လုပ်ပေးတဲ့ နည်းပညာ အလုပ်အလိုက် အလွှာခွဲထားတဲ့ ပုံစံကို layered
+      architecture လို့ ခေါ်ပါတယ်။ system တစ်ခုလုံးကို ဖွဲ့စည်းတဲ့ ပုံစံ အမျိုးအစား၊ architecture style တွေထဲက
+      တစ်မျိုးပါ။ ခရီးဖော် မှာတော့ ဒီ style ကို ဘယ်သူမှ ထိုင်ရွေးခဲ့တာ မဟုတ်ပါဘူး။ framework က ပေးထားတဲ့
+      folder ပုံစံအတိုင်း ရေးလာရင်း အလေ့အကျင့်နဲ့ ဖြစ်လာတာပါ။
+      [[mark:y-good]] ဒါပေမဲ့ layered က မှားတဲ့ ရွေးချယ်မှု မဟုတ်ပါဘူး။ developer တိုင်း ရင်းနှီးပြီးသားမို့
+      ချက်ချင်း စရေးလို့ ရသလို၊ ကုန်ကျစရိတ်လည်း နည်းပါတယ်။ app က သေးပြီး team တစ်ခုတည်းပဲ ရှိတဲ့အခါ၊ ဒါမှမဟုတ်
+      product က ဘယ်ဘက်ကို ဦးတည်မလဲ မသေချာသေးတဲ့ အစပိုင်း ကာလမှာဆိုရင် အသင့်တော်ဆုံး ရွေးချယ်မှု
+      ဖြစ်နိုင်ပါတယ်။
+      [[mark:y-cost]] ပြဿနာက business ဘက်က အတွေး တစ်ခုဟာ အလွှာ တစ်ခုတည်းထဲမှာ မနေတာပါ။ promo code လိုပဲ ထိုင်ခုံ
+      ရွေးတာ၊ ငွေချေတာ၊ ကားလိုင်းက ဈေးတင်တာ အားလုံးက အလွှာတိုင်းမှာ တစ်စစီ ပြန့်နေပါတယ်။
+      [[mark:y-teams]] အခု developer ၁၈ ယောက်၊ team သုံးခု ဖြစ်လာတော့ team တိုင်းက အလွှာတိုင်းကို ဝင်ပြင်နေရပါတယ်။
+      တစ်ယောက် ပြင်လိုက်တာက နောက်တစ်ယောက်ရဲ့ အလုပ်ကို ထိခိုက်ဖို့ လွယ်လာပါတယ်။
+      [[mark:y-sink]] သတိထားရမယ့် လက္ခဏာ နောက်တစ်ခုလည်း ရှိပါသေးတယ်။ request တစ်ခုက အလွှာတွေကို ဖြတ်သွားပေမဲ့
+      အလွှာတိုင်းက ဘာမှ မလုပ်ဘဲ အောက်ကို လက်ဆင့်ကမ်းပေးရုံပဲ ဆိုရင်၊ အဲဒီ အလွှာတွေက အလုပ်မလုပ်ဘဲ ဝန်ပဲ
+      ဖြစ်နေတာပါ။ ဒီလို request က နည်းနည်းပဲ ဆိုရင် ပြဿနာ မရှိပါဘူး။ အများစု ဖြစ်နေရင်တော့ အလွှာခွဲထားတာက
+      ကိုယ့် system နဲ့ မကိုက်တော့ဘူး ဆိုတဲ့ သတိပေးချက်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: point-layers,
+          type: whiteboard.point,
+          at: { mark: y-name },
+          target: { assetId: l-biz },
+        }
+      - {
+          id: keep-layers,
+          type: whiteboard.apply,
+          at: { mark: y-good },
+          clear: true,
+          upsertIds: [l-pres, l-pres-l, l-biz, l-biz-l, l-data, l-data-l],
+        }
+      - {
+          id: draw-y-good,
+          type: whiteboard.apply,
+          at: { mark: y-good, offsetMs: 6000 },
+          upsertIds: [y-good],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-y-teams,
+          type: whiteboard.apply,
+          at: { mark: y-teams },
+          upsertIds: [y-brace, y-t1, y-t2, y-t3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-y-sink,
+          type: whiteboard.apply,
+          at: { mark: y-sink, offsetMs: 3000 },
+          upsertIds: [y-sink, y-sink-l],
+          drawMs: 1500,
+        }
+
+  - id: modular
+    chapter: Modular monolith
+    narration: >
+      [[mark:m-open]] ဒါဆို app တစ်ခုတည်းကိုပဲ တခြား ပုံစံနဲ့ ခွဲကြည့်ရအောင်။ နည်းပညာ အလွှာအလိုက် ခွဲမယ့်အစား၊
+      business ရဲ့ လုပ်ငန်းနယ်ပယ်၊ domain အလိုက် ခွဲတာပါ။
+      [[mark:m-mods]] လက်မှတ် ရောင်းတာနဲ့ ဆိုင်သမျှက Booking၊ ကားလိုင်းတွေနဲ့ ဆိုင်သမျှက Operator၊ ငွေချေတာနဲ့
+      ဆိုင်သမျှက Payment ဆိုပြီး အပိုင်း သုံးပိုင်း ရပါတယ်။ ဒီလို အတူ ပြောင်းလဲတတ်တဲ့ code တွေကို
+      အုပ်စုဖွဲ့ထားတဲ့ အပိုင်းကို module လို့ ခေါ်ပါတယ်။ module တစ်ခုထဲမှာ သူ့ screen၊ သူ့ စည်းမျဉ်း၊ သူ့ query
+      တွေ အားလုံး ပါပါတယ်။
+      [[mark:m-deploy]] deploy လုပ်တာကတော့ အရင်အတိုင်း app တစ်ခုတည်းပါပဲ။ ဒီပုံစံကို modular monolith လို့
+      ခေါ်ပါတယ်။ monolith ဆိုတာ တစ်ခါတည်း အတူ deploy လုပ်ရတဲ့ app တစ်ခုလုံးကို ပြောတာဖြစ်ပြီး၊ modular ကတော့
+      အထဲမှာ module တွေ ခွဲထားတာကို ပြောတာပါ။
+      [[mark:m-promo]] ဒီပုံစံမှာ promo code ကို ထည့်ရင် ဘာဖြစ်မလဲ။ အကွက် အသစ်ရော၊ ဈေး တွက်နည်းရော၊ query ရော၊
+      column ရော အားလုံးက Booking module ထဲမှာပဲ ရှိတာမို့၊ Booking team က ကိုယ့် module ထဲမှာပဲ ပြင်ပြီး
+      ပြီးသွားပါတယ်။ Operator team နဲ့ Payment team ရဲ့ code ကို ထိစရာ မလိုတော့ပါဘူး။
+      [[mark:m-inside]] module တစ်ခုစီမှာ အရေးကြီးတဲ့ အရာ နှစ်ခု ရှိပါတယ်။ တစ်ခုက public interface ပါ။ တခြား
+      module တွေ လှမ်းသုံးလို့ရအောင် တမင် ဖွင့်ပေးထားတဲ့ function အနည်းငယ်ကို ဆိုလိုပါတယ်။
+      [[mark:m-own]] နောက်တစ်ခုက module ရဲ့ ကိုယ်ပိုင် table တွေပါ။ ကားလိုင်း data တွေက Operator module ရဲ့ table
+      တွေထဲမှာ၊ လက်မှတ် data တွေက Booking module ရဲ့ table တွေထဲမှာ ရှိတာမျိုးပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          clear: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m-mods,
+          type: whiteboard.apply,
+          at: { mark: m-mods },
+          upsertIds: [m-bk, m-bk-l, m-op, m-op-l, m-pay, m-pay-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-m-deploy,
+          type: whiteboard.apply,
+          at: { mark: m-deploy },
+          upsertIds: [m-bound, m-bound-l],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-m-promo,
+          type: whiteboard.apply,
+          at: { mark: m-promo, offsetMs: 2500 },
+          upsertIds: [m-p1, m-p2, m-p3, m-p4],
+          drawMs: 2000,
+        }
+      - { id: point-m-op, type: whiteboard.point, at: { mark: m-own }, target: { assetId: m-op } }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ Booking module က လက်မှတ်ပေါ်မှာ ကားလိုင်းရဲ့ နာမည်ကို ပြဖို့
+      လိုပါတယ်။ အဲဒီ နာမည်ကို ဘယ်လို ယူမလဲ။
+      [[mark:q-a]] ပထမ နည်းက Operator module ရဲ့ table ကို Booking ကနေ တိုက်ရိုက် query လုပ်လိုက်တာပါ။
+      database က တစ်ခုတည်းမို့ query တစ်ကြောင်းနဲ့ ပြီးပါတယ်။
+      [[mark:q-b]] ဒုတိယ နည်းကတော့ Operator module ရဲ့ interface ကို ခေါ်ပြီး နာမည်ကို တောင်းတာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ table ဆိုတာ module ရဲ့ အတွင်းပိုင်း
+      ဖြစ်လို့ပါ။ အတွင်းပိုင်းကို အပြင်က မသိမှ ပိုင်ရှင်က လွတ်လွတ်လပ်လပ် ပြင်နိုင်ပါတယ်။
+      [[mark:q-why]] Booking က Operator ရဲ့ table ကို တိုက်ရိုက် ဖတ်ထားရင်၊ Operator team က column နာမည် တစ်ခု
+      ပြောင်းလိုက်တာနဲ့ Booking က ပျက်သွားပါမယ်။ ဖတ်ရုံလေးပဲ ဆိုပေမဲ့၊ တစ်ယောက် ပြင်တာက
+      နောက်တစ်ယောက်ကို ထိတဲ့ အခြေအနေဆီ ပြန်ရောက်သွားတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok, q-r1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why, offsetMs: 2500 },
+          upsertIds: [q-r2],
+          drawMs: 900,
+        }
+
+  - id: rule
+    chapter: Module ကြားက စည်း
+    narration: >
+      [[mark:r-open]] ဒီ စည်းကို ပုံနဲ့ ကြည့်ရအောင်။ module နှစ်ခုကိုပဲ ယူကြည့်ပါမယ်။ Booking နဲ့ Operator ပါ။
+      [[mark:r-own]] Booking module က သူ့ table တွေကို သူပဲ ဖတ်ပြီး သူပဲ ရေးပါတယ်။ Operator module ကလည်း သူ့
+      table တွေကို အဲဒီလိုပဲ သူ တစ်ယောက်တည်း ကိုင်တွယ်ပါတယ်။
+      [[mark:r-allow]] Booking က ကားလိုင်း နာမည် လိုရင် Operator ရဲ့ interface ကို ခေါ်ပါတယ်။ ဒါက ခွင့်ပြုထားတဲ့
+      လမ်းပါ။ interface ရဲ့ ပုံစံ မပြောင်းသရွေ့ Operator team က အထဲက table တွေကို စိတ်ကြိုက် ပြင်နိုင်ပါတယ်။
+      [[mark:r-forbid]] Booking ကနေ Operator ရဲ့ table တွေဆီ တိုက်ရိုက် သွားတဲ့ လမ်းကိုတော့ ပိတ်ထားပါတယ်။
+      ရေးဖို့ရော၊ ဖတ်ဖို့ပါ ခွင့်မပြုပါဘူး။
+      [[mark:r-gain]] ဒီ စည်းကို ထိန်းထားနိုင်ရင် server ရော deploy လုပ်တဲ့ လုပ်ငန်းစဉ်ရော တစ်ခုတည်းနဲ့
+      ရိုးရိုးရှင်းရှင်း ဆက်သွားရင်း၊ team တစ်ခုက module တစ်ခုကို ပိုင်တဲ့ ပုံစံကို ရပါတယ်။ နောက်တစ်နေ့ module
+      တစ်ခုကို သီးခြား service အဖြစ် ခွဲထုတ်ဖို့ တကယ် လိုလာရင်လည်း၊ စည်းက ရှိပြီးသားမို့ အလုပ်
+      အများကြီး သက်သာသွားပါတယ်။
+      [[mark:r-risk]] အန္တရာယ်ကတော့ ဒီ စည်းက code ထဲမှာ အလိုလို မတည်မြဲတာပါ။ အလုပ်တွေ လောနေတဲ့ နေ့တစ်နေ့မှာ
+      တစ်ယောက်ယောက်က query တစ်ကြောင်းနဲ့ ဖြတ်ဝင်လိုက်ပါလိမ့်မယ်။ တစ်ခါ ဝင်ပြီးရင် နောက်လူတွေကလည်း
+      လိုက်လုပ်ကြပြီး၊ စည်းက တိတ်တိတ်လေး ပျက်သွားပါတယ်။ ဒါကြောင့် စည်း ကျော်တဲ့ code ကို build လုပ်တိုင်း
+      အလိုအလျောက် စစ်ပြီး တားပေးတဲ့ စစ်ဆေးချက် တစ်ခု ထည့်ထားဖို့ လိုပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          clear: true,
+          upsertIds: [r-bk, r-bk-l, r-op, r-op-l],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-r-own,
+          type: whiteboard.apply,
+          at: { mark: r-own },
+          upsertIds: [r-bk-a, r-bk-db, r-bk-db-l, r-op-a, r-op-db, r-op-db-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-r-allow,
+          type: whiteboard.apply,
+          at: { mark: r-allow },
+          upsertIds: [r-ok-a, r-ok-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-forbid,
+          type: whiteboard.apply,
+          at: { mark: r-forbid },
+          upsertIds: [r-no-a, r-no-x],
+          drawMs: 1200,
+        }
+      - {
+          id: point-r-no,
+          type: whiteboard.point,
+          at: { mark: r-risk },
+          target: { assetId: r-no-a },
+        }
+
+  - id: adr
+    chapter: ADR အဖြစ် ချရေးခြင်း
+    narration: >
+      [[mark:adr-open]] ဒီ ဆုံးဖြတ်ချက်ကို architecture decision record၊ အတိုကောက် ADR တစ်ခုအဖြစ်
+      ချရေးကြည့်ရအောင်။ ADR ဆိုတာ ဘာကို ဘာကြောင့် ဆုံးဖြတ်ခဲ့လဲ ဆိုတာ ရေးမှတ်ထားတဲ့ စာတိုလေးပါ။
+      [[mark:sel-context]] context အပိုင်းက ဒီ ဆုံးဖြတ်ချက် ဘာကြောင့် လိုလာလဲ ဆိုတာကို
+      မှတ်ထားပေးတာပါ။ ဒီမှာတော့ ခုနက promo code ရဲ့ ခရီးပါပဲ။
+      [[mark:type-dec-1]] decision အပိုင်းမှာ ပထမဆုံး ရေးရမှာက ဘာကို မပြောင်းဘူးလဲ ဆိုတာပါ။ deploy လုပ်တာကို app
+      တစ်ခုတည်းအဖြစ် ဆက်ထားပြီး၊ အထဲကိုပဲ domain အလိုက် module ခွဲမှာပါ။ service တွေအဖြစ် ခွဲထုတ်ဖို့
+      အကြောင်းပြချက်က အခုထိ မခိုင်လုံသေးလို့ပါ။
+      [[mark:type-dec-2]] ပြီးရင် module တစ်ခုက ဘာတွေ ပိုင်လဲ၊ module အချင်းချင်း ဘယ်လမ်းကနေပဲ ဆက်သွယ်ရမလဲ
+      ဆိုတဲ့ စည်း နှစ်ခုကို ရေးပါတယ်။ ဒါ မပါရင် module ဆိုတာ folder
+      နာမည် ပြောင်းထားတာသက်သက်ပဲ ဖြစ်သွားပါလိမ့်မယ်။
+      [[mark:type-plus]] consequences အပိုင်းမှာ ရလာမယ့် အကျိုးတွေကို အရင် ရေးပါတယ်။ ခုနက ပြောခဲ့တဲ့
+      အကျိုး သုံးခုပါပဲ။
+      [[mark:type-minus]] ပေးဆပ်ရမယ့် အရာတွေကိုလည်း ရိုးရိုးသားသား ရေးထားရပါမယ်။ app က တစ်ခုတည်းမို့ release က
+      အားလုံး အတူတူပဲ ထွက်ရဦးမှာပါ။ team တစ်ခုရဲ့ bug က ကျန်တဲ့ team တွေရဲ့ release ကို တားနေတဲ့ ပြဿနာကို ဒီ
+      ဆုံးဖြတ်ချက်က မဖြေရှင်းပေးပါဘူး။ အားနည်းချက်ကို ရေးမထားတဲ့ ADR ကို ဖတ်တဲ့သူက ယုံဖို့ ခက်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-rule, type: whiteboard.apply, at: { mark: adr-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-rule },
+          path: notebook/17-adr-modular-monolith.md,
+        }
+      - id: sel-context
+        type: editor.select
+        at: { mark: sel-context }
+        target:
+          file: notebook/17-adr-modular-monolith.md
+          text: "- team 3 ခုက app တစ်ခုတည်းကို ပြင်ပြီး အတူတူ deploy လုပ်နေရတယ်\n- code ကို layer အလိုက် ခွဲထားလို့ promo code လို အပြောင်းအလဲ တစ်ခုက layer တိုင်းကို ထိတယ်"
+      - id: type-dec-1
+        type: editor.type
+        at: { mark: type-dec-1 }
+        cadence: line-by-line
+        target: { file: notebook/17-adr-modular-monolith.md, after: "## Decision\n" }
+        text: "- app တစ်ခုတည်း ဆက် deploy လုပ်မယ်၊ အထဲမှာ domain အလိုက် module ခွဲမယ်\n- module: Booking, Operator, Payment\n"
+      - id: type-dec-2
+        type: editor.type
+        at: { mark: type-dec-2 }
+        cadence: line-by-line
+        target:
+          {
+            file: notebook/17-adr-modular-monolith.md,
+            after: "- module: Booking, Operator, Payment\n",
+          }
+        text: "- module တစ်ခုစီမှာ public interface တစ်ခုနဲ့ ကိုယ်ပိုင် table တွေ ရှိမယ်\n- တခြား module ရဲ့ table ကို တိုက်ရိုက် မဖတ်၊ မရေးဘူး၊ interface ကနေပဲ တောင်းမယ်\n"
+      - id: type-plus
+        type: editor.type
+        at: { mark: type-plus }
+        cadence: line-by-line
+        target: { file: notebook/17-adr-modular-monolith.md, after: "interface ကနေပဲ တောင်းမယ်\n" }
+        text: "\n## Consequences\n+ operation ရိုးရှင်းတယ်၊ ကုန်ကျစရိတ် နည်းတယ်\n+ team တစ်ခုက module တစ်ခုကို ပိုင်တယ်\n+ နောက်မှ module တစ်ခုကို service အဖြစ် ခွဲထုတ်ရ လွယ်တယ်\n"
+      - id: type-minus
+        type: editor.type
+        at: { mark: type-minus }
+        cadence: line-by-line
+        target: { file: notebook/17-adr-modular-monolith.md, after: "ခွဲထုတ်ရ လွယ်တယ်\n" }
+        text: "− release က အားလုံး အတူတူပဲ ထွက်ရဦးမယ်\n− စည်းကို အလိုအလျောက် မစစ်ရင် တဖြည်းဖြည်း ပျက်သွားမယ်\n"
+      - id: expect-rule
+        type: expect.file
+        at: { afterAction: type-minus }
+        path: notebook/17-adr-modular-monolith.md
+        contains: "- တခြား module ရဲ့ table ကို တိုက်ရိုက် မဖတ်၊ မရေးဘူး၊ interface ကနေပဲ တောင်းမယ်\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ ADR ထဲက module နာမည်တွေနေရာမှာ ကိုယ့် project
+      ရဲ့ module တွေကို ရေးကြည့်ပါ။ ကိုယ့် system ကို domain အလိုက် ခွဲရင် module ဘယ်နှခု ရမလဲ၊ နာမည်တွေက
+      ဘာတွေ ဖြစ်မလဲ ဆိုတာပါ။
+      [[mark:turn-2]] ပြီးရင် အဲဒီ module တွေကြားမှာ ထားချင်တဲ့ စည်း တစ်ခုကိုလည်း ရေးကြည့်ပါ။ စည်း
+      တစ်ခုတည်းနဲ့ စတာက၊ စည်း ဆယ်ခု ရေးပြီး ဘယ်သူမှ မလိုက်နာတာထက် ပိုအသုံးဝင်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-modules
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/17-adr-modular-monolith.md,
+            text: "- module: Booking, Operator, Payment",
+          }
+      - id: sel-rule
+        type: editor.select
+        at: { mark: turn-2 }
+        target:
+          {
+            file: notebook/17-adr-modular-monolith.md,
+            text: "- တခြား module ရဲ့ table ကို တိုက်ရိုက် မဖတ်၊ မရေးဘူး၊ interface ကနေပဲ တောင်းမယ်",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ layered architecture က code ကို နည်းပညာ အလုပ်အလိုက် အလွှာခွဲတာပါ။ စရ လွယ်ပြီး app
+      သေးသေး၊ team တစ်ခုတည်းအတွက် လုံလောက်နိုင်ပေမဲ့၊ business ဘက်က အပြောင်းအလဲ တစ်ခုက အလွှာတိုင်းကို
+      ဖြတ်သွားတတ်ပါတယ်။
+      [[mark:recap-2]] modular monolith ကတော့ deploy ကို တစ်ခုတည်း ထားပြီး အထဲမှာ domain အလိုက် module ခွဲတာပါ။
+      module တစ်ခုစီမှာ public interface နဲ့ ကိုယ်ပိုင် table တွေ ရှိပြီး၊ အဲဒီ စည်းကို အလိုအလျောက် စစ်ထားမှ
+      တည်မြဲပါတယ်။ team တွေ များလာတဲ့အခါ app တစ်ခုတည်းရဲ့ ရိုးရှင်းမှုကို မစွန့်ဘဲ သုံးနိုင်တဲ့ ပုံစံပါ။
+      [[mark:next]] နောက် lesson မှာတော့ ကားလိုင်း တစ်ခုချင်းစီရဲ့ မတူတဲ့ စည်းမျဉ်းတွေနဲ့၊ အဆင့်ဆင့် လုပ်ရတဲ့
+      အလုပ်တွေအတွက် သင့်တော်တဲ့ microkernel နဲ့ pipeline ဆိုတဲ့ style နှစ်မျိုးကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-decision
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          {
+            file: notebook/17-adr-modular-monolith.md,
+            text: "- app တစ်ခုတည်း ဆက် deploy လုပ်မယ်၊ အထဲမှာ domain အလိုက် module ခွဲမယ်",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
