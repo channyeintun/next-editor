@@ -1,0 +1,831 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-06-reversible-decisions
+  title: "Architect Path 06: ပြန်ပြင်လို့ရတဲ့ ဆုံးဖြတ်ချက်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/06-open-decisions.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/06-open-decisions.md: |
+        # ဖွင့်ထားတဲ့ ဆုံးဖြတ်ချက်များ
+
+        | ဆုံးဖြတ်ချက် | ပြန်ပြင်ရင် ကုန်ကျစရိတ် | ဘယ်လို ဖွင့်ထားမလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the request and what the team does not know yet. Orange
+    # questions, red for the cost the team remembers.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ဒုတိယ wallet: ဘယ်လောက် ကြာမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: w-q1,
+        kind: text,
+        x: 290,
+        y: 260,
+        width: 760,
+        height: 35,
+        text: "ဘယ်ကုမ္ပဏီလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-q2,
+        kind: text,
+        x: 290,
+        y: 330,
+        width: 760,
+        height: 35,
+        text: "API က အရင်လိုပဲ အလုပ်လုပ်မလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-q3,
+        kind: text,
+        x: 290,
+        y: 400,
+        width: 760,
+        height: 35,
+        text: "မှားရွေးမိရင်?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: w-fear,
+        kind: text,
+        x: 290,
+        y: 500,
+        width: 760,
+        height: 38,
+        text: "ပထမ wallet တုန်းက 3 လ ကြာခဲ့",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — decisions on one line by what it costs to undo them. Green is
+    # the cheap end and the move toward it, red the costly end and the error.
+    - {
+        id: u-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ပြန်ပြင်ရင် ဘယ်လောက် ကုန်မလဲ?",
+        fontSize: 36,
+      }
+    - { id: u-bar, kind: rectangle, x: 290, y: 330, width: 760, height: 24 }
+    - {
+        id: u-l,
+        kind: text,
+        x: 290,
+        y: 365,
+        width: 400,
+        height: 35,
+        text: "သက်သာ · မြန်မြန် ဆုံးဖြတ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: u-r,
+        kind: text,
+        x: 760,
+        y: 365,
+        width: 300,
+        height: 35,
+        text: "ကြီး · အရင် ဖွင့်ထား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: u-1,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 250,
+        height: 35,
+        text: "hold အချိန်",
+        fontSize: 28,
+      }
+    - { id: u-a1, kind: freedraw, stroke: arrow-down, x: 340, y: 283, width: 40, height: 40 }
+    - {
+        id: u-2,
+        kind: text,
+        x: 600,
+        y: 240,
+        width: 230,
+        height: 35,
+        text: "wallet ကုမ္ပဏီ",
+        fontSize: 28,
+      }
+    - { id: u-a2, kind: freedraw, stroke: arrow-down, x: 690, y: 283, width: 40, height: 40 }
+    - {
+        id: u-3,
+        kind: text,
+        x: 850,
+        y: 240,
+        width: 240,
+        height: 35,
+        text: "လက်မှတ် QR ပုံစံ",
+        fontSize: 28,
+      }
+    - { id: u-a3, kind: freedraw, stroke: arrow-down, x: 930, y: 283, width: 40, height: 40 }
+    - {
+        id: u-error,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 760,
+        height: 38,
+        text: "အမှားက ပြန်ပြင်မရအောင် ဆောက်မိတာ",
+        fontSize: 30,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: u-move,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 440,
+        y: 420,
+        width: 250,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: u-move-l,
+        kind: text,
+        x: 440,
+        y: 465,
+        width: 420,
+        height: 35,
+        text: "ကိုယ်ပိုင် interface ထားရင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: u-late,
+        kind: text,
+        x: 810,
+        y: 420,
+        width: 280,
+        height: 35,
+        text: "ဘယ်နေ့ နောက်ဆုံးထား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — two ways to try something. Blue layers of the system, a thin
+    # green slice through all of them (kept), an orange dashed box off to the
+    # side (thrown away).
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "စမ်းကြည့်နည်း နှစ်မျိုး",
+        fontSize: 36,
+      }
+    - { id: r-l1, kind: rectangle, x: 270, y: 230, width: 500, height: 62, strokeColor: "#1971c2" }
+    - {
+        id: r-l1-l,
+        kind: text,
+        x: 290,
+        y: 243,
+        width: 330,
+        height: 35,
+        text: "app စာမျက်နှာ",
+        fontSize: 28,
+      }
+    - { id: r-l2, kind: rectangle, x: 270, y: 302, width: 500, height: 62, strokeColor: "#1971c2" }
+    - {
+        id: r-l2-l,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 330,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - { id: r-l3, kind: rectangle, x: 270, y: 374, width: 500, height: 62, strokeColor: "#1971c2" }
+    - {
+        id: r-l3-l,
+        kind: text,
+        x: 290,
+        y: 387,
+        width: 330,
+        height: 35,
+        text: "Payment interface",
+        fontSize: 28,
+      }
+    - { id: r-l4, kind: rectangle, x: 270, y: 446, width: 500, height: 62, strokeColor: "#1971c2" }
+    - {
+        id: r-l4-l,
+        kind: text,
+        x: 290,
+        y: 459,
+        width: 330,
+        height: 35,
+        text: "wallet အသစ်",
+        fontSize: 28,
+      }
+    - {
+        id: r-tracer,
+        kind: rectangle,
+        x: 640,
+        y: 222,
+        width: 50,
+        height: 294,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+        fillStyle: hachure,
+      }
+    - {
+        id: r-tracer-l,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 500,
+        height: 35,
+        text: "tracer bullet: ဆက်ထားမယ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: r-proto,
+        kind: rectangle,
+        x: 800,
+        y: 300,
+        width: 270,
+        height: 100,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: r-proto-l,
+        kind: text,
+        align: center,
+        x: 800,
+        y: 332,
+        width: 270,
+        height: 35,
+        text: "prototype",
+        fontSize: 28,
+      }
+    - {
+        id: r-proto-s,
+        kind: text,
+        x: 800,
+        y: 415,
+        width: 290,
+        height: 35,
+        text: "ဖြေပြီးရင် ပစ်မယ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 4 — the quiz: white question and options, green answer, orange test.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "3 စက္ကန့်အတွင်း အတည်ပြုနိုင်မလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) tracer bullet",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) prototype",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 210,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 530,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "ဆက်ထားမှာလား၊ ပစ်မှာလား?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8106
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: second-wallet
+    chapter: ဒုတိယ wallet
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ design တစ်ခုကို နောက်တစ်ခါ ပြောင်းရတာ လွယ်မလွယ်နဲ့ အကဲဖြတ်ခဲ့ပြီး၊ wallet အသစ် တစ်ခု
+      ထည့်ရင် code နေရာ အများကြီး ပြင်ရမယ် ဆိုတာ တွေ့ခဲ့ပါတယ်။
+      [[mark:w-open]] အဲဒီ ပြောင်းလဲမှုက ဒီအပတ်မှာ တကယ် ရောက်လာပါတယ်။ CTO ဖြစ်တဲ့ အောင်အောင် က သီတင်းကျွတ်
+      လက်မှတ်တွေ မရောင်းခင် ဒုတိယ wallet တစ်ခုနဲ့ပါ ငွေချေလို့ရအောင် လုပ်ချင်ပါတယ်။ ဘယ်လောက် ကြာမလဲလို့လည်း
+      မေးပါတယ်။
+      [[mark:w-q1]] team ကတော့ ချက်ချင်း မဖြေရဲပါဘူး။ wallet ကုမ္ပဏီ နှစ်ခုနဲ့ ဆွေးနွေးနေတုန်းမို့ ဘယ်ကုမ္ပဏီ
+      ဖြစ်မလဲ မသိသေးပါဘူး။
+      [[mark:w-q2]] အသစ်ရဲ့ API က အခု သုံးနေတဲ့ wallet လိုပဲ အလုပ်လုပ်မလား ဆိုတာလည်း မသေချာပါဘူး။
+      [[mark:w-q3]] team ထဲက developer မောင်မောင် အစိုးရိမ်ဆုံးကတော့ မှားရွေးမိရင် ဘာဖြစ်မလဲ ဆိုတာပါ။
+      [[mark:w-fear]] ပထမ wallet ကို ထည့်တုန်းက သုံးလ ကြာခဲ့တာမို့၊ မှားရင် နောက်ထပ် သုံးလ ကုန်မှာကို
+      စိုးရိမ်တာပါ။ ဒီလို အခါမျိုးမှာ လူတွေက နှစ်မျိုး လုပ်တတ်ပါတယ်။ သေချာတဲ့အထိ လနဲ့ချီ စဉ်းစားနေတာ၊
+      ဒါမှမဟုတ် မသေချာဘဲနဲ့ သေချာသလို ကတိပေးလိုက်တာပါ။ နှစ်ခုလုံး မလိုဘဲ ရှေ့ဆက်နိုင်တဲ့ နည်းကို ဒီနေ့
+      ကြည့်ပါမယ်။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          open: true,
+          clear: true,
+          upsertIds: [w-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-w-q1,
+          type: whiteboard.apply,
+          at: { mark: w-q1 },
+          upsertIds: [w-q1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-q2,
+          type: whiteboard.apply,
+          at: { mark: w-q2 },
+          upsertIds: [w-q2],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-w-q3,
+          type: whiteboard.apply,
+          at: { mark: w-q3 },
+          upsertIds: [w-q3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-fear,
+          type: whiteboard.apply,
+          at: { mark: w-fear },
+          upsertIds: [w-fear],
+          drawMs: 1000,
+        }
+
+  - id: undo-cost
+    chapter: ပြန်ပြင်ရင် ဘယ်လောက် ကုန်မလဲ
+    narration: >
+      [[mark:u-open]] ပထမဆုံး သိထားရမှာက အပြီးအပိုင် ဆုံးဖြတ်ချက် ဆိုတာ ရှားတယ် ဆိုတာပါ။ ဆုံးဖြတ်ချက် အများစုကို
+      နောက်မှ ပြန်ပြင်လို့ ရပါတယ်။ ကွာတာက ပြန်ပြင်ရင် ဘယ်လောက် ကုန်မလဲ ဆိုတာပါပဲ။ ဒါကြောင့် ဆုံးဖြတ်ချက်တွေကို
+      အဲဒီ ကုန်ကျစရိတ်အလိုက် မျဉ်းတစ်ကြောင်းပေါ်မှာ စီကြည့်ရအောင်။
+      [[mark:u-1]] ထိုင်ခုံကို ဘယ်လောက်ကြာကြာ ထိန်းမလဲ ဆိုတာက သက်သာတဲ့ဘက်စွန်းမှာ ရှိပါတယ်။ ဂဏန်း တစ်ခုကို
+      တစ်နေရာမှာ ပြင်လိုက်ရုံပါ။ ဒီလို ဆုံးဖြတ်ချက်မျိုးကို အချိန်ကုန်ခံ ငြင်းမနေဘဲ မြန်မြန် ဆုံးဖြတ်ပြီး၊ မှားရင်
+      ပြန်ပြင်လိုက်တာက ပိုတွက်ခြေကိုက်ပါတယ်။
+      [[mark:u-3]] ခရီးသည်တွေဆီ ပို့ပြီးသား လက်မှတ်ပေါ်က QR code ထဲမှာ ဘာတွေ ထည့်မလဲ ဆိုတာကတော့ ကုန်ကျစရိတ်
+      ကြီးတဲ့ဘက်စွန်းမှာပါ။ ဖုန်းတွေထဲ ရောက်ပြီးသား လက်မှတ်တွေကို ပြန်သိမ်းလို့ မရတော့လို့ပါ။ ဒီလို
+      ဆုံးဖြတ်ချက်မျိုးမှာတော့ အချိန်ယူရပါတယ်။
+      [[mark:u-2]] wallet ကုမ္ပဏီကို ရွေးတာကရော။ ကုမ္ပဏီ တစ်ခုကို ရွေးတာမို့ သဘာဝအရတော့ ပြန်ပြင်လို့ ရတဲ့
+      ဆုံးဖြတ်ချက်ပါ။ ဒါပေမဲ့ ခရီးဖော် မှာတော့ ကြီးတဲ့ဘက် ရောက်နေပါတယ်။ အဲဒီ ကုမ္ပဏီရဲ့ API ကို code
+      နေရာတိုင်းကနေ တိုက်ရိုက် ခေါ်ထားလို့ပါ။
+      [[mark:u-error]] ဒီနေရာမှာ မှတ်သားစရာ တစ်ခု ရှိပါတယ်။ ပထမ wallet ကို ရွေးခဲ့တာက အမှား မဟုတ်ပါဘူး။ အမှားက
+      အဲဒီ ရွေးချယ်မှုကို ဘယ်တော့မှ မပြောင်းတော့မယ့်အတိုင်း ဆောက်ခဲ့တာပါ။ ဈေးကြီးတဲ့ အမှားဆိုတာ ဆုံးဖြတ်ချက်
+      မှားတာထက်၊ ပြန်ပြင်လို့ မရအောင် ဆောက်မိတာပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-u-open,
+          type: whiteboard.apply,
+          at: { mark: u-open },
+          clear: true,
+          upsertIds: [u-title, u-bar, u-l, u-r],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-u-1,
+          type: whiteboard.apply,
+          at: { mark: u-1 },
+          upsertIds: [u-1, u-a1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-u-3,
+          type: whiteboard.apply,
+          at: { mark: u-3 },
+          upsertIds: [u-3, u-a3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-u-2,
+          type: whiteboard.apply,
+          at: { mark: u-2 },
+          upsertIds: [u-2, u-a2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-u-error,
+          type: whiteboard.apply,
+          at: { mark: u-error },
+          upsertIds: [u-error],
+          drawMs: 1200,
+        }
+
+  - id: keep-open
+    chapter: ဆုံးဖြတ်ချက်ကို ဖွင့်ထားခြင်း
+    narration: >
+      ဒါဆို ကုန်ကျစရိတ် ကြီးတဲ့ ဆုံးဖြတ်ချက်တွေကို ဘယ်လို ကိုင်တွယ်မလဲ။ ပြန်ပြင်ရ သက်သာတဲ့ဘက်ကို
+      ရွှေ့ပေးတာပါ။
+      [[mark:k-iface]] wallet အတွက်ဆိုရင် ခရီးဖော် ရဲ့ code နဲ့ wallet API ကြားမှာ ကိုယ်ပိုင် interface တစ်ခု
+      ထားပါမယ်။ interface ဆိုတာ အပိုင်း နှစ်ခုကြား သဘောတူထားတဲ့ ပုံစံပါ။ ငွေဖြတ်ပါ၊ ငွေပြန်အမ်းပါ၊ ငွေချေပြီးပြီလား
+      စစ်ပါ ဆိုတာလောက်ကိုပဲ ကိုယ်တို့ရဲ့ စကားနဲ့ သတ်မှတ်ထားပါတယ်။ wallet ကုမ္ပဏီရဲ့ API ကို တကယ် ခေါ်တဲ့ code
+      ကတော့ အဲဒီ နောက်ကွယ်က နေရာ တစ်ခုတည်းမှာပဲ ရှိပါမယ်။
+      [[mark:k-move]] ဒါဆိုရင် ဒုတိယ wallet ထည့်တာက အဲဒီ နောက်ကွယ်မှာ အပိုင်း တစ်ခု ထပ်ထည့်တာပဲ ဖြစ်သွားပါတယ်။
+      ကုမ္ပဏီကို မှားရွေးမိရင်လည်း အဲဒီ အပိုင်း တစ်ခုကိုပဲ လဲရမှာပါ။ မောင်မောင် စိုးရိမ်နေတဲ့ သုံးလက အပတ်ပိုင်းပဲ
+      ဖြစ်သွားတာပါ။
+      [[mark:k-price]] ဒီလို အခု မဆုံးဖြတ်ဘဲ နောက်မှ ရွေးခွင့် ချန်ထားတာကို option လို့ ခေါ်ပါတယ်။ option က
+      အလကား မရပါဘူး။ interface ကို ဆောက်ဖို့ အချိန် ပေးရပါတယ်။ ဒါကြောင့် နေရာတိုင်းမှာ ကြိုလုပ်မထားဘဲ၊
+      ပြန်ပြင်ရ ကုန်ကျစရိတ် ကြီးပြီး ပြောင်းဖို့လည်း များတဲ့ နေရာမှာပဲ လုပ်ပါတယ်။
+      [[mark:k-late]] option ရှိသွားရင် ကောင်းတာ နောက်တစ်ခုက ဆုံးဖြတ်ချက်ကို နှောင့်နှေးထားလို့ ရသွားတာပါ။
+      ဘယ်ကုမ္ပဏီလဲ ဆိုတာကို ဒီနေ့ ရွေးစရာ မလိုတော့ပါဘူး။ ဆွေးနွေးပွဲတွေ ပြီးလို့ ပိုသိလာတဲ့အထိ စောင့်နိုင်ပါတယ်။
+      [[mark:k-moment]] ဒါပေမဲ့ အကန့်အသတ် မရှိ စောင့်လို့တော့ မရပါဘူး။ သီတင်းကျွတ် မတိုင်ခင် ပြီးဖို့ဆိုရင် ဘယ်နေ့
+      နောက်ဆုံးထား ရွေးရမလဲ ဆိုတာကို တွက်ပြီး၊ အဲဒီနေ့ကို ပြက္ခဒိန်ထဲ ထည့်ထားပါတယ်။ ပိုသိလာအောင် နောက်ကျကျ၊
+      ဒါပေမဲ့ လုပ်ဖို့ အချိန်မီအောင် စောစော ဆုံးဖြတ်တာပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: point-u-2, type: whiteboard.point, at: { mark: k-iface }, target: { assetId: u-2 } }
+      - {
+          id: draw-k-move,
+          type: whiteboard.apply,
+          at: { mark: k-move },
+          upsertIds: [u-move, u-move-l],
+          drawMs: 1500,
+        }
+      - {
+          id: point-u-move,
+          type: whiteboard.point,
+          at: { mark: k-price },
+          target: { assetId: u-move-l },
+        }
+      - {
+          id: draw-k-moment,
+          type: whiteboard.apply,
+          at: { mark: k-moment },
+          upsertIds: [u-late],
+          drawMs: 1000,
+        }
+
+  - id: tracer
+    chapter: Tracer bullet နဲ့ prototype
+    narration: >
+      [[mark:r-open]] interface ရှိသွားပေမဲ့ မသိတာတွေ ကျန်ပါသေးတယ်။ တချို့ မသိတာတွေကို စဉ်းစားနေရုံနဲ့ မသိနိုင်ပါဘူး။
+      စမ်းလုပ်ကြည့်မှ သိရတာပါ။ အန္တရာယ် နည်းနည်းနဲ့ စမ်းဖို့ နည်း နှစ်မျိုး ရှိပါတယ်။
+      [[mark:r-layers]] ဒုတိယ wallet နဲ့ ငွေချေတယ် ဆိုတာ app ရဲ့ စာမျက်နှာကနေ Booking၊ ကိုယ်ပိုင် Payment
+      interface ကို ဖြတ်ပြီး wallet အသစ်ဆီအထိ အလွှာ အားလုံးကို ဖြတ်သွားရပါတယ်။
+      [[mark:r-tracer]] ပထမ နည်းက tracer bullet ပါ။ အလွှာ တစ်ခုချင်းစီကို အပြည့် ဆောက်မနေဘဲ၊ အလွှာ အားလုံးကို
+      ဖြတ်တဲ့ ပါးပါးလေး လမ်းကြောင်း တစ်ခုကို အရင် ဆောက်တာပါ။ ဥပမာ ရန်ကုန်ကနေ မန္တလေး ခရီးစဉ် တစ်ခုတည်းအတွက်
+      ခရီးစဉ် ရှာ၊ ခုံရွေး၊ wallet အသစ်နဲ့ ငွေချေပြီး လက်မှတ် ရတဲ့အထိ တကယ် အလုပ်လုပ်အောင် လုပ်တာပါ။
+      [[mark:r-keep]] ပါးပေမဲ့ ဒါက တကယ့် code ပါ။ production မှာ သုံးမယ့် အရည်အသွေးနဲ့ ရေးထားပြီး၊ ကျန်တဲ့
+      ခရီးစဉ်တွေနဲ့ ကျန်တဲ့ အခြေအနေတွေကို ဒီ အရိုးစုပေါ်မှာပဲ ဆက်ဖြည့်သွားမှာပါ။ အလွှာတွေ တကယ် ဆက်မိမမိကို
+      အစောကြီးကတည်းက သိရတာက ဒီနည်းရဲ့ အကျိုးပါ။
+      [[mark:r-proto]] ဒုတိယ နည်းက prototype ပါ။ prototype က မေးခွန်း တစ်ခုတည်းကို ဖြေဖို့ အမြန် လုပ်ကြည့်တဲ့
+      အရာပါ။ ဥပမာ ငွေချေတဲ့ စာမျက်နှာမှာ wallet နှစ်ခုကို ဘယ်လို ပြရင် ခရီးသည်တွေ မရှုပ်မလဲ ဆိုတာ သိချင်ရင်၊
+      ပုံကြမ်း နှစ်မျိုး ဆွဲပြီး ကားဂိတ်က ခရီးသည် တချို့ကို ပြကြည့်လိုက်ရုံပါပဲ။
+      [[mark:r-throw]] အဖြေ ရပြီးတာနဲ့ prototype ကို လွှင့်ပစ်ပါတယ်။ အမြန် လုပ်ထားတဲ့ အရာမို့ production ထဲ
+      ဘယ်တော့မှ မထည့်ပါဘူး။ ဒါကြောင့် ဒါက ပစ်မယ့် prototype ပါ ဆိုတာကို အောင်အောင် တို့ကိုပါ အစကတည်းက
+      ပြောထားရပါတယ်။ မဟုတ်ရင် အလုပ်လုပ်နေတာ မြင်တာနဲ့ ဒါကိုပဲ ဆက်သုံးကြမယ်လို့ ပြောလာတတ်လို့ပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          clear: true,
+          upsertIds: [r-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-r-layers,
+          type: whiteboard.apply,
+          at: { mark: r-layers },
+          upsertIds: [r-l1, r-l1-l, r-l2, r-l2-l, r-l3, r-l3-l, r-l4, r-l4-l],
+          drawMs: 3200,
+        }
+      - {
+          id: draw-r-tracer,
+          type: whiteboard.apply,
+          at: { mark: r-tracer },
+          upsertIds: [r-tracer, r-tracer-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-proto,
+          type: whiteboard.apply,
+          at: { mark: r-proto },
+          upsertIds: [r-proto, r-proto-l],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-r-throw,
+          type: whiteboard.apply,
+          at: { mark: r-throw },
+          upsertIds: [r-proto-s],
+          drawMs: 900,
+        }
+
+  - id: table
+    chapter: ဖွင့်ထားတဲ့ ဆုံးဖြတ်ချက်များ
+    narration: >
+      [[mark:t-close]] ဒါတွေကို table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။
+      [[mark:t-cols]] ဆုံးဖြတ်ချက် တစ်ခုစီအတွက် ပြန်ပြင်ရင် ဘယ်လောက် ကုန်မလဲ၊ ဘယ်လို ဖွင့်ထားမလဲ ဆိုတာကို
+      ရေးသွားမှာပါ။
+      [[mark:type-r1]] wallet API ကို ဘယ်လို ခေါ်မလဲ ဆိုတာက အခုအတိုင်းဆို ပြန်ပြင်ရ အကြီးဆုံးပါ။ ကိုယ်ပိုင်
+      interface နောက်ကို ရွှေ့တာက ကိုယ်တို့ရဲ့ ပထမ အလုပ် ဖြစ်ပါတယ်။
+      [[mark:type-r2]] ဒုတိယ wallet က ဘယ်ကုမ္ပဏီလဲ ဆိုတာကတော့ interface ရှိသွားရင် သက်သာသွားပါပြီ။ ဒါကြောင့်
+      နောက်ဆုံးထား ရွေးရမယ့်နေ့အထိ မရွေးသေးဘဲ ထားပါမယ်။
+      [[mark:type-r3]] လက်မှတ် QR ထဲက အချက်အလက် ပုံစံကတော့ ထုတ်ပြီးသား လက်မှတ်တွေကြောင့် ပြန်ပြင်ရ ခက်ပါတယ်။
+      ဒီလို အရာမျိုးအတွက် ဖွင့်ထားနည်းက ပုံစံရဲ့ version နံပါတ်ကို QR ထဲမှာ ထည့်ထားတာပါ။ ဒါဆို ပုံစံအသစ်
+      ထွက်လာလည်း အဟောင်းနဲ့ အသစ်ကို ခွဲဖတ်နိုင်ပါတယ်။
+      [[mark:type-r4]] ထိုင်ခုံ ထိန်းချိန်ကတော့ ပြန်ပြင်ရ သက်သာပြီးသားမို့ ဘာမှ ထပ်လုပ်စရာ မလိုပါဘူး။ ဖွင့်ထားဖို့
+      အားထုတ်ရမှာက ကုန်ကျစရိတ် ကြီးတဲ့ ဆုံးဖြတ်ချက်တွေမှာပဲ ဆိုတာကို ဒီ table က ပြပေးပါတယ်။
+      [[mark:type-est]] အခုတော့ အောင်အောင် ရဲ့ မေးခွန်းကို ဖြေနိုင်ပါပြီ။ ဒါပေမဲ့ ရက်စွဲ တစ်ခုတည်းနဲ့ မဖြေပါဘူး။
+      ခန့်မှန်းချက် ဆိုတာ အမြဲတမ်း အပိုင်းအခြား တစ်ခုပါ။ interface ကတော့ ကိုယ်တို့ ကောင်းကောင်း သိတဲ့ အလုပ်မို့
+      ရက်နဲ့ ပြောနိုင်ပါတယ်။ wallet အသစ်ကတော့ မသိတာ များသေးတာမို့ အပတ်နဲ့ပဲ ပြောပါမယ်။
+      [[mark:sel-est]] သုံးတဲ့ ယူနစ်က ကိုယ် ဘယ်လောက် သေချာလဲ ဆိုတာကို ပြောပြနေတာပါ။ ရက်ပေါင်း ၃၀ လို့ ပြောရင်
+      တစ်ရက်ချင်းအထိ သေချာသလို ကြားရပါတယ်။ ၄ ပတ်ကနေ ၆ ပတ်လို့ ပြောရင်တော့ အဲဒီလောက်ပဲ သေချာတယ် ဆိုတာ
+      ရိုးရိုးသားသား ပြောတာပါ။ tracer bullet ပြီးလို့ ပိုသိလာတဲ့အခါ ဒီ ခန့်မှန်းချက်ကို ပြန်ပြင်ပေးပါမယ်။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - { id: close-tracer, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-tracer },
+          path: notebook/06-open-decisions.md,
+        }
+      - id: sel-cols
+        type: editor.select
+        at: { mark: t-cols }
+        target:
+          {
+            file: notebook/06-open-decisions.md,
+            text: "| ဆုံးဖြတ်ချက် | ပြန်ပြင်ရင် ကုန်ကျစရိတ် | ဘယ်လို ဖွင့်ထားမလဲ |",
+          }
+      - id: type-r1
+        type: editor.type
+        at: { mark: type-r1 }
+        cadence: line-by-line
+        target: { file: notebook/06-open-decisions.md, after: "|---|---|---|\n" }
+        text: "| wallet API ကို ဘယ်လို ခေါ်မလဲ | ကြီး: code နေရာတိုင်းမှာ | ကိုယ်ပိုင် Payment interface နောက်မှာ ထား |\n"
+      - id: type-r2
+        type: editor.type
+        at: { mark: type-r2 }
+        cadence: line-by-line
+        target: { file: notebook/06-open-decisions.md, after: "Payment interface နောက်မှာ ထား |\n" }
+        text: "| ဒုတိယ wallet က ဘယ်ကုမ္ပဏီလဲ | interface ရှိရင် သက်သာ | နောက်ဆုံးထား ရွေးရမယ့်နေ့အထိ မရွေးသေး |\n"
+      - id: type-r3
+        type: editor.type
+        at: { mark: type-r3 }
+        cadence: line-by-line
+        target: { file: notebook/06-open-decisions.md, after: "ရွေးရမယ့်နေ့အထိ မရွေးသေး |\n" }
+        text: "| လက်မှတ် QR ထဲက ပုံစံ | ကြီး: ထုတ်ပြီးသား လက်မှတ်တွေ | QR ထဲမှာ version နံပါတ် ထည့်ထား |\n"
+      - id: type-r4
+        type: editor.type
+        at: { mark: type-r4 }
+        cadence: line-by-line
+        target: { file: notebook/06-open-decisions.md, after: "version နံပါတ် ထည့်ထား |\n" }
+        text: "| seat hold အချိန် | သက်သာ: ဂဏန်း တစ်ခု | ထပ်လုပ်စရာ မလို |\n"
+      - id: type-est
+        type: editor.type
+        at: { mark: type-est }
+        cadence: line-by-line
+        target: { file: notebook/06-open-decisions.md, after: "ထပ်လုပ်စရာ မလို |\n" }
+        text: "\n## အောင်အောင် ကို ပြန်ဖြေတာ\n\n- ကိုယ်ပိုင် interface: 8–10 ရက်\n- ဒုတိယ wallet: 4–6 ပတ် (tracer ပြီးရင် ပြန်ခန့်မှန်းမယ်)\n"
+      - id: sel-est
+        type: editor.select
+        at: { mark: sel-est }
+        target:
+          {
+            file: notebook/06-open-decisions.md,
+            text: "- ကိုယ်ပိုင် interface: 8–10 ရက်\n- ဒုတိယ wallet: 4–6 ပတ်",
+          }
+      - id: expect-open
+        type: expect.file
+        at: { afterAction: sel-est }
+        path: notebook/06-open-decisions.md
+        contains: "| wallet API ကို ဘယ်လို ခေါ်မလဲ | ကြီး: code နေရာတိုင်းမှာ | ကိုယ်ပိုင် Payment interface နောက်မှာ ထား |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ငွေချေပြီးကြောင်း အတည်ပြုချက်ကို wallet အသစ်ရဲ့ API က ၃ စက္ကန့်အတွင်း
+      ပြန်ပေးနိုင်မလား ဆိုတာကို team က သိချင်နေပါတယ်။ ဒါကို သိဖို့ ဘာကို သုံးသင့်လဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက tracer bullet ပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုက prototype ပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ prototype ပါ။ ဘာကြောင့်လဲဆိုတော့ ဒီမှာ သိချင်တာက မေးခွန်း တစ်ခုတည်းမို့ပါ။
+      wallet ကုမ္ပဏီက စမ်းသပ်ဖို့ ပေးထားတဲ့ API ကို အကြိမ် တစ်ရာလောက် ခေါ်ကြည့်ပြီး အချိန်တိုင်းတဲ့ script လေး
+      တစ်ခုနဲ့ နေ့တစ်ဝက်အတွင်း သိနိုင်ပါတယ်။ အဖြေ ရရင် အဲဒီ script ကို ပစ်လိုက်ရုံပါပဲ။
+      [[mark:q-why]] tracer bullet ကတော့ မေးခွန်း တစ်ခုကို ဖြေဖို့ မဟုတ်ပါဘူး။ အလွှာတွေ အားလုံး ဆက်မိမမိ သိဖို့နဲ့၊
+      ဆက်ဆောက်သွားမယ့် အရိုးစု ရဖို့ပါ။
+      [[mark:q-r]] ဆိုတော့ နှစ်ခုကို ခွဲတဲ့ မေးခွန်းက ဒါကို ဆက်ထားမှာလား၊ ပစ်မှာလား ဆိုတာပါပဲ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1000,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 700 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 700 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - { id: draw-test, type: whiteboard.apply, at: { mark: q-r }, upsertIds: [q-r], drawMs: 1000 }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system ထဲမှာ ပြန်ပြင်ရင် အကုန်ကျ
+      အများဆုံး ဖြစ်မယ့် ဆုံးဖြတ်ချက် တစ်ခုကို ဒီ table ထဲမှာ ရေးကြည့်ပါ။ ပြီးရင် အဲဒါကို ဖွင့်ထားနိုင်မယ့် နည်း
+      တစ်ခုကို ဘေးမှာ ဖြည့်ပါ။
+      [[mark:turn-2]] ဖွင့်ထားနည်း မတွေ့ဘူးဆိုရင်လည်း အဲဒီ ဆုံးဖြတ်ချက်ကို ဘယ်နေ့ နောက်ဆုံးထား ချရမလဲ၊ အဲဒီ
+      မတိုင်ခင် ဘာကို စမ်းကြည့်ထားလို့ ရမလဲ ဆိုတာ ရေးထားပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-first-row
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/06-open-decisions.md,
+            text: "| wallet API ကို ဘယ်လို ခေါ်မလဲ | ကြီး: code နေရာတိုင်းမှာ | ကိုယ်ပိုင် Payment interface နောက်မှာ ထား |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ဆုံးဖြတ်ချက် အများစုက အပြီးအပိုင် မဟုတ်ပါဘူး။ ပြန်ပြင်ရင် ဘယ်လောက် ကုန်မလဲ ဆိုတာနဲ့
+      ခွဲကြည့်ပြီး၊ ကုန်ကျစရိတ် ကြီးတဲ့ ဆုံးဖြတ်ချက်တွေကို ကိုယ်ပိုင် interface လို နည်းတွေနဲ့ ဖွင့်ထားပါ။
+      [[mark:recap-2]] မသိတာကိုတော့ စဉ်းစားနေမယ့်အစား၊ ဆက်ထားမယ့် tracer bullet နဲ့ ဖြစ်ဖြစ်၊ ပစ်မယ့် prototype နဲ့
+      ဖြစ်ဖြစ် စမ်းကြည့်ပါ။ ခန့်မှန်းချက်ကိုလည်း ကိုယ် သေချာသလောက်ကို ပြတဲ့ ယူနစ်နဲ့ အပိုင်းအခြားအဖြစ် ပြောပါ။
+      [[mark:next]] ဒီ lesson နဲ့ဆိုရင် architect အမြင်ကို လေ့လာတဲ့ ပထမ အပိုင်း ပြီးပါပြီ။ နောက် lesson မှာတော့
+      code ကို အတူ ပြောင်းလဲတတ်တဲ့ အပိုင်းတွေ၊ module တွေအဖြစ် ဘယ်လို ခွဲမလဲ၊ module ကောင်း တစ်ခုက ဘာကို
+      ဖုံးထားပေးလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
