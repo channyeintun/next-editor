@@ -1,0 +1,804 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-42-how-systems-fail
+  title: "Architect Path 42: System တွေ ဘယ်လို ပျက်သလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/42-integration-points.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/42-integration-points.md: |
+        # Integration point စာရင်း
+
+        ဖြစ်ရပ်: သောကြာ ညနေ 6:10–6:30 · ဝယ်မရ၊ ရှာမရ · server အားလုံး run နေ၊ CPU နည်း
+
+        | Call | နှေးရင်? | မမျှော်လင့်တဲ့ အဖြေ ပြန်ရင်? | Time out |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: load-multipliers
+      contentType: html
+      name: Load ကို ပွားစေတဲ့ အရာများ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Load ကို ပွားစေတဲ့ အရာ လေးခု</div>
+          <div class="row" style="top: 30vh"><span class="num">1</span><span class="term wide orange">Retry</span>အားအနည်းဆုံး အချိန်မှာ ထပ်ခါထပ်ခါ ခေါ်</div>
+          <div class="row" style="top: 44vh"><span class="num">2</span><span class="term wide violet">တစ်ချိန်တည်း လာ</span>9 နာရီ SMS၊ cache သက်တမ်းကုန်ချိန်</div>
+          <div class="row" style="top: 58vh"><span class="num">3</span><span class="term wide red">Server တစ်လုံး ကျ</span>ကျန်တဲ့ server တွေ ပိုထမ်းရပြီး လိုက်ကျ</div>
+          <div class="row" style="top: 72vh"><span class="num">4</span><span class="term wide blue">အရှေ့က ပိုများ</span>အရှေ့ thread 400၊ အနောက် 50</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the quiz, asked before the rule: white question and options,
+    # green answer, orange the reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်ဟာက ပိုအန္တရာယ်များလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) ခေါ်တာနဲ့ ချက်ချင်း ငြင်းတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 780,
+        height: 35,
+        text: "ခ) လက်ခံပြီး 30 စက္ကန့်ကြာမှ ဖြေတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 500,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 820,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 780,
+        height: 35,
+        text: "စောင့်နေရင်း ကိုယ်ပါ ရပ်သွားတယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the chain, drawn from the bottom up. Blue = ခရီးဖော်'s parts,
+    # violet = one part calling the next, red = what failed and how it spread.
+    - {
+        id: c-wal,
+        kind: rectangle,
+        x: 290,
+        y: 535,
+        width: 380,
+        height: 64,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-wal-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 550,
+        width: 380,
+        height: 35,
+        text: "wallet API · 30 စက္ကန့်",
+        fontSize: 28,
+      }
+    - {
+        id: c-pay,
+        kind: rectangle,
+        x: 290,
+        y: 425,
+        width: 380,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-pay-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 440,
+        width: 380,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: c-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 494,
+        width: 40,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-pay-s,
+        kind: text,
+        x: 700,
+        y: 440,
+        width: 400,
+        height: 35,
+        text: "thread 50 လုံး စောင့်နေ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-book,
+        kind: rectangle,
+        x: 290,
+        y: 315,
+        width: 380,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-book-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 330,
+        width: 380,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 384,
+        width: 40,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-book-s,
+        kind: text,
+        x: 700,
+        y: 330,
+        width: 400,
+        height: 35,
+        text: "Payment ကို စောင့်နေ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-app,
+        kind: rectangle,
+        x: 290,
+        y: 205,
+        width: 380,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-app-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 220,
+        width: 380,
+        height: 35,
+        text: "app အဟောင်း (Search)",
+        fontSize: 28,
+      }
+    - {
+        id: c-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 460,
+        y: 274,
+        width: 40,
+        height: 36,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: c-app-s,
+        kind: text,
+        x: 700,
+        y: 220,
+        width: 400,
+        height: 35,
+        text: "ရှာတာပါ ရပ်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — three stages, top to bottom. Orange = the stages this board is
+    # about, red = the failure, green = where it can be stopped.
+    - {
+        id: f-b1,
+        kind: rectangle,
+        x: 290,
+        y: 215,
+        width: 200,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-t1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 232,
+        width: 200,
+        height: 35,
+        text: "fault",
+        fontSize: 28,
+      }
+    - {
+        id: f-e1,
+        kind: text,
+        x: 520,
+        y: 232,
+        width: 560,
+        height: 35,
+        text: "အကန့်အသတ်မရှိ စောင့်တဲ့ code",
+        fontSize: 28,
+      }
+    - {
+        id: f-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 292,
+        width: 40,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-b2,
+        kind: rectangle,
+        x: 290,
+        y: 355,
+        width: 200,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: f-t2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 372,
+        width: 200,
+        height: 35,
+        text: "error",
+        fontSize: 28,
+      }
+    - {
+        id: f-e2,
+        kind: text,
+        x: 520,
+        y: 372,
+        width: 560,
+        height: 35,
+        text: "Payment က Booking ကို မဖြေတော့",
+        fontSize: 28,
+      }
+    - {
+        id: f-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 432,
+        width: 40,
+        height: 56,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: f-b3,
+        kind: rectangle,
+        x: 290,
+        y: 495,
+        width: 200,
+        height: 70,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-t3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 512,
+        width: 200,
+        height: 35,
+        text: "failure",
+        fontSize: 28,
+      }
+    - {
+        id: f-e3,
+        kind: text,
+        x: 520,
+        y: 512,
+        width: 560,
+        height: 35,
+        text: "ခရီးသည် ဝယ်မရ၊ ရှာမရ",
+        fontSize: 28,
+      }
+    - {
+        id: f-s1,
+        kind: freedraw,
+        stroke: strike,
+        x: 335,
+        y: 310,
+        width: 110,
+        height: 20,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-s2,
+        kind: freedraw,
+        stroke: strike,
+        x: 335,
+        y: 450,
+        width: 110,
+        height: 20,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-stop,
+        kind: text,
+        x: 520,
+        y: 302,
+        width: 560,
+        height: 35,
+        text: "ဘယ်မှာ တားမလဲ ကြိုရွေးထား",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8142
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: အားလုံး ရပ်သွားတဲ့ ညနေ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ ဘယ်သူမှ အဖြေ ရေးမထားတဲ့ ဆုံးဖြတ်ချက် တစ်ခုအတွက် trade off analysis လုပ်ပုံနဲ့၊
+      အဲဒီ ရလဒ်ကို မေးခွန်း တစ်ခုတည်းအဖြစ် တင်ပြပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီ lesson ကနေ စပြီး system တစ်ခုက production မှာ တကယ် ဘယ်လို ရှင်သန်ရလဲ ဆိုတာကို
+      ကြည့်သွားမှာပါ။ ပြီးခဲ့တဲ့ လက ဖြစ်ရပ် တစ်ခုနဲ့ စကြည့်ရအောင်။
+      [[mark:sel-incident]] သောကြာနေ့ ညနေ ခြောက်နာရီ ဆယ်မိနစ်ကနေ မိနစ် ၂၀ ကြာအောင် ခရီးဖော် တစ်ခုလုံး
+      ရပ်သွားခဲ့ပါတယ်။ လက်မှတ် ဝယ်လို့ မရတာတင် မကဘဲ၊ ခရီးစဉ် ရှာတာတောင် မရခဲ့ပါဘူး။ ကားဂိတ်က ကောင်တာ
+      ဝန်ထမ်းတွေလည်း ဘာမှ ရောင်းလို့ မရတော့ပါဘူး။
+      [[mark:puzzle]] ထူးဆန်းတာက server တွေ အားလုံး run နေပြီး၊ CPU ကလည်း အလုပ် မရှိသလောက်ပါပဲ။ database
+      လည်း ကောင်းနေပါတယ်။ အဲဒီနေ့က ဘာ code မှလည်း deploy မလုပ်ခဲ့ပါဘူး။ CTO ဖြစ်တဲ့ အောင်အောင် က ဘာမှ
+      မပျက်ဘဲနဲ့ ဘာလို့ အကုန် ရပ်သွားရတာလဲ လို့ မေးပါတယ်။ လိုက်ရှာကြည့်တော့ ပြဿနာရဲ့ အစက ကိုယ်တို့ system
+      ထဲမှာ မဟုတ်ဘဲ၊ wallet ကုမ္ပဏီရဲ့ payment API ဘက်မှာ ဖြစ်နေတာကို တွေ့ရပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/42-integration-points.md,
+        }
+      - id: sel-incident
+        type: editor.select
+        at: { mark: sel-incident }
+        target:
+          {
+            file: notebook/42-integration-points.md,
+            text: "ဖြစ်ရပ်: သောကြာ ညနေ 6:10–6:30 · ဝယ်မရ၊ ရှာမရ",
+          }
+      - id: sel-puzzle
+        type: editor.select
+        at: { mark: puzzle }
+        target: { file: notebook/42-integration-points.md, text: "server အားလုံး run နေ၊ CPU နည်း" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] ဒီနေရာမှာ မေးခွန်း တစ်ခု မေးပါရစေ။ ကိုယ့် system က ခေါ်သုံးနေရတဲ့ တခြား service တစ်ခု
+      ပြဿနာ ဖြစ်တဲ့အခါ၊ ဘယ်လို ဖြစ်တာက ကိုယ့်အတွက် ပိုအန္တရာယ်များမလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက အဲဒီ service လုံးဝ ပျက်နေပြီး၊ ခေါ်လိုက်တာနဲ့ connection ကို ချက်ချင်း
+      ငြင်းလိုက်တာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုကတော့ connection ကို လက်ခံပါတယ်။ ဒါပေမဲ့ အဖြေကို စက္ကန့် ၃၀ ကြာမှ
+      ပြန်ပေးတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခု၊ နှေးနေတာက ပိုအန္တရာယ်များပါတယ်။ ဘာကြောင့်လဲဆိုတော့ ချက်ချင်း
+      ငြင်းခံရရင် ကိုယ့်ဘက်က ချက်ချင်း သိပြီး၊ ခရီးသည်ကို ငွေချေလို့ မရသေးဘူးလို့ ပြောပြနိုင်ပါတယ်။ ကျန်တဲ့
+      အလုပ်တွေကိုလည်း ဆက်လုပ်နိုင်ပါတယ်။
+      [[mark:q-why]] နှေးနေတဲ့အခါမှာတော့ ကိုယ့်ဘက်က ဘာမှ မသိရဘဲ စောင့်နေရပါတယ်။ စောင့်နေတဲ့ အတောအတွင်း
+      ကိုယ်တိုင်လည်း တခြား ဘာမှ မလုပ်နိုင်တော့ပါဘူး။ အဲဒီ ညနေက wallet API က ပျက်နေတာ မဟုတ်ပါဘူး။ ပုံမှန်ဆို
+      တစ်စက္ကန့်အတွင်း ဖြေနေကျကနေ၊ စက္ကန့် ၃၀ ကြာမှ ဖြေနေခဲ့တာပါ။ ဒါက ခရီးဖော် တစ်ခုလုံးကို ဘယ်လို
+      ရပ်သွားစေလဲ ဆိုတာ တစ်ဆင့်ချင်း လိုက်ကြည့်ရအောင်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+
+  - id: chain
+    chapter: တစ်ဆင့်ပြီး တစ်ဆင့် ရပ်သွားပုံ
+    narration: >
+      [[mark:c-wallet]] အစက wallet API ပါ။ ခရီးဖော် ရဲ့ အပြင်ဘက်က service ဖြစ်ပြီး၊ အဲဒီ ညနေမှာ စက္ကန့် ၃၀
+      ကြာမှ ဖြေနေပါတယ်။
+      [[mark:c-pay]] သူ့ကို ခေါ်တာက Payment service ပါ။ service တစ်ခုက တစ်ချိန်တည်းမှာ ကိုင်တွယ်နိုင်တဲ့
+      request အရေအတွက်မှာ အကန့်အသတ် ရှိပါတယ်။ request တစ်ခုစီအတွက် thread တစ်ခုကို သုံးထားရလို့ပါ။ Payment
+      မှာ thread ၅၀ ရှိတယ် ဆိုပါစို့။ wallet API ကို ခေါ်ထားတဲ့ thread က အဖြေ မရမချင်း တခြား ဘာမှ မလုပ်ဘဲ
+      စောင့်နေရပါတယ်။ ဘယ်လောက်ကြာကြာ စောင့်မယ် ဆိုတာကိုလည်း ဘယ်သူမှ သတ်မှတ်မထားခဲ့ပါဘူး။
+      [[mark:c-pay-full]] ညနေ ခြောက်နာရီဆိုတာ တစ်စက္ကန့်ကို ငွေချေမှု နှစ်ခုလောက် ဝင်နေတဲ့ အချိန်ပါ။
+      ဝင်လာတိုင်း thread တစ်ခုစီက စောင့်ရင်း ကျန်ခဲ့တော့၊ thread ၅၀ လုံးက စက္ကန့် ၃၀ တောင် မကြာခင်
+      ကုန်သွားပါတယ်။ အဲဒီနောက် ဝင်လာတဲ့ request တွေအတွက် Payment မှာ လက်ခံမယ့်သူ မရှိတော့ပါဘူး။
+      [[mark:c-book]] Payment ကို ခေါ်တာက Booking service ပါ။ ထိုင်ခုံ ဝယ်တဲ့ request တိုင်းက Payment ရဲ့
+      အဖြေကို စောင့်ရပါတယ်။ Payment က မဖြေနိုင်တော့တဲ့အခါ Booking ရဲ့ thread တွေလည်း တစ်ခုပြီး တစ်ခု စောင့်ရင်း
+      ပြည့်သွားပါတယ်။
+      [[mark:c-app]] ခရီးစဉ် ရှာတဲ့ စာမျက်နှာကလည်း ကျန်တဲ့ ထိုင်ခုံ အရေအတွက်ကို ပြဖို့ Booking ကို
+      လှမ်းမေးပါတယ်။ Booking က မဖြေနိုင်တော့၊ ရှာတဲ့ request တွေက app အဟောင်းရဲ့ thread တွေကို ကိုင်ပြီး
+      စောင့်နေကြပါတယ်။ ဒီလိုနဲ့ ငွေချေတာနဲ့ ဘာမှ မဆိုင်တဲ့ ရှာတာပါ ရပ်သွားတာပါ။
+      [[mark:c-cpu]] CPU က ဘာလို့ အလုပ် မရှိသလို ဖြစ်နေလဲ ဆိုတာလည်း ရှင်းသွားပါပြီ။ thread တွေ အားလုံးက အလုပ်
+      လုပ်နေတာ မဟုတ်ဘဲ၊ စောင့်နေကြတာပါ။ ဒီလို တစ်ခု ပျက်တာက သူ့ကို ခေါ်တဲ့သူကို ဆွဲချ၊ အဲဒီသူက နောက်တစ်ယောက်ကို
+      ဆက်ဆွဲချသွားတာကို cascading failure လို့ ခေါ်ပါတယ်။
+      [[mark:c-arrows]] system တစ်ခုက နောက်တစ်ခုကို ခေါ်တဲ့ နေရာတိုင်းကို integration point လို့ ခေါ်ပါတယ်။
+      ပြဿနာတွေက service တစ်ခုချင်းစီရဲ့ အထဲကထက်၊ ဒီလို ဆက်ထားတဲ့ နေရာတွေကနေ ဝင်လာတာ ပိုများတတ်ပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-c-wallet,
+          type: whiteboard.apply,
+          at: { mark: c-wallet },
+          clear: true,
+          upsertIds: [c-wal, c-wal-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-pay,
+          type: whiteboard.apply,
+          at: { mark: c-pay },
+          upsertIds: [c-pay, c-pay-l, c-a3],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-c-pay-full,
+          type: whiteboard.apply,
+          at: { mark: c-pay-full },
+          upsertIds: [c-pay-s],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-book,
+          type: whiteboard.apply,
+          at: { mark: c-book },
+          upsertIds: [c-book, c-book-l, c-a2, c-book-s],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-c-app,
+          type: whiteboard.apply,
+          at: { mark: c-app },
+          upsertIds: [c-app, c-app-l, c-a1, c-app-s],
+          drawMs: 2000,
+        }
+      - {
+          id: point-c-pay,
+          type: whiteboard.point,
+          at: { mark: c-cpu },
+          target: { assetId: c-pay-s },
+        }
+      - {
+          id: point-c-arrow,
+          type: whiteboard.point,
+          at: { mark: c-arrows },
+          target: { assetId: c-a3 },
+        }
+
+  - id: fault
+    chapter: Fault ကနေ failure အထိ
+    narration: >
+      ဒီဖြစ်ရပ်ကို အဆင့် သုံးဆင့်နဲ့ ခွဲကြည့်လို့ ရပါတယ်။
+      [[mark:f-fault]] ပထမ အဆင့်က fault ပါ။ system ရဲ့
+      အထဲမှာ တစ်ခုခု မှားနေတာကို ဆိုလိုပါတယ်။ ခရီးဖော် မှာတော့ Payment က အဖြေကို အကန့်အသတ်မရှိ စောင့်နေတာပါ။
+      wallet API မြန်နေသမျှ ဒီ fault ကို ဘယ်သူမှ မမြင်ရပါဘူး။
+      [[mark:f-error]] ဒုတိယ အဆင့်က error ပါ။ fault ကြောင့် မှားတဲ့ အပြုအမူက အပြင်ကို ထွက်လာတာပါ။ Payment က
+      သူ့ကို ခေါ်တဲ့ Booking ကို မဖြေတော့တာက error ပါ။
+      [[mark:f-failure]] တတိယ အဆင့်က failure ပါ။ သုံးတဲ့သူအတွက် system က အလုပ် မလုပ်တော့တာပါ။ ခရီးသည်က
+      လက်မှတ် ဝယ်မရ၊ ရှာမရ ဖြစ်သွားတာပါ။
+      [[mark:f-none]] fault ကို လုံးဝ မရှိအောင် လုပ်ဖို့ကတော့ မဖြစ်နိုင်ပါဘူး။ test ဘယ်လောက် ရေးရေး၊ code ကို
+      ဘယ်လောက် စစ်စစ် တစ်ခုခုတော့ ကျန်နေမှာပါ။
+      [[mark:f-stop]] architect အနေနဲ့ ဆုံးဖြတ်ရမှာက fault တစ်ခု ပေါ်လာတဲ့အခါ
+      ဘယ်နေရာမှာ တားမလဲ ဆိုတာပါ။ လမ်းမှာ ဘယ်သူမှ မတားရင် fault သေးသေးလေးကနေ failure ဖြစ်တဲ့အထိ
+      ရောက်သွားပါတယ်။ တားမယ့် နေရာကို ကိုယ် မရွေးထားရင်တော့၊ ဘယ်မှာ ရပ်မလဲ ဆိုတာကို ကံကပဲ
+      ဆုံးဖြတ်သွားပါလိမ့်မယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - {
+          id: draw-f-fault,
+          type: whiteboard.apply,
+          at: { mark: f-fault },
+          clear: true,
+          upsertIds: [f-b1, f-t1, f-e1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-f-error,
+          type: whiteboard.apply,
+          at: { mark: f-error },
+          upsertIds: [f-a1, f-b2, f-t2, f-e2],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-f-failure,
+          type: whiteboard.apply,
+          at: { mark: f-failure },
+          upsertIds: [f-a2, f-b3, f-t3, f-e3],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-f-stop,
+          type: whiteboard.apply,
+          at: { mark: f-stop },
+          upsertIds: [f-s1, f-s2, f-stop],
+          drawMs: 1500,
+        }
+
+  - id: load
+    chapter: Load ကို ပွားစေတဲ့ အရာတွေ
+    narration: >
+      [[mark:m-open]] အဲဒီ ညနေက နှေးတာ တစ်ခုတည်းနဲ့တင် ရပ်သွားခဲ့တာပါ။ ဒါပေမဲ့ ဒီလို အခြေအနေကို ပိုဆိုးစေတဲ့
+      အရာ လေးခု ရှိပါသေးတယ်။ လေးခုလုံးက load ကို မမျှော်လင့်တဲ့ အချိန်မှာ ပွားစေတာတွေပါ။
+      [[mark:m-retry]] ပထမက retry ပါ။ အဖြေ မရရင် ထပ်ခေါ်တာက ကောင်းတဲ့ အကျင့်လို့ ထင်ရပါတယ်။ ဒါပေမဲ့ Booking က
+      Payment ကို သုံးခါအထိ ခေါ်ပြီး၊ Payment ကလည်း wallet API ကို သုံးခါအထိ ခေါ်ရင်၊ ဝယ်တာ တစ်ခုအတွက် wallet
+      API ဆီ ကိုးခါ ရောက်သွားပါတယ်။ ခရီးသည်ကလည်း ခလုတ်ကို ထပ်နှိပ်ပါသေးတယ်။ ခေါ်ခံရတဲ့ဘက်က အားအနည်းဆုံး
+      အချိန်မှာ load က အဆပေါင်းများစွာ တက်လာတာပါ။
+      [[mark:m-same]] ဒုတိယက အားလုံး တစ်ချိန်တည်းမှာ လာတာပါ။ မနက် ၉ နာရီ တိတိမှာ promotion SMS ကို ခရီးသည်
+      အားလုံးဆီ တစ်ပြိုင်တည်း ပို့လိုက်ရင်၊ လူတွေက တစ်မိနစ်တည်းမှာ app ကို ဖွင့်ကြတတ်ပါတယ်။ cache ထဲက data တွေ
+      တစ်ချိန်တည်း သက်တမ်းကုန်တာလည်း ဒီသဘောပါပဲ။ request အားလုံးက database ဆီ တစ်ပြိုင်တည်း ရောက်သွားပါတယ်။
+      [[mark:m-one]] တတိယက server တစ်လုံး ကျသွားတာပါ။ Booking ကို server လေးလုံးနဲ့ run ထားတယ် ဆိုပါစို့။
+      တစ်လုံး ကျသွားရင် သူ့ load က ကျန်တဲ့ သုံးလုံးဆီ ရောက်လာပြီး၊ တစ်လုံးစီက သုံးပုံတစ်ပုံ ပိုထမ်းရပါတယ်။ ပထမ
+      တစ်လုံးက load မနိုင်လို့ ကျတာဆိုရင်၊ ကျန်တဲ့ သုံးလုံးလည်း အဲဒီ အကြောင်းနဲ့ပဲ တစ်လုံးပြီး တစ်လုံး
+      လိုက်ကျတတ်ပါတယ်။
+      [[mark:m-front]] စတုတ္ထက အရှေ့က ပို့နိုင်တာက အနောက်က ခံနိုင်တာထက် များနေတာပါ။ app အဟောင်းမှာ thread
+      ၄၀၀ ရှိပြီး Payment မှာ ၅၀ ပဲ ရှိတယ် ဆိုရင်၊ ပုံမှန်နေ့မှာ ဘာမှ မဖြစ်ပါဘူး။ သင်္ကြန် လက်မှတ်
+      ဖွင့်ရောင်းတဲ့ မနက်လို လူတိုင်းက ငွေချေတဲ့ အဆင့်ကို တစ်ပြိုင်တည်း ရောက်လာတဲ့ နေ့မှာတော့ အနောက်က
+      မခံနိုင်တော့ပါဘူး။
+      [[mark:m-will]] ဒါတွေက ဖြစ်ချင်မှ ဖြစ်မယ့် အရာတွေ မဟုတ်ပါဘူး။ system က ကြာကြာ run လေ တစ်နေ့နေ့မှာ
+      ကြုံရဖို့ များလာပါတယ်။ ဒါကြောင့် ဖြစ်လာမယ်လို့ပဲ ယူဆပြီး design ဆွဲရပါတယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: close-fault,
+          type: whiteboard.apply,
+          at: { mark: m-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-load,
+          type: slide.show,
+          at: { mark: m-open, offsetMs: -1000 },
+          slideId: load-multipliers,
+        }
+      - { id: point-retry, type: slide.point, at: { mark: m-retry }, target: { x: 0.15, y: 0.39 } }
+      - { id: point-same, type: slide.point, at: { mark: m-same }, target: { x: 0.15, y: 0.53 } }
+      - { id: point-one, type: slide.point, at: { mark: m-one }, target: { x: 0.15, y: 0.67 } }
+      - { id: point-front, type: slide.point, at: { mark: m-front }, target: { x: 0.15, y: 0.81 } }
+
+  - id: points
+    chapter: Integration point စာရင်း
+    narration: >
+      [[mark:p-close]] ဒါဆို ခရီးဖော် မှာ အန္တရာယ်ရှိတဲ့ နေရာတွေကို စာရင်းလုပ်ကြည့်ရအောင်။ integration point
+      တစ်ခုစီအတွက် မေးခွန်း သုံးခု မေးပါမယ်။ နှေးသွားရင် ဘာဖြစ်မလဲ၊ မမျှော်လင့်တဲ့ အဖြေ ပြန်လာရင် ဘာဖြစ်မလဲ၊
+      စောင့်ချိန်ကို ကန့်သတ်ထားသလား ဆိုတာပါ။
+      [[mark:type-wallet]] ပထမဆုံးက အဲဒီ ညနေရဲ့ အစ၊ wallet API ပါ။ နှေးရင် ဘာဖြစ်လဲ ဆိုတာ ကိုယ်တွေ့
+      သိပြီးပါပြီ။ မမျှော်လင့်တဲ့ အဖြေ ဆိုတာကတော့ ဥပမာ ငွေဖြတ်တာ အောင်မြင်မအောင်မြင် မပါဘဲ ပြန်လာတာမျိုးပါ။
+      အဲဒီလိုဆို ခရီးသည်ဆီက ငွေ ဖြတ်ပြီးပြီလား မသိနိုင်တော့ပါဘူး။ စောင့်ချိန် ကန့်သတ်ချက်၊ ဆိုလိုတာက time out
+      ကတော့ မရှိပါဘူး။
+      [[mark:type-seats]] ဒုတိယက ရှာတဲ့ စာမျက်နှာက Booking ကို ကျန်တဲ့ ခုံအရေအတွက် လှမ်းမေးတာပါ။ ဒါလည်း
+      စောင့်ချိန် ကန့်သတ်မထားလို့ ရှာတာပါ ရပ်ခဲ့တာပါ။ ခုံအရေအတွက် မသိရလည်း ခရီးစဉ်တွေကိုတော့ ပြလို့
+      ရသင့်ပါတယ်။
+      [[mark:type-sms]] တတိယက Notification က SMS gateway ကို ခေါ်တာပါ။ ဒီတစ်ခုကတော့ မတူပါဘူး။ Booking က
+      လက်မှတ် ရောင်းပြီးကြောင်း event ကို stream ထဲ ထည့်လိုက်ရုံပဲမို့၊ SMS gateway နှေးလည်း နောက်ကျတာက SMS ပဲ
+      ဖြစ်ပါတယ်။ ဝယ်တာကို မထိပါဘူး။
+      [[mark:type-report]] နောက်ဆုံး တစ်ခုက ကားလိုင်းတွေ ကြည့်တဲ့ ရောင်းအား စာရင်းပါ။ ဒီ query မှာ
+      ဘယ်နှကြောင်းထိပဲ ယူမယ် ဆိုတဲ့ limit မပါပါဘူး။ ကုမ္ပဏီ စခါစက ပြဿနာ မရှိပေမဲ့၊ ငါးနှစ်ကြာတော့
+      ကားလိုင်းကြီး တစ်ခုမှာ လက်မှတ် သန်းနဲ့ချီ ရှိနေပါပြီ။ ဘယ်လောက် ပြန်ပေးမလဲ ဆိုတာကို ခေါ်တဲ့ဘက်က
+      မသတ်မှတ်ရင်၊ တစ်နေ့မှာ မနိုင်တဲ့ အဖြေကြီး ပြန်လာပါလိမ့်မယ်။
+      [[mark:type-sum]] လေးခုထဲက သုံးခုမှာ စောင့်ချိန် ကန့်သတ်ချက် မရှိပါဘူး။ သုံးခုလုံးက တစ်နေ့မှာ အဲဒီ
+      ညနေလို ဖြစ်လာနိုင်တဲ့ နေရာတွေပါ။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - { id: close-load, type: slide.close, at: { mark: p-close } }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-load },
+          path: notebook/42-integration-points.md,
+        }
+      - id: type-wallet
+        type: editor.type
+        at: { mark: type-wallet }
+        cadence: line-by-line
+        target: { file: notebook/42-integration-points.md, after: "|---|---|---|---|\n" }
+        text: "| Payment → wallet API | thread ပြည့်ပြီး အားလုံး ရပ် | ငွေ ဖြတ်ပြီးမပြီး မသိ | မရှိ |\n"
+      - id: expect-wallet
+        type: expect.file
+        at: { afterAction: type-wallet }
+        path: notebook/42-integration-points.md
+        contains: "| Payment → wallet API | thread ပြည့်ပြီး အားလုံး ရပ် | ငွေ ဖြတ်ပြီးမပြီး မသိ | မရှိ |\n"
+      - id: type-seats
+        type: editor.type
+        at: { mark: type-seats }
+        cadence: line-by-line
+        target: { file: notebook/42-integration-points.md, after: "ငွေ ဖြတ်ပြီးမပြီး မသိ | မရှိ |\n" }
+        text: "| app → Booking (ကျန်တဲ့ ခုံ) | ရှာတာပါ ရပ် | ခုံအရေအတွက် မှား ပြ | မရှိ |\n"
+      - id: type-sms
+        type: editor.type
+        at: { mark: type-sms }
+        cadence: line-by-line
+        target: { file: notebook/42-integration-points.md, after: "ခုံအရေအတွက် မှား ပြ | မရှိ |\n" }
+        text: "| Notification → SMS gateway | SMS ပဲ နောက်ကျ၊ ဝယ်တာ မထိ | SMS မရောက်တာ မသိ | 10 s |\n"
+      - id: type-report
+        type: editor.type
+        at: { mark: type-report }
+        cadence: line-by-line
+        target: { file: notebook/42-integration-points.md, after: "SMS မရောက်တာ မသိ | 10 s |\n" }
+        text: "| Operator → database (ရောင်းအား စာရင်း) | စာမျက်နှာ နှေး | limit မပါ၊ row သန်းချီ ပြန်လာ | မရှိ |\n"
+      - id: type-sum
+        type: editor.type
+        at: { mark: type-sum }
+        cadence: line-by-line
+        target: { file: notebook/42-integration-points.md, after: "row သန်းချီ ပြန်လာ | မရှိ |\n" }
+        text: "\nTime out မရှိတဲ့ call: 4 ခုထဲက 3 ခု\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ integration
+      point တွေကို ရေးကြည့်ပါ။ တခြား service ကို ခေါ်တာ၊ database ကို ခေါ်တာ၊ အပြင်က API ကို ခေါ်တာ အားလုံး
+      ပါပါတယ်။
+      [[mark:turn-2]] ပြီးရင် စောင့်ချိန် ကန့်သတ်မထားတဲ့ တစ်ခုကို ရှာပြီး အမှတ်အသား လုပ်ထားပါ။ သုံးထားတဲ့
+      library က ကိုယ့်အစား သတ်မှတ်ပေးထားလိမ့်မယ်လို့ မယူဆပါနဲ့။ တကယ် ဘယ်လောက် စောင့်လဲ ဆိုတာကို setting ထဲမှာ
+      ကိုယ်တိုင် ဝင်ကြည့်ပါ။ အဲဒီ တစ်ခုကို နောက် lesson မှာ ပြန်သုံးပါမယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/42-integration-points.md,
+            text: "| Call | နှေးရင်? | မမျှော်လင့်တဲ့ အဖြေ ပြန်ရင်? | Time out |",
+          }
+      - id: sel-none
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/42-integration-points.md, text: "Time out မရှိတဲ့ call: 4 ခုထဲက 3 ခု" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ system တွေက အပိုင်း တစ်ခု လုံးဝ ပျက်လို့ထက်၊ တစ်ခု နှေးတာကို ကျန်တဲ့
+      အပိုင်းတွေက စောင့်နေရင်း ရပ်သွားတာ ပိုများတတ်ပါတယ်။ fault သေးသေးလေးက လမ်းမှာ ဘယ်သူမှ မတားရင် error ဖြစ်၊
+      failure ဖြစ်တဲ့အထိ ကူးသွားပါတယ်။ ဒါကြောင့် တခြား system ကို ခေါ်တဲ့ နေရာတိုင်းမှာ၊ နှေးရင် ဘာဖြစ်မလဲ၊
+      မမျှော်လင့်တာ ပြန်လာရင် ဘာဖြစ်မလဲ ဆိုတာကို ကြိုမေးထားရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ဒီ ညနေကိုပဲ အကာအကွယ်တွေ တပ်ပြီး ပြန်ကြည့်မယ့် stability pattern
+      တွေကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Release It! 2nd edition (Nygard)", url: "https://pragprog.com/titles/mnee2/" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
