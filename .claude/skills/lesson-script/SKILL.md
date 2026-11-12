@@ -16,10 +16,22 @@ table). Editorial rules: **docs/studio-persona.md**. Canonical small example:
 
 1. **Read** `docs/lesson-script-authoring.md`, `docs/studio-persona.md`, and
    `src/studio/scripts/rust-borrow.yaml`.
-2. **Design before writing**: one concept; work out the exact final code
-   (pinned files plus your insertions); mentally run it and transcribe the
-   exact program output for the fixture; then write narration that speaks
-   _while_ each action happens, placing `[[mark:…]]` where actions begin.
+2. **Design before writing** ("Teaching design" in the authoring doc). A
+   lesson is not a video: the learner can pause, change the code and run it,
+   so design for someone who can touch what you show.
+   - One concept, written first as what the learner can do afterwards. Open
+     with the need for it, not its definition.
+   - Give each idea its surface: a slide for a few steps or terms, the
+     whiteboard for how things relate, the editor for what the code is, a run
+     or the preview for what it does. Type only the lines the idea hinges on;
+     pin the rest.
+   - Ask what the run that matters will do before running it, name one small
+     change the learner can try by themselves (make it yourself first), and
+     close with the idea in one sentence.
+   - Then work out the exact final code (pinned files plus your insertions),
+     mentally run it and transcribe the exact program output for the fixture,
+     and write narration that speaks _while_ each action happens, placing
+     `[[mark:…]]` where actions begin.
 3. **Write** the YAML. Discipline points that break renders when sloppy:
    - Every object is strict: an unknown or misspelled key is an error. An
      anchor (`at`) names exactly one of `scene`, `mark`, or `afterAction`, and

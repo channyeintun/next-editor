@@ -12,6 +12,7 @@ studio's source code. The editorial rules live in
 
 - [What you are producing](#what-you-are-producing)
 - [The mental model](#the-mental-model-read-this-before-writing)
+- [Teaching design](#teaching-design-decide-this-before-the-yaml)
 - [Workflow](#workflow)
 - [Schema reference](#schema-reference)
 - [Editorial requirements](#editorial-requirements-summary--full-text-in-studio-personamd)
@@ -61,6 +62,47 @@ browser at render time. Two ways it reaches the studio:
    must contain what you asserted, action start times must hit their plan
    times within the timing gate. A render that fails any gate produces no
    lesson.
+
+## Teaching design (decide this before the YAML)
+
+A lesson is not a video. The learner watches it inside a real editor: at any
+moment they can pause, change the code and run it, then carry on, and their
+edits are kept as a version they can come back to. Design for that learner —
+one who can touch what you show.
+
+- **Write down what the learner can do afterwards, in one sentence, first.**
+  "After this you can make a button change what the page shows." Whatever does
+  not serve that sentence belongs to another lesson.
+- **Open with the need, not the definition.** Show the question the idea
+  answers — a button that does nothing yet, output that is not what you would
+  expect — and then the idea. Starter code that is unfinished is not a fake
+  mistake; a bug planted to be "discovered" is.
+- **Give each idea the surface that shows it best**, one surface at a time:
+
+  | The idea is…                                         | Show it on                                    |
+  | ---------------------------------------------------- | --------------------------------------------- |
+  | a few steps or terms the narration walks through     | a slide, with a `slide.point` at each as said |
+  | how things relate: a flow, a cycle, before and after | the whiteboard, drawn as it is said           |
+  | what the code is                                     | the editor: type it, or `editor.select` it    |
+  | what the code does                                   | a run and the console, or the preview         |
+
+  A slide or a board covers the editor, so close it before the words go back
+  to the code.
+
+- **Type only the lines the idea hinges on**, and pin the rest in the
+  workspace files. Every typed character costs narration time and the
+  learner's attention; spend both on the part being taught.
+- **Before the run that matters, ask what it will do.** "What do you think this
+  prints?", then run it and point at the line that answers. A learner who has
+  guessed remembers the answer. Once or twice in a lesson, not at every run.
+- **Hand the code over.** Name one small, specific change the learner can make
+  by themselves — "pause here, change the one to a five, and run it" — at a
+  moment when the code is on screen and complete enough to run. Choose a change
+  whose result they can see, and make it yourself first so you know it works.
+  This is the thing a video cannot do; a lesson that never invites it has used
+  the editor as a screen.
+- **Close with the idea in one sentence**, in the words you opened with, so the
+  last thing the learner hears is the thing to keep.
 
 ## Workflow
 

@@ -20,9 +20,21 @@ Read, entirely and in order, before writing:
 
 ## Procedure
 
-1. **Design before writing.** One concept per lesson. Work out the exact
-   final code (pinned starter files plus your insertions), mentally run it,
-   and transcribe the program's exact output for the fixture.
+1. **Design before writing** ("Teaching design" in the authoring reference).
+   A lesson is not a video: the learner can pause, change the code and run it,
+   so design for someone who can touch what you show.
+   - One concept per lesson, written first as what the learner can do
+     afterwards. Open with the need for it, not its definition.
+   - Give each idea its surface: a slide for a few steps or terms, the
+     whiteboard for how things relate, the editor for what the code is, a run
+     or the preview for what it does. Type only the lines the idea hinges on;
+     pin the rest in the starter files.
+   - Ask what the run that matters will do before running it, name one small
+     change the learner can try by themselves (make it yourself first), and
+     close with the idea in one sentence.
+   - Then work out the exact final code (pinned starter files plus your
+     insertions), mentally run it, and transcribe the program's exact output
+     for the fixture.
 2. **Write the narration as a conversation** — the way a teacher talks at a
    whiteboard, never the way a manual reads: contractions everywhere natural
    ("that's", "doesn't", "let's"), an occasional short question the next
