@@ -1,0 +1,799 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-40-reuse
+  title: "Architect Path 40: Reuse လား၊ ကူးယူမလား"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/40-sharing.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/40-sharing.md: |
+        # Sharing: မျှသုံးမလား၊ ကူးယူမလား
+
+        - ပြဿနာ: ငွေပမာဏ format နဲ့ ကားလိုင်း permission check ကို team 6 ခုလုံးက တစ်ခုစီ ရေးထား
+        - အဆိုပြုချက်: common library တစ်ခုနဲ့ lookup service တစ်ခု
+
+        | မျှသုံးမယ့် အရာ | ပြောင်းနှုန်း | ရွေးချယ်မှု | ဘာကြောင့် |
+        |---|---|---|---|
+
+        လမ်းညွှန်: တစ်ခုစီကို ဘယ်လောက် ပြောင်းလဲ မေးပြီးမှ နည်းကို ရွေး။ common တစ်ခုတည်းထဲ အကုန် မထည့်
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — everything in one `common` library: orange the library the
+    # board is about, violet who depends on it, red what that costs.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "common ထဲ အကုန်ထည့်ရင်",
+        fontSize: 36,
+      }
+    - {
+        id: b-common,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 480,
+        height: 290,
+        strokeStyle: dashed,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-common-l,
+        kind: text,
+        x: 290,
+        y: 238,
+        width: 200,
+        height: 35,
+        text: "common",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: b-i1,
+        kind: text,
+        x: 310,
+        y: 290,
+        width: 400,
+        height: 35,
+        text: "ငွေ format",
+        fontSize: 28,
+      }
+    - {
+        id: b-i2,
+        kind: text,
+        x: 310,
+        y: 345,
+        width: 400,
+        height: 35,
+        text: "permission check",
+        fontSize: 28,
+      }
+    - {
+        id: b-i3,
+        kind: text,
+        x: 310,
+        y: 400,
+        width: 400,
+        height: 35,
+        text: "retry, logging",
+        fontSize: 28,
+      }
+    - {
+        id: b-i4,
+        kind: text,
+        x: 310,
+        y: 455,
+        width: 400,
+        height: 35,
+        text: "ရက်စွဲ၊ SMS စာသား",
+        fontSize: 28,
+      }
+    - {
+        id: b-arrow,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 765,
+        y: 342,
+        width: 95,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-teams,
+        kind: text,
+        x: 875,
+        y: 345,
+        width: 200,
+        height: 35,
+        text: "team 6 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: b-cost,
+        kind: text,
+        x: 270,
+        y: 540,
+        width: 700,
+        height: 35,
+        text: "တစ်ခု ပြင်တိုင်း team 6 ခုလုံး deploy",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-rule,
+        kind: text,
+        x: 270,
+        y: 598,
+        width: 700,
+        height: 35,
+        text: "ဘယ်လောက် မကြာခဏ ပြောင်းလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — four ways to share along one line, from no coupling to a
+    # run-time dependency; red is what each way costs, orange the rule.
+    - {
+        id: w-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 600,
+        height: 45,
+        text: "မျှသုံးနည်း လေးမျိုး",
+        fontSize: 36,
+      }
+    - { id: w-line, kind: rectangle, x: 270, y: 330, width: 810, height: 8 }
+    - {
+        id: w-left,
+        kind: text,
+        x: 270,
+        y: 350,
+        width: 300,
+        height: 35,
+        text: "coupling မရှိ",
+        fontSize: 28,
+      }
+    - {
+        id: w-right,
+        kind: text,
+        x: 790,
+        y: 350,
+        width: 300,
+        height: 35,
+        text: "run time မှာ မှီခို",
+        fontSize: 28,
+      }
+    - {
+        id: w-o1,
+        kind: text,
+        x: 270,
+        y: 270,
+        width: 180,
+        height: 38,
+        text: "ကူးယူ",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-o2,
+        kind: text,
+        x: 470,
+        y: 270,
+        width: 180,
+        height: 38,
+        text: "Library",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-o3,
+        kind: text,
+        x: 680,
+        y: 270,
+        width: 180,
+        height: 38,
+        text: "Sidecar",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-o4,
+        kind: text,
+        x: 900,
+        y: 270,
+        width: 180,
+        height: 38,
+        text: "Service",
+        fontSize: 30,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: w-c1,
+        kind: text,
+        x: 270,
+        y: 430,
+        width: 190,
+        height: 35,
+        text: "မိတ္တူ ကွဲလာ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-c2,
+        kind: text,
+        x: 470,
+        y: 430,
+        width: 200,
+        height: 35,
+        text: "version စီမံရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-c3,
+        kind: text,
+        x: 680,
+        y: 430,
+        width: 200,
+        height: 35,
+        text: "ops အတွက်ပဲ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: w-c4,
+        kind: text,
+        x: 900,
+        y: 430,
+        width: 190,
+        height: 35,
+        text: "အားလုံး မှီခို",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 3 — the quiz: white givens and options, green answer, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "Commission စည်းမျဉ်းကို ဘယ်မှာ ထားမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-g,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 700,
+        height: 35,
+        text: "service 3 ခု သုံး၊ 3 လ တစ်ခါ ပြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 700,
+        height: 35,
+        text: "က) library အဖြစ် ထုတ်၊ သုံးခုလုံး ယူသုံး",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 700,
+        height: 35,
+        text: "ခ) service တစ်ခုတည်းက ပိုင်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 395,
+        width: 400,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 710,
+        y: 383,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 475,
+        width: 700,
+        height: 35,
+        text: "မြန်မြန် ပြောင်းတဲ့ business rule",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-home,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 700,
+        height: 35,
+        text: "အိမ် တစ်ခုပဲ ရှိရမယ်: Settlement",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8140
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ခြောက်နေရာမှာ ထပ်နေတဲ့ code
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ service အများကြီးကို ဖြတ်တဲ့ လုပ်ငန်းစဉ်ကို saga နဲ့ state တွေအဖြစ် design ဆွဲပုံကို
+      လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီတစ်ခါတော့ service တွေကြားမှာ ထပ်နေတဲ့ code အကြောင်းပါ။
+      [[mark:sel-problem]] ခရီးဖော် ရဲ့ team ခြောက်ခုလုံးက ငွေပမာဏကို စာသားအဖြစ် ပြတဲ့ code နဲ့၊ ကားလိုင်း ဝန်ထမ်း
+      တစ်ယောက်က ဘယ် data ကို ကြည့်ခွင့်ရှိလဲ စစ်တဲ့ permission check ကို တစ်ခုစီ ရေးထားကြပါတယ်။ ပြီးခဲ့တဲ့လက အဲဒီ
+      မိတ္တူတွေထဲက တစ်ခုက နောက်ကျကျန်နေလို့၊ ကားလိုင်း တစ်ခုရဲ့ ဝန်ထမ်းက တခြား ကားလိုင်းရဲ့ ရောင်းအားစာရင်းကို
+      မြင်သွားခဲ့ပါတယ်။
+      [[mark:sel-proposal]] Booking team lead မောင်မောင် က ဒါကို တစ်ခါတည်း ရှင်းဖို့ အဆိုပြုပါတယ်။ ထပ်နေတဲ့ code အားလုံးကို
+      common ဆိုတဲ့ library တစ်ခုတည်းထဲ စုမယ်၊ မျှသုံးတဲ့ data တွေအတွက်လည်း lookup service တစ်ခု ထားမယ် ဆိုတာပါ။
+      ရေးပြီးသားကို ပြန်သုံးတာ၊ ဆိုလိုတာက reuse က ကောင်းတယ်လို့ လူတိုင်း သင်ခဲ့ရတာမို့ ကန့်ကွက်သူ
+      မရှိသလောက်ပါပဲ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/40-sharing.md,
+        }
+      - id: sel-problem
+        type: editor.select
+        at: { mark: sel-problem }
+        target:
+          {
+            file: notebook/40-sharing.md,
+            text: "- ပြဿနာ: ငွေပမာဏ format နဲ့ ကားလိုင်း permission check ကို team 6 ခုလုံးက တစ်ခုစီ ရေးထား",
+          }
+      - id: sel-proposal
+        type: editor.select
+        at: { mark: sel-proposal }
+        target:
+          {
+            file: notebook/40-sharing.md,
+            text: "- အဆိုပြုချက်: common library တစ်ခုနဲ့ lookup service တစ်ခု",
+          }
+
+  - id: coupling
+    chapter: မျှသုံးတိုင်း coupling ဖြစ်တယ်
+    narration: >
+      [[mark:b-open]] ဒါပေမဲ့ မျှသုံးတိုင်း coupling တစ်ခု ဖြစ်လာပါတယ်။ coupling ဆိုတာ အပိုင်း နှစ်ခုက တစ်ခုအကြောင်း
+      တစ်ခု ဘယ်လောက် သိနေရလဲ ဆိုတာပါ။ common ထဲကို ဘာတွေ ရောက်လာမလဲ ကြည့်ရအောင်။
+      [[mark:b-items]] ငွေ format၊ permission check၊ retry နဲ့ logging၊ ရက်စွဲနဲ့ SMS စာသား ဆိုပြီး တစ်ခုနဲ့တစ်ခု
+      မဆိုင်တဲ့ အရာတွေ တစ်နေရာတည်းမှာ စုလာပါတယ်။
+      [[mark:b-teams]] အဲဒီ library တစ်ခုတည်းကို team ခြောက်ခုလုံးက သုံးပါတယ်။
+      [[mark:b-cost]] အထဲက တစ်ခုခုကို ပြင်တိုင်း library ရဲ့ version အသစ် ထွက်ပြီး၊ မဆိုင်တဲ့ team တွေပါ လိုက်ယူ၊
+      လိုက်စစ်ပြီး deploy လုပ်ရပါတယ်။ နှစ် ၂ တုန်းက utils folder ကို မှတ်မိကြပါလိမ့်မယ်။ ဈေးနှုန်း function ကို
+      ပြင်လိုက်တာက SMS စာသားကို ဖျက်ခဲ့တာပါ။ common ဆိုတာ အဲဒီ utils ကို ကုမ္ပဏီ တစ်ခုလုံးစာ ချဲ့လိုက်တာပါပဲ။
+      [[mark:b-rule]] ဒါကြောင့် မေးရမယ့် မေးခွန်းက ဒါ ထပ်နေလား မဟုတ်ပါဘူး။ ဒါ ဘယ်လောက် မကြာခဏ ပြောင်းလဲ ဆိုတာပါ။
+      မျှသုံးတာက ပြောင်းခဲတဲ့ အရာအတွက်ပဲ တန်ပါတယ်။ operating system နဲ့ framework ကို လူတိုင်း မျှသုံးနေကြတာက
+      အဲဒါတွေ ကိုယ့် code ထက် အများကြီး ပြောင်းနှေးလို့ပါ။
+      [[mark:b-history]] reuse ကို အများဆုံး ရအောင် ကြိုးစားခဲ့တဲ့ အဖွဲ့အစည်းတွေမှာ ဖြစ်ခဲ့တာက၊ ပြောင်းလဲမှုတိုင်းက
+      မျှသုံးတဲ့ အပိုင်းကို ထိန်းတဲ့ ဗဟို team ကို ဖြတ်ရတာပါ။ team တိုင်းက အဲဒီ team တစ်ခုတည်းကို တန်းစီ
+      စောင့်ရပါတော့တယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          upsertIds: [b-title, b-common, b-common-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-b-items,
+          type: whiteboard.apply,
+          at: { mark: b-items },
+          upsertIds: [b-i1, b-i2, b-i3, b-i4],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-b-teams,
+          type: whiteboard.apply,
+          at: { mark: b-teams },
+          upsertIds: [b-teams, b-arrow],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-cost,
+          type: whiteboard.apply,
+          at: { mark: b-cost },
+          upsertIds: [b-cost],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-b-rule,
+          type: whiteboard.apply,
+          at: { mark: b-rule, offsetMs: 4000 },
+          upsertIds: [b-rule],
+          drawMs: 1200,
+        }
+      - {
+          id: point-b-common,
+          type: whiteboard.point,
+          at: { mark: b-history },
+          target: { assetId: b-common },
+        }
+
+  - id: ways
+    chapter: မျှသုံးနည်း လေးမျိုး
+    narration: >
+      [[mark:w-open]] မျှသုံးတဲ့နည်းက တစ်မျိုးတည်း မဟုတ်ပါဘူး။ coupling မရှိတာကနေ run time မှာ မှီခိုရတာအထိ လေးမျိုး
+      ရှိပါတယ်။
+      [[mark:w-copy]] ပထမက ကူးယူတာပါ။ service တစ်ခုစီက ကိုယ့်မိတ္တူကို ထားတာမို့ coupling မရှိပါဘူး။ ပေးရတာက
+      မိတ္တူတွေ တဖြည်းဖြည်း ကွဲလာတာပါ။ သေးပြီး ပြောင်းခဲတဲ့ code အတွက် သင့်တော်ပါတယ်။
+      [[mark:w-lib]] ဒုတိယက library ပါ။ build လုပ်တဲ့အချိန်မှာ မျှသုံးတာမို့ run time မှာ ဘယ်သူ့ကိုမှ မမှီခိုပါဘူး။
+      ဒါပေမဲ့ version တွေ လိုပြီး၊ team တစ်ခုစီက ဘယ် version ကို ဘယ်တော့ ယူမလဲ ဆိုတာ စီမံရပါတယ်။ version အဟောင်းကို ဘယ်နေ့အထိပဲ ခွင့်ပြုမယ် ဆိုတာကိုလည်း
+      ကြိုသတ်မှတ်ထားရပါတယ်။
+      [[mark:w-small]] library ကြီး တစ်ခုထက်၊ အလုပ်တစ်ခုပဲ လုပ်တဲ့ library သေးသေး အများကြီးက ပိုသင့်တော်ပါတယ်။ ကိုယ်နဲ့
+      မဆိုင်တဲ့ ပြောင်းလဲမှုကို လိုက်ယူစရာ မလိုတော့လို့ပါ။
+      [[mark:w-side]] တတိယက sidecar ပါ။ service တစ်ခုစီရဲ့ ဘေးမှာ တွဲ run တဲ့ process သေးသေး တစ်ခုပါ။ logging၊
+      စောင့်ကြည့်တာ၊ service အချင်းချင်း လုံခြုံအောင် ချိတ်တာလို operation ကိစ္စတွေကို အဲဒီထဲ ထည့်ပါတယ်။ service ရဲ့
+      code ကို မထိဘဲ အားလုံးအတွက် တစ်ခါတည်း ပြောင်းလို့ ရပါတယ်။ ဒါပေမဲ့ business rule ကိုတော့ အဲဒီထဲ
+      မထည့်သင့်ပါဘူး။
+      [[mark:w-svc]] စတုတ္ထက service တစ်ခုအဖြစ် ထားတာပါ။ တစ်နေရာမှာ ပြင်လိုက်တာနဲ့ အားလုံးအတွက် ချက်ချင်း
+      ပြောင်းပါတယ်။ ပေးရတာက ခေါ်တဲ့သူတိုင်းက run time မှာ သူ့ကို မှီခိုသွားတာပါ။
+      [[mark:w-lookup]] အဆိုပြုထားတဲ့ lookup service ဆိုရင် service ခြောက်ခုလုံးက request တိုင်းမှာ သူ့ကို ခေါ်ရမှာမို့၊
+      သူ နှေးရင် အားလုံး နှေး၊ သူ ပျက်ရင် အားလုံး ပျက်ပါတယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          clear: true,
+          upsertIds: [w-title, w-line, w-left, w-right],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-w-copy,
+          type: whiteboard.apply,
+          at: { mark: w-copy },
+          upsertIds: [w-o1, w-c1],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-w-lib,
+          type: whiteboard.apply,
+          at: { mark: w-lib },
+          upsertIds: [w-o2, w-c2],
+          drawMs: 1300,
+        }
+      - {
+          id: point-w-lib,
+          type: whiteboard.point,
+          at: { mark: w-small },
+          target: { assetId: w-o2 },
+        }
+      - {
+          id: draw-w-side,
+          type: whiteboard.apply,
+          at: { mark: w-side },
+          upsertIds: [w-o3, w-c3],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-w-svc,
+          type: whiteboard.apply,
+          at: { mark: w-svc },
+          upsertIds: [w-o4, w-c4],
+          drawMs: 1300,
+        }
+      - {
+          id: point-w-svc,
+          type: whiteboard.point,
+          at: { mark: w-lookup },
+          target: { assetId: w-c4 },
+        }
+
+  - id: table
+    chapter: တစ်ခုချင်း ခွဲပြီး ဆုံးဖြတ်ခြင်း
+    narration: >
+      [[mark:t-close]] ဒါဆို common ထဲ ထည့်မယ့် အရာတွေကို တစ်ခုချင်း ခွဲပြီး table နဲ့ ဆုံးဖြတ်ကြည့်ရအောင်။ တစ်ခုစီအတွက်
+      ဘယ်လောက် မကြာခဏ ပြောင်းလဲ ဆိုတာကို အရင် မေးပါမယ်။ ပြောင်းနှုန်းကိုတော့ ခန့်မှန်းတာ မဟုတ်ပါဘူး။ ပြီးခဲ့တဲ့
+      နှစ်အတွင်း code တစ်ခုစီ ဘယ်နှခါ ပြောင်းခဲ့လဲ ဆိုတာကို git history ထဲမှာ ရေတွက်ထားတာပါ။
+      [[mark:type-money]] ငွေပမာဏ format က ဆယ်ကြောင်းလောက်ပဲ ရှိပြီး မပြောင်းသလောက်ပါ။ ဒါကြောင့် ကူးယူထားတာနဲ့ပဲ
+      ရပါတယ်။ မိတ္တူ တစ်ခု ကွဲသွားလည်း ထိခိုက်မှုက နည်းပါတယ်။
+      [[mark:type-perm]] permission check ကတော့ တစ်နှစ်မှာ တစ်ခါ နှစ်ခါလောက်ပဲ ပြောင်းပါတယ်။ ဒါပေမဲ့ နေရာတိုင်းမှာ
+      တစ်ထပ်တည်း တူရပါမယ်။ မတူရင် ဘာဖြစ်လဲ ဆိုတာ ပြီးခဲ့တဲ့လက မြင်ခဲ့ပြီးပါပြီ။ ဒါကြောင့် ဒီ အလုပ်တစ်ခုတည်းအတွက်
+      library သေးသေး တစ်ခု လုပ်ပြီး version နဲ့ ထုတ်ပါမယ်။ ဝန်ထမ်းက ဘယ်ကားလိုင်းကလဲ ဆိုတဲ့ data ကိုတော့ Operator က
+      ပိုင်မြဲ ပိုင်ပါတယ်။ library ထဲမှာ ပါတာက စစ်တဲ့ စည်းမျဉ်းပဲ ဖြစ်ပါတယ်။
+      [[mark:type-log]] logging နဲ့ စောင့်ကြည့်တာတွေကတော့ business rule မဟုတ်ပါဘူး။ operation ကိစ္စမို့ sidecar ထဲ
+      ထည့်ပါမယ်။
+      [[mark:type-lookup]] အဆိုပြုချက်ရဲ့ ဒုတိယ အပိုင်း ဖြစ်တဲ့ lookup service ကိုတော့ မလုပ်တော့ပါဘူး။ ကားလိုင်း နာမည်လို
+      data တစ်ခုစီမှာ ပိုင်ရှင် service ရှိပြီးသားမို့၊ လိုတဲ့သူက ပိုင်ရှင်ဆီကနေ ကူးထားပါမယ်။ service တစ်ခုတည်းကို
+      အားလုံးက မှီခိုတာမျိုး မဖြစ်စေချင်လို့ပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - { id: close-ways, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-ways },
+          path: notebook/40-sharing.md,
+        }
+      - id: type-money
+        type: editor.type
+        at: { mark: type-money }
+        cadence: line-by-line
+        target: { file: notebook/40-sharing.md, after: "|---|---|---|---|\n" }
+        text: "| ငွေပမာဏ format | မပြောင်းသလောက် | ကူးယူ | သေးပြီး တည်ငြိမ်၊ ကွဲလည်း ထိခိုက်မှု နည်း |\n"
+      - id: type-perm
+        type: editor.type
+        at: { mark: type-perm }
+        cadence: line-by-line
+        target: { file: notebook/40-sharing.md, after: "ကွဲလည်း ထိခိုက်မှု နည်း |\n" }
+        text: "| ကားလိုင်း permission check | တစ်နှစ် 1-2 ခါ | library သေးသေး (version နဲ့) | နေရာတိုင်း တူရမယ် |\n"
+      - id: type-log
+        type: editor.type
+        at: { mark: type-log }
+        cadence: line-by-line
+        target: { file: notebook/40-sharing.md, after: "| နေရာတိုင်း တူရမယ် |\n" }
+        text: "| logging, monitoring | operations ဘက်က ပြောင်း | sidecar | business rule မဟုတ်၊ operation ကိစ္စ |\n"
+      - id: type-lookup
+        type: editor.type
+        at: { mark: type-lookup }
+        cadence: line-by-line
+        target: { file: notebook/40-sharing.md, after: "| business rule မဟုတ်၊ operation ကိစ္စ |\n" }
+        text: "| ကားလိုင်း နာမည်လို data | တစ်လ တစ်ခါ | ပိုင်ရှင်ဆီက ကူးထား | lookup service တစ်ခုကို အားလုံး မမှီခိုစေချင် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ခရီးဖော် ရဲ့ commission စည်းမျဉ်းကို service သုံးခုက သုံးပါတယ်။ ကားလိုင်းကို
+      ငွေရှင်းတဲ့ Settlement၊ ငွေပြန်အမ်းတဲ့ Payment နဲ့ ကားလိုင်းကို ရောင်းအား ပြတဲ့ Operator ပါ။
+      [[mark:q-g]] အခြေခံက ၅ ရာခိုင်နှုန်း ဖြစ်ပေမဲ့၊ ကားလိုင်း အကြီးတွေအတွက် လျှော့နှုန်းလို စည်းမျဉ်းတွေက သုံးလ
+      တစ်ခါလောက် ပြောင်းနေပါတယ်။
+      [[mark:q-a]] ဒီ စည်းမျဉ်းကို library တစ်ခုအဖြစ် ထုတ်ပြီး service သုံးခုလုံးက ယူသုံးမလား။
+      [[mark:q-b]] ဒါမှမဟုတ် service တစ်ခုတည်းက ပိုင်ပြီး ကျန်တဲ့သူက သူ့ဆီက ယူမလား။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ service တစ်ခုတည်းက ပိုင်တာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ဒါက မြန်မြန် ပြောင်းတဲ့ business rule မို့ပါ။ library နဲ့ဆိုရင် သုံးလ တစ်ခါ
+      service သုံးခုလုံးက version အသစ် ယူပြီး deploy လုပ်ရပါမယ်။ တစ်ခုက နောက်ကျတဲ့ ရက်တွေမှာ ကားလိုင်း မြင်ရတဲ့
+      commission နဲ့ တကယ် ဖြတ်တဲ့ commission က မတူတော့ပါဘူး။
+      [[mark:q-home]] ဒါကြောင့် commission ကို common ထဲ မထည့်ဘဲ၊ အခုအတိုင်း Settlement တစ်ခုတည်းက ဆက်တွက်ပြီး၊ ကျန်တဲ့ service တွေက တွက်ပြီးသား
+      ရလဒ်ကိုပဲ ယူသုံးပါမယ်။ စည်းမျဉ်း ပြောင်းတဲ့နေ့မှာ deploy လုပ်ရတာက Settlement တစ်ခုတည်းပါ။ မြန်မြန် ပြောင်းတဲ့
+      စည်းမျဉ်း တစ်ခုမှာ အိမ် တစ်ခုပဲ ရှိရပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1400,
+        }
+      - { id: draw-q-g, type: whiteboard.apply, at: { mark: q-g }, upsertIds: [q-g], drawMs: 1200 }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 1000 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-home,
+          type: whiteboard.apply,
+          at: { mark: q-home },
+          upsertIds: [q-home],
+          drawMs: 1200,
+        }
+
+  - id: home
+    chapter: စည်းမျဉ်း တစ်ခု၊ အိမ် တစ်ခု
+    narration: >
+      [[mark:h-close]] ဒီ ဆုံးဖြတ်ချက်ကိုလည်း table ထဲ ထည့်လိုက်ပါမယ်။
+      [[mark:type-comm]] commission စည်းမျဉ်းရဲ့ အိမ်က Settlement ပါ။ စည်းမျဉ်း ပြောင်းတဲ့အခါ တစ်နေရာတည်းမှာ ပြင်ရုံနဲ့
+      အားလုံးအတွက် ပြောင်းသွားပါမယ်။
+      [[mark:h-context]] ဒီ table ကနေ လမ်းညွှန် တစ်ခု ထုတ်လို့ ရပါတယ်။ bounded context တစ်ခုအတွင်းမှာ စည်းမျဉ်း
+      တစ်ခုအတွက် အိမ် တစ်ခုပဲ ထားပါ။ bounded context ဆိုတာ စကားလုံး တစ်လုံးက အဓိပ္ပာယ် တစ်ခုတည်း ရှိတဲ့
+      နယ်နိမိတ်ပါ။ context တွေကို ဖြတ်တဲ့အခါမှာတော့ ကူးယူထားတာက များသောအားဖြင့် ပိုသက်သာတဲ့ coupling ပါ။
+      [[mark:h-price]] ဥပမာ ဈေးနှုန်း ဆိုတာ Booking အတွက် ခရီးသည် ပေးရမယ့် ငွေ ဖြစ်ပြီး၊ Settlement အတွက်တော့ ကားလိုင်း
+      ရမယ့် ငွေပါ။ နှစ်ခုကို class တစ်ခုတည်းနဲ့ မျှသုံးလိုက်ရင်၊ တစ်ဖက်ရဲ့ ပြောင်းလဲမှုတိုင်းက နောက်တစ်ဖက်ကို
+      လိုက်ထိပါလိမ့်မယ်။
+      [[mark:h-fair]] မောင်မောင် ရဲ့ အဆိုပြုချက်က မှားတာ မဟုတ်ပါဘူး။ မိတ္တူတွေ ကွဲနေတဲ့ ပြဿနာကို သူ မြင်တာ မှန်ပါတယ်။
+      ကွာသွားတာက အရာအားလုံးကို နည်း တစ်မျိုးတည်းနဲ့ မဖြေရှင်းဘဲ၊ တစ်ခုစီကို သူ့ ပြောင်းနှုန်းအလိုက် ရွေးလိုက်တာပါ။
+      [[mark:sel-rule]] အောက်ဆုံးက စာကြောင်းက ဒီ lesson ကို ချုပ်ထားတာပါ။ မျှသုံးမယ့် အရာ တစ်ခုစီကို ဘယ်လောက် ပြောင်းလဲ
+      မေးပြီးမှ နည်းကို ရွေးပါ။ common တစ်ခုတည်းထဲ အကုန် မထည့်ပါနဲ့။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+      - {
+          title: "Building Evolutionary Architectures, 2nd edition (Ford, Parsons, Kua, Sadalage)",
+          url: "https://oreil.ly/evolutionary-arch-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: h-close }, open: false }
+      - id: type-comm
+        type: editor.type
+        at: { mark: type-comm }
+        cadence: line-by-line
+        target: { file: notebook/40-sharing.md, after: "| lookup service တစ်ခုကို အားလုံး မမှီခိုစေချင် |\n" }
+        text: "| commission စည်းမျဉ်း | 3 လ တစ်ခါ | Settlement တစ်ခုတည်း ပိုင် | မြန်မြန် ပြောင်းတဲ့ business rule |\n"
+      - id: expect-comm
+        type: expect.file
+        at: { afterAction: type-comm }
+        path: notebook/40-sharing.md
+        contains: "| commission စည်းမျဉ်း | 3 လ တစ်ခါ | Settlement တစ်ခုတည်း ပိုင် | မြန်မြန် ပြောင်းတဲ့ business rule |\n"
+      - id: sel-home
+        type: editor.select
+        at: { mark: h-context, offsetMs: 4000 }
+        target: { file: notebook/40-sharing.md, text: "Settlement တစ်ခုတည်း ပိုင်" }
+      - id: sel-copy
+        type: editor.select
+        at: { mark: h-price }
+        target: { file: notebook/40-sharing.md, text: "| ကူးယူ |" }
+      - id: sel-proposal-2
+        type: editor.select
+        at: { mark: h-fair }
+        target:
+          {
+            file: notebook/40-sharing.md,
+            text: "- အဆိုပြုချက်: common library တစ်ခုနဲ့ lookup service တစ်ခု",
+          }
+      - id: sel-rule
+        type: editor.select
+        at: { mark: sel-rule }
+        target:
+          {
+            file: notebook/40-sharing.md,
+            text: "လမ်းညွှန်: တစ်ခုစီကို ဘယ်လောက် ပြောင်းလဲ မေးပြီးမှ နည်းကို ရွေး။ common တစ်ခုတည်းထဲ အကုန် မထည့်",
+          }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲမှာလည်း common၊ shared၊ utils လို နာမည်နဲ့ folder ဒါမှမဟုတ် library
+      တစ်ခု ရှိနေတတ်ပါတယ်။ lesson ကို pause လုပ်ပြီး၊ အဲဒီထဲက သုံးခုကို ရွေးပြီး ဒီ table ထဲမှာ ကိုယ့် project အတွက်
+      ရေးကြည့်ပါ။
+      [[mark:turn-2]] တစ်ခုစီအတွက် ပြီးခဲ့တဲ့ နှစ်အတွင်း ဘယ်နှခါ ပြောင်းခဲ့လဲ ဆိုတာကို git history ထဲမှာ ကြည့်ပြီးမှ၊
+      ကူးယူမလား၊ library လား၊ sidecar လား၊ service တစ်ခုက ပိုင်မလား ဆိုတာ ရွေးပါ။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 8000 }
+        target:
+          { file: notebook/40-sharing.md, text: "| မျှသုံးမယ့် အရာ | ပြောင်းနှုန်း | ရွေးချယ်မှု | ဘာကြောင့် |" }
+      - id: sel-rate
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/40-sharing.md, text: "ပြောင်းနှုန်း" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ reuse က အခမဲ့ မဟုတ်ပါဘူး။ မျှသုံးတိုင်း coupling ဖြစ်လာတာမို့၊ ပြောင်းခဲတဲ့
+      အရာအတွက်ပဲ တန်ပါတယ်။ သေးပြီး တည်ငြိမ်တာကို ကူးယူ၊ နေရာတိုင်း တူရမယ့် ပြောင်းခဲတာကို library သေးသေး၊ operation
+      ကိစ္စကို sidecar၊ မြန်မြန် ပြောင်းတဲ့ business rule ကိုတော့ ပိုင်ရှင် service တစ်ခုတည်းမှာ ထားပါ။
+      [[mark:next]] နောက် lesson မှာတော့ ဘယ်သူမှ အဖြေ ရေးမထားတဲ့ ဆုံးဖြတ်ချက် တစ်ခုအတွက် trade off analysis ကို
+      ကိုယ်တိုင် ဘယ်လို လုပ်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Software Architecture: The Hard Parts (Ford, Richards, Sadalage, Dehghani)",
+          url: "https://oreil.ly/sa-the-hard-parts",
+        }
+    actions:
+      - id: sel-title
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/40-sharing.md, text: "# Sharing: မျှသုံးမလား၊ ကူးယူမလား" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
