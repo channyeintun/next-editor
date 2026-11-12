@@ -1,0 +1,934 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-33-distributed-trouble
+  title: "Architect Path 33: Distributed system ရဲ့ ဒုက္ခများ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/33-pay-call.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/33-pay-call.md: |
+        # Booking → Payment: ငွေဖြတ်တဲ့ call
+
+        Call: 25,000 ကျပ် ဖြတ်ပါ → 5 စက္ကန့် စောင့်၊ အဖြေ မလာ (time out)
+
+        | ဖြစ်နိုင်တာ | ဘယ်လို သိမလဲ | ဘာလုပ်မလဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — three things a timeout can hide, side by side between Booking
+    # and Payment. Blue = the services, violet = a message on its way, red =
+    # what was lost, orange = what the board is about.
+    - {
+        id: b-book,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 820,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-book-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 243,
+        width: 820,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: b-pay,
+        kind: rectangle,
+        x: 270,
+        y: 560,
+        width: 820,
+        height: 70,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-pay-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 578,
+        width: 820,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: b-l1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 370,
+        y: 305,
+        width: 40,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-l1-l,
+        kind: text,
+        x: 300,
+        y: 425,
+        width: 240,
+        height: 35,
+        text: "request ပျောက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-l2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 610,
+        y: 305,
+        width: 40,
+        height: 245,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-l2-l,
+        kind: text,
+        x: 665,
+        y: 500,
+        width: 170,
+        height: 35,
+        text: "လုပ်နေတုန်း",
+        fontSize: 28,
+      }
+    - {
+        id: b-l3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 850,
+        y: 305,
+        width: 40,
+        height: 245,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-l3r,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 930,
+        y: 420,
+        width: 40,
+        height: 130,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-l3-l,
+        kind: text,
+        x: 905,
+        y: 375,
+        width: 190,
+        height: 35,
+        text: "အဖြေ ပျောက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-same,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 820,
+        height: 40,
+        text: "Booking အမြင်မှာ သုံးမျိုးလုံး တိတ်နေတာပဲ",
+        fontSize: 32,
+        strokeColor: "#f08c00",
+      }
+    # Board 2 — the quiz: white question and options, green answer and
+    # reason, orange the name of the idea.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "Time out ပြီးရင် ထပ်ပို့လို့ ရမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 255,
+        width: 760,
+        height: 35,
+        text: "က) ရတယ်၊ အဖြေ မရသေးတော့ ထပ်ပို့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 760,
+        height: 35,
+        text: "ခ) request ထဲ ဘာပါလဲပေါ် မူတည်တယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 330,
+        width: 500,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 820,
+        y: 318,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-id,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 780,
+        height: 35,
+        text: "request id တူရင် Payment က တစ်ခါပဲ ဖြတ်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-term,
+        kind: text,
+        x: 290,
+        y: 525,
+        width: 780,
+        height: 35,
+        text: "နှစ်ခါ လုပ်လည်း တစ်ခါလိုပဲ = idempotent",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — two machines, two clocks. Blue = the services, orange = the
+    # question, red = the drift, green = the rule.
+    - {
+        id: c-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 700,
+        height: 45,
+        text: "စက် နှစ်လုံး၊ နာရီ နှစ်လုံး",
+        fontSize: 36,
+      }
+    - {
+        id: c-b,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 370,
+        height: 115,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-b-t,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 247,
+        width: 370,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: c-b-s,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 297,
+        width: 370,
+        height: 35,
+        text: "hold ကုန်: 10:10:00",
+        fontSize: 28,
+      }
+    - {
+        id: c-p,
+        kind: rectangle,
+        x: 720,
+        y: 235,
+        width: 370,
+        height: 115,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: c-p-t,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 247,
+        width: 370,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: c-p-s,
+        kind: text,
+        align: center,
+        x: 720,
+        y: 297,
+        width: 370,
+        height: 35,
+        text: "ငွေဖြတ်: 10:09:58",
+        fontSize: 28,
+      }
+    - {
+        id: c-q,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 500,
+        height: 38,
+        text: "ဘယ်ဟာ အရင်လဲ?",
+        fontSize: 30,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: c-drift,
+        kind: text,
+        x: 290,
+        y: 465,
+        width: 780,
+        height: 35,
+        text: "Payment နာရီ 3 စက္ကန့် နောက်ကျနေရင်?",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: c-rule,
+        kind: text,
+        x: 290,
+        y: 550,
+        width: 780,
+        height: 35,
+        text: "စက်မတူရင် timestamp ချင်း မနှိုင်းနဲ့",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — a worker that still believes it holds the lock is refused by
+    # the store. Blue = workers and the store, green = the accepted write,
+    # red = the pause and the refused write, orange = the lesson of it.
+    - {
+        id: f-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 800,
+        height: 45,
+        text: "Lock ကိုင်ထားတုန်းလို့ ထင်နေသူ",
+        fontSize: 36,
+      }
+    - {
+        id: f-a,
+        kind: rectangle,
+        x: 290,
+        y: 235,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-a-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 257,
+        width: 250,
+        height: 35,
+        text: "worker A",
+        fontSize: 28,
+      }
+    - {
+        id: f-pause,
+        kind: text,
+        x: 290,
+        y: 325,
+        width: 240,
+        height: 35,
+        text: "ကြားမှာ ရပ်သွား",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-b,
+        kind: rectangle,
+        x: 290,
+        y: 460,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-b-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 482,
+        width: 250,
+        height: 35,
+        text: "worker B",
+        fontSize: 28,
+      }
+    - {
+        id: f-store,
+        kind: ellipse,
+        x: 810,
+        y: 330,
+        width: 270,
+        height: 120,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: f-store-l,
+        kind: text,
+        align: center,
+        x: 810,
+        y: 372,
+        width: 270,
+        height: 35,
+        text: "ငွေလွှဲ စာရင်း",
+        fontSize: 28,
+      }
+    - {
+        id: f-b-arrow,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 555,
+        y: 440,
+        width: 245,
+        height: 50,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: f-a-arrow,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 555,
+        y: 290,
+        width: 245,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-a-n,
+        kind: text,
+        x: 560,
+        y: 240,
+        width: 200,
+        height: 35,
+        text: "နံပါတ် 7",
+        fontSize: 28,
+      }
+    - {
+        id: f-b-n,
+        kind: text,
+        x: 560,
+        y: 505,
+        width: 200,
+        height: 35,
+        text: "နံပါတ် 8",
+        fontSize: 28,
+      }
+    - {
+        id: f-refuse,
+        kind: text,
+        x: 790,
+        y: 270,
+        width: 300,
+        height: 35,
+        text: "7 က ဟောင်းပြီ၊ ငြင်း",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: f-rule,
+        kind: text,
+        x: 290,
+        y: 590,
+        width: 780,
+        height: 35,
+        text: "ကိုယ့်အမြင် တစ်ခုတည်းကို မယုံနဲ့",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8133
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ခရီးသည်က ငွေပေးပြီးပြီလား
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ transaction က ပေးတဲ့ ကတိတွေနဲ့၊ isolation level က မကာပေးတဲ့ စည်းကမ်းတွေကို ဘယ်လို
+      ကာရမလဲ ဆိုတာကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] အဲဒါတွေက database တစ်ခုတည်းအတွင်းက ကိစ္စတွေပါ။ ဒီနေ့ ပြဿနာကတော့ service နှစ်ခုကြားမှာ
+      ဖြစ်တာပါ။
+      [[mark:sel-call]] ခရီးသည် တစ်ယောက်က ၂၅၀၀၀ ကျပ်တန် လက်မှတ် တစ်စောင် ဝယ်ပါတယ်။ Booking service က Payment
+      service ကို ငွေဖြတ်ပေးဖို့ ခေါ်လိုက်ပါတယ်။ ငါးစက္ကန့် စောင့်ပေမဲ့ အဖြေ ပြန်မလာတော့ time out ဖြစ်သွားပါတယ်။
+      time out ဆိုတာ အဖြေကို ဘယ်လောက်ထိပဲ စောင့်မယ် ဆိုတဲ့ ကန့်သတ်ချက်ပါ။
+      [[mark:mm]] Booking team lead မောင်မောင် က ဒီအခါ ဘာလုပ်ရမလဲလို့ လာမေးပါတယ်။ ခရီးသည်ကို မအောင်မြင်ဘူးလို့
+      ပြလိုက်ရင်၊ ငွေက တကယ် ဖြတ်ပြီးသား ဖြစ်နေနိုင်ပါတယ်။ အောင်မြင်တယ်လို့ ယူဆပြီး လက်မှတ် ထုတ်ပေးလိုက်ရင်လည်း၊
+      ငွေ မရဘဲ ခုံ ပေးလိုက်မိနိုင်ပါတယ်။ သိချင်တာက တစ်ခုတည်းပါ။ ခရီးသည်က ငွေပေးပြီးပြီလား ဆိုတာပါ။
+      [[mark:one-machine]] app တစ်ခုတည်းတုန်းက ဒီမေးခွန်း မရှိခဲ့ပါဘူး။ function တစ်ခုကို ခေါ်ရင် အဖြေ ပြန်ရတယ်၊
+      ဒါမှမဟုတ် app တစ်ခုလုံး ပျက်တယ်။ စက်တစ်လုံးထဲမှာ အလုပ်လုပ်တာနဲ့ ပျက်တာက ရှင်းရှင်းလင်းလင်း ကွဲပါတယ်။
+      စက်တွေ အများကြီးကို network နဲ့ ဆက်ထားတဲ့ distributed system မှာတော့၊ အပိုင်း တချို့က ပျက်နေပြီး
+      တချို့က အလုပ်လုပ်နေတာမျိုး ဖြစ်နိုင်ပါတယ်။ ဘယ်အပိုင်းက ပျက်နေတာလဲ ဆိုတာကိုတောင် အပြင်ကနေ မသိနိုင်တာက တကယ့် အခက်အခဲပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/33-pay-call.md,
+        }
+      - id: sel-call
+        type: editor.select
+        at: { mark: sel-call }
+        target:
+          {
+            file: notebook/33-pay-call.md,
+            text: "Call: 25,000 ကျပ် ဖြတ်ပါ → 5 စက္ကန့် စောင့်၊ အဖြေ မလာ (time out)",
+          }
+
+  - id: three-cases
+    chapter: Time out ရဲ့ နောက်ကွယ်က သုံးမျိုး
+    narration: >
+      [[mark:b-open]] time out တစ်ခုရဲ့ နောက်ကွယ်မှာ ဖြစ်နိုင်တာ သုံးမျိုး ရှိပါတယ်။
+      [[mark:b-lost]] ပထမ တစ်မျိုးက request ကိုယ်တိုင် လမ်းမှာ ပျောက်သွားတာပါ။ Payment ဆီ ဘာမှ မရောက်ခဲ့တော့
+      ငွေလည်း မဖြတ်ရသေးပါဘူး။
+      [[mark:b-running]] ဒုတိယ တစ်မျိုးက request ရောက်ပြီး Payment က လုပ်နေတုန်း ဖြစ်တာပါ။ wallet ကုမ္ပဏီရဲ့
+      payment API ကို စောင့်နေတာ ဖြစ်နိုင်သလို၊ Payment ကိုယ်တိုင် ခဏ ရပ်နေတာလည်း ဖြစ်နိုင်ပါတယ်။ ငွေ ဖြတ်ဖြစ်မလား မဖြစ်ဘူးလား ဆိုတာ မသိရသေးတဲ့ အနေအထားပါ။
+      [[mark:b-reply]] တတိယ တစ်မျိုးက Payment က ငွေဖြတ်ပြီးသွားပြီ၊ ဒါပေမဲ့ ပြန်ပို့လိုက်တဲ့ အဖြေက လမ်းမှာ
+      ပျောက်သွားတာပါ။ ဒီတစ်ခါတော့ ခရီးသည်က ငွေပေးပြီးသားပါ။
+      [[mark:b-same]] Booking ဘက်ကနေ ကြည့်ရင် သုံးမျိုးလုံးက တစ်ပုံစံတည်းပါ။ တိတ်နေတာပါပဲ။ ဒါကြောင့် time out က
+      ပြောနိုင်တာ တစ်ခုတည်း ရှိပါတယ်။ အဖြေ မလာသေးဘူး ဆိုတာပါ။ မအောင်မြင်ဘူးလို့ ပြောတာ မဟုတ်ပါဘူး။
+      [[mark:b-tune]] time out ကို ဘယ်လောက် ထားမလဲ ဆိုတာလည်း ချိန်ဆရတဲ့ ကိစ္စပါ။ တိုလွန်းရင် နှေးရုံ နှေးနေတဲ့
+      Payment ကို ပျက်ပြီလို့ ထင်မိပြီး၊ ရှည်လွန်းရင် ခရီးသည်က အကြာကြီး စောင့်ရပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+      - {
+          title: "Fallacies of distributed computing (Wikipedia)",
+          url: "https://en.wikipedia.org/wiki/Fallacies_of_distributed_computing",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          upsertIds: [b-book, b-book-l, b-pay, b-pay-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-b-lost,
+          type: whiteboard.apply,
+          at: { mark: b-lost },
+          upsertIds: [b-l1, b-l1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-running,
+          type: whiteboard.apply,
+          at: { mark: b-running },
+          upsertIds: [b-l2, b-l2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-reply,
+          type: whiteboard.apply,
+          at: { mark: b-reply },
+          upsertIds: [b-l3, b-l3r, b-l3-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-same,
+          type: whiteboard.apply,
+          at: { mark: b-same },
+          upsertIds: [b-same],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ time out ဖြစ်သွားတဲ့အခါ၊ ၂၅၀၀၀ ကျပ် ဖြတ်ပေးပါ ဆိုတဲ့ request ကို
+      Booking က နောက်တစ်ခါ ထပ်ပို့လိုက်လို့ ရမလား။
+      [[mark:q-a]] ပထမ အဖြေက ရတယ်၊ အဖြေ မရသေးတော့ ထပ်ပို့ရမှာပဲ ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေက request ထဲမှာ ဘာပါလဲ ဆိုတာပေါ် မူတည်တယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ၂၅၀၀၀ ကျပ် ဖြတ်ပါလို့ပဲ ပါတဲ့ request ကို
+      ထပ်ပို့ရင်၊ ငွေဖြတ်ပြီးသား အခြေအနေမှာ ခရီးသည်ဆီက ငါးသောင်း ဖြတ်မိမှာမို့ပါ။ Payment လုပ်နေတုန်း
+      အခြေအနေမှာလည်း အတူတူပါပဲ။
+      [[mark:q-id]] request တိုင်းမှာ တစ်ခုနဲ့တစ်ခု မတူတဲ့ request id တစ်ခု ထည့်ပေးထားရင်တော့ အခြေအနေ
+      ပြောင်းသွားပါတယ်။ Payment က အဲဒီ id ကို မှတ်ထားပြီး၊ မြင်ဖူးပြီးသား id ပြန်ရောက်လာရင် ငွေ ထပ်မဖြတ်ဘဲ ပထမ
+      ရလဒ်ကိုပဲ ပြန်ပေးပါတယ်။
+      [[mark:q-term]] ဒီလို နှစ်ခါ လုပ်လည်း တစ်ခါ လုပ်သလိုပဲ ရလဒ် တူတာကို idempotent ဖြစ်တယ်လို့ ခေါ်ပါတယ်။
+      idempotent ဖြစ်တဲ့ request ဆိုရင်၊ ဘယ်အခြေအနေ ဖြစ်ခဲ့လဲ မသိလည်း ထပ်ပို့လို့ ရပါပြီ။ သတိထားရမှာက id ကို
+      ထပ်ပို့တိုင်း အသစ် မထုတ်ဘဲ၊ ပထမ ပို့တုန်းက id အတိုင်း သုံးဖို့ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-id,
+          type: whiteboard.apply,
+          at: { mark: q-id },
+          upsertIds: [q-id],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-q-term,
+          type: whiteboard.apply,
+          at: { mark: q-term },
+          upsertIds: [q-term],
+          drawMs: 1200,
+        }
+
+  - id: clocks
+    chapter: နာရီကိုလည်း မယုံရ
+    narration: >
+      [[mark:c-open]] မယုံရတာက network တစ်ခုတည်း မဟုတ်ပါဘူး။ နာရီကိုလည်း မယုံရပါဘူး။
+      [[mark:c-clocks]] ထိုင်ခုံကို ဆယ်မိနစ် hold လုပ်ထားတာကို ပြန်စဉ်းစားကြည့်ပါ။ hold က Booking ရဲ့ စက်မှာ
+      ဆယ်နာရီ ဆယ်မိနစ် တိတိမှာ ကုန်ပါတယ်။ Payment ရဲ့ စက်ကတော့ ငွေဖြတ်ပြီးတဲ့ အချိန်ကို ဆယ်နာရီ ကိုးမိနစ် ၅၈
+      စက္ကန့်လို့ မှတ်ထားပါတယ်။
+      [[mark:c-q]] ဒါဆို ငွေချေတာက hold မကုန်ခင်လား၊ ကုန်ပြီးမှလား။ timestamp နှစ်ခုကို နှိုင်းကြည့်ရင် မကုန်ခင်လို့
+      ထင်ရပါတယ်။ ဒါပေမဲ့ စက်နှစ်လုံးရဲ့ နာရီက အတိအကျ မတူပါဘူး။
+      [[mark:c-drift]] Payment စက်ရဲ့ နာရီက သုံးစက္ကန့် နောက်ကျနေခဲ့ရင်၊ တကယ်တော့ hold ကုန်ပြီးမှ ငွေဖြတ်တာ
+      ဖြစ်နေပါလိမ့်မယ်။ အဲဒီအချိန်မှာ ခုံကို တခြားသူ ယူသွားပြီလည်း ဖြစ်နိုင်ပါတယ်။
+      [[mark:c-rule]] ဒါကြောင့် စက်မတူတဲ့ နေရာ နှစ်ခုက timestamp တွေကို နှိုင်းပြီး ဘယ်ဟာ အရင်လဲ ဆိုတာ
+      မဆုံးဖြတ်ပါနဲ့။ အစီအစဉ်ကို တစ်နေရာတည်းက ဆုံးဖြတ်ပါစေ။ ဒီမှာဆိုရင် ငွေဖြတ်တဲ့ ရလဒ် ရောက်လာတဲ့အချိန်မှာ
+      hold ရှိသေးလား ဆိုတာကို Booking ကပဲ သူ့ data နဲ့ စစ်ပြီး ဆုံးဖြတ်ရပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-c-open,
+          type: whiteboard.apply,
+          at: { mark: c-open },
+          clear: true,
+          upsertIds: [c-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-c-clocks,
+          type: whiteboard.apply,
+          at: { mark: c-clocks },
+          upsertIds: [c-b, c-b-t, c-b-s, c-p, c-p-t, c-p-s],
+          drawMs: 2800,
+        }
+      - { id: draw-c-q, type: whiteboard.apply, at: { mark: c-q }, upsertIds: [c-q], drawMs: 800 }
+      - {
+          id: draw-c-drift,
+          type: whiteboard.apply,
+          at: { mark: c-drift },
+          upsertIds: [c-drift],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-c-rule,
+          type: whiteboard.apply,
+          at: { mark: c-rule },
+          upsertIds: [c-rule],
+          drawMs: 1200,
+        }
+
+  - id: pause
+    chapter: Process ကိုလည်း မယုံရ
+    narration: >
+      [[mark:f-open]] မယုံရတဲ့ တတိယ အရာက process ကိုယ်တိုင်ပါ။ process တစ်ခုက ဘယ်အချိန်မဆို စက္ကန့်ပိုင်းကနေ
+      မိနစ်ပိုင်းအထိ ရပ်သွားနိုင်ပါတယ်။ ပြန်နိုးလာတဲ့အခါ သူ့အတွက်တော့ အချိန်က မကုန်ခဲ့သလိုပါပဲ။
+      [[mark:f-a]] ခရီးဖော် မှာ တနင်္လာနေ့တိုင်း ကားလိုင်းတွေကို ငွေစာရင်း ရှင်းပေးတဲ့ settlement job ရှိပါတယ်။
+      နှစ်ခါ မလွှဲမိအောင် worker တစ်ခုတည်းက lock ယူပြီးမှ run ရပါတယ်။ lock မှာ သက်တမ်း ပါပြီး၊ အခု worker A က
+      lock ကို ရထားပါတယ်။
+      [[mark:f-pause]] ငွေမလွှဲခင်လေးမှာ A က ရပ်သွားပါတယ်။ ရပ်နေတုန်းမှာ lock ရဲ့ သက်တမ်း ကုန်သွားပါတယ်။
+      [[mark:f-b]] lock လွတ်သွားတော့ worker B က ယူပြီး ကားလိုင်းတွေဆီ ငွေလွှဲလိုက်ပါတယ်။
+      [[mark:f-wake]] အဲဒီနောက် A ပြန်နိုးလာပါတယ်။ သူကတော့ lock ကို ကိုင်ထားတုန်းပဲလို့ ထင်နေတာမို့ ငွေကို
+      ထပ်လွှဲဖို့ ကြိုးစားပါတယ်။
+      [[mark:f-token]] ဒါကို ကာဖို့ lock ပေးတဲ့ဘက်က ပေးတိုင်း တစ်ခုစီ တိုးသွားတဲ့ နံပါတ် တစ်ခုကို တွဲပေးပါတယ်။
+      [[mark:f-nums]] A ရခဲ့တာက ခုနစ်၊ B ရတာက ရှစ်ပါ။ ငွေလွှဲ စာရင်းကို သိမ်းတဲ့ဘက်က နောက်ဆုံး မြင်ဖူးတဲ့ နံပါတ်ကို မှတ်ထားပြီး၊
+      အဲဒီထက် ငယ်တဲ့ နံပါတ်နဲ့ လာရေးတာကို ငြင်းပါတယ်။
+      [[mark:f-refuse]] ရှစ်ကို မြင်ပြီးသားမို့ A ရဲ့ ခုနစ်ကို ငြင်းလိုက်ပါတယ်။ အရေးကြီးတာက စစ်တဲ့သူက A ကိုယ်တိုင်
+      မဟုတ်ဘဲ၊ ကာကွယ်ရမယ့် data ကို သိမ်းထားတဲ့ဘက် ဖြစ်တာပါ။
+      A က သူ့အမြင်ကို သူ ယုံခဲ့လို့ မှားတာပါ။
+      [[mark:f-majority]] distributed system မှာ ဘယ်စက်ကမှ ကိုယ့်အမြင်
+      တစ်ခုတည်းကို မယုံရပါဘူး။ စက်တစ်လုံး ပျက်ပြီလား၊ lock က ဘယ်သူ့လက်ထဲမှာလဲ ဆိုတာမျိုးကို စက်တွေ အများစုရဲ့
+      သဘောတူညီချက်နဲ့ ဆုံးဖြတ်ရပါတယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-f-open,
+          type: whiteboard.apply,
+          at: { mark: f-open },
+          clear: true,
+          upsertIds: [f-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-a,
+          type: whiteboard.apply,
+          at: { mark: f-a },
+          upsertIds: [f-store, f-store-l, f-a, f-a-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-f-pause,
+          type: whiteboard.apply,
+          at: { mark: f-pause },
+          upsertIds: [f-pause],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-b,
+          type: whiteboard.apply,
+          at: { mark: f-b },
+          upsertIds: [f-b, f-b-l, f-b-arrow],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-f-wake,
+          type: whiteboard.apply,
+          at: { mark: f-wake },
+          upsertIds: [f-a-arrow],
+          drawMs: 900,
+        }
+      - {
+          id: draw-f-token,
+          type: whiteboard.apply,
+          at: { mark: f-nums },
+          upsertIds: [f-a-n, f-b-n],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-f-refuse,
+          type: whiteboard.apply,
+          at: { mark: f-refuse },
+          upsertIds: [f-refuse],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-f-rule,
+          type: whiteboard.apply,
+          at: { mark: f-majority },
+          upsertIds: [f-rule],
+          drawMs: 1200,
+        }
+
+  - id: table
+    chapter: ငွေဖြတ်တဲ့ call ရဲ့ ဆုံးဖြတ်ချက်
+    narration: >
+      [[mark:t-close]] အခု Booking က Payment ကို ခေါ်တဲ့ ဒီ call အတွက် ဆုံးဖြတ်ချက်တွေကို ချရေးကြည့်ရအောင်။
+      [[mark:type-lost]] request ပျောက်သွားတဲ့ အခြေအနေမှာ Payment ဆီမှာ အဲဒီ id ကို မတွေ့ပါဘူး။ ထပ်ရောက်လာတဲ့
+      request ကို ပုံမှန်အတိုင်း ငွေဖြတ်ပြီး အဖြေပေးပါတယ်။
+      [[mark:type-running]] လုပ်နေတုန်း အခြေအနေမှာတော့ id ကို တွေ့ပေမဲ့ မပြီးသေးပါဘူး။ ဒုတိယ တစ်ခါ အသစ် မစဘဲ၊
+      ပထမတစ်ခု ပြီးတဲ့အထိ စောင့်ခိုင်းပါတယ်။
+      [[mark:type-done]] ငွေဖြတ်ပြီးသား အခြေအနေမှာ id ကို ပြီးပြီ ဆိုတဲ့ အမှတ်နဲ့ တွေ့ပါတယ်။ ငွေ ထပ်မဖြတ်ဘဲ
+      သိမ်းထားတဲ့ ရလဒ်ကိုပဲ ပြန်ပေးပါတယ်။
+      [[mark:type-rule]] သတိထားကြည့်ပါ။ ဘယ်အခြေအနေလဲ ဆိုတာကို သိတာက Payment ပါ။ Booking ဘက်က လုပ်ရတာကတော့
+      သုံးမျိုးလုံးမှာ တစ်ခုတည်းပါ။ id အတူတူနဲ့ ထပ်ပို့တာပါပဲ။
+      [[mark:type-limits]] ထပ်ပို့တာကိုလည်း အကန့်အသတ် ထားရပါမယ်။ time out ကို ငါးစက္ကန့် ထားပြီး၊ သုံးခါထက်
+      ပိုမပို့ပါဘူး။ တစ်ခါနဲ့တစ်ခါကြားလည်း ခဏစီ စောင့်ပါမယ်။ Payment က နှေးနေချိန်မှာ အဆက်မပြတ် ထပ်ပို့နေရင်
+      သူ့ကို ပိုပြီး ဝန်ပိစေမှာမို့ပါ။
+      [[mark:type-unknown]] သုံးခါလုံး အဖြေ မရရင်တော့ ခရီးသည်ကို မအောင်မြင်ဘူးလို့ မပြဘဲ စစ်ဆေးနေဆဲလို့ ပြပြီး၊
+      ခုံကို hold ထားပေးပါမယ်။ နောက်ကွယ်မှာတော့ id အတူတူနဲ့ ဆက်မေးနေပြီး၊ အဖြေ ရတဲ့အခါမှ လက်မှတ် ထုတ်ပေးမလား၊
+      ခုံကို ပြန်လွှတ်မလား ဆုံးဖြတ်ပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-pause, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-pause },
+          path: notebook/33-pay-call.md,
+        }
+      - id: type-lost
+        type: editor.type
+        at: { mark: type-lost }
+        cadence: line-by-line
+        target: { file: notebook/33-pay-call.md, after: "|---|---|---|\n" }
+        text: "| request လမ်းမှာ ပျောက် | Payment မှာ ဒီ id မတွေ့ | ငွေဖြတ်ပြီး အဖြေပေး |\n"
+      - id: type-running
+        type: editor.type
+        at: { mark: type-running }
+        cadence: line-by-line
+        target: { file: notebook/33-pay-call.md, after: "| ငွေဖြတ်ပြီး အဖြေပေး |\n" }
+        text: "| Payment လုပ်နေတုန်း | id တွေ့၊ မပြီးသေး | အသစ် မစ၊ ပြီးတဲ့အထိ စောင့်ခိုင်း |\n"
+      - id: type-done
+        type: editor.type
+        at: { mark: type-done }
+        cadence: line-by-line
+        target: { file: notebook/33-pay-call.md, after: "ပြီးတဲ့အထိ စောင့်ခိုင်း |\n" }
+        text: "| ငွေဖြတ်ပြီး၊ အဖြေ ပျောက် | id တွေ့၊ ပြီးပြီ | ထပ်မဖြတ်၊ ရလဒ်ဟောင်း ပြန်ပေး |\n"
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        cadence: line-by-line
+        target: { file: notebook/33-pay-call.md, after: "ရလဒ်ဟောင်း ပြန်ပေး |\n" }
+        text: "\n## စည်းကမ်း\n- Booking: request id အတူတူနဲ့ ထပ်ပို့မယ်\n- Payment: id တူရင် တစ်ခါပဲ ဖြတ်မယ်\n"
+      - id: expect-rule
+        type: expect.file
+        at: { afterAction: type-rule }
+        path: notebook/33-pay-call.md
+        contains: "- Payment: id တူရင် တစ်ခါပဲ ဖြတ်မယ်\n"
+      - id: type-limits
+        type: editor.type
+        at: { mark: type-limits }
+        cadence: line-by-line
+        target: { file: notebook/33-pay-call.md, after: "- Payment: id တူရင် တစ်ခါပဲ ဖြတ်မယ်\n" }
+        text: "- time out 5 စက္ကန့်၊ ထပ်ပို့တာ အများဆုံး 3 ခါ၊ ကြားမှာ ခဏစောင့်\n"
+      - id: type-unknown
+        type: editor.type
+        at: { mark: type-unknown }
+        cadence: line-by-line
+        target: { file: notebook/33-pay-call.md, after: "ကြားမှာ ခဏစောင့်\n" }
+        text: "- 3 ခါလုံး အဖြေမရရင်: စစ်ဆေးနေဆဲလို့ ပြ၊ ခုံကို hold ထား၊ id နဲ့ ဆက်မေး\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system ထဲက network ဖြတ်ပြီး ခေါ်ရတဲ့ call တစ်ခုကို ရွေးပါ။ တခြား
+      service ကို ခေါ်တာ၊ ငွေပေးချေတဲ့ API ကို ခေါ်တာ၊ message ပို့တာ ဘာမဆို ရပါတယ်။ lesson ကို pause လုပ်ပြီး၊
+      အဲဒီ call မှာ time out ဖြစ်ရင် ဖြစ်နိုင်တဲ့ အခြေအနေ သုံးမျိုးကို ဒီ table ပုံစံအတိုင်း ရေးကြည့်ပါ။
+      [[mark:turn-2]] တတိယ အတန်းကို အထူး သတိထားပါ။ လုပ်ပြီးသား အလုပ်ကို ထပ်ပို့မိရင် ဘာဖြစ်မလဲ။ နှစ်ခါ
+      ဖြစ်သွားမယ်ဆိုရင်၊ အဲဒီ call မှာ request id လိုနေပါပြီ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn }
+        target: { file: notebook/33-pay-call.md, text: "| ဖြစ်နိုင်တာ | ဘယ်လို သိမလဲ | ဘာလုပ်မလဲ |" }
+      - id: sel-third
+        type: editor.select
+        at: { mark: turn-2 }
+        target: { file: notebook/33-pay-call.md, text: "| ငွေဖြတ်ပြီး၊ အဖြေ ပျောက် |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ distributed system မှာ network၊ နာရီနဲ့ process သုံးခုလုံးကို အပြည့်အဝ မယုံရပါဘူး။
+      time out က အဖြေ မလာသေးဘူး ဆိုတာပဲ ပြောနိုင်ပါတယ်။ စက်နှစ်လုံးရဲ့ timestamp ကို နှိုင်းပြီး အရင်အနောက် ဆုံးဖြတ်လို့ မရသလို၊ lock
+      ကိုင်ထားတယ် ထင်နေတဲ့ process ကလည်း မှားနေနိုင်ပါတယ်။
+      [[mark:recap-2]] ဒါကြောင့် network ဖြတ်တဲ့ call တစ်ခုကို design ဆွဲတဲ့အခါ၊ ထပ်ပို့လည်း အန္တရာယ် မရှိအောင်
+      request id ထည့်ပါ။ ကာကွယ်ရမယ့် data ကို သိမ်းတဲ့ဘက်ကလည်း ဟောင်းနေတဲ့သူကို ငြင်းနိုင်ပါစေ။
+      [[mark:next]] စက်တွေ အများစုရဲ့ သဘောတူညီချက် ဆိုတာကိုတော့ ဒီနေ့ တစ်ခွန်းပဲ ပြောခဲ့ရပါသေးတယ်။ နောက် lesson
+      မှာတော့ ဘယ်နေရာတွေမှာ data က ခဏလေးတောင် မမှားရဘူးလဲ ဆိုတဲ့ consistency နဲ့၊ စက်တွေ သဘောတူအောင် လုပ်တဲ့
+      consensus ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-payment-rule
+        type: editor.select
+        at: { mark: recap-2 }
+        target: { file: notebook/33-pay-call.md, text: "- Payment: id တူရင် တစ်ခါပဲ ဖြတ်မယ်" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
