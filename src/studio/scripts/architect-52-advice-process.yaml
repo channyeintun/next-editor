@@ -1,0 +1,821 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-52-advice-process
+  title: "Architect Path 52: Architecture advice process"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/52-adr-with-advice.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/52-adr-with-advice.md: |
+        # ADR-012 · TicketSold event ထဲက ဖုန်းနံပါတ်ကို ဖြုတ်မယ်
+
+        ## Status
+        Proposed · advice တောင်းနေဆဲ
+
+        ## Context
+        - TicketSold event ထဲမှာ ခရီးသည်ရဲ့ ဖုန်းနံပါတ် ပါတယ်
+        - event ကို ဖတ်တဲ့ service 3 ခုလုံးမှာ ဖုန်းနံပါတ် မိတ္တူ ကျန်နေတယ်
+        - ရွေးစရာ: ဖြုတ်မယ် / encrypt လုပ်မယ် / ဒီအတိုင်း ထားမယ်
+
+        ## Advice
+        | ဘယ်သူ့ကို မေးလဲ | အကြံနဲ့ အကြောင်းပြချက် | ဘာလုပ်လိုက်လဲ |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: supports
+      contentType: html
+      name: Advice process ကို ထောက်ပေးတဲ့ အရာများ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Advice process ကို ထောက်ပေးတဲ့ အရာ သုံးခု</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term blue">Advice forum</span>အပတ်စဉ် ဖွင့်ထားတဲ့ ဝိုင်း၊ ခွင့်ပြုတာ မလုပ်ဘူး</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term orange">Architect</span>အဖြေပေးသူ မဟုတ်၊ စကားဝိုင်း ဖြစ်အောင် လုပ်ပေးသူ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term green">စမ်းသပ်ပုံ</span>team 1 ခု၊ 3 လ၊ ပြီးရင် ပြန်သုံးသပ်</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — before: every decision waits for Thursday. Teams and the board
+    # are people (white), violet is the flow of decisions, orange the queue the
+    # board is about, red what it costs.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ဆုံးဖြတ်ချက်တိုင်း ကြာသပတေးနေ့ကို စောင့်ရတယ်",
+        fontSize: 36,
+      }
+    - { id: b-teams, kind: rectangle, x: 270, y: 250, width: 200, height: 80, strokeStyle: dashed }
+    - {
+        id: b-teams-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 272,
+        width: 200,
+        height: 35,
+        text: "team 12 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 482,
+        y: 270,
+        width: 88,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-queue,
+        kind: rectangle,
+        x: 582,
+        y: 255,
+        width: 270,
+        height: 70,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: b-queue-l,
+        kind: text,
+        align: center,
+        x: 582,
+        y: 272,
+        width: 270,
+        height: 35,
+        text: "စောင့်နေတာ 23 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 864,
+        y: 270,
+        width: 80,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - { id: b-board, kind: rectangle, x: 954, y: 250, width: 136, height: 80, rounded: true }
+    - {
+        id: b-board-l,
+        kind: text,
+        align: center,
+        x: 954,
+        y: 272,
+        width: 136,
+        height: 35,
+        text: "board",
+        fontSize: 28,
+      }
+    - {
+        id: b-rate,
+        kind: text,
+        x: 905,
+        y: 345,
+        width: 190,
+        height: 35,
+        text: "တစ်ပတ် 4 ခုပဲ",
+        fontSize: 28,
+      }
+    - {
+        id: b-wait,
+        kind: text,
+        x: 582,
+        y: 345,
+        width: 290,
+        height: 35,
+        text: "6 ပတ်နီးပါး စောင့်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-far,
+        kind: text,
+        x: 270,
+        y: 450,
+        width: 600,
+        height: 35,
+        text: "code နဲ့ ဝေးတဲ့နေရာက ဆုံးဖြတ်ရ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-skip,
+        kind: text,
+        x: 270,
+        y: 520,
+        width: 600,
+        height: 35,
+        text: "team တချို့ မတင်တော့ဘူး",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 2 — after: the decider in the middle (orange, what the board is
+    # about), the two groups to ask (white, dashed = a group of people), violet
+    # for the advice flowing in and the record flowing out.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "အကြံ တောင်းပြီးမှ ဆုံးဖြတ်",
+        fontSize: 36,
+      }
+    - {
+        id: r-dec,
+        kind: rectangle,
+        x: 525,
+        y: 425,
+        width: 300,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: r-dec-l,
+        kind: text,
+        align: center,
+        x: 525,
+        y: 437,
+        width: 300,
+        height: 35,
+        text: "ဆုံးဖြတ်သူ",
+        fontSize: 28,
+      }
+    - {
+        id: r-dec-team,
+        kind: text,
+        align: center,
+        x: 525,
+        y: 477,
+        width: 300,
+        height: 35,
+        text: "Booking team",
+        fontSize: 28,
+      }
+    - { id: r-aff, kind: rectangle, x: 270, y: 225, width: 380, height: 110, strokeStyle: dashed }
+    - {
+        id: r-aff-h,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 340,
+        height: 35,
+        text: "ထိခိုက်မယ့်သူ",
+        fontSize: 28,
+      }
+    - {
+        id: r-aff-l,
+        kind: text,
+        x: 290,
+        y: 285,
+        width: 340,
+        height: 35,
+        text: "event ဖတ်တဲ့ team 3 ခု",
+        fontSize: 28,
+      }
+    - {
+        id: r-arr1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 470,
+        y: 345,
+        width: 110,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - { id: r-exp, kind: rectangle, x: 700, y: 225, width: 380, height: 110, strokeStyle: dashed }
+    - {
+        id: r-exp-h,
+        kind: text,
+        x: 720,
+        y: 235,
+        width: 340,
+        height: 35,
+        text: "ကျွမ်းကျင်သူ",
+        fontSize: 28,
+      }
+    - {
+        id: r-exp-l,
+        kind: text,
+        x: 720,
+        y: 285,
+        width: 340,
+        height: 35,
+        text: "platform · architect",
+        fontSize: 28,
+      }
+    - {
+        id: r-arr2,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 770,
+        y: 345,
+        width: 110,
+        height: 70,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-arr3,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 837,
+        y: 455,
+        width: 88,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-adr,
+        kind: text,
+        x: 937,
+        y: 457,
+        width: 150,
+        height: 35,
+        text: "ADR ရေး",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer and reason,
+    # orange the line that says who answers for the result.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "အကြံကို မလိုက်နာရင် process ပျက်လား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) ပျက်ပြီ၊ architect ရဲ့ အကြံကို လိုက်နာရမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) မပျက်ဘူး၊ process က အလုပ်လုပ်နေတာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 560,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 880,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 790,
+        height: 35,
+        text: "အကြံ ဆိုတာ ခွင့်ပြုချက် မဟုတ်ဘူး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r2,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 790,
+        height: 35,
+        text: "ရလဒ်အတွက် တာဝန်ယူသူ = ဆုံးဖြတ်သူ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8152
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ကြာသပတေးနေ့ကို စောင့်နေတဲ့ ဆုံးဖြတ်ချက်တွေ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ တောင်းဆိုချက် တစ်ခုကို အချက်အလက်နဲ့ ရွေးစရာတွေ ပြပြီး ညှိနှိုင်းပုံနဲ့၊ ဆုံးဖြတ်ချက်
+      တစ်ခုတည်းကို နားထောင်သူ လေးမျိုးအတွက် လေးမျိုး ပြောပြပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:q-open]] ဒီတစ်ခါ ပြဿနာကတော့ ဆုံးဖြတ်ချက်တွေ စောင့်နေရတာပါ။ ခရီးဖော် မှာ အခု developer ၉၀၊ team
+      ၁၂ ခု ရှိနေပါပြီ။
+      [[mark:q-board]] team တစ်ခုထက် ပိုထိမယ့် ဆုံးဖြတ်ချက်မှန်သမျှကို ကြာသပတေးနေ့တိုင်း ထိုင်တဲ့ architecture
+      board က ခွင့်ပြုပေးရပါတယ်။ board မှာ chief architect ဖြစ်တဲ့ ကိုယ်နဲ့ တခြား architect သုံးယောက်
+      ပါပါတယ်။
+      [[mark:q-queue]] board က တစ်ပတ်ကို လေးခုလောက်ပဲ ကြည့်နိုင်ပါတယ်။ အခု စောင့်နေတာက ၂၃ ခု ရှိနေပြီမို့၊
+      ဒီနေ့ တင်တဲ့ team က ခြောက်ပတ်နီးပါး စောင့်ရမှာပါ။
+      [[mark:q-far]] ကြာတာ တစ်ခုတည်းလည်း မဟုတ်ပါဘူး။ ကိုယ်တို့ လေးယောက်က team တစ်ခု ဆယ်မိနစ်လောက် ရှင်းပြတာကို
+      နားထောင်ပြီး ဆုံးဖြတ်ရတာပါ။ အဲဒီ service ကို နေ့တိုင်း ရေးနေတဲ့သူတွေ သိတာရဲ့ အနည်းငယ်လောက်နဲ့ပဲ
+      ဆုံးဖြတ်နေရတာပါ။
+      [[mark:q-skip]] အဆိုးဆုံးကတော့ team တချို့က board ကို မတင်တော့တာပါ။ ပြီးခဲ့တဲ့လက team တစ်ခုက cache
+      အသစ် တစ်ခုကို ဘယ်သူ့ကိုမှ မမေးဘဲ ထည့်လိုက်တာကို၊ production မှာ ပြဿနာ ဖြစ်မှ ကိုယ်တို့ သိရပါတယ်။
+      ခြောက်ပတ် စောင့်နေရင် အလုပ်က ပြီးမှာ မဟုတ်တာမို့၊ သူတို့ကို အပြစ်တင်လို့လည်း မရပါဘူး။
+      [[mark:q-shape]] ပြဿနာက လူတွေမှာ မဟုတ်ပါဘူး။ လူ အနည်းငယ်က အားလုံးအတွက် ဆုံးဖြတ်ပေးတဲ့ ပုံစံမှာပါ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: q-open },
+          open: true,
+          upsertIds: [b-title, b-teams, b-teams-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-b-board,
+          type: whiteboard.apply,
+          at: { mark: q-board },
+          upsertIds: [b-board, b-board-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-queue,
+          type: whiteboard.apply,
+          at: { mark: q-queue },
+          upsertIds: [b-rate, b-a1, b-queue, b-queue-l, b-a2, b-wait],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-b-far,
+          type: whiteboard.apply,
+          at: { mark: q-far },
+          upsertIds: [b-far],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-b-skip,
+          type: whiteboard.apply,
+          at: { mark: q-skip },
+          upsertIds: [b-skip],
+          drawMs: 1000,
+        }
+      - {
+          id: point-b-queue,
+          type: whiteboard.point,
+          at: { mark: q-shape },
+          target: { assetId: b-queue },
+        }
+
+  - id: rule
+    chapter: အကြံ တောင်းပြီးမှ ဆုံးဖြတ်ခြင်း
+    narration: >
+      [[mark:r-open]] ဒါဆို ဆုံးဖြတ်ခွင့်ကို code နဲ့ အနီးဆုံးမှာ ရှိတဲ့ team တွေဆီ ပေးလိုက်ရင်ကော။ စိုးရိမ်စရာကတော့ team
+      ၁၂ ခုက ကိုယ့်ဘာသာ ဆုံးဖြတ်ကြရင် တစ်ခုနဲ့တစ်ခု မကိုက်တာ၊ တခြား team ကို ထိခိုက်တာတွေ ဖြစ်လာနိုင်တာပါ။ ဒီ စိုးရိမ်မှုကို ဖြေပေးတဲ့ နည်းတစ်ခုကို architecture advice process လို့ ခေါ်ပါတယ်။
+      [[mark:r-rule]] စည်းမျဉ်းက တစ်ခုတည်းပါ။ architecture ဆုံးဖြတ်ချက်ကို လိုအပ်တဲ့သူ ဘယ်သူမဆို
+      ချနိုင်ပါတယ်။ ဒါပေမဲ့ မချခင်မှာ လူ
+      နှစ်အုပ်စုဆီက အကြံကို အရင် တောင်းရပါမယ်။
+      [[mark:r-aff]] ပထမ အုပ်စုက အဲဒီ ဆုံးဖြတ်ချက်ကြောင့် ထိခိုက်မယ့်သူ အားလုံးပါ။ code ကို လိုက်ပြင်ရမယ့်သူ၊
+      အလုပ်လုပ်ပုံ ပြောင်းသွားမယ့်သူတွေပါ။
+      [[mark:r-exp]] ဒုတိယ အုပ်စုက အဲဒီ အကြောင်းအရာကို ကျွမ်းကျင်တဲ့သူတွေပါ။ ဒီလို ကိစ္စမျိုးကို အရင်က
+      ကြုံဖူးပြီး၊ ဘယ်နေရာမှာ အန္တရာယ် ရှိတတ်လဲ သိတဲ့သူတွေပါ။
+      [[mark:r-example]] ခရီးဖော် မှာ ဒီနည်းကို Booking team တစ်ခုတည်းနဲ့ အရင် စမ်းကြည့်ပါတယ်။ Booking team lead
+      မောင်မောင် တို့မှာ ဆုံးဖြတ်စရာ တစ်ခု ရှိနေပါတယ်။ လက်မှတ် တစ်စောင် ရောင်းပြီးတိုင်း Booking service က event
+      တစ်ခု ထုတ်ပေးပါတယ်။ event ဆိုတာ ဖြစ်ပြီးသွားတဲ့ အကြောင်းအရာ တစ်ခုကို တခြား service တွေ သိအောင်
+      ကြေညာတာပါ။
+      [[mark:r-phone]] အဲဒီ event ထဲမှာ ခရီးသည်ရဲ့ ဖုန်းနံပါတ် ပါနေတော့၊ event ကို ဖတ်တဲ့ service တိုင်းရဲ့
+      database ထဲမှာ ဖုန်းနံပါတ်တွေ မိတ္တူ ကျန်နေပါတယ်။ မောင်မောင် တို့က အဲဒါကို မကြိုက်လို့၊ event ထဲက
+      ဖုန်းနံပါတ်ကို ဖြုတ်ချင်ပါတယ်။
+      [[mark:r-who-aff]] ဒီ ဆုံးဖြတ်ချက်ကြောင့် ထိခိုက်မယ့်သူတွေက အဲဒီ event ကို ဖတ်နေတဲ့ team သုံးခုပါ။
+      Notification၊ Settlement နဲ့ Operator team တို့ပါ။
+      [[mark:r-who-exp]] ကျွမ်းကျင်သူတွေကတော့ event တွေ ဖြတ်သွားတဲ့ stream ကို ထိန်းတဲ့ platform team နဲ့
+      architect တွေပါ။
+      [[mark:r-why]] ထိခိုက်မယ့်သူတွေက ဆုံးဖြတ်သူ မမြင်နိုင်တဲ့ အရာကို မြင်တတ်ပါတယ်။ တစ်ခုခု ဆုံးရှုံးရမယ့်သူက
+      အဲဒါကို အရင်ဆုံး သတိထားမိတတ်လို့ပါ။
+      [[mark:r-adr]] အကြံတွေ ရပြီးရင် team က ကိုယ်တိုင် ဆုံးဖြတ်ပြီး၊ architecture decision record၊ အတိုကောက် ADR
+      တစ်ခု ရေးပါတယ်။ ADR ဆိုတာ ဘာကို ဘာကြောင့် ဆုံးဖြတ်ခဲ့လဲ ရေးမှတ်ထားတဲ့ စာတိုလေးပါ။
+      [[mark:r-small]] ဒီနည်းမှာ အကျိုးဆက် တစ်ခုလည်း ပါလာပါတယ်။ ဆုံးဖြတ်ချက် ကြီးလေ၊ မေးရမယ့်သူ များလေမို့၊ team တွေက ဆုံးဖြတ်ချက်ကို သေးသေး၊ တခြားသူကို ထိခိုက်မှု နည်းနည်း ဖြစ်အောင် ကိုယ်တိုင်
+      ပုံဖော်လာတတ်ကြပါတယ်။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          clear: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-rule,
+          type: whiteboard.apply,
+          at: { mark: r-rule },
+          upsertIds: [r-dec, r-dec-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-aff,
+          type: whiteboard.apply,
+          at: { mark: r-aff },
+          upsertIds: [r-aff, r-aff-h, r-arr1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-exp,
+          type: whiteboard.apply,
+          at: { mark: r-exp },
+          upsertIds: [r-exp, r-exp-h, r-arr2],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-r-example,
+          type: whiteboard.apply,
+          at: { mark: r-example },
+          upsertIds: [r-dec-team],
+          drawMs: 900,
+        }
+      - {
+          id: draw-r-who-aff,
+          type: whiteboard.apply,
+          at: { mark: r-who-aff },
+          upsertIds: [r-aff-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-r-who-exp,
+          type: whiteboard.apply,
+          at: { mark: r-who-exp },
+          upsertIds: [r-exp-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-r-adr,
+          type: whiteboard.apply,
+          at: { mark: r-adr },
+          upsertIds: [r-arr3, r-adr],
+          drawMs: 1200,
+        }
+      - {
+          id: point-r-dec,
+          type: whiteboard.point,
+          at: { mark: r-small },
+          target: { assetId: r-dec },
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ မောင်မောင် တို့ team က ကိုယ့်ဆီကလည်း အကြံ တောင်းပါတယ်။ ကိုယ်က
+      ဖုန်းနံပါတ်ကို မဖြုတ်ဘဲ encrypt လုပ်ထားဖို့ အကြံပေးခဲ့ပါတယ်။ ဒါဆို key ကို Notification တစ်ခုတည်းကို
+      ပေးရုံနဲ့ ကျန်တဲ့ team တွေ code ပြင်စရာ မလိုဘူးလို့ ကိုယ် တွက်ခဲ့လို့ပါ။
+      [[mark:q-ctx]] team က ကိုယ့်အကြံကို သေချာ နားထောင်ပါတယ်။ ဒါပေမဲ့ ဖြုတ်မယ်လို့ပဲ ဆုံးဖြတ်ပြီး၊ ဘာကြောင့်လဲ
+      ဆိုတာကို ADR ထဲမှာ ရေးထားပါတယ်။
+      [[mark:q-a]] ဒါဆို process က ပျက်သွားပြီလား။ architect ရဲ့ အကြံကို လိုက်နာရမှာလား။
+      [[mark:q-b]] ဒါမှမဟုတ် process က အလုပ်လုပ်နေတာလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ process က အလုပ်လုပ်နေတာပါ။ ဘာကြောင့်လဲဆိုတော့ အကြံဆိုတာ ခွင့်ပြုချက်
+      မဟုတ်လို့ပါ။
+      [[mark:q-r1]] အကြံကို မဖြစ်မနေ တောင်းရပါမယ်။ သေချာ နားထောင်ပြီး နားလည်အောင်လည်း လုပ်ရပါမယ်။ ဒါပေမဲ့
+      လိုက်နာဖို့တော့ မလိုပါဘူး။ အကြံပေးသူရဲ့ ရာထူး ဘယ်လောက်ကြီးကြီး ဒီအတိုင်းပါပဲ။
+      [[mark:q-r2]] အဲဒီအစား ဆုံးဖြတ်သူက တာဝန်ကို အပြည့်အဝ ယူရပါတယ်။ ရလဒ် ကောင်းကောင်း ဆိုးဆိုး ADR ပေါ်မှာ
+      နာမည်ပါတဲ့ team ရဲ့ တာဝန်ပါ။ ရခဲ့တဲ့ အကြံတွေနဲ့၊ မလိုက်နာခဲ့ရင်
+      ဘာကြောင့်လဲ ဆိုတာကို လူတိုင်း မြင်အောင် ရေးထားရတာမို့၊ ပေါ့ပေါ့ဆဆ ဆုံးဖြတ်ဖို့ ခက်သွားပါတယ်။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 1000 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 1000 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-q-r1,
+          type: whiteboard.apply,
+          at: { mark: q-r1 },
+          upsertIds: [q-r1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-q-r2,
+          type: whiteboard.apply,
+          at: { mark: q-r2 },
+          upsertIds: [q-r2],
+          drawMs: 1000,
+        }
+
+  - id: adr
+    chapter: အကြံတွေကို ADR ထဲ မှတ်ခြင်း
+    narration: >
+      [[mark:a-close]] မောင်မောင် တို့ team ရေးခဲ့တဲ့ ADR ကို ကြည့်ရအောင်။ ADR ပုံစံထဲမှာ
+      အကြံတွေ မှတ်ဖို့ အပိုင်း တစ်ခု တိုးထားပါတယ်။
+      [[mark:sel-options]] အပေါ်ပိုင်းမှာ ပြဿနာနဲ့ ရွေးစရာ သုံးခုကို ရေးထားပါတယ်။ team က ဒီအဆင့်မှာ မဆုံးဖြတ်သေးဘဲ အကြံ စတောင်းပါတယ်။
+      [[mark:type-a1]] ပထမဆုံး မေးတာက Notification team ပါ။ သူတို့က လက်မှတ် ဝယ်ပြီးတဲ့ ခရီးသည်ဆီ SMS ပို့ဖို့
+      အဲဒီ event ထဲက ဖုန်းနံပါတ်ကို သုံးနေတာပါ။ ဖြုတ်လိုက်ရင် SMS ပို့လို့ မရတော့ပါဘူး။ Booking team က ဒါကို
+      မသိခဲ့ပါဘူး။ ဒါကြောင့် လက်မှတ် နံပါတ်နဲ့ ဖုန်းနံပါတ်ကို တောင်းလို့ရတဲ့ API တစ်ခု ထည့်ပေးဖို့
+      ပြင်လိုက်ပါတယ်။ Settlement နဲ့ Operator team ကတော့ ဖုန်းနံပါတ်ကို မသုံးဘူးလို့ ဖြေပါတယ်။
+      [[mark:type-a2]] ဒုတိယက platform team ပါ။ event ရဲ့ ပုံစံကို ပြောင်းတဲ့အခါ ဖတ်တဲ့ဘက်ကို အရင် ပြင်ပြီးမှ
+      ရေးတဲ့ဘက်ကို ပြောင်းဖို့ သူတို့က အကြံပေးပါတယ်။ မဟုတ်ရင် ဖတ်တဲ့ service တွေက မရှိတော့တဲ့ ဖုန်းနံပါတ်ကို
+      ရှာပြီး ပျက်နိုင်လို့ပါ။ ဒီအကြံကိုလည်း လက်ခံပြီး အလုပ်ကို နှစ်ဆင့် ခွဲလိုက်ပါတယ်။
+      [[mark:type-a3]] တတိယကတော့ ကိုယ့်အကြံပါ။ မလိုက်နာခဲ့ဘူး ဆိုတာနဲ့အတူ အကြောင်းပြချက်ကိုပါ ရေးထားပါတယ်။
+      encrypt လုပ်ထားလည်း ဖုန်းနံပါတ် မိတ္တူတွေက service သုံးခုလုံးရဲ့ database ထဲမှာ ဆက်ကျန်ပြီး၊
+      key ကိုပါ ထပ်ထိန်းရမယ် ဆိုတာပါ။ ဖတ်ကြည့်တော့ သူတို့ မှန်တယ်လို့ ကိုယ်လည်း လက်ခံရပါတယ်။
+      [[mark:advice-vs]] ဒီ အကြံတွေမှာ တူတာ တစ်ခုကို သတိထားကြည့်ပါ။ အကြံတိုင်းမှာ ဘာလုပ်သင့်လဲ ဆိုတာနဲ့အတူ
+      ဘာကြောင့်လဲ ဆိုတာ ပါပါတယ်။ ဘာကြောင့်လဲ မပါရင် အဲဒါက အကြံ မဟုတ်သေးဘဲ ထင်မြင်ချက်ပဲ ရှိပါသေးတယ်။
+      ရာထူးကြီးသူရဲ့ ထင်မြင်ချက်ကို အမိန့်လို့ ယူဆမိတတ်တာမို့၊ အဲဒီလို ကြားရရင် ဘာကြောင့်လဲလို့
+      ပြန်မေးပါ။
+      [[mark:type-dec]] အကြံတွေ စုံတော့ team က ဆုံးဖြတ်ပါတယ်။ ဖုန်းနံပါတ်ကို ဖြုတ်မယ်၊ လိုအပ်တဲ့ service က Booking
+      ဆီကနေ တောင်းယူမယ် ဆိုတာပါ။
+      [[mark:type-cons]] ရလဒ်ကိုလည်း ရတာရော၊ ပေးရတာရော ရေးပါတယ်။ ဖုန်းနံပါတ်က Booking တစ်နေရာတည်းမှာပဲ
+      ရှိတော့မှာပါ။ အဲဒီအတွက် Notification က SMS တစ်စောင် ပို့တိုင်း Booking ကို တစ်ခါ ခေါ်ရပါမယ်။
+      [[mark:type-status]] နောက်ဆုံးမှာ status ကို ပြောင်းပါတယ်။ အကြံ စတောင်းတဲ့နေ့ကနေ ဒီအထိ လေးရက်ပဲ
+      ကြာပါတယ်။ ခြောက်ပတ် မဟုတ်တော့ပါဘူး။ ဆုံးဖြတ်သူရဲ့ နာမည်လည်း အဲဒီမှာ ပါပါတယ်။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: a-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-quiz },
+          path: notebook/52-adr-with-advice.md,
+        }
+      - id: sel-options
+        type: editor.select
+        at: { mark: sel-options }
+        target:
+          {
+            file: notebook/52-adr-with-advice.md,
+            text: "- ရွေးစရာ: ဖြုတ်မယ် / encrypt လုပ်မယ် / ဒီအတိုင်း ထားမယ်",
+          }
+      - id: type-a1
+        type: editor.type
+        at: { mark: type-a1 }
+        cadence: line-by-line
+        target: { file: notebook/52-adr-with-advice.md, after: "|---|---|---|\n" }
+        text: "| Notification (ထိခိုက်) | SMS ပို့ဖို့ ဖုန်းနံပါတ် လိုတယ် | လက်မှတ် နံပါတ်နဲ့ တောင်းတဲ့ API ထည့်မယ် |\n| Settlement, Operator (ထိခိုက်) | ဖုန်းနံပါတ် မသုံးဘူး | ပြင်စရာ မရှိ |\n"
+      - id: type-a2
+        type: editor.type
+        at: { mark: type-a2 }
+        cadence: line-by-line
+        target: { file: notebook/52-adr-with-advice.md, after: "| ပြင်စရာ မရှိ |\n" }
+        text: "| Platform team (ကျွမ်းကျင်) | ဖတ်တဲ့ဘက် အရင်ပြင်၊ မဟုတ်ရင် ပျက်မယ် | အလုပ်ကို 2 ဆင့် ခွဲမယ် |\n"
+      - id: type-a3
+        type: editor.type
+        at: { mark: type-a3 }
+        cadence: line-by-line
+        target: { file: notebook/52-adr-with-advice.md, after: "| အလုပ်ကို 2 ဆင့် ခွဲမယ် |\n" }
+        text: "| Chief architect (ကျွမ်းကျင်) | encrypt လုပ်ပါ၊ Notification ပဲ ပြင်ရမယ် | မလိုက်နာ: မိတ္တူ 3 နေရာ ကျန်ဆဲ၊ key ပါ ထိန်းရ |\n"
+      - id: expect-advice
+        type: expect.file
+        at: { afterAction: type-a3 }
+        path: notebook/52-adr-with-advice.md
+        contains: "| Chief architect (ကျွမ်းကျင်) | encrypt လုပ်ပါ၊ Notification ပဲ ပြင်ရမယ် | မလိုက်နာ: မိတ္တူ 3 နေရာ ကျန်ဆဲ၊ key ပါ ထိန်းရ |\n"
+      - id: sel-reason
+        type: editor.select
+        at: { mark: advice-vs }
+        target: { file: notebook/52-adr-with-advice.md, text: "အကြံနဲ့ အကြောင်းပြချက်" }
+      - id: type-dec
+        type: editor.type
+        at: { mark: type-dec }
+        cadence: line-by-line
+        target: { file: notebook/52-adr-with-advice.md, after: "key ပါ ထိန်းရ |\n" }
+        text: "\n## Decision\nဖုန်းနံပါတ်ကို event ထဲက ဖြုတ်မယ်။ လိုတဲ့ service က Booking API ကနေ တောင်းမယ်။\n"
+      - id: type-cons
+        type: editor.type
+        at: { mark: type-cons }
+        cadence: line-by-line
+        target: { file: notebook/52-adr-with-advice.md, after: "Booking API ကနေ တောင်းမယ်။\n" }
+        text: "\n## Consequences\n+ ဖုန်းနံပါတ်က Booking တစ်နေရာတည်းမှာပဲ ရှိမယ်\n− Notification က SMS တစ်စောင်တိုင်း Booking ကို ခေါ်ရမယ်\n"
+      - id: type-status
+        type: editor.type
+        at: { mark: type-status }
+        cadence: line-by-line
+        target: { file: notebook/52-adr-with-advice.md, after: "Proposed · advice တောင်းနေဆဲ\n" }
+        text: "Accepted · 4 ရက်အကြာ · ဆုံးဖြတ်သူ: Booking team\n"
+
+  - id: supports
+    chapter: Forum နဲ့ architect ရဲ့ အလုပ်သစ်
+    narration: >
+      [[mark:s-open]] ဒါဆို ကြာသပတေးနေ့ အစည်းအဝေးနဲ့ ကိုယ်တို့ architect လေးယောက်က ဘာလုပ်ကြတော့မလဲ။
+      ပျောက်သွားတာ မဟုတ်ဘဲ၊ အလုပ် ပြောင်းသွားတာပါ။
+      [[mark:s-forum]] စမ်းသပ်မှု အဆင်ပြေရင် ကြာသပတေးနေ့ အစည်းအဝေးက advice forum ဖြစ်လာပါမယ်။ ဘယ်သူမဆို တက်လို့ရတဲ့ အပတ်စဉ်
+      ဝိုင်းပါ။ ဆုံးဖြတ်တော့မယ့် team တွေက ADR မူကြမ်းကို လာတင်ပြပြီး၊ ထိခိုက်မယ့်သူနဲ့
+      ကျွမ်းကျင်သူတွေက အဲဒီမှာ တစ်ခါတည်း အကြံပေးကြပါတယ်။ ဒီဝိုင်းမှာ ဘယ်အရာကိုမှ ခွင့်ပြုတာ၊ ပယ်ချတာ
+      မလုပ်ပါဘူး။
+      [[mark:s-architect]] architect ရဲ့ အလုပ်ကလည်း ပြောင်းပါတယ်။ အရင်က ကိုယ်တို့က အဖြေကို ပေးရတဲ့သူတွေပါ။
+      အခုတော့ လိုအပ်တဲ့ စကားဝိုင်းတွေ တကယ် ဖြစ်အောင် လုပ်ပေးရတဲ့သူတွေပါ။ ဘယ်သူ့ကို မေးသင့်လဲ ညွှန်ပေးတာ၊ အကြောင်းပြချက်ပါတဲ့ အကြံ ပေးတာ၊ ADR ရေးတတ်အောင် ကူပေးတာတွေပါ။
+      [[mark:s-whole]] ပြီးတော့ team တစ်ခုတည်းက မမြင်နိုင်တဲ့ system တစ်ခုလုံးကို ကြည့်ပေးရပါတယ်။ team
+      အများကြီးကို ဖြတ်တဲ့ ဆုံးဖြတ်ချက်တွေကိုတော့ ကိုယ်တို့ကိုယ်တိုင် အကြံတောင်းပြီး ချပါတယ်။
+      [[mark:s-overrule]] အခက်ဆုံးကတော့ ကိုယ် မကြိုက်တဲ့ ဆုံးဖြတ်ချက်ကို ကြည့်နေရတာပါ။ ဒီတစ်ခါတည်း ဆိုပြီး
+      ကိုယ်က ပြန်ပယ်လိုက်ရင်၊ team တွေက နောက်တစ်ခါ ကိုယ့်ခွင့်ပြုချက်ကိုပဲ ပြန်စောင့်လာတတ်ပါတယ်။
+      [[mark:s-start]] ဒီ process က ယုံကြည်မှုပေါ်မှာ ရပ်တည်တာမို့၊ တစ်ရက်တည်းနဲ့ ကုမ္ပဏီ တစ်ခုလုံးကို
+      ပြောင်းလို့ မရပါဘူး။ ခရီးဖော် မှာ Booking team တစ်ခုတည်းနဲ့ သုံးလ စမ်းတာလည်း ဒါကြောင့်ပါ။ သုံးလ ပြည့်ရင် ဘာအဆင်ပြေလဲ၊ ဘာမပြေလဲ
+      အတူ ပြန်သုံးသပ်ပြီးမှ နောက် team တွေဆီ တိုးပါမယ်။
+
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: show-supports,
+          type: slide.show,
+          at: { mark: s-open, offsetMs: -1200 },
+          slideId: supports,
+        }
+      - { id: point-forum, type: slide.point, at: { mark: s-forum }, target: { x: 0.15, y: 0.43 } }
+      - {
+          id: point-architect,
+          type: slide.point,
+          at: { mark: s-architect },
+          target: { x: 0.15, y: 0.59 },
+        }
+      - { id: point-start, type: slide.point, at: { mark: s-start }, target: { x: 0.15, y: 0.75 } }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team မှာ မကြာခင် ချရမယ့် ဆုံးဖြတ်ချက် တစ်ခုကို ရွေးပါ။ lesson ကို
+      pause လုပ်ပြီး၊ ဒီ table ထဲမှာ အဲဒီ ဆုံးဖြတ်ချက်ကြောင့် ထိခိုက်မယ့်သူတွေနဲ့ အဲဒီ အကြောင်းအရာကို
+      ကျွမ်းကျင်တဲ့သူတွေကို တစ်ယောက်ချင်း ရေးကြည့်ပါ။
+      [[mark:turn-2]] စာရင်းက အရမ်း ရှည်နေရင် ဆုံးဖြတ်ချက်က ကြီးလွန်းနေတာမို့ ခွဲကြည့်ပါ။ ကိုယ်နဲ့
+      သဘောမတူတတ်တဲ့သူ တစ်ယောက်လောက်ကိုလည်း စာရင်းထဲ ထည့်ပါ။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-supports, type: slide.close, at: { mark: turn } }
+      - id: sel-who
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/52-adr-with-advice.md,
+            text: "| ဘယ်သူ့ကို မေးလဲ | အကြံနဲ့ အကြောင်းပြချက် | ဘာလုပ်လိုက်လဲ |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ လူ အနည်းငယ်က အားလုံးအတွက် ဆုံးဖြတ်ပေးရင် ဆုံးဖြတ်ချက်တွေက တန်းစီ စောင့်ရပါတယ်။
+      [[mark:recap-rule]] advice process မှာတော့ ဘယ်သူမဆို ဆုံးဖြတ်နိုင်ပါတယ်။ ထိခိုက်မယ့်သူနဲ့ ကျွမ်းကျင်သူဆီက အကြံကို အရင်
+      တောင်းရမယ်၊ ရတဲ့ အကြံကို ADR ထဲ ရေးရမယ်၊ ရလဒ်အတွက် ကိုယ်တိုင် တာဝန်ယူရမယ် ဆိုတာပါပဲ။
+      [[mark:recap-2]] architect ကတော့ ဆုံးဖြတ်ပေးသူကနေ၊ မှန်တဲ့ စကားဝိုင်းတွေ ဖြစ်အောင် လုပ်ပေးပြီး system
+      တစ်ခုလုံးကို ကြည့်ပေးသူ ဖြစ်သွားပါတယ်။
+      [[mark:next]] ဒါပေမဲ့ team ၁၂ ခုက ကိုယ့်ဘာသာ ဆုံးဖြတ်ကြတဲ့အခါ ကုမ္ပဏီ တစ်ခုလုံး ဘယ်လို တစ်သားတည်း
+      ရှိနေမလဲ။ နောက် lesson မှာတော့ အဲဒီအတွက် သုံးတဲ့ principle နဲ့ technology radar ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - id: sel-status
+        type: editor.select
+        at: { mark: recap-rule }
+        target:
+          {
+            file: notebook/52-adr-with-advice.md,
+            text: "Accepted · 4 ရက်အကြာ · ဆုံးဖြတ်သူ: Booking team",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
