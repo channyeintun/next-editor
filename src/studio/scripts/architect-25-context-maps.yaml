@@ -1,0 +1,710 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-25-context-maps
+  title: "Architect Path 25: Context map"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/25-context-map.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/25-context-map.md: |
+        # ခရီးဖော် ရဲ့ context map
+
+        | Upstream | Downstream | Pattern | ဘာကြောင့် |
+        |---|---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — the map inside the company: blue contexts, violet arrows that
+    # run from upstream to downstream, green for the pattern the teams chose.
+    - {
+        id: a-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 400,
+        height: 45,
+        text: "Context map",
+        fontSize: 36,
+      }
+    - {
+        id: a-op,
+        kind: rectangle,
+        x: 270,
+        y: 270,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-op-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 297,
+        width: 220,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: a-arrow,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 505,
+        y: 315,
+        width: 340,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-book,
+        kind: rectangle,
+        x: 860,
+        y: 270,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-book-l,
+        kind: text,
+        align: center,
+        x: 860,
+        y: 297,
+        width: 220,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: a-up,
+        kind: text,
+        x: 270,
+        y: 225,
+        width: 220,
+        height: 35,
+        text: "upstream",
+        fontSize: 28,
+      }
+    - {
+        id: a-down,
+        kind: text,
+        x: 860,
+        y: 225,
+        width: 220,
+        height: 35,
+        text: "downstream",
+        fontSize: 28,
+      }
+    - {
+        id: a-ohs,
+        kind: text,
+        x: 520,
+        y: 265,
+        width: 320,
+        height: 35,
+        text: "open-host service",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: a-pay,
+        kind: rectangle,
+        x: 860,
+        y: 480,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: a-pay-l,
+        kind: text,
+        align: center,
+        x: 860,
+        y: 507,
+        width: 220,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: a-pd,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 925,
+        y: 368,
+        width: 40,
+        height: 104,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-pu,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 975,
+        y: 368,
+        width: 40,
+        height: 104,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: a-partner,
+        kind: text,
+        x: 640,
+        y: 402,
+        width: 260,
+        height: 35,
+        text: "partnership",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — outside companies upstream (white: not ours), our contexts
+    # downstream (blue); green the pattern chosen, orange the open question.
+    - {
+        id: b-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "အပြင်က ကုမ္ပဏီတွေနဲ့",
+        fontSize: 36,
+      }
+    - { id: b-sms, kind: rectangle, x: 270, y: 250, width: 250, height: 90, rounded: true }
+    - {
+        id: b-sms-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 277,
+        width: 250,
+        height: 35,
+        text: "SMS gateway",
+        fontSize: 28,
+      }
+    - {
+        id: b-a1,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 295,
+        width: 310,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-conf,
+        kind: text,
+        x: 580,
+        y: 245,
+        width: 240,
+        height: 35,
+        text: "conformist",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-book,
+        kind: rectangle,
+        x: 860,
+        y: 250,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-book-l,
+        kind: text,
+        align: center,
+        x: 860,
+        y: 277,
+        width: 220,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - { id: b-wal, kind: rectangle, x: 270, y: 440, width: 250, height: 90, rounded: true }
+    - {
+        id: b-wal-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 467,
+        width: 250,
+        height: 35,
+        text: "wallet ကုမ္ပဏီ",
+        fontSize: 28,
+      }
+    - {
+        id: b-a2,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 535,
+        y: 485,
+        width: 310,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-pay,
+        kind: rectangle,
+        x: 860,
+        y: 440,
+        width: 220,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-pay-l,
+        kind: text,
+        align: center,
+        x: 860,
+        y: 467,
+        width: 220,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: b-q,
+        kind: text,
+        x: 675,
+        y: 425,
+        width: 40,
+        height: 45,
+        text: "?",
+        fontSize: 36,
+        strokeColor: "#f08c00",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange name.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "Wallet API နဲ့ ဘယ်လို ဆက်ဆံမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) wallet ရဲ့ ပုံစံကို နေရာတိုင်းမှာ သုံး",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 780,
+        height: 35,
+        text: "ခ) အစွန်မှာ ဘာသာပြန်၊ အတွင်းမှာ ကိုယ့် model",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 640,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 960,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-reason,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 780,
+        height: 35,
+        text: "anticorruption layer = ဘာသာပြန်တဲ့ အလွှာ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8125
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ဘယ်သူက ဘယ်သူ့ကို လိုက်ညှိမလဲ
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ စကားလုံး တစ်လုံးက အဓိပ္ပာယ် တစ်ခုတည်း ရှိတဲ့ နယ်နိမိတ်၊ bounded context ကို လေ့လာပြီး၊
+      ခရီးဖော် မှာ Booking၊ Payment နဲ့ Operator ဆိုတဲ့ context သုံးခု ခွဲခဲ့ပါတယ်။ ခွဲလိုက်တာနဲ့တော့
+      မပြီးသေးပါဘူး။ context တွေက တစ်ခုနဲ့တစ်ခု ဆက်သွယ်ရပါသေးတယ်။
+      [[mark:n-op]] ဒီလထဲမှာ Operator team က ကားလိုင်းတွေ ပွဲတော်ရက်မှာ ကား အပို ထည့်နိုင်အောင် လုပ်ပေးရင်း၊
+      ခရီးစဉ် data ရဲ့ ပုံစံကို ပြောင်းလိုက်ပါတယ်။ အဲဒီ data ကို တိုက်ရိုက် ဖတ်နေတဲ့ Booking ရဲ့ ခရီးစဉ် ရှာတဲ့ အပိုင်းက ပျက်သွားပါတယ်။
+      ဒီ သုံးလအတွင်း တတိယ အကြိမ်ပါ။
+      [[mark:n-who]] Booking team lead မောင်မောင် က Operator team ကို မပြောင်းဖို့ တောင်းပေမဲ့၊ Operator team
+      မှာလည်း ကားလိုင်းတွေအတွက် ပြောင်းရမယ့် အကြောင်း ရှိပါတယ်။
+      [[mark:n-wallet]] တစ်ချိန်တည်းမှာ wallet ကုမ္ပဏီကလည်း payment API ကို နှစ်ပတ်အတွင်း ပြောင်းမယ်လို့
+      အကြောင်းကြားလာပါတယ်။ သူတို့ကတော့ ခရီးဖော် ကို မမေးဘဲ၊ ပြောင်းချင်တဲ့အချိန် ပြောင်းတာပါ။
+      [[mark:n-idea]] ကိစ္စ နှစ်ခုလုံးမှာ မေးခွန်းက အတူတူပါပဲ။ ဘယ်သူက ဘယ်သူ့ကို လိုက်ညှိရမလဲ ဆိုတာပါ။ အဖြေက
+      နည်းပညာထက် team တွေကြားက ဆက်ဆံရေးပေါ်မှာ ပိုမူတည်ပါတယ်။ အဲဒီ ဆက်ဆံရေးတွေကို ပုံဆွဲပြတာကို context map
+      လို့ ခေါ်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-n-op,
+          type: whiteboard.apply,
+          at: { mark: n-op },
+          open: true,
+          upsertIds: [a-op, a-op-l, a-arrow, a-book, a-book-l],
+          drawMs: 2400,
+        }
+      - {
+          id: point-n-who,
+          type: whiteboard.point,
+          at: { mark: n-who },
+          target: { assetId: a-book },
+        }
+      - {
+          id: draw-n-idea,
+          type: whiteboard.apply,
+          at: { mark: n-idea },
+          upsertIds: [a-title],
+          drawMs: 800,
+        }
+
+  - id: inside
+    chapter: Team တွေ လက်တွဲနိုင်တဲ့အခါ
+    narration: >
+      [[mark:i-updown]] ပုံထဲက မြားက ဘယ်သူက ဘယ်သူ့ကို မှီခိုနေလဲ ဆိုတာကို ပြပါတယ်။ မှီခိုခံရတဲ့ဘက်ကို
+      upstream၊ မှီခိုနေတဲ့ဘက်ကို downstream လို့ ခေါ်ပါတယ်။ upstream ပြောင်းရင် downstream က ထိခိုက်တာမို့၊ ပုံမှန်အားဖြင့် upstream
+      ဘက်က အားပိုကောင်းပါတယ်။ team တစ်ခုတည်းကပဲ ဆက်ဆံရေး တစ်ခုမှာ upstream ဖြစ်ပြီး၊ နောက်တစ်ခုမှာ downstream
+      ဖြစ်နိုင်ပါတယ်။
+      [[mark:i-ohs]] Operator နဲ့ Booking က ကုမ္ပဏီ တစ်ခုတည်းက team တွေမို့ ညှိလို့ ရပါတယ်။ ညှိလိုက်တဲ့ ပုံစံက
+      Operator က Booking အတွက် တည်ငြိမ်တဲ့ public interface တစ်ခု ထုတ်ပေးမယ် ဆိုတာပါ။ အတွင်းက data ပုံစံကို
+      ကြိုက်သလို ပြောင်းလို့ ရပေမဲ့၊ အပြင်ကို ထုတ်ပေးထားတဲ့ ပုံစံကိုတော့ သဘောတူညီချက် မရှိဘဲ မပြောင်းရပါဘူး။
+      [[mark:i-ohs-name]] ဒီ pattern ကို open host service လို့ ခေါ်ပါတယ်။ ခရီးစဉ် data ကို သုံးတာက Booking
+      တစ်ခုတည်း မဟုတ်ဘဲ၊ report တွေနဲ့ ကောင်တာ screen ကလည်း သုံးပါတယ်။ သုံးတဲ့သူတိုင်းက အပြောင်းအလဲကို
+      တစ်ယောက်စီ လိုက်ကာနေရမယ့်အစား၊ ပေးတဲ့ဘက် တစ်နေရာတည်းက တည်ငြိမ်အောင် ထုတ်ပေးတာက ပိုသက်သာပါတယ်။
+      ဈေးကတော့ Operator ဘက်မှာ အတွင်းပုံစံနဲ့ အပြင်ပုံစံ နှစ်ခုကို ထိန်းရတာပါ။
+      [[mark:i-partner]] Booking နဲ့ Payment ကြားမှာတော့ အထက်အောက် မရှိပါဘူး။ ထိုင်ခုံကို ဆယ်မိနစ် hold
+      လုပ်ထားတုန်း ငွေချေရတာမို့၊ တစ်ဖက်က ပြောင်းရင် နောက်တစ်ဖက်ပါ လိုက်ပြောင်းရပါတယ်။ ဒါကြောင့် team
+      နှစ်ခုက အပြောင်းအလဲတွေကို အတူ စီစဉ်ပြီး အတူ ထုတ်ကြပါတယ်။
+      [[mark:i-partner-name]] ဒါကို partnership လို့ ခေါ်ပါတယ်။ မကြာခဏ စကားပြောနိုင်တဲ့ team တွေကြားမှာပဲ
+      အလုပ်ဖြစ်ပါတယ်။ team တွေ များလာပြီး ဝေးသွားတဲ့နေ့မှာတော့ ဒီပုံစံက မခံနိုင်တော့ဘဲ၊ တစ်ဖက်က upstream
+      ဖြစ်လာတတ်ပါတယ်။
+      [[mark:i-kernel]] လက်တွဲတဲ့ team တွေအတွက် နောက်တစ်နည်းက model သေးသေး တစ်ခုကို နှစ်ဖက်လုံးက မျှသုံးတဲ့
+      shared kernel ပါ။ ဥပမာ ငွေပမာဏကို ဘယ်လို ကိုယ်စားပြုမလဲ ဆိုတာကို code တစ်ခုတည်းနဲ့ အတူ သုံးတာမျိုးပါ။
+      ကူးရေးစရာ မလိုတော့ပေမဲ့၊ အဲဒီ code ကို ပြင်တိုင်း နှစ်ဖက်လုံး သဘောတူရတာမို့ ဈေးကြီးပါတယ်။ ဒါကြောင့်
+      မျှသုံးတဲ့ အပိုင်းကို တတ်နိုင်သမျှ သေးအောင် ထားရပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-i-updown,
+          type: whiteboard.apply,
+          at: { mark: i-updown },
+          upsertIds: [a-up, a-down],
+          drawMs: 1200,
+        }
+      - { id: point-i-ohs, type: whiteboard.point, at: { mark: i-ohs }, target: { assetId: a-op } }
+      - {
+          id: draw-i-ohs,
+          type: whiteboard.apply,
+          at: { mark: i-ohs-name },
+          upsertIds: [a-ohs],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-i-partner,
+          type: whiteboard.apply,
+          at: { mark: i-partner },
+          upsertIds: [a-pay, a-pay-l, a-pd, a-pu],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-i-partner-l,
+          type: whiteboard.apply,
+          at: { mark: i-partner-name },
+          upsertIds: [a-partner],
+          drawMs: 1000,
+        }
+      - {
+          id: point-i-kernel,
+          type: whiteboard.point,
+          at: { mark: i-kernel },
+          target: { assetId: a-partner },
+        }
+
+  - id: outside
+    chapter: တစ်ဖက်က အားပိုကောင်းတဲ့အခါ
+    narration: >
+      [[mark:o-open]] အပြင်က ကုမ္ပဏီတွေနဲ့ကျတော့ အခြေအနေ မတူတော့ပါဘူး။ သူတို့က upstream ဖြစ်ပြီး၊ ခရီးဖော်
+      အတွက် သူတို့ဘက်က ဘာမှ ပြောင်းပေးမှာ မဟုတ်ပါဘူး။ downstream ဖြစ်တဲ့ ကိုယ့်ဘက်မှာ ရွေးစရာ နှစ်ခုပဲ
+      ရှိပါတယ်။ သူ့ model၊ ဆိုလိုတာက သူ့ စကားလုံးတွေနဲ့ data ပုံစံကို ရှိတဲ့အတိုင်း လက်ခံမလား၊ ကိုယ့်ဘက်မှာ
+      ဘာသာပြန်တဲ့ အလွှာ တစ်ခု ခံမလား ဆိုတာပါ။
+      [[mark:o-sms]] SMS gateway အတွက်တော့ လက်ခံလိုက်တာက သင့်တော်ပါတယ်။ ဖုန်းနံပါတ်နဲ့ စာသား
+      ပို့ပေးလိုက်တာလောက်ပဲမို့၊ သူ့ပုံစံအတိုင်း သုံးလိုက်လည်း ကိုယ့် code ထဲမှာ ထိခိုက်စရာ မရှိပါဘူး။
+      [[mark:o-conf]] ဒီလို upstream ရဲ့ model ကို ရှိတဲ့အတိုင်း လက်ခံတာကို conformist လို့ ခေါ်ပါတယ်။ ဒါက
+      လက်လျှော့တာ မဟုတ်ပါဘူး။ လူတိုင်း သုံးနေတဲ့ ပုံစံ တစ်ခုကို လိုက်သုံးတာက၊ ကိုယ်တိုင် အသစ် တီထွင်တာထက်
+      ကောင်းတဲ့အခါ များပါတယ်။
+      [[mark:o-wallet]] wallet ကုမ္ပဏီနဲ့ Payment ကြားကတော့ ပိုလေးနက်ပါတယ်။ ဘာသာပြန်တဲ့ အလွှာ တစ်ခု ဆောက်ရင်
+      ရေးရ၊ ထိန်းရတဲ့ code ပိုများလာပါတယ်။ မဆောက်ရင်တော့ သူ့ စကားလုံးတွေနဲ့ သူ့ data ပုံစံက ကိုယ့် code ထဲ
+      ရောက်လာပါမယ်။
+      [[mark:o-q]] ဒီ မြားပေါ်မှာ ဘာရေးမလဲ ဆိုတာကိုတော့ ခဏနေမှ ဆုံးဖြတ်ပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-o-open,
+          type: whiteboard.apply,
+          at: { mark: o-open },
+          clear: true,
+          upsertIds: [b-title, b-sms, b-sms-l, b-wal, b-wal-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-o-sms,
+          type: whiteboard.apply,
+          at: { mark: o-sms },
+          upsertIds: [b-a1, b-book, b-book-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-o-conf,
+          type: whiteboard.apply,
+          at: { mark: o-conf },
+          upsertIds: [b-conf],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-o-wallet,
+          type: whiteboard.apply,
+          at: { mark: o-wallet },
+          upsertIds: [b-a2, b-pay, b-pay-l],
+          drawMs: 1500,
+        }
+      - { id: draw-o-q, type: whiteboard.apply, at: { mark: o-q }, upsertIds: [b-q], drawMs: 600 }
+
+  - id: table
+    chapter: Map ကို table နဲ့ မှတ်ခြင်း
+    narration: >
+      [[mark:d-close]] ဆုံးဖြတ်ပြီးသား ဆက်ဆံရေးတွေကို table နဲ့ ချရေးထားပါမယ်။ ပုံက မြင်ရ လွယ်ပေမဲ့၊ ဘာကြောင့်
+      ဆိုတာကိုတော့ table က ပိုကောင်းကောင်း မှတ်ပေးနိုင်ပါတယ်။
+      [[mark:d-rows]] ပထမ သုံးကြောင်းက ခုနက ဆွဲခဲ့တဲ့ ဆက်ဆံရေး သုံးခုပါ။ နောက်ဆုံး column က အရေးအကြီးဆုံးပါ။
+      pattern နာမည်ထက်၊ ဘာကြောင့် ဒီ pattern ကို ရွေးလဲ ဆိုတာကို နောက်လူတွေ သိဖို့ လိုလို့ပါ။
+      [[mark:d-separate]] နောက်ထပ် ရွေးစရာ တစ်ခု ကျန်ပါသေးတယ်။ လုံးဝ မချိတ်ဆက်ဘဲ တစ်ဖက်စီ ကိုယ်တိုင်
+      ထားတာပါ။ ဥပမာ ပွဲတော်ရက် စာရင်းကို Operator က ကားထွက်ချိန်အတွက် လိုပြီး၊ Payment ကလည်း ကားလိုင်းတွေကို
+      ငွေရှင်းပေးမယ့် ရက်အတွက် လိုပါတယ်။ ဒီလောက် သေးတဲ့ ကိစ္စအတွက် team နှစ်ခု ချိတ်ဆက်ပြီး ညှိနေတာထက်၊
+      တစ်ဖက်စီ စာရင်း တစ်ခုစီ ထားလိုက်တာက ပိုသက်သာပါတယ်။ စာရင်း နှစ်ခု တစ်ခါတလေ ကွာသွားနိုင်တာကိုတော့
+      လက်ခံရပါမယ်။ ဒါကို separate ways လို့ ခေါ်ပါတယ်။
+      [[mark:d-never]] ဒါပေမဲ့ ခရီးဖော် ကို ပြိုင်ဘက်နဲ့ ကွာစေတဲ့ အပိုင်း၊ core အတွက်တော့ ဒီနည်းကို ဘယ်တော့မှ
+      မသုံးရပါဘူး။ ထိုင်ခုံ လွတ်မလွတ်ကို နှစ်နေရာက တစ်ဖက်စီ ကိုယ်တိုင် တွက်နေရင် ဘာဖြစ်မလဲ ဆိုတာ သင်္ကြန်တုန်းက
+      မြင်ခဲ့ပြီးပါပြီ။
+      [[mark:d-org]] ဒီ map က နည်းပညာ ပုံတစ်ပုံထက် ပိုပါတယ်။ ဘယ်သူက အားကောင်းလဲ၊ ဘယ် team တွေ
+      စကားပြောနေကြလဲ ဆိုတာကို ပြတာမို့၊ အဖွဲ့အစည်းထဲက ပြဿနာတွေပါ ပေါ်လာပါတယ်။ ခရီးဖော် မှာဆိုရင် Operator နဲ့
+      Booking ကြားမှာ ဒီလအထိ သဘောတူထားတဲ့ pattern တစ်ခုမှ မရှိခဲ့တာကို၊ map ဆွဲကြည့်မှ သိလိုက်ရတာပါ။
+      [[mark:d-own]] map ကို architect တစ်ယောက်တည်း ထိန်းထားဖို့လည်း မဟုတ်ပါဘူး။ team တစ်ခုစီက ကိုယ်နဲ့ ဆိုင်တဲ့
+      အတန်းကို ကိုယ်တိုင် ပြင်ပြီး၊ အားလုံး မြင်ရတဲ့ နေရာမှာ ထားရပါတယ်။ ဆက်ဆံရေး ပြောင်းသွားတဲ့နေ့မှာ pattern
+      ကိုလည်း ပြန်ရွေးရမှာမို့ပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-outside, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-outside },
+          path: notebook/25-context-map.md,
+        }
+      - id: type-rows
+        type: editor.type
+        at: { mark: d-rows }
+        cadence: line-by-line
+        target: { file: notebook/25-context-map.md, after: "|---|---|---|---|\n" }
+        text: "| Operator | Booking | open-host service | အတွင်းပိုင်း ပြောင်းလည်း Booking မပျက်အောင် |\n| Booking | Payment | partnership | အထက်အောက် မရှိ၊ အတူ စီစဉ်ပြီး အတူ ထုတ် |\n| SMS gateway | Booking | conformist | ရိုးတဲ့ အပိုင်းမို့ သူ့ပုံစံအတိုင်း လက်ခံ |\n"
+      - id: type-separate
+        type: editor.type
+        at: { mark: d-separate }
+        cadence: line-by-line
+        target: { file: notebook/25-context-map.md, after: "| ရိုးတဲ့ အပိုင်းမို့ သူ့ပုံစံအတိုင်း လက်ခံ |\n" }
+        text: "| — | Operator, Payment | separate ways | ပွဲတော်ရက် စာရင်းကို တစ်ဖက်စီ ကိုယ်တိုင် ထား |\n"
+      - id: sel-separate
+        type: editor.select
+        at: { mark: d-never }
+        target: { file: notebook/25-context-map.md, text: "separate ways" }
+      - id: sel-op-row
+        type: editor.select
+        at: { mark: d-org }
+        target:
+          { file: notebook/25-context-map.md, text: "| Operator | Booking | open-host service |" }
+      - id: expect-ohs
+        type: expect.file
+        at: { afterAction: sel-op-row }
+        path: notebook/25-context-map.md
+        contains: "| Operator | Booking | open-host service | အတွင်းပိုင်း ပြောင်းလည်း Booking မပျက်အောင် |\n"
+      - id: sel-partner-row
+        type: editor.select
+        at: { mark: d-own }
+        target: { file: notebook/25-context-map.md, text: "| Booking | Payment | partnership |" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ wallet ကုမ္ပဏီက ခရီးဖော် အတွက် သူ့ API ကို ဘယ်တော့မှ ပြောင်းပေးမှာ
+      မဟုတ်ပါဘူး။ Payment context က အဲဒီ API နဲ့ ဘယ်လို ဆက်ဆံသင့်လဲ။
+      [[mark:quiz-a]] ပထမ ရွေးစရာက wallet ရဲ့ စကားလုံးတွေနဲ့ data ပုံစံကို Payment ရဲ့ code တစ်ခုလုံးမှာ
+      ရှိတဲ့အတိုင်း သုံးတာပါ။
+      [[mark:quiz-b]] ဒုတိယက Payment ရဲ့ အစွန်မှာ ဘာသာပြန်တဲ့ အလွှာ တစ်ခု ထားပြီး၊ အတွင်းမှာတော့ ကိုယ့် model
+      ကိုပဲ သုံးတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ငွေနဲ့ ပတ်သက်တဲ့ Payment က ပြင်ပ
+      ကုမ္ပဏီ တစ်ခုရဲ့ ပုံစံအတိုင်း လိုက်ကွေးနေဖို့ အရေးကြီးလွန်းလို့ပါ။ wallet က API ကို ပြောင်းတိုင်း ဘာသာပြန်တဲ့
+      အလွှာ တစ်နေရာတည်းမှာပဲ ပြင်ရပါမယ်။ နောက်တစ်နေ့ wallet အသစ် တစ်ခု ထပ်ထည့်ရင်လည်း အလွှာ တစ်ခုပဲ
+      ထပ်ရေးရမှာပါ။
+      [[mark:quiz-acl]] ဒီလို တခြားသူ့ model ကို ကိုယ့် model ဆီ ဘာသာပြန်ပေးတဲ့ အလွှာကို anticorruption layer
+      လို့ ခေါ်ပါတယ်။ upstream က ရှုပ်ထွေးတဲ့အခါ၊ မကြာခဏ ပြောင်းတဲ့အခါ၊ ဒါမှမဟုတ် ကိုယ့်ဘက်က အရေးကြီးတဲ့
+      အပိုင်း ဖြစ်တဲ့အခါ ဒီ အလွှာက တန်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [z-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: quiz-acl },
+          upsertIds: [z-reason],
+          drawMs: 1400,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် team ရဲ့ ချိတ်ဆက်မှု
+    narration: >
+      [[mark:t-close]] ဒီ ဆုံးဖြတ်ချက်ကိုလည်း map ထဲ ဖြည့်လိုက်ပါမယ်။
+      [[mark:type-wallet]] wallet ကုမ္ပဏီ ဘယ်လိုပဲ ပြောင်းပြောင်း၊ Payment ရဲ့ အတွင်းပိုင်းကို မထိစေဖို့ပါ။
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် team ရဲ့ ချိတ်ဆက်မှု
+      တစ်ခုအတွက် အတန်း တစ်တန်း ထပ်ရေးကြည့်ပါ။ တခြား team တစ်ခု၊ ဒါမှမဟုတ် အပြင်က service တစ်ခုနဲ့ ချိတ်ထားတာ
+      တစ်ခုကို ရွေးပါ။ ဘယ်ဘက်က upstream လဲ၊ ဘယ်သူ့ဘက်က အားပိုကောင်းလဲ၊ အခု ဘယ် pattern နဲ့ အနီးစပ်ဆုံးလဲ
+      ဆိုတာကို ဖြေရမှာပါ။
+      [[mark:turn-2]] pattern ကို ရွေးမထားခဲ့ဘူးဆိုရင်လည်း အဲဒါကို ရိုးရိုးသားသား ရေးထားပါ။ မရွေးထားတဲ့
+      ဆက်ဆံရေးက အများအားဖြင့် conformist ဖြစ်နေတတ်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - id: type-wallet
+        type: editor.type
+        at: { mark: type-wallet }
+        cadence: line-by-line
+        target: { file: notebook/25-context-map.md, after: "| ပွဲတော်ရက် စာရင်းကို တစ်ဖက်စီ ကိုယ်တိုင် ထား |\n" }
+        text: "| wallet ကုမ္ပဏီ | Payment | anticorruption layer | သူ့ model ကို အစွန်မှာ ဘာသာပြန်၊ အတွင်းကို မထိစေ |\n"
+      - id: sel-wallet-row
+        type: editor.select
+        at: { mark: turn }
+        target:
+          {
+            file: notebook/25-context-map.md,
+            text: "| wallet ကုမ္ပဏီ | Payment | anticorruption layer |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ context တွေ ဘယ်လို ချိတ်ဆက်မလဲ ဆိုတာက team တွေကြားက ဆက်ဆံရေးပေါ်မှာ မူတည်ပါတယ်။
+      လက်တွဲနိုင်တဲ့ team တွေက အတူ ညှိကြပြီး၊ တစ်ဖက်က အားကောင်းနေရင်တော့ downstream က လက်ခံမလား၊ ဘာသာပြန်မလား
+      ရွေးရပါတယ်။ upstream ဘက်ကလည်း တည်ငြိမ်တဲ့ public interface ထုတ်ပေးနိုင်ပါတယ်။ ဒါတွေကို context map ပေါ်
+      တင်ကြည့်ရင် ဘယ်သူက ဘယ်သူ့ကို လိုက်ညှိနေရလဲ ဆိုတာ မြင်ရပါတယ်။
+      [[mark:next]] context တွေကြားက ဆက်ဆံရေးကို သိပြီဆိုတော့၊ context တစ်ခုရဲ့ အတွင်းဘက်ကို ကြည့်ဖို့
+      ကျန်ပါတယ်။ နောက် lesson မှာတော့ business logic ကို အဲဒီ အပိုင်းရဲ့ ရှုပ်ထွေးမှုနဲ့ လိုက်အောင် ဘယ်လို
+      တည်ဆောက်မလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
