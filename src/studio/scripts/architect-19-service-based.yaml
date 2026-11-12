@@ -1,0 +1,887 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-19-service-based
+  title: "Architect Path 19: Service-based architecture"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/19-service-candidates.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/19-service-candidates.md: |+
+        # Service candidates · ခရီးဖော်
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — one app, one release: two modules are ready (green), one has a
+    # bug (red), and the whole release to production is stopped (red strike).
+    - { id: b-app, kind: rectangle, x: 280, y: 215, width: 800, height: 190, strokeStyle: dashed }
+    - {
+        id: b-app-l,
+        kind: text,
+        align: center,
+        x: 280,
+        y: 227,
+        width: 800,
+        height: 35,
+        text: "app တစ်ခုတည်း = release တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - {
+        id: b-bk,
+        kind: rectangle,
+        x: 305,
+        y: 280,
+        width: 230,
+        height: 105,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-bk-l,
+        kind: text,
+        align: center,
+        x: 305,
+        y: 290,
+        width: 230,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: b-op,
+        kind: rectangle,
+        x: 565,
+        y: 280,
+        width: 230,
+        height: 105,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-op-l,
+        kind: text,
+        align: center,
+        x: 565,
+        y: 290,
+        width: 230,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: b-pay,
+        kind: rectangle,
+        x: 825,
+        y: 280,
+        width: 230,
+        height: 105,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: b-pay-l,
+        kind: text,
+        align: center,
+        x: 825,
+        y: 290,
+        width: 230,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: b-ok1,
+        kind: freedraw,
+        stroke: check,
+        x: 400,
+        y: 335,
+        width: 40,
+        height: 38,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-ok2,
+        kind: freedraw,
+        stroke: check,
+        x: 660,
+        y: 335,
+        width: 40,
+        height: 38,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: b-bug,
+        kind: text,
+        align: center,
+        x: 825,
+        y: 337,
+        width: 230,
+        height: 35,
+        text: "bug",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-go,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 660,
+        y: 415,
+        width: 40,
+        height: 95,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: b-stop,
+        kind: freedraw,
+        stroke: strike,
+        x: 625,
+        y: 435,
+        width: 110,
+        height: 50,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: b-prod,
+        kind: text,
+        align: center,
+        x: 530,
+        y: 525,
+        width: 300,
+        height: 35,
+        text: "production",
+        fontSize: 28,
+      }
+    # Board 2 — three coarse services, each released on its own (green), all
+    # using the one database (violet flow).
+    - {
+        id: s-bk,
+        kind: rectangle,
+        x: 290,
+        y: 300,
+        width: 230,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-bk-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 322,
+        width: 230,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: s-op,
+        kind: rectangle,
+        x: 560,
+        y: 300,
+        width: 230,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-op-l,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 322,
+        width: 230,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: s-pay,
+        kind: rectangle,
+        x: 830,
+        y: 300,
+        width: 230,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: s-pay-l,
+        kind: text,
+        align: center,
+        x: 830,
+        y: 322,
+        width: 230,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - { id: s-db, kind: ellipse, x: 475, y: 500, width: 400, height: 110, strokeColor: "#1971c2" }
+    - {
+        id: s-db-l,
+        kind: text,
+        align: center,
+        x: 475,
+        y: 537,
+        width: 400,
+        height: 35,
+        text: "database တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - {
+        id: s-a1,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 440,
+        y: 390,
+        width: 110,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 655,
+        y: 390,
+        width: 40,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-a3,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 800,
+        y: 390,
+        width: 110,
+        height: 100,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: s-r1,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 385,
+        y: 200,
+        width: 40,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-r2,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 655,
+        y: 200,
+        width: 40,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: s-r3,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 925,
+        y: 200,
+        width: 40,
+        height: 90,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — inside the shared database: table groups by owner (dashed
+    # boundaries), one read across a boundary (violet), and the schema change
+    # that reaches the reader (red).
+    - {
+        id: x-bk,
+        kind: rectangle,
+        x: 290,
+        y: 190,
+        width: 280,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: x-bk-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 210,
+        width: 280,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: x-op,
+        kind: rectangle,
+        x: 790,
+        y: 190,
+        width: 280,
+        height: 76,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: x-op-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 210,
+        width: 280,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - { id: x-db, kind: rectangle, x: 270, y: 380, width: 820, height: 230, strokeColor: "#1971c2" }
+    - {
+        id: x-db-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 562,
+        width: 820,
+        height: 35,
+        text: "database တစ်ခုတည်း",
+        fontSize: 28,
+      }
+    - { id: g-bk, kind: rectangle, x: 290, y: 400, width: 280, height: 130, strokeStyle: dashed }
+    - {
+        id: g-bk-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 412,
+        width: 280,
+        height: 35,
+        text: "Booking ပိုင်",
+        fontSize: 28,
+      }
+    - { id: g-op, kind: rectangle, x: 790, y: 400, width: 280, height: 130, strokeStyle: dashed }
+    - {
+        id: g-op-l,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 412,
+        width: 280,
+        height: 35,
+        text: "Operator ပိုင်",
+        fontSize: 28,
+      }
+    - {
+        id: x-read,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 585,
+        y: 276,
+        width: 195,
+        height: 114,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: x-read-l,
+        kind: text,
+        x: 600,
+        y: 345,
+        width: 90,
+        height: 35,
+        text: "ဖတ်ရုံ",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: x-change,
+        kind: text,
+        align: center,
+        x: 790,
+        y: 472,
+        width: 280,
+        height: 35,
+        text: "column ပြောင်း",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    # Board 4 — the quiz: white question and options, green answer and what was
+    # gained, orange reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Quantum ဘယ်နှခု ရှိလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) 3 ခု · service 3 ခုမို့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) 1 ခု · database တစ်ခုတည်းမို့",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 450,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 760,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "database ကျရင် service 3 ခုလုံး ကျတယ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-r2,
+        kind: text,
+        x: 290,
+        y: 535,
+        width: 760,
+        height: 35,
+        text: "release သီးခြား လုပ်နိုင်ပြီ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8119
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: တစ်ပတ် တစ်ခါ release
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ core သေးသေး တစ်ခုကို plug in တွေ ဝိုင်းတပ်တဲ့ microkernel နဲ့၊ အလုပ်ကို အဆင့်ဆင့်
+      ဖြတ်သွားစေတဲ့ pipeline ဆိုတဲ့ ပုံစံ နှစ်မျိုးကို လေ့လာခဲ့ပါတယ်။
+      [[mark:readme]] ဒီနေ့တော့ app တစ်ခုလုံးရဲ့ ပုံစံဆီ ပြန်လာပါမယ်။ ခရီးဖော် မှာ release က တစ်ပတ် တစ်ခါ၊
+      ကြာသပတေးနေ့တိုင်း ထွက်ပါတယ်။
+      [[mark:b-open]] app က တစ်ခုတည်းမို့ team သုံးခုလုံးရဲ့ အလုပ်တွေက release တစ်ခုတည်းထဲမှာ အတူတူ ပါသွားရတာပါ။
+      ပြီးခဲ့တဲ့ အပတ်က ဒီလို ဖြစ်ခဲ့ပါတယ်။
+      [[mark:b-ok]] Booking team ရဲ့ promo code က အဆင်သင့် ဖြစ်နေပါပြီ။ Operator team ရဲ့ report အသစ်ကလည်း
+      ပြီးနေပါပြီ။
+      [[mark:b-bug]] ဒါပေမဲ့ Payment team ရဲ့ ငွေပြန်အမ်းတဲ့ code ထဲမှာ release မထွက်ခင် နောက်ဆုံးနေ့ကျမှ bug
+      တစ်ခု တွေ့ပါတယ်။
+      [[mark:b-stop]] app က တစ်ခုတည်းမို့ release တစ်ခုလုံးကို ရပ်ထားလိုက်ရပြီး၊ ပြီးနေတဲ့ အလုပ် နှစ်ခုကလည်း
+      နောက်တစ်ပတ်အထိ စောင့်ရပါတယ်။
+      [[mark:b-cto]] CTO ဖြစ်တဲ့ အောင်အောင် က ပြီးနေတဲ့ အလုပ်တွေကို ဘာလို့ မထုတ်နိုင်တာလဲလို့ မေးပါတယ်။ ဒီ
+      မေးခွန်းက ကိုယ်တို့ စောင့်နေခဲ့တဲ့၊ နာမည်တပ်ပြနိုင်တဲ့ အကြောင်းပြချက်ပါပဲ။ team တွေက
+      တစ်ယောက်ကိုတစ်ယောက် မစောင့်ဘဲ release လုပ်နိုင်ဖို့ လိုနေပြီ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: readme }, path: README.md }
+      - id: sel-release
+        type: editor.select
+        at: { mark: readme, offsetMs: 3500 }
+        target:
+          { file: README.md, text: "- release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်" }
+      - {
+          id: draw-b-open,
+          type: whiteboard.apply,
+          at: { mark: b-open },
+          open: true,
+          upsertIds: [b-app, b-app-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-b-mods,
+          type: whiteboard.apply,
+          at: { mark: b-open, offsetMs: 3000 },
+          upsertIds: [b-bk, b-bk-l, b-op, b-op-l, b-pay, b-pay-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-b-ok,
+          type: whiteboard.apply,
+          at: { mark: b-ok },
+          upsertIds: [b-ok1, b-ok2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-b-bug,
+          type: whiteboard.apply,
+          at: { mark: b-bug },
+          upsertIds: [b-bug],
+          drawMs: 600,
+        }
+      - {
+          id: draw-b-stop,
+          type: whiteboard.apply,
+          at: { mark: b-stop },
+          upsertIds: [b-go, b-stop, b-prod],
+          drawMs: 1500,
+        }
+      - { id: point-b-ok, type: whiteboard.point, at: { mark: b-cto }, target: { assetId: b-bk } }
+
+  - id: idea
+    chapter: Service ကြီးကြီး အနည်းငယ်
+    narration: >
+      [[mark:s-three]] ဒီအတွက် network ဘက်ကို လှမ်းမယ်ဆိုရင် အရိုးရှင်းဆုံး ခြေလှမ်းက app ကို service ကြီးကြီး
+      အနည်းငယ်အဖြစ် ခွဲလိုက်တာပါ။ app ထဲမှာ ခွဲထားပြီးသား code အုပ်စုတွေ၊ module တွေအတိုင်း Booking၊ Operator၊ Payment
+      ဆိုပြီး service သုံးခုပါ။ service တစ်ခုစီကို
+      သီးခြား deploy လုပ်ပါတယ်။ ဆယ်ဂဏန်းနဲ့ချီတဲ့ service သေးသေးလေးတွေ မဟုတ်ဘဲ၊ business ရဲ့ လုပ်ငန်းနယ်ပယ်
+      တစ်ခုလုံးစာ ကြီးတဲ့ service တွေပါ။ service တစ်ခုရဲ့ အထဲမှာတော့ အရင်လိုပဲ module တွေ ရှိနေပါတယ်။
+      [[mark:s-db]] database ကိုတော့ မခွဲသေးပါဘူး။ service သုံးခုလုံးက အရင် database တစ်ခုတည်းကိုပဲ ဆက်သုံးပါတယ်။
+      ဒီ ပုံစံကို service based architecture လို့ ခေါ်ပါတယ်။
+      [[mark:s-release]] ပထမဆုံး ရတာက team တစ်ခုစီက ကိုယ့် service ကို ကိုယ့်အချိန်နဲ့ကိုယ် release လုပ်နိုင်တာပါ။
+      Payment မှာ bug ရှိနေလည်း Booking က promo code ကို ဒီနေ့ပဲ ထုတ်နိုင်ပါတယ်။
+      [[mark:s-crash]] ဒုတိယက service တစ်ခု crash ဖြစ်သွားရင်လည်း ကျန်တဲ့ service တွေ ဆက်အလုပ်လုပ်နိုင်တာပါ။
+      Payment service ကျသွားတဲ့အချိန်မှာ ခရီးသည်တွေက ခရီးစဉ် ရှာလို့ ရနေသေးပြီး၊ ကားလိုင်းတွေကလည်း ဈေးတင်လို့
+      ရနေပါသေးတယ်။
+      [[mark:s-tx]] တတိယက database တစ်ခုတည်းမို့ transaction တွေက အရင်လို ရိုးရိုးရှင်းရှင်းပဲ ရှိနေတာပါ။
+      transaction ဆိုတာ အကုန်ဖြစ်၊ ဒါမှမဟုတ် တစ်ခုမှ မဖြစ် ဆိုတဲ့ လုပ်ဆောင်ချက် အစုပါ။ ထိုင်ခုံကို ယူတာနဲ့
+      လက်မှတ် ထုတ်တာကို Booking service က transaction တစ်ခုတည်းနဲ့ လုပ်နိုင်တုန်းပါပဲ။
+      [[mark:s-ops]] ပေးဆပ်ရတာလည်း ရှိပါတယ်။ deploy လုပ်ရမယ့် အရာက တစ်ခုကနေ သုံးခု ဖြစ်လာပါတယ်။ Booking က
+      ငွေချေခိုင်းဖို့ Payment ကို ခေါ်တာလို၊ အရင်က function တစ်ခု ခေါ်ရုံနဲ့ ပြီးခဲ့တာတွေက network ပေါ်က call
+      ဖြစ်လာပြီး၊ နှေးနိုင်၊ ပျက်နိုင်တာကို ထည့်စဉ်းစားရပါတယ်။ ဒါပေမဲ့ service သုံးခုဆိုတာ team သုံးခုက
+      ကိုင်တွယ်နိုင်တဲ့ အရေအတွက်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-s-three,
+          type: whiteboard.apply,
+          at: { mark: s-three, offsetMs: 5000 },
+          clear: true,
+          upsertIds: [s-bk, s-bk-l, s-op, s-op-l, s-pay, s-pay-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-s-db,
+          type: whiteboard.apply,
+          at: { mark: s-db },
+          upsertIds: [s-db, s-db-l, s-a1, s-a2, s-a3],
+          drawMs: 2200,
+        }
+      - {
+          id: draw-s-release,
+          type: whiteboard.apply,
+          at: { mark: s-release },
+          upsertIds: [s-r1, s-r2, s-r3],
+          drawMs: 1300,
+        }
+      - {
+          id: point-s-pay,
+          type: whiteboard.point,
+          at: { mark: s-crash },
+          target: { assetId: s-pay },
+        }
+      - { id: point-s-db, type: whiteboard.point, at: { mark: s-tx }, target: { assetId: s-db } }
+      - {
+          id: point-s-bk,
+          type: whiteboard.point,
+          at: { mark: s-ops, offsetMs: 5500 },
+          target: { assetId: s-bk },
+        }
+
+  - id: price
+    chapter: Database မှာ ပေးရတဲ့ အခကြေးငွေ
+    narration: >
+      [[mark:d-open]] အကြီးဆုံး အခကြေးငွေကိုတော့ database မှာ ပေးရပါတယ်။ service နှစ်ခုကိုပဲ ယူပြီး database ရဲ့
+      အထဲကို ကြည့်ရအောင်။
+      [[mark:d-own]] database က တစ်ခုတည်း ဆိုပေမဲ့ table တွေကို ပိုင်ရှင်အလိုက် အုပ်စုခွဲထားရပါတယ်။ လက်မှတ်နဲ့
+      ထိုင်ခုံ table တွေကို Booking service က ပိုင်ပြီး၊ ကားလိုင်းနဲ့ ခရီးစဉ် table တွေကို Operator service က
+      ပိုင်တာမျိုးပါ။ ပိုင်တယ် ဆိုတာ အဲဒီ table ကို ရေးခွင့်ရှိတာ သူ တစ်ခုတည်းလို့ ဆိုလိုပါတယ်။ service နှစ်ခုက table
+      တစ်ခုတည်းကို ရေးနေရင်၊ ဘယ်သူ့ စည်းမျဉ်းက အမှန်လဲ ဆိုတာ မသေချာတော့လို့ပါ။
+      [[mark:d-read]] ဒါပေမဲ့ Booking က ခရီးစဉ် ရှာပေးဖို့ Operator ရဲ့ ခရီးစဉ် table ကို ဖတ်ရပါတယ်။ module
+      တုန်းကတော့ တခြား module ရဲ့ table ကို တိုက်ရိုက် မဖတ်ဘဲ interface ကနေ တောင်းခဲ့ပါတယ်။ service
+      ဖြစ်သွားတဲ့အခါ အဲဒီ interface ကို ခေါ်တာက network ပေါ်က call ဖြစ်လာတော့၊ နှေးလည်း နှေး၊ ပျက်နိုင်ခြေလည်း
+      ရှိလာပါတယ်။ ဒါကြောင့် service based မှာ ဖတ်ရုံသက်သက်အတွက်ဆိုရင် တခြားသူ့ table ကို တိုက်ရိုက် ဖတ်ခွင့်
+      ပေးလေ့ရှိပါတယ်။
+      [[mark:d-schema]] ပြဿနာက schema ပြောင်းတဲ့အခါမှာ ပေါ်လာပါတယ်။ schema ဆိုတာ data ရဲ့ ပုံစံပါ။ Operator team က
+      ခရီးစဉ် table ထဲက column တစ်ခုကို နာမည်ပြောင်းလိုက်တယ် ဆိုပါစို့။
+      [[mark:d-break]] အဲဒီ table ကို ဖတ်နေတဲ့ Booking service ကပါ ပျက်သွားနိုင်ပါတယ်။ ဒါကြောင့် service တွေ
+      မျှသုံးနေတဲ့ table ရဲ့ schema ကို ပြောင်းတော့မယ်ဆိုရင်၊ ပိုင်တဲ့ team က ဖတ်နေတဲ့ team တွေနဲ့ အရင် ညှိရပါတယ်။
+      release ကို သီးခြားစီ လုပ်နိုင်ပေမဲ့ schema ကိုတော့ အတူတူ ညှိရတုန်းပဲ ဆိုတာက ဒီ style ရဲ့ trade off ပါ။ trade
+      off ဆိုတာ တစ်ခု ရဖို့ နောက်တစ်ခုကို လျှော့ပေးရတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          clear: true,
+          upsertIds: [x-bk, x-bk-l, x-op, x-op-l, x-db, x-db-l],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-d-own,
+          type: whiteboard.apply,
+          at: { mark: d-own },
+          upsertIds: [g-bk, g-bk-l, g-op, g-op-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-d-read,
+          type: whiteboard.apply,
+          at: { mark: d-read },
+          upsertIds: [x-read, x-read-l],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-d-schema,
+          type: whiteboard.apply,
+          at: { mark: d-schema, offsetMs: 5500 },
+          upsertIds: [x-change],
+          drawMs: 800,
+        }
+      - { id: point-x-bk, type: whiteboard.point, at: { mark: d-break }, target: { assetId: x-bk } }
+
+  - id: table
+    chapter: Service တွေနဲ့ table ပိုင်ရှင်
+    narration: >
+      [[mark:t-open]] ဒါကို table တစ်ခုနဲ့ ချရေးကြည့်ရအောင်။ service တစ်ခုစီအတွက် ဘယ် team က တာဝန်ယူလဲ၊ ဘယ် table
+      တွေကို ပိုင်လဲ၊ ဘယ် table တွေကို ဖတ်ရုံပဲ ဖတ်လဲ ဆိုတာပါ။
+      [[mark:type-head]] Booking က လက်မှတ် ရောင်းတဲ့ဘက်ပါ။ ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းမိဖို့ဆိုရင် ထိုင်ခုံနဲ့
+      လက်မှတ် table ကို ရေးခွင့်ရှိတာ service တစ်ခုတည်း ဖြစ်နေမှ စိတ်ချရပါတယ်။ ခရီးစဉ်တွေကိုတော့ ကိုယ်တိုင်
+      မပိုင်ဘဲ ဖတ်ရုံပဲ ဖတ်ပါတယ်။
+      [[mark:type-row-2]] ခရီးစဉ်နဲ့ ဈေးနှုန်းကို သတ်မှတ်တာက ကားလိုင်းတွေမို့ အဲဒီ table တွေကို Operator service က
+      ပိုင်ပါတယ်။ ရောင်းအားကို ပြဖို့အတွက်တော့ လက်မှတ် table ကို ဖတ်ရပါတယ်။
+      [[mark:type-row-3]] ငွေနဲ့ ဆိုင်သမျှ table တွေကိုတော့ Payment service တစ်ခုတည်းက ရေးပါတယ်။ ကားလိုင်းတွေကို
+      အပတ်စဉ် ငွေစာရင်း ရှင်းပေးတဲ့ settlement လည်း ဒီထဲမှာ ပါပါတယ်။
+      [[mark:type-rule]] table ရဲ့ အောက်မှာ စည်းကမ်း တစ်ကြောင်း ထည့်ထားပါတယ်။ schema ပြောင်းမယ်ဆိုရင် ဘယ်သူက
+      ဘယ်သူ့ကို အရင် ပြောရမလဲ ဆိုတာပါ။ နောက်ဆုံး column ကို ကြည့်လိုက်တာနဲ့ ပြောရမယ့် team တွေကို
+      သိနိုင်ပါတယ်။
+      [[mark:coarse]] ဒီ table မှာ row သုံးခုပဲ ရှိတာက တမင် ရည်ရွယ်ထားတာပါ။ Booking service ထဲမှာ ခရီးစဉ် ရှာတာ၊
+      ထိုင်ခုံ ကိုင်တာ၊ လက်မှတ် ထုတ်တာတွေ အားလုံး ပါနေပါတယ်။ Booking team lead မောင်မောင် ကတော့ ခရီးစဉ်
+      ရှာတဲ့အပိုင်းကို အခုကတည်းက သီးခြား service ခွဲချင်ပါတယ်။
+      [[mark:coarse-2]] ဒါပေမဲ့ အခု ဖြေရှင်းနေတဲ့ ပြဿနာက team သုံးခုကြားက release ကိစ္စပါ။ team တစ်ခုတည်းရဲ့ အထဲမှာ
+      service တစ်ခု ထပ်ခွဲလိုက်တာက အဲဒီ ပြဿနာကို မကူညီဘဲ၊ network ပေါ်က call တွေနဲ့ ထိန်းရမယ့် အရာတွေကိုပဲ
+      တိုးစေပါတယ်။ ထပ်ခွဲမယ်ဆိုရင် အဲဒါက သူ့အကြောင်းပြချက်နဲ့သူ ချရမယ့် သီးခြား ဆုံးဖြတ်ချက် တစ်ခုပါ။
+      [[mark:rest]] service based ကို service သေးသေးလေးတွေ အများကြီးဆီ သွားတဲ့ လမ်းပေါ်က ခဏနားတဲ့ နေရာလို့ပဲ
+      မြင်တတ်ကြပါတယ်။ တကယ်တော့ team သုံးလေးခုနဲ့ အလတ်စား product တစ်ခုအတွက်ဆိုရင်၊ ဒီနေရာမှာပဲ နှစ်ပေါင်းများစွာ
+      အခြေချနေလို့ ရတဲ့ ပုံစံပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-price, type: whiteboard.apply, at: { mark: t-open }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-price },
+          path: notebook/19-service-candidates.md,
+        }
+      - id: type-head
+        type: editor.type
+        at: { mark: type-head }
+        cadence: line-by-line
+        target:
+          { file: notebook/19-service-candidates.md, after: "# Service candidates · ခရီးဖော်\n\n" }
+        text: "| Service | Team | ပိုင်တဲ့ table | ဖတ်ရုံပဲ ဖတ်တဲ့ table |\n|---|---|---|---|\n| Booking | Booking | ticket, seat, seat hold | trip, operator |\n"
+      - id: type-row-2
+        type: editor.type
+        at: { mark: type-row-2 }
+        cadence: line-by-line
+        target: { file: notebook/19-service-candidates.md, after: "| trip, operator |\n" }
+        text: "| Operator | Operator | operator, trip, price | ticket |\n"
+      - id: type-row-3
+        type: editor.type
+        at: { mark: type-row-3 }
+        cadence: line-by-line
+        target: { file: notebook/19-service-candidates.md, after: "trip, price | ticket |\n" }
+        text: "| Payment | Payment | payment, refund, settlement | ticket, operator |\n"
+      - id: type-rule
+        type: editor.type
+        at: { mark: type-rule }
+        cadence: line-by-line
+        target: { file: notebook/19-service-candidates.md, after: "| ticket, operator |\n" }
+        text: "\nSchema ပြောင်းမယ်ဆိုရင်: ပိုင်တဲ့ team က ဖတ်နေတဲ့ team တွေကို အရင် အသိပေးမယ်\n"
+      - id: expect-payment
+        type: expect.file
+        at: { afterAction: type-rule }
+        path: notebook/19-service-candidates.md
+        contains: "| Payment | Payment | payment, refund, settlement | ticket, operator |\n"
+      - id: sel-booking-row
+        type: editor.select
+        at: { mark: coarse, offsetMs: 4500 }
+        target:
+          {
+            file: notebook/19-service-candidates.md,
+            text: "| Booking | Booking | ticket, seat, seat hold | trip, operator |",
+          }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ architecture quantum ဆိုတာကို မှတ်မိဦးမလား။ အတူတူ deploy လုပ်ရပြီး
+      အတူတူ ရှင်သန်ရတဲ့ အစုအဝေး တစ်ခုကို ခေါ်တာပါ။ ဒီ ပုံစံအတိုင်း ခရီးဖော် က service သုံးခုကို
+      သီးခြားစီ deploy လုပ်ပြီး၊ database ကိုတော့ တစ်ခုတည်းပဲ ဆက်သုံးမယ်ဆိုရင် quantum ဘယ်နှခု ရှိမလဲ။
+      [[mark:q-a]] ပထမ အဖြေက service သုံးခု ရှိတာမို့ quantum လည်း သုံးခု ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ အဖြေကတော့ database တစ်ခုတည်းမို့ quantum လည်း တစ်ခုတည်းပဲ ဆိုတာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ တစ်ခုတည်းပါ။ ဘာကြောင့်လဲဆိုတော့ service သုံးခုလုံးက database တစ်ခုတည်းပေါ်မှာ
+      မှီနေလို့ပါ။ database နှေးသွားရင် သုံးခုလုံး နှေးပြီး၊ database ကျသွားရင် သုံးခုလုံး ကျပါတယ်။
+      [[mark:q-but]] ဒါပေမဲ့ ဒါက ရှုံးတာ မဟုတ်ပါဘူး။ ကိုယ်တို့ လိုချင်ခဲ့တာက quantum အရေအတွက် မဟုတ်ဘဲ၊ team တွေ
+      တစ်ယောက်ကိုတစ်ယောက် မစောင့်ဘဲ release လုပ်နိုင်ဖို့ပါ။ အဲဒါကိုတော့ ရပါပြီ။ ခရီးစဉ် ရှာတဲ့အပိုင်းကို
+      သီးခြား scale လုပ်ချင်တာလို တခြား ရည်မှန်းချက် ပေါ်လာမှ data ကို ခွဲဖို့ စဉ်းစားရမှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok, q-r1],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-but,
+          type: whiteboard.apply,
+          at: { mark: q-but, offsetMs: 3000 },
+          upsertIds: [q-r2],
+          drawMs: 900,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် system ကို service ကြီးကြီး
+      သုံးခုကနေ ငါးခုအထိ ခွဲမယ်ဆိုရင် ဘာတွေ ဖြစ်မလဲ ရေးကြည့်ပါ။ service တစ်ခုစီအတွက် တာဝန်ယူမယ့် team နဲ့
+      ပိုင်မယ့် table တွေကိုပါ ဖြည့်ကြည့်ပါ။
+      [[mark:turn-2]] table တစ်ခုကို service နှစ်ခုက ပိုင်ချင်နေတာ တွေ့ရင်၊ အဲဒီနေရာက နယ်နိမိတ်ကို
+      ပြန်စဉ်းစားရမယ့် နေရာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/19-service-candidates.md,
+            text: "| Service | Team | ပိုင်တဲ့ table | ဖတ်ရုံပဲ ဖတ်တဲ့ table |",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ service based architecture က app ကို လုပ်ငန်းနယ်ပယ်အလိုက် service ကြီးကြီး အနည်းငယ်
+      ခွဲပြီး သီးခြားစီ deploy လုပ်တာပါ။ team တစ်ခုရဲ့ bug က တခြား team တွေရဲ့ release ကို မတားတော့ပါဘူး။
+      [[mark:recap-2]] database ကိုတော့ မျှသုံးထားတာမို့ transaction တွေ ရိုးရှင်းနေသေးပေမဲ့၊ မျှသုံးတဲ့ table ရဲ့
+      schema ပြောင်းတိုင်း team တွေ ညှိရပါတယ်။ service တွေအဖြစ် ခွဲတဲ့ဘက်ကို လှမ်းတဲ့ ပထမဆုံး ခြေလှမ်းအနေနဲ့ ကုန်ကျစရိတ် သက်သာတဲ့
+      ပုံစံ ဖြစ်ပြီး၊ အလတ်စား product တော်တော်များများအတွက် ဒီမှာတင် ရပ်နေလို့လည်း ရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ လက်မှတ် တစ်စောင် ရောင်းပြီးတိုင်း Booking က တခြား အပိုင်းတွေကို
+      တစ်ခုပြီးတစ်ခု လှမ်းခေါ်နေရတဲ့ ပြဿနာကို ဖြေရှင်းပေးတဲ့ event driven architecture ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-rule
+        type: editor.select
+        at: { mark: recap-2 }
+        target:
+          {
+            file: notebook/19-service-candidates.md,
+            text: "Schema ပြောင်းမယ်ဆိုရင်: ပိုင်တဲ့ team က ဖတ်နေတဲ့ team တွေကို အရင် အသိပေးမယ်",
+          }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
