@@ -1,0 +1,826 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-50-architect-and-team
+  title: "Architect Path 50: Architect နဲ့ development team"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/50-involvement.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/50-involvement.md: |
+        # Team နဲ့ ဘယ်လောက် နီးနီး အလုပ်လုပ်မလဲ
+
+        - Booking team: ပြောင်းလဲမှုတိုင်း architect ရဲ့ approval ကို စောင့်ရတယ် (တစ်ခါ 9 ရက်)
+        - Partner API team: architect နဲ့ စကားမပြောတာ 4 လ ရှိပြီ
+
+        | Factor | Booking team | Partner API team |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: five-factors
+      contentType: html
+      name: ဘယ်လောက် နီးရမလဲ ဆိုတဲ့ အချက်များ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">ဘယ်လောက် နီးရမလဲ: အချက် 5 ချက်</div>
+          <div class="row" style="top: 26vh"><span class="num">1</span><span class="term blue">အတွေ့အကြုံ</span>ဒီလို အလုပ်မျိုး လုပ်ဖူးလား</div>
+          <div class="row" style="top: 38vh"><span class="num">2</span><span class="term blue">သိကျွမ်းမှု</span>အချင်းချင်း ဘယ်လောက် သိကြလဲ</div>
+          <div class="row" style="top: 50vh"><span class="num">3</span><span class="term blue">အရွယ်အစား</span>လူ ဘယ်နှယောက်လဲ</div>
+          <div class="row" style="top: 62vh"><span class="num">4</span><span class="term violet">ရှုပ်ထွေးမှု</span>အလုပ်က ဘယ်လောက် ခက်လဲ</div>
+          <div class="row" style="top: 74vh"><span class="num">5</span><span class="term violet">ကြာချိန်</span>ဘယ်လောက် ကြာမယ့် အလုပ်လဲ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the dial: one line from too far to too close. Red = the two ways
+    # to fail, green = the useful zone, orange = where ကိုယ် stands with each team.
+    - {
+        id: d-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 640,
+        height: 45,
+        text: "Architect က ဘယ်လောက် နီးရမလဲ?",
+        fontSize: 36,
+      }
+    - { id: d-bar, kind: rectangle, x: 290, y: 345, width: 780, height: 22 }
+    - {
+        id: d-far,
+        kind: text,
+        x: 290,
+        y: 235,
+        width: 130,
+        height: 35,
+        text: "ဝေးလွန်း",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-far-s,
+        kind: text,
+        x: 290,
+        y: 280,
+        width: 300,
+        height: 35,
+        text: "box ဆွဲပြီး ပျောက်သွား",
+        fontSize: 28,
+      }
+    - {
+        id: d-near,
+        kind: text,
+        x: 965,
+        y: 235,
+        width: 110,
+        height: 35,
+        text: "နီးလွန်း",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: d-near-s,
+        kind: text,
+        x: 765,
+        y: 280,
+        width: 320,
+        height: 35,
+        text: "အသေးစိတ် အကုန် ဆုံးဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: m-partner,
+        kind: ellipse,
+        x: 318,
+        y: 338,
+        width: 36,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: m-partner-l,
+        kind: text,
+        x: 290,
+        y: 390,
+        width: 270,
+        height: 35,
+        text: "Partner API team",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: m-booking,
+        kind: ellipse,
+        x: 1008,
+        y: 338,
+        width: 36,
+        height: 36,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: m-booking-l,
+        kind: text,
+        x: 877,
+        y: 390,
+        width: 205,
+        height: 35,
+        text: "Booking team",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: d-zone,
+        kind: rectangle,
+        x: 570,
+        y: 337,
+        width: 220,
+        height: 38,
+        strokeColor: "#2f9e44",
+        backgroundColor: "#b2f2bb",
+        fillStyle: hachure,
+      }
+    - {
+        id: d-zone-l,
+        kind: text,
+        x: 575,
+        y: 440,
+        width: 230,
+        height: 35,
+        text: "အသုံးဝင်တဲ့ နေရာ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: d-zone-s,
+        kind: text,
+        x: 450,
+        y: 485,
+        width: 500,
+        height: 35,
+        text: "ဘောင် သတ်မှတ်ပေး၊ အလွယ်တကူ တွေ့နိုင်",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — three signs of a team in trouble (red), each with what ကိုယ် saw
+    # at the Partner API team (white).
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 620,
+        height: 45,
+        text: "ဒုက္ခရောက်နေတဲ့ team ရဲ့ လက္ခဏာ",
+        fontSize: 36,
+      }
+    - {
+        id: s-b1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 330,
+        height: 76,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 260,
+        width: 330,
+        height: 35,
+        text: "အလုပ်ချင်း တိုက်",
+        fontSize: 28,
+      }
+    - {
+        id: s-e1,
+        kind: text,
+        x: 630,
+        y: 260,
+        width: 450,
+        height: 35,
+        text: "file တစ်ခုတည်းကို နှစ်ယောက် ပြင်",
+        fontSize: 28,
+      }
+    - {
+        id: s-b2,
+        kind: rectangle,
+        x: 270,
+        y: 450,
+        width: 330,
+        height: 76,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-l2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 470,
+        width: 330,
+        height: 35,
+        text: "တိတ်တိတ် သဘောတူ",
+        fontSize: 28,
+      }
+    - {
+        id: s-e2,
+        kind: text,
+        x: 630,
+        y: 470,
+        width: 450,
+        height: 35,
+        text: "meeting မှာ ဘယ်သူမှ မကန့်ကွက်",
+        fontSize: 28,
+      }
+    - {
+        id: s-b3,
+        kind: rectangle,
+        x: 270,
+        y: 345,
+        width: 330,
+        height: 76,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: s-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 365,
+        width: 330,
+        height: 35,
+        text: "ကြားထဲ ကျန်တဲ့ အလုပ်",
+        fontSize: 28,
+      }
+    - {
+        id: s-e3,
+        kind: text,
+        x: 630,
+        y: 365,
+        width: 460,
+        height: 35,
+        text: "API key ပေါက်ရင် ဘယ်သူ ပိတ်မလဲ?",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange the
+    # two words that complete it and what changes later.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "Junior 12 ယောက်၊ ရှုပ်ထွေးတဲ့ project",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 700,
+        height: 35,
+        text: "က) ဝေးဝေးနေ: သူတို့ဘာသာ သင်ယူပါစေ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 400,
+        height: 35,
+        text: "ခ) နီးနီးနေ: အတူ ဆုံးဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 340,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 650,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-now,
+        kind: text,
+        x: 725,
+        y: 345,
+        width: 170,
+        height: 35,
+        text: "အခုအတွက်ပဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 420,
+        height: 35,
+        text: "team ကျွမ်းလာရင် ပြန်ဆုတ်",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8150
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Team နှစ်ခု၊ ပြဿနာ နှစ်မျိုး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ diagram တစ်ခုကို လူတစ်မျိုးအတွက် မေးခွန်း တစ်ခုကို ဖြေအောင် ဆွဲပြီး၊ တစ်ပိုင်းချင်း
+      တင်ပြပုံကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီ lesson ကစပြီး ပုံတွေ၊ စာရွက်တွေထက် လူတွေနဲ့ အလုပ်လုပ်တဲ့ဘက်ကို ကြည့်ပါမယ်။ ခရီးဖော် မှာ
+      team ၁၂ ခု ရှိပြီး၊ architect က ကိုယ် အပါအဝင် လေးယောက်ပဲ ရှိပါတယ်။ ဒီအပတ်ထဲမှာ ကိုယ် သတိထားမိတာ နှစ်ခု
+      ရှိပါတယ်။
+      [[mark:sel-booking]] Booking team က ပြောင်းလဲမှု သေးသေးလေးတွေအတွက်တောင် ကိုယ့် approval ကို စောင့်နေကြပါတယ်။
+      Booking team lead မောင်မောင် က ပြီးခဲ့တဲ့အပတ်က change တစ်ခု ကိုယ့်ဆီမှာ ကိုးရက် ကြာနေတယ်လို့ ပြောလာပါတယ်။
+      [[mark:sel-partner]] တစ်ဖက်မှာတော့ ကားလိုင်းတွေရဲ့ system နဲ့ ချိတ်ဖို့ API ကို ဆောက်နေတဲ့ Partner API team နဲ့
+      ကိုယ် စကားမပြောဖြစ်တာ လေးလ ရှိနေပါပြီ။
+      [[mark:n-both]] တစ်ခုက နီးလွန်းပြီး၊ နောက်တစ်ခုက ဝေးလွန်းနေတာပါ။ ဒါဆို architect တစ်ယောက်က team တစ်ခုနဲ့
+      ဘယ်လောက် နီးနီး အလုပ်လုပ်သင့်လဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/50-involvement.md,
+        }
+      - id: sel-booking
+        type: editor.select
+        at: { mark: sel-booking }
+        target:
+          {
+            file: notebook/50-involvement.md,
+            text: "- Booking team: ပြောင်းလဲမှုတိုင်း architect ရဲ့ approval ကို စောင့်ရတယ် (တစ်ခါ 9 ရက်)",
+          }
+      - id: sel-partner
+        type: editor.select
+        at: { mark: sel-partner }
+        target:
+          {
+            file: notebook/50-involvement.md,
+            text: "- Partner API team: architect နဲ့ စကားမပြောတာ 4 လ ရှိပြီ",
+          }
+
+  - id: dial
+    chapter: ဝေးလွန်းတာနဲ့ နီးလွန်းတာ
+    narration: >
+      [[mark:d-open]] architect နဲ့ team ကြားက အကွာအဝေးကို မျဉ်းတစ်ကြောင်းပေါ်မှာ တင်ကြည့်ရအောင်။
+      [[mark:d-far]] တစ်ဖက်စွန်းက ဝေးလွန်းတာပါ။ diagram ပေါ်မှာ box တစ်ခု ဆွဲပေးပြီး ပျောက်သွားတာမျိုးပါ။ box က
+      ဘာလုပ်ရမလဲ မရှင်းသလို၊ လက်တွေ့မှာ ဘာဖြစ်နေလဲ ဆိုတာကိုလည်း ပြန်မကြည့်တော့ပါဘူး။
+      [[mark:d-far-me]] Partner API team နဲ့ ကိုယ် ဖြစ်နေတာ ဒါပါပဲ။
+      [[mark:d-near]] နောက်တစ်ဖက်စွန်းက နီးလွန်းတာပါ။ class နာမည်၊ table ပုံစံလို အသေးစိတ်တွေအထိ architect က
+      ဆုံးဖြတ်ပေးနေတာမျိုးပါ။ developer တွေမှာ စဉ်းစားစရာ မကျန်တော့သလို၊ အလုပ်အားလုံးကလည်း လူတစ်ယောက်ကို
+      စောင့်နေရပါတယ်။
+      [[mark:d-near-me]] Booking team နဲ့ ကိုယ် ဖြစ်နေတာကတော့ ဒီဘက်ပါ။
+      [[mark:d-trap]] နှစ်ခုလုံးက ဘယ် architect မဆို ကျတတ်တဲ့ ထောင်ချောက်တွေပါ။ အလုပ်များရင် ဝေးသွားတတ်ပြီး၊
+      စိတ်ပူရင် နီးလာတတ်ပါတယ်။
+      [[mark:d-zone]] အသုံးဝင်တဲ့ နေရာက အလယ်မှာပါ။ team အလုပ်လုပ်ဖို့ ကျယ်လောက်တဲ့ ဘောင်ကို သတ်မှတ်ပေးပြီး၊
+      လိုတဲ့အချိန် အလွယ်တကူ တွေ့နိုင်အောင် နေပေးတာပါ။ ဘောင်ဆိုတာ ဒီ service က ဘာကို တာဝန်ယူလဲ၊ ဘယ်
+      စည်းကမ်းတွေကို မချိုးရဘူးလဲ ဆိုတာမျိုးပါ။ ဘောင်ထဲမှာတော့ team က ကိုယ်တိုင် ဆုံးဖြတ်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-d-open,
+          type: whiteboard.apply,
+          at: { mark: d-open },
+          open: true,
+          upsertIds: [d-title, d-bar],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-d-far,
+          type: whiteboard.apply,
+          at: { mark: d-far },
+          upsertIds: [d-far, d-far-s],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-d-far-me,
+          type: whiteboard.apply,
+          at: { mark: d-far-me },
+          upsertIds: [m-partner, m-partner-l],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-d-near,
+          type: whiteboard.apply,
+          at: { mark: d-near },
+          upsertIds: [d-near, d-near-s],
+          drawMs: 1400,
+        }
+      - {
+          id: draw-d-near-me,
+          type: whiteboard.apply,
+          at: { mark: d-near-me },
+          upsertIds: [m-booking, m-booking-l],
+          drawMs: 1100,
+        }
+      - {
+          id: draw-d-zone,
+          type: whiteboard.apply,
+          at: { mark: d-zone },
+          upsertIds: [d-zone, d-zone-l, d-zone-s],
+          drawMs: 2000,
+        }
+
+  - id: signs
+    chapter: ဒုက္ခရောက်နေတဲ့ team ရဲ့ လက္ခဏာ
+    narration: >
+      [[mark:s-open]] လေးလ ကြာပြီးမှ ကိုယ် Partner API team နဲ့ တစ်ပတ် အတူ ထိုင်ကြည့်ပါတယ်။ team တစ်ခု
+      ဒုက္ခရောက်နေတာကို ပြတဲ့ လက္ခဏာ သုံးခုကို တွေ့ရပါတယ်။
+      [[mark:s-1]] ပထမက အလုပ်ချင်း တိုက်နေတာပါ။ developer နှစ်ယောက်က file တစ်ခုတည်းကို တစ်ပြိုင်တည်း ပြင်နေကြလို့
+      merge လုပ်တိုင်း conflict ဖြစ်ပြီး၊ လူ ထပ်ထည့်လေ ပိုနှေးလေ ဖြစ်နေပါတယ်။ ဒီအခါ လူ မတိုးခင်၊ အပြိုင်
+      လုပ်လို့ရအောင် အလုပ်ကို အရင် ခွဲပေးရပါတယ်။
+      [[mark:s-2]] ဒုတိယက လူတွေကြားထဲမှာ ကျန်ခဲ့တဲ့ အလုပ်ပါ။ ကားလိုင်း တစ်ခုရဲ့ API key ပေါက်ကြားရင် ဘယ်သူ
+      ပိတ်ပေးမလဲ ဆိုတာကို လူတိုင်းက တစ်ယောက်ယောက် လုပ်လိမ့်မယ်လို့ ထင်နေကြပါတယ်။ ဒီအခါ အလုပ် တစ်ခုစီမှာ
+      ပိုင်ရှင် နာမည် တစ်ခု တပ်ပေးရပါတယ်။
+      [[mark:s-3]] တတိယကတော့ အဝေးကနေ အမြင်ရ အခက်ဆုံးပါ။ ဘယ်သူမှ မယုံတဲ့ တိတ်တိတ် သဘောတူညီမှုပါ။ design
+      တစ်ခုကို meeting ထဲမှာ ဘယ်သူမှ မကန့်ကွက်ပေမဲ့၊ အပြင်ရောက်မှ အလုပ်မဖြစ်ဘူးလို့ တစ်ယောက်ချင်း ပြောကြပါတယ်။
+      လူတိုင်းက ကျန်တဲ့သူတွေ သဘောတူတယ်လို့ ထင်နေကြတာပါ။ ဒီအခါ တိတ်နေတဲ့သူကို နာမည်ခေါ်ပြီး ဘယ်လို ထင်လဲ
+      မေးပေးရပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-1,
+          type: whiteboard.apply,
+          at: { mark: s-1 },
+          upsertIds: [s-b1, s-l1, s-e1],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-2,
+          type: whiteboard.apply,
+          at: { mark: s-2 },
+          upsertIds: [s-b3, s-l3, s-e3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-s-3,
+          type: whiteboard.apply,
+          at: { mark: s-3 },
+          upsertIds: [s-b2, s-l2, s-e2],
+          drawMs: 1800,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] ဒါဆို team တစ်ခုနဲ့ ဘယ်လောက် နီးရမလဲ။ မေးခွန်း တစ်ခု မေးပါရစေ။ အလုပ်ဝင်တာ မကြာသေးတဲ့
+      junior developer ၁၂ ယောက်နဲ့ team အသစ် တစ်ခုက ရှုပ်ထွေးတဲ့ project တစ်ခုကို စမယ် ဆိုပါစို့။
+      [[mark:quiz-a]] ပထမ ရွေးစရာက ဝေးဝေးနေပြီး သူတို့ဘာသာ သင်ယူခွင့် ပေးတာပါ။ နီးလွန်းရင် မကောင်းဘူးလို့
+      ခုနကပဲ ပြောခဲ့တာကိုး။
+      [[mark:quiz-b]] ဒုတိယ ရွေးစရာက နီးနီးကပ်ကပ် နေပြီး အတူ ဆုံးဖြတ်ပေးတာပါ။ lesson ကို pause လုပ်ပြီး
+      စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခု၊ နီးနီးကပ်ကပ် နေတာပါ။ ဒါပေမဲ့ အခုအတွက်ပဲ ဆိုတာကို ထည့်ပြောရပါမယ်။
+      ဘာကြောင့်လဲဆိုတော့ မှန်တဲ့ အကွာအဝေးက architect ရဲ့ အကျင့်ပေါ်မှာ မဟုတ်ဘဲ၊ team ရဲ့ အခြေအနေပေါ်မှာ
+      မူတည်လို့ပါ။
+      [[mark:quiz-why]] ဒီ team က အတွေ့အကြုံ နည်းတယ်၊ လူများတယ်၊ အချင်းချင်းလည်း မသိကြသေးဘူး၊ အလုပ်ကလည်း
+      ခက်ပါတယ်။ ဒီအခြေအနေမှာ ဝေးဝေးနေတာက လွတ်လပ်ခွင့် ပေးတာ မဟုတ်ဘဲ ပစ်ထားတာပါ။
+      [[mark:quiz-later]] ခြောက်လလောက် ကြာလို့ team က ကျွမ်းကျင်လာရင်တော့ ကိုယ်က ပြန်ဆုတ်ပေးရမှာပါ။ အခုအတွက်ပဲ
+      ဆိုတာ ဒါကို ပြောတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz, offsetMs: 3000 },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [q-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [q-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-now,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer, offsetMs: 4500 },
+          upsertIds: [q-now],
+          drawMs: 800,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: quiz-later },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+
+  - id: factors
+    chapter: အကွာအဝေးကို သတ်မှတ်တဲ့ အချက် ငါးချက်
+    narration: >
+      [[mark:f-open]] team ရဲ့ အခြေအနေကို အချက် ငါးချက်နဲ့ ကြည့်လို့ ရပါတယ်။ ပထမ သုံးချက်က team ထဲက လူတွေ
+      အကြောင်းဖြစ်ပြီး၊ နောက် နှစ်ချက်က သူတို့ လုပ်ရမယ့် အလုပ်အကြောင်းပါ။
+      [[mark:f-1]] ပထမက အတွေ့အကြုံပါ။ ဒီလို အလုပ်မျိုးကို လုပ်ဖူးတဲ့ senior တွေ များရင် ဝေးလို့ ရပြီး၊ junior
+      တွေ များရင် နီးရပါမယ်။
+      [[mark:f-2]] ဒုတိယက team ထဲက လူတွေ အချင်းချင်း ဘယ်လောက် သိကျွမ်းလဲ ဆိုတာပါ။ အတူ လုပ်ဖူးတာ ကြာပြီဆိုရင်
+      ကိုယ့်ဘာသာ ညှိနိုင်ကြပါတယ်။ အသစ် စုထားတာဆိုရင်တော့ architect က ပိုနီးဖို့ လိုပါတယ်။
+      [[mark:f-3]] တတိယက အရွယ်အစားပါ။ လူ များလေ အချင်းချင်း ညှိရတာ များလေမို့၊ ပိုနီးဖို့ လိုလေပါ။
+      [[mark:f-4]] စတုတ္ထက အလုပ်ရဲ့ ရှုပ်ထွေးမှုပါ။ လုပ်နေကျ အလုပ်မျိုးဆိုရင် ဝေးလို့ ရပေမဲ့၊ တစ်ခါမှ မလုပ်ဖူးတဲ့
+      အလုပ်ဆိုရင် နီးရပါမယ်။
+      [[mark:f-5]] နောက်ဆုံးက အလုပ်က ဘယ်လောက် ကြာမလဲ ဆိုတာပါ။ ဒီအချက်က ထင်တာနဲ့ ပြောင်းပြန်ပါ။ ရက်ပိုင်းနဲ့
+      ပြီးမယ့် အလုပ်မှာ team က အာရုံစိုက်ထားတတ်ပါတယ်။ တစ်နှစ်ကြာမယ့် project မှာတော့ လမ်းကြောင်းက တဖြည်းဖြည်း
+      လွဲသွားတတ်တာမို့၊ ကြာလေ ပိုနီးဖို့ လိုလေပါ။
+      [[mark:f-change]] ဒီ ငါးချက်က အချိန်နဲ့အမျှ ပြောင်းတတ်တာမို့၊ အကွာအဝေးကိုလည်း တစ်ခါ သတ်မှတ်ပြီး
+      ထားလိုက်လို့ မရပါဘူး။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: close-quiz,
+          type: whiteboard.apply,
+          at: { mark: f-open, offsetMs: -1300 },
+          open: false,
+        }
+      - {
+          id: show-factors,
+          type: slide.show,
+          at: { afterAction: close-quiz },
+          slideId: five-factors,
+        }
+      - { id: point-f-1, type: slide.point, at: { mark: f-1 }, target: { x: 0.15, y: 0.35 } }
+      - { id: point-f-2, type: slide.point, at: { mark: f-2 }, target: { x: 0.15, y: 0.47 } }
+      - { id: point-f-3, type: slide.point, at: { mark: f-3 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-f-4, type: slide.point, at: { mark: f-4 }, target: { x: 0.15, y: 0.71 } }
+      - { id: point-f-5, type: slide.point, at: { mark: f-5 }, target: { x: 0.15, y: 0.83 } }
+
+  - id: table
+    chapter: Team နှစ်ခုကို အမှတ်ပေးကြည့်ခြင်း
+    narration: >
+      [[mark:t-close]] ဒီ ငါးချက်နဲ့ ခရီးဖော် ရဲ့ team နှစ်ခုကို ကြည့်ပါမယ်။ အချက် တစ်ခုစီက နီးဖို့ ဆွဲလား၊ ဝေးဖို့
+      ဆွဲလား ဆိုတာကိုပဲ မှတ်ပါမယ်။
+      [[mark:t-exp]] အတွေ့အကြုံမှာ Booking team က senior တွေ များပြီး၊ Partner API team မှာ လူသစ် သုံးယောက်
+      ပါပါတယ်။
+      [[mark:t-know]] Booking team က လေးနှစ် အတူ လုပ်လာကြတာပါ။ Partner API team ကတော့ ဖွဲ့တာ ငါးလပဲ ရှိသေးပြီး၊
+      team လေးခုက လူတွေကို စုထားတာပါ။
+      [[mark:t-size]] အရွယ်အစားက ရှစ်ယောက်နဲ့ ဆယ်ယောက်မို့ သိပ်မကွာပါဘူး။ နှစ်ခုလုံး အလယ်အလတ်ပါ။
+      [[mark:t-complex]] Booking ရဲ့ အလုပ်က သူတို့ ကျွမ်းပြီးသား domain၊ ဆိုလိုတာက လုပ်ငန်းနယ်ပယ်ပါ။ Partner API
+      ကတော့ အပြင်က system တွေ လှမ်းခေါ်မယ့် API မို့၊ ခရီးဖော် မှာ တစ်ခါမှ မလုပ်ဖူးတဲ့ အလုပ်ပါ။
+      [[mark:t-long]] Booking ရဲ့ အလုပ်တွေက ရက်သတ္တပတ်ပိုင်းနဲ့ ပြီးတဲ့ အပိုင်းလေးတွေပါ။ Partner API ကတော့
+      တစ်နှစ်ကျော် ကြာမယ့် project ပါ။
+      [[mark:t-read]] ရလဒ်က ရှင်းပါတယ်။ Booking မှာ လေးချက်က ဝေးဖို့ ဆွဲနေပြီး၊ Partner API မှာ လေးချက်က နီးဖို့
+      ဆွဲနေပါတယ်။ ကိုယ် လုပ်နေတာကတော့ အဲဒါနဲ့ ပြောင်းပြန်ပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-factors, type: slide.close, at: { mark: t-close } }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-factors },
+          path: notebook/50-involvement.md,
+        }
+      - id: type-exp
+        type: editor.type
+        at: { mark: t-exp }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "|---|---|---|\n" }
+        text: "| အတွေ့အကြုံ | senior များ → ဝေး | လူသစ် 3 ယောက် ပါ → နီး |\n"
+      - id: type-know
+        type: editor.type
+        at: { mark: t-know }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "လူသစ် 3 ယောက် ပါ → နီး |\n" }
+        text: "| သိကျွမ်းမှု | 4 နှစ် အတူ → ဝေး | ဖွဲ့တာ 5 လ၊ team 4 ခုက လူတွေ → နီး |\n"
+      - id: type-size
+        type: editor.type
+        at: { mark: t-size }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "team 4 ခုက လူတွေ → နီး |\n" }
+        text: "| အရွယ်အစား | 8 ယောက် → အလယ် | 10 ယောက် → အလယ် |\n"
+      - id: type-complex
+        type: editor.type
+        at: { mark: t-complex }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "10 ယောက် → အလယ် |\n" }
+        text: "| ရှုပ်ထွေးမှု | ကျွမ်းပြီးသား domain → ဝေး | အပြင်က system အတွက် API၊ အသစ် → နီး |\n"
+      - id: type-long
+        type: editor.type
+        at: { mark: t-long }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "API၊ အသစ် → နီး |\n" }
+        text: "| ကြာချိန် | ရက်သတ္တပတ်ပိုင်း အပိုင်းလေးတွေ → ဝေး | 1 နှစ်ကျော် project → နီး |\n"
+
+  - id: changes
+    chapter: ကိုယ် ဘာကို ပြောင်းမလဲ
+    narration: >
+      [[mark:ch-booking]] Booking အတွက် ကိုယ် ပြောင်းမှာက approval ကို ရပ်လိုက်တာပါ။ ဘောင်က ရှိပြီးသားပါ။
+      ဆုံးဖြတ်ချက်တွေက architecture decision record၊ အတိုကောက် ADR တွေထဲမှာ ရှိပြီး၊ fitness function၊
+      ဆိုလိုတာက အလိုအလျောက် စစ်ဆေးချက်တွေက pipeline ထဲမှာ စောင့်ပေးနေပါတယ်။ ဘောင်ထဲမှာ မောင်မောင် တို့
+      ကိုယ်တိုင် ဆုံးဖြတ်ပြီး၊ ကိုယ်ကတော့ နှစ်ပတ် တစ်ခါ တွေ့ပါမယ်။
+      [[mark:ch-partner]] Partner API အတွက်ကတော့ အပတ်စဉ် design review တစ်ခု စပါမယ်။ ပထမဆုံး API ကိုလည်း
+      သူတို့နဲ့ အတူ ထိုင်ဆွဲပါမယ်။
+      [[mark:ch-check]] မေ့တတ်တဲ့ အဆင့်တွေအတွက် checklist တိုတို တစ်ခုလည်း ထည့်ပါမယ်။ checklist ဆိုတာ အလုပ်ကို
+      ဘယ်လို လုပ်ရမလဲ သင်ပေးဖို့ မဟုတ်ဘဲ၊ တတ်ပြီးသား လူတွေ အလျင်စလိုမှာ မေ့တတ်တဲ့ အဆင့်တွေအတွက်ပါ။ ဥပမာ API ကို
+      ပြောင်းရင် ကားလိုင်းတွေကို ကြိုအကြောင်းကြားပြီးပြီလား ဆိုတာမျိုးပါ။
+      [[mark:ch-code]] နီးနီးနေမယ် ဆိုတာ team ရဲ့ အဓိက code ကို ကိုယ်တိုင် ဝင်ရေးမယ်လို့ မဆိုလိုပါဘူး။ architect က
+      release အတွက် မရှိမဖြစ် code ကို ကိုင်ထားရင်၊ အစည်းအဝေးတွေကြားမှာ ကိုယ် မအားတဲ့အခါတိုင်း team က
+      ကိုယ့်ကို စောင့်နေရတတ်ပါတယ်။
+      [[mark:ch-tech]] technical ဖြစ်နေဖို့ဆိုရင် proof of concept၊ ဆိုလိုတာက အကြံတစ်ခု အလုပ်ဖြစ်မဖြစ် စမ်းကြည့်တဲ့
+      code အသေးလေး ရေးပြတာ၊ စစ်ဆေးချက်တွေကို automate လုပ်ပေးတာနဲ့ code review လုပ်ပေးတာတွေက ပိုသင့်တော်ပါတယ်။
+      [[mark:ch-again]] သုံးလကြာရင် ဒီ table ကို ပြန်ပြီး အမှတ်ပေးပါမယ်။ Partner API team ကျွမ်းကျင်လာရင် ကိုယ်လည်း
+      တဖြည်းဖြည်း ပြန်ဆုတ်ရမှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: type-booking
+        type: editor.type
+        at: { mark: ch-booking }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "1 နှစ်ကျော် project → နီး |\n" }
+        text: "\n## ကိုယ် ပြောင်းမယ့်အရာ\n- Booking: approval ရပ်မယ်။ ADR နဲ့ fitness function ဘောင်ထဲမှာ team က ဆုံးဖြတ်၊ 2 ပတ် တစ်ခါ တွေ့\n"
+      - id: type-partner
+        type: editor.type
+        at: { mark: ch-partner }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "2 ပတ် တစ်ခါ တွေ့\n" }
+        text: "- Partner API: အပတ်စဉ် design review၊ ပထမ API ကို အတူ ဆွဲ\n"
+      - id: type-check
+        type: editor.type
+        at: { mark: ch-check }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "ပထမ API ကို အတူ ဆွဲ\n" }
+        text: "- Partner API: release checklist တိုတို (မေ့တတ်တဲ့ အဆင့်တွေအတွက်)\n"
+      - id: type-self
+        type: editor.type
+        at: { mark: ch-tech }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "(မေ့တတ်တဲ့ အဆင့်တွေအတွက်)\n" }
+        text: "- ကိုယ်: release အတွက် မရှိမဖြစ် code မကိုင်ဘူး။ proof of concept၊ automation၊ code review ပဲ\n"
+      - id: type-again
+        type: editor.type
+        at: { mark: ch-again }
+        cadence: line-by-line
+        target: { file: notebook/50-involvement.md, after: "code review ပဲ\n" }
+        text: "- 3 လကြာရင် ဒီ table ကို ပြန်အမှတ်ပေး\n"
+      - id: expect-booking
+        type: expect.file
+        at: { afterAction: type-again }
+        path: notebook/50-involvement.md
+        contains: "- Booking: approval ရပ်မယ်။ ADR နဲ့ fitness function ဘောင်ထဲမှာ team က ဆုံးဖြတ်၊ 2 ပတ် တစ်ခါ တွေ့\n"
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table မှာ column အသစ် တစ်ခု ထည့်ပြီး ကိုယ့် team ကို
+      အချက် ငါးချက်နဲ့ အမှတ်ပေးကြည့်ပါ။
+      [[mark:turn-2]] ပြီးရင် ကိုယ့် team ရဲ့ architect က နီးလွန်းနေတာလား၊ ဝေးလွန်းနေတာလား တစ်ကြောင်း ရေးပါ။
+      ကိုယ်တိုင်က architect ဆိုရင်တော့ ကိုယ့်အကြောင်းကို ရေးပါ။ team ထဲက တစ်ယောက်ကိုပါ မေးကြည့်ရင် ပိုမှန်တဲ့
+      အဖြေ ရပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: turn, offsetMs: 2500 }
+        target:
+          { file: notebook/50-involvement.md, text: "| Factor | Booking team | Partner API team |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ architect က team နဲ့ ဝေးလွန်းရင် box ဆွဲပြီး ပျောက်သွားသူ ဖြစ်ပြီး၊ နီးလွန်းရင်
+      အသေးစိတ် အကုန် ဆုံးဖြတ်ပေးသူ ဖြစ်သွားပါတယ်။ အသုံးဝင်တဲ့ နေရာက ဘောင် သတ်မှတ်ပေးပြီး၊ အလွယ်တကူ
+      တွေ့နိုင်အောင် နေတာပါ။
+      [[mark:recap-2]] ဘယ်လောက် နီးရမလဲ ဆိုတာ team ထဲက လူတွေရော၊ သူတို့ လုပ်ရမယ့် အလုပ်ရဲ့ သဘောပါ
+      ပေါ်မှာ မူတည်ပြီး၊ အချိန်နဲ့အမျှ ပြောင်းပါတယ်။ team ဒုက္ခရောက်နေတဲ့ လက္ခဏာတွေကိုတော့ အနားမှာ
+      ရှိမှ မြင်ရတာပါ။
+      [[mark:next]] team နဲ့ နီးနီး အလုပ်လုပ်ရင် အမြင် မတူတာတွေနဲ့လည်း ကြုံရမှာပါ။ နောက် lesson မှာတော့
+      ညှိနှိုင်းတာနဲ့၊ ဆုံးဖြတ်ချက် တစ်ခုကို လူအမျိုးမျိုး နားလည်အောင် ပြောပြတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
