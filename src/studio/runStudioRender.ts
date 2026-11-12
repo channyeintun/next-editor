@@ -118,6 +118,10 @@ const RECORDING_START_TIMEOUT_MS = 8_000;
 const FINALIZE_GRACE_MS = 10_000;
 /** Max drift tolerated between the narration audio and the plan's pinned duration. */
 const AUDIO_DURATION_TOLERANCE_MS = 1_500;
+// How long the whiteboard stays open before the clock starts, for Excalidraw to
+// mount once, and the longest that warm-up then waits for its font.
+const WHITEBOARD_WARM_UP_MS = 400;
+const WHITEBOARD_FONT_WAIT_MS = 2_000;
 
 export interface StudioRenderOptions {
   /**
@@ -326,6 +330,21 @@ export async function runStudioRender(
   deps.slidesStore.trigger.setPreviewState({
     previewState: { ...DEFAULT_PREVIEW_STATE },
   });
+  // Warm the whiteboard the same way. Its chunk is loaded above, but the first
+  // time the board opens Excalidraw still has to start and fetch its
+  // hand-drawn font, which took the first few hundred milliseconds of the
+  // lesson's first drawing: the box the narration was introducing popped in
+  // half drawn, and its label was measured in a fallback font.
+  if (plan.whiteboardAssets.length > 0) {
+    deps.whiteboardStore.trigger.setScene({
+      scene: { ...EMPTY_WHITEBOARD_SCENE, isOpen: true },
+    });
+    await new Promise((resolve) => setTimeout(resolve, WHITEBOARD_WARM_UP_MS));
+    await Promise.race([
+      document.fonts?.ready,
+      new Promise((resolve) => setTimeout(resolve, WHITEBOARD_FONT_WAIT_MS)),
+    ]);
+  }
   deps.whiteboardStore.trigger.setScene({ scene: EMPTY_WHITEBOARD_SCENE });
   // The runner dock is stage furniture too. Pinning it here rather than with a
   // scheduled action means a lesson that starts shut is already shut in frame

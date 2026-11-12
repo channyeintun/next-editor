@@ -120,6 +120,7 @@ describe("runStudioRender visible-tab gate", () => {
     runtime: { kind: "none" },
     actions: [],
     slides: [],
+    whiteboardAssets: [],
     dependencies: {},
   } as unknown as StudioPlan;
 
