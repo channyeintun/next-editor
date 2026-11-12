@@ -1,0 +1,968 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-02-the-architects-job
+  title: "Architect Path 02: Architect ရဲ့ အလုပ်"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/02-decisions-this-week.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 2 နှစ်)
+
+        - developer 6 ယောက်၊ team တစ်ခု
+        - ကားလိုင်း 40၊ တစ်ရက် လက်မှတ် 8,000 ခန့် (60 % က ကောင်တာက)
+        - app တစ်ခုတည်း (monolith)၊ database တစ်ခု၊ server တစ်လုံး
+        - အပြင်က service: wallet payment API၊ SMS gateway
+
+        ## သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့
+
+        - မနက် 9 နာရီမှာ ဝင်သုံးသူ ပုံမှန်ရဲ့ 15 ဆ
+        - app က 2 နာရီကြာ နှေးနေခဲ့တယ်
+        - ထိုင်ခုံ 312 ခုံကို နှစ်ခါ ရောင်းမိတယ်
+      notebook/02-decisions-this-week.md: |
+        # ဒီအပတ် ဆုံးဖြတ်စရာတွေ
+
+        | ဆုံးဖြတ်စရာ | အမျိုးအစား | ဘာကြောင့် |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: three-kinds
+      contentType: html
+      name: အလုပ် သုံးမျိုး
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Architect ရဲ့ အလုပ် သုံးမျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term blue">ဆုံးဖြတ်</span>system တစ်ခုလုံးကို ထိမယ့် ဆုံးဖြတ်ချက်ကို လမ်းညွှန်</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term orange">စောင့်ကြည့်</span>သဘောတူထားတဲ့အတိုင်း ဖြစ်မဖြစ်၊ ကိုက်သေးမကိုက်</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term green">ချိတ်ဆက်</span>business နဲ့ code ကြား အဓိပ္ပာယ် သယ်ပေး</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — Monday morning: two guesses about the job (white, struck out in red),
+    # then the three things an architect needs together (blue parts).
+    - {
+        id: m-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 780,
+        height: 45,
+        text: "တနင်္လာနေ့ကစပြီး ဘာ ပြောင်းမလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: m-g1,
+        kind: text,
+        x: 290,
+        y: 245,
+        width: 600,
+        height: 35,
+        text: "အတော်ဆုံး developer လား?",
+        fontSize: 28,
+      }
+    - {
+        id: m-g1-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 285,
+        y: 245,
+        width: 355,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-g2,
+        kind: text,
+        x: 290,
+        y: 310,
+        width: 600,
+        height: 35,
+        text: "code မရေးတော့တဲ့ manager လား?",
+        fontSize: 28,
+      }
+    - {
+        id: m-g2-x,
+        kind: freedraw,
+        stroke: strike,
+        x: 285,
+        y: 310,
+        width: 435,
+        height: 35,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: m-skill,
+        kind: rectangle,
+        x: 270,
+        y: 410,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-skill-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 431,
+        width: 250,
+        height: 38,
+        text: "Skill",
+        fontSize: 30,
+      }
+    - {
+        id: m-impact,
+        kind: rectangle,
+        x: 545,
+        y: 410,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-impact-l,
+        kind: text,
+        align: center,
+        x: 545,
+        y: 431,
+        width: 250,
+        height: 38,
+        text: "Impact",
+        fontSize: 30,
+      }
+    - {
+        id: m-lead,
+        kind: rectangle,
+        x: 820,
+        y: 410,
+        width: 250,
+        height: 80,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: m-lead-l,
+        kind: text,
+        align: center,
+        x: 820,
+        y: 431,
+        width: 250,
+        height: 38,
+        text: "Leadership",
+        fontSize: 30,
+      }
+    - {
+        id: m-all,
+        kind: text,
+        x: 270,
+        y: 540,
+        width: 700,
+        height: 38,
+        text: "သုံးခုလုံး ပေါင်းမှ architect",
+        fontSize: 30,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — the company as a building. Floors are people (white), the lift
+    # shaft is the path between them (violet, dashed), the architect is the one
+    # thing the board is about (orange).
+    - {
+        id: e-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "အထပ်တွေကြား အတက်အဆင်း",
+        fontSize: 36,
+      }
+    - { id: e-f1, kind: rectangle, x: 270, y: 230, width: 440, height: 80 }
+    - {
+        id: e-f1-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 252,
+        width: 440,
+        height: 35,
+        text: "business · အောင်အောင်",
+        fontSize: 28,
+      }
+    - { id: e-f2, kind: rectangle, x: 270, y: 325, width: 440, height: 80 }
+    - {
+        id: e-f2-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 347,
+        width: 440,
+        height: 35,
+        text: "product · လှလှ",
+        fontSize: 28,
+      }
+    - { id: e-f3, kind: rectangle, x: 270, y: 420, width: 440, height: 80 }
+    - {
+        id: e-f3-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 442,
+        width: 440,
+        height: 35,
+        text: "စက်ခန်း · developer team",
+        fontSize: 28,
+      }
+    - {
+        id: e-shaft,
+        kind: rectangle,
+        x: 740,
+        y: 230,
+        width: 180,
+        height: 270,
+        strokeStyle: dashed,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-car,
+        kind: rectangle,
+        x: 750,
+        y: 330,
+        width: 160,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: e-car-l,
+        kind: text,
+        align: center,
+        x: 750,
+        y: 347,
+        width: 160,
+        height: 35,
+        text: "architect",
+        fontSize: 28,
+      }
+    - {
+        id: e-down,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 950,
+        y: 240,
+        width: 40,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-down-l,
+        kind: text,
+        x: 270,
+        y: 530,
+        width: 800,
+        height: 35,
+        text: "အဆင်း: ဦးတည်ချက်ကို ဆုံးဖြတ်ချက်အဖြစ်",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-up,
+        kind: freedraw,
+        stroke: arrow-up,
+        x: 1010,
+        y: 380,
+        width: 40,
+        height: 110,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: e-up-l,
+        kind: text,
+        x: 270,
+        y: 585,
+        width: 800,
+        height: 35,
+        text: "အတက်: အခက်အခဲကို business စကားနဲ့",
+        fontSize: 28,
+        strokeColor: "#6741d9",
+      }
+    # Board 3 — design to architecture as one line. The line and its ends are
+    # neutral, the three questions are orange, the sample decisions sit above.
+    - {
+        id: s-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 700,
+        height: 45,
+        text: "Design လား၊ architecture လား",
+        fontSize: 36,
+      }
+    - { id: s-bar, kind: rectangle, x: 290, y: 340, width: 760, height: 24 }
+    - {
+        id: s-left,
+        kind: text,
+        x: 290,
+        y: 375,
+        width: 360,
+        height: 35,
+        text: "design · ရေးတဲ့သူ ဆုံးဖြတ်",
+        fontSize: 28,
+      }
+    - {
+        id: s-right,
+        kind: text,
+        x: 670,
+        y: 375,
+        width: 400,
+        height: 35,
+        text: "architecture · ကိုယ့်တာဝန်",
+        fontSize: 28,
+      }
+    - {
+        id: s-q1,
+        kind: text,
+        x: 290,
+        y: 450,
+        width: 760,
+        height: 35,
+        text: "ဘယ်လောက် ကြာကြာ၊ ဘယ်နှယောက်ကို ထိမလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-q2,
+        kind: text,
+        x: 290,
+        y: 505,
+        width: 760,
+        height: 35,
+        text: "ပြန်ပြောင်းရင် ဘယ်လောက် ကုန်မလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-q3,
+        kind: text,
+        x: 290,
+        y: 560,
+        width: 760,
+        height: 35,
+        text: "trade-off ဘယ်လောက် ကြီးလဲ?",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: s-m1,
+        kind: text,
+        x: 290,
+        y: 240,
+        width: 250,
+        height: 35,
+        text: "function ခွဲတာ",
+        fontSize: 28,
+      }
+    - { id: s-a1, kind: freedraw, stroke: arrow-down, x: 371, y: 285, width: 40, height: 45 }
+    - {
+        id: s-m2,
+        kind: text,
+        x: 550,
+        y: 240,
+        width: 250,
+        height: 35,
+        text: "SMS နောက်မှ ပို့တာ",
+        fontSize: 28,
+      }
+    - { id: s-a2, kind: freedraw, stroke: arrow-down, x: 642, y: 285, width: 40, height: 45 }
+    - {
+        id: s-m3,
+        kind: text,
+        x: 830,
+        y: 240,
+        width: 250,
+        height: 35,
+        text: "wallet API ခေါ်ပုံ",
+        fontSize: 28,
+      }
+    - { id: s-a3, kind: freedraw, stroke: arrow-down, x: 930, y: 285, width: 40, height: 45 }
+    # Board 4 — the quiz: white question and options, green answer and reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်ဟာက architect ရဲ့ တာဝန်လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 790,
+        height: 35,
+        text: "က) operator screen အတွက် UI library ရွေးတာ",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 790,
+        height: 35,
+        text: "ခ) internet ပြတ်လည်း ကောင်တာက ရောင်းနိုင်ရမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 670,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 1040,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 790,
+        height: 35,
+        text: "ဖွဲ့စည်းပုံကို ပြောင်းစေတဲ့ အရည်အသွေး",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8102
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: monday
+    chapter: တနင်္လာနေ့ မနက်
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ architecture ဆိုတာ system တစ်ခုလုံးရဲ့ ပုံစံကို သတ်မှတ်ပြီး နောက်မှ
+      ပြောင်းဖို့ ခက်တဲ့ ဆုံးဖြတ်ချက်တွေ ဖြစ်တယ် ဆိုတာ လေ့လာခဲ့ပါတယ်။
+      [[mark:m-open]] CTO ဖြစ်တဲ့ အောင်အောင် ကလည်း ခရီးဖော် ရဲ့ architecture ကို ကြည့်ပေးဖို့ ကိုယ့်ကို
+      တာဝန်ပေးခဲ့ပါတယ်။ ဒါပေမဲ့ တနင်္လာနေ့ မနက် ရုံးရောက်တော့ ကိုယ့်စားပွဲလည်း၊ လုပ်စရာ ticket တွေလည်း
+      အရင်အတိုင်းပါပဲ။ ဒီနေ့ကစပြီး ဘာကို ပြောင်းလုပ်ရမှာလဲ ဆိုတာ ကိုယ်လည်း မသေချာပါဘူး။
+      [[mark:m-g1]] team ထဲက developer မောင်မောင် ကတော့ အခုကစပြီး code ပြင်တိုင်း ကိုယ့်ဆီက ခွင့်ပြုချက်
+      ယူရတော့မှာလား လို့ မေးပါတယ်။ သူ့အမြင်မှာ architect ဆိုတာ အရာရာကို ဆုံးဖြတ်ပေးရမယ့် အတော်ဆုံး
+      developer ပါ။
+      [[mark:m-g2]] တချို့ကလည်း architect ဖြစ်သွားရင် code မရေးတော့ဘဲ၊ အစည်းအဝေးတွေ ထိုင်ပြီး
+      အလုပ်ခွဲပေးတဲ့ manager လို ဖြစ်သွားမယ်လို့ ထင်ကြပါတယ်။
+      [[mark:m-no]] နှစ်ခုလုံးက ပြည့်စုံတဲ့ အဖြေ မဟုတ်ပါဘူး။ အရာရာကို ကိုယ်တစ်ယောက်တည်း ဆုံးဖြတ်ရင် team
+      တစ်ခုလုံးက ကိုယ့်ကို စောင့်နေရမှာပါ။ code နဲ့ ကင်းကွာသွားရင်လည်း ကိုယ့် ဆုံးဖြတ်ချက်တွေက
+      လက်တွေ့နဲ့ ဝေးသွားပါလိမ့်မယ်။ architect ဆိုတာ system တစ်ခုလုံးကို ထိမယ့် ဆုံးဖြတ်ချက်တွေအတွက်
+      တာဝန်ယူရတဲ့သူပါ။ အဲဒီ တာဝန်အတွက် အရာ သုံးခု လိုပါတယ်။
+      [[mark:m-skill]] ပထမက skill ပါ။ အများကြီး သိနေရုံ မဟုတ်ဘဲ၊ ဘယ်နေရာမှာ ဘယ်အရာကို သုံးရမလဲ ရွေးတတ်တာကို ဆိုလိုပါတယ်။
+      [[mark:m-impact]] ဒုတိယက impact ပါ။ ကိုယ် သိတာတွေကြောင့် business အတွက် တကယ် အကျိုးရှိသွားတာပါ။
+      ခရီးဖော် အတွက်ဆိုရင် နောက်နှစ် သင်္ကြန်မှာ ထိုင်ခုံတွေကို နှစ်ခါ မရောင်းမိတော့တာမျိုးပါ။
+      [[mark:m-lead]] တတိယက leadership ပါ။ ကိုယ် မရှိတဲ့ အချိန်မှာလည်း team က ကောင်းကောင်း ဆုံးဖြတ်နိုင်အောင်
+      တခြားသူတွေကို လက်တွဲ ခေါ်ပေးတာပါ။
+      [[mark:m-all]] ဒီ သုံးခုထဲက တစ်ခု လိုနေရင် မပြည့်စုံပါဘူး။ သိရုံနဲ့ အကျိုး မထွက်ရင် စာတွေ့ပဲ
+      ဖြစ်နေမှာပါ။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-m-open,
+          type: whiteboard.apply,
+          at: { mark: m-open },
+          open: true,
+          upsertIds: [m-title],
+        }
+      - {
+          id: draw-m-g1,
+          type: whiteboard.apply,
+          at: { mark: m-g1 },
+          upsertIds: [m-g1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-m-g2,
+          type: whiteboard.apply,
+          at: { mark: m-g2 },
+          upsertIds: [m-g2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-m-no,
+          type: whiteboard.apply,
+          at: { mark: m-no },
+          upsertIds: [m-g1-x, m-g2-x],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m-skill,
+          type: whiteboard.apply,
+          at: { mark: m-skill },
+          upsertIds: [m-skill, m-skill-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m-impact,
+          type: whiteboard.apply,
+          at: { mark: m-impact },
+          upsertIds: [m-impact, m-impact-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m-lead,
+          type: whiteboard.apply,
+          at: { mark: m-lead },
+          upsertIds: [m-lead, m-lead-l],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-m-all,
+          type: whiteboard.apply,
+          at: { mark: m-all },
+          upsertIds: [m-all],
+          drawMs: 900,
+        }
+
+  - id: three-kinds
+    chapter: အလုပ် သုံးမျိုး
+    narration: >
+      [[mark:k-open]] ဒါဆို တစ်ပတ်တာအတွင်း architect တစ်ယောက် တကယ် လုပ်ရတဲ့ အလုပ်တွေကို သုံးမျိုး
+      ခွဲကြည့်ရအောင်။
+      [[mark:k-1]] ပထမ အမျိုးအစားက ဆုံးဖြတ်တာပါ။ system တစ်ခုလုံးကို ထိခိုက်မယ့် ဆုံးဖြတ်ချက်တွေကို
+      ချမှတ်ပြီး၊ ဘာကြောင့်လဲ ဆိုတာပါ ရှင်းပြရပါတယ်။ အသေးစိတ်အထိ အမိန့်ပေးတာ မဟုတ်ဘဲ လမ်းညွှန်ပေးတာပါ။
+      ဥပမာ wallet ကုမ္ပဏီရဲ့ API ကို ခေါ်တဲ့ code အားလုံးက နေရာ တစ်ခုတည်းကို ဖြတ်ရမယ် လို့ ကိုယ်က
+      လမ်းညွှန်ပေးပါတယ်။ အဲဒီ နေရာထဲမှာ ဘယ်လို ရေးမလဲ ဆိုတာကတော့ ရေးမယ့် developer တွေရဲ့
+      ဆုံးဖြတ်ချက်ပါ။
+      [[mark:k-2]] ဒုတိယ အမျိုးအစားက စောင့်ကြည့်တာပါ။ ဆုံးဖြတ်လိုက်ရုံနဲ့ အလုပ် မပြီးသေးပါဘူး။ deadline
+      နီးလာတဲ့အခါ တစ်ယောက်ယောက်က wallet API ကို အရင်လိုပဲ တိုက်ရိုက် ခေါ်လိုက်မိတာမျိုး ဖြစ်တတ်လို့၊
+      သဘောတူထားတဲ့အတိုင်း တကယ် ဖြစ်နေရဲ့လား ဆိုတာ ပုံမှန် ကြည့်ရပါတယ်။
+      [[mark:k-2b]] ဒါ့အပြင် system က အခု အခြေအနေနဲ့ ကိုက်သေးရဲ့လား၊ အပြင်မှာ ပေါ်လာနေတဲ့ technology
+      တွေထဲက ဘာက အသုံးဝင်နိုင်လဲ ဆိုတာလည်း ကြည့်ရပါတယ်။ ကားလိုင်း ၄၀ အတွက် အဆင်ပြေခဲ့တဲ့ ပုံစံက
+      ကားလိုင်းတွေ တိုးလာတဲ့အခါ အဆင်ပြေချင်မှ ပြေမှာပါ။
+      [[mark:k-3]] တတိယ အမျိုးအစားက ချိတ်ဆက်တာပါ။ ခရီးဖော် က ရောင်းရငွေရဲ့ ၅ ရာခိုင်နှုန်းကို ယူပြီး၊
+      ကျန်တာကို ကားလိုင်းတွေဆီ တနင်္လာနေ့တိုင်း ရှင်းပေးရတယ် ဆိုတာမျိုး business ကို နားလည်ထားမှ မှန်တဲ့
+      ဆုံးဖြတ်ချက် ချနိုင်ပါတယ်။ ပြီးတော့ business ဘက်က လူတွေနဲ့ code ရေးတဲ့ လူတွေကြားမှာ တစ်ဖက်ရဲ့
+      စကားကို နောက်တစ်ဖက် နားလည်အောင် သယ်ပေးရပါတယ်။ ဒီအလုပ်ကို ပုံနဲ့ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - {
+          id: close-monday,
+          type: whiteboard.apply,
+          at: { mark: k-open, offsetMs: -1200 },
+          open: false,
+        }
+      - {
+          id: show-kinds,
+          type: slide.show,
+          at: { afterAction: close-monday },
+          slideId: three-kinds,
+        }
+      - { id: point-kind-1, type: slide.point, at: { mark: k-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-kind-2, type: slide.point, at: { mark: k-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-kind-3, type: slide.point, at: { mark: k-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: elevator
+    chapter: အထပ်တွေကြား ချိတ်ဆက်ခြင်း
+    narration: >
+      [[mark:e-open]] ကုမ္ပဏီ တစ်ခုကို အထပ်တွေ ပါတဲ့ အဆောက်အအုံ တစ်လုံးလို မြင်ကြည့်ပါ။
+      [[mark:e-top]] အပေါ်ဆုံးထပ်မှာ အောင်အောင် တို့လို business ကို ဦးဆောင်တဲ့သူတွေ ရှိပါတယ်။ သူတို့
+      စဉ်းစားတာက ကုန်ကျစရိတ်၊ အချိန်နဲ့ ကုမ္ပဏီ ကြီးထွားဖို့ပါ။
+      [[mark:e-mid]] အလယ်ထပ်မှာ product manager လှလှ ရှိပါတယ်။ ခရီးသည်တွေနဲ့ ကားလိုင်းတွေ ဘာလိုချင်လဲ
+      ဆိုတာကို သူက ယူလာပေးပါတယ်။
+      [[mark:e-bottom]] အောက်ဆုံးထပ်ကတော့ စက်ခန်းပါ။ system ကို တကယ် တည်ဆောက်နေတဲ့ developer team ရှိတဲ့
+      နေရာပါ။
+      [[mark:e-gap]] အထပ်တွေက ကိစ္စ တစ်ခုတည်းအကြောင်း ပြောနေတာတောင် သုံးတဲ့ စကားက မတူပါဘူး။ အပေါ်ထပ်က
+      သင်္ကြန်မှာ ဒီလို ထပ်မဖြစ်စေနဲ့ လို့ပဲ ပြောပါတယ်။ စက်ခန်းကတော့ database connection တွေ
+      ပြည့်သွားတဲ့အကြောင်း ပြောနေပါတယ်။ ကြားမှာ ဘာသာပြန်ပေးမယ့်သူ မရှိရင် နှစ်ဖက်လုံးက တစ်ဖက်ကို
+      နားမလည်ဘဲ ကျန်နေမှာပါ။
+      [[mark:e-car]] architect က အဲဒီ အထပ်တွေကြားမှာ ဓာတ်လှေကားနဲ့ အတက်အဆင်း လုပ်နေတဲ့သူပါ။
+      [[mark:e-down]] အောက်ကို ဆင်းတဲ့အခါ business ရဲ့ ဦးတည်ချက်ကို စက်ခန်းက နားလည်တဲ့ ဆုံးဖြတ်ချက်အဖြစ်
+      ပြောင်းပေးပါတယ်။ သင်္ကြန်မှာ ထပ်မဖြစ်စေနဲ့ ဆိုတာကို ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းရဘူး၊
+      ဝင်သုံးသူ ၁၅ ဆ တက်လာလည်း ခံနိုင်ရမယ် ဆိုပြီး ပြောပြတာပါ။
+      [[mark:e-up]] အပေါ်ကို တက်တဲ့အခါမှာတော့ စက်ခန်းက အခက်အခဲကို business စကားနဲ့ ယူသွားပါတယ်။ database
+      က ဒီထက် မခံနိုင်တော့ဘူး ဆိုတာကို နောက်တစ်ခါ လက်မှတ် ဖွင့်ရောင်းတဲ့နေ့မှာ ရောင်းအား
+      ဆုံးရှုံးနိုင်တယ် ဆိုပြီး ပြောပြတာပါ။
+      [[mark:e-trap]] ဒီနေရာမှာ ကျတတ်တဲ့ ထောင်ချောက်က အပေါ်ထပ်မှာပဲ နေပြီး အောက်ကို ပြန်မဆင်းတော့တာပါ။
+      ဘယ်သူမဆို ကျနိုင်တာမို့၊ ကိုယ့် ဆုံးဖြတ်ချက်တွေ code ထဲမှာ တကယ် ဘယ်လို ဖြစ်သွားလဲ သိအောင် code ကို
+      ဆက်ရေး၊ ဆက်ဖတ်နေဖို့ လိုပါတယ်။
+    sources:
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-kinds, type: slide.close, at: { mark: e-open, offsetMs: -1200 } }
+      - {
+          id: draw-e-open,
+          type: whiteboard.apply,
+          at: { afterAction: close-kinds },
+          open: true,
+          clear: true,
+          upsertIds: [e-title],
+        }
+      - {
+          id: draw-e-top,
+          type: whiteboard.apply,
+          at: { mark: e-top },
+          upsertIds: [e-f1, e-f1-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-mid,
+          type: whiteboard.apply,
+          at: { mark: e-mid },
+          upsertIds: [e-f2, e-f2-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-bottom,
+          type: whiteboard.apply,
+          at: { mark: e-bottom },
+          upsertIds: [e-f3, e-f3-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-e-car,
+          type: whiteboard.apply,
+          at: { mark: e-car },
+          upsertIds: [e-shaft, e-car, e-car-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-down,
+          type: whiteboard.apply,
+          at: { mark: e-down },
+          upsertIds: [e-down, e-down-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-e-up,
+          type: whiteboard.apply,
+          at: { mark: e-up },
+          upsertIds: [e-up, e-up-l],
+          drawMs: 1500,
+        }
+      - {
+          id: point-e-car,
+          type: whiteboard.point,
+          at: { mark: e-trap },
+          target: { assetId: e-car },
+        }
+
+  - id: spectrum
+    chapter: Design လား၊ architecture လား
+    narration: >
+      [[mark:s-open]] ဒါဆို ဘယ်ဆုံးဖြတ်ချက်တွေက ကိုယ့်တာဝန်လဲ။ code တစ်နေရာထဲမှာ ဘယ်လို ရေးမလဲ ဆိုတဲ့
+      ဆုံးဖြတ်ချက်မျိုးကို design လို့ ခေါ်ကြပါတယ်။ ဒါပေမဲ့ design နဲ့ architecture က သီးခြား အုပ်စု
+      နှစ်ခု မဟုတ်ဘဲ၊ မျဉ်းတစ်ကြောင်းရဲ့ အစွန်း နှစ်ဖက်ပါ။ ဆုံးဖြတ်ချက်တွေက အဲဒီ မျဉ်းပေါ်မှာ နေရာ
+      အမျိုးမျိုး ကျနေတာပါ။
+      [[mark:s-q1]] ဆုံးဖြတ်ချက် တစ်ခုက မျဉ်းရဲ့ ဘယ်နေရာမှာ ရှိလဲ သိဖို့ မေးခွန်း သုံးခု မေးကြည့်ပါ။
+      ပထမက ဒီ ဆုံးဖြတ်ချက်က ဘယ်လောက် ကြာကြာ၊ လူ ဘယ်နှယောက်ရဲ့ အလုပ်ကို ထိမလဲ ဆိုတာပါ။
+      [[mark:s-q2]] ဒုတိယက နောက်မှ ပြန်ပြောင်းချင်ရင် ဘယ်လောက် ကုန်ကျမလဲ ဆိုတာပါ။
+      [[mark:s-q3]] တတိယက trade off ဘယ်လောက် ကြီးလဲ ဆိုတာပါ။ trade off ဆိုတာ တစ်ခု ရဖို့ နောက်တစ်ခုကို
+      လျှော့ပေးရတာပါ။ ရတာနဲ့ ပေးရတာ နှစ်ခုလုံး ကြီးလေ architecture ဘက်ကို ပိုရောက်လေပါပဲ။
+      [[mark:s-m1]] function တစ်ခုကို နှစ်ခု ခွဲရေးတာမျိုးက design ဘက်စွန်းမှာ ရှိပါတယ်။ file
+      တစ်ခုထဲမှာပဲ ပြီးပြီး နောက်နေ့ ပြန်ပြင်လို့ ရတာမို့၊ ရေးတဲ့ developer ကိုယ်တိုင် ဆုံးဖြတ်ပါတယ်။
+      [[mark:s-m3]] wallet API ကို system တစ်ခုလုံးက ဘယ်လို ခေါ်မလဲ ဆိုတာကတော့ architecture ဘက်စွန်းမှာပါ။
+      ဒါမျိုးကို ကိုယ်က တာဝန်ယူရပါတယ်။
+      [[mark:s-m2]] အလယ်မှာ ကျတဲ့ ဆုံးဖြတ်ချက်တွေလည်း အများကြီး ရှိပါတယ်။ လက်မှတ် ဝယ်ပြီးတဲ့အခါ ပို့တဲ့
+      SMS ကို နောက်ကွယ်ကနေ ပို့မလား ဆိုတာမျိုးပါ။ အဲဒါမျိုးကိုတော့ team နဲ့ အတူ ဆုံးဖြတ်တာ
+      ပိုသင့်တော်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - {
+          id: draw-s-open,
+          type: whiteboard.apply,
+          at: { mark: s-open },
+          clear: true,
+          upsertIds: [s-title, s-bar, s-left, s-right],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-s-q1,
+          type: whiteboard.apply,
+          at: { mark: s-q1 },
+          upsertIds: [s-q1],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-s-q2,
+          type: whiteboard.apply,
+          at: { mark: s-q2 },
+          upsertIds: [s-q2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-q3,
+          type: whiteboard.apply,
+          at: { mark: s-q3 },
+          upsertIds: [s-q3],
+          drawMs: 900,
+        }
+      - {
+          id: draw-s-m1,
+          type: whiteboard.apply,
+          at: { mark: s-m1 },
+          upsertIds: [s-m1, s-a1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-m3,
+          type: whiteboard.apply,
+          at: { mark: s-m3 },
+          upsertIds: [s-m3, s-a3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-s-m2,
+          type: whiteboard.apply,
+          at: { mark: s-m2 },
+          upsertIds: [s-m2, s-a2],
+          drawMs: 1200,
+        }
+
+  - id: table
+    chapter: ဒီအပတ် ဆုံးဖြတ်စရာ ငါးခု
+    narration: >
+      [[mark:t-close]] ဒီ မျဉ်းကို ခရီးဖော် မှာ ဒီအပတ် ပေါ်လာတဲ့ ဆုံးဖြတ်စရာ ငါးခုနဲ့ စမ်းကြည့်ရအောင်။
+      [[mark:type-r1]] ပထမ တစ်ခုက လက်မှတ် PDF ထုတ်တဲ့ function ကြီးကို နှစ်ခု ခွဲမလား ဆိုတာပါ။ file
+      တစ်ခုထဲမှာပဲ ပြီးတာမို့ design ပါ။ ရေးတဲ့သူ ဆုံးဖြတ်လိုက်ရုံပါပဲ။
+      [[mark:type-r2]] ဒုတိယက ခရီးစဉ် စာရင်းကို ထွက်ချိန်အလိုက် စီပြမလား ဆိုတာပါ။ ရှာတဲ့အပိုင်း
+      တစ်ခုတည်းနဲ့ပဲ ဆိုင်ပြီး၊ မကြိုက်ရင် နောက်နေ့ ပြန်ပြောင်းလို့ ရတာမို့ ဒါလည်း design ပါပဲ။
+      [[mark:type-r3]] တတိယကတော့ SMS ကို နောက်ကွယ်ကနေ ပို့မလား ဆိုတာပါ။ ပြင်ရတဲ့ code က နည်းပေမဲ့၊ SMS
+      gateway နှေးနေတဲ့အခါ ခရီးသည် ဘာကို မြင်ရမလဲ ဆိုတာကို ပြောင်းစေတာမို့ အလယ်မှာ ထားပါမယ်။
+      [[mark:type-r4]] စတုတ္ထက wallet API ကို ခေါ်တဲ့ code တွေကို နေရာ တစ်ခုတည်းမှာ စုမလား ဆိုတာပါ။ code
+      နေရာ အများကြီးကို ထိပြီး၊ wallet အသစ် ထည့်ရတာ လွယ်မလွယ်ကိုပါ သတ်မှတ်မှာမို့ architecture ဘက်မှာ
+      ရှိပါတယ်။
+      [[mark:type-r5]] နောက်ဆုံး တစ်ခုက ထိုင်ခုံတွေကို နှစ်ခါ မရောင်းမိအောင် ဘယ်လို ကာမလဲ ဆိုတာပါ။ app
+      ရော ကောင်တာရော ထိမယ်၊ တစ်ခါ ရွေးပြီးရင် ပြန်ပြောင်းဖို့လည်း ခက်ပါတယ်။ မေးခွန်း သုံးခုလုံးမှာ အဖြေက
+      ကြီးနေတာမို့ ဒါက ကိုယ် တာဝန်ယူရမယ့် ဆုံးဖြတ်ချက်ပါ။
+      [[mark:t-why]] ဒီလို ချရေးကြည့်လိုက်တော့ တနင်္လာနေ့ မနက်က မေးခွန်းရဲ့ အဖြေ ပေါ်လာပါတယ်။ ငါးခုထဲက
+      ကိုယ် တာဝန်ယူရမှာက ဒီ နှစ်ခုပါ။ ကျန်တာတွေကိုတော့ team ကို ယုံကြည်ပြီး လွှတ်ထားရမှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions:
+      - { id: close-spectrum, type: whiteboard.apply, at: { mark: t-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-spectrum },
+          path: notebook/02-decisions-this-week.md,
+        }
+      - id: type-r1
+        type: editor.type
+        at: { mark: type-r1 }
+        cadence: line-by-line
+        target: { file: notebook/02-decisions-this-week.md, after: "|---|---|---|\n" }
+        text: "| လက်မှတ် PDF ထုတ်တဲ့ function ကို နှစ်ခု ခွဲမလား | design | file တစ်ခုထဲမှာပဲ ပြီးတယ် |\n"
+      - id: type-r2
+        type: editor.type
+        at: { mark: type-r2 }
+        cadence: line-by-line
+        target: { file: notebook/02-decisions-this-week.md, after: "file တစ်ခုထဲမှာပဲ ပြီးတယ် |\n" }
+        text: "| ခရီးစဉ် စာရင်းကို ထွက်ချိန်အလိုက် စီမလား | design | Search ထဲမှာပဲ ပြီးတယ်၊ ပြန်ပြောင်းရ လွယ်တယ် |\n"
+      - id: type-r3
+        type: editor.type
+        at: { mark: type-r3 }
+        cadence: line-by-line
+        target: { file: notebook/02-decisions-this-week.md, after: "ပြန်ပြောင်းရ လွယ်တယ် |\n" }
+        text: "| SMS ကို နောက်ကွယ်ကနေ ပို့မလား | အလယ် | code နည်းပေမဲ့ ခရီးသည် မြင်ရတာ ပြောင်းတယ် |\n"
+      - id: type-r4
+        type: editor.type
+        at: { mark: type-r4 }
+        cadence: line-by-line
+        target: { file: notebook/02-decisions-this-week.md, after: "ခရီးသည် မြင်ရတာ ပြောင်းတယ် |\n" }
+        text: "| wallet API ခေါ်တဲ့ code ကို တစ်နေရာတည်း စုမလား | architecture | နေရာအများကြီး ထိတယ်၊ wallet အသစ် ထည့်ရ လွယ်မယ် |\n"
+      - id: type-r5
+        type: editor.type
+        at: { mark: type-r5 }
+        cadence: line-by-line
+        target: { file: notebook/02-decisions-this-week.md, after: "wallet အသစ် ထည့်ရ လွယ်မယ် |\n" }
+        text: "| ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် ဘယ်လို ကာမလဲ | architecture | app ရော ကောင်တာရော ထိတယ်၊ ပြန်ပြောင်းရ ခက်တယ် |\n"
+      - id: sel-arch
+        type: editor.select
+        at: { mark: t-why, offsetMs: 2500 }
+        target:
+          file: notebook/02-decisions-this-week.md
+          text: "| wallet API ခေါ်တဲ့ code ကို တစ်နေရာတည်း စုမလား | architecture | နေရာအများကြီး ထိတယ်၊ wallet အသစ် ထည့်ရ လွယ်မယ် |\n| ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် ဘယ်လို ကာမလဲ | architecture |"
+      - id: expect-row-5
+        type: expect.file
+        at: { afterAction: sel-arch }
+        path: notebook/02-decisions-this-week.md
+        contains: "| ထိုင်ခုံ နှစ်ခါ မရောင်းမိအောင် ဘယ်လို ကာမလဲ | architecture | app ရော ကောင်တာရော ထိတယ်၊ ပြန်ပြောင်းရ ခက်တယ် |\n"
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီ နှစ်ခုထဲက ဘယ်ဟာက architect တာဝန်ယူရမယ့် ဆုံးဖြတ်ချက်
+      ဖြစ်မလဲ။
+      [[mark:q-a]] ပထမ တစ်ခုက ကားလိုင်းတွေ သုံးတဲ့ operator screen ကို ဆောက်ဖို့ ဘယ် UI library ကို သုံးမလဲ
+      ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ တစ်ခုကတော့ ကားဂိတ်မှာ internet ပြတ်သွားလည်း ကောင်တာ ဝန်ထမ်းက လက်မှတ် ဆက်ရောင်းလို့
+      ရရမယ် ဆိုတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ internet မရှိဘဲ ရောင်းလို့ရရမယ်
+      ဆိုတာနဲ့ ထိုင်ခုံ data ကို ဘယ်မှာ ထားမလဲ၊ ကောင်တာနဲ့ app ကြား ဘယ်လို ပြန်ညှိမလဲ ဆိုတာတွေ အကုန်
+      ပြောင်းသွားလို့ပါ။
+      [[mark:q-r]] ဒါက system ရဲ့ ဖွဲ့စည်းပုံကို ပြောင်းစေတဲ့ အရည်အသွေးမျိုးပါ။ ကိုယ်က တာဝန်မယူရင်
+      ဘယ်သူမှ ယူမှာ မဟုတ်ပါဘူး။ UI library ကိုတော့ နေ့တိုင်း သုံးရမယ့် developer တွေက အသိဆုံးပါ။
+      ကိုယ့်ဘက်က လမ်းညွှန်ချက် ပေးထားနိုင်ပေမဲ့၊ ဘယ်ဟာလဲ ဆိုတာကိုတော့ team က ရွေးပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: q-r },
+          upsertIds: [q-r],
+          drawMs: 1000,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ဒီ table ထဲမှာ ကိုယ့် project အတွက်
+      ပြီးခဲ့တဲ့ တစ်လအတွင်း ချခဲ့တဲ့ ဆုံးဖြတ်ချက် သုံးခုကို ရေးကြည့်ပါ။ တစ်ခုစီအတွက် မေးခွန်း သုံးခုကို
+      မေးပြီး design လား၊ architecture လား၊ အလယ်မှာလား ဆိုတာ ဖြည့်ပါ။
+      [[mark:turn-2]] architecture ဘက် ရောက်နေတဲ့ ဆုံးဖြတ်ချက်ကို ဘယ်သူမှ သတိမထားမိဘဲ ချခဲ့တာမျိုး တွေ့ရင်၊
+      အဲဒါက ကိုယ် ပထမဆုံး ပြန်ကြည့်ရမယ့် နေရာပါပဲ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-rows
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/02-decisions-this-week.md
+          text: "| လက်မှတ် PDF ထုတ်တဲ့ function ကို နှစ်ခု ခွဲမလား | design | file တစ်ခုထဲမှာပဲ ပြီးတယ် |\n| ခရီးစဉ် စာရင်းကို ထွက်ချိန်အလိုက် စီမလား | design | Search ထဲမှာပဲ ပြီးတယ်၊ ပြန်ပြောင်းရ လွယ်တယ် |\n| SMS ကို နောက်ကွယ်ကနေ ပို့မလား | အလယ် |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ architecture ကို ကြည့်ပေးတယ် ဆိုတာ အရာရာကို ကိုယ်တိုင်
+      ဆုံးဖြတ်တာလည်း မဟုတ်၊ code ကို စွန့်လိုက်တာလည်း မဟုတ်ပါဘူး။ ဆုံးဖြတ်တာ၊ စောင့်ကြည့်တာနဲ့
+      ချိတ်ဆက်တာ ဆိုတဲ့ အလုပ် သုံးမျိုးပါ။
+      [[mark:recap-2]] ဘယ်ဆုံးဖြတ်ချက်က ကိုယ့်တာဝန်လဲ ဆိုတာကိုတော့ ဘယ်နှယောက်ကို ထိမလဲ၊ ပြန်ပြောင်းရ
+      ဘယ်လောက် ကုန်မလဲ၊ trade off ဘယ်လောက် ကြီးလဲ ဆိုတဲ့ မေးခွန်း သုံးခုနဲ့ ခွဲကြည့်နိုင်ပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ ထိုင်ခုံတွေကို နှစ်ခါ မရောင်းမိအောင် ကာမယ့် နည်းလမ်း နှစ်ခုကို
+      ယှဉ်ကြည့်ရင်း၊ ဆုံးဖြတ်ချက်တိုင်းမှာ ပါလာတဲ့ trade off ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
