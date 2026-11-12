@@ -30,14 +30,24 @@ export interface StudioPreviewTargetInspection {
   value: string | null;
 }
 
-/** Where a command's target sits in the preview's own viewport (CSS px), and that viewport's size. */
-export interface StudioPreviewTargetBox {
+/** A box in the preview's own viewport (CSS px). */
+export interface StudioPreviewRect {
   left: number;
   top: number;
   width: number;
   height: number;
+}
+
+/** Where a command's target sits in the preview's own viewport (CSS px), and that viewport's size. */
+export interface StudioPreviewTargetBox extends StudioPreviewRect {
   viewportWidth: number;
   viewportHeight: number;
+  /**
+   * The box of what the target holds — its text and children — when that is
+   * narrower than the target itself: a heading is as wide as its column while
+   * its words end early. Absent for an empty target or a form control.
+   */
+  content?: StudioPreviewRect;
 }
 
 export interface StudioPreviewCommandResult {
@@ -69,12 +79,18 @@ function isTargetInspection(value: unknown): value is StudioPreviewTargetInspect
   );
 }
 
+function hasFiniteNumbers(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return keys.every((key) => typeof value[key] === "number" && Number.isFinite(value[key]));
+}
+
+const RECT_KEYS = ["left", "top", "width", "height"] as const;
+
 function isTargetBox(value: unknown): value is StudioPreviewTargetBox {
   return (
     isRecord(value) &&
-    ["left", "top", "width", "height", "viewportWidth", "viewportHeight"].every(
-      (key) => typeof value[key] === "number" && Number.isFinite(value[key]),
-    )
+    hasFiniteNumbers(value, [...RECT_KEYS, "viewportWidth", "viewportHeight"]) &&
+    (value.content === undefined ||
+      (isRecord(value.content) && hasFiniteNumbers(value.content, RECT_KEYS)))
   );
 }
 
@@ -199,6 +215,20 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
         element.dispatchEvent(new Event('change', { bubbles: true }));
       }
 
+      // The box of the element's own text and children, for the studio pointer:
+      // a block is as wide as its column while its words end early.
+      function contentBox(element) {
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(element);
+          var rect = range.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+          }
+        } catch {}
+        return undefined;
+      }
+
       function box(element) {
         if (!element || typeof element.getBoundingClientRect !== 'function') return undefined;
         var rect = element.getBoundingClientRect();
@@ -209,6 +239,7 @@ export function createStudioPreviewCommandBridgeScript(setupMarker: string): str
           height: rect.height,
           viewportWidth: window.innerWidth,
           viewportHeight: window.innerHeight,
+          content: contentBox(element),
         };
       }
 

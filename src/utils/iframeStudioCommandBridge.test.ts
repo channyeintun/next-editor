@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createStudioPreviewCommandBridgeScript,
+  requestStudioPreviewCommand,
   STUDIO_PREVIEW_COMMAND_MESSAGE_TYPE,
   STUDIO_PREVIEW_COMMAND_RESPONSE_MESSAGE_TYPE,
   STUDIO_PREVIEW_FRAME_FALLBACK_MS,
@@ -128,5 +129,110 @@ describe("studio preview bridge without animation frames", () => {
 
     expect(bridge.acknowledged(id)).toMatchObject({ result: { command: "click" } });
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("studio preview bridge content box", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    document.body.innerHTML = "";
+  });
+
+  const neverFrames = () => 1;
+
+  /** Stubs the Range jsdom lays nothing out for, so the bridge reads `rect` as its contents' box. */
+  function stubContentRect(rect: { left: number; top: number; width: number; height: number }) {
+    vi.spyOn(document, "createRange").mockReturnValue({
+      selectNodeContents: () => {},
+      getBoundingClientRect: () => rect,
+    } as unknown as Range);
+  }
+
+  async function inspectTitle() {
+    document.body.innerHTML = '<h1 data-testid="title">Scores</h1>';
+    const bridge = mountBridge(neverFrames);
+    const id = bridge.send({ type: "inspect", target: { testId: "title" } });
+    await vi.advanceTimersByTimeAsync(STUDIO_PREVIEW_FRAME_FALLBACK_MS);
+    const result = bridge.acknowledged(id)?.result as
+      | { targetBox: Record<string, unknown> }
+      | undefined;
+    if (!result) throw new Error("The bridge did not acknowledge the inspect");
+    return result.targetBox;
+  }
+
+  // A heading is as wide as its column while its words end early; the pointer
+  // aims under the words, so the bridge reports where they are.
+  it("reports the box of an element's contents when it has one", async () => {
+    vi.useFakeTimers();
+    stubContentRect({ left: 20, top: 104, width: 200, height: 32 });
+
+    expect((await inspectTitle()).content).toEqual({ left: 20, top: 104, width: 200, height: 32 });
+  });
+
+  it("leaves the content box out when the contents have no size", async () => {
+    vi.useFakeTimers();
+    stubContentRect({ left: 0, top: 0, width: 0, height: 0 });
+
+    const targetBox = await inspectTitle();
+    expect(targetBox).toBeDefined();
+    expect(targetBox.content).toBeUndefined();
+  });
+});
+
+describe("requestStudioPreviewCommand target box validation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.replaceChildren();
+  });
+
+  const box = {
+    left: 0,
+    top: 100,
+    width: 800,
+    height: 40,
+    viewportWidth: 800,
+    viewportHeight: 600,
+  };
+
+  /** Sends an inspect and answers it from the frame with `targetBox`. */
+  function answerWith(targetBox: unknown) {
+    const iframe = document.createElement("iframe");
+    document.body.append(iframe);
+    const frameWindow = iframe.contentWindow as Window;
+    const postMessage = vi.spyOn(frameWindow, "postMessage").mockImplementation(() => {});
+    const request = requestStudioPreviewCommand(
+      iframe,
+      { type: "inspect", target: { testId: "title" } },
+      { signal: new AbortController().signal, timeoutMs: 1_000 },
+    );
+    const [message] = postMessage.mock.calls[0] as [{ payload: { id: string } }];
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: frameWindow,
+        data: {
+          type: STUDIO_PREVIEW_COMMAND_RESPONSE_MESSAGE_TYPE,
+          payload: {
+            id: message.payload.id,
+            result: { command: "inspect", route: "/", scrollLeft: 0, scrollTop: 0, targetBox },
+          },
+        },
+      }),
+    );
+    return request;
+  }
+
+  it("accepts a well-formed content box", async () => {
+    const targetBox = { ...box, content: { left: 20, top: 104, width: 200, height: 32 } };
+
+    await expect(answerWith(targetBox)).resolves.toMatchObject({ targetBox });
+  });
+
+  it("rejects a content box with a field that is not a number", async () => {
+    const targetBox = { ...box, content: { left: "20", top: 104, width: 200, height: 32 } };
+
+    await expect(answerWith(targetBox)).rejects.toThrow(
+      "The preview returned an invalid command acknowledgement",
+    );
   });
 });
