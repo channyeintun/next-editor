@@ -1,0 +1,824 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-51-negotiation
+  title: "Architect Path 51: ညှိနှိုင်းခြင်းနဲ့ ဆက်သွယ်ခြင်း"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/51-four-messages.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+        - ပါဆယ် ပို့သူ: ကားနဲ့ ပါဆယ် ထည့်ပေးတယ် (လုပ်ငန်း အသစ်)
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 7 နှစ်)
+
+        - developer 90 ယောက်၊ team 12 ခု၊ architect 4 ယောက်
+        - ကားလိုင်း 500၊ တစ်ရက် လက်မှတ် 200,000 ခန့်
+        - service အများကြီး၊ team တိုင်း သုံးတဲ့ platform တစ်ခုပေါ်မှာ
+        - လုပ်ငန်း အသစ်: ကားတွေနဲ့ ပါဆယ် ပို့ပေးတာ
+      notebook/51-four-messages.md: |+
+        # ဆုံးဖြတ်ချက် တစ်ခု၊ message လေးခု
+
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — two challenges in one week (orange: what each side asks), and
+    # the point of the scene in green.
+    - {
+        id: n-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 450,
+        height: 45,
+        text: "ဒီအပတ် စိန်ခေါ်မှု နှစ်ခု",
+        fontSize: 36,
+      }
+    - { id: n-cto, kind: text, x: 270, y: 240, width: 80, height: 35, text: "CTO", fontSize: 28 }
+    - {
+        id: n-cto-b,
+        kind: rectangle,
+        x: 270,
+        y: 285,
+        width: 440,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-cto-l,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 307,
+        width: 440,
+        height: 35,
+        text: "five nines၊ zero downtime",
+        fontSize: 28,
+      }
+    - {
+        id: n-lead,
+        kind: text,
+        x: 735,
+        y: 240,
+        width: 160,
+        height: 35,
+        text: "Team lead",
+        fontSize: 28,
+      }
+    - {
+        id: n-lead-b,
+        kind: rectangle,
+        x: 735,
+        y: 285,
+        width: 350,
+        height: 80,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: n-lead-l,
+        kind: text,
+        align: center,
+        x: 735,
+        y: 307,
+        width: 350,
+        height: 35,
+        text: "ဒီ စည်းကမ်းကို လက်မခံဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: n-all,
+        kind: text,
+        x: 270,
+        y: 440,
+        width: 460,
+        height: 35,
+        text: "ဆုံးဖြတ်ချက်တိုင်း စိန်ခေါ်ခံရတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: n-job,
+        kind: text,
+        x: 270,
+        y: 500,
+        width: 400,
+        height: 35,
+        text: "အဲဒါက အလုပ်ရဲ့ အစိတ်အပိုင်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — a demand narrowed step by step, as a funnel: the big word
+    # (orange), the worry behind it (red), the numbers, the scope, and last the
+    # agreed option with its cost (green).
+    - {
+        id: l-b1,
+        kind: rectangle,
+        x: 285,
+        y: 165,
+        width: 780,
+        height: 62,
+        rounded: true,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: l-l1,
+        kind: text,
+        align: center,
+        x: 285,
+        y: 178,
+        width: 780,
+        height: 35,
+        text: "five nines၊ zero downtime",
+        fontSize: 28,
+      }
+    - { id: l-a1, kind: freedraw, stroke: arrow-down, x: 655, y: 231, width: 40, height: 27 }
+    - {
+        id: l-b2,
+        kind: rectangle,
+        x: 335,
+        y: 262,
+        width: 680,
+        height: 62,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: l-l2,
+        kind: text,
+        align: center,
+        x: 335,
+        y: 275,
+        width: 680,
+        height: 35,
+        text: "စိုးရိမ်တာ: ရောင်းတာ ရပ်မှာ",
+        fontSize: 28,
+      }
+    - { id: l-a2, kind: freedraw, stroke: arrow-down, x: 655, y: 328, width: 40, height: 27 }
+    - { id: l-b3, kind: rectangle, x: 385, y: 359, width: 580, height: 62, rounded: true }
+    - {
+        id: l-l3,
+        kind: text,
+        align: center,
+        x: 385,
+        y: 372,
+        width: 580,
+        height: 35,
+        text: "99.999 % = 5 မိနစ်၊ 99.9 % = 9 နာရီ",
+        fontSize: 28,
+      }
+    - { id: l-a3, kind: freedraw, stroke: arrow-down, x: 655, y: 425, width: 40, height: 27 }
+    - { id: l-b4, kind: rectangle, x: 435, y: 456, width: 480, height: 62, rounded: true }
+    - {
+        id: l-l4,
+        kind: text,
+        align: center,
+        x: 435,
+        y: 469,
+        width: 480,
+        height: 35,
+        text: "ဝယ်တဲ့ လမ်းကြောင်းအတွက်ပဲ",
+        fontSize: 28,
+      }
+    - { id: l-a4, kind: freedraw, stroke: arrow-down, x: 655, y: 522, width: 40, height: 27 }
+    - {
+        id: l-b5,
+        kind: rectangle,
+        x: 475,
+        y: 553,
+        width: 400,
+        height: 62,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: l-l5,
+        kind: text,
+        align: center,
+        x: 475,
+        y: 566,
+        width: 400,
+        height: 35,
+        text: "99.99 %၊ team 3 ခု၊ 4 လ",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer; red for what
+    # a debate decides, green for what a measurement decides.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 640,
+        height: 45,
+        text: "Cache ထည့်ရင် search မြန်မလား?",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 265,
+        width: 700,
+        height: 35,
+        text: "က) အစည်းအဝေးမှာ ဆက်ငြင်း",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 335,
+        width: 700,
+        height: 35,
+        text: "ခ) နေ့ခင်း တစ်ပိုင်း အတူ တိုင်းကြည့်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 340,
+        width: 450,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 765,
+        y: 328,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-r1,
+        kind: text,
+        x: 290,
+        y: 455,
+        width: 420,
+        height: 35,
+        text: "ငြင်းခုံမှု: ဘယ်သူ ပိုပြောနိုင်လဲ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: q-r2,
+        kind: text,
+        x: 290,
+        y: 520,
+        width: 400,
+        height: 35,
+        text: "တိုင်းတာချက်: ဘယ်ဟာ မှန်လဲ",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 4 — three habits with developers (green), each with what it looked
+    # like with the Booking team (white).
+    - {
+        id: v-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 440,
+        height: 45,
+        text: "Developer နဲ့ ညှိတဲ့အခါ",
+        fontSize: 36,
+      }
+    - {
+        id: v-b1,
+        kind: rectangle,
+        x: 270,
+        y: 240,
+        width: 360,
+        height: 76,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: v-l1,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 260,
+        width: 360,
+        height: 35,
+        text: "အကြောင်းပြချက် အရင်",
+        fontSize: 28,
+      }
+    - {
+        id: v-e1,
+        kind: text,
+        x: 660,
+        y: 260,
+        width: 360,
+        height: 35,
+        text: "code နှစ်မျိုး အတူ run လို့",
+        fontSize: 28,
+      }
+    - {
+        id: v-b2,
+        kind: rectangle,
+        x: 270,
+        y: 345,
+        width: 360,
+        height: 76,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: v-l2,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 365,
+        width: 360,
+        height: 35,
+        text: "ငြင်းမယ့်အစား ပြ",
+        fontSize: 28,
+      }
+    - {
+        id: v-e2,
+        kind: text,
+        x: 660,
+        y: 365,
+        width: 410,
+        height: 35,
+        text: "30 ကြိမ်မှာ 4 ကြိမ်ပဲ 3 ဆင့် လို",
+        fontSize: 28,
+      }
+    - {
+        id: v-b3,
+        kind: rectangle,
+        x: 270,
+        y: 450,
+        width: 360,
+        height: 76,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: v-l3,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 470,
+        width: 360,
+        height: 35,
+        text: "ကိုယ်တိုင် ရောက်ပါစေ",
+        fontSize: 28,
+      }
+    - {
+        id: v-e3,
+        kind: text,
+        x: 660,
+        y: 470,
+        width: 400,
+        height: 35,
+        text: "နှစ်နည်းလုံး သူ့ team က စမ်း",
+        fontSize: 28,
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8151
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: စိန်ခေါ်မှု နှစ်ခု
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ architect က team တစ်ခုနဲ့ ဘယ်လောက် နီးနီး အလုပ်လုပ်သင့်လဲ ဆိုတာကို team ရဲ့
+      အခြေအနေနဲ့ ချိန်ကြည့်ခဲ့ပါတယ်။
+      [[mark:n-open]] ဒီအပတ်ထဲမှာတော့ ကိုယ် စိန်ခေါ်မှု နှစ်ခုနဲ့ တစ်ပြိုင်တည်း ကြုံရပါတယ်။
+      [[mark:n-cto]] ပထမက CTO ဖြစ်တဲ့ အောင်အောင် ဆီကပါ။ system ကို five nines၊ zero downtime ဖြစ်အောင်
+      လုပ်ပေးပါ တဲ့။
+      [[mark:n-lead]] ဒုတိယက Booking team lead မောင်မောင် ဆီကပါ။ database ရဲ့ schema၊ ဆိုလိုတာက data ရဲ့
+      ပုံစံကို ပြောင်းတိုင်း အဆင့် သုံးဆင့်နဲ့ ပြောင်းရမယ် ဆိုတဲ့ လမ်းညွှန်ဟောင်းကို အခုကစပြီး
+      မဖြစ်မနေ လိုက်နာရမယ်လို့ ချလိုက်တဲ့ ကိုယ့် ဆုံးဖြတ်ချက်ကို၊ အစည်းအဝေးထဲမှာတင်
+      လက်မခံဘူးလို့ ပြောလိုက်တာပါ။
+      [[mark:n-job]] architect တစ်ယောက်ရဲ့ ဆုံးဖြတ်ချက်တိုင်းလိုလိုက ဒီလို စိန်ခေါ်ခံရတာပါပဲ။ အဲဒါက အလုပ်
+      မှားနေလို့ မဟုတ်ဘဲ၊ အလုပ်ရဲ့ အစိတ်အပိုင်း တစ်ခုပါ။ ဆုံးဖြတ်ချက် တစ်ခုက လူအများကို ထိခိုက်လေ၊
+      မေးခွန်းထုတ်မယ့်သူ များလေပါ။ ဒီနေ့ နှစ်ဖက်လုံးနဲ့ ဘယ်လို ညှိမလဲ ကြည့်ရအောင်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-n-open,
+          type: whiteboard.apply,
+          at: { mark: n-open },
+          open: true,
+          upsertIds: [n-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-n-cto,
+          type: whiteboard.apply,
+          at: { mark: n-cto },
+          upsertIds: [n-cto, n-cto-b, n-cto-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-n-lead,
+          type: whiteboard.apply,
+          at: { mark: n-lead },
+          upsertIds: [n-lead, n-lead-b, n-lead-l],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-n-job,
+          type: whiteboard.apply,
+          at: { mark: n-job },
+          upsertIds: [n-all, n-job],
+          drawMs: 1600,
+        }
+
+  - id: demand
+    chapter: စကားလုံးကနေ ဂဏန်းဆီ
+    narration: >
+      [[mark:l-word]] အောင်အောင် ရဲ့ တောင်းဆိုချက်ကနေ စပါမယ်။ five nines ဆိုတာ system က အချိန်ရဲ့ ၉၉ ဒသမ ၉၉၉
+      ရာခိုင်နှုန်းမှာ သုံးလို့ရနေရမယ် ဆိုတာပါ။ ချက်ချင်း မရဘူးလို့ ပြန်ပြောချင်စရာပါ။ ဒါပေမဲ့ စကားလုံးကြီးကြီး
+      တစ်လုံးကို ကြားရင် အရင်ဆုံး လုပ်ရမှာက၊ အဲဒီ စကားလုံးနောက်က စိုးရိမ်မှုကို ရှာတာပါ။
+      [[mark:l-worry]] ဒါကြောင့် ဘာဖြစ်လို့ ဒီလို တောင်းတာလဲလို့ မေးကြည့်ပါတယ်။ ပြီးခဲ့တဲ့ သောကြာနေ့ ညနေက deploy
+      တစ်ခုကြောင့် လက်မှတ် ရောင်းတာ မိနစ် ၄၀ ရပ်သွားခဲ့ပါတယ်။ ကားလိုင်းကြီး တစ်ခုရဲ့ ပိုင်ရှင်က အောင်အောင် ဆီ
+      တိုက်ရိုက် ဖုန်းဆက်ပြီး မကျေနပ်ကြောင်း ပြောခဲ့တာပါ။ သူ တကယ် စိုးရိမ်တာက လက်မှတ် ရောင်းတာ ရပ်သွားမှာပါ။ zero
+      downtime လို့ ပြောတာကလည်း deploy လုပ်တိုင်း ရောင်းတာ မရပ်စေချင်တာပါ။
+      [[mark:l-number]] နောက်တစ်ဆင့်က စကားလုံးကို ဂဏန်း ပြောင်းတာပါ။ ၉၉ ဒသမ ၉၉၉ ရာခိုင်နှုန်း ဆိုတာ တစ်နှစ်လုံးမှာ
+      ငါးမိနစ်လောက်ပဲ ပျက်ခွင့်ရှိတာပါ။ အခု ကိုယ်တို့ ထားတဲ့ ၉၉ ဒသမ ၉ ရာခိုင်နှုန်းကတော့ တစ်နှစ်ကို
+      ကိုးနာရီလောက်ပါ။ ကြားထဲက ၉၉ ဒသမ ၉၉ ရာခိုင်နှုန်းဆိုရင် တစ်နှစ်ကို တစ်နာရီအောက်ပါ။ ဂဏန်းနဲ့ မြင်ရတော့
+      အောင်အောင် ကိုယ်တိုင်က ငါးမိနစ်အထိတော့ မလိုဘူးလို့ ပြောလာပါတယ်။
+      [[mark:l-worth]] ဂဏန်း တစ်ခုစီက ဘယ်လောက် တန်လဲ ဆိုတာကိုလည်း အတူ တွက်ကြည့်ပါတယ်။ ခရီးဖော် က တစ်ရက်ကို လက်မှတ်
+      နှစ်သိန်းလောက် ရောင်းတာမို့၊ ၂၄ နာရီလုံး ညီညီ ရောင်းတယ်လို့ ယူရင်တောင် တစ်နာရီ ရပ်တာနဲ့ လက်မှတ်
+      ရှစ်ထောင်ကျော် မရောင်းရတော့ပါဘူး။ နေ့ခင်း အရောင်းကောင်းချိန်ဆိုရင် ဒီထက် ပိုပါမယ်။ ဒီ ဂဏန်းက
+      ပျက်ချိန်ကို လျှော့ဖို့ ငွေ ဘယ်လောက်အထိ သုံးသင့်လဲ ဆိုတာကို ပြောပြပေးပါတယ်။
+      [[mark:l-scope]] တတိယ အဆင့်က scope ကို ကျဉ်းတာပါ။ အဲဒီ ဂဏန်းက system တစ်ခုလုံးအတွက် လိုတာလား၊
+      ဘယ်အပိုင်းအတွက်လဲလို့ မေးပါတယ်။ ရောင်းအား report တစ်ခု ဆယ်မိနစ် ပျက်လို့ ဖုန်းဆက်မယ့် ကားလိုင်း
+      ရှားပါတယ်။ တကယ် လိုတာက လက်မှတ် ရှာတာ၊ ထိုင်ခုံ ရွေးတာနဲ့ ငွေချေတာ ဆိုတဲ့ ဝယ်တဲ့ လမ်းကြောင်း တစ်ခုတည်းပါ။
+      report တွေကိုတော့ အခုအတိုင်းပဲ ဆက်ထားလို့ ရပါတယ်။
+      [[mark:l-cost]] စရိတ်နဲ့ အချိန်ကိုတော့ နောက်ဆုံးမှ ပြောပါတယ်။ အစကတည်းက ဈေးကြီးတယ်လို့ စပြောရင် ကိုယ်က
+      မလုပ်ချင်လို့ ဆင်ခြေပေးတယ်လို့ပဲ ကြားရမှာပါ။ လိုချင်တာကို နှစ်ယောက်လုံး ရှင်းသွားမှ၊ အဲဒါအတွက် ဘယ်လောက်
+      ပေးရမလဲ ဆိုတာကို အတူ ကြည့်လို့ ရတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-l-word,
+          type: whiteboard.apply,
+          at: { mark: l-word },
+          clear: true,
+          upsertIds: [l-b1, l-l1],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-l-worry,
+          type: whiteboard.apply,
+          at: { mark: l-worry, offsetMs: 15500 },
+          upsertIds: [l-a1, l-b2, l-l2],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-l-number,
+          type: whiteboard.apply,
+          at: { mark: l-number },
+          upsertIds: [l-a2, l-b3, l-l3],
+          drawMs: 1800,
+        }
+      - {
+          id: draw-l-scope,
+          type: whiteboard.apply,
+          at: { mark: l-scope },
+          upsertIds: [l-a3, l-b4, l-l4],
+          drawMs: 1600,
+        }
+      - {
+          id: draw-l-cost,
+          type: whiteboard.apply,
+          at: { mark: l-cost },
+          upsertIds: [l-a4, l-b5],
+          drawMs: 1100,
+        }
+
+  - id: options
+    chapter: သတင်းဆိုးကို ရွေးစရာနဲ့ တွဲပေးခြင်း
+    narration: >
+      [[mark:o-open]] အားလုံးအတွက် five nines မရနိုင်ဘူး ဆိုတာ သတင်းဆိုးပါ။ သတင်းဆိုးကို မရဘူး ဆိုတဲ့
+      စကားတစ်ခွန်းတည်းနဲ့ မပေးဘဲ၊ ရွေးစရာတွေနဲ့ တွဲပေးရပါတယ်။ ကိုယ် ယူသွားတာက ရွေးစရာ သုံးခုပါ။ system
+      တစ်ခုလုံးကို five nines လုပ်ရင် နှစ်နဲ့ချီ ကြာပြီး၊ infrastructure စရိတ်လည်း နှစ်ဆကျော်ပါမယ်။ deploy ကိုပဲ
+      ပြင်ရင်တော့ team တစ်ခုနဲ့ ခြောက်ပတ်ပါ။
+      [[mark:o-pick]] ကြားထဲက ရွေးစရာကတော့ ဝယ်တဲ့ လမ်းကြောင်းကို ၉၉ ဒသမ ၉၉ ရာခိုင်နှုန်း ထားပြီး၊ deploy
+      လုပ်နေတုန်းလည်း ရောင်းတာ မရပ်အောင် လုပ်တာပါ။ team သုံးခုနဲ့ လေးလ ကြာပါမယ်။ အောင်အောင် က ဒါကို
+      ရွေးပါတယ်။ ကိုယ်က ငြင်းလိုက်တာ မဟုတ်ဘဲ၊ သူက ဈေးနှုန်းကို သိပြီး ရွေးလိုက်တာ ဖြစ်သွားပါတယ်။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: point-l-b5, type: whiteboard.point, at: { mark: o-open }, target: { assetId: l-b5 } }
+      - {
+          id: draw-l-pick,
+          type: whiteboard.apply,
+          at: { mark: o-pick },
+          upsertIds: [l-l5],
+          drawMs: 1000,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] developer တွေနဲ့ ညှိတာကတော့ ပုံစံ တစ်မျိုးပါ။ မေးခွန်း တစ်ခု မေးပါရစေ။ Search team က developer
+      တစ်ယောက်က ခရီးစဉ် ရှာတာ နှေးနေတာကို cache တစ်ခု ထည့်လိုက်ရင် ပြေလည်မယ်လို့ အစည်းအဝေးထဲမှာ အခိုင်အမာ
+      ပြောနေပါတယ်။ ကိုယ်ကတော့ နှေးတဲ့နေရာက တခြားမှာလို့ ထင်ပါတယ်။ အစည်းအဝေး အချိန်ကလည်း ဆယ်မိနစ်ပဲ
+      ကျန်ပါတော့တယ်။
+      [[mark:quiz-a]] ပထမ နည်းက အစည်းအဝေးထဲမှာပဲ ဆက်ငြင်းပြီး၊ ကိုယ့် အတွေ့အကြုံနဲ့ အနိုင်ယူလိုက်တာပါ။
+      [[mark:quiz-b]] ဒုတိယ နည်းက နေ့ခင်း တစ်ပိုင်း အချိန်ပေးပြီး နှစ်ယောက် အတူ တိုင်းကြည့်တာပါ။ lesson ကို pause
+      လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ နည်းပါ။ ဘာကြောင့်လဲဆိုတော့ ငြင်းခုံမှုက ဘယ်သူ ပိုပြောနိုင်လဲကိုပဲ
+      ဆုံးဖြတ်ပေးပြီး၊ တိုင်းတာချက်ကတော့ ဘယ်ဟာ မှန်လဲကို ဆုံးဖြတ်ပေးလို့ပါ။
+      [[mark:quiz-win]] ကိုယ် မှန်ခဲ့ရင် သူက ဂဏန်းကို ကိုယ်တိုင် မြင်ပြီး လက်ခံသွားပါမယ်။ ကိုယ် မှားခဲ့ရင်လည်း
+      system အတွက် ပိုကောင်းတဲ့ အဖြေ ရသွားတာမို့၊ ဘယ်လို ထွက်ထွက် အားလုံး နိုင်ပါတယ်။ ရာထူးနဲ့
+      အနိုင်ယူလိုက်ရင်တော့ သူ နောက်တစ်ခါ အကြံပေးဖို့ တွန့်သွားတတ်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz, offsetMs: 3000 },
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [q-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [q-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reasons,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer, offsetMs: 3000 },
+          upsertIds: [q-r1, q-r2],
+          drawMs: 2000,
+        }
+
+  - id: developers
+    chapter: အမိန့်အစား အကြောင်းပြချက်
+    narration: >
+      [[mark:v-open]] မောင်မောင် နဲ့လည်း ဒီအတိုင်းပဲ ညှိခဲ့ပါတယ်။ ဆုံးဖြတ်ပြီးသားမို့ လိုက်လုပ်ပါလို့ ပြောလိုက်ရင်
+      အစည်းအဝေးက မြန်မြန် ပြီးမှာပါ။ ဒါပေမဲ့ လက်မခံတဲ့ စည်းကမ်းကို လူတွေက ဘယ်သူမှ မကြည့်တဲ့အခါ ရှောင်ကွင်းတတ်ကြပါတယ်။
+      [[mark:v-reason]] ပထမ၊ အမိန့် မပေးဘဲ အကြောင်းပြချက်ကို အရင် ပြောပါတယ်။ schema ကို သုံးဆင့်နဲ့ ပြောင်းရမယ်လို့
+      မစဘဲ၊ deploy လုပ်နေတုန်းမှာ code အဟောင်းနဲ့ အသစ်က အတူတူ run နေတာမို့၊ column တစ်ခုကို တစ်ခါတည်း
+      နာမည်ပြောင်းလိုက်ရင် တစ်ဖက်ဖက်က ပျက်မယ်လို့ စပြောတာပါ။ သောကြာနေ့က မိနစ် ၄၀ က အဲဒီကြောင့်ပါ။
+      [[mark:v-show]] ဒုတိယ၊ ငြင်းမယ့်အစား ပြပါတယ်။ မောင်မောင် စိုးရိမ်တာက အလုပ် သုံးဆ ပိုလာမှာပါ။ ဒါကြောင့်
+      ပြီးခဲ့တဲ့ သုံးလက schema ပြောင်းခဲ့တာတွေကို အတူ ရေတွက်ကြည့်ပါတယ်။ အကြိမ် ၃၀ ထဲမှာ သုံးဆင့် လိုတာ လေးကြိမ်ပဲ
+      ရှိပါတယ်။ ကျန်တာတွေက column အသစ် ထည့်တာမျိုးမို့ အရင်အတိုင်းပါပဲ။
+      [[mark:v-own]] တတိယ၊ အဖြေကို သူတို့ကိုယ်တိုင် ရောက်ခွင့် ပေးပါတယ်။ မောင်မောင် ရဲ့ အကြံက ညသန်းခေါင်
+      လူနည်းချိန်မှာ deploy လုပ်ဖို့ပါ။ ကိုယ်က မရဘူးလို့ မပြောဘဲ၊ သူ့ team ကိုပဲ နှစ်နည်းလုံး စမ်းကြည့်ဖို့
+      တောင်းပါတယ်။ ညဘက် ရောင်းအားကို ကြည့်တော့ ညသန်းခေါင်မှာလည်း လက်မှတ် ဝယ်နေသူတွေ ရှိနေတာကို သူတို့ကိုယ်တိုင်
+      တွေ့ပြီး၊ သုံးဆင့် နည်းကို သူတို့ဘာသာ ရွေးလိုက်ကြပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-v-open,
+          type: whiteboard.apply,
+          at: { mark: v-open },
+          clear: true,
+          upsertIds: [v-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-v-reason,
+          type: whiteboard.apply,
+          at: { mark: v-reason },
+          upsertIds: [v-b1, v-l1],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-v-e1,
+          type: whiteboard.apply,
+          at: { mark: v-reason, offsetMs: 9000 },
+          upsertIds: [v-e1],
+          drawMs: 900,
+        }
+      - {
+          id: draw-v-show,
+          type: whiteboard.apply,
+          at: { mark: v-show },
+          upsertIds: [v-b2, v-l2],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-v-e2,
+          type: whiteboard.apply,
+          at: { mark: v-show, offsetMs: 12000 },
+          upsertIds: [v-e2],
+          drawMs: 900,
+        }
+      - {
+          id: draw-v-own,
+          type: whiteboard.apply,
+          at: { mark: v-own },
+          upsertIds: [v-b3, v-l3],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-v-e3,
+          type: whiteboard.apply,
+          at: { mark: v-own, offsetMs: 11000 },
+          upsertIds: [v-e3],
+          drawMs: 900,
+        }
+
+  - id: messages
+    chapter: ဆုံးဖြတ်ချက် တစ်ခု၊ message လေးခု
+    narration: >
+      [[mark:m-close]] ဆုံးဖြတ်ချက် ကျပြီဆိုရင် လူတွေကို ပြောပြရပါတော့မယ်။
+      [[mark:m-decision]] ဆုံးဖြတ်ချက်က တစ်ခုတည်းပါ။ ဒါပေမဲ့ ဒီစာကို လူတိုင်းဆီ အတူတူ ပို့လိုက်ရင် ဘယ်သူ့အတွက်မှ
+      အသုံးမဝင်ပါဘူး။ လူတစ်ယောက်စီက ဒီ ဆုံးဖြတ်ချက်ကြောင့် သူ့အတွက် ဘာပြောင်းမလဲ ဆိုတာကိုပဲ သိချင်တာပါ။
+      [[mark:m-cto]] အောင်အောင် သိချင်တာက ရလဒ်နဲ့ စရိတ်ပါ။ ရောင်းတာ ရပ်နိုင်တဲ့ အချိန် ဘယ်လောက် ကျမလဲ၊ ဘယ်လောက်
+      ကုန်မလဲ၊ ဘာတွေ မပါဘူးလဲ ဆိုတာပါ။ နည်းပညာ စကားလုံး တစ်လုံးမှ မပါပါဘူး။
+      [[mark:m-pm]] product manager လှလှ သိချင်တာက ကားလိုင်းတွေကို ဘာပြောလို့ရမလဲ ဆိုတာနဲ့၊ ဘယ် feature တွေ
+      နောက်ကျမလဲ ဆိုတာပါ။
+      [[mark:m-lead]] မောင်မောင် လို team lead အတွက်ကတော့ သူ့ team ရဲ့ နေ့စဉ် အလုပ်မှာ ဘာပြောင်းမလဲ ဆိုတာနဲ့
+      ဘာကြောင့်လဲ ဆိုတာပါ။
+      [[mark:m-ops]] operations engineer တွေကတော့ production မှာ ဘာကို ဘယ်လို run ရမလဲ၊ ဘာကို စောင့်ကြည့်ရမလဲ
+      သိဖို့ လိုပါတယ်။
+      [[mark:m-same]] လေးခုလုံးက ဆုံးဖြတ်ချက် တစ်ခုတည်းကို ပြောနေတာပါ။ တစ်ခုနဲ့တစ်ခု ဆန့်ကျင်တာ မရှိပါဘူး။
+      ကွာတာက ဘယ်ဘက်ကနေ ကြည့်ပြီး ပြောလဲ ဆိုတာပဲပါ။ ပြောမယ့် အချိန်ကိုလည်း ရွေးပါ။ မောင်မောင် တို့ team က
+      အစည်းအဝေးမှာမှ ပထမဆုံး ကြားရတာမျိုး မဖြစ်စေဘဲ၊ ကြိုပြီး တစ်ယောက်ချင်း ပြောထားတာက ပိုကောင်းပါတယ်။
+      [[mark:m-short]] စာတစ်စောင်စီကိုလည်း နှစ်ကြောင်း၊ သုံးကြောင်းထက် မပိုစေပါနဲ့။ အသေးစိတ် သိချင်တဲ့သူအတွက်
+      architecture decision record၊ အတိုကောက် ADR ကို ညွှန်းထားရုံပါပဲ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+      - {
+          title: "The Software Architect Elevator (Hohpe)",
+          url: "https://oreil.ly/Software_Architect_Elevator",
+        }
+    actions:
+      - { id: close-dev, type: whiteboard.apply, at: { mark: m-close }, open: false }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-dev },
+          path: notebook/51-four-messages.md,
+        }
+      - id: type-decision
+        type: editor.type
+        at: { mark: m-decision }
+        cadence: line-by-line
+        target: { file: notebook/51-four-messages.md, after: "# ဆုံးဖြတ်ချက် တစ်ခု၊ message လေးခု\n\n" }
+        text: "ဆုံးဖြတ်ချက်: ဝယ်တဲ့ လမ်းကြောင်း (Search, Booking, Payment) ကို 99.99 % ထားမယ်။ deploy အတွင်းလည်း ရောင်းတာ မရပ်စေရ\n"
+      - id: type-cto
+        type: editor.type
+        at: { mark: m-cto }
+        cadence: line-by-line
+        target: { file: notebook/51-four-messages.md, after: "deploy အတွင်းလည်း ရောင်းတာ မရပ်စေရ\n" }
+        text: "\n## CTO ကို\n- ရောင်းတာ ရပ်နိုင်ချိန်: တစ်နှစ် 9 နာရီကနေ 1 နာရီအောက်။ team 3 ခု၊ 4 လ။ report တွေ မပါ\n"
+      - id: type-pm
+        type: editor.type
+        at: { mark: m-pm }
+        cadence: line-by-line
+        target: { file: notebook/51-four-messages.md, after: "report တွေ မပါ\n" }
+        text: "\n## Product manager ကို\n- ကားလိုင်းတွေကို: deploy ကြောင့် ရောင်းတာ မရပ်တော့ဘူး။ Booking feature 2 ခု 4 လ နောက်ကျမယ်\n"
+      - id: type-lead
+        type: editor.type
+        at: { mark: m-lead }
+        cadence: line-by-line
+        target: { file: notebook/51-four-messages.md, after: "4 လ နောက်ကျမယ်\n" }
+        text: "\n## Team lead ကို\n- schema ပြောင်းရင် 3 ဆင့်: ထည့်၊ ရွှေ့၊ ဖြုတ်။ ဘာကြောင့်: deploy အတွင်း code အဟောင်းနဲ့ အသစ် အတူ run လို့\n"
+      - id: type-ops
+        type: editor.type
+        at: { mark: m-ops }
+        cadence: line-by-line
+        target: { file: notebook/51-four-messages.md, after: "အသစ် အတူ run လို့\n" }
+        text: "\n## Operations ကို\n- deploy ကို server တစ်လုံးချင်း။ ရောင်းအား ကျရင် အလိုအလျောက် ရပ်။ failover ကို လစဉ် စမ်း\n"
+      - id: expect-cto
+        type: expect.file
+        at: { afterAction: type-ops }
+        path: notebook/51-four-messages.md
+        contains: "## CTO ကို\n- ရောင်းတာ ရပ်နိုင်ချိန်: တစ်နှစ် 9 နာရီကနေ 1 နာရီအောက်။ team 3 ခု၊ 4 လ။ report တွေ မပါ\n"
+      - id: sel-decision
+        type: editor.select
+        at: { mark: m-same }
+        target:
+          {
+            file: notebook/51-four-messages.md,
+            text: "ဆုံးဖြတ်ချက်: ဝယ်တဲ့ လမ်းကြောင်း (Search, Booking, Payment) ကို 99.99 % ထားမယ်။ deploy အတွင်းလည်း ရောင်းတာ မရပ်စေရ",
+          }
+
+  - id: your-turn
+    chapter: ကိုယ့် team အတွက်
+    narration: >
+      အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် team ကို မကြာခင်က ပို့ခဲ့တဲ့ ကြေညာချက် တစ်ခုကို ပြန်ရှာပါ။ release
+      note ဖြစ်ဖြစ်၊ chat ထဲက စာတစ်စောင် ဖြစ်ဖြစ် ရပါတယ်။
+      [[mark:turn-2]] lesson ကို pause လုပ်ပြီး၊ အဲဒီ ကြေညာချက်ကို တခြား လူတစ်မျိုးအတွက် ဒီ ခေါင်းစဉ်တွေထဲက
+      တစ်ခုအောက်မှာ ပြန်ရေးကြည့်ပါ။ developer တွေအတွက် ရေးခဲ့တာဆိုရင် product manager အတွက် ပြန်ရေးပါ။ သူ့အတွက်
+      ဘာပြောင်းမလဲ ဆိုတဲ့ မေးခွန်း တစ်ခုတည်းကိုပဲ ဖြေပါ။
+    sources:
+      - {
+          title: "The Pragmatic Programmer, 20th Anniversary Edition (Thomas, Hunt)",
+          url: "https://pragprog.com/titles/tpp20",
+        }
+    actions:
+      - id: sel-pm
+        type: editor.select
+        at: { mark: turn-2, offsetMs: 2500 }
+        target:
+          {
+            file: notebook/51-four-messages.md,
+            text: "## Product manager ကို\n- ကားလိုင်းတွေကို: deploy ကြောင့် ရောင်းတာ မရပ်တော့ဘူး။ Booking feature 2 ခု 4 လ နောက်ကျမယ်",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ ဆုံးဖြတ်ချက်တွေ စိန်ခေါ်ခံရတာက architect အလုပ်ရဲ့ အစိတ်အပိုင်းပါ။ business ဘက်နဲ့
+      ညှိရင် စကားလုံးနောက်က စိုးရိမ်မှုကို ရှာ၊ ဂဏန်း ပြောင်း၊ scope ကျဉ်းပြီး၊ စရိတ်ကို နောက်ဆုံးမှ ပြောပါ။
+      သတင်းဆိုးကို ရွေးစရာနဲ့ တွဲပေးပါ။
+      [[mark:recap-2]] developer တွေနဲ့ ညှိရင် အမိန့်အစား အကြောင်းပြချက် ပေးပြီး၊ ငြင်းမယ့်အစား တိုင်းပြပါ။
+      ဆုံးဖြတ်ပြီးရင်လည်း လူတစ်မျိုးစီကို သူ့အတွက် ဘာပြောင်းမလဲ ဆိုတာနဲ့ ပြောပြပါ။
+      [[mark:next]] ဒါပေမဲ့ team ၁၂ ခုရဲ့ ဆုံးဖြတ်ချက်တိုင်းကို architect လေးယောက်က ဒီလို တစ်ခုချင်း
+      ညှိပေးနေရရင် မနိုင်တော့ပါဘူး။ နောက် lesson မှာတော့ ဆုံးဖြတ်ချက်တွေကို team တွေကိုယ်တိုင် ချနိုင်အောင်
+      လုပ်ပေးတဲ့ architecture advice process ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+      - {
+          title: "Facilitating Software Architecture (Harmel-Law)",
+          url: "https://oreil.ly/FacilitatingSoftwareArch",
+        }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
