@@ -15,8 +15,12 @@ export interface CursorTargetRect {
 }
 
 /**
- * A place in a target's text content: the written line, the character offset
- * within it, and where inside that character's cell (0–1 each way).
+ * A place in a target's own content, for targets whose content can move under
+ * a still pointer. Over a terminal it is the written line, the character
+ * offset within it, and where inside that character's cell (0–1 each way).
+ * Over the whiteboard it is a scene point: `line` and `offset` are the whole
+ * scene y and x, `dy` and `dx` their fractions. Only the target's own provider
+ * (cursorCellAnchors.ts) reads the numbers.
  */
 export interface CursorCellAnchor {
   line: number;
@@ -34,7 +38,7 @@ export interface CursorTargetSnapshot {
   rect: CursorTargetRect;
   x: number;
   y: number;
-  /** Set over a terminal: replay resolves it before the pixel offset. */
+  /** Set over a terminal or the whiteboard: replay resolves it before the pixel offset. */
   cell?: CursorCellAnchor;
 }
 

@@ -13,7 +13,12 @@ import { useOptionalCollaboration } from "../contexts/CollaborationContext";
 import { useWhiteboardStore } from "../contexts/WhiteboardStoreContext";
 import { planWhiteboardCanvasView } from "../stores/whiteboardStore";
 import { clearTextMeasurements, fitTextElement } from "../utils/whiteboardTextFit";
+import {
+  registerCursorCellAnchor,
+  unregisterCursorCellAnchor,
+} from "../core/src/utils/cursorCellAnchors";
 import HoverRing from "./hoverRing/HoverRing";
+import { WHITEBOARD_CANVAS_TARGET_ID, createWhiteboardSceneAnchor } from "./whiteboardSceneAnchor";
 
 // Image embeds are out of scope for v1 (binary files aren't recorded into the
 // .ne, see whiteboard-plan.md §4) — this also gates paste/drag-drop of images,
@@ -226,6 +231,22 @@ export default function WhiteboardPanel() {
   // blurred when CodeEditor went inert) moves to Close. On close, focus that the
   // removed panel dropped returns to the header's whiteboard button. A passive
   // effect, so the cleanup runs after CodeEditor has dropped `inert`.
+  // A pointer recorded over the board is kept as a point of the drawing, not a
+  // pixel offset (whiteboardSceneAnchor), so it needs the canvas's live view.
+  const canvasSurfaceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const surface = canvasSurfaceRef.current;
+    if (!isOpen || !surface) return;
+    const anchor = createWhiteboardSceneAnchor(surface, () => {
+      const appState = apiRef.current?.getAppState();
+      return appState
+        ? { scrollX: appState.scrollX, scrollY: appState.scrollY, zoom: appState.zoom.value }
+        : null;
+    });
+    registerCursorCellAnchor(surface, anchor);
+    return () => unregisterCursorCellAnchor(surface, anchor);
+  }, [isOpen]);
+
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!isOpen) return;
@@ -313,8 +334,10 @@ export default function WhiteboardPanel() {
             for it. Zen mode is a default (via initialData, so the presenter can
             still toggle it), not the controlled `zenModeEnabled` prop. */}
         <div
+          ref={canvasSurfaceRef}
           role="region"
           aria-label="Whiteboard drawing"
+          data-cursor-replay-target={WHITEBOARD_CANVAS_TARGET_ID}
           className="relative flex-1 [&_.default-sidebar-trigger]:hidden"
           onPointerDownCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
           onWheelCapture={() => collaboration?.stopFollowing("local-whiteboard-input")}
