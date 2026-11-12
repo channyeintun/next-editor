@@ -1,0 +1,643 @@
+schemaVersion: 1
+
+lesson:
+  slug: event-state-render-mm
+  title: "ခလုတ် တစ်ချက် နှိပ်ရင် ဘာဖြစ်သလဲ — Event, State, Render"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Event State Render
+    entryFilePath: main.js
+    files:
+      package.json: |
+        {
+          "name": "event-state-render",
+          "private": true,
+          "version": "1.0.0",
+          "type": "module",
+          "scripts": {
+            "dev": "vite --host 0.0.0.0 --port 5173 --strictPort"
+          },
+          "devDependencies": {
+            "vite": "5.4.21"
+          }
+        }
+      index.html: |
+        <!doctype html>
+        <html lang="my">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <link rel="icon" href="data:," />
+            <title>ရေတွက်စက်</title>
+            <link rel="stylesheet" href="/style.css" />
+          </head>
+          <body>
+            <main class="card">
+              <h1 data-testid="title">ရေတွက်စက်</h1>
+              <p class="count" data-testid="count">0</p>
+              <button type="button" id="add" data-testid="add">တစ်ခု တိုးမယ်</button>
+            </main>
+            <script type="module" src="/main.js"></script>
+          </body>
+        </html>
+      main.js: |
+        const countText = document.querySelector("[data-testid='count']");
+        const addButton = document.querySelector("#add");
+
+        let count = 0;
+
+        function render() {
+          countText.textContent = count;
+        }
+
+        render();
+      style.css: |
+        :root {
+          color-scheme: dark;
+        }
+
+        body {
+          margin: 0;
+          min-height: 100vh;
+          display: grid;
+          place-items: center;
+          background: #11141c;
+          color: #e7e9ee;
+          font-family: system-ui, "Noto Sans Myanmar", sans-serif;
+        }
+
+        .card {
+          padding: 28px 40px;
+          border: 1px solid #2b3140;
+          border-radius: 16px;
+          text-align: center;
+        }
+
+        h1 {
+          margin: 0;
+          font-size: 20px;
+          font-weight: 600;
+          color: #9aa3b5;
+        }
+
+        .count {
+          margin: 18px 0 36px;
+          font-size: 48px;
+          line-height: 1;
+          font-weight: 700;
+        }
+
+        button {
+          font: inherit;
+          font-size: 18px;
+          padding: 10px 22px;
+          border: 0;
+          border-radius: 10px;
+          background: #3b82f6;
+          color: white;
+          cursor: pointer;
+        }
+  slides:
+    - id: three-steps
+      contentType: html
+      name: အဆင့် သုံးဆင့်
+      content: |
+        <style>
+          .stage {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #0b0d12;
+            color: #e7e9ee;
+            font-family: system-ui, "Noto Sans Myanmar", sans-serif;
+            text-align: left;
+          }
+          .title {
+            position: absolute;
+            left: 8vw;
+            top: 11vh;
+            height: 12vh;
+            line-height: 12vh;
+            font-size: 4vw;
+            font-weight: 700;
+            white-space: nowrap;
+          }
+          .row {
+            position: absolute;
+            left: 8vw;
+            height: 10vh;
+            line-height: 10vh;
+            font-size: 2.6vw;
+            white-space: nowrap;
+          }
+          .num {
+            display: inline-block;
+            width: 5vw;
+            color: #8b93a7;
+          }
+          .term {
+            display: inline-block;
+            width: 14vw;
+            font-weight: 700;
+          }
+        </style>
+        <div class="stage">
+          <div class="title">ခလုတ် တစ်ချက်၊ အဆင့် သုံးဆင့်</div>
+          <div class="row" style="top: 36vh">
+            <span class="num">၁</span><span class="term" style="color: #74c0fc">Event</span>user က တစ်ခုခု လုပ်လိုက်တယ်
+          </div>
+          <div class="row" style="top: 52vh">
+            <span class="num">၂</span><span class="term" style="color: #ffc078">State</span>မှတ်ထားတဲ့ data ပြောင်းတယ်
+          </div>
+          <div class="row" style="top: 68vh">
+            <span class="num">၃</span><span class="term" style="color: #8ce99a">Render</span>screen ကို ပြန်ဆွဲတယ်
+          </div>
+        </div>
+  whiteboardAssets:
+    # The loop: blue is what the user does, orange is the state (the one box
+    # the board is about, so it alone is filled), green is the screen, violet
+    # is the flow between them.
+    - {
+        id: event-box,
+        kind: rectangle,
+        x: 270,
+        y: 250,
+        width: 200,
+        height: 100,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: event-label,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 277,
+        width: 200,
+        height: 45,
+        text: "Event",
+        fontSize: 36,
+      }
+    - { id: to-state, kind: freedraw, stroke: arrow-right, x: 480, y: 280, width: 100, height: 40 }
+    - {
+        id: state-box,
+        kind: rectangle,
+        x: 590,
+        y: 250,
+        width: 200,
+        height: 100,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: state-label,
+        kind: text,
+        align: center,
+        x: 590,
+        y: 277,
+        width: 200,
+        height: 45,
+        text: "State",
+        fontSize: 36,
+      }
+    - { id: to-render, kind: freedraw, stroke: arrow-right, x: 800, y: 280, width: 100, height: 40 }
+    - {
+        id: render-box,
+        kind: rectangle,
+        x: 910,
+        y: 250,
+        width: 180,
+        height: 100,
+        rounded: true,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: render-label,
+        kind: text,
+        align: center,
+        x: 910,
+        y: 277,
+        width: 180,
+        height: 45,
+        text: "Render",
+        fontSize: 36,
+      }
+    - {
+        id: loop-back,
+        kind: freedraw,
+        stroke: arrow-arc-left,
+        x: 370,
+        y: 362,
+        width: 630,
+        height: 88,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: loop-label,
+        kind: text,
+        align: center,
+        x: 370,
+        y: 462,
+        width: 630,
+        height: 35,
+        text: "ထပ်နှိပ်ရင် အစကို ပြန်ရောက်",
+        fontSize: 28,
+      }
+    - {
+        id: flow-brace,
+        kind: freedraw,
+        stroke: brace-up,
+        x: 270,
+        y: 196,
+        width: 820,
+        height: 40,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: flow-label,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 153,
+        width: 820,
+        height: 35,
+        text: "data က တစ်ဖက်တည်းကိုပဲ စီးတယ်",
+        fontSize: 28,
+      }
+    # The rule: red marks what to keep an eye on and what to avoid, a dashed
+    # outline is the way that is not the real one, green confirms the rule.
+    - {
+        id: state-circle,
+        kind: freedraw,
+        stroke: circle,
+        x: 574,
+        y: 236,
+        width: 232,
+        height: 128,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: shortcut-box,
+        kind: rectangle,
+        x: 270,
+        y: 530,
+        width: 340,
+        height: 92,
+        rounded: true,
+        strokeStyle: dashed,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: shortcut-label,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 542,
+        width: 340,
+        height: 35,
+        text: "screen ကို တိုက်ရိုက် ပြင်",
+        fontSize: 28,
+      }
+    - {
+        id: shortcut-wrong,
+        kind: freedraw,
+        stroke: wavy,
+        x: 300,
+        y: 574,
+        width: 280,
+        height: 32,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: rule-text,
+        kind: text,
+        x: 670,
+        y: 548,
+        width: 370,
+        height: 38,
+        text: "state အရင်၊ render နောက်",
+        fontSize: 30,
+      }
+    - {
+        id: rule-underline,
+        kind: freedraw,
+        stroke: double-underline,
+        x: 666,
+        y: 556,
+        width: 370,
+        height: 52,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: rule-check,
+        kind: freedraw,
+        stroke: check,
+        x: 1048,
+        y: 540,
+        width: 46,
+        height: 46,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  voiceProfile: pocket-alba-v1
+  seed: 5121
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: pnpm install
+  runCommand: pnpm dev
+  expectedPort: 5173
+  environment: {}
+
+scenes:
+  - id: three-steps
+    chapter: အဆင့် သုံးဆင့်
+    narration: >
+      [[mark:slide]] ခလုတ်လေး တစ်ခုကို နှိပ်လိုက်တာနဲ့ screen ပေါ်က နံပါတ် တစ်ခု
+      ပြောင်းသွားတာကို နေ့တိုင်း မြင်နေကြပါတယ်။ အဲဒီ အချိန်တိုလေး အတွင်းမှာ
+      တကယ်တော့ အဆင့် သုံးဆင့် ဖြစ်သွားတာပါ။
+      [[mark:s-event]] ပထမ အဆင့်က event ပါ။ user က ခလုတ်ကို နှိပ်လိုက်တာ၊
+      စာရိုက်လိုက်တာလို တစ်ခုခု ဖြစ်လာတိုင်း browser က ကိုယ့် code ဆီ
+      အကြောင်းကြားပေးပါတယ်။
+      [[mark:s-state]] ဒုတိယ အဆင့်က state ပါ။ state ဆိုတာ program က လက်ရှိ
+      မှတ်ထားတဲ့ data ဖြစ်ပြီး၊ event ရောက်လာတဲ့အခါ ဒီ data ကို အရင်ဆုံး
+      ပြောင်းပါတယ်။
+      [[mark:s-render]] တတိယ အဆင့်က render ပါ။ ပြောင်းသွားတဲ့ state အတိုင်း
+      screen ကို ပြန်ဆွဲပေးတာ ဖြစ်ပါတယ်။
+      [[mark:slide-close]] ဒီ သုံးဆင့်က တစ်ခုနဲ့တစ်ခု ဘယ်လို ဆက်နေလဲ ဆိုတာ
+      ပုံလေး ဆွဲကြည့်ရအောင်။
+    sources:
+      - title: "MDN — Introduction to events"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Events"
+      - title: "React — Thinking in React"
+        url: "https://react.dev/learn/thinking-in-react"
+    actions:
+      - id: show-steps
+        type: slide.show
+        at: { mark: slide, offsetMs: -1450 }
+        slideId: three-steps
+      - id: start-dev-server
+        type: runtime.start
+        at: { mark: slide, offsetMs: 2500 }
+        timeoutMs: 45000
+        retry: { maxAttempts: 2, delayMs: 500 }
+      - id: point-event
+        type: slide.point
+        at: { mark: s-event }
+        target: { x: 0.16, y: 0.45 }
+      - id: point-state
+        type: slide.point
+        at: { mark: s-state }
+        target: { x: 0.16, y: 0.61 }
+      - id: point-render
+        type: slide.point
+        at: { mark: s-render }
+        target: { x: 0.165, y: 0.77 }
+      - id: close-steps
+        type: slide.close
+        at: { mark: slide-close }
+
+  - id: loop
+    chapter: ပုံနဲ့ ကြည့်ရအောင်
+    narration: >
+      [[mark:b-event]] ဘယ်ဘက်ဆုံးမှာ event ကို ထားပါမယ်။ အရာအားလုံးက user
+      လုပ်လိုက်တဲ့ တစ်ခုခုကနေ စတင်တာပါ။
+      [[mark:b-state]] event က state ဆီ သွားပါတယ်။ state ကို အရောင်ခြယ်ထားတာက
+      ဒီပုံရဲ့ အချက်အချာ ဖြစ်လို့ပါ။ program အတွက် အမှန်လို့ ယူရမယ့် တန်ဖိုးက
+      ဒီတစ်နေရာတည်းမှာပဲ ရှိပါတယ်။
+      [[mark:b-render]] state ပြောင်းပြီးတာနဲ့ render က screen ကို
+      ပြန်ဆွဲပါတယ်။
+      [[mark:b-back]] user က screen အသစ်ကို မြင်ပြီး ထပ်နှိပ်လိုက်ရင်တော့
+      အစကို ပြန်ရောက်ပြီး ဒီအတိုင်းပဲ ပတ်နေတာပါ။
+      [[mark:b-flow]] သတိထားစရာက ဒီ သုံးဆင့်လုံးမှာ data က တစ်ဖက်တည်းကိုပဲ
+      စီးနေတာပါ။ render ကနေ state ကို ပြန်ပြင်တာမျိုး မရှိပါဘူး။
+      [[mark:b-close]] ဒါကို code နဲ့ ကြည့်ရအောင်။
+    sources:
+      - title: "React — Thinking in React (one-way data flow)"
+        url: "https://react.dev/learn/thinking-in-react"
+      - title: "MDN — Introduction to events"
+        url: "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting/Events"
+    actions:
+      - id: draw-event
+        type: whiteboard.apply
+        at: { mark: b-event }
+        open: true
+        upsertIds: [event-box, event-label]
+        drawMs: 1200
+      - id: draw-state
+        type: whiteboard.apply
+        at: { mark: b-state }
+        upsertIds: [to-state, state-box, state-label]
+        drawMs: 1800
+      - id: draw-render
+        type: whiteboard.apply
+        at: { mark: b-render }
+        upsertIds: [to-render, render-box, render-label]
+        drawMs: 1800
+      - id: draw-loop-back
+        type: whiteboard.apply
+        at: { mark: b-back }
+        upsertIds: [loop-back, loop-label]
+        drawMs: 1500
+      - id: draw-flow
+        type: whiteboard.apply
+        at: { mark: b-flow }
+        upsertIds: [flow-brace, flow-label]
+        drawMs: 1600
+      - id: close-board
+        type: whiteboard.apply
+        at: { mark: b-close }
+        open: false
+
+  - id: code
+    chapter: Code နဲ့ စမ်းကြည့်ရအောင်
+    narration: >
+      [[mark:code]] ဒီ file ထဲမှာ နံပါတ်လေး တစ်ခုကို ပြပေးတဲ့ ရေတွက်စက် တစ်ခု
+      ရှိပါတယ်။
+      [[mark:sel-state]] ဒီတစ်ကြောင်းက state ပါ။ နံပါတ်ကို variable တစ်ခုထဲမှာ
+      သုညကနေ စပြီး မှတ်ထားတာပါ။
+      [[mark:sel-render]] ဒီ function ကတော့ render ပါ။ state ထဲက နံပါတ်ကို
+      ယူပြီး screen ပေါ်က စာသားထဲ ထည့်ပေးရုံပါပဲ။
+      [[mark:type-event]] လိုနေသေးတာက event ပါ။ ခလုတ်ကို နှိပ်တိုင်း state ကို
+      တစ် တိုးပြီး render ကို ပြန်ခေါ်ပေးဖို့ ရေးလိုက်ပါမယ်။
+      [[mark:sel-order]] အစီအစဉ်ကို သတိထားကြည့်ပါ။ state ကို အရင် ပြောင်းပြီးမှ
+      render ကို ခေါ်တာပါ။
+    sources:
+      - title: "MDN — EventTarget: addEventListener() method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"
+      - title: "MDN — Node: textContent property"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/Node/textContent"
+    actions:
+      - id: wait-for-dev-server
+        type: runtime.waitForReady
+        at: { mark: code }
+        timeoutMs: 30000
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: open-preview
+        type: preview.open
+        at: { afterAction: wait-for-dev-server }
+        timeoutMs: 10000
+        mode: docked
+        retry: { maxAttempts: 2, delayMs: 250 }
+      - id: expect-title
+        type: expect.preview
+        at: { afterAction: open-preview }
+        timeoutMs: 5000
+        target: { by: testId, value: title }
+        textContains: "ရေတွက်စက်"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: expect-zero
+        type: expect.preview
+        at: { afterAction: expect-title }
+        timeoutMs: 5000
+        target: { by: testId, value: count }
+        textContains: "0"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: collapse-runner-dock
+        type: runtime.collapseDock
+        at: { afterAction: expect-zero }
+      - id: select-state
+        type: editor.select
+        at: { mark: sel-state }
+        target: { file: main.js, text: "let count = 0;" }
+      - id: select-render
+        type: editor.select
+        at: { mark: sel-render }
+        target:
+          file: main.js
+          text: "function render() {\n  countText.textContent = count;\n}"
+      - id: type-handler
+        type: editor.type
+        at: { mark: type-event, offsetMs: 1800 }
+        cadence: block
+        target:
+          file: main.js
+          after: "render();\n"
+        text: "\naddButton.addEventListener(\"click\", () => {\n  count = count + 1;\n  render();\n});\n"
+      - id: select-order
+        type: editor.select
+        at: { mark: sel-order }
+        target:
+          file: main.js
+          text: "count = count + 1;\n  render();"
+
+  - id: try-it
+    narration: >
+      [[mark:p-count]] preview ထဲက နံပါတ်က အခု သုည ဖြစ်နေပါတယ်။
+      [[mark:click-1]] ခလုတ်ကို တစ်ချက် နှိပ်ကြည့်ပါမယ်။
+      [[mark:p-one]] နံပါတ်က တစ် ဖြစ်သွားပါပြီ။ နှိပ်လိုက်တဲ့ event ကြောင့်
+      state က တစ် ဖြစ်သွားပြီး၊ render က အဲဒီ တန်ဖိုးကို screen ပေါ်
+      တင်ပေးလိုက်တာပါ။
+      [[mark:click-2]] နောက်တစ်ချက် ထပ်နှိပ်ကြည့်ပါမယ်။
+      [[mark:p-two]] ဒီတစ်ခါလည်း လမ်းကြောင်း အတူတူပဲ သွားပြီး နှစ်
+      ဖြစ်သွားပါတယ်။
+    sources:
+      - title: "MDN — EventTarget: addEventListener() method"
+        url: "https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"
+    actions:
+      - id: point-count
+        type: preview.point
+        at: { mark: p-count }
+        target: { by: testId, value: count }
+      - id: click-add-1
+        type: preview.click
+        at: { mark: click-1, offsetMs: 900 }
+        target: { by: testId, value: add }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-one
+        type: expect.preview
+        at: { afterAction: click-add-1 }
+        timeoutMs: 5000
+        target: { by: testId, value: count }
+        textContains: "1"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: point-one
+        type: preview.point
+        at: { mark: p-one }
+        target: { by: testId, value: count }
+      - id: click-add-2
+        type: preview.click
+        at: { mark: click-2, offsetMs: 900 }
+        target: { by: testId, value: add }
+        retry: { maxAttempts: 1, delayMs: 0 }
+      - id: expect-two
+        type: expect.preview
+        at: { afterAction: click-add-2 }
+        timeoutMs: 5000
+        target: { by: testId, value: count }
+        textContains: "2"
+        retry: { maxAttempts: 3, delayMs: 300 }
+      - id: point-two
+        type: preview.point
+        at: { mark: p-two }
+        target: { by: testId, value: count }
+      - id: expect-handler
+        type: expect.file
+        at: { afterAction: point-two }
+        path: main.js
+        contains: "addButton.addEventListener(\"click\", () => {\n  count = count + 1;\n  render();\n});\n"
+
+  - id: rule
+    chapter: မှတ်ထားရမယ့် စည်းကမ်း
+    narration: >
+      [[mark:r-open]] ပုံကို တစ်ခါ ပြန်ကြည့်ရအောင်။
+      [[mark:r-point]] ဒီ state ကို မှတ်ထားပါ။
+      [[mark:r-circle]] screen ပေါ်မှာ မြင်ရသမျှက state ကို ကြည့်ပြီး
+      ဆွဲထားတာ ဖြစ်လို့၊ screen ဟာ state ရဲ့ ပုံရိပ်ပဲ ဖြစ်ပါတယ်။
+      [[mark:r-shortcut]] တစ်ခါတလေ state ကို မပြောင်းဘဲ screen ပေါ်က စာသားကို
+      တိုက်ရိုက် ပြင်လိုက်ချင်စိတ် ပေါ်တတ်ပါတယ်။
+      [[mark:r-wrong]] အဲဒီလို လုပ်လိုက်ရင် screen က တစ်မျိုး၊ state က တစ်မျိုး
+      ဖြစ်သွားပြီး bug တွေ ဝင်လာတတ်လို့ ရှောင်ပါ။
+      [[mark:r-rule]] မှတ်ထားရမယ့် စည်းကမ်းက တစ်ခုတည်းပါ။ state ကို အရင်
+      ပြောင်းပါ၊ ပြီးမှ render လုပ်ပါ။
+      [[mark:r-check]] React လို library တွေကလည်း ဒီ အယူအဆ ပေါ်မှာပဲ
+      တည်ဆောက်ထားတာ ဖြစ်လို့၊ ဒီပုံကို နားလည်ထားရင် နောက်ပိုင်း လေ့လာရတာ
+      ပိုလွယ်သွားပါလိမ့်မယ်။
+    sources:
+      - title: "React — Render and Commit"
+        url: "https://react.dev/learn/render-and-commit"
+      - title: "React — Thinking in React"
+        url: "https://react.dev/learn/thinking-in-react"
+    actions:
+      - id: reopen-board
+        type: whiteboard.apply
+        at: { mark: r-open }
+        open: true
+      - id: point-state-box
+        type: whiteboard.point
+        at: { mark: r-point }
+        target: { assetId: state-box }
+      - id: circle-state
+        type: whiteboard.apply
+        at: { mark: r-circle }
+        upsertIds: [state-circle]
+        drawMs: 700
+      - id: draw-shortcut
+        type: whiteboard.apply
+        at: { mark: r-shortcut }
+        upsertIds: [shortcut-box, shortcut-label]
+        drawMs: 1400
+      - id: mark-shortcut-wrong
+        type: whiteboard.apply
+        at: { mark: r-wrong }
+        upsertIds: [shortcut-wrong]
+        drawMs: 700
+      - id: draw-rule
+        type: whiteboard.apply
+        at: { mark: r-rule }
+        upsertIds: [rule-text, rule-underline]
+        drawMs: 1600
+      - id: check-rule
+        type: whiteboard.apply
+        at: { mark: r-check }
+        upsertIds: [rule-check]
+        drawMs: 500
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
