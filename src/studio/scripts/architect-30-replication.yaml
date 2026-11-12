@@ -1,0 +1,685 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-30-replication
+  title: "Architect Path 30: Replication"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/30-reads.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 5 နှစ်)
+
+        - developer 45 ယောက်၊ team 6 ခု: Search, Booking, Payment, Settlement, Operator, Notification
+        - ကားလိုင်း 300၊ တစ်ရက် လက်မှတ် 80,000 ခန့်၊ သင်္ကြန်မှာ ပုံမှန်ရဲ့ 20 ဆ
+        - Booking, Payment, Notification က သီးခြား service တွေ၊ ကျန်တာက app အဟောင်းထဲမှာ
+        - database: primary တစ်ခုနဲ့ read replica 2 ခု
+        - service တွေကြားမှာ event stream တစ်ခု
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/30-reads.md: |
+        # Feature တစ်ခုစီ ဘယ်ကနေ ဖတ်မလဲ
+
+        ဖြစ်ရပ်: ခရီးသည်က ငွေချေပြီး "ကိုယ့် လက်မှတ်များ" ကို ဖွင့်တော့ လက်မှတ် မပေါ်၊ ထပ်ဝယ်မိ (follower က 3 စက္ကန့် နောက်ကျနေ)
+
+        | Feature | လက်မခံနိုင်တဲ့ anomaly | ဘယ်ကနေ ဖတ်မလဲ |
+        |---|---|---|
+
+        Feature အသစ်တိုင်း မေးဖို့: lag က မိနစ်နဲ့ချီ ကြာသွားရင် ဒီ feature မှာ ဘာဖြစ်မလဲ?
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: replication-shapes
+      contentType: html
+      name: Replication ပုံစံများ
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Replication ပုံစံ သုံးမျိုး</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide blue">Single leader</span>ရေးတာ တစ်နေရာတည်း၊ စည်းကမ်း ထိန်းရ ရှင်း</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide orange">Multi-leader</span>နေရာအများက ရေး၊ တိုက်ရင် ကိုယ်တိုင် ဖြေရှင်း</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide violet">Leaderless</span>အများဆီ ရေး၊ အများဆီက ဖတ်ပြီး ထပ်စေ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — a leader and two followers, one lagging; the passenger's write
+    # and read. Blue = databases, violet = data moving, red = the lag.
+    - {
+        id: r-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 760,
+        height: 45,
+        text: "ဝယ်ပြီးသား လက်မှတ် ဘာလို့ မပေါ်တာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: r-leader,
+        kind: ellipse,
+        x: 560,
+        y: 225,
+        width: 250,
+        height: 90,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: r-leader-l,
+        kind: text,
+        align: center,
+        x: 560,
+        y: 253,
+        width: 250,
+        height: 35,
+        text: "leader",
+        fontSize: 28,
+      }
+    - { id: r-f1, kind: ellipse, x: 470, y: 480, width: 250, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: r-f1-l,
+        kind: text,
+        align: center,
+        x: 470,
+        y: 508,
+        width: 250,
+        height: 35,
+        text: "follower 1",
+        fontSize: 28,
+      }
+    - { id: r-f2, kind: ellipse, x: 810, y: 480, width: 250, height: 90, strokeColor: "#1971c2" }
+    - {
+        id: r-f2-l,
+        kind: text,
+        align: center,
+        x: 810,
+        y: 508,
+        width: 250,
+        height: 35,
+        text: "follower 2",
+        fontSize: 28,
+      }
+    - {
+        id: r-rep1,
+        kind: freedraw,
+        stroke: arrow-down-left,
+        x: 610,
+        y: 325,
+        width: 60,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-rep2,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 720,
+        y: 325,
+        width: 180,
+        height: 145,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-lag,
+        kind: text,
+        x: 470,
+        y: 585,
+        width: 280,
+        height: 35,
+        text: "3 စက္ကန့် နောက်ကျ",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - { id: r-p, kind: text, x: 270, y: 385, width: 130, height: 35, text: "ခရီးသည်", fontSize: 28 }
+    - {
+        id: r-w,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 390,
+        y: 290,
+        width: 160,
+        height: 85,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-rd,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 300,
+        y: 430,
+        width: 150,
+        height: 75,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: r-rd-l,
+        kind: text,
+        x: 262,
+        y: 530,
+        width: 200,
+        height: 35,
+        text: "လက်မှတ် ကြည့်",
+        fontSize: 28,
+      }
+    # Board 2 — the same databases; green = the reading rule chosen per feature.
+    - {
+        id: g-own,
+        kind: freedraw,
+        stroke: arrow-up-right,
+        x: 390,
+        y: 290,
+        width: 160,
+        height: 85,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-own-l,
+        kind: text,
+        x: 260,
+        y: 232,
+        width: 300,
+        height: 35,
+        text: "1 မိနစ်အတွင်း leader",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-pin,
+        kind: freedraw,
+        stroke: arrow-down-right,
+        x: 300,
+        y: 430,
+        width: 150,
+        height: 75,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: g-pin-l,
+        kind: text,
+        x: 260,
+        y: 590,
+        width: 460,
+        height: 35,
+        text: "user တစ်ယောက် = follower တစ်ခု",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange the
+    # reason.
+    - {
+        id: q-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "Dashboard က 5 စက္ကန့် နောက်ကျနေတယ်",
+        fontSize: 36,
+      }
+    - {
+        id: q-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) ပြင်ဖို့ လိုတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) ဒီအတိုင်း ထားလို့ ရတယ်",
+        fontSize: 28,
+      }
+    - {
+        id: q-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 320,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 640,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: q-why,
+        kind: text,
+        x: 290,
+        y: 460,
+        width: 780,
+        height: 35,
+        text: "5 စက္ကန့် စောသိလည်း ဘာမှ မပြောင်း",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: q-r,
+        kind: text,
+        x: 290,
+        y: 530,
+        width: 780,
+        height: 35,
+        text: "lag ကို လက်ခံတယ်လို့ ရေးမှတ်ထား",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8130
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: ငွေချေပြီးသား လက်မှတ် မပေါ်ဘူး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ code အဟောင်းနဲ့ အသစ် နှစ်ခုလုံး မပျက်အောင် schema ကို အဆင့်ခွဲ ပြောင်းပုံနဲ့၊
+      service တွေကြားက contract ကို လေ့လာခဲ့ပါတယ်။
+      [[mark:open-doc]] ဒီတစ်ခါတော့ data ကို မိတ္တူပွားထားလို့ ဖြစ်လာတဲ့ ပြဿနာပါ။
+      [[mark:sel-incident]] ခရီးသည် တစ်ယောက်က လက်မှတ် ဝယ်ပြီး ငွေချေလိုက်ပါတယ်။ ချက်ချင်းပဲ ဝယ်ထားတဲ့
+      လက်မှတ်တွေ ပြတဲ့ စာမျက်နှာကို ဖွင့်ကြည့်တော့ လက်မှတ်က မပေါ်ပါဘူး။ ငွေချေတာ မအောင်မြင်ဘူး ထင်ပြီး
+      နောက်တစ်ခါ ထပ်ဝယ်လိုက်ပါတယ်။ တကယ်တော့ ပထမ လက်မှတ်က အောင်မြင်ပြီးသားပါ။ ဒီလို တိုင်ကြားချက်တွေက
+      ဖတ်ဖို့သက်သက် မိတ္တူ database၊ ဆိုလိုတာက read replica တွေ ထည့်ပြီးတဲ့နောက်မှ စပေါ်လာတာပါ။
+      [[mark:puzzle]] product manager လှလှ က ဒါ bug လားလို့ မေးပါတယ်။ Booking team lead မောင်မောင် ကတော့ code
+      မှာ ဘာမှ မမှားဘူး၊ data လည်း မပျောက်ဘူးလို့ ဖြေပါတယ်။ နှစ်ယောက်လုံး မှန်ပါတယ်။ ဒါကို နားလည်ဖို့
+      replication ကို ကြည့်ရအောင်။ replication ဆိုတာ data အတူတူကို စက် အများကြီးမှာ မိတ္တူထားတာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: open-doc },
+          path: notebook/30-reads.md,
+        }
+      - id: sel-incident
+        type: editor.select
+        at: { mark: sel-incident }
+        target:
+          {
+            file: notebook/30-reads.md,
+            text: 'ခရီးသည်က ငွေချေပြီး "ကိုယ့် လက်မှတ်များ" ကို ဖွင့်တော့ လက်မှတ် မပေါ်၊ ထပ်ဝယ်မိ',
+          }
+
+  - id: leader
+    chapter: Leader နဲ့ follower
+    narration: >
+      [[mark:r-open]] မိတ္တူ ထားရတဲ့ အကြောင်းက သုံးခု ရှိပါတယ်။ စက်တစ်လုံး ပျက်သွားလည်း ဆက်သုံးနိုင်ဖို့၊
+      ဖတ်တဲ့ request တွေကို စက်အများကြီးဆီ ခွဲပေးဖို့နဲ့၊ user နဲ့ နီးတဲ့ နေရာမှာ data ထားပေးဖို့ပါ။ ခရီးဖော်
+      ကတော့ ခရီးစဉ် ရှာတဲ့ request တွေ များလာလို့ ဒုတိယ အကြောင်းနဲ့ ထည့်ခဲ့တာပါ။
+      [[mark:r-leader]] အသုံးများတဲ့ ပုံစံ တစ်ခုမှာ မိတ္တူတွေထဲက တစ်ခုတည်းကိုပဲ ရေးခွင့်ပေးပါတယ်။ အဲဒါကို leader
+      လို့ ခေါ်ပါတယ်။ ခရီးဖော် ရဲ့ primary database က leader ပါ။
+      [[mark:r-followers]] ကျန်တဲ့ မိတ္တူတွေက leader မှာ ရေးသမျှကို လိုက်ကူးပါတယ်။ follower လို့ ခေါ်ပြီး၊ read
+      replica နှစ်ခုက follower တွေပါ။ ဖတ်တာကိုတော့ ဘယ်မိတ္တူကနေမဆို ဖတ်လို့ ရပါတယ်။
+      [[mark:r-wait]] ဒီမှာ ဆုံးဖြတ်စရာ တစ်ခု ရှိပါတယ်။ leader က follower တွေ ကူးပြီးတဲ့အထိ စောင့်ပြီးမှ
+      ရေးပြီးပြီလို့ ပြန်ပြောမလား ဆိုတာပါ။ စောင့်ရင် leader ပျက်သွားလည်း data မဆုံးရှုံးလို့ ပိုစိတ်ချရပါတယ်။
+      ဒါပေမဲ့ follower တစ်ခု နှေးတာနဲ့ ရေးတာတိုင်း နှေးသွားပါတယ်။ မစောင့်ရင်တော့ ရေးတာ မြန်ပါတယ်။ ဒါပေမဲ့
+      follower တွေက leader နောက်မှာ ခဏ ကျန်နေခဲ့ပါတယ်။
+      [[mark:r-lag]] အဲဒီ ကျန်နေတဲ့ အချိန်ကို replication lag လို့ ခေါ်ပါတယ်။ ခရီးဖော် က မစောင့်တဲ့ဘက်ကို
+      ရွေးထားပါတယ်။ lag က ပုံမှန်ဆို တစ်စက္ကန့်အောက်ပါ။ လူများတဲ့ အချိန်မှာတော့ follower တစ်ခုက
+      သုံးစက္ကန့်လောက် နောက်ကျတတ်ပါတယ်။
+      [[mark:r-write]] အခု ခရီးသည်ရဲ့ ဖြစ်ရပ်ကို ပြန်ကြည့်ရအောင်။ ငွေချေလိုက်တဲ့အခါ လက်မှတ်ကို leader မှာ
+      ရေးပါတယ်။
+      [[mark:r-read]] နောက်တစ်စက္ကန့်မှာ ဝယ်ထားတဲ့ လက်မှတ်တွေကို ကြည့်တဲ့ request ကတော့ နောက်ကျနေတဲ့ follower
+      ဆီ ရောက်သွားပါတယ်။ အဲဒီ follower ဆီ လက်မှတ်က မရောက်သေးပါဘူး။ ခရီးသည်က ကိုယ်တိုင် ရေးလိုက်တာကို ကိုယ်တိုင်
+      ပြန်မမြင်ရတာပါ။
+      [[mark:r-result]] data က မပျောက်ပါဘူး။ သုံးစက္ကန့်နေရင် ပေါ်လာမှာပါ။ ဒါပေမဲ့ ခရီးသည်က အဲဒီ
+      သုံးစက္ကန့်အတွင်းမှာ ထပ်ဝယ်လိုက်ပြီးပါပြီ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-r-open,
+          type: whiteboard.apply,
+          at: { mark: r-open },
+          open: true,
+          upsertIds: [r-title],
+        }
+      - {
+          id: draw-r-leader,
+          type: whiteboard.apply,
+          at: { mark: r-leader },
+          upsertIds: [r-leader, r-leader-l],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-followers,
+          type: whiteboard.apply,
+          at: { mark: r-followers },
+          upsertIds: [r-rep1, r-f1, r-f1-l, r-rep2, r-f2, r-f2-l],
+          drawMs: 2800,
+        }
+      - {
+          id: draw-r-lag,
+          type: whiteboard.apply,
+          at: { mark: r-lag },
+          upsertIds: [r-lag],
+          drawMs: 900,
+        }
+      - {
+          id: draw-r-write,
+          type: whiteboard.apply,
+          at: { mark: r-write },
+          upsertIds: [r-p, r-w],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-r-read,
+          type: whiteboard.apply,
+          at: { mark: r-read },
+          upsertIds: [r-rd, r-rd-l],
+          drawMs: 1200,
+        }
+
+  - id: fixes
+    chapter: Feature အလိုက် ဖြေရှင်းခြင်း
+    narration: >
+      [[mark:f-open]] lag ကြောင့် ဖြစ်တဲ့ ဒီလို ထူးဆန်းတဲ့ အပြုအမူတွေကို anomaly လို့ ခေါ်ပါတယ်။ နောက်ထပ်
+      anomaly တစ်ခုလည်း ရှိပါသေးတယ်။
+      [[mark:f-back]] ခရီးစဉ် ရှာတဲ့ စာမျက်နှာကို refresh လုပ်တဲ့အခါ၊ ပထမ request က နောက်ဆုံး အခြေအနေ
+      ရောက်ပြီးသား follower ဆီ ရောက်ပြီး ခုံ သုံးခုံ ကျန်တယ်လို့ ပြပါတယ်။
+      [[mark:f-back2]] ဒုတိယ request က နောက်ကျနေတဲ့ follower ဆီ ရောက်တော့ ခုံ ငါးခုံ ကျန်တယ်လို့ ပြပါတယ်။ user
+      ရဲ့ မျက်စိထဲမှာ အချိန်က နောက်ပြန်ဆုတ်သွားသလို ဖြစ်ပါတယ်။
+      [[mark:f-all]] အလွယ်ဆုံး အဖြေက အားလုံးကို leader ကနေပဲ ဖတ်ခိုင်းတာပါ။ ဒါပေမဲ့ အဲဒီလိုဆို follower တွေ
+      ထားရတဲ့ အကျိုး မရှိတော့ပါဘူး။ ဒါကြောင့် ဖြေရှင်းချက်တွေကို feature တစ်ခုချင်းစီအလိုက် ရွေးရပါတယ်။
+      [[mark:f-own]] ကိုယ်ရေးတာကို ကိုယ်ပြန်မြင်ရဖို့အတွက်၊ user တစ်ယောက် ရေးပြီး တစ်မိနစ်အတွင်း သူ့ကိုယ်ပိုင်
+      data ကို ဖတ်တဲ့ request တွေကို leader ဆီ ပို့ပါတယ်။ တစ်မိနစ် ကျော်ရင်တော့ follower ဆီ ပြန်ပို့ပါတယ်။
+      [[mark:f-pin]] အချိန် နောက်ပြန်မဆုတ်ဖို့အတွက်ကတော့ user တစ်ယောက်ရဲ့ request တွေကို follower တစ်ခုတည်းဆီ
+      အမြဲ ပို့ပါတယ်။ အဲဒီ follower က နောက်ကျနေရင်လည်း၊ user မြင်ရတာက ရှေ့ကိုပဲ သွားပါတော့တယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: point-f-lag,
+          type: whiteboard.point,
+          at: { mark: f-open },
+          target: { assetId: r-lag },
+        }
+      - { id: point-f-f2, type: whiteboard.point, at: { mark: f-back }, target: { assetId: r-f2 } }
+      - { id: point-f-f1, type: whiteboard.point, at: { mark: f-back2 }, target: { assetId: r-f1 } }
+      - {
+          id: reset-f,
+          type: whiteboard.apply,
+          at: { mark: f-all },
+          clear: true,
+          upsertIds: [r-leader, r-leader-l, r-f1, r-f1-l, r-f2, r-f2-l, r-rep1, r-rep2, r-p],
+        }
+      - {
+          id: draw-f-own,
+          type: whiteboard.apply,
+          at: { mark: f-own },
+          upsertIds: [g-own, g-own-l],
+          drawMs: 1300,
+        }
+      - {
+          id: draw-f-pin,
+          type: whiteboard.apply,
+          at: { mark: f-pin },
+          upsertIds: [g-pin, g-pin-l],
+          drawMs: 1300,
+        }
+
+  - id: shapes
+    chapter: Leader တစ်ခုထက် ပိုရင်
+    narration: >
+      [[mark:m-open]] leader တစ်ခုတည်း ထားတာက တစ်ခုတည်းသော ပုံစံ မဟုတ်ပါဘူး။ ပုံစံ သုံးမျိုးကို
+      နှိုင်းယှဉ်ကြည့်ရအောင်။
+      [[mark:m-single]] ခရီးဖော် သုံးနေတာက single leader ပုံစံပါ။ ရေးတာအားလုံး တစ်နေရာတည်းက ဖြတ်ရလို့၊ ထိုင်ခုံ
+      တစ်ခုံကို တစ်ယောက်ပဲ ရနိုင်တယ် ဆိုတာမျိုး စည်းကမ်းတွေကို ထိန်းရတာ ရှင်းပါတယ်။ အားနည်းချက်က leader ဆီ
+      မရောက်နိုင်ရင် ဘာမှ ရေးလို့ မရတာပါ။
+      [[mark:m-multi]] ဒုတိယ ပုံစံမှာ leader တွေ အများကြီး ထားပါတယ်။ ဒေသ တစ်ခုစီမှာ leader တစ်ခု ထားတာ၊
+      ဒါမှမဟုတ် internet မရလည်း ဆက်ရောင်းနိုင်အောင် ကားဂိတ် ကောင်တာ တစ်ခုစီကို leader လုပ်ပေးတာမျိုးပါ။
+      internet အားနည်းတဲ့ ကားဂိတ်တွေအတွက် ဆွဲဆောင်မှု ရှိပါတယ်။
+      [[mark:m-conflict]] ဒါပေမဲ့ ကောင်တာ နှစ်ခုက ထိုင်ခုံ တစ်ခုံတည်းကို တစ်ချိန်တည်း ရောင်းလိုက်ရင် ရေးထားတာ
+      နှစ်ခုက တိုက်နေပါပြီ။ နောက်ဆုံး ရေးတဲ့သူကို အနိုင်ပေးလိုက်တာက အလွယ်ဆုံးပါ။ ဒါပေမဲ့ အဲဒါက ရှုံးတဲ့ဘက်ရဲ့
+      လက်မှတ်ကို ဘယ်သူ့ကိုမှ မပြောဘဲ တိတ်တိတ်လေး ဖျက်ပစ်လိုက်တာပါ။ ဒါကြောင့် leader အများကြီး သုံးမယ်ဆိုရင်
+      တိုက်တဲ့အခါ ဘယ်လို ပေါင်းမလဲ ဆိုတာကို ကြိုတင် ဆုံးဖြတ်ထားရပါတယ်။ ထိုင်ခုံလို ပေါင်းလို့ မရတဲ့ data
+      အတွက်တော့ ဒီပုံစံက မသင့်တော်ပါဘူး။
+      [[mark:m-less]] တတိယ ပုံစံမှာ leader လုံးဝ မရှိပါဘူး။ ရေးတဲ့အခါ မိတ္တူ အများကြီးဆီ တစ်ပြိုင်တည်း ရေးပြီး၊
+      ဖတ်တဲ့အခါလည်း အများကြီးဆီက ဖတ်ပါတယ်။ ရေးတဲ့ အုပ်စုနဲ့ ဖတ်တဲ့ အုပ်စု ထပ်နေအောင် ထားရင်၊ ပုံမှန်အခြေအနေမှာ ဖတ်လိုက်တဲ့ထဲက အနည်းဆုံး တစ်ခုမှာ နောက်ဆုံး တန်ဖိုး ပါလာပါတယ်။ စက်တစ်လုံး ပျက်လည်း မရပ်တာက အားသာချက်ပါ။ ဒါပေမဲ့ နှစ်ယောက် တစ်ပြိုင်တည်း ရေးတာ၊ ရေးတာ တစ်ဝက်တစ်ပျက် ဖြစ်တာမျိုး ကြုံရင် နောက်ဆုံး တန်ဖိုးကို အမြဲ ရမယ်လို့တော့ အာမ မခံနိုင်ပါဘူး။
+      [[mark:m-choose]] ဘယ်ပုံစံကို ရွေးရွေး lag နဲ့ anomaly တစ်မျိုးမျိုးကတော့ ပါလာတတ်ပါတယ်။ ဒါကြောင့် မေးရမယ့် မေးခွန်းက
+      ဘယ်ပုံစံ ကောင်းလဲ မဟုတ်ဘဲ၊ ကိုယ့် business က ဘယ် anomaly ကို လက်မခံနိုင်လဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: close-fixes,
+          type: whiteboard.apply,
+          at: { mark: m-open, offsetMs: -1500 },
+          open: false,
+        }
+      - {
+          id: show-shapes,
+          type: slide.show,
+          at: { mark: m-open, offsetMs: -1000 },
+          slideId: replication-shapes,
+        }
+      - {
+          id: point-single,
+          type: slide.point,
+          at: { mark: m-single },
+          target: { x: 0.15, y: 0.43 },
+        }
+      - { id: point-multi, type: slide.point, at: { mark: m-multi }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-less, type: slide.point, at: { mark: m-less }, target: { x: 0.15, y: 0.75 } }
+
+  - id: table
+    chapter: ဘယ်ကနေ ဖတ်မလဲ
+    narration: >
+      [[mark:t-close]] အဲဒီ မေးခွန်းကို ခရီးဖော် ရဲ့ feature တစ်ခုချင်းစီအတွက် မေးပြီး table တစ်ခုနဲ့
+      ချရေးကြည့်ရအောင်။
+      [[mark:type-mine]] ဝယ်ထားတဲ့ လက်မှတ်တွေ ပြတဲ့ စာမျက်နှာက ကိုယ်ရေးတာကို ကိုယ် မမြင်ရတဲ့ anomaly ကို
+      လက်မခံနိုင်ပါဘူး။ ဒါကြောင့် ဝယ်ပြီး တစ်မိနစ်အတွင်းမှာ leader ကနေ ဖတ်ပါမယ်။
+      [[mark:type-search]] ခရီးစဉ် ရှာတဲ့ စာမျက်နှာကတော့ နည်းနည်း ဟောင်းတာကို ခံနိုင်ပါတယ်။ မခံနိုင်တာက ကျန်တဲ့
+      ခုံအရေအတွက် နောက်ပြန်ဆုတ်တာပါ။ ဒါကြောင့် user တစ်ယောက်ကို follower တစ်ခုတည်းနဲ့ တွဲထားပါမယ်။
+      [[mark:type-hold]] ထိုင်ခုံကို hold လုပ်တဲ့ အဆင့်ကတော့ ရောင်းပြီးသား ခုံကို လွတ်တယ်လို့ မြင်တာကို လုံးဝ
+      လက်မခံနိုင်ပါဘူး။ ဒီအဆင့်မှာ အမြဲ leader ကနေပဲ ဖတ်ပါမယ်။
+      [[mark:sel-question]] feature အသစ် တစ်ခု ထည့်တိုင်း မေးဖို့ မေးခွန်း တစ်ခုကိုလည်း table အောက်မှာ
+      ရေးထားပါတယ်။ lag က စက္ကန့်ပိုင်း မဟုတ်ဘဲ မိနစ်နဲ့ချီ ကြာသွားရင် ဒီ feature မှာ ဘာဖြစ်မလဲ ဆိုတာပါ။ lag ကို
+      ဘယ်တော့မှ သုညလို့ မယူဆပါနဲ့။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-shapes, type: slide.close, at: { mark: t-close } }
+      - {
+          id: reopen-notebook,
+          type: workspace.openFile,
+          at: { afterAction: close-shapes },
+          path: notebook/30-reads.md,
+        }
+      - id: type-mine
+        type: editor.type
+        at: { mark: type-mine }
+        cadence: line-by-line
+        target: { file: notebook/30-reads.md, after: "|---|---|---|\n" }
+        text: "| ကိုယ့် လက်မှတ်များ | ကိုယ်ရေးတာ ကိုယ် မမြင်ရတာ | ဝယ်ပြီး 1 မိနစ်အတွင်း leader၊ ပြီးရင် follower |\n"
+      - id: type-search
+        type: editor.type
+        at: { mark: type-search }
+        cadence: line-by-line
+        target: { file: notebook/30-reads.md, after: "ပြီးရင် follower |\n" }
+        text: "| ခရီးစဉ် ရှာဖွေမှု | ကျန်တဲ့ ခုံအရေအတွက် နောက်ပြန်ဆုတ်တာ | user တစ်ယောက်ကို follower တစ်ခုတည်း |\n"
+      - id: type-hold
+        type: editor.type
+        at: { mark: type-hold }
+        cadence: line-by-line
+        target: { file: notebook/30-reads.md, after: "follower တစ်ခုတည်း |\n" }
+        text: "| ထိုင်ခုံ hold | ရောင်းပြီးသား ခုံကို လွတ်တယ်လို့ မြင်တာ | အမြဲ leader |\n"
+      - id: sel-question
+        type: editor.select
+        at: { mark: sel-question }
+        target: { file: notebook/30-reads.md, text: "lag က မိနစ်နဲ့ချီ ကြာသွားရင် ဒီ feature မှာ ဘာဖြစ်မလဲ?" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ကားလိုင်းတွေက ကိုယ့် ရောင်းအားကို ကြည့်တဲ့ dashboard တစ်ခု
+      ရှိပါတယ်။ အဲဒီ dashboard က follower ကနေ ဖတ်ပြီး ကိန်းဂဏန်းတွေကို ခဏခြား ပြန်ဆွဲတာမို့၊ ပြနေတဲ့ ကိန်းဂဏန်းတွေက ငါးစက္ကန့်လောက် နောက်ကျနေတတ်ပါတယ်။ developer တစ်ယောက်က ဒါကို ပြင်ပေးဖို့ အဆိုပြုထားပါတယ်။
+      [[mark:q-a]] ဒါကို ပြင်ဖို့ လိုသလား။
+      [[mark:q-b]] ဒါမှမဟုတ် ဒီအတိုင်း ထားလို့ ရသလား။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒီအတိုင်း ထားလို့ ရတယ် ဆိုတာပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ကားလိုင်း ပိုင်ရှင်က ရောင်းအားကို ကြည့်ပြီး စက္ကန့်ပိုင်းအတွင်း
+      ဆုံးဖြတ်ရတာ ဘာမှ မရှိလို့ပါ။ ငါးစက္ကန့် စောသိလည်း ဘာမှ မပြောင်းလဲပါဘူး။ ငွေစာရင်း ရှင်းတဲ့အခါမှာတော့ ဒီ
+      dashboard ကို မသုံးဘဲ မူရင်း data ကိုပဲ သုံးပါတယ်။
+      [[mark:q-name]] ထားလို့ရတယ် ဆိုတာက လျစ်လျူရှုတာ မဟုတ်ပါဘူး။ ဒီ feature က lag ကို လက်ခံတယ်လို့
+      နာမည်တပ်ပြီး ရေးမှတ်ထားတာပါ။ မလိုအပ်ဘဲ leader ကနေ ဖတ်ခိုင်းလိုက်ရင်၊ dashboard က လက်မှတ် ရောင်းတဲ့
+      အလုပ်နဲ့ leader ကို လုနေပါလိမ့်မယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [q-title],
+          drawMs: 1200,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [q-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [q-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [q-b-line, q-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [q-why],
+          drawMs: 1200,
+        }
+      - {
+          id: draw-name,
+          type: whiteboard.apply,
+          at: { mark: q-name },
+          upsertIds: [q-r],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] dashboard ကိုလည်း table ထဲမှာ ထည့်ထားလိုက်ပါမယ်။
+      [[mark:type-dash]] လက်မခံနိုင်တဲ့ anomaly မရှိဘူး၊ follower ကနေ ဖတ်မယ် ဆိုတာလည်း ဆုံးဖြတ်ချက် တစ်ခုပါပဲ။
+      [[mark:turn-you]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် system မှာ replica တွေ မရှိသေးရင်လည်း ရှိလာမယ့် နေ့အတွက်
+      စဉ်းစားကြည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ user က ကိုယ်တိုင် ရေးလိုက်တာကို ချက်ချင်း ပြန်မြင်ရမှ ဖြစ်မယ့်
+      feature တစ်ခုကို ရှာပြီး ဒီ table ထဲမှာ ရေးကြည့်ပါ။
+      [[mark:turn-2]] profile ပြင်တာ၊ comment တင်တာ၊ ငွေလွှဲတာ စတာတွေထဲမှာ ရှာကြည့်ပါ။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: type-dash
+        type: editor.type
+        at: { mark: type-dash }
+        cadence: line-by-line
+        target: { file: notebook/30-reads.md, after: "| အမြဲ leader |\n" }
+        text: "| ကားလိုင်း sales dashboard | မရှိ (5 စက္ကန့် နောက်ကျတာ လက်ခံ) | follower |\n"
+      - id: expect-dash
+        type: expect.file
+        at: { afterAction: type-dash }
+        path: notebook/30-reads.md
+        contains: "| ကားလိုင်း sales dashboard | မရှိ (5 စက္ကန့် နောက်ကျတာ လက်ခံ) | follower |\n"
+      - id: sel-mine
+        type: editor.select
+        at: { mark: turn-you }
+        target: { file: notebook/30-reads.md, text: "| ကိုယ့် လက်မှတ်များ | ကိုယ်ရေးတာ ကိုယ် မမြင်ရတာ |" }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ replication က data ကို စက်အများကြီးမှာ မိတ္တူထားပေးပေမဲ့၊ မိတ္တူတွေက အချိန်တိုင်း
+      အတူတူ မဖြစ်နိုင်ပါဘူး။ follower တွေက leader နောက်မှာ ကျန်နေတတ်လို့၊ ကိုယ်ရေးတာ ကိုယ်မမြင်ရတာ၊ အချိန်
+      နောက်ပြန်ဆုတ်တာလို anomaly တွေ ဖြစ်လာပါတယ်။
+      [[mark:recap-q]] ဒါကြောင့် feature တစ်ခုချင်းစီအတွက် ဘယ် anomaly ကို လက်မခံနိုင်လဲ မေးပြီး၊ ဘယ်ကနေ ဖတ်မလဲ
+      ဆိုတာကို ဆုံးဖြတ်ပါ။
+      [[mark:next]] နောက် lesson မှာတော့ data ကို မိတ္တူပွားတာ မဟုတ်ဘဲ၊ အပိုင်းပိုင်း ခွဲပြီး စက်တွေပေါ်
+      ဖြန့်ထားတဲ့ sharding ကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Designing Data-Intensive Applications, 2nd edition (Kleppmann, Riccomini)",
+          url: "https://oreil.ly/DesigningDataIntensiveApps2",
+        }
+    actions:
+      - id: sel-header
+        type: editor.select
+        at: { mark: recap-q }
+        target: { file: notebook/30-reads.md, text: "| Feature | လက်မခံနိုင်တဲ့ anomaly | ဘယ်ကနေ ဖတ်မလဲ |" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
