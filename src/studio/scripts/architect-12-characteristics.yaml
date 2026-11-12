@@ -1,0 +1,857 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-12-characteristics
+  title: "Architect Path 12: Architecture characteristic ဆိုတာ ဘာလဲ"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/12-candidates.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      notebook/12-candidates.md: |
+        # Characteristic candidate များ
+
+        ## လှလှ ရဲ့ requirement (အကျဉ်း)
+        - ခရီးသည်က အသွားအပြန် လက်မှတ်ကို တစ်ခါတည်း ဝယ်နိုင်ရမယ်
+        - ခရီးသည်က ဝယ်ပြီးသား ထိုင်ခုံကို ပြောင်းနိုင်ရမယ်
+        - ကားလိုင်းက promotion ဈေး သတ်မှတ်နိုင်ရမယ်
+
+        ## Candidate များ
+        | Characteristic | ဘယ်စကားက ဆိုလိုနေလဲ | ရေးထားလား |
+        |---|---|---|
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  slides:
+    - id: three-tests
+      contentType: html
+      name: Characteristic ဖြစ်ဖို့ အချက် သုံးချက်
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Characteristic ဖြစ်ဖို့ အချက် 3 ချက်</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide blue">Feature မဟုတ်ဘူး</span>ဘာလုပ်လဲ မဟုတ်၊ ဘယ်လောက် ကောင်းကောင်းလဲ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide orange">Structure ကို ထိတယ်</span>code တစ်နေရာ ပြင်ရုံနဲ့ မရဘူး</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide green">အောင်မြင်ဖို့ လိုတယ်</span>မရှိရင် business ထိခိုက်မယ်</div>
+        </div>
+    - id: three-families
+      contentType: html
+      name: Characteristic အုပ်စု သုံးစု
+      content: |
+        <style>
+          .stage { position: relative; width: 100vw; height: 100vh; background: #0b0d12; color: #e7e9ee; font-family: system-ui, "Noto Sans Myanmar", sans-serif; text-align: left; }
+          .title { position: absolute; left: 8vw; top: 9vh; height: 12vh; line-height: 12vh; font-size: 3.6vw; font-weight: 700; white-space: nowrap; }
+          .row { position: absolute; left: 8vw; height: 10vh; line-height: 10vh; font-size: 2.4vw; white-space: nowrap; }
+          .num { display: inline-block; width: 4vw; color: #8b93a7; }
+          .term { display: inline-block; width: 18vw; font-weight: 700; }
+          .wide { width: 26vw; }
+          .blue { color: #74c0fc; } .orange { color: #ffc078; } .green { color: #8ce99a; } .red { color: #ffa8a8; } .violet { color: #b197fc; }
+        </style>
+        <div class="stage">
+          <div class="title">Characteristic အုပ်စု 3 စု</div>
+          <div class="row" style="top: 34vh"><span class="num">1</span><span class="term wide blue">Operational</span>run နေချိန်မှာ ဘယ်လို ပြုမူလဲ</div>
+          <div class="row" style="top: 50vh"><span class="num">2</span><span class="term wide violet">Structural</span>code ကို ပြင်ရ၊ ပို့ရတာ ဘယ်လောက် လွယ်လဲ</div>
+          <div class="row" style="top: 66vh"><span class="num">3</span><span class="term wide orange">Cross-cutting</span>system တစ်ခုလုံးနဲ့ ဆိုင်တာ</div>
+        </div>
+  whiteboardAssets:
+    # Board 1 — the သင်္ကြန် morning again: every feature worked (green checks), what
+    # failed (red) was how well; orange names the thing the lesson is about.
+    - {
+        id: i-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 760,
+        height: 45,
+        text: "သင်္ကြန် မနက်က ဘာ ပျက်ခဲ့တာလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: i-f1,
+        kind: text,
+        x: 290,
+        y: 250,
+        width: 220,
+        height: 35,
+        text: "ခရီးစဉ် ရှာတာ",
+        fontSize: 28,
+      }
+    - {
+        id: i-c1,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 246,
+        width: 38,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: i-f2,
+        kind: text,
+        x: 290,
+        y: 315,
+        width: 220,
+        height: 35,
+        text: "ထိုင်ခုံ ရွေးတာ",
+        fontSize: 28,
+      }
+    - {
+        id: i-c2,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 311,
+        width: 38,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: i-f3,
+        kind: text,
+        x: 290,
+        y: 380,
+        width: 220,
+        height: 35,
+        text: "ငွေချေတာ",
+        fontSize: 28,
+      }
+    - {
+        id: i-c3,
+        kind: freedraw,
+        stroke: check,
+        x: 520,
+        y: 376,
+        width: 38,
+        height: 40,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: i-r1,
+        kind: rectangle,
+        x: 660,
+        y: 240,
+        width: 420,
+        height: 70,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: i-r1-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 258,
+        width: 420,
+        height: 35,
+        text: "app 2 နာရီကြာ နှေး",
+        fontSize: 28,
+      }
+    - {
+        id: i-r2,
+        kind: rectangle,
+        x: 660,
+        y: 340,
+        width: 420,
+        height: 70,
+        rounded: true,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: i-r2-l,
+        kind: text,
+        align: center,
+        x: 660,
+        y: 358,
+        width: 420,
+        height: 35,
+        text: "312 ခုံ နှစ်ခါ ရောင်းမိ",
+        fontSize: 28,
+      }
+    - {
+        id: i-char,
+        kind: rectangle,
+        x: 330,
+        y: 480,
+        width: 680,
+        height: 130,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: i-char-t,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 494,
+        width: 680,
+        height: 38,
+        text: "Architecture characteristic",
+        fontSize: 30,
+      }
+    - {
+        id: i-char-s,
+        kind: text,
+        align: center,
+        x: 330,
+        y: 550,
+        width: 680,
+        height: 35,
+        text: "ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ",
+        fontSize: 28,
+      }
+    # Board 2 — two characteristics pulling against each other at the counter. Orange
+    # is the question and the pull; blue the two qualities; red what each one costs.
+    - {
+        id: p-title,
+        kind: text,
+        x: 270,
+        y: 165,
+        width: 800,
+        height: 45,
+        text: "ကောင်တာမှာ နှစ်ခုလုံး အပြည့် ရမလား?",
+        fontSize: 36,
+      }
+    - {
+        id: p-av,
+        kind: rectangle,
+        x: 270,
+        y: 350,
+        width: 330,
+        height: 110,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-av-t,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 362,
+        width: 330,
+        height: 38,
+        text: "Availability",
+        fontSize: 30,
+      }
+    - {
+        id: p-av-s,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 412,
+        width: 330,
+        height: 35,
+        text: "အမြဲ ရောင်းလို့ရ",
+        fontSize: 28,
+      }
+    - {
+        id: p-di,
+        kind: rectangle,
+        x: 760,
+        y: 350,
+        width: 330,
+        height: 110,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: p-di-t,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 362,
+        width: 330,
+        height: 38,
+        text: "Data integrity",
+        fontSize: 30,
+      }
+    - {
+        id: p-di-s,
+        kind: text,
+        align: center,
+        x: 760,
+        y: 412,
+        width: 330,
+        height: 35,
+        text: "ခုံ နှစ်ခါ မရောင်းမိ",
+        fontSize: 28,
+      }
+    - {
+        id: p-q,
+        kind: rectangle,
+        x: 495,
+        y: 240,
+        width: 370,
+        height: 70,
+        rounded: true,
+        strokeColor: "#f08c00",
+        backgroundColor: "#ffec99",
+        fillStyle: hachure,
+      }
+    - {
+        id: p-q-l,
+        kind: text,
+        align: center,
+        x: 495,
+        y: 258,
+        width: 370,
+        height: 35,
+        text: "internet ပြတ်သွားရင်?",
+        fontSize: 28,
+      }
+    - {
+        id: p-av-cost,
+        kind: text,
+        x: 290,
+        y: 490,
+        width: 310,
+        height: 35,
+        text: "နှစ်ခါ ရောင်းမိနိုင်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-di-cost,
+        kind: text,
+        x: 780,
+        y: 490,
+        width: 310,
+        height: 35,
+        text: "ရောင်းလို့ မရတော့",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: p-pull-l,
+        kind: freedraw,
+        stroke: arrow-left,
+        x: 615,
+        y: 365,
+        width: 130,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-pull-r,
+        kind: freedraw,
+        stroke: arrow-right,
+        x: 615,
+        y: 405,
+        width: 130,
+        height: 40,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: p-few,
+        kind: text,
+        x: 270,
+        y: 580,
+        width: 800,
+        height: 38,
+        text: "အကုန် မရဘူး · အရေးကြီးတဲ့ အနည်းငယ်ကို ရွေး",
+        fontSize: 30,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 800,
+        height: 45,
+        text: "ဘယ်ဟာက characteristic လဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 780,
+        height: 35,
+        text: "က) ခရီးသည်က wallet နဲ့ ငွေချေနိုင်ရမယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 740,
+        height: 35,
+        text: "ခ) wallet ဘက် ခဏ ကျလည်း ငွေ မပျောက်ရဘူး",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 590,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 910,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-why,
+        kind: text,
+        x: 290,
+        y: 480,
+        width: 780,
+        height: 35,
+        text: "ဘာလုပ်လဲ မဟုတ်၊ ဘယ်လောက် ကောင်းကောင်း လုပ်ရမလဲ",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8112
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: Feature တွေပဲ ပါတဲ့ requirement
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ system ရဲ့ လုပ်ငန်း တစ်ခုစီကို တာဝန်ယူတဲ့ component တွေကို ဘယ်လို ရှာဖွေရမလဲ ဆိုတာ
+      လေ့လာခဲ့ပါတယ်။
+      [[mark:year]] အဲဒီနောက် တစ်နှစ် ကြာသွားပါပြီ။
+      [[mark:team]] ခရီးဖော် မှာ developer က ၁၈ ယောက် ဖြစ်လာပြီး၊ Booking၊ Operator နဲ့ Payment ဆိုပြီး team
+      သုံးခု ခွဲထားပါတယ်။ ကိုယ်ကလည်း ခရီးဖော် ရဲ့ ပထမဆုံး architect ဖြစ်လာပါပြီ။
+      [[mark:req]] ဒီနှစ်အတွက် လုပ်ရမယ့် အလုပ်တွေကို product manager လှလှ က requirement စာရွက် တစ်ခုနဲ့
+      ရေးပေးထားပါတယ်။
+      [[mark:sel-req]] ဒီထဲမှာ ပါတာတွေက ခရီးသည်နဲ့ ကားလိုင်းတွေ ဘာတွေ လုပ်နိုင်ရမလဲ ဆိုတဲ့ feature
+      တွေချည်းပါပဲ။ ဘယ်လောက် မြန်ရမလဲ၊ ဘယ်အချိန်ထိ သုံးလို့ရနေရမလဲ၊ ဘယ်လောက် လုံခြုံရမလဲ ဆိုတာတော့
+      တစ်ကြောင်းမှ မပါပါဘူး။ ဒါက လှလှ ရဲ့ အမှား မဟုတ်ပါဘူး။ requirement စာရွက် အများစုက ဒီလိုပဲ feature
+      တွေကိုပဲ ရေးလေ့ရှိပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: open-readme, type: workspace.openFile, at: { mark: year }, path: README.md }
+      - id: sel-team
+        type: editor.select
+        at: { mark: team }
+        target:
+          { file: README.md, text: "- developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment" }
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { mark: req },
+          path: notebook/12-candidates.md,
+        }
+      - id: sel-req
+        type: editor.select
+        at: { mark: sel-req }
+        target:
+          file: notebook/12-candidates.md
+          text: "- ခရီးသည်က အသွားအပြန် လက်မှတ်ကို တစ်ခါတည်း ဝယ်နိုင်ရမယ်\n- ခရီးသည်က ဝယ်ပြီးသား ထိုင်ခုံကို ပြောင်းနိုင်ရမယ်\n- ကားလိုင်းက promotion ဈေး သတ်မှတ်နိုင်ရမယ်"
+
+  - id: incident
+    chapter: ဘာလုပ်လဲ မဟုတ်၊ ဘယ်လောက် ကောင်းကောင်းလဲ
+    narration: >
+      [[mark:i-open]] ဒီနေရာမှာ အရင်နှစ်က သင်္ကြန် လက်မှတ် ဖွင့်ရောင်းတဲ့ မနက်ကို ပြန်သတိရကြည့်ရအောင်။
+      [[mark:i-feat]] အဲဒီ မနက်က ခရီးစဉ် ရှာတာ၊ ထိုင်ခုံ ရွေးတာ၊ ငွေချေတာ ဆိုတဲ့ feature တွေ အားလုံးက
+      ရေးထားတဲ့အတိုင်း အလုပ်လုပ်နေခဲ့ပါတယ်။ ပျောက်နေတဲ့ feature ဆိုတာ တစ်ခုမှ မရှိပါဘူး။
+      [[mark:i-fail]] ဒါပေမဲ့ ဝင်သုံးသူက ပုံမှန်နေ့ရဲ့ ၁၅ ဆ ဖြစ်သွားတော့ app က နှစ်နာရီလောက် နှေးနေခဲ့ပြီး၊
+      ထိုင်ခုံ ၃၁၂ ခုံကိုလည်း app ကနေ တစ်ခါ၊ ကောင်တာကနေ တစ်ခါ နှစ်ခါ ရောင်းမိခဲ့ပါတယ်။
+      [[mark:i-gap]] ဆိုလိုတာက ပျက်ခဲ့တာက system က ဘာလုပ်ပေးလဲ ဆိုတဲ့ အပိုင်း မဟုတ်ပါဘူး။ လူတွေ အများကြီး
+      ဝင်လာတဲ့အချိန်မှာ ဘယ်လောက် ကောင်းကောင်း လုပ်ပေးနိုင်လဲ ဆိုတဲ့ အပိုင်းပါ။ အဲဒီအပိုင်းကိုတော့ ဘယ်
+      requirement ထဲမှာမှ မရေးခဲ့ကြပါဘူး။
+      [[mark:i-name]] system က ဘာလုပ်လဲ မဟုတ်ဘဲ၊ ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်ရမလဲ ဆိုတဲ့ ဒီလို
+      အရည်အသွေးတွေကို architecture characteristic လို့ ခေါ်ပါတယ်။ architect ရဲ့ အလုပ်က ဒီ အရည်အသွေးတွေကို
+      ရှာဖော်ပြီး၊ system ရဲ့ ဖွဲ့စည်းပုံက အဲဒါတွေကို ထောက်ပံ့နိုင်အောင် လုပ်ပေးတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-i-open,
+          type: whiteboard.apply,
+          at: { mark: i-open },
+          open: true,
+          clear: true,
+          upsertIds: [i-title],
+        }
+      - {
+          id: draw-i-feat,
+          type: whiteboard.apply,
+          at: { mark: i-feat },
+          upsertIds: [i-f1, i-c1, i-f2, i-c2, i-f3, i-c3],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-i-fail,
+          type: whiteboard.apply,
+          at: { mark: i-fail },
+          upsertIds: [i-r1, i-r1-l, i-r2, i-r2-l],
+          drawMs: 2000,
+        }
+      - {
+          id: draw-i-name,
+          type: whiteboard.apply,
+          at: { mark: i-name },
+          upsertIds: [i-char, i-char-t, i-char-s],
+          drawMs: 1500,
+        }
+
+  - id: three-tests
+    chapter: Characteristic ဖြစ်ဖို့ အချက် သုံးချက်
+    narration: >
+      [[mark:close-i]] ဒါပေမဲ့ ကောင်းစေချင်တဲ့ အရာတိုင်းကို architecture characteristic လို့ ခေါ်လို့ မရပါဘူး။
+      [[mark:s-open]] characteristic တစ်ခုလို့ သတ်မှတ်ဖို့ အချက် သုံးချက်နဲ့ ကိုက်ညီရပါတယ်။
+      [[mark:q-1]] ပထမ အချက်က feature မဟုတ်ရပါဘူး။ ကားလိုင်းက promotion ဈေး သတ်မှတ်နိုင်ရမယ် ဆိုတာက system
+      ဘာလုပ်ပေးရမလဲ ဆိုတဲ့ feature ပါ။ characteristic ကတော့ feature တစ်ခုတည်းနဲ့ပဲ ဆိုင်တာ မဟုတ်ဘဲ၊ feature
+      တွေ အားလုံးက ဘယ်လောက် ကောင်းကောင်း အလုပ်လုပ်ရမလဲ ဆိုတာကို ပြောတာပါ။
+      [[mark:q-2]] ဒုတိယ အချက်က အဲဒါကို ရဖို့ system ရဲ့ structure ကို ထိရပါမယ်။ structure ဆိုတာ system ကို
+      ဘယ်လို အပိုင်းတွေ ခွဲပြီး ဘယ်လို ဆက်ထားလဲ ဆိုတာပါ။ ဥပမာ ခလုတ်တွေကို ပိုကြီးကြီး ပြချင်တာမျိုးက code
+      တစ်နေရာမှာ ပြင်လိုက်ရုံနဲ့ ရပါတယ်။ ထိုင်ခုံ နှစ်ခါ မရောင်းမိဖို့ကတော့ တစ်နေရာ ပြင်ရုံနဲ့ မရပါဘူး။ app ရော
+      ကောင်တာရော ထိုင်ခုံ data ကို ဘယ်လမ်းကြောင်းကနေ ရေးခွင့်ပေးမလဲ ဆိုတဲ့ အထိ ပြန်စဉ်းစားရပါတယ်။
+      [[mark:q-3]] တတိယ အချက်က business အောင်မြင်ဖို့ တကယ် လိုအပ်ရပါမယ်။ ခရီးဖော် အတွက် ထိုင်ခုံ မမှားတာက
+      မရှိမဖြစ်ပါ။ တစ်ဖက်မှာတော့ app ကို ဘာသာစကား ၂၀ နဲ့ သုံးလို့ရတာမျိုးက ရှိရင် ကောင်းပေမဲ့၊ အခု ခရီးဖော် ရဲ့
+      အောင်မြင်မှုကို ဆုံးဖြတ်ပေးတာ မဟုတ်ပါဘူး။
+      [[mark:q-all]] ဒီ သုံးချက်လုံးနဲ့ ကိုက်ညီမှ architecture characteristic အဖြစ် ထည့်စဉ်းစားရမှာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-i, type: whiteboard.apply, at: { mark: close-i }, open: false }
+      - {
+          id: show-tests,
+          type: slide.show,
+          at: { mark: s-open, offsetMs: -1200 },
+          slideId: three-tests,
+        }
+      - { id: point-test-1, type: slide.point, at: { mark: q-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-test-2, type: slide.point, at: { mark: q-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-test-3, type: slide.point, at: { mark: q-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: families
+    chapter: Characteristic အုပ်စု သုံးစု
+    narration: >
+      [[mark:fam-open]] characteristic တွေက အများကြီး ရှိပါတယ်။ အားလုံးကို အလွတ်ကျက်စရာ မလိုဘဲ၊ အုပ်စု သုံးစု
+      ခွဲပြီး မှတ်ထားရင် ရပါတယ်။
+      [[mark:fam-1]] ပထမ အုပ်စုက operational ပါ။ system က run နေတဲ့အချိန်မှာ ဘယ်လို ပြုမူလဲ ဆိုတာနဲ့
+      ဆိုင်ပါတယ်။ သုံးချင်တဲ့အချိန် သုံးလို့ရနေတာကို availability၊ တုံ့ပြန်တာ ဘယ်လောက် မြန်လဲ ဆိုတာကို
+      performance လို့ ခေါ်ပါတယ်။ user တဖြည်းဖြည်း များလာလည်း ခံနိုင်တာက scalability ပါ။ သင်္ကြန်မနက်လို
+      ရုတ်တရက် တက်လာတဲ့ load ကို ချက်ချင်း လိုက်နိုင်တာကတော့ elasticity ပါ။
+      [[mark:fam-2]] ဒုတိယ အုပ်စုက structural ပါ။ code ရဲ့ ဖွဲ့စည်းပုံနဲ့ ဆိုင်ပြီး developer တွေက နေ့တိုင်း
+      ခံစားရတာတွေပါ။ နောက်လူတွေ ဆက်ပြင်ရတာ ဘယ်လောက် လွယ်လဲ ဆိုတဲ့ maintainability၊ ပြောင်းလဲမှုကို
+      production ဆီ ဘယ်လောက် မြန်မြန် ပို့နိုင်လဲ ဆိုတဲ့ deployability နဲ့၊ မှန်မမှန် စစ်ရတာ ဘယ်လောက် လွယ်လဲ
+      ဆိုတဲ့ testability တို့ ပါဝင်ပါတယ်။
+      [[mark:fam-3]] တတိယ အုပ်စုက cross cutting ပါ။ အပိုင်း တစ်ခုတည်းနဲ့ မဆိုင်ဘဲ system တစ်ခုလုံးကို ဖြတ်ပြီး
+      သက်ရောက်တာတွေပါ။ security၊ ခရီးသည်ရဲ့ ကိုယ်ရေးအချက်အလက်ကို ကာကွယ်တဲ့ privacy၊ မျက်စိ
+      အားနည်းသူတွေလို မသန်စွမ်းသူတွေပါ သုံးနိုင်အောင် လုပ်ပေးတဲ့ accessibility နဲ့၊ ဥပဒေက သတ်မှတ်ထားတဲ့ အချက်တွေ ဒီထဲမှာ
+      ပါဝင်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: show-families,
+          type: slide.show,
+          at: { mark: fam-open, offsetMs: -1200 },
+          slideId: three-families,
+        }
+      - { id: point-fam-1, type: slide.point, at: { mark: fam-1 }, target: { x: 0.15, y: 0.43 } }
+      - { id: point-fam-2, type: slide.point, at: { mark: fam-2 }, target: { x: 0.15, y: 0.59 } }
+      - { id: point-fam-3, type: slide.point, at: { mark: fam-3 }, target: { x: 0.15, y: 0.75 } }
+
+  - id: candidates
+    chapter: ခရီးဖော် အတွက် candidate စာရင်း
+    narration: >
+      [[mark:close-fam]] ဒါဆို ခရီးဖော် အတွက် ဘယ် characteristic တွေ လိုနိုင်မလဲ ဆိုတာ စာရင်း
+      ပြုစုကြည့်ရအောင်။ အရေးကြီးတာက characteristic တစ်ခုချင်းစီကို business ထဲက ဘယ်စကား၊ ဘယ်အဖြစ်အပျက်က
+      ဆိုလိုနေတာလဲ ဆိုတာနဲ့ တွဲရေးဖို့ပါ။
+      [[mark:type-1]] ပထမ တစ်ခုက elasticity ပါ။ သင်္ကြန် လက်မှတ် ဖွင့်တဲ့ မနက်မှာ လူတွေ တစ်ပြိုင်တည်း
+      ဝင်လာတာက ဒီ အရည်အသွေးကို တောင်းဆိုနေတာပါ။
+      [[mark:type-2]] ဒုတိယက data integrity ပါ။ data က အမြဲ မှန်ကန်နေရမယ် ဆိုတဲ့ အရည်အသွေးပါ။ ခရီးဖော်
+      အတွက်ဆိုရင် ထိုင်ခုံ တစ်ခုံကို လူ တစ်ယောက်ပဲ ပိုင်ရမယ် ဆိုတာပါ။
+      [[mark:type-3]] တတိယက ကောင်တာအတွက် availability ပါ။ ကားဂိတ်မှာ internet က မကြာခဏ အားနည်းပေမဲ့၊
+      ကောင်တာ ဝန်ထမ်းကတော့ ရှေ့မှာ ရပ်နေတဲ့ ခရီးသည်ကို လက်မှတ် ရောင်းပေးနိုင်ရပါမယ်။
+      [[mark:type-4]] စတုတ္ထက deployability ပါ။ team သုံးခုလုံးက app တစ်ခုတည်းကို အတူ release လုပ်ရတော့
+      တစ်ပတ်မှာ တစ်ခါပဲ ထွက်နိုင်ပြီး၊ team တစ်ခုရဲ့ bug က ကျန်တဲ့ team တွေရဲ့ release ကိုပါ တားနေပါတယ်။
+      [[mark:type-5]] ပဉ္စမက security ပါ။ ဒါကတော့ wallet ကုမ္ပဏီနဲ့ ချုပ်ထားတဲ့ စာချုပ်ထဲမှာ ငွေချေမှု data ကို
+      လုံခြုံအောင် ထားရမယ်လို့ ရေးထားပြီးသားပါ။
+      [[mark:sel-written]] ဒီ ငါးခုထဲမှာ စာနဲ့ ရေးထားတာက ဒီ တစ်ခုပဲ ရှိပါတယ်။ ကျန်တဲ့ လေးခုကိုတော့ ဘယ်သူမှ
+      မရေးခဲ့ပါဘူး။ ထိုင်ခုံကို နှစ်ခါ မရောင်းပါနဲ့လို့ ဘယ်ကားလိုင်းကမှ ရေးမပေးပါဘူး။ ရေးစရာ မလိုအောင်
+      သိသာတယ်လို့ ထင်ထားကြလို့ပါ။ ဒါပေမဲ့ တကယ် ဖြစ်လာတဲ့နေ့မှာတော့ အားလုံးက စိတ်ဆိုးကြပါတယ်။
+      [[mark:type-count]] ဒါကြောင့် characteristic အများစုကို requirement ထဲမှာ ရှာလို့ မတွေ့နိုင်ပါဘူး။ business
+      ကို နားလည်အောင် လုပ်ပြီး၊ ဆိုလိုရင်းကို ကိုယ်တိုင် ဖော်ထုတ်ယူရတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-families, type: slide.close, at: { mark: close-fam } }
+      - id: type-1
+        type: editor.type
+        at: { mark: type-1 }
+        cadence: line-by-line
+        target: { file: notebook/12-candidates.md, after: "| ရေးထားလား |\n|---|---|---|\n" }
+        text: "| elasticity | သင်္ကြန် လက်မှတ် ဖွင့်တဲ့ မနက် လူ 15 ဆ ဝင်လာတယ် | မရေး |\n"
+      - id: type-2
+        type: editor.type
+        at: { mark: type-2 }
+        cadence: line-by-line
+        target: { file: notebook/12-candidates.md, after: "လူ 15 ဆ ဝင်လာတယ် | မရေး |\n" }
+        text: "| data integrity | ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းရဘူး | မရေး |\n"
+      - id: type-3
+        type: editor.type
+        at: { mark: type-3 }
+        cadence: line-by-line
+        target: { file: notebook/12-candidates.md, after: "နှစ်ခါ မရောင်းရဘူး | မရေး |\n" }
+        text: "| availability | ကောင်တာက internet မကောင်းလည်း ရောင်းရမယ် | မရေး |\n"
+      - id: type-4
+        type: editor.type
+        at: { mark: type-4 }
+        cadence: line-by-line
+        target: { file: notebook/12-candidates.md, after: "မကောင်းလည်း ရောင်းရမယ် | မရေး |\n" }
+        text: "| deployability | team 3 ခု၊ release က တစ်ပတ် တစ်ခါပဲ | မရေး |\n"
+      - id: type-5
+        type: editor.type
+        at: { mark: type-5 }
+        cadence: line-by-line
+        target: { file: notebook/12-candidates.md, after: "တစ်ပတ် တစ်ခါပဲ | မရေး |\n" }
+        text: "| security | wallet ကုမ္ပဏီနဲ့ စာချုပ်: ငွေချေမှု data လုံခြုံရမယ် | ရေးထား |\n"
+      - id: sel-written
+        type: editor.select
+        at: { mark: sel-written }
+        target: { file: notebook/12-candidates.md, text: "| ရေးထား |" }
+      - id: type-count
+        type: editor.type
+        at: { mark: type-count }
+        cadence: line-by-line
+        target: { file: notebook/12-candidates.md, after: "data လုံခြုံရမယ် | ရေးထား |\n" }
+        text: "\nရေးထားတာ 1 ခု၊ မရေးဘဲ ဆိုလိုနေတာ 4 ခု\n"
+      - id: expect-row
+        type: expect.file
+        at: { afterAction: type-count }
+        path: notebook/12-candidates.md
+        contains: "| data integrity | ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းရဘူး | မရေး |\n"
+
+  - id: tension
+    chapter: တစ်ခု တိုးရင် တစ်ခု လျော့တယ်
+    narration: >
+      [[mark:t-open]] ဒါဆို ဒီ ငါးခုလုံးကို အပြည့်အဝ ရအောင် လုပ်လိုက်ရင် မပြီးဘူးလားလို့ မေးစရာ ရှိပါတယ်။
+      အဲဒီလို လုပ်လို့ မရပါဘူး။ ဘာကြောင့်လဲ ဆိုတာ ကောင်တာရဲ့ အခြေအနေနဲ့ ကြည့်ရအောင်။
+      [[mark:t-two]] ကောင်တာမှာ characteristic နှစ်ခု လိုပါတယ်။ internet မကောင်းလည်း ရောင်းလို့ရရမယ် ဆိုတဲ့
+      availability နဲ့၊ ထိုင်ခုံ နှစ်ခါ မရောင်းမိရဘူး ဆိုတဲ့ data integrity ပါ။
+      [[mark:t-left]] availability ကို အပြည့် ပေးချင်ရင် internet ပြတ်နေတဲ့အချိန်မှာလည်း ကောင်တာက
+      ဆက်ရောင်းနိုင်ရပါမယ်။ ဒါပေမဲ့ အဲဒီအချိန်မှာ app ဘက်က ဘယ်ခုံတွေ ရောင်းပြီးပြီလဲ ဆိုတာကို ကောင်တာက
+      မသိနိုင်တော့၊ ခုံ တစ်ခုံကို နှစ်ခါ ရောင်းမိနိုင်ပါတယ်။
+      [[mark:t-right]] data integrity ကို အပြည့် ပေးချင်ရင်တော့ ကောင်တာက ရောင်းတိုင်း ဗဟိုက ထိုင်ခုံ စာရင်းကို
+      အရင် စစ်ရပါမယ်။ ဒီလိုဆိုရင် internet ပြတ်တာနဲ့ ကောင်တာက ဘာမှ ရောင်းလို့ မရတော့ပါဘူး။
+      [[mark:t-pull]] တစ်ခုကို တိုးလိုက်ရင် နောက်တစ်ခုက လျော့သွားတာပါ။ နှစ်ခုလုံးကို တစ်ပြိုင်တည်း အပြည့်
+      ရဖို့ဆိုတာ မဖြစ်နိုင်ပါဘူး။
+      [[mark:t-cost]] တစ်ခုနဲ့တစ်ခု ဆန့်ကျင်မနေတဲ့ characteristic တွေမှာလည်း အခမဲ့ ရတာ တစ်ခုမှ မရှိပါဘူး။ တစ်ခုကို
+      ထောက်ပံ့တိုင်း design ဆွဲရတဲ့ အချိန်၊ ဆောက်ရတဲ့ အချိန်နဲ့ ထိန်းသိမ်းရတဲ့ ကုန်ကျစရိတ်တွေ ပါလာပါတယ်။
+      [[mark:t-few]] ဒါကြောင့် မေးရမယ့် မေးခွန်းက characteristic ဘယ်နှခုကို ထောက်ပံ့နိုင်မလဲ ဆိုတာ
+      မဟုတ်ပါဘူး။ ဒီ system အတွက် တကယ် အရေးကြီးတဲ့ အနည်းငယ်က ဘယ်ဟာတွေလဲ ဆိုတာပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-t-open,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          open: true,
+          clear: true,
+          upsertIds: [p-title],
+        }
+      - {
+          id: draw-t-two,
+          type: whiteboard.apply,
+          at: { mark: t-two },
+          upsertIds: [p-av, p-av-t, p-av-s, p-di, p-di-t, p-di-s],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-t-left,
+          type: whiteboard.apply,
+          at: { mark: t-left },
+          upsertIds: [p-q, p-q-l, p-av-cost],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-t-right,
+          type: whiteboard.apply,
+          at: { mark: t-right },
+          upsertIds: [p-di-cost],
+          drawMs: 800,
+        }
+      - {
+          id: draw-t-pull,
+          type: whiteboard.apply,
+          at: { mark: t-pull },
+          upsertIds: [p-pull-l, p-pull-r],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-few,
+          type: whiteboard.apply,
+          at: { mark: t-few },
+          upsertIds: [p-few],
+          drawMs: 1200,
+        }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ ဒီ စာကြောင်း နှစ်ကြောင်းထဲက ဘယ်ဟာက architecture characteristic ကို
+      ပြောနေတာလဲ။
+      [[mark:q-a]] ပထမ စာကြောင်းက ခရီးသည်က wallet နဲ့ ငွေချေနိုင်ရမယ် ဆိုတာပါ။
+      [[mark:q-b]] ဒုတိယ စာကြောင်းကတော့ ငွေချေနေတုန်း wallet ကုမ္ပဏီဘက်က ခဏ ကျသွားရင်တောင် ခရီးသည်ရဲ့ ငွေ မပျောက်ရဘူး ဆိုတာပါ။ lesson ကို
+      pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ စာကြောင်းပါ။
+      [[mark:q-why]] ဘာကြောင့်လဲဆိုတော့ ပထမ စာကြောင်းက system ဘာလုပ်ပေးရမလဲ ဆိုတဲ့ feature ကို ပြောတာပါ။
+      ဒုတိယ စာကြောင်းကတော့ အဲဒီ feature က ဘယ်လို အခြေအနေမှာ ဘယ်လောက် ကောင်းကောင်း အလုပ်လုပ်ရမလဲ ဆိုတာကို
+      ပြောတာပါ။
+      [[mark:q-more]] ပြီးတော့ ဒါကို ရဖို့ code တစ်နေရာ ပြင်ရုံနဲ့ မရပါဘူး။ ငွေချေတာ တစ်ဝက်မှာ ရပ်သွားရင် ဘယ်အပိုင်းက
+      မှတ်ထားမလဲ၊ ဘယ်အပိုင်းက နောက်မှ ပြန်စစ်မလဲ ဆိုတဲ့ structure ကို ထိပါတယ်။ မရခဲ့ရင်လည်း ခရီးသည်တွေရဲ့
+      ယုံကြည်မှု ပျောက်သွားမှာမို့ business ကို တိုက်ရိုက် ထိခိုက်ပါတယ်။ အချက်
+      သုံးချက်လုံးနဲ့ ကိုက်ညီတာကြောင့် ဒါက characteristic တစ်ခုပါ။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 900,
+        }
+      - { id: draw-q-a, type: whiteboard.apply, at: { mark: q-a }, upsertIds: [z-a], drawMs: 900 }
+      - { id: draw-q-b, type: whiteboard.apply, at: { mark: q-b }, upsertIds: [z-b], drawMs: 900 }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-why,
+          type: whiteboard.apply,
+          at: { mark: q-why },
+          upsertIds: [z-why],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system အတွက်
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ ကိုယ့် project မှာလည်း ဘယ်သူမှ မရေးထားပေမဲ့ လူတိုင်းက မျှော်လင့်ထားတဲ့
+      characteristic တွေ ရှိနေမှာပါ။ lesson ကို pause လုပ်ပြီး ဒီ table ထဲမှာ ကိုယ့် system ရဲ့ မရေးထားတဲ့
+      characteristic နှစ်ခုကို၊ ဘယ်စကား ဒါမှမဟုတ် ဘယ်အဖြစ်အပျက်က ဆိုလိုနေလဲ ဆိုတာနဲ့ တွဲပြီး ရေးကြည့်ပါ။
+      [[mark:turn-2]] ရှာရ ခက်နေရင် နောက်ဆုံး ဖြစ်ခဲ့တဲ့ ပြဿနာကြီး တစ်ခုကို ပြန်စဉ်းစားကြည့်ပါ။ feature က
+      မှန်နေရက်နဲ့ လူတွေ စိတ်ဆိုးခဲ့ရတယ်ဆိုရင်၊ အဲဒီနေရာမှာ မရေးထားတဲ့ characteristic တစ်ခု ရှိနေတတ်ပါတယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-rows
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          file: notebook/12-candidates.md
+          text: "| elasticity | သင်္ကြန် လက်မှတ် ဖွင့်တဲ့ မနက် လူ 15 ဆ ဝင်လာတယ် | မရေး |\n| data integrity | ထိုင်ခုံ တစ်ခုံကို နှစ်ခါ မရောင်းရဘူး | မရေး |"
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      [[mark:recap]] ဒါဆို ပြန်ချုပ်ရရင်၊ requirement ထဲမှာ feature တွေပဲ ပါတတ်ပေမဲ့၊ system ကို အောင်မြင်စေတာ၊
+      ကျရှုံးစေတာကတော့ ဘယ်လောက် ကောင်းကောင်း လုပ်နိုင်လဲ ဆိုတဲ့ architecture characteristic တွေပါ။ feature
+      မဟုတ်ဘဲ structure ကို ထိပြီး၊ business အောင်မြင်ဖို့ လိုအပ်တဲ့ အရည်အသွေးတွေပါ။ အများစုကို ဘယ်သူမှ
+      ရေးမထားတတ်ပါဘူး။ တစ်ခုကို တိုးရင် နောက်တစ်ခု လျော့တတ်တာမို့၊ အကုန်လုံးကို မလိုက်ဘဲ အရေးကြီးတဲ့
+      အနည်းငယ်ကို ရွေးရပါတယ်။
+      [[mark:next]] နောက် lesson မှာတော့ business ဘက်က ပြောတဲ့ စကားတွေကနေ characteristic တွေကို ဘယ်လို
+      ဘာသာပြန်ယူမလဲ၊ အရေးကြီးဆုံး သုံးခုကို ဘယ်လို ရွေးမလဲ ဆိုတာကို လေ့လာသွားပါမယ်။
+    sources:
+      - {
+          title: "Fundamentals of Software Architecture, 2nd edition (Richards, Ford)",
+          url: "https://oreil.ly/fundamentals-of-software-architecture-2e",
+        }
+    actions:
+      - id: sel-count
+        type: editor.select
+        at: { mark: recap }
+        target: { file: notebook/12-candidates.md, text: "ရေးထားတာ 1 ခု၊ မရေးဘဲ ဆိုလိုနေတာ 4 ခု" }
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
