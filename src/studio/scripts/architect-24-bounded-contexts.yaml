@@ -1,0 +1,784 @@
+schemaVersion: 1
+
+lesson:
+  slug: architect-24-bounded-contexts
+  title: "Architect Path 24: Ubiquitous language နဲ့ bounded context"
+  locale: my-MM
+  workspace:
+    lessonType: javascript
+    name: Architect Notebook
+    entryFilePath: notebook/24-language.md
+    sidebarStartsCollapsed: true
+    files:
+      README.md: |
+        # ခရီးဖော် · system မှတ်စု
+
+        ခရီးဖော်က အဝေးပြေးကား လက်မှတ်ကို app ကနေ ဝယ်လို့ရအောင် လုပ်ပေးတဲ့ ကုမ္ပဏီပါ။
+        ဒီ course အတွက် စိတ်ကူးနဲ့ တည်ဆောက်ထားတဲ့ ကုမ္ပဏီ ဖြစ်ပါတယ်။
+
+        ## သုံးတဲ့သူတွေ
+
+        - ခရီးသည်: ခရီးစဉ် ရှာတယ်၊ ထိုင်ခုံ ရွေးတယ်၊ wallet နဲ့ ငွေချေတယ်၊ လက်မှတ် ရတယ်
+        - ကားလိုင်း: ခရီးစဉ်နဲ့ ဈေးနှုန်း တင်တယ်၊ ရောင်းအား ကြည့်တယ်
+        - ကောင်တာ ဝန်ထမ်း: ကားဂိတ်မှာ ထိုင်ခုံ အတူတူကိုပဲ ရောင်းတယ်
+
+        ## အခု အခြေအနေ (ကုမ္ပဏီ သက်တမ်း 3 နှစ်)
+
+        - developer 18 ယောက်၊ team 3 ခု: Booking, Operator, Payment
+        - ကားလိုင်း 120၊ တစ်ရက် လက်မှတ် 25,000 ခန့်
+        - deploy လုပ်ရတာက app တစ်ခုတည်းပဲ၊ အထဲမှာ module တွေ ခွဲနေဆဲ
+        - release က တစ်ပတ် တစ်ခါ၊ team တစ်ခုရဲ့ bug က အားလုံးရဲ့ release ကို တားတယ်
+        - အပြင်က service: wallet payment API၊ SMS gateway
+      examples/Ticket.ts: |
+        // Example: ခရီးဖော် ရဲ့ Ticket class (field 60 ထဲက တချို့)
+        class Ticket {
+          tripId: string;
+          seatNumber: string;
+          holdExpiresAt: Date;
+
+          amount: number;
+          walletReference: string;
+          refundedAt: Date | null;
+
+          passengerName: string;
+          boardedAt: Date | null;
+          luggageCount: number;
+
+          status: string;
+          // ... နောက်ထပ် field 50
+        }
+      notebook/24-language.md: |
+        # စကားလုံး မှတ်စု (context အလိုက်)
+
+        ## Booking context
+
+        ## Payment context
+
+        ## Operator context
+      package.json: |
+        {
+          "name": "architect-notebook",
+          "private": true,
+          "version": "1.0.0",
+          "scripts": {
+            "dev": "echo concept lesson: nothing to run"
+          }
+        }
+  whiteboardAssets:
+    # Board 1 — a requirement handed from person to person until it is code:
+    # white people, a blue part, violet hand-overs, red for what is lost and
+    # green for the one shared language that replaces the translating.
+    - { id: h-b1, kind: rectangle, x: 290, y: 180, width: 260, height: 64, rounded: true }
+    - {
+        id: h-l1,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 194,
+        width: 260,
+        height: 35,
+        text: "ကားလိုင်း",
+        fontSize: 28,
+      }
+    - {
+        id: h-a1,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 250,
+        width: 40,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - { id: h-b2, kind: rectangle, x: 290, y: 290, width: 260, height: 64, rounded: true }
+    - {
+        id: h-l2,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 304,
+        width: 260,
+        height: 35,
+        text: "လှလှ",
+        fontSize: 28,
+      }
+    - {
+        id: h-a2,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 360,
+        width: 40,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - { id: h-b3, kind: rectangle, x: 290, y: 400, width: 260, height: 64, rounded: true }
+    - {
+        id: h-l3,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 414,
+        width: 260,
+        height: 35,
+        text: "developer",
+        fontSize: 28,
+      }
+    - {
+        id: h-a3,
+        kind: freedraw,
+        stroke: arrow-down,
+        x: 400,
+        y: 470,
+        width: 40,
+        height: 34,
+        strokeColor: "#6741d9",
+      }
+    - {
+        id: h-b4,
+        kind: rectangle,
+        x: 290,
+        y: 510,
+        width: 260,
+        height: 64,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: h-l4,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 524,
+        width: 260,
+        height: 35,
+        text: "code",
+        fontSize: 28,
+      }
+    - {
+        id: h-loss,
+        kind: text,
+        x: 625,
+        y: 305,
+        width: 400,
+        height: 35,
+        text: "အဆင့်တိုင်း အဓိပ္ပာယ် ပျောက်",
+        fontSize: 28,
+        strokeColor: "#e03131",
+      }
+    - {
+        id: h-strike,
+        kind: freedraw,
+        stroke: strike,
+        x: 620,
+        y: 305,
+        width: 380,
+        height: 35,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: h-ul,
+        kind: text,
+        x: 625,
+        y: 400,
+        width: 400,
+        height: 35,
+        text: "စကားလုံး တစ်မျိုးတည်း",
+        fontSize: 28,
+        strokeColor: "#2f9e44",
+      }
+    # Board 2 — one word, three meanings: each dashed line is a bounded context,
+    # blue is what "လက်မှတ်" is inside it, orange the word the board is about.
+    - {
+        id: k-title,
+        kind: text,
+        x: 270,
+        y: 160,
+        width: 600,
+        height: 45,
+        text: "လက်မှတ် ဆိုတာ ဘာလဲ?",
+        fontSize: 36,
+        strokeColor: "#f08c00",
+      }
+    - {
+        id: k-b-bound,
+        kind: rectangle,
+        x: 270,
+        y: 225,
+        width: 262,
+        height: 300,
+        strokeStyle: dashed,
+      }
+    - {
+        id: k-b-name,
+        kind: text,
+        align: center,
+        x: 270,
+        y: 240,
+        width: 262,
+        height: 35,
+        text: "Booking",
+        fontSize: 28,
+      }
+    - {
+        id: k-b-box,
+        kind: rectangle,
+        x: 290,
+        y: 330,
+        width: 222,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-b-l,
+        kind: text,
+        align: center,
+        x: 290,
+        y: 357,
+        width: 222,
+        height: 35,
+        text: "ထိုင်ခုံ တစ်ခုံ",
+        fontSize: 28,
+      }
+    - {
+        id: k-p-bound,
+        kind: rectangle,
+        x: 549,
+        y: 225,
+        width: 262,
+        height: 300,
+        strokeStyle: dashed,
+      }
+    - {
+        id: k-p-name,
+        kind: text,
+        align: center,
+        x: 549,
+        y: 240,
+        width: 262,
+        height: 35,
+        text: "Payment",
+        fontSize: 28,
+      }
+    - {
+        id: k-p-box,
+        kind: rectangle,
+        x: 569,
+        y: 330,
+        width: 222,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-p-l,
+        kind: text,
+        align: center,
+        x: 569,
+        y: 357,
+        width: 222,
+        height: 35,
+        text: "ငွေ တစ်ကြောင်း",
+        fontSize: 28,
+      }
+    - {
+        id: k-o-bound,
+        kind: rectangle,
+        x: 828,
+        y: 225,
+        width: 262,
+        height: 300,
+        strokeStyle: dashed,
+      }
+    - {
+        id: k-o-name,
+        kind: text,
+        align: center,
+        x: 828,
+        y: 240,
+        width: 262,
+        height: 35,
+        text: "Operator",
+        fontSize: 28,
+      }
+    - {
+        id: k-o-box,
+        kind: rectangle,
+        x: 848,
+        y: 330,
+        width: 222,
+        height: 90,
+        rounded: true,
+        strokeColor: "#1971c2",
+      }
+    - {
+        id: k-o-l,
+        kind: text,
+        align: center,
+        x: 848,
+        y: 357,
+        width: 222,
+        height: 35,
+        text: "နာမည် တစ်ခု",
+        fontSize: 28,
+      }
+    - {
+        id: k-team,
+        kind: text,
+        x: 270,
+        y: 560,
+        width: 600,
+        height: 35,
+        text: "context တစ်ခုကို team တစ်ခုက ပိုင်",
+        fontSize: 28,
+      }
+    # Board 3 — the quiz: white question and options, green answer, orange reason.
+    - {
+        id: z-title,
+        kind: text,
+        x: 270,
+        y: 170,
+        width: 700,
+        height: 45,
+        text: "Ticket class ကို ဘယ်လို ပြင်မလဲ?",
+        fontSize: 36,
+      }
+    - {
+        id: z-a,
+        kind: text,
+        x: 290,
+        y: 270,
+        width: 760,
+        height: 35,
+        text: "က) field နာမည်မှာ ရှေ့ဆက် ထည့်မယ်",
+        fontSize: 28,
+      }
+    - {
+        id: z-b,
+        kind: text,
+        x: 290,
+        y: 345,
+        width: 760,
+        height: 35,
+        text: "ခ) context တစ်ခုစီမှာ class သေးသေး",
+        fontSize: 28,
+      }
+    - {
+        id: z-b-line,
+        kind: freedraw,
+        stroke: underline,
+        x: 290,
+        y: 350,
+        width: 540,
+        height: 42,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-b-ok,
+        kind: freedraw,
+        stroke: check,
+        x: 860,
+        y: 338,
+        width: 44,
+        height: 44,
+        strokeColor: "#2f9e44",
+      }
+    - {
+        id: z-reason,
+        kind: text,
+        x: 290,
+        y: 470,
+        width: 760,
+        height: 35,
+        text: "model တစ်ခုကို context တစ်ခု၊ team တစ်ခု",
+        fontSize: 28,
+        strokeColor: "#f08c00",
+      }
+
+build:
+  # Studio replaces this built-in profile at render time with the Burmese
+  # provider chosen in the render console.
+  voiceProfile: pocket-alba-v1
+  seed: 8124
+
+runtime:
+  kind: webcontainer
+  adapterVersion: 1
+  defaultMode: live
+  initCommand: ""
+  runCommand: pnpm dev
+  environment: {}
+
+scenes:
+  - id: need
+    chapter: စကားလုံး တစ်လုံး၊ အဓိပ္ပာယ် သုံးမျိုး
+    narration: >
+      ပြီးခဲ့တဲ့ lesson မှာ business ရဲ့ အပိုင်းတွေထဲက ဘယ်ဟာက ခရီးဖော် ကို ပြိုင်ဘက်နဲ့ ကွာစေလဲ ခွဲကြည့်ပြီး၊
+      အားကို ဘယ်အပိုင်းမှာ အများဆုံး သုံးမလဲ ဆုံးဖြတ်ခဲ့ပါတယ်။ ဒီအပတ်မှာတော့ product manager လှလှ တောင်းထားတဲ့
+      feature တစ်ခုက ပြဿနာ ဖြစ်လာပါတယ်။ ခရီးသည်က လက်မှတ်ကို တခြား ရက်ကို ပြောင်းလို့ရအောင် လုပ်ပေးဖို့ပါ။
+      [[mark:n-story]] Booking team lead မောင်မောင် ရဲ့ team က လက်မှတ် ပြောင်းတာကို ထိုင်ခုံ အဟောင်းကို
+      လွှတ်ပြီး ထိုင်ခုံ အသစ် ယူတာလို့ နားလည်ပြီး ရေးလိုက်ပါတယ်။
+      [[mark:n-pay]] release ထွက်တဲ့နေ့မှာ Payment team ရဲ့ ငွေစာရင်းတွေ မကိုက်တော့ပါဘူး။
+      [[mark:n-op]] ကားလိုင်းတွေဆီ ရောက်တဲ့ ကားတက်စာရင်းမှာလည်း ခရီးသည် နာမည်တွေ နှစ်ခါ ပါလာပါတယ်။
+      [[mark:n-open]] ဘာကြောင့်လဲ ဆိုတာ သိဖို့ code ထဲက Ticket class ကို ဥပမာအနေနဲ့ ကြည့်ရအောင်။ field ၆၀
+      ရှိပြီး၊ ပြင်ရမှာကို လူတိုင်း ကြောက်နေတဲ့ class ပါ။
+      [[mark:n-seat]] အပေါ်ပိုင်းက field တွေက ထိုင်ခုံနဲ့ ခရီးစဉ် အကြောင်းပါ။ Booking team အတွက် လက်မှတ်
+      ဆိုတာ ဒါပါပဲ။
+      [[mark:n-money]] အလယ်က field တွေက ငွေအကြောင်းပါ။ Payment team အတွက်တော့ လက်မှတ် ဆိုတာ ငွေစာရင်း
+      တစ်ကြောင်းပါ။
+      [[mark:n-board]] အောက်ပိုင်းက field တွေကတော့ ကားပေါ် တက်တာနဲ့ ဆိုင်ပါတယ်။ ကားလိုင်းအတွက် လက်မှတ် ဆိုတာ
+      ကားတက်စာရင်းထဲက နာမည် တစ်ခုပါ။
+      [[mark:n-status]] အဆိုးဆုံးက status ဆိုတဲ့ field တစ်ခုတည်းနဲ့ အဲဒီ သုံးမျိုးလုံးရဲ့ အခြေအနေကို
+      မှတ်နေတာပါ။ စကားလုံး တစ်လုံးတည်းကို လူသုံးစုက အဓိပ္ပာယ် သုံးမျိုးနဲ့ သုံးနေပြီး၊ code ကလည်း အဲဒီအတိုင်း
+      ရောနေတာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: open-notebook,
+          type: workspace.openFile,
+          at: { scene: start },
+          path: notebook/24-language.md,
+        }
+      - id: sel-booking
+        type: editor.select
+        at: { mark: n-story }
+        target: { file: notebook/24-language.md, text: "## Booking context" }
+      - id: sel-payment
+        type: editor.select
+        at: { mark: n-pay }
+        target: { file: notebook/24-language.md, text: "## Payment context" }
+      - id: sel-operator
+        type: editor.select
+        at: { mark: n-op }
+        target: { file: notebook/24-language.md, text: "## Operator context" }
+      - {
+          id: open-ticket,
+          type: workspace.openFile,
+          at: { mark: n-open },
+          path: examples/Ticket.ts,
+        }
+      - id: sel-seat
+        type: editor.select
+        at: { mark: n-seat }
+        target:
+          {
+            file: examples/Ticket.ts,
+            text: "  tripId: string;\n  seatNumber: string;\n  holdExpiresAt: Date;",
+          }
+      - id: sel-money
+        type: editor.select
+        at: { mark: n-money }
+        target:
+          {
+            file: examples/Ticket.ts,
+            text: "  amount: number;\n  walletReference: string;\n  refundedAt: Date | null;",
+          }
+      - id: sel-boarding
+        type: editor.select
+        at: { mark: n-board }
+        target:
+          {
+            file: examples/Ticket.ts,
+            text: "  passengerName: string;\n  boardedAt: Date | null;\n  luggageCount: number;",
+          }
+      - id: sel-status
+        type: editor.select
+        at: { mark: n-status }
+        target: { file: examples/Ticket.ts, text: "status: string;" }
+
+  - id: telephone
+    chapter: လက်ဆင့်ကမ်းတိုင်း အဓိပ္ပာယ် ပျောက်တယ်
+    narration: >
+      [[mark:t-open]] ဒီ ပြဿနာက ဘယ်သူ့ အမှားမှ မဟုတ်ပါဘူး။ လိုအပ်ချက် တစ်ခုက code ဖြစ်လာဖို့ လက်ဆင့်ကမ်းရတဲ့
+      လမ်းကို ကြည့်ရအောင်။ ကားလိုင်းက သူ လိုချင်တာကို လှလှ ကို ပြောပြပါတယ်။
+      [[mark:t-chain]] လှလှ က requirement အဖြစ် ရေးပါတယ်။ developer က အဲဒါကို ဖတ်ပြီး code ရေးပါတယ်။
+      [[mark:t-loss]] လက်ဆင့်ကမ်းတဲ့ အဆင့်တိုင်းမှာ စကားလုံးကို ကိုယ့် နားလည်မှုနဲ့ ဘာသာပြန်ကြရတာမို့၊
+      အဓိပ္ပာယ် နည်းနည်းစီ ပျောက်သွားပါတယ်။ လက်မှတ် ပြောင်းတယ် ဆိုတဲ့ စကားက ကားလိုင်းအတွက် ခရီးသည်ကို
+      တခြားကားကို ရွှေ့တာ ဖြစ်ပေမဲ့၊ code ထဲ ရောက်တော့ ထိုင်ခုံ နှစ်ခုံကို လဲတာ ဖြစ်သွားခဲ့ပါတယ်။
+      [[mark:t-ul]] ဒါကို ဖြေရှင်းတဲ့ နည်းက ubiquitous language ပါ။ business ဘက်က လူတွေနဲ့ developer တွေ
+      အတူသုံးတဲ့ စကားလုံး တစ်မျိုးတည်းကို ဆိုလိုတာပါ။ စကားပြောတဲ့အခါ၊ စာရွက်စာတမ်းထဲမှာ၊ code ထဲက
+      နာမည်တွေမှာပါ အဲဒီ စကားလုံးတွေကိုပဲ သုံးရင် ကြားမှာ ဘာသာပြန်စရာ မလိုတော့ပါဘူး။ စကားလုံးတွေကိုလည်း
+      database ရဲ့ table နာမည်တွေကနေ မယူဘဲ၊ business ဘက်က လူတွေ တကယ် ပြောနေတဲ့ စကားကနေ ယူရပါတယ်။
+      [[mark:t-rules]] စည်းကမ်းက နှစ်ခုပဲ ရှိပါတယ်။ စကားလုံး တစ်လုံးမှာ အဓိပ္ပာယ် တစ်ခုတည်း ရှိရမယ်၊ အဓိပ္ပာယ်
+      တစ်ခုအတွက်လည်း စကားလုံး တစ်လုံးတည်း သုံးရပါမယ်။ ဥပမာ ခရီးစဉ် လို့လည်း ပြော၊ ကားအချိန် လို့လည်း
+      ပြောနေရင်၊ အဲဒီ နှစ်ခုက တကယ် အတူတူပဲလား ဆိုတာ ဘယ်သူမှ မသေချာတော့ပါဘူး။ ဒါက တစ်ခါ သတ်မှတ်ပြီး
+      ပြီးသွားတဲ့ အလုပ်လည်း မဟုတ်ပါဘူး။ စကားပြောရင်း မကိုက်တာ တွေ့တိုင်း ပြန်ညှိနေရတာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-t-open,
+          type: whiteboard.apply,
+          at: { mark: t-open },
+          open: true,
+          upsertIds: [h-b1, h-l1, h-a1, h-b2, h-l2],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-t-chain,
+          type: whiteboard.apply,
+          at: { mark: t-chain },
+          upsertIds: [h-a2, h-b3, h-l3, h-a3, h-b4, h-l4],
+          drawMs: 2400,
+        }
+      - {
+          id: draw-t-loss,
+          type: whiteboard.apply,
+          at: { mark: t-loss },
+          upsertIds: [h-loss],
+          drawMs: 1000,
+        }
+      - {
+          id: draw-t-ul,
+          type: whiteboard.apply,
+          at: { mark: t-ul },
+          upsertIds: [h-strike, h-ul],
+          drawMs: 1400,
+        }
+      - { id: point-ul, type: whiteboard.point, at: { mark: t-rules }, target: { assetId: h-ul } }
+
+  - id: one-word
+    chapter: Bounded context
+    narration: >
+      [[mark:w-open]] ဒါဆို ကုမ္ပဏီ တစ်ခုလုံးအတွက် လက်မှတ် ရဲ့ အဓိပ္ပာယ်ကို တစ်ခုတည်း သတ်မှတ်လိုက်ရင် ပြီးမလား။
+      စမ်းကြည့်ရင် မရတာကို တွေ့ရပါလိမ့်မယ်။
+      [[mark:w-book]] Booking team နဲ့ ခရီးသည်တွေ စကားပြောတဲ့အခါ လက်မှတ် ဆိုတာ ခရီးစဉ် တစ်ခုပေါ်က ထိုင်ခုံ
+      တစ်ခုံပါ။
+      [[mark:w-pay]] Payment team နဲ့ finance ဘက်က တာဝန်ခံတွေအတွက်တော့ ငွေစာရင်း တစ်ကြောင်းပါ။ ထိုင်ခုံ
+      နံပါတ်ကို သူတို့ စိတ်မဝင်စားပါဘူး။
+      [[mark:w-op]] ကားလိုင်းနဲ့ ကားဂိတ်က ဝန်ထမ်းတွေအတွက်ကတော့ ကားတက်စာရင်းထဲက နာမည် တစ်ခုပါ။
+      [[mark:w-honest]] သုံးဖွဲ့လုံးက ကိုယ့်အလုပ်အတွက် မှန်တဲ့ အဓိပ္ပာယ်ကို သုံးနေကြတာပါ။ ဥပမာ လက်မှတ်
+      တစ်စောင်အတွက် ငွေကို နှစ်ကြိမ်ခွဲ ပြန်အမ်းရရင်၊ Payment မှာ စာရင်း နှစ်ကြောင်း ဖြစ်ပေမဲ့ Booking မှာတော့
+      ထိုင်ခုံက တစ်ခုံတည်းပါပဲ။ အားလုံးကို အဓိပ္ပာယ် တစ်ခုတည်း သုံးခိုင်းရင်၊ ဘယ်သူ့အတွက်မှ အသုံးမကျတဲ့
+      ဝါးတားတား အဓိပ္ပာယ် တစ်ခုပဲ ရလာမှာပါ။
+      [[mark:w-bc]] ဒါကြောင့် စကားလုံးကို အတင်း မပေါင်းဘဲ၊ နယ်နိမိတ် ခြားလိုက်ပါတယ်။ စကားလုံး တစ်လုံးက
+      အဓိပ္ပာယ် တစ်ခုတည်း ရှိတဲ့ အဲဒီ နယ်နိမိတ်ကို bounded context လို့ ခေါ်ပါတယ်။ ubiquitous language
+      ဆိုတာလည်း ကုမ္ပဏီ တစ်ခုလုံးအတွက် မဟုတ်ဘဲ၊ context တစ်ခုအတွင်းမှာပဲ တစ်မျိုးတည်း ဖြစ်ရတာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-w-open,
+          type: whiteboard.apply,
+          at: { mark: w-open },
+          clear: true,
+          upsertIds: [k-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-w-book,
+          type: whiteboard.apply,
+          at: { mark: w-book },
+          upsertIds: [k-b-name, k-b-box, k-b-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-pay,
+          type: whiteboard.apply,
+          at: { mark: w-pay },
+          upsertIds: [k-p-name, k-p-box, k-p-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-op,
+          type: whiteboard.apply,
+          at: { mark: w-op },
+          upsertIds: [k-o-name, k-o-box, k-o-l],
+          drawMs: 1500,
+        }
+      - {
+          id: draw-w-bc,
+          type: whiteboard.apply,
+          at: { mark: w-bc },
+          upsertIds: [k-b-bound, k-p-bound, k-o-bound],
+          drawMs: 1800,
+        }
+
+  - id: designed
+    chapter: Context ကို ကိုယ်တိုင် design ဆွဲရတယ်
+    narration: >
+      business ရဲ့ လုပ်ငန်း အပိုင်းတွေ၊ subdomain တွေကတော့ ရှိပြီးသားမို့ ရှာတွေ့ရတာပါ။ bounded context ကတော့
+      ကိုယ်တိုင် design ဆွဲပြီး ဆုံးဖြတ်ရတာပါ။ ဘယ်နှခု ခွဲမလဲ၊ နယ်နိမိတ်ကို ဘယ်မှာ ချမလဲ ဆိုတာ ကိုယ့်
+      ဆုံးဖြတ်ချက်ပါ။
+      [[mark:g-team]] ပထမ စည်းကမ်းက context တစ်ခုကို team တစ်ခုတည်းက ပိုင်ရမယ် ဆိုတာပါ။ team နှစ်ခုက
+      context တစ်ခုကို ဝိုင်းပြင်နေရင် စကားလုံးတွေ ပြန်ရောသွားမှာမို့ပါ။
+      [[mark:g-wide]] ဒုတိယက အစမှာ ကျယ်ကျယ် ခွဲပြီး၊ နားလည်မှု တိုးလာမှ ထပ်ခွဲတာပါ။ ခရီးဖော် မှာ အခုတော့ team
+      သုံးခုနဲ့ ကိုက်အောင် context သုံးခုပဲ ထားပါမယ်။ Booking ထဲမှာ ထိုင်ခုံနဲ့ လက်မှတ်ကို ထပ်ခွဲသင့်မသင့်
+      ဆိုတာ မသေချာသေးတာမို့၊ သေချာလာမှ ခွဲပါမယ်။ မှားခွဲမိတဲ့ နယ်နိမိတ်ကို ပြန်ပေါင်းရတာက ပိုခက်လို့ပါ။
+      context ဆိုတာ သေးလေ ကောင်းလေလည်း မဟုတ်ပါဘူး။ သေးလွန်းရင် context တွေကြား ဆက်သွယ်ရတာတွေ များလာပြီး၊
+      ကြီးလွန်းရင်တော့ အဓိပ္ပာယ်တွေ ပြန်ရောလာပါတယ်။
+      [[mark:g-service]] နောက်တစ်ခုက bounded context ဆိုတာ service တစ်ခု ဖြစ်စရာ မလိုတာပါ။ ခရီးဖော် ရဲ့ app
+      တစ်ခုတည်းထဲမှာတောင် module တစ်ခုစီက context တစ်ခု ဖြစ်နိုင်ပါတယ်။ အရေးကြီးတာက deploy ဘယ်လို လုပ်လဲ
+      မဟုတ်ဘဲ၊ စကားလုံးတွေ မရောဖို့ပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-g-team,
+          type: whiteboard.apply,
+          at: { mark: g-team },
+          upsertIds: [k-team],
+          drawMs: 1200,
+        }
+      - {
+          id: point-booking,
+          type: whiteboard.point,
+          at: { mark: g-wide },
+          target: { assetId: k-b-bound },
+        }
+      - {
+          id: point-word,
+          type: whiteboard.point,
+          at: { mark: g-service },
+          target: { assetId: k-title },
+        }
+
+  - id: glossary
+    chapter: Context အလိုက် စကားလုံး မှတ်စု
+    narration: >
+      [[mark:d-close]] ဒါကို လက်တွေ့ သုံးဖို့ context တစ်ခုစီအတွက် စကားလုံး မှတ်စု တစ်ခု ရေးကြည့်ရအောင်။
+      ရောနေတတ်တဲ့ စကားလုံး သုံးလုံးဖြစ်တဲ့ လက်မှတ်၊ ခရီးစဉ်နဲ့ ဈေး ကို ယူပါမယ်။
+      [[mark:d-book]] Booking context ထဲမှာ စကားလုံး သုံးလုံးစလုံးက ထိုင်ခုံကို ဗဟိုပြုပါတယ်။ ခရီးစဉ် ဆိုတာ
+      လမ်းကြောင်း တစ်ခုတည်းကို မဆိုလိုဘဲ၊ ကား တစ်စီးနဲ့ ထွက်ချိန် တစ်ခုပါ တွဲပြီးသားပါ။ ဒါကြောင့် ဒီမှာ
+      လက်မှတ် ပြောင်းတယ် ဆိုတာ ခရီးစဉ် တစ်ခုက ထိုင်ခုံကို လွှတ်ပြီး နောက်တစ်ခုက ထိုင်ခုံကို ယူတာပါ။
+      [[mark:d-pay]] Payment context ထဲမှာတော့ အရာအားလုံးက ငွေပါ။ ခရီးစဉ် ဆိုတဲ့ စကားလုံးကို ဒီမှာ
+      မသုံးပါဘူး။ ဈေး ကိုတော့ ကားလိုင်း ရမယ့်ငွေနဲ့ ခရီးဖော် ရဲ့ commission ၅ ရာခိုင်နှုန်း ဆိုပြီး
+      ခွဲမှတ်ရပါတယ်။ ဒီမှာ လက်မှတ် ပြောင်းတယ် ဆိုတာ ဈေး ကွာသွားရင် ငွေ ထပ်ယူ၊ ဒါမှမဟုတ် ပြန်အမ်းရမယ့်
+      ကိစ္စပါ။
+      [[mark:d-op]] Operator context ကတော့ ကားလိုင်းရဲ့ အမြင်ပါ။ လက်မှတ် ဆိုတာ ဘယ်သူ ကားပေါ် တက်မလဲ
+      ဆိုတာ ဖြစ်ပြီး၊ ဈေး ဆိုတာ ကားလိုင်းက သတ်မှတ်တဲ့ ဈေးပါ။ ဒီမှာ လက်မှတ် ပြောင်းတယ် ဆိုတာ ကားတက်စာရင်း
+      နှစ်ခုကို ပြင်ရတာပါ။
+      [[mark:d-sum]] ဒီလို ရေးလိုက်တော့ လှလှ တောင်းတဲ့ feature တစ်ခုတည်းက context သုံးခုမှာ အလုပ် သုံးမျိုး
+      ဖြစ်နေတာ ရှင်းသွားပါတယ်။ နောက်တစ်ခါ စကားပြောတဲ့အခါ ဘယ် context ရဲ့ လက်မှတ်ကို ပြောနေတာလဲလို့ အရင်
+      မေးလိုက်ရင်၊ နားလည်မှု လွဲတာ အများကြီး လျော့သွားမှာပါ။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-contexts, type: whiteboard.apply, at: { mark: d-close }, open: false }
+      - {
+          id: open-glossary,
+          type: workspace.openFile,
+          at: { afterAction: close-contexts },
+          path: notebook/24-language.md,
+        }
+      - id: type-booking
+        type: editor.type
+        at: { mark: d-book }
+        cadence: line-by-line
+        target: { file: notebook/24-language.md, after: "## Booking context\n" }
+        text: "- လက်မှတ်: ခရီးစဉ် တစ်ခုပေါ်က ထိုင်ခုံ တစ်ခုံကို ခရီးသည် တစ်ယောက်အတွက် ယူထားတာ\n- ခရီးစဉ်: ကား တစ်စီး + လမ်းကြောင်း တစ်ခု + ထွက်ချိန် တစ်ခု\n- ဈေး: ခရီးသည် မြင်ရတဲ့ ထိုင်ခုံ တစ်ခုံရဲ့ ဈေး\n"
+      - id: type-payment
+        type: editor.type
+        at: { mark: d-pay }
+        cadence: line-by-line
+        target: { file: notebook/24-language.md, after: "## Payment context\n" }
+        text: "- လက်မှတ်: လက်ခံထားတဲ့ ငွေစာရင်း တစ်ကြောင်း\n- ဈေး: ကားလိုင်း ရမယ့်ငွေ + commission 5 %\n"
+      - id: type-operator
+        type: editor.type
+        at: { mark: d-op }
+        cadence: line-by-line
+        target: { file: notebook/24-language.md, after: "## Operator context\n" }
+        text: "- လက်မှတ်: ကားတက်စာရင်းထဲက ခရီးသည် တစ်ယောက်ရဲ့ နာမည်\n- ခရီးစဉ်: ကားလိုင်း တင်ထားတဲ့ ကားထွက်ချိန်နဲ့ ထိုင်ခုံ ပုံစံ\n- ဈေး: ကားလိုင်း သတ်မှတ်တဲ့ ဈေး\n"
+      - id: expect-payment
+        type: expect.file
+        at: { afterAction: type-operator }
+        path: notebook/24-language.md
+        contains: "## Payment context\n- လက်မှတ်: လက်ခံထားတဲ့ ငွေစာရင်း တစ်ကြောင်း\n"
+      - id: sel-payment-ticket
+        type: editor.select
+        at: { mark: d-sum }
+        target: { file: notebook/24-language.md, text: "- လက်မှတ်: လက်ခံထားတဲ့ ငွေစာရင်း တစ်ကြောင်း" }
+
+  - id: quiz
+    chapter: မေးခွန်း တစ်ခု
+    narration: >
+      [[mark:quiz]] မေးခွန်း တစ်ခု မေးပါရစေ။ field ၆၀ ရှိတဲ့ Ticket class ကို ဘယ်လို ပြင်မလဲ။
+      [[mark:quiz-a]] ပထမ ရွေးစရာက class ကို ဒီအတိုင်းထားပြီး၊ field နာမည်တွေရဲ့ ရှေ့မှာ booking၊ payment
+      ဆိုတာမျိုး ရှေ့ဆက်တွေ ထည့်ပြီး ခွဲခြားတာပါ။
+      [[mark:quiz-b]] ဒုတိယက context တစ်ခုစီမှာ ကိုယ့်အတွက် လိုတဲ့ field တွေပဲ ပါတဲ့ class သေးသေး တစ်ခုစီ
+      ထားတာပါ။ lesson ကို pause လုပ်ပြီး စဉ်းစားကြည့်ပါ။
+      [[mark:quiz-answer]] အဖြေကတော့ ဒုတိယ တစ်ခုပါ။ ဘာကြောင့်လဲဆိုတော့ ရှေ့ဆက် ထည့်လိုက်လည်း class က
+      တစ်ခုတည်းပဲမို့၊ team သုံးခုလုံးက အဲဒီ တစ်ခုတည်းကို ဝိုင်းပြင်နေရတုန်းပါပဲ။ လူတွေကလည်း စကားပြောတဲ့အခါ
+      ရှေ့ဆက်တွေ ထည့်ပြီး ဘယ်တော့မှ မပြောကြပါဘူး။
+      [[mark:quiz-model]] context တစ်ခုစီမှာ ကိုယ်ပိုင် model၊ ဆိုလိုတာက အဲဒီ context ရဲ့ အဓိပ္ပာယ်ကိုပဲ
+      ကိုယ်စားပြုတဲ့ class သေးသေးတွေ ရှိမှ၊ စကားပြောတဲ့ စကားလုံးနဲ့ code ထဲက နာမည် ထပ်တူကျပါတယ်။ team တစ်ခုကလည်း ကိုယ့် model ကို တခြားသူ မထိခိုက်ဘဲ ပြင်နိုင်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - {
+          id: draw-quiz,
+          type: whiteboard.apply,
+          at: { mark: quiz },
+          open: true,
+          clear: true,
+          upsertIds: [z-title],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-a,
+          type: whiteboard.apply,
+          at: { mark: quiz-a },
+          upsertIds: [z-a],
+          drawMs: 900,
+        }
+      - {
+          id: draw-quiz-b,
+          type: whiteboard.apply,
+          at: { mark: quiz-b },
+          upsertIds: [z-b],
+          drawMs: 900,
+        }
+      - {
+          id: draw-answer,
+          type: whiteboard.apply,
+          at: { mark: quiz-answer },
+          upsertIds: [z-b-line, z-b-ok],
+          drawMs: 900,
+        }
+      - {
+          id: draw-reason,
+          type: whiteboard.apply,
+          at: { mark: quiz-model },
+          upsertIds: [z-reason],
+          drawMs: 1200,
+        }
+
+  - id: your-turn
+    chapter: ကိုယ့် system ထဲက စကားလုံး
+    narration: >
+      [[mark:turn]] အခု ကိုယ့်အလှည့်ပါ။ lesson ကို pause လုပ်ပြီး၊ ကိုယ့် system ထဲမှာ အဓိပ္ပာယ် တစ်ခုထက် ပိုပြီး
+      သုံးနေတဲ့ စကားလုံး တစ်လုံးကို ရှာကြည့်ပါ။ user၊ order၊ account လို စကားလုံးတွေက ဖြစ်တတ်ပါတယ်။ ပြီးရင်
+      ဒီ လက်မှတ် နေရာမှာ အဲဒီ စကားလုံးကို ထည့်ပြီး၊ ဘယ်သူတွေအတွက် ဘာကို ဆိုလိုလဲ ဆိုတာ တစ်ကြောင်းစီ
+      ရေးကြည့်ပါ။
+      [[mark:turn-2]] အဓိပ္ပာယ် နှစ်ခု တွေ့ပြီဆိုရင် အဲဒီ ကြားမှာ context နယ်နိမိတ် တစ်ခု ရှိနေတတ်ပါတယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions:
+      - { id: close-quiz, type: whiteboard.apply, at: { mark: turn }, open: false }
+      - id: sel-ticket-line
+        type: editor.select
+        at: { mark: turn, offsetMs: 2200 }
+        target:
+          {
+            file: notebook/24-language.md,
+            text: "- လက်မှတ်: ခရီးစဉ် တစ်ခုပေါ်က ထိုင်ခုံ တစ်ခုံကို ခရီးသည် တစ်ယောက်အတွက် ယူထားတာ",
+          }
+
+  - id: recap
+    chapter: ပြန်ချုပ်
+    narration: >
+      ဒါဆို ပြန်ချုပ်ရရင်၊ စကားလုံး တစ်လုံးကို လူတွေက အဓိပ္ပာယ် မတူဘဲ သုံးနေရင် code ကလည်း လိုက်ရောသွားပါတယ်။
+      business နဲ့ developer အတူသုံးတဲ့ စကားလုံး တစ်မျိုးတည်း၊ ubiquitous language က လက်ဆင့်ကမ်းတဲ့အခါ
+      ပျောက်တဲ့ အဓိပ္ပာယ်ကို ကာပေးပါတယ်။ အဲဒီ စကားလုံး တစ်လုံးက အဓိပ္ပာယ် တစ်ခုတည်း ရှိတဲ့ နယ်နိမိတ်က bounded
+      context ဖြစ်ပြီး၊ team တစ်ခုက ပိုင်ပါတယ်။
+      [[mark:next]] context တွေ ခွဲလိုက်ပြီဆိုတော့ သူတို့ချင်း ဆက်သွယ်ရပါဦးမယ်။ Booking က Operator ဆီက ခရီးစဉ်
+      data ကို လိုသလို၊ Payment ကလည်း wallet ကုမ္ပဏီကို မှီခိုနေရပါတယ်။ နောက် lesson မှာတော့ context တွေ
+      ဘယ်လို ဆက်ဆံလဲ ပြတဲ့ context map ကို လေ့လာသွားပါမယ်။
+    sources:
+      - { title: "Learning Domain-Driven Design (Khononov)", url: "https://oreil.ly/lddd" }
+    actions: []
+
+checks:
+  - { type: timing.p95Ms, max: 300 }
