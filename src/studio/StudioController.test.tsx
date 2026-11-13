@@ -670,6 +670,61 @@ describe("StudioController workflow", () => {
     expect(studio.builtVoiceProfile).toMatchObject({ providerId: "athanlab" });
   });
 
+  it("resumes a narrated workflow on an empty AthanLab balance, and starts no new one", async () => {
+    studio.capabilities = { athanlab: true, burmeseVoxCpm2: false };
+    localStorage.setItem("next-editor:studio:narration-provider", "athanlab");
+    // The first performance fails for a reason of its own; the second passes.
+    studio.runRender.mockRejectedValueOnce(new Error("performance flake")).mockResolvedValue({
+      report: {
+        planSlug: "burmese-script",
+        outcome: "passed",
+        checks: [],
+        errors: [],
+        receipts: [],
+      },
+      manifest: { planSlug: "burmese-script", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      semantics: null,
+      artifacts: {
+        neBlob: new Blob(),
+        audioBlob: new Blob(),
+        audioFileName: "a.ogg",
+        recording: {},
+      },
+    } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
+    renderController(await freshStudioController());
+    await settle();
+    const panel = studio.athanLabPanel;
+    if (!panel) throw new Error("AthanLabPanel not rendered");
+    act(() => {
+      panel.onVoiceChange("voice-a", "Voice A");
+      panel.onReadyChange(true, null, true);
+    });
+    const emptyBalance = "Your AthanLab balance is empty — no characters left.";
+    studio.narrateAhead.mockImplementation(async () => {
+      act(() => panel.onReadyChange(false, emptyBalance, true));
+      return { outcome: "ready", dialogCount: 1, synthesizedCount: 1 };
+    });
+    pickLesson("burmese-script");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
+
+    const resume = await screen.findByRole("button", { name: "Resume" });
+    expect(resume).toBeEnabled();
+    expect(screen.queryByText(emptyBalance)).toBeNull();
+
+    // A new workflow would have to buy its narration: that stays blocked.
+    fireEvent.click(screen.getByRole("button", { name: "New workflow" }));
+    expect(screen.getByRole("button", { name: /^Start workflow/ })).toBeDisabled();
+    expect(screen.getByText(emptyBalance)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to the current workflow" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    await waitFor(() => expect(screen.getByText("1/1 done")).toBeInTheDocument());
+    expect(studio.runRender).toHaveBeenCalledTimes(2);
+  });
+
   it("refuses a lesson the chosen narration cannot speak before anything renders", () => {
     renderController();
     pickLesson("burmese-script");

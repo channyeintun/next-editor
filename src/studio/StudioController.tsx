@@ -488,8 +488,8 @@ export default function StudioController() {
       // renders find their narration cached and buy nothing, so an empty
       // balance must not stop them. Narration that does have to be bought
       // fails at its first dialog with AthanLab's own refusal. Starting a
-      // render or a workflow on an empty balance stays blocked at the buttons
-      // (startBlockedReason, workflowBlockedReason).
+      // render or a new workflow on an empty balance stays blocked at the
+      // buttons (startBlockedReason, workflowBlockedReason).
       if (!athanLabReadiness.configured || !athanLabVoice) {
         throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
       }
@@ -805,16 +805,28 @@ export default function StudioController() {
     screenRecording: screenRecordingEnabled && isScreenSupported,
   });
   const busy = running || workflow.active;
-  const workflowBlockedReason =
+  // What stops a workflow that already ran from resuming: the studio is busy,
+  // or the narration is not set up.
+  const workflowResumeBlockedReason =
     running && !workflow.active
       ? "A render is running."
       : voiceTask.busy !== null || voiceTask.recording
         ? "Finish the narrator voice task first."
         : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
           ? "Choose a narrator reference in the Render tab first."
-          : provider === "athanlab" && !athanLabReadiness.ready
+          : provider === "athanlab" && !athanLabReadiness.configured
             ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
             : null;
+  // A new workflow has all of its narration still to buy, so an empty AthanLab
+  // balance stops it too. One that already ran may have every lesson narrated
+  // (its own narration pass can be what emptied the balance): resuming it buys
+  // nothing for those, and narration it does still need fails at its first
+  // dialog with AthanLab's own refusal (narrationSetupOf).
+  const workflowBlockedReason =
+    workflowResumeBlockedReason ??
+    (provider === "athanlab" && !athanLabReadiness.ready
+      ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
+      : null);
   // A lesson the workflow cannot narrate fails before the workflow starts, not
   // hours in: its script must parse and its locale suit the chosen narration.
   const workflowLessonOf = (slug: string): { title: string } | { error: string } => {
@@ -999,6 +1011,7 @@ export default function StudioController() {
               slugs={Object.keys(sources)}
               lessonOf={workflowLessonOf}
               blockedReason={workflowBlockedReason}
+              resumeBlockedReason={workflowResumeBlockedReason}
               phase={phase}
             />
           </div>

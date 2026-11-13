@@ -42,8 +42,14 @@ interface StudioWorkflowPanelProps {
    * script does not parse, or the chosen narration cannot speak its language).
    */
   lessonOf: (slug: string) => { title: string } | { error: string };
-  /** Why no workflow can start or resume now (narration not ready, a render running), or null. */
+  /** Why no new workflow can start now (narration not ready, a render running), or null. */
   blockedReason: string | null;
+  /**
+   * Why the workflow that already ran cannot resume now, or null. It asks for
+   * less than a new start: a narration service's empty balance does not stop
+   * lessons that are already narrated.
+   */
+  resumeBlockedReason: string | null;
   /** The render phase of the lesson rendering now. */
   phase: string;
 }
@@ -83,7 +89,10 @@ export default function StudioWorkflowPanel(props: StudioWorkflowPanelProps) {
     <WorkflowRun
       api={api}
       workflow={api.workflow}
-      blockedReason={props.blockedReason}
+      // A workflow that was built but never ran starts like a new one.
+      blockedReason={
+        api.workflow.state === "ready" ? props.blockedReason : props.resumeBlockedReason
+      }
       phase={props.phase}
       onNewWorkflow={() => setSettingUp(true)}
     />
