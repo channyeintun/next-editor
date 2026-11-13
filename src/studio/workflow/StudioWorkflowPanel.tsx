@@ -13,6 +13,8 @@ import { THUMBNAIL_ACCEPT, useMyPlaylists } from "@next-editor/infra";
 import HoverRing from "../../components/hoverRing/HoverRing";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { downloadBlob } from "../../utils/downloadBlob";
+import type { OfflineNarrationApi } from "../narrationPack/offlineNarration";
+import OfflineNarrationSection from "../narrationPack/OfflineNarrationSection";
 import type { StudioWorkflowApi } from "./useStudioWorkflow";
 import { groupLessons, matchThumbnail, orderWorkflowLessons } from "./workflowLessons";
 import {
@@ -52,6 +54,11 @@ interface StudioWorkflowPanelProps {
   resumeBlockedReason: string | null;
   /** The render phase of the lesson rendering now. */
   phase: string;
+  /**
+   * Narration made outside the studio (export its requests, import its audio),
+   * or null where this user has no voice that takes it.
+   */
+  offlineNarration: OfflineNarrationApi | null;
 }
 
 const PRIMARY_BUTTON =
@@ -104,6 +111,7 @@ function WorkflowSetup({
   slugs,
   lessonOf,
   blockedReason,
+  offlineNarration,
   onCancel,
   onStarted,
 }: StudioWorkflowPanelProps & { onCancel: (() => void) | null; onStarted: () => void }) {
@@ -417,6 +425,13 @@ function WorkflowSetup({
           </p>
         ) : null}
       </fieldset>
+
+      {offlineNarration ? (
+        <OfflineNarrationSection
+          api={offlineNarration}
+          slugs={queue.map((lesson) => lesson.slug)}
+        />
+      ) : null}
 
       {api.setupError || startError ? (
         <p

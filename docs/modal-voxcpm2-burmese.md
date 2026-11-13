@@ -5,6 +5,10 @@ Pocket-TTS path. Burmese narration uses VoxCPM2 in a Modal workspace and is
 available only when the signed-in user has the
 `studio.burmese-voxcpm2` D1 feature flag.
 
+The same narration can be made without the hosted GPU: the studio exports the
+requests, a Colab notebook synthesizes them as a batch, and the studio imports
+the audio. See [colab-voxcpm2-burmese.md](./colab-voxcpm2-burmese.md).
+
 ## Request path
 
 1. `GET /api/studio/capabilities` checks the session, D1 flag, and Modal

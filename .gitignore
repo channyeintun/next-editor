@@ -40,3 +40,7 @@ studio-out/
 share/*.zip
 *.pdf
 .vitest/
+
+# Python bytecode (integrations/)
+__pycache__/
+*.pyc

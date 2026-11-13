@@ -13,7 +13,14 @@ import { bytesToBase64 } from "../../shared/base64";
 
 const referenceAudioCache = new Map<string, Promise<string>>();
 
-async function loadReferenceAudioBase64(profile: ModalVoxCpm2VoiceProfile): Promise<string> {
+/**
+ * The narrator's reference recording as every VoxCPM2 synthesizer takes it: a
+ * mono 24 kHz PCM16 WAV in base64. Throws when the recording is not in this
+ * browser, or cannot serve as a reference.
+ */
+export async function voxCpm2ReferenceWavBase64(
+  profile: ModalVoxCpm2VoiceProfile,
+): Promise<string> {
   const referenceVoiceId = profile.referenceVoiceId;
   const referenceVoiceSha256 = profile.referenceVoiceSha256;
   if (!referenceVoiceId || !referenceVoiceSha256) {
@@ -50,6 +57,17 @@ async function loadReferenceAudioBase64(profile: ModalVoxCpm2VoiceProfile): Prom
 }
 
 /**
+ * Why no VoxCPM2 synthesizer takes this dialog, or null: each counts the
+ * trimmed text and refuses one over the shared limit.
+ */
+export function voxCpm2TextLengthError(speechText: string): string | null {
+  const length = speechText.trim().length;
+  return length > VOXCPM2_MAX_TEXT_CHARS
+    ? `this dialog is ${length} characters long, and VoxCPM2 speaks at most ${VOXCPM2_MAX_TEXT_CHARS} per request — split it with a [[mark:…]]`
+    : null;
+}
+
+/**
  * Synthesize one dialog through the same-origin Worker. The profile is used for
  * cache identity and local validation only: model settings and Modal
  * credentials are fixed server-side, so browser input cannot select arbitrary
@@ -60,15 +78,13 @@ export async function synthesizeModalVoxCpm2Wav(
   speechText: string,
   seed: number,
 ): Promise<Uint8Array> {
-  // The Worker counts the trimmed text; refusing here names the fix and skips
-  // uploading the reference voice for a request it would refuse.
-  const length = speechText.trim().length;
-  if (length > VOXCPM2_MAX_TEXT_CHARS) {
-    throw new Error(
-      `VoxCPM2 narration: this dialog is ${length} characters long, and VoxCPM2 speaks at most ${VOXCPM2_MAX_TEXT_CHARS} per request — split it with a [[mark:…]]`,
-    );
+  // Refusing here names the fix and skips uploading the reference voice for a
+  // request the Worker would refuse.
+  const tooLong = voxCpm2TextLengthError(speechText);
+  if (tooLong) {
+    throw new Error(`VoxCPM2 narration: ${tooLong}`);
   }
-  const referenceAudioBase64 = await loadReferenceAudioBase64(profile);
+  const referenceAudioBase64 = await voxCpm2ReferenceWavBase64(profile);
   const body = JSON.stringify({ text: speechText, seed, referenceAudioBase64 });
 
   return retryDroppedConnection(

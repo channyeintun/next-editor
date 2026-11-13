@@ -101,7 +101,8 @@ vi.mock("./tts/wav", async (importOriginal) => {
   };
 });
 
-const { buildPlanFromScript, synthesizeNarrationAhead } = await import("./inPageDirector");
+const { buildPlanFromScript, narrationRequestsOf, synthesizeNarrationAhead } =
+  await import("./inPageDirector");
 const { prepareModalVoxCpm2Take } = await import("./tts/modalVoxCpm2Synth");
 
 /** A voiced (non-silent) PCM16 mono WAV of the given length: a 220 Hz tone. */
@@ -690,6 +691,27 @@ describe("synthesizeNarrationAhead", () => {
 
     expect(built.synthesizedCount).toBe(0);
     expect(tts.synthesizeModalVoxCpm2Wav).not.toHaveBeenCalled();
+  });
+
+  // An offline narration pack exports these; audio made elsewhere must land
+  // under the hashes the pass and the build look up.
+  it("names the requests of a script without making any of them", async () => {
+    const { profile, requests } = await narrationRequestsOf(burmese(), { voiceProfile });
+
+    expect(profile).toBe(voiceProfile);
+    expect(tts.synthesizeModalVoxCpm2Wav).not.toHaveBeenCalled();
+    expect(tts.hasCachedDialogWav).not.toHaveBeenCalled();
+    expect(tts.getCachedDialogWav).not.toHaveBeenCalled();
+
+    await synthesizeNarrationAhead(burmese(), { voiceProfile });
+
+    expect(requests.map((request) => request.requestHash)).toEqual(
+      tts.putCachedDialogWav.mock.calls.map(([hash]) => hash),
+    );
+    expect(requests.map(({ speechText, seed }) => [speechText, seed])).toEqual(
+      tts.synthesizeModalVoxCpm2Wav.mock.calls.map(([, speechText, seed]) => [speechText, seed]),
+    );
+    expect(requests[0].label).toContain(`dialog 1/${requests.length}`);
   });
 
   it("only looks a cached dialog up: no read, no synthesis, no engine load", async () => {

@@ -234,6 +234,35 @@ async function dialogRequestOf(
   return { speechText, requestHash, label: dialogLabelOf(dialogs[index], index, dialogs.length) };
 }
 
+/** One dialog as a speech service is asked for it, and where its take is kept. */
+export interface NarrationRequest {
+  /** The content address of this dialog's take in the dialog cache. */
+  requestHash: string;
+  speechText: string;
+  seed: number;
+  /** Names the dialog in errors and warnings. */
+  label: string;
+}
+
+/**
+ * The speech requests a build of this script with this voice makes, in dialog
+ * order, without making any of them: what an offline narration pack exports
+ * (src/studio/narrationPack), so that audio synthesized elsewhere lands under
+ * the hashes the build looks up. Nothing is synthesized and no engine loads.
+ */
+export async function narrationRequestsOf(
+  script: LessonScript,
+  options: InPageDirectorOptions = {},
+): Promise<{ profile: VoiceProfile; requests: NarrationRequest[] }> {
+  const narration = scriptNarrationOf(script, options);
+  const requests: NarrationRequest[] = [];
+  for (let i = 0; i < narration.dialogs.length; i++) {
+    const { requestHash, speechText, label } = await dialogRequestOf(narration, i);
+    requests.push({ requestHash, speechText, seed: narration.provider.seed, label });
+  }
+  return { profile: narration.profile, requests };
+}
+
 function synthesisPhaseOf(index: number, count: number): string {
   return `synthesize ${index + 1}/${count}`;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "@xstate/store-react";
 import { useSearchParams } from "react-router";
 import { ChevronDown, ChevronUp, Info, TriangleAlert } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +33,13 @@ import { downloadBlob } from "../utils/downloadBlob";
 import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
 import { buildPlanFromScript, synthesizeNarrationAhead } from "./inPageDirector";
+import { importNarrationAudio } from "./narrationPack/audioImport";
+import {
+  offlineNarrationStore,
+  selectNarrationImportRunning,
+  type OfflineNarrationApi,
+} from "./narrationPack/offlineNarration";
+import { buildNarrationRequestPack } from "./narrationPack/requestPack";
 import { defaultRuntimeModeOf, type StudioRuntimeMode } from "./plan";
 import { parseRuntimeModeParam, shouldAutostartRender } from "./renderLaunch";
 import {
@@ -126,6 +134,11 @@ function renderFailureOf(report: StudioRunResult["report"]): string {
 }
 
 /** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
+const NARRATOR_REFERENCE_NEEDED = "Choose a narrator reference in the Render tab first.";
+// A render started now would find takes the import has not filed yet missing,
+// and buy them from the hosted voice.
+const NARRATION_IMPORT_RUNNING = "Wait for the narration audio import to finish.";
+
 const ATHANLAB_NOT_REPORTED = {
   ready: false,
   reason: "Checking your AthanLab setup…",
@@ -397,6 +410,9 @@ export default function StudioController() {
 
   const selectedVoiceIsBurmeseReady =
     narratorVoice !== null && isVoxCpm2ReferenceReady(narratorVoice);
+  const narrationImportRunning = useSelector(offlineNarrationStore, (snapshot) =>
+    selectNarrationImportRunning(snapshot.context),
+  );
 
   // Memoized (this module is uncompiled) so `sources[planSlug]` keeps its
   // identity across the per-receipt/phase/output-chunk re-renders, which lets
@@ -722,6 +738,43 @@ export default function StudioController() {
     }
   };
 
+  // Narration made outside the studio (the Colab notebook): the requests are
+  // the ones narrateLesson and the render make, from the same setup.
+  // Only where the Burmese voice exists at all: without it no render looks
+  // these takes up.
+  const offlineNarration: OfflineNarrationApi | null = studioCapabilities.burmeseVoxCpm2
+    ? {
+        exportBlockedReason:
+          provider !== "voxcpm2"
+            ? "Choose the Burmese voice (VoxCPM2) in the Render tab to export requests."
+            : !selectedVoiceIsBurmeseReady
+              ? NARRATOR_REFERENCE_NEEDED
+              : null,
+        exportRequests: async (slugs) => {
+          const lessons = [];
+          const failures: string[] = [];
+          for (const slug of slugs) {
+            try {
+              const { script, voiceProfile } = narrationSetupOf(slug);
+              lessons.push({ slug, script, voiceProfile });
+            } catch (error) {
+              failures.push(`${slug}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+          if (failures.length > 0) {
+            const shown = failures.slice(0, 3).join("; ");
+            throw new Error(
+              failures.length > 3
+                ? `${failures.length} lessons cannot be exported. ${shown}; …`
+                : shown,
+            );
+          }
+          return buildNarrationRequestPack(lessons);
+        },
+        importAudio: (files, onProgress) => importNarrationAudio(files, { onProgress }),
+      }
+    : null;
+
   useEffect(() => {
     publishWindowHandle(comparison, runningRef.current);
   }, [comparison, latest]);
@@ -783,6 +836,7 @@ export default function StudioController() {
   const narrationSetupError = narrationSetupErrorOf(selectedScriptLocale, provider);
   const startBlockedReason =
     narrationSetupError ??
+    (narrationImportRunning ? NARRATION_IMPORT_RUNNING : null) ??
     (provider === "athanlab" && !athanLabReadiness.ready
       ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
       : null);
@@ -810,13 +864,15 @@ export default function StudioController() {
   const workflowResumeBlockedReason =
     running && !workflow.active
       ? "A render is running."
-      : voiceTask.busy !== null || voiceTask.recording
-        ? "Finish the narrator voice task first."
-        : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
-          ? "Choose a narrator reference in the Render tab first."
-          : provider === "athanlab" && !athanLabReadiness.configured
-            ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
-            : null;
+      : narrationImportRunning
+        ? NARRATION_IMPORT_RUNNING
+        : voiceTask.busy !== null || voiceTask.recording
+          ? "Finish the narrator voice task first."
+          : provider === "voxcpm2" && !selectedVoiceIsBurmeseReady
+            ? NARRATOR_REFERENCE_NEEDED
+            : provider === "athanlab" && !athanLabReadiness.configured
+              ? (athanLabReadiness.reason ?? ATHANLAB_NOT_REPORTED.reason)
+              : null;
   // A new workflow has all of its narration still to buy, so an empty AthanLab
   // balance stops it too. One that already ran may have every lesson narrated
   // (its own narration pass can be what emptied the balance): resuming it buys
@@ -1013,6 +1069,7 @@ export default function StudioController() {
               blockedReason={workflowBlockedReason}
               resumeBlockedReason={workflowResumeBlockedReason}
               phase={phase}
+              offlineNarration={offlineNarration}
             />
           </div>
         ) : null}
