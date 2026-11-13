@@ -90,6 +90,9 @@ function harness(options: {
   /** Narrations and renders in the order the runner asked for them. */
   const steps: string[] = [];
   const narrationStates: WorkflowNarration[] = [];
+  /** The lesson the runner called active (rendering) each time a narration began. */
+  const activeDuringNarration: (string | null)[] = [];
+  let activeLesson: string | null = null;
   const renderCalls: { slug: string; stream: MediaStream | null }[] = [];
   const uploads: { uploadId: string; title: string; thumbnail: File | null }[] = [];
   const published: string[] = [];
@@ -104,6 +107,7 @@ function harness(options: {
   const deps: StudioWorkflowDeps = {
     narrateLesson: async (slug, { onPhase, isCancelled }) => {
       steps.push(`narrate ${slug}`);
+      activeDuringNarration.push(activeLesson);
       onPhase("synthesize 1/1");
       options.duringNarration?.(slug, isCancelled);
       if (isCancelled()) return { outcome: "cancelled" };
@@ -123,7 +127,9 @@ function harness(options: {
   };
   const io: WorkflowRunnerIo = {
     commit: (workflow) => commits.push(workflow),
-    onActiveLesson: () => undefined,
+    onActiveLesson: (slug) => {
+      activeLesson = slug;
+    },
     onUploadProgress: () => undefined,
     onFailedReport: () => undefined,
     onSetupError: () => undefined,
@@ -169,6 +175,7 @@ function harness(options: {
     latest,
     steps,
     narrationStates,
+    activeDuringNarration,
     renderCalls,
     uploads,
     published,
@@ -424,6 +431,31 @@ describe("createWorkflowRunner", () => {
         active: null,
         ready: ["a", "c"],
         stopped: null,
+      });
+      // b is done by the time c is narrated: no lesson is called rendering then.
+      expect(run.activeDuringNarration).toEqual([null, null, null]);
+    });
+
+    it("treats a narration that throws as one that failed", async () => {
+      const run = harness({
+        renders: { a: [passed("A")], b: [passed("B")] },
+        duringNarration: (slug) => {
+          if (slug === "a") throw new Error("narrator exploded");
+        },
+      });
+
+      await run.runner.start({
+        lessons: unillustrated,
+        settings: narrateFirst,
+        thumbnails: new Map(),
+      });
+
+      expect(run.latest().state).toBe("finished");
+      expect(run.steps).toEqual(["narrate a", "render a", "narrate b", "render b"]);
+      expect(run.narrationStates).toContainEqual({
+        active: null,
+        ready: [],
+        stopped: { slug: "a", reason: "failed", message: "narrator exploded" },
       });
     });
 

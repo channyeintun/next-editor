@@ -323,10 +323,16 @@ export function createWorkflowRunner(
       for (const slug of slugs) {
         if (stopRequested()) break;
         setNarration({ active: { slug, phase: "starting" } });
-        const attempt = await deps.narrateLesson(slug, {
-          onPhase: (phase) => setNarration({ active: { slug, phase } }),
-          isCancelled: stopRequested,
-        });
+        let attempt: LessonNarrationAttempt;
+        try {
+          attempt = await deps.narrateLesson(slug, {
+            onPhase: (phase) => setNarration({ active: { slug, phase } }),
+            isCancelled: stopRequested,
+          });
+        } catch (error) {
+          // It promises not to throw; the pass still must not fail the workflow.
+          attempt = { outcome: "failed", error: describeWorkflowError(error) };
+        }
         if (attempt.outcome === "ready") {
           setNarration({ ready: [...new Set([...narration.ready, slug])] });
           continue;
@@ -365,6 +371,8 @@ export function createWorkflowRunner(
       }
       if (narrationDue) {
         narrationDue = false;
+        // No lesson is rendering while the pass runs (the last one may be done).
+        io.onActiveLesson(null);
         narrationResumesAfter = await narrateAhead(index);
         // Stop was pressed during the pass: nothing renders.
         if (stopRequested()) continue;

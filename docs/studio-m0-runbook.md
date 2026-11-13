@@ -71,14 +71,18 @@ no speech service. For VoxCPM2 on Modal this is the difference between one GPU
 start per workflow and one per lesson (with the GPU idle, or shut down and
 started again, during every recording). The pass needs no visible tab. The
 first lesson renders only after all the narration is made, so uncheck it to
-see a first lesson sooner; each lesson is then narrated as it renders.
+see a first lesson sooner; each lesson is then narrated as it renders, and
+VoxCPM2 cold-starts once per lesson (it scales down after 2 idle minutes, and
+a recording lasts 8–15). A workflow stored before this setting existed resumes
+that way too: it has no pass.
 
 The pass never fails the workflow. At a lesson it cannot narrate it stops and
 says so: the lessons before it render from the narration already made, that
 lesson's render narrates it again (and reports the failure if it fails again),
-and the pass then goes on with the lessons after it. **Stop narrating** ends
-the pass after the dialog in progress; what it made stays cached. Resume runs
-the pass again, which skips every dialog already cached.
+and the pass then goes on with the lessons after it. During the pass the stop
+button reads **Stop after this dialog**: it stops the workflow once the dialog
+in progress is synthesized, nothing renders, and what the pass made stays
+cached. Resume runs the pass again, which skips every dialog already cached.
 
 While a lesson performs, the console is invisible, so it covers nothing on the
 stage and stays out of the screen recording. The tab title shows the progress.

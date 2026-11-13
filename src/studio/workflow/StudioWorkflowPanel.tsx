@@ -514,7 +514,7 @@ function WorkflowRun({
 
       {narration.active ? (
         <p className="rounded-lg border border-slate-700 bg-[#151a22] p-2 text-[12px] text-slate-300">
-          Narrating every lesson before the first render · {narration.ready.length} ready ·{" "}
+          Narrating ahead of the renders · {narration.ready.length} narrated ·{" "}
           <span className="font-mono text-slate-200">{narration.active.slug}</span>{" "}
           {narration.active.phase}
         </p>
@@ -589,8 +589,8 @@ function WorkflowRun({
           >
             {narration.active
               ? workflow.state === "stopping"
-                ? "Stopping…"
-                : "Stop narrating"
+                ? "Stopping after this dialog…"
+                : "Stop after this dialog"
               : workflow.state === "stopping"
                 ? "Stopping after this lesson…"
                 : "Stop after this lesson"}

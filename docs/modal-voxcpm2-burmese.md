@@ -102,7 +102,9 @@ The deployment pins:
   working one, so it only bridges the gap between two jobs of one run. A Studio
   workflow narrates all of its lessons in one pass before it records the first
   ("Narrate every lesson first", on by default), so the GPU starts once per
-  workflow and is not kept warm through the recordings
+  workflow and is not kept warm through the recordings. It starts again only
+  when the pass stops at a lesson it cannot narrate, and once per lesson when
+  the pass is off (the box unchecked, or a workflow stored before the setting)
 - a separate CPU `jobs` web app (FastAPI only) that validates, spawns, polls,
   and cancels synthesis jobs, so a malformed request never starts an L4
 
