@@ -4,7 +4,12 @@ import { invalidateLessonDerivedQueries } from "@next-editor/infra";
 import { acquireDisplayStream } from "../../utils/displayCapture";
 import type { StudioRenderReport } from "../report";
 import { isWorkflowActive, restoreWorkflow, type StudioWorkflow } from "./workflowQueue";
-import { createWorkflowRunner, type StudioWorkflowDeps } from "./workflowRunner";
+import {
+  createWorkflowRunner,
+  NO_WORKFLOW_NARRATION,
+  type StudioWorkflowDeps,
+  type WorkflowNarration,
+} from "./workflowRunner";
 import {
   clearWorkflowThumbnails,
   loadStoredWorkflow,
@@ -41,6 +46,7 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
   // The failed render's full report lives only in this page: it is too big to
   // keep with the queue, and the issue report already carries its findings.
   const [failedReport, setFailedReport] = useState<StudioRenderReport | null>(null);
+  const [narration, setNarration] = useState<WorkflowNarration>(NO_WORKFLOW_NARRATION);
   const queryClient = useQueryClient();
   const [runner] = useState(() =>
     createWorkflowRunner(workflow, deps, {
@@ -53,6 +59,7 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
       onUploadProgress: setUploadProgress,
       onFailedReport: setFailedReport,
       onSetupError: setSetupError,
+      onNarration: setNarration,
       acquireScreen: () => acquireDisplayStream(true),
       storeThumbnails: storeWorkflowThumbnails,
       loadThumbnail: loadWorkflowThumbnail,
@@ -85,6 +92,7 @@ export function useStudioWorkflow(deps: StudioWorkflowDeps) {
     uploadProgress,
     setupError,
     failedReport,
+    narration,
     start: runner.start,
     requestStop: runner.requestStop,
   };

@@ -66,6 +66,38 @@ export async function getCachedDialogWav(
   }
 }
 
+/**
+ * Whether Cache storage exists in this page at all. Where it does not, reads
+ * miss and writes do nothing without a report, so a caller that synthesizes
+ * only to fill the cache asks this first.
+ */
+export function isDialogCacheAvailable(): boolean {
+  return cacheAvailable();
+}
+
+/**
+ * Whether a take is kept for this request, without reading it: a workflow
+ * that narrates ahead asks this for every dialog of every lesson, and reading
+ * megabytes of audio it will not use would take minutes. The entry is not
+ * validated here; the build that reads it does that.
+ */
+export async function hasCachedDialogWav(
+  requestHash: string,
+  onUnavailable?: OnDialogCacheUnavailable,
+): Promise<boolean> {
+  if (!cacheAvailable()) {
+    return false;
+  }
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    // keys() lists the matching entry without opening its body.
+    return (await cache.keys(cacheUrlFor(requestHash))).length > 0;
+  } catch (error) {
+    onUnavailable?.(reasonOf(error));
+    return false;
+  }
+}
+
 export async function putCachedDialogWav(
   requestHash: string,
   { wav, hitFrameCap }: CachedDialogWav,

@@ -63,6 +63,23 @@ unattended (`src/studio/workflow/`):
    With screen recording on, the screen picker opens once, at Start, and every
    lesson records into that one share.
 
+With **Narrate every lesson first** checked (the default), the workflow starts
+with a narration pass: it synthesizes the narration of every lesson that still
+has to render, one lesson after another, into the dialog cache, and only then
+renders the first lesson. Each render then finds its dialogs cached and calls
+no speech service. For VoxCPM2 on Modal this is the difference between one GPU
+start per workflow and one per lesson (with the GPU idle, or shut down and
+started again, during every recording). The pass needs no visible tab. The
+first lesson renders only after all the narration is made, so uncheck it to
+see a first lesson sooner; each lesson is then narrated as it renders.
+
+The pass never fails the workflow. At a lesson it cannot narrate it stops and
+says so: the lessons before it render from the narration already made, that
+lesson's render narrates it again (and reports the failure if it fails again),
+and the pass then goes on with the lessons after it. **Stop narrating** ends
+the pass after the dialog in progress; what it made stays cached. Resume runs
+the pass again, which skips every dialog already cached.
+
 While a lesson performs, the console is invisible, so it covers nothing on the
 stage and stays out of the screen recording. The tab title shows the progress.
 **Stop after this lesson** finishes the lesson in progress first.

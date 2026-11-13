@@ -22,9 +22,12 @@ import type { WorkflowUploadInput } from "./workflowUpload";
 /**
  * The loop that takes a studio workflow's lessons through their steps: render
  * each with the studio, upload it as a draft, publish it, and stop at the
- * first failure with an issue report. Plain code behind injected effects
- * (useStudioWorkflow supplies the real ones), so the loop's stop and resume
- * rules are tested with fakes.
+ * first failure with an issue report. A workflow that narrates first runs a
+ * narration pass before the first render: every lesson's narration is
+ * synthesized in one unbroken run, so a hosted speech GPU starts once instead
+ * of once per lesson. Plain code behind injected effects (useStudioWorkflow
+ * supplies the real ones), so the loop's stop and resume rules are tested
+ * with fakes.
  */
 
 /** One lesson's render, as the studio's Start render would do it. */
@@ -40,12 +43,46 @@ export type LessonRenderAttempt =
       buildWarnings: string[];
     };
 
+/** One lesson's narration, synthesized ahead of its render by the narration pass. */
+export type LessonNarrationAttempt =
+  | { outcome: "ready" }
+  /** Stopped between two dialogs because the workflow is stopping. */
+  | { outcome: "cancelled" }
+  /** Nothing synthesized now can be kept for the render, so narrating ahead only pays twice. */
+  | { outcome: "cache-unavailable"; reason: string }
+  | { outcome: "failed"; error: string };
+
+/** Where the narration pass is, for the workflow panel. It lives in this page only. */
+export interface WorkflowNarration {
+  /** The lesson being narrated now and the Director phase it is in; null outside the pass. */
+  active: { slug: string; phase: string } | null;
+  /** Lessons whose narration is synthesized: their renders call no speech service. */
+  ready: readonly string[];
+  /**
+   * The lesson the pass stopped early at, and why: its narration "failed"
+   * (that lesson's render narrates it again), or the browser cannot keep
+   * narration for the renders ("cache-unavailable": no more passes this run).
+   */
+  stopped: { slug: string; reason: "failed" | "cache-unavailable"; message: string } | null;
+}
+
+export const NO_WORKFLOW_NARRATION: WorkflowNarration = { active: null, ready: [], stopped: null };
+
 export interface StudioWorkflowDeps {
   /**
    * Render one lesson with the studio's current narration settings, recording
    * the screen into `screenStream` when one is given (and never asking for one).
    */
   renderLesson: (slug: string, screenStream: MediaStream | null) => Promise<LessonRenderAttempt>;
+  /**
+   * Synthesize one lesson's narration with the studio's current narration
+   * settings and keep it for that lesson's render, without rendering. Never
+   * throws: a failure comes back as the attempt's error.
+   */
+  narrateLesson: (
+    slug: string,
+    options: { onPhase: (phase: string) => void; isCancelled: () => boolean },
+  ) => Promise<LessonNarrationAttempt>;
   /** What narrates the renders, for the issue report. */
   narration: { provider: string; voice: string | null; runtimeMode: string | null };
   isImported: (slug: string) => boolean;
@@ -68,6 +105,8 @@ export interface WorkflowRunnerIo {
   /** The failed render's full report, or null once a lesson renders again. */
   onFailedReport: (report: StudioRenderReport | null) => void;
   onSetupError: (message: string | null) => void;
+  /** Every change to where the narration pass is. */
+  onNarration: (narration: WorkflowNarration) => void;
   acquireScreen: () => Promise<MediaStream>;
   storeThumbnails: (thumbnails: ReadonlyMap<string, File>) => Promise<void>;
   loadThumbnail: (slug: string) => Promise<File | null>;
@@ -111,11 +150,20 @@ export function createWorkflowRunner(
   // The studio's latest (narration settings can change between workflows).
   let deps = initialDeps;
   let running = false;
+  let narration = NO_WORKFLOW_NARRATION;
 
   const commit = (next: StudioWorkflow) => {
     current = next;
     io.commit(next);
   };
+
+  const setNarration = (patch: Partial<WorkflowNarration>) => {
+    narration = { ...narration, ...patch };
+    io.onNarration(narration);
+  };
+
+  /** Whether Stop was pressed. A call, because the state changes under an await. */
+  const stopRequested = () => current?.state === "stopping";
 
   const lessonOf = (slug: string): WorkflowLesson => {
     const lesson = current?.lessons.find((candidate) => candidate.slug === slug);
@@ -248,7 +296,61 @@ export function createWorkflowRunner(
     return true;
   };
 
+  /**
+   * The narration pass: synthesize the narration of every lesson from
+   * `fromIndex` on that still has to render, one lesson after another, before
+   * any of them renders. The speech service then works in one unbroken run —
+   * a hosted GPU starts once, instead of once per lesson with a recording's
+   * idle time in between — and each render finds its dialogs already kept.
+   *
+   * The pass only moves synthesis earlier, so it never fails the workflow. At
+   * a lesson it cannot narrate it stops and returns that lesson's slug: the
+   * lessons before it render from what the pass kept, that lesson's render
+   * synthesizes again (and reports a failure the way it always has), and the
+   * queue runs the pass again for the lessons after it. Returns null when
+   * nothing is left for a later pass: every lesson is narrated, the workflow
+   * is stopping, or this browser cannot keep narration for the renders.
+   */
+  const narrateAhead = async (fromIndex: number): Promise<string | null> => {
+    const settings = current!.settings;
+    const slugs = current!.lessons
+      .slice(fromIndex)
+      .filter((lesson) => nextStepOf(lesson, settings) === "render")
+      .map((lesson) => lesson.slug);
+    let stoppedAt: string | null = null;
+    setNarration({ stopped: null });
+    try {
+      for (const slug of slugs) {
+        if (stopRequested()) break;
+        setNarration({ active: { slug, phase: "starting" } });
+        const attempt = await deps.narrateLesson(slug, {
+          onPhase: (phase) => setNarration({ active: { slug, phase } }),
+          isCancelled: stopRequested,
+        });
+        if (attempt.outcome === "ready") {
+          setNarration({ ready: [...new Set([...narration.ready, slug])] });
+          continue;
+        }
+        if (attempt.outcome === "failed") {
+          stoppedAt = slug;
+          setNarration({ stopped: { slug, reason: "failed", message: attempt.error } });
+        } else if (attempt.outcome === "cache-unavailable") {
+          setNarration({
+            stopped: { slug, reason: "cache-unavailable", message: attempt.reason },
+          });
+        }
+        break;
+      }
+    } finally {
+      setNarration({ active: null });
+    }
+    return stoppedAt;
+  };
+
   const runQueue = async (stream: MediaStream | null) => {
+    let narrationDue = current?.settings.narrateFirst === true;
+    // The lesson the narration pass stopped at; the pass goes on after it renders.
+    let narrationResumesAfter: string | null = null;
     while (current) {
       if (current.state === "stopping") {
         commit(withWorkflowState(current, "stopped"));
@@ -261,9 +363,19 @@ export function createWorkflowRunner(
         void io.clearThumbnails().catch(() => undefined);
         return;
       }
+      if (narrationDue) {
+        narrationDue = false;
+        narrationResumesAfter = await narrateAhead(index);
+        // Stop was pressed during the pass: nothing renders.
+        if (stopRequested()) continue;
+      }
       const slug = current.lessons[index].slug;
       io.onActiveLesson(slug);
       if (!(await runLesson(slug, stream))) return;
+      if (slug === narrationResumesAfter) {
+        narrationResumesAfter = null;
+        narrationDue = true;
+      }
     }
   };
 
@@ -277,6 +389,8 @@ export function createWorkflowRunner(
     if (!fresh && (!current || current.state === "finished")) return;
     running = true;
     io.onSetupError(null);
+    // What an earlier run narrated says nothing now: the voice may have changed.
+    setNarration(NO_WORKFLOW_NARRATION);
     let stream: MediaStream | null = null;
     try {
       if (deps.screenRecording) {

@@ -31,7 +31,7 @@ import { acquireDisplayStream, isScreenCaptureSupported } from "../utils/display
 import { downloadBlob } from "../utils/downloadBlob";
 import { describeDraftDescription, describeDraftProvenance } from "./draftProvenance";
 import { canonicalJson } from "./hash";
-import { buildPlanFromScript } from "./inPageDirector";
+import { buildPlanFromScript, synthesizeNarrationAhead } from "./inPageDirector";
 import { defaultRuntimeModeOf, type StudioRuntimeMode } from "./plan";
 import { parseRuntimeModeParam, shouldAutostartRender } from "./renderLaunch";
 import {
@@ -75,7 +75,7 @@ import AthanLabPanel from "./AthanLabPanel";
 import NarratorVoicePanel, { type NarratorVoiceTask } from "./NarratorVoicePanel";
 import StudioWorkflowPanel from "./workflow/StudioWorkflowPanel";
 import { useStudioWorkflow } from "./workflow/useStudioWorkflow";
-import type { LessonRenderAttempt } from "./workflow/workflowRunner";
+import type { LessonRenderAttempt, StudioWorkflowDeps } from "./workflow/workflowRunner";
 import { workflowProgressOf } from "./workflow/workflowQueue";
 
 /**
@@ -442,6 +442,54 @@ export default function StudioController() {
   }, []);
 
   /**
+   * A lesson's script and the voice this console narrates it with now, for a
+   * render and for the workflow's narration pass alike, so both ask the
+   * Director for the same takes. Throws what can be checked without a network
+   * round trip: an unknown lesson, a script that does not parse, a locale the
+   * provider cannot speak, and the provider's own requirements.
+   */
+  const narrationSetupOf = (slug: string) => {
+    const source = sources[slug];
+    if (!source) {
+      throw new Error(`Unknown lesson "${slug}" — available: ${Object.keys(sources).join(", ")}`);
+    }
+    const script = source.load();
+    const setupError = narrationSetupErrorOf(script.lesson.locale, provider);
+    if (setupError) throw new Error(setupError);
+    let voiceProfile: VoiceProfile | undefined;
+    let voiceName: string | null = null;
+    let voiceKind: StudioRunEntry["voiceKind"] = null;
+    if (provider === "voxcpm2") {
+      if (!studioCapabilities.burmeseVoxCpm2) {
+        throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
+      }
+      if (!narratorVoice || !isVoxCpm2ReferenceReady(narratorVoice)) {
+        throw new Error(
+          `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
+        );
+      }
+      voiceProfile = modalVoxCpm2BurmeseProfileOf(narratorVoice);
+      voiceName = narratorVoice.name;
+      voiceKind = "reference";
+    } else if (provider === "athanlab") {
+      if (!studioCapabilities.athanlab) {
+        throw new Error("AthanLab narration is not available on this server yet");
+      }
+      if (!athanLabReadiness.ready || !athanLabVoice) {
+        throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
+      }
+      voiceProfile = athanLabProfileOf(athanLabVoice.id);
+      voiceName = athanLabVoice.name;
+      voiceKind = "athanlab";
+    } else if (narratorVoice) {
+      voiceProfile = customVoiceProfileOf(narratorVoice);
+      voiceName = narratorVoice.name;
+      voiceKind = "cloned";
+    }
+    return { script, voiceProfile, voiceName, voiceKind };
+  };
+
+  /**
    * Render one lesson. `screenStream` is the workflow's (a stream, or null for
    * none); left out, the Start render click asks for one when screen recording
    * is on. Never throws: a failure comes back as the attempt's error.
@@ -483,47 +531,9 @@ export default function StudioController() {
     let acquiredScreenStream: MediaStream | undefined;
 
     try {
-      const source = sources[slug];
-      if (!source) {
-        throw new Error(`Unknown lesson "${slug}" — available: ${Object.keys(sources).join(", ")}`);
-      }
-      // Everything checkable without a network round trip — the script's
-      // locale against the provider, the provider's own requirements — fails
-      // here, before the screen picker below opens for a render that cannot run.
-      const script = source.load();
-      const setupError = narrationSetupErrorOf(script.lesson.locale, renderProvider);
-      if (setupError) throw new Error(setupError);
-      const renderVoice = narratorVoice;
-      let voiceProfile: VoiceProfile | undefined;
-      let voiceName: string | null = null;
-      let voiceKind: StudioRunEntry["voiceKind"] = null;
-      if (renderProvider === "voxcpm2") {
-        if (!studioCapabilities.burmeseVoxCpm2) {
-          throw new Error("Burmese · VoxCPM2 (Modal) is not enabled for this user");
-        }
-        if (!renderVoice || !isVoxCpm2ReferenceReady(renderVoice)) {
-          throw new Error(
-            `Burmese narration requires a ${MIN_VOXCPM2_REFERENCE_SECONDS}–${MAX_SAMPLE_SECONDS}s narrator reference. Record or upload one first.`,
-          );
-        }
-        voiceProfile = modalVoxCpm2BurmeseProfileOf(renderVoice);
-        voiceName = renderVoice.name;
-        voiceKind = "reference";
-      } else if (renderProvider === "athanlab") {
-        if (!studioCapabilities.athanlab) {
-          throw new Error("AthanLab narration is not available on this server yet");
-        }
-        if (!athanLabReadiness.ready || !athanLabVoice) {
-          throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
-        }
-        voiceProfile = athanLabProfileOf(athanLabVoice.id);
-        voiceName = athanLabVoice.name;
-        voiceKind = "athanlab";
-      } else if (renderVoice) {
-        voiceProfile = customVoiceProfileOf(renderVoice);
-        voiceName = renderVoice.name;
-        voiceKind = "cloned";
-      }
+      // Everything checkable without a network round trip fails here, before
+      // the screen picker below opens for a render that cannot run.
+      const { script, voiceProfile, voiceName, voiceKind } = narrationSetupOf(slug);
 
       setBuildWarnings([]);
 
@@ -677,6 +687,26 @@ export default function StudioController() {
     }
   };
 
+  /**
+   * One lesson's narration into the dialog cache, for the workflow's narration
+   * pass: the same script, voice and Director stage its render uses, so that
+   * render finds every dialog cached. Never throws.
+   */
+  const narrateLesson: StudioWorkflowDeps["narrateLesson"] = async (slug, options) => {
+    try {
+      const { script, voiceProfile } = narrationSetupOf(slug);
+      return await synthesizeNarrationAhead(script, { ...options, voiceProfile });
+    } catch (error) {
+      return { outcome: "failed", error: error instanceof Error ? error.message : String(error) };
+    } finally {
+      // As after a render: the pass spent AthanLab characters, or AthanLab
+      // refused the saved key.
+      if (provider === "athanlab" && userId !== null) {
+        void invalidateAthanLabAccount(queryClient, userId);
+      }
+    }
+  };
+
   useEffect(() => {
     publishWindowHandle(comparison, runningRef.current);
   }, [comparison, latest]);
@@ -749,6 +779,7 @@ export default function StudioController() {
       selectLesson(slug);
       return renderLesson(slug, screenStream);
     },
+    narrateLesson,
     narration: {
       provider: narrationProviderLabel(provider),
       voice:

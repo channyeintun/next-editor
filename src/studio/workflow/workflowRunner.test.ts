@@ -3,8 +3,10 @@ import type { Recording } from "../../core/src";
 import type { StudioRenderReport } from "../report";
 import {
   createWorkflowRunner,
+  type LessonNarrationAttempt,
   type LessonRenderAttempt,
   type StudioWorkflowDeps,
+  type WorkflowNarration,
   type WorkflowRunnerIo,
 } from "./workflowRunner";
 import type { StudioWorkflow, WorkflowSettings } from "./workflowQueue";
@@ -79,8 +81,15 @@ function harness(options: {
   /** Runs while a lesson renders, as Chan clicking mid-render would. */
   duringRender?: (slug: string) => void;
   playlistFailures?: number;
+  /** Each lesson's narration attempts in order; one left out is ready. */
+  narrations?: Record<string, LessonNarrationAttempt[]>;
+  /** Runs while a lesson is narrated ahead, as Chan clicking mid-pass would. */
+  duringNarration?: (slug: string, isCancelled: () => boolean) => void;
 }) {
   const commits: StudioWorkflow[] = [];
+  /** Narrations and renders in the order the runner asked for them. */
+  const steps: string[] = [];
+  const narrationStates: WorkflowNarration[] = [];
   const renderCalls: { slug: string; stream: MediaStream | null }[] = [];
   const uploads: { uploadId: string; title: string; thumbnail: File | null }[] = [];
   const published: string[] = [];
@@ -93,7 +102,15 @@ function harness(options: {
   let ids = 0;
 
   const deps: StudioWorkflowDeps = {
+    narrateLesson: async (slug, { onPhase, isCancelled }) => {
+      steps.push(`narrate ${slug}`);
+      onPhase("synthesize 1/1");
+      options.duringNarration?.(slug, isCancelled);
+      if (isCancelled()) return { outcome: "cancelled" };
+      return options.narrations?.[slug]?.shift() ?? { outcome: "ready" };
+    },
     renderLesson: async (slug, stream) => {
+      steps.push(`render ${slug}`);
       renderCalls.push({ slug, stream });
       options.duringRender?.(slug);
       const next = options.renders[slug]?.shift();
@@ -110,6 +127,7 @@ function harness(options: {
     onUploadProgress: () => undefined,
     onFailedReport: () => undefined,
     onSetupError: () => undefined,
+    onNarration: (narration) => narrationStates.push(narration),
     acquireScreen: async () => screen.stream,
     storeThumbnails: async (thumbnails) => {
       storedThumbnails.clear();
@@ -149,6 +167,8 @@ function harness(options: {
     runner,
     commits,
     latest,
+    steps,
+    narrationStates,
     renderCalls,
     uploads,
     published,
@@ -332,5 +352,180 @@ describe("createWorkflowRunner", () => {
     expect(run.renderCalls.map((call) => call.slug)).toEqual(["a", "b"]);
     expect(run.published).toHaveLength(2);
     expect(run.playlisted).toEqual(["css:lesson-id-2", "css:lesson-id-3"]);
+  });
+
+  describe("narrating first", () => {
+    const three = ["a", "b", "c"].map((slug) => ({
+      slug,
+      title: slug.toUpperCase(),
+      thumbnail: null,
+    }));
+    const narrateFirst = { ...SETTINGS, narrateFirst: true };
+
+    it("narrates every lesson before the first one renders", async () => {
+      const run = harness({ renders: { a: [passed("A")], b: [passed("B")], c: [passed("C")] } });
+
+      await run.runner.start({ lessons: three, settings: narrateFirst, thumbnails: new Map() });
+
+      expect(run.latest().state).toBe("finished");
+      expect(run.steps).toEqual([
+        "narrate a",
+        "narrate b",
+        "narrate c",
+        "render a",
+        "render b",
+        "render c",
+      ]);
+      expect(run.narrationStates).toContainEqual({
+        active: { slug: "b", phase: "synthesize 1/1" },
+        ready: ["a"],
+        stopped: null,
+      });
+      expect(run.narrationStates.at(-1)).toEqual({
+        active: null,
+        ready: ["a", "b", "c"],
+        stopped: null,
+      });
+    });
+
+    it("narrates each lesson as it renders when the setting is off or absent", async () => {
+      const run = harness({ renders: { a: [passed("A")], b: [passed("B")] } });
+
+      await run.runner.start({ lessons: unillustrated, settings: SETTINGS, thumbnails: new Map() });
+
+      expect(run.steps).toEqual(["render a", "render b"]);
+    });
+
+    it("renders on past a lesson it could not narrate, then narrates the rest", async () => {
+      const run = harness({
+        renders: { a: [passed("A")], b: [passed("B")], c: [passed("C")] },
+        narrations: { b: [{ outcome: "failed", error: "HTTP 504" }] },
+      });
+
+      await run.runner.start({ lessons: three, settings: narrateFirst, thumbnails: new Map() });
+
+      // The pass never fails the workflow: b's own render narrates it again,
+      // and only then is c narrated ahead of its render.
+      expect(run.latest().state).toBe("finished");
+      expect(run.steps).toEqual([
+        "narrate a",
+        "narrate b",
+        "render a",
+        "render b",
+        "narrate c",
+        "render c",
+      ]);
+      expect(run.narrationStates).toContainEqual({
+        active: null,
+        ready: ["a"],
+        stopped: { slug: "b", reason: "failed", message: "HTTP 504" },
+      });
+      expect(run.narrationStates.at(-1)).toEqual({
+        active: null,
+        ready: ["a", "c"],
+        stopped: null,
+      });
+    });
+
+    it("leaves a narration failure to that lesson's render to report", async () => {
+      const run = harness({
+        renders: {
+          a: [
+            {
+              ok: false,
+              error: "Narration dialog 3/40: HTTP 504",
+              phase: "synthesize 3/40",
+              report: null,
+              buildWarnings: [],
+            },
+            passed("A"),
+          ],
+          b: [passed("B")],
+        },
+        narrations: { a: [{ outcome: "failed", error: "Narration dialog 3/40: HTTP 504" }] },
+      });
+
+      await run.runner.start({
+        lessons: unillustrated,
+        settings: narrateFirst,
+        thumbnails: new Map(),
+      });
+
+      expect(run.latest().state).toBe("failed");
+      expect(run.latest().lessons[0].issue).toMatchObject({
+        step: "render",
+        phase: "synthesize 3/40",
+      });
+      expect(run.steps).toEqual(["narrate a", "render a"]);
+
+      // Resume narrates what is left first, as a fresh start does.
+      await run.runner.start();
+
+      expect(run.latest().state).toBe("finished");
+      expect(run.steps.slice(2)).toEqual(["narrate a", "narrate b", "render a", "render b"]);
+    });
+
+    it("stops in the middle of the pass without rendering anything", async () => {
+      const run = harness({
+        renders: {},
+        duringNarration: (slug) => {
+          if (slug === "b") runnerRef.current?.requestStop();
+        },
+      });
+
+      await run.runner.start({ lessons: three, settings: narrateFirst, thumbnails: new Map() });
+
+      expect(run.latest().state).toBe("stopped");
+      expect(run.latest().lessons.map((lesson) => lesson.status)).toEqual([
+        "queued",
+        "queued",
+        "queued",
+      ]);
+      expect(run.steps).toEqual(["narrate a", "narrate b"]);
+      expect(run.narrationStates.at(-1)).toEqual({ active: null, ready: ["a"], stopped: null });
+    });
+
+    it("narrates as it renders where the browser cannot keep narration", async () => {
+      const run = harness({
+        renders: { a: [passed("A")], b: [passed("B")] },
+        narrations: { a: [{ outcome: "cache-unavailable", reason: "Quota exceeded." }] },
+      });
+
+      await run.runner.start({
+        lessons: unillustrated,
+        settings: narrateFirst,
+        thumbnails: new Map(),
+      });
+
+      expect(run.latest().state).toBe("finished");
+      // No second pass: what it synthesized could not be kept for the renders.
+      expect(run.steps).toEqual(["narrate a", "render a", "render b"]);
+      expect(run.narrationStates.at(-1)?.stopped).toEqual({
+        slug: "a",
+        reason: "cache-unavailable",
+        message: "Quota exceeded.",
+      });
+    });
+
+    it("narrates only the lessons that still render", async () => {
+      const run = harness({
+        renders: { a: [passed("A")], b: [passed("B")] },
+        publishFailures: 1,
+      });
+
+      await run.runner.start({
+        lessons: unillustrated,
+        settings: narrateFirst,
+        thumbnails: new Map(),
+      });
+      // Stopped at a's publish: a has its draft, b has not rendered.
+      expect(run.latest().state).toBe("failed");
+      run.steps.length = 0;
+
+      await run.runner.start();
+
+      expect(run.latest().state).toBe("finished");
+      expect(run.steps).toEqual(["narrate b", "render b"]);
+    });
   });
 });

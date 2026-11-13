@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { deleteCachedDialogWav, getCachedDialogWav, putCachedDialogWav } from "./dialogCache";
+import {
+  deleteCachedDialogWav,
+  getCachedDialogWav,
+  hasCachedDialogWav,
+  isDialogCacheAvailable,
+  putCachedDialogWav,
+} from "./dialogCache";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -10,6 +16,8 @@ function memoryCaches(): Pick<CacheStorage, "open"> {
   const entries = new Map<string, Response>();
   const cache = {
     match: async (url: string) => entries.get(url)?.clone(),
+    keys: async (url: string) =>
+      entries.has(url) ? [new Request(`https://studio.test${url}`)] : [],
     put: async (url: string, response: Response) => {
       entries.set(url, response);
     },
@@ -28,6 +36,26 @@ describe("dialogCache", () => {
     expect(await getCachedDialogWav("abc")).toEqual({ wav, hitFrameCap: true });
     await deleteCachedDialogWav("abc");
     expect(await getCachedDialogWav("abc")).toBeNull();
+  });
+
+  it("says whether a take is kept without reading it", async () => {
+    const storage = memoryCaches();
+    const cache = await storage.open("");
+    const match = vi.spyOn(cache, "match");
+    vi.stubGlobal("caches", storage);
+
+    expect(isDialogCacheAvailable()).toBe(true);
+    expect(await hasCachedDialogWav("abc")).toBe(false);
+    await putCachedDialogWav("abc", { wav: new Uint8Array(4), hitFrameCap: false });
+    expect(await hasCachedDialogWav("abc")).toBe(true);
+    expect(match).not.toHaveBeenCalled();
+  });
+
+  it("keeps nothing, and says so, where Cache storage does not exist", async () => {
+    vi.stubGlobal("caches", undefined);
+
+    expect(isDialogCacheAvailable()).toBe(false);
+    expect(await hasCachedDialogWav("abc")).toBe(false);
   });
 
   it("keeps only a take's own bytes, from a window or a shared buffer", async () => {
@@ -53,12 +81,14 @@ describe("dialogCache", () => {
     const onUnavailable = vi.fn<(reason: string) => void>();
 
     expect(await getCachedDialogWav("abc", onUnavailable)).toBeNull();
+    expect(await hasCachedDialogWav("abc", onUnavailable)).toBe(false);
     await expect(
       putCachedDialogWav("abc", { wav: new Uint8Array(4), hitFrameCap: false }, onUnavailable),
     ).resolves.toBeUndefined();
     await expect(deleteCachedDialogWav("abc", onUnavailable)).resolves.toBeUndefined();
 
     expect(onUnavailable.mock.calls).toEqual([
+      ["The operation is insecure."],
       ["The operation is insecure."],
       ["The operation is insecure."],
       ["The operation is insecure."],

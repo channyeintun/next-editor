@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { AthanLabPanelProps } from "./AthanLabPanel";
+import type { synthesizeNarrationAhead } from "./inPageDirector";
 import type { runStudioRender } from "./runStudioRender";
 import type { SavedCustomVoice } from "./tts/customVoices";
 import type { VoiceProfile } from "./tts/profiles";
@@ -17,6 +18,8 @@ const studio = vi.hoisted(() => ({
   athanLabPanel: null as AthanLabPanelProps | null,
   /** The voice the last plan build synthesized with. */
   builtVoiceProfile: undefined as VoiceProfile | undefined,
+  /** The workflow's narration pass, one call per lesson. */
+  narrateAhead: vi.fn<typeof synthesizeNarrationAhead>(),
 }));
 
 vi.mock("react-router", () => ({
@@ -94,6 +97,7 @@ vi.mock("./inPageDirector", () => ({
       warnings: [],
     });
   },
+  synthesizeNarrationAhead: studio.narrateAhead,
 }));
 vi.mock("./runStudioRender", () => ({
   runStudioRender: studio.runRender,
@@ -591,17 +595,30 @@ describe("StudioController workflow", () => {
         recording: {},
       },
     } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
+    studio.narrateAhead.mockResolvedValue({
+      outcome: "ready",
+      dialogCount: 1,
+      synthesizedCount: 1,
+    });
     // A fresh module: this render stays out of the other tests' run history.
     renderController(await freshStudioController());
     pickLesson("english-script");
     fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+    expect(screen.getByRole("checkbox", { name: "Narrate every lesson first" })).toBeChecked();
 
     fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
 
     await waitFor(() => expect(screen.getByText("1/1 done")).toBeInTheDocument());
     expect(screen.getByText("rendered")).toBeInTheDocument();
+    expect(screen.getByText(/^narrate all → render only/)).toBeInTheDocument();
     expect(studio.runRender).toHaveBeenCalledTimes(1);
+    // The lesson was narrated ahead with the script its render then built from.
+    expect(studio.narrateAhead).toHaveBeenCalledTimes(1);
+    expect(studio.narrateAhead.mock.calls[0][0].lesson.slug).toBe("english-script");
+    expect(studio.narrateAhead.mock.invocationCallOrder[0]).toBeLessThan(
+      studio.runRender.mock.invocationCallOrder[0],
+    );
     expect(window.__NEXT_EDITOR_STUDIO__?.workflow?.state).toBe("finished");
   });
 

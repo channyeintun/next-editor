@@ -30,6 +30,9 @@ const tts = vi.hoisted(() => ({
     >(),
   deleteCachedDialogWav:
     vi.fn<(requestHash: string, onUnavailable?: (reason: string) => void) => Promise<void>>(),
+  hasCachedDialogWav:
+    vi.fn<(requestHash: string, onUnavailable?: (reason: string) => void) => Promise<boolean>>(),
+  isDialogCacheAvailable: vi.fn<() => boolean>(),
   preloadPocket: vi.fn<(...args: unknown[]) => Promise<void>>(),
   putCachedDialogWav: vi.fn<(...args: unknown[]) => Promise<void>>(),
   synthesizePocketDialog:
@@ -59,6 +62,8 @@ const tts = vi.hoisted(() => ({
 vi.mock("./tts/dialogCache", () => ({
   getCachedDialogWav: tts.getCachedDialogWav,
   deleteCachedDialogWav: tts.deleteCachedDialogWav,
+  hasCachedDialogWav: tts.hasCachedDialogWav,
+  isDialogCacheAvailable: tts.isDialogCacheAvailable,
   putCachedDialogWav: tts.putCachedDialogWav,
 }));
 
@@ -96,7 +101,7 @@ vi.mock("./tts/wav", async (importOriginal) => {
   };
 });
 
-const { buildPlanFromScript } = await import("./inPageDirector");
+const { buildPlanFromScript, synthesizeNarrationAhead } = await import("./inPageDirector");
 const { prepareModalVoxCpm2Take } = await import("./tts/modalVoxCpm2Synth");
 
 /** A voiced (non-silent) PCM16 mono WAV of the given length: a 220 Hz tone. */
@@ -154,58 +159,63 @@ function loadPilotWithDeckSlide() {
   return script;
 }
 
-describe("buildPlanFromScript narration", () => {
-  beforeEach(() => {
-    stitch.segments = [];
-    tts.getCachedDialogWav.mockReset().mockResolvedValue(null);
-    tts.deleteCachedDialogWav.mockReset().mockResolvedValue();
-    tts.preloadPocket.mockReset().mockResolvedValue();
-    tts.putCachedDialogWav.mockReset().mockResolvedValue();
-    tts.synthesizePocketDialog.mockReset().mockImplementation(async (_, speechText) => ({
-      wav: voicedWav(400 + speechText.split(/\s+/).length * 320, 24_000),
-      cappedChunkCount: 0,
-    }));
-    tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
-      return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
-    });
-    tts.synthesizeAthanLabWav.mockReset().mockImplementation(async (_, speechText) => {
-      return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
-    });
-    tts.pocketSynthProvider.mockReset().mockImplementation((profile, buildSeed, onPhase) => ({
-      sampleRate: profile.sampleRate,
-      mimeType: profile.mimeType,
-      seed: buildSeed,
-      preload: () => tts.preloadPocket(profile, onPhase),
-      synthesize: async (speechText) => {
-        const take = await tts.synthesizePocketDialog(profile, speechText, buildSeed);
-        return { wav: take.wav, hitFrameCap: take.cappedChunkCount > 0 };
-      },
-      prepareTake: (wav) => wav,
-    }));
-    tts.voxCpm2SynthProvider.mockReset().mockImplementation((profile, buildSeed) => ({
-      sampleRate: profile.sampleRate,
-      mimeType: profile.mimeType,
-      seed: buildSeed,
-      preload: async () => undefined,
-      synthesize: async (speechText) => ({
-        wav: await tts.synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
-        hitFrameCap: false,
-      }),
-      prepareTake: prepareModalVoxCpm2Take,
-    }));
-    tts.athanLabSynthProvider.mockReset().mockImplementation((profile) => ({
-      sampleRate: profile.sampleRate,
-      mimeType: profile.mimeType,
-      seed: 0,
-      preload: async () => undefined,
-      synthesize: async (speechText) => ({
-        wav: await tts.synthesizeAthanLabWav(profile, speechText),
-        hitFrameCap: false,
-      }),
-      prepareTake: (wav) => wav,
-    }));
-    slides.fetchPublishedDeck.mockReset().mockResolvedValue(PUBLISHED_DECK);
+/** Every stand-in back to its default: an empty cache, and engines that speak a tone. */
+function resetNarrationStandIns() {
+  stitch.segments = [];
+  tts.getCachedDialogWav.mockReset().mockResolvedValue(null);
+  tts.deleteCachedDialogWav.mockReset().mockResolvedValue();
+  tts.hasCachedDialogWav.mockReset().mockResolvedValue(false);
+  tts.isDialogCacheAvailable.mockReset().mockReturnValue(true);
+  tts.preloadPocket.mockReset().mockResolvedValue();
+  tts.putCachedDialogWav.mockReset().mockResolvedValue();
+  tts.synthesizePocketDialog.mockReset().mockImplementation(async (_, speechText) => ({
+    wav: voicedWav(400 + speechText.split(/\s+/).length * 320, 24_000),
+    cappedChunkCount: 0,
+  }));
+  tts.synthesizeModalVoxCpm2Wav.mockReset().mockImplementation(async (_, speechText) => {
+    return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
   });
+  tts.synthesizeAthanLabWav.mockReset().mockImplementation(async (_, speechText) => {
+    return voicedWav(400 + speechText.split(/\s+/).length * 320, 48_000);
+  });
+  tts.pocketSynthProvider.mockReset().mockImplementation((profile, buildSeed, onPhase) => ({
+    sampleRate: profile.sampleRate,
+    mimeType: profile.mimeType,
+    seed: buildSeed,
+    preload: () => tts.preloadPocket(profile, onPhase),
+    synthesize: async (speechText) => {
+      const take = await tts.synthesizePocketDialog(profile, speechText, buildSeed);
+      return { wav: take.wav, hitFrameCap: take.cappedChunkCount > 0 };
+    },
+    prepareTake: (wav) => wav,
+  }));
+  tts.voxCpm2SynthProvider.mockReset().mockImplementation((profile, buildSeed) => ({
+    sampleRate: profile.sampleRate,
+    mimeType: profile.mimeType,
+    seed: buildSeed,
+    preload: async () => undefined,
+    synthesize: async (speechText) => ({
+      wav: await tts.synthesizeModalVoxCpm2Wav(profile, speechText, buildSeed),
+      hitFrameCap: false,
+    }),
+    prepareTake: prepareModalVoxCpm2Take,
+  }));
+  tts.athanLabSynthProvider.mockReset().mockImplementation((profile) => ({
+    sampleRate: profile.sampleRate,
+    mimeType: profile.mimeType,
+    seed: 0,
+    preload: async () => undefined,
+    synthesize: async (speechText) => ({
+      wav: await tts.synthesizeAthanLabWav(profile, speechText),
+      hitFrameCap: false,
+    }),
+    prepareTake: (wav) => wav,
+  }));
+  slides.fetchPublishedDeck.mockReset().mockResolvedValue(PUBLISHED_DECK);
+}
+
+describe("buildPlanFromScript narration", () => {
+  beforeEach(resetNarrationStandIns);
 
   it("reuses the plan seed across dialogs and bypasses legacy cached audio", async () => {
     const script = loadPilot();
@@ -636,5 +646,111 @@ describe("buildPlanFromScript narration", () => {
         /^Dialog 1\/\d+ "[^"]+" \("Go functions can return two values…"\) stays \d+\.\d dB quieter than the rest of the narration after leveling/,
       ),
     ]);
+  });
+});
+
+describe("synthesizeNarrationAhead", () => {
+  beforeEach(resetNarrationStandIns);
+
+  const burmese = () => {
+    const script = loadPilot();
+    script.lesson.locale = "my-MM";
+    return script;
+  };
+  const voiceProfile = VOICE_PROFILES["modal-voxcpm2-burmese-v1"];
+
+  it("caches every dialog's take under the request the build then looks up", async () => {
+    const phases: string[] = [];
+
+    const result = await synthesizeNarrationAhead(burmese(), {
+      voiceProfile,
+      onPhase: (phase) => phases.push(phase),
+    });
+
+    if (result.outcome !== "ready") throw new Error(`Expected a ready pass, got ${result.outcome}`);
+    expect(result.dialogCount).toBeGreaterThan(1);
+    expect(result.synthesizedCount).toBe(result.dialogCount);
+    expect(tts.synthesizeModalVoxCpm2Wav).toHaveBeenCalledTimes(result.dialogCount);
+    expect(phases.at(-1)).toBe(`synthesize ${result.dialogCount}/${result.dialogCount}`);
+    // No plan is built: no deck is fetched and nothing is stitched.
+    expect(slides.fetchPublishedDeck).not.toHaveBeenCalled();
+    expect(stitch.segments).toEqual([]);
+
+    const kept = new Map(
+      tts.putCachedDialogWav.mock.calls.map(([hash, take]) => [
+        hash as string,
+        take as { wav: Uint8Array; hitFrameCap: boolean },
+      ]),
+    );
+    expect(tts.hasCachedDialogWav.mock.calls.map(([hash]) => hash)).toEqual([...kept.keys()]);
+    tts.getCachedDialogWav.mockImplementation(async (hash) => kept.get(hash) ?? null);
+    tts.synthesizeModalVoxCpm2Wav.mockClear();
+
+    const built = await buildPlanFromScript(burmese(), { voiceProfile });
+
+    expect(built.synthesizedCount).toBe(0);
+    expect(tts.synthesizeModalVoxCpm2Wav).not.toHaveBeenCalled();
+  });
+
+  it("only looks a cached dialog up: no read, no synthesis, no engine load", async () => {
+    tts.hasCachedDialogWav.mockResolvedValue(true);
+
+    const result = await synthesizeNarrationAhead(loadPilot());
+
+    expect(result).toMatchObject({ outcome: "ready", synthesizedCount: 0 });
+    expect(tts.getCachedDialogWav).not.toHaveBeenCalled();
+    expect(tts.preloadPocket).not.toHaveBeenCalled();
+    expect(tts.synthesizePocketDialog).not.toHaveBeenCalled();
+    expect(tts.putCachedDialogWav).not.toHaveBeenCalled();
+  });
+
+  it("stops between two dialogs once it is cancelled", async () => {
+    const result = await synthesizeNarrationAhead(burmese(), {
+      voiceProfile,
+      isCancelled: () => tts.synthesizeModalVoxCpm2Wav.mock.calls.length >= 2,
+    });
+
+    expect(result).toEqual({ outcome: "cancelled" });
+    expect(tts.synthesizeModalVoxCpm2Wav).toHaveBeenCalledTimes(2);
+    expect(tts.putCachedDialogWav).toHaveBeenCalledTimes(2);
+  });
+
+  it("synthesizes nothing it cannot keep for the build", async () => {
+    tts.isDialogCacheAvailable.mockReturnValue(false);
+    expect(await synthesizeNarrationAhead(burmese(), { voiceProfile })).toMatchObject({
+      outcome: "cache-unavailable",
+    });
+
+    tts.isDialogCacheAvailable.mockReturnValue(true);
+    tts.hasCachedDialogWav.mockImplementationOnce(async (_, onUnavailable) => {
+      onUnavailable?.("The operation is insecure.");
+      return false;
+    });
+    expect(await synthesizeNarrationAhead(burmese(), { voiceProfile })).toEqual({
+      outcome: "cache-unavailable",
+      reason: "The operation is insecure.",
+    });
+    expect(tts.synthesizeModalVoxCpm2Wav).not.toHaveBeenCalled();
+
+    // A full disk shows at the first write: that take is lost, and no more are bought.
+    tts.putCachedDialogWav.mockImplementationOnce(async (_, __, onUnavailable) => {
+      (onUnavailable as (reason: string) => void)("QuotaExceededError");
+    });
+    expect(await synthesizeNarrationAhead(burmese(), { voiceProfile })).toEqual({
+      outcome: "cache-unavailable",
+      reason: "QuotaExceededError",
+    });
+    expect(tts.synthesizeModalVoxCpm2Wav).toHaveBeenCalledOnce();
+  });
+
+  it("names the dialog it cannot synthesize, and keeps the takes before it", async () => {
+    tts.synthesizeModalVoxCpm2Wav
+      .mockImplementationOnce(async () => voicedWav(1_200, 48_000))
+      .mockRejectedValueOnce(new Error("Burmese narration service failed with HTTP 504"));
+
+    await expect(synthesizeNarrationAhead(burmese(), { voiceProfile })).rejects.toThrow(
+      /^Narration dialog 2\/\d+ .*: Burmese narration service failed with HTTP 504$/,
+    );
+    expect(tts.putCachedDialogWav).toHaveBeenCalledOnce();
   });
 });

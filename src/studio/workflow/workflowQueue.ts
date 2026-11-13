@@ -30,6 +30,13 @@ export interface WorkflowSettings {
    * in course order. Requires publish. Absent in workflows stored before it.
    */
   playlist?: { id: string; title: string } | null;
+  /**
+   * Synthesize every lesson's narration before the first lesson renders
+   * (the runner's narration pass), instead of each lesson's as it renders.
+   * Absent, and off, in workflows stored before it: resuming one of those
+   * goes on lesson by lesson rather than narrating the rest first.
+   */
+  narrateFirst?: boolean;
 }
 
 /** The draft lesson a passing render was uploaded as. */

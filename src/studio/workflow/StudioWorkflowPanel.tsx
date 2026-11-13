@@ -29,7 +29,9 @@ import {
  * point it at the course's thumbnail folder, choose how far each lesson goes
  * (render, draft, publish), and start. The studio then takes the lessons
  * through those steps one after another and stops at the first failure with
- * an issue report to hand to Claude; Resume picks up at that lesson.
+ * an issue report to hand to Claude; Resume picks up at that lesson. With
+ * "narrate every lesson first" it synthesizes all the narration before the
+ * first render, and shows where that pass is.
  */
 
 interface StudioWorkflowPanelProps {
@@ -104,6 +106,7 @@ function WorkflowSetup({
     publish: true,
     defaultThumbnailWhenMissing: false,
     playlist: null,
+    narrateFirst: true,
   });
   const { data: playlists } = useMyPlaylists({ fresh: true });
   const [thumbnails, setThumbnails] = useState<{ folder: string; files: Map<string, File> }>({
@@ -317,6 +320,26 @@ function WorkflowSetup({
         <label className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-300">
           <input
             type="checkbox"
+            checked={settings.narrateFirst === true}
+            onChange={(event) =>
+              setSettings((current) => ({ ...current, narrateFirst: event.target.checked }))
+            }
+            aria-describedby="studio-workflow-narrate-first-help"
+            className="size-3.5 accent-sky-500"
+          />
+          Narrate every lesson first
+        </label>
+        <p
+          id="studio-workflow-narrate-first-help"
+          className="mt-0.5 pl-5.5 text-[12px] text-slate-400"
+        >
+          All the narration is synthesized in one run before the first render, so a hosted voice
+          (VoxCPM2 on Modal) starts its GPU once, not once per lesson. Unchecked, each lesson is
+          narrated as it renders.
+        </p>
+        <label className="mt-1.5 flex items-center gap-2 text-[12px] text-slate-300">
+          <input
+            type="checkbox"
             checked={settings.createDraft || settings.publish}
             disabled={settings.publish}
             onChange={(event) =>
@@ -444,11 +467,14 @@ function WorkflowRun({
   const stoppedAt = workflowIssueOf(workflow);
   const canResume =
     !api.active && workflow.state !== "finished" && done < total && blockedReason === null;
-  const steps = workflow.settings.publish
+  const lessonSteps = workflow.settings.publish
     ? `render → draft → publish${workflow.settings.playlist ? ` → “${workflow.settings.playlist.title}”` : ""}`
     : workflow.settings.createDraft
       ? "render → draft"
       : "render only";
+  const steps = workflow.settings.narrateFirst ? `narrate all → ${lessonSteps}` : lessonSteps;
+  const { narration } = api;
+  const narrated = new Set(narration.ready);
 
   useEffect(() => {
     if (!copied) return;
@@ -485,6 +511,27 @@ function WorkflowRun({
           />
         </div>
       </div>
+
+      {narration.active ? (
+        <p className="rounded-lg border border-slate-700 bg-[#151a22] p-2 text-[12px] text-slate-300">
+          Narrating every lesson before the first render · {narration.ready.length} ready ·{" "}
+          <span className="font-mono text-slate-200">{narration.active.slug}</span>{" "}
+          {narration.active.phase}
+        </p>
+      ) : null}
+      {narration.stopped ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[12px] text-amber-200">
+          <p>
+            Narrating ahead stopped at <span className="font-mono">{narration.stopped.slug}</span>.{" "}
+            {narration.stopped.reason === "failed"
+              ? "The lessons before it render from the narration already made, and this one is narrated again when it renders."
+              : "This browser cannot keep narration for the renders, so each lesson is narrated as it renders."}
+          </p>
+          <p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words font-mono">
+            {narration.stopped.message}
+          </p>
+        </div>
+      ) : null}
 
       {stoppedAt ? (
         <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-[12px] text-rose-200">
@@ -540,9 +587,13 @@ function WorkflowRun({
             disabled={workflow.state === "stopping"}
             className={DANGER_BUTTON}
           >
-            {workflow.state === "stopping"
-              ? "Stopping after this lesson…"
-              : "Stop after this lesson"}
+            {narration.active
+              ? workflow.state === "stopping"
+                ? "Stopping…"
+                : "Stop narrating"
+              : workflow.state === "stopping"
+                ? "Stopping after this lesson…"
+                : "Stop after this lesson"}
           </button>
         ) : (
           <>
@@ -574,6 +625,8 @@ function WorkflowRun({
             lesson={lesson}
             active={lesson.slug === api.activeSlug}
             phase={phase}
+            narratingPhase={narration.active?.slug === lesson.slug ? narration.active.phase : null}
+            narrated={narrated.has(lesson.slug)}
             uploadProgress={api.uploadProgress}
             publishes={workflow.settings.publish}
           />
@@ -587,12 +640,18 @@ function WorkflowLessonRow({
   lesson,
   active,
   phase,
+  narratingPhase,
+  narrated,
   uploadProgress,
   publishes,
 }: {
   lesson: WorkflowLesson;
   active: boolean;
   phase: string;
+  /** The narration pass's phase while it narrates this lesson ahead of its render. */
+  narratingPhase: string | null;
+  /** The narration pass has this lesson's narration ready for its render. */
+  narrated: boolean;
   uploadProgress: number | null;
   publishes: boolean;
 }) {
@@ -631,7 +690,14 @@ function WorkflowLessonRow({
         );
       break;
     default:
-      detail = lesson.draft && publishes ? "draft ready, publish next" : "queued";
+      detail =
+        narratingPhase !== null
+          ? `narrating · ${narratingPhase}`
+          : lesson.draft && publishes
+            ? "draft ready, publish next"
+            : narrated
+              ? "narration ready"
+              : "queued";
   }
 
   const icon =
@@ -639,7 +705,7 @@ function WorkflowLessonRow({
       <CircleCheck aria-hidden="true" className="size-3.5 shrink-0 text-emerald-400" />
     ) : lesson.status === "failed" ? (
       <CircleX aria-hidden="true" className="size-3.5 shrink-0 text-rose-400" />
-    ) : lesson.status === "queued" ? (
+    ) : lesson.status === "queued" && narratingPhase === null ? (
       <Circle aria-hidden="true" className="size-3.5 shrink-0 text-slate-500" />
     ) : (
       <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-amber-300" />
@@ -647,9 +713,9 @@ function WorkflowLessonRow({
 
   return (
     <li
-      aria-current={active ? "step" : undefined}
+      aria-current={active || narratingPhase !== null ? "step" : undefined}
       className={`flex items-center gap-2 border-b border-slate-800 px-2 py-1 text-[12px] last:border-b-0 ${
-        active ? "bg-[#151a22]" : ""
+        active || narratingPhase !== null ? "bg-[#151a22]" : ""
       }`}
     >
       {icon}
