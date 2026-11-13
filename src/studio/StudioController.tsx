@@ -126,7 +126,11 @@ function renderFailureOf(report: StudioRunResult["report"]): string {
 }
 
 /** Until <AthanLabPanel> reports, a render with AthanLab cannot start. */
-const ATHANLAB_NOT_REPORTED = { ready: false, reason: "Checking your AthanLab setup…" };
+const ATHANLAB_NOT_REPORTED = {
+  ready: false,
+  reason: "Checking your AthanLab setup…",
+  configured: false,
+};
 
 /**
  * Why the selected lesson cannot be narrated by the selected provider, or null.
@@ -293,11 +297,13 @@ export default function StudioController() {
   const [collapsed, setCollapsed] = useState(false);
   const [provider, setProvider] = useState<StudioNarrationProvider>(readStoredNarrationProvider);
   // Reported by <AthanLabPanel>: the voice every dialog is synthesized with,
-  // and whether a render can start (key connected, voice chosen, balance left).
+  // whether a render can start (key connected, voice chosen, balance left),
+  // and whether the key and the voice alone are set up (`configured`).
   const [athanLabVoice, setAthanLabVoice] = useState<{ id: string; name: string } | null>(null);
   const [athanLabReadiness, setAthanLabReadiness] = useState<{
     ready: boolean;
     reason: string | null;
+    configured: boolean;
   }>(ATHANLAB_NOT_REPORTED);
   const runningRef = useRef(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -370,9 +376,11 @@ export default function StudioController() {
     });
   };
 
-  const reportAthanLabReadiness = (ready: boolean, reason: string | null) => {
+  const reportAthanLabReadiness = (ready: boolean, reason: string | null, configured: boolean) => {
     setAthanLabReadiness((current) =>
-      current.ready === ready && current.reason === reason ? current : { ready, reason },
+      current.ready === ready && current.reason === reason && current.configured === configured
+        ? current
+        : { ready, reason, configured },
     );
   };
 
@@ -475,7 +483,14 @@ export default function StudioController() {
       if (!studioCapabilities.athanlab) {
         throw new Error("AthanLab narration is not available on this server yet");
       }
-      if (!athanLabReadiness.ready || !athanLabVoice) {
+      // The key and the voice only, not the balance. A workflow that narrates
+      // first can spend the balance to zero before any lesson renders; those
+      // renders find their narration cached and buy nothing, so an empty
+      // balance must not stop them. Narration that does have to be bought
+      // fails at its first dialog with AthanLab's own refusal. Starting a
+      // render or a workflow on an empty balance stays blocked at the buttons
+      // (startBlockedReason, workflowBlockedReason).
+      if (!athanLabReadiness.configured || !athanLabVoice) {
         throw new Error(athanLabReadiness.reason ?? "Choose an AthanLab voice first");
       }
       voiceProfile = athanLabProfileOf(athanLabVoice.id);

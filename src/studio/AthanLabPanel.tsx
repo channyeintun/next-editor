@@ -108,11 +108,14 @@ interface ReadinessInput {
   voiceList: AthanLabVoiceList | null;
   voicesError: AthanLabError | null;
   selectedVoice: AthanLabVoice | null;
-  usage: AthanLabUsageReport | null;
 }
 
-/** Null when a render can start; otherwise the reason it cannot, shown beside Start render. */
-function notReadyReasonOf(input: ReadinessInput): string | null {
+/**
+ * Why the key or the voice is not set up, or null once both are. The balance
+ * is apart from this (usageBlockOf): it stops a render that has to buy
+ * narration, not one whose narration is already made.
+ */
+function setupBlockOf(input: ReadinessInput): string | null {
   if (input.capabilitiesLoading) return "Checking whether AthanLab narration is available…";
   if (!input.signedIn) return "Sign in to connect your AthanLab API key.";
   if (!input.capabilityAvailable) return "AthanLab narration is not available on this server yet.";
@@ -125,7 +128,7 @@ function notReadyReasonOf(input: ReadinessInput): string | null {
   if (input.voicesError) return input.voicesError.message;
   if (!input.voiceList) return "Loading AthanLab voices…";
   if (!input.selectedVoice) return "No AthanLab voice is available — refresh the voice list.";
-  return usageBlockOf(input.usage);
+  return null;
 }
 
 export interface AthanLabPanelProps {
@@ -137,7 +140,12 @@ export interface AthanLabPanelProps {
   disabled: boolean;
   /** The voice dialogs are synthesized with, or null when there is none to use. */
   onVoiceChange: (voiceId: string | null, voiceName: string | null) => void;
-  onReadyChange: (ready: boolean, reason: string | null) => void;
+  /**
+   * `ready`: a render can start, and `reason` says why not. `configured`: the
+   * key and the voice are set up, so when it is true and `ready` is false only
+   * AthanLab's balance or plan is in the way.
+   */
+  onReadyChange: (ready: boolean, reason: string | null, configured: boolean) => void;
 }
 
 const BUTTON_CLASS =
@@ -196,7 +204,7 @@ export default function AthanLabPanel({
     connected && voicesQuery.data === undefined && voicesQuery.error
       ? athanLabErrorOf(voicesQuery.error)
       : null;
-  const notReadyReason = notReadyReasonOf({
+  const setupBlock = setupBlockOf({
     capabilitiesLoading,
     signedIn: userId !== null,
     capabilityAvailable,
@@ -205,8 +213,10 @@ export default function AthanLabPanel({
     voiceList,
     voicesError,
     selectedVoice,
-    usage: usageReport,
   });
+  // Null when a render can start; otherwise the reason, shown beside Start render.
+  const notReadyReason = setupBlock ?? usageBlock;
+  const configured = setupBlock === null;
 
   // The voice list or the balance can be the first to learn that AthanLab
   // revoked the key (a render's 401 marks it server-side); re-read the key
@@ -229,8 +239,8 @@ export default function AthanLabPanel({
   }, [selectedVoiceId, selectedVoiceName]);
 
   useEffect(() => {
-    onReadyChange(notReadyReason === null, notReadyReason);
-  }, [notReadyReason]);
+    onReadyChange(notReadyReason === null, notReadyReason, configured);
+  }, [notReadyReason, configured]);
 
   useEffect(
     () => () => {

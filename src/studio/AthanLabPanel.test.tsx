@@ -1,13 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { AthanLabKeyStatus, AthanLabVoiceList } from "@next-editor/infra";
+import type { AthanLabKeyStatus, AthanLabUsage, AthanLabVoiceList } from "@next-editor/infra";
 
 const athan = vi.hoisted(() => ({
   keyStatus: undefined as AthanLabKeyStatus | undefined,
   keyError: null as Error | null,
   voices: undefined as AthanLabVoiceList | undefined,
   voicesError: null as Error | null,
+  usage: undefined as AthanLabUsage | undefined,
   saveKey: vi.fn<(apiKey: string) => Promise<unknown>>(),
   removeKey: vi.fn<() => Promise<unknown>>(),
 }));
@@ -33,7 +34,7 @@ vi.mock("@next-editor/infra", async () => {
     signInUrl: () => "/sign-in",
     useAthanLabKey: () => query(athan.keyStatus, athan.keyError),
     useAthanLabVoices: () => query(athan.voices, athan.voicesError),
-    useAthanLabUsage: () => query(undefined, null),
+    useAthanLabUsage: () => query(athan.usage, null),
     useSaveAthanLabKey: () =>
       useMutation({ mutationFn: (apiKey: string) => athan.saveKey(apiKey), gcTime: 0 }),
     useRemoveAthanLabKey: () => useMutation({ mutationFn: () => athan.removeKey() }),
@@ -60,7 +61,9 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderPanel() {
+type OnReadyChange = (ready: boolean, reason: string | null, configured: boolean) => void;
+
+function renderPanel(onReadyChange: OnReadyChange = () => {}) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <AthanLabPanel
@@ -69,7 +72,7 @@ function renderPanel() {
         capabilitiesLoading={false}
         disabled={false}
         onVoiceChange={() => {}}
-        onReadyChange={() => {}}
+        onReadyChange={onReadyChange}
       />
     </QueryClientProvider>,
   );
@@ -93,6 +96,7 @@ describe("AthanLabPanel key form focus", () => {
     athan.keyError = null;
     athan.voices = VOICES;
     athan.voicesError = null;
+    athan.usage = undefined;
   });
 
   afterEach(() => {
@@ -198,6 +202,7 @@ describe("AthanLabPanel errors", () => {
     athan.keyError = null;
     athan.voices = VOICES;
     athan.voicesError = null;
+    athan.usage = undefined;
   });
 
   afterEach(() => {
@@ -240,6 +245,59 @@ describe("AthanLabPanel errors", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not play this voice's sample — try again.",
+    );
+  });
+});
+
+describe("AthanLabPanel readiness", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    athan.keyStatus = CONNECTED;
+    athan.keyError = null;
+    athan.voices = VOICES;
+    athan.voicesError = null;
+    athan.usage = undefined;
+  });
+
+  const usageWith = (spendable: number): AthanLabUsage => ({
+    spendable,
+    entitled: true,
+    upgradeUrl: null,
+    monthly: { limit: null, used: null, remaining: null, resetsAt: null },
+    tokens: { balance: null },
+    key: { monthlyCharBudget: null, remaining: null },
+  });
+
+  it("reports the key and the voice as set up when only the balance is empty", () => {
+    athan.usage = usageWith(0);
+    const onReadyChange = vi.fn<OnReadyChange>();
+
+    renderPanel(onReadyChange);
+
+    expect(onReadyChange).toHaveBeenLastCalledWith(
+      false,
+      "Your AthanLab balance is empty — there are no characters left for narration.",
+      true,
+    );
+  });
+
+  it("reports ready with characters left, and not set up without a key", () => {
+    athan.usage = usageWith(1_000);
+    const onReadyChange = vi.fn<OnReadyChange>();
+    const { unmount } = renderPanel(onReadyChange);
+    expect(onReadyChange).toHaveBeenLastCalledWith(true, null, true);
+    unmount();
+
+    // The empty balance of a key that is gone says nothing: the key comes first.
+    athan.keyStatus = { connected: false, hint: null, updatedAt: null } as AthanLabKeyStatus;
+    athan.usage = usageWith(0);
+    const disconnected = vi.fn<OnReadyChange>();
+    renderPanel(disconnected);
+    expect(disconnected).toHaveBeenLastCalledWith(
+      false,
+      "Connect your AthanLab API key first.",
+      false,
     );
   });
 });

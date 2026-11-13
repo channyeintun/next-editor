@@ -188,6 +188,9 @@ async function freshStudioController(): Promise<typeof StudioController> {
   return module.default;
 }
 
+/** Long enough for every effect and resolved promise of the mount to settle. */
+const settle = () => act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
+
 /** Report an automation-controlled browser (navigator.webdriver) until restored. */
 function stubWebdriver(): () => void {
   const own = Object.getOwnPropertyDescriptor(navigator, "webdriver");
@@ -388,9 +391,6 @@ describe("StudioController unattended render", () => {
     studio.athanLabPanel = null;
   });
 
-  /** Long enough for every effect and resolved promise of the mount to settle. */
-  const settle = () => act(() => new Promise((resolve) => window.setTimeout(resolve, 20)));
-
   it("waits for the saved voices, then renders with the stored one", async () => {
     let resolveVoices: (voices: SavedCustomVoice[]) => void = () => {};
     studio.voicesLoad = new Promise((resolve) => {
@@ -432,13 +432,13 @@ describe("StudioController unattended render", () => {
     await settle();
     const panel = studio.athanLabPanel;
     if (!panel) throw new Error("AthanLabPanel not rendered");
-    act(() => panel.onReadyChange(false, "Checking your AthanLab key…"));
+    act(() => panel.onReadyChange(false, "Checking your AthanLab key…", false));
     await settle();
     expect(studio.runRender).not.toHaveBeenCalled();
 
     act(() => {
       panel.onVoiceChange("voice-a", "Voice A");
-      panel.onReadyChange(true, null);
+      panel.onReadyChange(true, null, true);
     });
     await waitFor(() => expect(studio.runRender).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole("alert")).toBeNull();
@@ -620,6 +620,54 @@ describe("StudioController workflow", () => {
       studio.runRender.mock.invocationCallOrder[0],
     );
     expect(window.__NEXT_EDITOR_STUDIO__?.workflow?.state).toBe("finished");
+  });
+
+  it("renders a narrated lesson although the narration pass emptied the AthanLab balance", async () => {
+    studio.capabilities = { athanlab: true, burmeseVoxCpm2: false };
+    localStorage.setItem("next-editor:studio:narration-provider", "athanlab");
+    studio.runRender.mockResolvedValue({
+      report: {
+        planSlug: "burmese-script",
+        outcome: "passed",
+        checks: [],
+        errors: [],
+        receipts: [],
+      },
+      manifest: { planSlug: "burmese-script", planHash: "0".repeat(64), runtimeMode: "fixture" },
+      semantics: null,
+      artifacts: {
+        neBlob: new Blob(),
+        audioBlob: new Blob(),
+        audioFileName: "a.ogg",
+        recording: {},
+      },
+    } as unknown as Awaited<ReturnType<typeof runStudioRender>>);
+    renderController(await freshStudioController());
+    await settle();
+    const panel = studio.athanLabPanel;
+    if (!panel) throw new Error("AthanLabPanel not rendered");
+    act(() => {
+      panel.onVoiceChange("voice-a", "Voice A");
+      panel.onReadyChange(true, null, true);
+    });
+    // The pass buys the last characters: the panel then reports the empty
+    // balance, with the key and the voice still set up.
+    studio.narrateAhead.mockImplementation(async () => {
+      act(() =>
+        panel.onReadyChange(false, "Your AthanLab balance is empty — no characters left.", true),
+      );
+      return { outcome: "ready", dialogCount: 1, synthesizedCount: 1 };
+    });
+    pickLesson("burmese-script");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Publish the draft" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Create a draft" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Start workflow (1)" }));
+
+    await waitFor(() => expect(screen.getByText("1/1 done")).toBeInTheDocument());
+    expect(studio.narrateAhead).toHaveBeenCalledTimes(1);
+    expect(studio.runRender).toHaveBeenCalledTimes(1);
+    expect(studio.builtVoiceProfile).toMatchObject({ providerId: "athanlab" });
   });
 
   it("refuses a lesson the chosen narration cannot speak before anything renders", () => {
