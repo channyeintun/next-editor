@@ -1,0 +1,1780 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architect Path thumbnail</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;500;700&display=block"
+    />
+    <!--
+      Architect Path course (Burmese) lesson thumbnail, 1280×720 (16:9, the lesson card ratio).
+      Click a stop on the route (or press ← / →) to load that lesson from LESSONS, or render
+      the whole set with `bun docs/architect-path-thumbnails/render.ts`.
+
+      This course has its own look. The other course thumbnails sit on the cream page with a
+      mascot; this one is the lesson's dark whiteboard: an ink ground, and on it one diagram
+      drawn for the lesson. What it keeps from the family: the brand colours and type (teal,
+      yellow and purple from the logo, Google Sans + Noto Sans Myanmar), the language pill,
+      the Next Editor mark, the file tab, and a lesson-by-lesson progress strip.
+
+      - The big number, the part label and the route highlight take the part's accent
+        (yellow, teal, purple in turn), so the ten parts band the gallery.
+      - The route along the bottom is the course: 56 stops in ten parts.
+      - The tab on the board names the notebook document the lesson types.
+      - Every diagram is original and drawn here from the shapes in the DSL below. Colours
+        keep the jobs they have on the lessons' boards: cream for a part of the system,
+        yellow for the thing in focus, teal for what is good or chosen, purple for a flow,
+        red for a failure or a cost. No diagram is taken from a book.
+    -->
+    <style>
+      :root {
+        --ground: #0c0f16;
+        --panel: #131722;
+        --rule: #2a3142;
+        --cream: #ece9e0;
+        --dim: #8d96a9;
+        --yellow: #ffd255;
+        --teal: #4de5d6;
+        --purple: #a394ff;
+        --pill: #6d57ff;
+        --accent: var(--yellow);
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* The frame sits at the top rather than centered vertically: centering can land it
+         on a half pixel, and a screenshot then picks up a line of the page background. */
+      body {
+        margin: 0;
+        min-width: max-content;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 32px 16px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      #thumb {
+        position: relative;
+        width: 1280px;
+        height: 720px;
+        flex: none;
+        overflow: hidden;
+        color: var(--cream);
+        background-color: var(--ground);
+        background-image: radial-gradient(rgb(236 233 224 / 0.075) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      .series {
+        position: absolute;
+        left: 64px;
+        top: 42px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font: 700 34px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .series svg {
+        width: 52px;
+        height: 36px;
+      }
+
+      .lang {
+        position: absolute;
+        right: 64px;
+        top: 34px;
+        padding: 10px 28px 12px;
+        border-radius: 999px;
+        background: var(--pill);
+        color: #fff;
+        font: 700 26px/1.3 var(--mm);
+      }
+
+      /* The left column hangs between the board's top and bottom edges: the number at
+         the top, the part and the title at the bottom. */
+      .left {
+        position: absolute;
+        left: 64px;
+        top: 124px;
+        width: 556px;
+        height: 460px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .num-label {
+        font: 700 21px/1 var(--mono);
+        letter-spacing: 0.22em;
+        color: var(--dim);
+      }
+
+      .num {
+        margin: 12px 0 0 -6px;
+        font: 700 172px/0.8 var(--sans);
+        letter-spacing: -0.045em;
+        color: var(--accent);
+      }
+
+      .part {
+        font: 600 24px/1.5 var(--sans);
+        color: var(--accent);
+        white-space: nowrap;
+      }
+
+      .title {
+        margin-top: 6px;
+        font-weight: 700;
+        font-family: var(--sans);
+        line-height: 1.34;
+        letter-spacing: -0.012em;
+      }
+
+      /* A title breaks only where LESSONS breaks it. */
+      .title .line {
+        display: block;
+        width: max-content;
+        white-space: nowrap;
+      }
+
+      .board {
+        position: absolute;
+        left: 664px;
+        top: 124px;
+        width: 552px;
+        height: 460px;
+        border: 2px solid var(--rule);
+        border-radius: 28px;
+        background-color: var(--panel);
+        background-image: radial-gradient(rgb(236 233 224 / 0.07) 1.4px, transparent 1.4px);
+        background-size: 24px 24px;
+        background-position: 12px 12px;
+      }
+
+      .board svg {
+        position: absolute;
+        inset: -2px;
+        width: 552px;
+        height: 460px;
+        font-family: var(--sans);
+      }
+
+      .board svg .mm {
+        font-family: var(--mm);
+      }
+
+      .tab {
+        position: absolute;
+        left: 28px;
+        top: -19px;
+        padding: 7px 16px 8px;
+        border-radius: 999px;
+        background: var(--cream);
+        color: #12151d;
+        font: 600 17px/1 var(--mono);
+        white-space: nowrap;
+      }
+
+      .route {
+        position: absolute;
+        left: 64px;
+        top: 624px;
+        width: 860px;
+        height: 44px;
+      }
+
+      .route circle {
+        cursor: pointer;
+      }
+
+      .brand {
+        position: absolute;
+        right: 64px;
+        top: 622px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 29px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 48px;
+        height: 48px;
+      }
+
+      .hint {
+        color: #b9b9bd;
+        font: 400 14px/1.4 var(--sans);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="thumb">
+      <div class="series">
+        <svg viewBox="0 0 52 36" aria-hidden="true">
+          <path
+            d="M6,28 C22,28 18,8 34,8 H44"
+            fill="none"
+            stroke="#ece9e0"
+            stroke-width="4"
+            stroke-linecap="round"
+          />
+          <circle cx="6" cy="28" r="5" fill="#ece9e0" />
+          <circle cx="44" cy="8" r="6.5" fill="#ffd255" />
+        </svg>
+        Architect Path
+      </div>
+      <div class="lang">မြန်မာလို</div>
+
+      <div class="left">
+        <div>
+          <div class="num-label">LESSON</div>
+          <div class="num" id="num">01</div>
+        </div>
+        <div id="titleGroup">
+          <div class="part" id="part"></div>
+          <div class="title" id="title"></div>
+        </div>
+      </div>
+
+      <div class="board">
+        <svg id="glyph" viewBox="0 0 552 460" aria-hidden="true"></svg>
+        <div class="tab" id="tab"></div>
+      </div>
+
+      <svg class="route" id="route" viewBox="0 0 860 44" aria-label="Lesson in the course"></svg>
+
+      <div class="brand">
+        <svg viewBox="0 0 1024 1024" aria-hidden="true">
+          <defs>
+            <linearGradient
+              id="g2c"
+              x1="300"
+              y1="312"
+              x2="724"
+              y2="712"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#4DE5D6" />
+              <stop offset="0.5" stop-color="#FFD255" />
+              <stop offset="1" stop-color="#6D57FF" />
+            </linearGradient>
+          </defs>
+          <rect
+            x="72"
+            y="72"
+            width="880"
+            height="880"
+            rx="200"
+            fill="#0B0E14"
+            stroke="#2a3142"
+            stroke-width="36"
+          />
+          <polygon
+            points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+            fill="url(#g2c)"
+          />
+        </svg>
+        Next Editor
+      </div>
+    </div>
+
+    <div class="hint">Click a stop on the route, or press ← / →, to load another lesson.</div>
+
+    <script>
+      // The ten parts of the course, in order (the names the course guide uses).
+      const PARTS = [
+        "Architect အမြင်",
+        "Module နဲ့ coupling",
+        "Architecture characteristic",
+        "Architecture style",
+        "Domain ကို နားလည်ခြင်း",
+        "Data",
+        "Distributed architecture",
+        "Production",
+        "Evolution နဲ့ governance",
+        "လူနဲ့ အဖွဲ့အစည်း",
+      ];
+
+      // One entry per lesson: [number, slug, part, title lines, notebook document].
+      // The title lines joined by a space are the lesson's title after "Architect Path NN: "
+      // (render.ts checks that against the lesson's YAML); the breaks are chosen by hand.
+      const LESSONS = [
+        [
+          1,
+          "architect-01-what-is-architecture",
+          1,
+          ["Architecture", "ဆိုတာ ဘာလဲ"],
+          "01-architecture.md",
+        ],
+        [
+          2,
+          "architect-02-the-architects-job",
+          1,
+          ["Architect ရဲ့", "အလုပ်"],
+          "02-decisions-this-week.md",
+        ],
+        [3, "architect-03-trade-offs", 1, ["အရာတိုင်းက", "trade-off"], "03-seat-hold-trade-off.md"],
+        [4, "architect-04-breadth-and-depth", 1, ["အကျယ်နဲ့ အနက်"], "04-my-radar.md"],
+        [
+          5,
+          "architect-05-easier-to-change",
+          1,
+          ["ပြောင်းရ လွယ်အောင်", "ဆောက်ခြင်း"],
+          "05-change-test.md",
+        ],
+        [
+          6,
+          "architect-06-reversible-decisions",
+          1,
+          ["ပြန်ပြင်လို့ရတဲ့", "ဆုံးဖြတ်ချက်"],
+          "06-open-decisions.md",
+        ],
+        [7, "architect-07-modularity", 2, ["Module, cohesion", "နဲ့ coupling"], "07-module-audit.md"],
+        [8, "architect-08-complexity", 2, ["Complexity", "ဘယ်က လာသလဲ"], "08-how-to-decide.md"],
+        [
+          9,
+          "architect-09-coupling-strength",
+          2,
+          ["Coupling ရဲ့ အားကို", "တိုင်းခြင်း"],
+          "09-coupling-audit.md",
+        ],
+        [10, "architect-10-balanced-coupling", 2, ["Coupling ကို", "ချိန်ညှိခြင်း"], "10-balance.md"],
+        [11, "architect-11-components", 2, ["Component တွေကို", "ရှာဖွေခြင်း"], "11-components.md"],
+        [
+          12,
+          "architect-12-characteristics",
+          3,
+          ["Architecture", "characteristic", "ဆိုတာ ဘာလဲ"],
+          "12-candidates.md",
+        ],
+        [
+          13,
+          "architect-13-finding-characteristics",
+          3,
+          ["Business စကားကနေ", "characteristic ဆီ"],
+          "13-characteristics.md",
+        ],
+        [
+          14,
+          "architect-14-measuring-characteristics",
+          3,
+          ["Characteristic ကို", "တိုင်းတာခြင်း"],
+          "14-measures.md",
+        ],
+        [15, "architect-15-architecture-quantum", 3, ["Architecture", "quantum"], "15-quanta.md"],
+        [
+          16,
+          "architect-16-monolith-or-distributed",
+          4,
+          ["Monolith လား၊", "distributed လား"],
+          "16-reasons-to-distribute.md",
+        ],
+        [
+          17,
+          "architect-17-layered-and-modular-monolith",
+          4,
+          ["Layered နဲ့", "modular monolith"],
+          "17-adr-modular-monolith.md",
+        ],
+        [
+          18,
+          "architect-18-microkernel-and-pipeline",
+          4,
+          ["Microkernel", "နဲ့ pipeline"],
+          "18-plugin-contract.md",
+        ],
+        [
+          19,
+          "architect-19-service-based",
+          4,
+          ["Service-based", "architecture"],
+          "19-service-candidates.md",
+        ],
+        [20, "architect-20-event-driven", 4, ["Event-driven", "architecture"], "20-events.md"],
+        [21, "architect-21-microservices", 4, ["Microservices"], "21-readiness.md"],
+        [22, "architect-22-choosing-a-style", 4, ["Style တစ်ခုကို", "ရွေးချယ်ခြင်း"], "22-adr-style.md"],
+        [
+          23,
+          "architect-23-subdomains",
+          5,
+          ["Core, supporting,", "generic subdomain"],
+          "23-subdomains.md",
+        ],
+        [
+          24,
+          "architect-24-bounded-contexts",
+          5,
+          ["Ubiquitous language", "နဲ့ bounded context"],
+          "24-language.md",
+        ],
+        [25, "architect-25-context-maps", 5, ["Context map"], "25-context-map.md"],
+        [
+          26,
+          "architect-26-business-logic-patterns",
+          5,
+          ["Business logic ကို", "ဘယ်လို တည်ဆောက်မလဲ"],
+          "26-patterns.md",
+        ],
+        [27, "architect-27-eventstorming", 5, ["EventStorming"], "27-refund-events.md"],
+        [28, "architect-28-data-systems", 6, ["Data system တွေရဲ့", "trade-off"], "28-stores.md"],
+        [
+          29,
+          "architect-29-schema-evolution",
+          6,
+          ["Schema evolution", "နဲ့ contract"],
+          "29-changes.md",
+        ],
+        [30, "architect-30-replication", 6, ["Replication"], "30-reads.md"],
+        [31, "architect-31-sharding", 6, ["Sharding"], "31-adr-not-yet.md"],
+        [32, "architect-32-transactions", 6, ["Transaction", "နဲ့ isolation"], "32-invariants.md"],
+        [
+          33,
+          "architect-33-distributed-trouble",
+          6,
+          ["Distributed system", "ရဲ့ ဒုက္ခများ"],
+          "33-pay-call.md",
+        ],
+        [
+          34,
+          "architect-34-consistency-and-consensus",
+          6,
+          ["Consistency", "နဲ့ consensus"],
+          "34-consistency.md",
+        ],
+        [
+          35,
+          "architect-35-streams-and-derived-data",
+          6,
+          ["Event stream နဲ့", "derived data"],
+          "35-consumers.md",
+        ],
+        [36, "architect-36-breaking-the-monolith", 7, ["Monolith ကို", "ခွဲထုတ်ခြင်း"], "36-plan.md"],
+        [
+          37,
+          "architect-37-service-granularity",
+          7,
+          ["Service ဘယ်လောက်", "သေးရမလဲ"],
+          "37-granularity.md",
+        ],
+        [38, "architect-38-data-ownership", 7, ["Data ကို", "ဘယ်သူ ပိုင်သလဲ"], "38-ownership.md"],
+        [39, "architect-39-sagas", 7, ["Distributed", "transaction နဲ့ saga"], "39-purchase-saga.md"],
+        [40, "architect-40-reuse", 7, ["Reuse လား၊", "ကူးယူမလား"], "40-sharing.md"],
+        [
+          41,
+          "architect-41-trade-off-analysis",
+          7,
+          ["Trade-off analysis", "လုပ်နည်း"],
+          "41-analysis.md",
+        ],
+        [
+          42,
+          "architect-42-how-systems-fail",
+          8,
+          ["System တွေ", "ဘယ်လို ပျက်သလဲ"],
+          "42-integration-points.md",
+        ],
+        [
+          43,
+          "architect-43-stability-patterns",
+          8,
+          ["Stability", "pattern များ"],
+          "43-protections.md",
+        ],
+        [44, "architect-44-production-ready", 8, ["Production အတွက်", "design"], "44-readiness.md"],
+        [
+          45,
+          "architect-45-evolutionary-architecture",
+          9,
+          ["Evolutionary", "architecture နဲ့", "fitness function"],
+          "45-fitness-functions.md",
+        ],
+        [
+          46,
+          "architect-46-governance-as-code",
+          9,
+          ["Governance ကို", "automate လုပ်ခြင်း"],
+          "46-rollout.md",
+        ],
+        [
+          47,
+          "architect-47-decision-records",
+          9,
+          ["Architecture", "decision record"],
+          "47-adr-seat-uniqueness.md",
+        ],
+        [48, "architect-48-risk", 9, ["Risk ကို မြင်အောင်", "ကြည့်ခြင်း"], "48-risk.md"],
+        [49, "architect-49-diagrams", 9, ["Diagram နဲ့", "တင်ပြခြင်း"], "49-diagram-checklist.md"],
+        [
+          50,
+          "architect-50-architect-and-team",
+          10,
+          ["Architect နဲ့", "development team"],
+          "50-involvement.md",
+        ],
+        [51, "architect-51-negotiation", 10, ["ညှိနှိုင်းခြင်းနဲ့", "ဆက်သွယ်ခြင်း"], "51-four-messages.md"],
+        [
+          52,
+          "architect-52-advice-process",
+          10,
+          ["Architecture", "advice process"],
+          "52-adr-with-advice.md",
+        ],
+        [
+          53,
+          "architect-53-principles-and-radar",
+          10,
+          ["Principle နဲ့", "technology radar"],
+          "53-principles.md",
+        ],
+        [54, "architect-54-the-elevator", 10, ["Architect", "elevator"], "54-memo.md"],
+        [55, "architect-55-organisation", 10, ["အဖွဲ့အစည်းကို", "system လို မြင်ခြင်း"], "55-teams.md"],
+        [56, "architect-56-your-path", 10, ["Architect", "ခရီးလမ်း"], "56-my-path.md"],
+      ].map(([number, slug, part, lines, doc]) => ({ number, slug, part, lines, doc }));
+      window.LESSONS = LESSONS;
+
+      /* ---------- The drawing DSL: every diagram is built from these shapes ---------- */
+
+      const PANEL = "#131722";
+      // Colour jobs: w a part of the system, d a quiet line, y the thing in focus,
+      // t good or chosen, p a flow, r a failure or a cost, k ink on a solid shape.
+      const INK = {
+        w: "#ece9e0",
+        d: "#737c92",
+        y: "#ffd255",
+        t: "#4de5d6",
+        p: "#a394ff",
+        r: "#ff7b72",
+        o: "#ff9f43",
+        b: "#5aa9ff",
+        k: "#12151d",
+      };
+      const ACCENTS = ["y", "t", "p"];
+
+      const esc = (text) =>
+        String(text).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      const n1 = (value) => Math.round(value * 10) / 10;
+      const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      // A tint is the colour laid over the board, kept opaque so a line drawn earlier
+      // never shows through a shape.
+      function mix(hex, base, amount) {
+        const a = channels(hex);
+        const b = channels(base);
+        return `rgb(${a.map((v, i) => Math.round(v * amount + b[i] * (1 - amount))).join(" ")})`;
+      }
+      const strokeOf = (o = {}) =>
+        `stroke="${INK[o.c || "w"]}" stroke-width="${o.sw ?? 4}" stroke-linecap="round" stroke-linejoin="round"` +
+        (o.dash ? ` stroke-dasharray="${o.dash === 1 ? "10 10" : o.dash}"` : "") +
+        (o.op ? ` opacity="${o.op}"` : "");
+      const fillOf = (o = {}, closed = true) =>
+        o.solid
+          ? INK[o.c || "w"]
+          : o.f
+            ? mix(INK[o.c || "w"], PANEL, 0.2)
+            : o.open || !closed
+              ? "none"
+              : PANEL;
+      const heads = (o = {}) =>
+        ` marker-end="url(#ah-${o.c || "w"})"` +
+        (o.both ? ` marker-start="url(#ah-${o.c || "w"})"` : "");
+
+      // maxw marks a label that sits inside a shape; glyphProblems() checks it fits.
+      const txt = (x, y, text, o = {}) =>
+        `<text x="${n1(x)}" y="${n1(y)}" text-anchor="${o.a || "middle"}" dominant-baseline="central"` +
+        ` font-size="${o.fs || 20}" font-weight="${o.fw || 500}" fill="${INK[o.c || "w"]}"` +
+        (o.mm ? ' class="mm"' : "") +
+        (o.rot ? ` transform="rotate(${o.rot} ${n1(x)} ${n1(y)})"` : "") +
+        (o.maxw ? ` data-maxw="${o.maxw}"` : "") +
+        `>${esc(text)}</text>`;
+      const labelOf = (cx, cy, width, o) =>
+        o.label
+          ? txt(cx, cy, o.label, {
+              fs: o.fs,
+              fw: o.fw,
+              mm: o.mm,
+              c: o.lc || (o.solid ? "k" : "w"),
+              maxw: width - 14,
+            })
+          : "";
+      const box = (x, y, w, h, o = {}) =>
+        `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.r ?? 12}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+        labelOf(x + w / 2, y + h / 2, w, o);
+      const circ = (cx, cy, r, o = {}) =>
+        `<circle cx="${n1(cx)}" cy="${n1(cy)}" r="${r}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+        labelOf(cx, cy, r * 2, o);
+      const ell = (cx, cy, rx, ry, o = {}) =>
+        `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${fillOf(o)}" ${strokeOf(o)}/>`;
+      // A database: a drum with its lid drawn.
+      function cyl(x, y, w, h, o = {}) {
+        const ry = Math.min(15, h * 0.15);
+        const side = h - 2 * ry;
+        return (
+          `<path d="M${x},${y + ry} v${side} a${w / 2},${ry} 0 0 0 ${w},0 v${-side}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+          `<ellipse cx="${x + w / 2}" cy="${y + ry}" rx="${w / 2}" ry="${ry}" fill="${fillOf(o)}" ${strokeOf(o)}/>` +
+          labelOf(x + w / 2, y + h / 2 + ry * 0.7, w, o)
+        );
+      }
+      const line = (x1, y1, x2, y2, o = {}) =>
+        `<line x1="${n1(x1)}" y1="${n1(y1)}" x2="${n1(x2)}" y2="${n1(y2)}" fill="none" ${strokeOf(o)}/>`;
+      const arr = (x1, y1, x2, y2, o = {}) =>
+        `<line x1="${n1(x1)}" y1="${n1(y1)}" x2="${n1(x2)}" y2="${n1(y2)}" fill="none" ${strokeOf(o)}${heads(o)}/>`;
+      const path = (d, o = {}) =>
+        `<path d="${d}" fill="${fillOf(o, false)}" ${strokeOf(o)}${o.arrow ? heads(o) : ""}/>`;
+      const poly = (points, o = {}) =>
+        `<polyline points="${points.map((p) => p.map(n1).join(",")).join(" ")}" fill="none" ${strokeOf(o)}/>`;
+      const polygon = (points, o = {}) =>
+        `<polygon points="${points.map((p) => p.map(n1).join(",")).join(" ")}" fill="${fillOf(o, false)}" ${strokeOf(o)}/>`;
+      // A person: a head over rounded shoulders, s is the scale.
+      const person = (cx, cy, s = 1, o = {}) =>
+        `<path d="M${n1(cx - 24 * s)},${n1(cy + 30 * s)} a${24 * s},${28 * s} 0 0 1 ${48 * s},0 z" fill="${fillOf({ f: 1, ...o })}" ${strokeOf(o)}/>` +
+        `<circle cx="${cx}" cy="${n1(cy - 20 * s)}" r="${13 * s}" fill="${fillOf({ f: 1, ...o })}" ${strokeOf(o)}/>`;
+      // A page with a folded corner and a few lines of writing.
+      function doc(x, y, w, h, o = {}) {
+        const fold = o.fold ?? 22;
+        const out = [
+          `<path d="M${x},${y} h${w - fold} l${fold},${fold} v${h - fold} h${-w} z" fill="${fillOf(o)}" ${strokeOf(o)}/>`,
+          `<path d="M${x + w - fold},${y} v${fold} h${fold}" fill="none" ${strokeOf(o)}/>`,
+        ];
+        const lines = o.lines ?? 3;
+        const top = y + (o.label ? 46 : 28);
+        for (let i = 0; i < lines; i++)
+          out.push(
+            line(x + 16, top + i * 18, x + w - (i % 2 ? 34 : 16), top + i * 18, { c: "d", sw: 4 }),
+          );
+        if (o.label)
+          out.push(txt(x + 16, y + 24, o.label, { a: "start", fs: 18, fw: 700, c: "y" }));
+        return out.join("");
+      }
+      // A speech bubble; tail = { side: "b" | "r", at, d } points down or to the right.
+      function bubble(x, y, w, h, o = {}) {
+        const r = o.r ?? 24;
+        const tail = o.tail || {};
+        const half = 13;
+        let d = `M${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r}`;
+        if (tail.side === "r")
+          d += ` V${tail.at - half} L${x + w + 24},${tail.at + (tail.d || 0)} L${x + w},${tail.at + half}`;
+        d += ` V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h}`;
+        if (tail.side === "b")
+          d += ` H${tail.at + half} L${tail.at + (tail.d || 0)},${y + h + 24} L${tail.at - half},${y + h}`;
+        d += ` H${x + r} Q${x},${y + h} ${x},${y + h - r} V${y + r} Q${x},${y} ${x + r},${y} Z`;
+        return `<path d="${d}" fill="${fillOf(o)}" ${strokeOf(o)}/>`;
+      }
+      const tick = (cx, cy, s, o = {}) =>
+        path(
+          `M${n1(cx - s)},${n1(cy)} l${n1(s * 0.7)},${n1(s * 0.75)} l${n1(s * 1.3)},${n1(-s * 1.5)}`,
+          {
+            sw: 5,
+            ...o,
+          },
+        );
+      const cross = (cx, cy, s, o = {}) =>
+        line(cx - s, cy - s, cx + s, cy + s, { sw: 5, ...o }) +
+        line(cx - s, cy + s, cx + s, cy - s, { sw: 5, ...o });
+      const plus = (cx, cy, s, o = {}) =>
+        line(cx - s, cy, cx + s, cy, { sw: 6, ...o }) +
+        line(cx, cy - s, cx, cy + s, { sw: 6, ...o });
+      const minus = (cx, cy, s, o = {}) => line(cx - s, cy, cx + s, cy, { sw: 6, ...o });
+      // A clock face; the two hands are given as angles in degrees from 12 o'clock.
+      function clock(cx, cy, r, o = {}, hands = [0, 120]) {
+        const hand = (deg, len) => {
+          const a = ((deg - 90) * Math.PI) / 180;
+          return line(cx, cy, cx + Math.cos(a) * len, cy + Math.sin(a) * len, o);
+        };
+        return circ(cx, cy, r, o) + hand(hands[0], r * 0.62) + hand(hands[1], r * 0.42);
+      }
+      const bolt = (cx, cy, s, o = {}) =>
+        polygon(
+          [
+            [cx + 0.22 * s, cy - s],
+            [cx - 0.5 * s, cy + 0.12 * s],
+            [cx - 0.02 * s, cy + 0.12 * s],
+            [cx - 0.22 * s, cy + s],
+            [cx + 0.5 * s, cy - 0.14 * s],
+            [cx + 0.02 * s, cy - 0.14 * s],
+          ],
+          { solid: 1, sw: 3, ...o },
+        );
+      // A sticky note with one or two lines of writing, slightly turned.
+      function sticky(x, y, size, color, words, turn) {
+        const cx = x + size / 2;
+        const cy = y + size / 2;
+        const rows = words.map((word, i) =>
+          txt(cx, cy + (i - (words.length - 1) / 2) * 22, word, {
+            fs: 17,
+            fw: 700,
+            c: "k",
+            maxw: size - 10,
+          }),
+        );
+        return (
+          `<g transform="rotate(${turn} ${cx} ${cy})">` +
+          `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${INK[color]}"/>` +
+          rows.join("") +
+          "</g>"
+        );
+      }
+      const move = (dx, dy, items) => [`<g transform="translate(${dx} ${dy})">`, ...items, "</g>"];
+      const around = (cx, cy, r, deg) => {
+        const a = (deg * Math.PI) / 180;
+        return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+      };
+
+      /* ---------- One diagram per lesson, on a 552×460 board ---------- */
+
+      const GLYPHS = {
+        // Four things that make an architecture, around the company's system.
+        1: () => [
+          line(276, 242, 124, 108, { c: "d" }),
+          line(276, 242, 428, 108, { c: "d" }),
+          line(276, 242, 124, 376, { c: "d" }),
+          line(276, 242, 428, 376, { c: "d" }),
+          box(36, 80, 176, 56, { label: "Characteristics", fs: 17 }),
+          box(340, 80, 176, 56, { label: "Components", fs: 17 }),
+          box(36, 348, 176, 56, { label: "Style", fs: 17 }),
+          box(340, 348, 176, 56, { label: "Decisions", fs: 17 }),
+          box(186, 186, 180, 112, { c: "y", f: 1, r: 18, label: "ခရီးဖော်", fs: 30, fw: 700, mm: 1 }),
+        ],
+        // The architect stands between the business and the system, and writes decisions down.
+        2: () => [
+          line(454, 124, 454, 264, { c: "t" }),
+          bubble(36, 152, 148, 84, { c: "p", f: 1, tail: { side: "r", at: 194 } }),
+          txt(110, 194, "business", { fs: 19 }),
+          person(276, 194, 1.5, { c: "y" }),
+          arr(326, 194, 384, 194, { c: "y" }),
+          box(394, 100, 120, 48, { c: "t", f: 1 }),
+          box(394, 170, 120, 48, { c: "t", f: 1 }),
+          box(394, 240, 120, 48, { c: "t", f: 1 }),
+          arr(276, 252, 276, 286, { c: "y" }),
+          doc(232, 294, 88, 98, { label: "ADR" }),
+        ],
+        // Two options on a scale: one side always costs something.
+        3: () => [
+          line(206, 372, 346, 372, { sw: 6 }),
+          line(276, 372, 276, 140),
+          line(116, 160, 52, 270, { c: "d", sw: 3 }),
+          line(116, 160, 180, 270, { c: "d", sw: 3 }),
+          line(436, 120, 372, 230, { c: "d", sw: 3 }),
+          line(436, 120, 500, 230, { c: "d", sw: 3 }),
+          line(116, 160, 436, 120, { sw: 6 }),
+          circ(276, 140, 10, { solid: 1 }),
+          line(44, 270, 188, 270, { c: "y", sw: 6 }),
+          box(88, 212, 56, 56, { c: "y", f: 1, r: 8, label: "A", fs: 24, fw: 700 }),
+          line(364, 230, 508, 230, { c: "t", sw: 6 }),
+          circ(436, 197, 30, { c: "t", f: 1, label: "B", fs: 24, fw: 700 }),
+        ],
+        // T-shaped knowledge: wide across the top, deep in one place.
+        4: () => [
+          box(56, 96, 440, 72, { c: "t", f: 1, label: "breadth", fs: 22 }),
+          box(222, 182, 108, 222, { c: "y", f: 1 }),
+          txt(276, 293, "depth", { fs: 22, rot: -90 }),
+        ],
+        // A part is swapped without touching its neighbours.
+        5: () => [
+          line(176, 254, 376, 254, { c: "d" }),
+          box(56, 206, 120, 96),
+          box(376, 206, 120, 96),
+          box(216, 206, 120, 96, { c: "d", dash: 1 }),
+          box(216, 76, 120, 84, { c: "y", f: 1, label: "new" }),
+          arr(276, 166, 276, 198, { c: "y" }),
+          arr(276, 308, 276, 340, { c: "r" }),
+          box(216, 348, 120, 64, { c: "r", dash: 1, label: "old", fs: 18, lc: "r" }),
+        ],
+        // One road lets you come back; the other does not.
+        6: () =>
+          move(14, 8, [
+            path("M64,244 H170 C240,244 250,150 320,150 H420", { c: "t" }),
+            path("M420,150 C492,150 492,92 420,92 H336", { c: "t", arrow: 1 }),
+            path("M170,244 C240,244 250,338 320,338 H444", { c: "r", arrow: 1 }),
+            line(470, 300, 470, 376, { c: "r", sw: 8 }),
+            circ(64, 244, 12, { solid: 1 }),
+            txt(378, 186, "reversible", { c: "t" }),
+            txt(378, 374, "one-way", { c: "r" }),
+          ]),
+        // Tight inside each module, one thin link between them.
+        7: () =>
+          move(0, -8, [
+            line(220, 232, 332, 232, { c: "d", dash: "6 8" }),
+            box(40, 112, 180, 240, { r: 22 }),
+            box(332, 112, 180, 240, { r: 22 }),
+            line(130, 170, 86, 290, { c: "y", sw: 5 }),
+            line(130, 170, 174, 290, { c: "y", sw: 5 }),
+            line(86, 290, 174, 290, { c: "y", sw: 5 }),
+            circ(130, 170, 18, { c: "y", f: 1 }),
+            circ(86, 290, 18, { c: "y", f: 1 }),
+            circ(174, 290, 18, { c: "y", f: 1 }),
+            line(422, 170, 378, 290, { c: "t", sw: 5 }),
+            line(422, 170, 466, 290, { c: "t", sw: 5 }),
+            line(378, 290, 466, 290, { c: "t", sw: 5 }),
+            circ(422, 170, 18, { c: "t", f: 1 }),
+            circ(378, 290, 18, { c: "t", f: 1 }),
+            circ(466, 290, 18, { c: "t", f: 1 }),
+            circ(220, 232, 6, { c: "d", solid: 1 }),
+            circ(332, 232, 6, { c: "d", solid: 1 }),
+            txt(276, 208, "coupling", { c: "d", fs: 17 }),
+            txt(130, 384, "cohesion", { c: "y", fs: 19 }),
+            txt(422, 384, "cohesion", { c: "t", fs: 19 }),
+          ]),
+        // Every part knows every other part.
+        8: () => {
+          const points = Array.from({ length: 7 }, (_, i) =>
+            around(276, 240, 150, -90 + (i * 360) / 7),
+          );
+          const out = [];
+          points.forEach((a, i) =>
+            points.forEach((b, j) => {
+              if (j <= i) return;
+              const neighbour = j - i === 1 || (i === 0 && j === 6);
+              out.push(
+                line(
+                  a[0],
+                  a[1],
+                  b[0],
+                  b[1],
+                  neighbour ? { c: "d", sw: 3 } : { c: "r", sw: 2.5, op: 0.8 },
+                ),
+              );
+            }),
+          );
+          points.forEach((p) => out.push(circ(p[0], p[1], 18)));
+          return out;
+        },
+        // The same link, from weak to strong.
+        9: () => {
+          const rows = [
+            [88, "t", 3],
+            [168, "y", 8],
+            [248, "o", 13],
+            [328, "r", 19],
+          ];
+          return [
+            ...rows.flatMap(([y, c, sw]) => [
+              line(176, y + 26, 376, y + 26, { c, sw }),
+              box(60, y, 116, 52),
+              box(376, y, 116, 52),
+            ]),
+            txt(276, 92, "weak", { c: "t", fs: 18 }),
+            txt(276, 394, "strong", { c: "r", fs: 18 }),
+          ];
+        },
+        // Three dials to set against each other.
+        10: () =>
+          [
+            ["strength", 140, 0.28],
+            ["distance", 244, 0.72],
+            ["volatility", 348, 0.5],
+          ].flatMap(([label, y, at]) => [
+            txt(48, y, label, { a: "start" }),
+            line(196, y, 504, y, { c: "d", sw: 6 }),
+            line(196, y, 196 + 308 * at, y, { c: "y", sw: 6 }),
+            circ(196 + 308 * at, y, 16, { c: "y", solid: 1 }),
+          ]),
+        // One app, and the logical components inside it.
+        11: () => [
+          box(44, 84, 464, 326, { c: "d", dash: 1, r: 24, open: 1 }),
+          box(72, 112, 196, 82, { c: "t", f: 1, label: "Search" }),
+          box(284, 112, 196, 82, { c: "y", f: 1, label: "Booking" }),
+          box(72, 210, 196, 82, { c: "p", f: 1, label: "Payment" }),
+          box(284, 210, 196, 82, { label: "Operator" }),
+          box(72, 308, 408, 74, { label: "Notification" }),
+        ],
+        // How much of each quality the system has.
+        12: () => {
+          const at = (i, r) => around(276, 250, r, -90 + i * 72);
+          const ring = (r) =>
+            polygon(
+              [0, 1, 2, 3, 4].map((i) => at(i, r)),
+              { c: "d", sw: 2 },
+            );
+          const shape = [124, 78, 110, 60, 98].map((r, i) => at(i, r));
+          return [
+            ring(132),
+            ring(88),
+            ring(44),
+            ...[0, 1, 2, 3, 4].map((i) => line(276, 250, ...at(i, 132), { c: "d", sw: 2 })),
+            polygon(shape, { c: "y", f: 1 }),
+            ...shape.map((p) => circ(p[0], p[1], 6, { c: "y", solid: 1 })),
+            txt(276, 100, "availability", { fs: 17, c: "d" }),
+            txt(412, 205, "performance", { fs: 17, c: "d", a: "start" }),
+            txt(372, 386, "security", { fs: 17, c: "d" }),
+            txt(180, 386, "testability", { fs: 17, c: "d" }),
+            txt(140, 205, "elasticity", { fs: 17, c: "d", a: "end" }),
+          ];
+        },
+        // What the business says becomes the characteristics to design for.
+        13: () =>
+          move(0, 26, [
+            bubble(36, 104, 196, 104, { c: "p", f: 1, tail: { side: "b", at: 104, d: -12 } }),
+            txt(134, 138, "business", { fs: 19 }),
+            line(72, 166, 196, 166, { c: "p", sw: 5 }),
+            line(72, 186, 164, 186, { c: "p", sw: 5 }),
+            person(88, 292, 1.3, { c: "p" }),
+            arr(246, 178, 304, 178, { c: "y" }),
+            box(316, 96, 200, 56, { c: "y", f: 1, r: 28, label: "elasticity", fs: 19 }),
+            box(316, 170, 200, 56, { r: 28, label: "data integrity", fs: 19 }),
+            box(316, 244, 200, 56, { r: 28, label: "deployability", fs: 19 }),
+          ]),
+        // A target with a number: most searches under one second.
+        14: () => [
+          line(64, 384, 508, 384, { c: "d" }),
+          line(64, 384, 64, 92, { c: "d" }),
+          ...[60, 140, 226, 180, 112, 62, 34, 18].map((h, i) =>
+            box(88 + i * 50, 384 - h, 34, h, { c: i < 6 ? "t" : "r", f: 1, r: 6 }),
+          ),
+          line(380, 96, 380, 384, { c: "y", dash: 1 }),
+          txt(394, 112, "p95 < 1 s", { a: "start", c: "y", fs: 22, fw: 700 }),
+        ],
+        // Each quantum deploys by itself, with its own data.
+        15: () =>
+          move(0, -10, [
+            box(36, 96, 224, 292, { c: "y", dash: 1, r: 44, open: 1 }),
+            line(148, 202, 148, 270),
+            box(74, 138, 148, 64, { label: "Search" }),
+            cyl(98, 262, 100, 92),
+            box(292, 96, 224, 292, { c: "t", dash: 1, r: 44, open: 1 }),
+            line(404, 202, 404, 270),
+            box(330, 138, 148, 64, { label: "Booking" }),
+            cyl(354, 262, 100, 92),
+            txt(148, 414, "quantum", { c: "y", fs: 18 }),
+            txt(404, 414, "quantum", { c: "t", fs: 18 }),
+          ]),
+        // One deployable, or many that talk over the network.
+        16: () => [
+          box(44, 128, 180, 232, { c: "y", f: 1, r: 16, label: "monolith" }),
+          txt(276, 246, "?", { fs: 72, fw: 700 }),
+          line(366, 166, 466, 166, { c: "t", sw: 3 }),
+          line(366, 322, 466, 322, { c: "t", sw: 3 }),
+          line(366, 166, 366, 322, { c: "t", sw: 3 }),
+          line(466, 166, 466, 322, { c: "t", sw: 3 }),
+          line(366, 166, 466, 322, { c: "t", sw: 3 }),
+          box(328, 128, 76, 76, { c: "t", f: 1 }),
+          box(428, 128, 76, 76, { c: "t", f: 1 }),
+          box(328, 284, 76, 76, { c: "t", f: 1 }),
+          box(428, 284, 76, 76, { c: "t", f: 1 }),
+        ],
+        // Cut by technical layer, or cut by business module.
+        17: () =>
+          move(0, -14, [
+            box(44, 116, 208, 72, { label: "UI" }),
+            box(44, 204, 208, 72, { label: "logic" }),
+            box(44, 292, 208, 72, { label: "data" }),
+            box(300, 116, 208, 248, { c: "d" }),
+            box(316, 132, 54, 216, { c: "y", f: 1, r: 8 }),
+            box(377, 132, 54, 216, { c: "t", f: 1, r: 8 }),
+            box(438, 132, 54, 216, { c: "p", f: 1, r: 8 }),
+            txt(148, 398, "layered", { fs: 19, c: "d" }),
+            txt(404, 398, "modular", { fs: 19, c: "d" }),
+          ]),
+        // A core with plug-ins; and a line of filters.
+        18: () =>
+          move(0, 14, [
+            line(128, 112, 276, 150, { c: "d" }),
+            line(128, 188, 276, 150, { c: "d" }),
+            line(424, 112, 276, 150, { c: "d" }),
+            line(424, 188, 276, 150, { c: "d" }),
+            box(84, 90, 88, 44, { r: 10 }),
+            box(84, 166, 88, 44, { r: 10 }),
+            box(380, 90, 88, 44, { r: 10 }),
+            box(380, 166, 88, 44, { r: 10 }),
+            circ(276, 150, 46, { c: "y", f: 1, label: "core" }),
+            line(60, 258, 492, 258, { c: "d", dash: "4 10", sw: 2.5 }),
+            box(60, 308, 104, 60, { c: "t", f: 1 }),
+            box(224, 308, 104, 60, { c: "t", f: 1 }),
+            box(388, 308, 104, 60, { c: "t", f: 1 }),
+            arr(172, 338, 216, 338, { c: "t" }),
+            arr(336, 338, 380, 338, { c: "t" }),
+          ]),
+        // A few services behind one UI, sharing one database.
+        19: () => [
+          ...[96, 216, 336, 456].flatMap((x) => [
+            line(276, 104, x, 228, { c: "d", sw: 3 }),
+            line(x, 228, 276, 372, { c: "d", sw: 3 }),
+          ]),
+          box(176, 76, 200, 56, { label: "UI" }),
+          box(46, 196, 100, 64, { c: "t", f: 1, label: "Search", fs: 17 }),
+          box(166, 196, 100, 64, { c: "t", f: 1, label: "Booking", fs: 17 }),
+          box(286, 196, 100, 64, { c: "t", f: 1, label: "Payment", fs: 17 }),
+          box(406, 196, 100, 64, { c: "t", f: 1, label: "Operator", fs: 17 }),
+          cyl(196, 322, 160, 92, { c: "y", f: 1, label: "database", fs: 18 }),
+        ],
+        // One service announces what happened; others react.
+        20: () => [
+          arr(166, 244, 200, 244, { c: "p" }),
+          arr(360, 234, 398, 136, { c: "p" }),
+          arr(362, 244, 396, 244, { c: "p" }),
+          arr(360, 254, 398, 352, { c: "p" }),
+          box(36, 206, 124, 76, { c: "y", f: 1, label: "Booking", fs: 19 }),
+          box(206, 220, 150, 48, { c: "p", f: 1, r: 24 }),
+          circ(244, 244, 7, { c: "p", solid: 1 }),
+          circ(281, 244, 7, { c: "p", solid: 1 }),
+          circ(318, 244, 7, { c: "p", solid: 1 }),
+          txt(281, 198, "events", { c: "p", fs: 17 }),
+          box(404, 96, 112, 64, { c: "t", f: 1, label: "Payment", fs: 18 }),
+          box(404, 212, 112, 64, { c: "t", f: 1, label: "Notify", fs: 18 }),
+          box(404, 328, 112, 64, { c: "t", f: 1, label: "Search", fs: 18 }),
+        ],
+        // Many small services, each with its own data.
+        21: () => {
+          const out = [
+            line(110, 117, 442, 117, { c: "d", sw: 3 }),
+            line(110, 287, 442, 287, { c: "d", sw: 3 }),
+          ];
+          const colours = ["y", "t", "p", "t", "p", "y"];
+          [92, 262].forEach((y, row) =>
+            [110, 276, 442].forEach((cx, col) => {
+              const c = colours[row * 3 + col];
+              out.push(
+                line(cx, y + 50, cx, y + 84, { c }),
+                box(cx - 62, y, 124, 50, { c, f: 1 }),
+                cyl(cx - 34, y + 74, 68, 58, { c }),
+              );
+            }),
+          );
+          return out;
+        },
+        // Three candidates, one chosen, and where it leads.
+        22: () =>
+          move(0, 8, [
+            box(40, 96, 144, 176, { r: 16 }),
+            box(204, 96, 144, 176, { c: "t", f: 1, r: 16 }),
+            box(368, 96, 144, 176, { r: 16 }),
+            box(66, 124, 92, 22, { c: "d", r: 5, sw: 3 }),
+            box(66, 154, 92, 22, { c: "d", r: 5, sw: 3 }),
+            box(66, 184, 92, 22, { c: "d", r: 5, sw: 3 }),
+            box(232, 122, 88, 88, { c: "t", r: 8, sw: 3, f: 1 }),
+            line(261, 122, 261, 210, { c: "t", sw: 3 }),
+            line(291, 122, 291, 210, { c: "t", sw: 3 }),
+            box(398, 124, 36, 36, { c: "d", r: 6, sw: 3 }),
+            box(446, 124, 36, 36, { c: "d", r: 6, sw: 3 }),
+            box(398, 172, 36, 36, { c: "d", r: 6, sw: 3 }),
+            box(446, 172, 36, 36, { c: "d", r: 6, sw: 3 }),
+            txt(112, 244, "layered", { fs: 17, c: "d" }),
+            txt(276, 244, "modular", { fs: 17 }),
+            txt(440, 244, "micro", { fs: 17, c: "d" }),
+            circ(348, 96, 19, { c: "t", solid: 1 }),
+            tick(347, 97, 8, { c: "k", sw: 4 }),
+            arr(276, 280, 276, 320, { c: "y" }),
+            box(176, 330, 200, 58, { c: "y", f: 1, r: 29, label: "service-based", fs: 19 }),
+          ]),
+        // Where the company wins, what supports it, what anyone can buy.
+        23: () => [
+          circ(190, 236, 118, { c: "y", f: 1, label: "core", fs: 34, fw: 700 }),
+          circ(410, 150, 72, { c: "t", f: 1, label: "supporting", fs: 18 }),
+          circ(410, 338, 62, { label: "generic", fs: 18 }),
+        ],
+        // The same word means two things in two contexts.
+        24: () => [
+          box(36, 92, 210, 304, { c: "y", dash: 1, r: 28, open: 1 }),
+          txt(141, 128, "Booking", { c: "y", fs: 19 }),
+          box(65, 160, 152, 60, { label: "Ticket", fs: 24, fw: 700 }),
+          ...[90, 126, 162].flatMap((x, i) => [
+            box(x, 252, 30, 30, { c: "d", r: 6, sw: 3, ...(i === 1 ? { c: "y", solid: 1 } : {}) }),
+            box(x, 290, 30, 30, { c: "d", r: 6, sw: 3 }),
+          ]),
+          txt(141, 356, "a seat", { c: "d", fs: 17 }),
+          box(306, 92, 210, 304, { c: "t", dash: 1, r: 28, open: 1 }),
+          txt(411, 128, "Settlement", { c: "t", fs: 19 }),
+          box(335, 160, 152, 60, { label: "Ticket", fs: 24, fw: 700 }),
+          ell(411, 306, 42, 13, { c: "t", f: 1, sw: 3 }),
+          ell(411, 288, 42, 13, { c: "t", f: 1, sw: 3 }),
+          ell(411, 270, 42, 13, { c: "t", f: 1, sw: 3 }),
+          txt(411, 356, "a payout", { c: "d", fs: 17 }),
+          txt(276, 190, "≠", { fs: 44, fw: 700, c: "r" }),
+        ],
+        // Who depends on whom, and where a translating layer stands guard.
+        25: () => [
+          line(276, 106, 110, 230, { c: "d" }),
+          line(276, 106, 442, 230, { c: "d" }),
+          line(276, 106, 180, 370, { c: "d" }),
+          line(442, 230, 442, 370, { c: "d" }),
+          box(201, 76, 150, 60, { c: "y", f: 1, label: "Booking" }),
+          box(40, 200, 140, 60, { label: "Search" }),
+          box(372, 200, 140, 60, { c: "t", f: 1, label: "Payment" }),
+          box(110, 340, 140, 60, { label: "Settlement", fs: 18 }),
+          box(372, 340, 140, 60, { c: "d", dash: 1, label: "wallet", lc: "d" }),
+          box(404, 292, 76, 16, { c: "t", solid: 1, r: 8, sw: 0 }),
+          txt(488, 300, "ACL", { a: "start", fs: 15, c: "t" }),
+        ],
+        // The more complex the rules, the more structure the logic needs.
+        26: () => [
+          doc(44, 150, 112, 150, { lines: 6 }),
+          arr(170, 225, 202, 225, { c: "d" }),
+          box(214, 160, 124, 130, { r: 8 }),
+          line(214, 203, 338, 203, { sw: 3 }),
+          line(214, 246, 338, 246, { sw: 3 }),
+          line(262, 160, 262, 290, { sw: 3 }),
+          arr(350, 225, 382, 225, { c: "d" }),
+          line(452, 160, 410, 230, { c: "y", sw: 3 }),
+          line(452, 160, 494, 230, { c: "y", sw: 3 }),
+          line(410, 230, 452, 296, { c: "y", sw: 3 }),
+          line(494, 230, 452, 296, { c: "y", sw: 3 }),
+          line(410, 230, 494, 230, { c: "y", sw: 3 }),
+          circ(452, 160, 15, { c: "y", f: 1 }),
+          circ(410, 230, 15, { c: "y", f: 1 }),
+          circ(494, 230, 15, { c: "y", f: 1 }),
+          circ(452, 296, 15, { c: "y", f: 1 }),
+          txt(100, 340, "script", { fs: 18, c: "d" }),
+          txt(276, 340, "record", { fs: 18, c: "d" }),
+          txt(452, 340, "model", { fs: 18, c: "y" }),
+        ],
+        // A wall of notes: who asks, the command, then what happened, in order.
+        27: () => [
+          arr(44, 368, 508, 368, { c: "d" }),
+          txt(276, 398, "time", { fs: 17, c: "d" }),
+          sticky(76, 96, 60, "y", [], -5),
+          person(106, 129, 0.62, { c: "k", sw: 3, solid: 1 }),
+          sticky(52, 208, 104, "b", ["Ask for", "refund"], -3),
+          sticky(168, 208, 104, "o", ["Refund", "asked"], 2),
+          sticky(284, 208, 104, "o", ["Ticket", "cancelled"], -2),
+          sticky(400, 208, 104, "o", ["Money", "returned"], 3),
+        ],
+        // One store holds the truth; the others can be rebuilt from it.
+        28: () => [
+          cyl(56, 128, 156, 176, { c: "y", f: 1, label: "record", fs: 22 }),
+          arr(224, 222, 330, 222, { c: "p" }),
+          txt(277, 198, "rebuild", { fs: 17, c: "p" }),
+          cyl(340, 128, 156, 176, { c: "t", dash: 1, label: "derived", fs: 22 }),
+          box(326, 330, 86, 44, { r: 22, label: "cache", fs: 17 }),
+          box(424, 330, 86, 44, { r: 22, label: "index", fs: 17 }),
+          txt(134, 352, "source of truth", { fs: 17, c: "d" }),
+        ],
+        // A new field is added, and old and new code can still read each other's data.
+        29: () => [
+          box(40, 104, 196, 224, { r: 14 }),
+          txt(64, 138, "v1", { a: "start", fs: 22, fw: 700 }),
+          line(64, 180, 194, 180, { c: "d", sw: 8 }),
+          line(64, 216, 160, 216, { c: "d", sw: 8 }),
+          line(64, 252, 180, 252, { c: "d", sw: 8 }),
+          arr(248, 216, 304, 216, { c: "t" }),
+          box(316, 104, 196, 224, { c: "t", r: 14 }),
+          txt(340, 138, "v2", { a: "start", fs: 22, fw: 700, c: "t" }),
+          line(340, 180, 470, 180, { c: "d", sw: 8 }),
+          line(340, 216, 436, 216, { c: "d", sw: 8 }),
+          line(340, 252, 456, 252, { c: "d", sw: 8 }),
+          line(340, 288, 440, 288, { c: "t", sw: 8 }),
+          plus(476, 288, 9, { c: "t", sw: 5 }),
+          arr(116, 372, 436, 372, { c: "d", both: 1 }),
+          circ(276, 372, 19, { c: "t", solid: 1 }),
+          tick(275, 373, 8, { c: "k", sw: 4 }),
+        ],
+        // Writes go to the leader, copies flow to the followers, reads come from them.
+        30: () =>
+          move(0, 6, [
+            arr(84, 132, 196, 132, { c: "y" }),
+            txt(136, 108, "write", { fs: 18, c: "y" }),
+            cyl(206, 76, 140, 112, { c: "y", f: 1, label: "leader", fs: 19 }),
+            arr(236, 196, 150, 282, { c: "p", dash: 1 }),
+            arr(316, 196, 402, 282, { c: "p", dash: 1 }),
+            cyl(56, 290, 140, 104, { label: "follower", fs: 18 }),
+            cyl(356, 290, 140, 104, { label: "follower", fs: 18 }),
+            txt(276, 326, "read", { fs: 18, c: "t" }),
+            arr(244, 350, 206, 350, { c: "t" }),
+            arr(308, 350, 346, 350, { c: "t" }),
+          ]),
+        // A key decides which shard holds the row.
+        31: () =>
+          move(0, 8, [
+            box(186, 80, 180, 56, { c: "p", f: 1, r: 28, label: "key → shard", fs: 19 }),
+            arr(246, 144, 130, 254, { c: "p" }),
+            arr(276, 144, 276, 254, { c: "p" }),
+            arr(306, 144, 422, 254, { c: "p" }),
+            cyl(48, 264, 136, 124, { c: "y", f: 1, label: "A – H" }),
+            cyl(208, 264, 136, 124, { c: "t", f: 1, label: "I – P" }),
+            cyl(368, 264, 136, 124, { label: "Q – Z" }),
+          ]),
+        // Two sellers, one seat: the rule lets only one sale through.
+        32: () =>
+          move(0, -24, [
+            arr(126, 214, 214, 214, { c: "t" }),
+            tick(170, 184, 10, { c: "t" }),
+            arr(426, 214, 338, 214, { c: "r" }),
+            cross(382, 184, 9, { c: "r" }),
+            person(76, 214, 1.25, { c: "t" }),
+            person(476, 214, 1.25, { c: "r" }),
+            line(276, 266, 276, 318, { c: "y" }),
+            box(224, 162, 104, 104, { r: 14, label: "12A", fs: 30, fw: 700 }),
+            box(166, 318, 220, 56, { c: "y", f: 1, r: 28, label: "one row per seat", fs: 18 }),
+          ]),
+        // A message may be lost or late, the other side may be down, and clocks disagree.
+        33: () =>
+          move(0, 12, [
+            clock(109, 112, 30, { c: "d" }, [-50, 60]),
+            clock(443, 112, 30, { c: "d" }, [30, 160]),
+            box(44, 178, 130, 90, { label: "A", fs: 26, fw: 700 }),
+            box(378, 178, 130, 90, { label: "B", fs: 26, fw: 700 }),
+            line(182, 206, 240, 206),
+            bolt(276, 206, 26, { c: "r" }),
+            arr(312, 206, 370, 206, { c: "d", dash: "6 8" }),
+            arr(370, 244, 182, 244, { c: "d", dash: "6 8" }),
+            box(74, 330, 116, 46, { c: "r", r: 23, label: "lost", fs: 18 }),
+            box(218, 330, 116, 46, { c: "r", r: 23, label: "late", fs: 18 }),
+            box(362, 330, 116, 46, { c: "r", r: 23, label: "down", fs: 18 }),
+          ]),
+        // Three nodes; two agree, and that is enough to decide.
+        34: () =>
+          move(0, 14, [
+            line(276, 120, 126, 336, { c: "d" }),
+            line(276, 120, 426, 336, { c: "d" }),
+            line(126, 336, 426, 336, { c: "d" }),
+            circ(276, 120, 42, { c: "t", f: 1 }),
+            tick(274, 122, 13, { c: "t" }),
+            circ(126, 336, 42, { c: "t", f: 1 }),
+            tick(124, 338, 13, { c: "t" }),
+            circ(426, 336, 42, { c: "d" }),
+            txt(426, 336, "?", { fs: 30, fw: 700, c: "d" }),
+            txt(276, 250, "2 / 3", { fs: 44, fw: 700, c: "y" }),
+            txt(276, 292, "majority", { fs: 18, c: "d" }),
+          ]),
+        // Events are appended to a log, and several consumers build their own view from it.
+        35: () =>
+          move(0, 30, [
+            arr(170, 114, 204, 114, { c: "y" }),
+            arr(300, 150, 122, 298, { c: "p" }),
+            arr(360, 150, 286, 298, { c: "p" }),
+            arr(420, 150, 438, 298, { c: "p" }),
+            box(36, 84, 128, 60, { c: "y", f: 1, label: "Booking", fs: 19 }),
+            ...[0, 1, 2, 3, 4].map((i) =>
+              box(212 + i * 60, 86, 56, 56, {
+                r: 8,
+                label: String(i + 1),
+                fs: 18,
+                ...(i === 4 ? { c: "y", dash: "6 7", lc: "y" } : {}),
+              }),
+            ),
+            txt(360, 62, "event stream", { fs: 17, c: "d" }),
+            box(40, 308, 140, 60, { label: "seat cache", fs: 17 }),
+            box(206, 308, 140, 60, { c: "t", f: 1, label: "search index", fs: 17 }),
+            box(372, 308, 140, 60, { label: "notification", fs: 17 }),
+          ]),
+        // One part comes out of the old app and gets its own data.
+        36: () =>
+          move(0, -14, [
+            box(36, 112, 256, 256, { r: 16 }),
+            box(56, 132, 104, 104, { c: "d", r: 10 }),
+            box(168, 132, 104, 104, { c: "y", dash: 1, r: 10 }),
+            box(56, 244, 104, 104, { c: "d", r: 10 }),
+            box(168, 244, 104, 104, { c: "d", r: 10 }),
+            arr(282, 184, 378, 184, { c: "y" }),
+            line(452, 228, 452, 270, { c: "y" }),
+            box(388, 140, 128, 88, { c: "y", f: 1, label: "Booking", fs: 19 }),
+            cyl(416, 262, 72, 76, { c: "y" }),
+            txt(164, 398, "old app", { fs: 18, c: "d" }),
+          ]),
+        // Forces that pull a service apart, and forces that keep it together.
+        37: () => [
+          box(196, 170, 160, 124, { r: 14 }),
+          line(276, 154, 276, 310, { c: "y", dash: 1 }),
+          arr(184, 232, 84, 232, { c: "y" }),
+          arr(368, 232, 468, 232, { c: "y" }),
+          txt(276, 124, "split?", { c: "y", fs: 22, fw: 700 }),
+          arr(64, 356, 178, 356, { c: "t" }),
+          arr(488, 356, 374, 356, { c: "t" }),
+          txt(276, 356, "keep together", { c: "t", fs: 19 }),
+        ],
+        // One service owns the table; the others ask the owner.
+        38: () =>
+          move(0, 6, [
+            arr(152, 168, 230, 260, { c: "y" }),
+            txt(146, 224, "writes", { c: "y", fs: 17 }),
+            arr(336, 128, 226, 128, { c: "t", dash: "6 8" }),
+            txt(281, 104, "asks", { c: "t", fs: 17 }),
+            line(408, 168, 330, 260, { c: "r", dash: "6 8" }),
+            cross(369, 214, 10, { c: "r" }),
+            box(60, 96, 156, 64, { c: "y", f: 1, label: "Booking" }),
+            box(344, 96, 156, 64, { label: "Settlement", fs: 19 }),
+            cyl(206, 268, 140, 112, { c: "y", f: 1, label: "tickets", fs: 19 }),
+          ]),
+        // Steps run one after another; when one fails, the earlier ones are undone.
+        39: () =>
+          move(0, 10, [
+            arr(172, 176, 200, 176, { c: "t" }),
+            arr(343, 176, 371, 176, { c: "t" }),
+            path("M440,220 C440,300 290,300 290,224", { c: "r", arrow: 1 }),
+            path("M262,220 C262,336 105,336 105,224", { c: "r", arrow: 1 }),
+            box(36, 140, 130, 72, { label: "Booking", fs: 18 }),
+            box(207, 140, 130, 72, { label: "Payment", fs: 18 }),
+            box(378, 140, 130, 72, { c: "r", f: 1, label: "Notify", fs: 18 }),
+            circ(502, 140, 15, { c: "r", solid: 1 }),
+            cross(502, 140, 6, { c: "k", sw: 4 }),
+            txt(365, 306, "undo", { c: "r", fs: 18 }),
+            txt(183, 334, "undo", { c: "r", fs: 18 }),
+          ]),
+        // Code that three services share ties the three together.
+        40: () => [
+          line(105, 150, 236, 300, { c: "r", sw: 6 }),
+          line(276, 150, 276, 300, { c: "r", sw: 6 }),
+          line(447, 150, 316, 300, { c: "r", sw: 6 }),
+          box(40, 96, 130, 60, { label: "Search", fs: 18 }),
+          box(211, 96, 130, 60, { label: "Booking", fs: 18 }),
+          box(382, 96, 130, 60, { label: "Payment", fs: 18 }),
+          box(166, 300, 220, 84, { c: "r", f: 1, label: "shared code", fs: 21 }),
+          txt(404, 238, "coupling", { a: "start", c: "r", fs: 18 }),
+        ],
+        // Two options, weighed on the things that matter here.
+        41: () => [
+          box(366, 76, 152, 326, { c: "y", dash: 1, r: 16, open: 1 }),
+          box(216, 88, 140, 48, { r: 24, label: "option A", fs: 18 }),
+          box(372, 88, 140, 48, { c: "y", f: 1, r: 24, label: "option B", fs: 18 }),
+          line(40, 224, 356, 224, { c: "d", sw: 2 }),
+          line(40, 300, 356, 300, { c: "d", sw: 2 }),
+          txt(48, 186, "cost", { a: "start" }),
+          txt(48, 262, "speed", { a: "start" }),
+          txt(48, 338, "risk", { a: "start" }),
+          plus(286, 186, 13, { c: "t" }),
+          minus(286, 262, 13, { c: "r" }),
+          minus(286, 338, 13, { c: "r" }),
+          minus(442, 186, 13, { c: "r" }),
+          plus(442, 262, 13, { c: "t" }),
+          plus(442, 338, 13, { c: "t" }),
+        ],
+        // One slow dependency, and the failure travels up the chain.
+        42: () =>
+          move(0, 10, [
+            bolt(86, 138, 26, { c: "r" }),
+            arr(136, 236, 160, 236, { c: "r" }),
+            arr(262, 236, 286, 236, { c: "r" }),
+            arr(388, 236, 412, 236, { c: "r" }),
+            box(40, 176, 92, 120, { c: "r", f: 1, label: "wallet", fs: 17 }),
+            box(166, 176, 92, 120, { c: "r", label: "Payment", fs: 17 }),
+            box(292, 176, 92, 120, { c: "y", label: "Booking", fs: 17 }),
+            box(418, 176, 92, 120, { label: "app", fs: 17 }),
+            txt(86, 322, "slow", { c: "r", fs: 17 }),
+            txt(212, 322, "waits", { c: "r", fs: 17 }),
+            txt(338, 322, "waits", { c: "y", fs: 17 }),
+            txt(464, 322, "down", { c: "d", fs: 17 }),
+          ]),
+        // A breaker that opens, a clock that gives up, walls that keep a failure in.
+        43: () => [
+          clock(236, 116, 30, { c: "t" }, [0, 110]),
+          txt(280, 116, "timeout", { a: "start", c: "t", fs: 19 }),
+          line(170, 240, 238, 240),
+          line(314, 240, 382, 240),
+          line(238, 240, 300, 204, { c: "y", sw: 5 }),
+          circ(238, 240, 7, { solid: 1 }),
+          circ(314, 240, 7, { solid: 1 }),
+          box(40, 196, 130, 88, { label: "Payment", fs: 18 }),
+          box(382, 196, 130, 88, { c: "r", dash: 1, label: "wallet", fs: 18, lc: "r" }),
+          box(146, 324, 260, 64, { r: 10 }),
+          box(232, 324, 88, 64, { c: "r", f: 1, r: 0 }),
+          box(146, 324, 260, 64, { r: 10, open: 1 }),
+          txt(276, 412, "bulkhead", { fs: 17, c: "d" }),
+        ],
+        // A service you can see into: logs, metrics, a health check, an alert.
+        44: () => [
+          box(40, 84, 190, 84, { label: "Booking" }),
+          circ(206, 106, 9, { c: "t", solid: 1 }),
+          box(262, 84, 116, 38, { r: 19, label: "logs", fs: 16 }),
+          box(392, 84, 116, 38, { r: 19, label: "metrics", fs: 16 }),
+          box(262, 130, 116, 38, { r: 19, label: "health", fs: 16 }),
+          box(392, 130, 116, 38, { r: 19, label: "traces", fs: 16 }),
+          box(40, 204, 472, 190, { c: "d", r: 14 }),
+          line(60, 262, 492, 262, { c: "r", dash: "6 8", sw: 2.5 }),
+          poly(
+            [
+              [64, 350],
+              [108, 338],
+              [150, 346],
+              [192, 318],
+              [234, 330],
+              [276, 244],
+              [318, 300],
+              [360, 292],
+              [402, 310],
+              [444, 286],
+              [488, 300],
+            ],
+            { c: "t" },
+          ),
+          circ(276, 244, 8, { c: "r", solid: 1 }),
+          circ(474, 232, 15, { c: "r", solid: 1 }),
+          txt(474, 232, "!", { c: "k", fs: 20, fw: 700 }),
+        ],
+        // Every change is checked against a line the system must stay under.
+        45: () =>
+          move(0, -10, [
+            line(64, 384, 508, 384, { c: "d" }),
+            line(64, 384, 64, 96, { c: "d" }),
+            line(64, 176, 508, 176, { c: "y", dash: 1 }),
+            txt(504, 152, "p95 < 1 s", { a: "end", c: "y", fs: 20, fw: 700 }),
+            txt(84, 120, "fitness function", { a: "start", fs: 18, c: "d" }),
+            poly(
+              [
+                [100, 316],
+                [170, 300],
+                [240, 262],
+                [310, 240],
+                [380, 206],
+                [450, 216],
+              ],
+              { c: "t" },
+            ),
+            ...[
+              [100, 316],
+              [170, 300],
+              [240, 262],
+              [310, 240],
+              [380, 206],
+              [450, 216],
+            ].flatMap(([x, y]) => [
+              circ(x, y, 8, { c: "t", solid: 1 }),
+              tick(x - 1, 412, 6, { c: "t", sw: 4 }),
+            ]),
+          ]),
+        // A rule written as a check: the build passes it, or it is blocked.
+        46: () => [
+          line(276, 128, 276, 196, { c: "y" }),
+          box(186, 80, 180, 48, { c: "y", r: 24, label: "no cycles", fs: 18 }),
+          arr(166, 236, 208, 236, { c: "d" }),
+          arr(342, 236, 384, 236, { c: "t" }),
+          box(40, 196, 120, 80, { label: "commit", fs: 18 }),
+          box(216, 196, 120, 80, { c: "y", f: 1, label: "check", fs: 19 }),
+          box(392, 196, 120, 80, { c: "t", f: 1, label: "deploy", fs: 18 }),
+          arr(276, 282, 276, 330, { c: "r" }),
+          box(206, 338, 140, 56, { c: "r", r: 28, label: "blocked", fs: 18, lc: "r" }),
+        ],
+        // A short record of one decision: why, what, and what it costs.
+        47: () => [
+          doc(150, 66, 252, 352, { fold: 34, lines: 0 }),
+          txt(178, 114, "ADR", { a: "start", fs: 28, fw: 700, c: "y" }),
+          ...[
+            ["Context", 160],
+            ["Decision", 232],
+            ["Consequences", 304],
+          ].flatMap(([label, y]) => [
+            txt(178, y, label, { a: "start", fs: 16, c: "w" }),
+            line(178, y + 24, 372, y + 24, { c: "d", sw: 6 }),
+            line(178, y + 44, 318, y + 44, { c: "d", sw: 6 }),
+          ]),
+          '<g transform="rotate(-10 380 372)">',
+          box(308, 348, 150, 50, { c: "t", r: 10, label: "accepted", fs: 20, fw: 700, lc: "t" }),
+          "</g>",
+        ],
+        // Each risk is placed by how likely it is and how much it would hurt.
+        48: () => {
+          const out = [];
+          const left = 136;
+          const top = 92;
+          for (let row = 0; row < 3; row++)
+            for (let col = 0; col < 3; col++) {
+              const level = 2 - row + col;
+              out.push(
+                box(left + col * 112, top + row * 88, 106, 82, {
+                  c: level <= 1 ? "t" : level === 2 ? "y" : "r",
+                  f: 1,
+                  r: 8,
+                  sw: 3,
+                }),
+              );
+            }
+          out.push(
+            circ(left + 2 * 112 + 53, top + 41, 13, { solid: 1 }),
+            circ(left + 112 + 53, top + 88 + 41, 13, { solid: 1 }),
+            circ(left + 53, top + 2 * 88 + 41, 13, { solid: 1 }),
+            txt(left + 165, top + 3 * 88 + 22, "impact →", { fs: 18, c: "d" }),
+            txt(left - 26, top + 129, "likelihood →", { fs: 18, c: "d", rot: -90 }),
+          );
+          return out;
+        },
+        // A diagram others can read: few shapes, clear arrows, and a key.
+        49: () =>
+          move(0, 6, [
+            box(44, 80, 464, 312, { r: 14 }),
+            arr(150, 190, 150, 244, { c: "d" }),
+            arr(220, 160, 298, 222, { c: "d" }),
+            arr(220, 280, 296, 262, { c: "d" }),
+            box(86, 116, 128, 68, { c: "y", f: 1, label: "app", fs: 19 }),
+            box(86, 252, 128, 68, { c: "t", f: 1, label: "Booking", fs: 19 }),
+            cyl(304, 196, 96, 100, { c: "p", f: 1, label: "db", fs: 18 }),
+            box(408, 236, 84, 136, { c: "d", r: 8, sw: 2.5 }),
+            txt(450, 256, "key", { fs: 15, c: "d" }),
+            ...[
+              ["y", 284],
+              ["t", 314],
+              ["p", 344],
+            ].flatMap(([c, y]) => [
+              box(420, y - 9, 18, 18, { c, f: 1, r: 4, sw: 2.5 }),
+              line(448, y, 480, y, { c: "d", sw: 4 }),
+            ]),
+          ]),
+        // The architect sets the box the team works in: not too tight, not too loose.
+        50: () => [
+          box(170, 104, 320, 264, { c: "y", dash: 1, r: 26, open: 1 }),
+          person(250, 214, 1.1, { c: "t" }),
+          person(330, 276, 1.1, { c: "t" }),
+          person(410, 214, 1.1, { c: "t" }),
+          person(84, 240, 1.3, { c: "y" }),
+          arr(126, 240, 160, 240, { c: "y" }),
+          arr(464, 130, 506, 88, { c: "y", both: 1 }),
+          txt(330, 396, "constraints", { c: "y", fs: 19 }),
+        ],
+        // Two people want different things and settle on one answer.
+        51: () =>
+          move(0, 8, [
+            bubble(56, 92, 196, 92, { c: "p", f: 1, tail: { side: "b", at: 116, d: -10 } }),
+            txt(154, 138, "by Friday?"),
+            bubble(300, 92, 196, 92, { c: "t", f: 1, tail: { side: "b", at: 436, d: 10 } }),
+            txt(398, 138, "safely?"),
+            person(104, 292, 1.4, { c: "p" }),
+            person(448, 292, 1.4, { c: "t" }),
+            arr(160, 300, 226, 300, { c: "p" }),
+            arr(392, 300, 326, 300, { c: "t" }),
+            circ(276, 300, 38, { c: "y", f: 1 }),
+            tick(274, 302, 13, { c: "y", sw: 6 }),
+            txt(276, 366, "agreed", { c: "y", fs: 18 }),
+          ]),
+        // Anyone may decide, after asking those affected and those who know.
+        52: () => [
+          arr(114, 214, 226, 234, { c: "p" }),
+          arr(196, 142, 248, 192, { c: "t" }),
+          arr(356, 142, 304, 192, { c: "t" }),
+          arr(438, 214, 326, 234, { c: "p" }),
+          person(84, 206, 1, { c: "p" }),
+          person(170, 116, 1, { c: "t" }),
+          person(382, 116, 1, { c: "t" }),
+          person(468, 206, 1, { c: "p" }),
+          txt(276, 112, "advice", { fs: 18, c: "d" }),
+          person(276, 236, 1.4, { c: "y" }),
+          arr(276, 288, 276, 316, { c: "y" }),
+          doc(234, 324, 84, 92, { label: "ADR", lines: 2 }),
+        ],
+        // Technologies placed by how ready the company is to use them.
+        53: () => {
+          const cx = 276;
+          const cy = 246;
+          const blips = [
+            [20, 40, "t"],
+            [24, 200, "t"],
+            [60, -60, "t"],
+            [62, 130, "t"],
+            [102, 20, "y"],
+            [104, 100, "y"],
+            [100, 230, "y"],
+            [146, -32, "p"],
+            [148, 160, "p"],
+            [146, 70, "r"],
+            [148, 292, "r"],
+          ];
+          return [
+            circ(cx, cy, 168, { c: "d", sw: 3 }),
+            circ(cx, cy, 124, { c: "d", sw: 3 }),
+            circ(cx, cy, 80, { c: "d", sw: 3 }),
+            circ(cx, cy, 38, { c: "t", f: 1, sw: 3 }),
+            line(cx - 168, cy, cx + 168, cy, { c: "d", sw: 2 }),
+            line(cx, cy - 168, cx, cy + 168, { c: "d", sw: 2 }),
+            ...blips.map(([r, deg, c]) => circ(...around(cx, cy, r, deg), 9, { c, solid: 1 })),
+          ];
+        },
+        // The architect rides between the top floor and the engine room.
+        54: () => [
+          box(120, 66, 200, 356, { r: 10 }),
+          ...[137, 208, 279, 350].map((y) => line(120, y, 320, y, { c: "d", sw: 3 })),
+          line(232, 66, 232, 422, { c: "d", dash: "4 9", sw: 2.5 }),
+          box(144, 104, 14, 22, { c: "p", f: 1, r: 3, sw: 2.5 }),
+          box(166, 92, 14, 34, { c: "p", f: 1, r: 3, sw: 2.5 }),
+          box(188, 82, 14, 44, { c: "p", f: 1, r: 3, sw: 2.5 }),
+          ...[0, 60, 120, 180, 240, 300].map((deg) =>
+            line(...around(176, 386, 17, deg), ...around(176, 386, 24, deg), { c: "t", sw: 5 }),
+          ),
+          circ(176, 386, 16, { c: "t" }),
+          circ(176, 386, 5, { c: "t", solid: 1 }),
+          arr(276, 204, 276, 150, { c: "y" }),
+          arr(276, 284, 276, 338, { c: "y" }),
+          box(244, 216, 64, 56, { c: "y", f: 1, r: 8 }),
+          txt(340, 102, "penthouse", { a: "start", fs: 19, c: "p" }),
+          txt(340, 386, "engine room", { a: "start", fs: 19, c: "t" }),
+        ],
+        // The shape of the teams and the shape of the system mirror each other.
+        55: () =>
+          move(0, 10, [
+            arr(110, 206, 110, 300, { c: "d", both: 1 }),
+            arr(276, 206, 276, 300, { c: "d", both: 1 }),
+            arr(442, 206, 442, 300, { c: "d", both: 1 }),
+            line(180, 140, 372, 140, { c: "p", sw: 3 }),
+            line(180, 345, 372, 345, { c: "d", sw: 3 }),
+            ...[40, 206, 372].flatMap((x) => [
+              box(x, 84, 140, 112, { c: "p", dash: 1, r: 16 }),
+              person(x + 42, 146, 0.75, { c: "p" }),
+              person(x + 98, 146, 0.75, { c: "p" }),
+            ]),
+            box(40, 310, 140, 70, { label: "Search", fs: 18 }),
+            box(206, 310, 140, 70, { c: "y", f: 1, label: "Booking", fs: 18 }),
+            box(372, 310, 140, 70, { label: "Payment", fs: 18 }),
+          ]),
+        // The road from beginner to practitioner to leader.
+        56: () => [
+          path("M64,360 C200,360 176,278 264,262 C372,242 336,160 444,144", { sw: 5 }),
+          line(444, 144, 444, 76),
+          polygon(
+            [
+              [444, 78],
+              [498, 96],
+              [444, 114],
+            ],
+            { c: "y", solid: 1 },
+          ),
+          circ(64, 360, 13, { c: "t", solid: 1 }),
+          circ(264, 262, 13, { c: "y", solid: 1 }),
+          circ(444, 144, 13, { c: "p", solid: 1 }),
+          txt(44, 404, "စတင်သူ", { a: "start", mm: 1, fs: 22, c: "t" }),
+          txt(288, 300, "လုပ်ကိုင်သူ", { a: "start", mm: 1, fs: 22, c: "y" }),
+          txt(452, 192, "ဦးဆောင်သူ", { mm: 1, fs: 22, c: "p" }),
+        ],
+      };
+      window.GLYPHS = GLYPHS;
+
+      const markers = Object.entries(INK)
+        .map(
+          ([key, colour]) =>
+            `<marker id="ah-${key}" viewBox="0 0 12 12" refX="9" refY="6" markerWidth="15" markerHeight="15"` +
+            ` markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1,1.5 L11,6 L1,10.5 Z" fill="${colour}"/></marker>`,
+        )
+        .join("");
+
+      /* ---------- The frame ---------- */
+
+      const $ = (id) => document.getElementById(id);
+      const MYANMAR = /[က-႟ꧠ-꧿ꩠ-ꩿ၊။]+/g;
+      // Burmese shapes only when one font holds the whole run, so every Myanmar run is
+      // wrapped in .mm.
+      const withMyanmar = (text) =>
+        esc(text).replace(MYANMAR, (run) => `<span class="mm">${run}</span>`);
+
+      // The route: 56 stops in ten groups, one group per part.
+      const STOP_STEP = 13.4;
+      const PART_GAP = 12;
+      const stopX = LESSONS.map((lesson, i) => 10 + i * STOP_STEP + (lesson.part - 1) * PART_GAP);
+
+      function renderRoute(current) {
+        const accent = INK[ACCENTS[(current.part - 1) % 3]];
+        const inPart = LESSONS.filter((lesson) => lesson.part === current.part);
+        const from = stopX[inPart[0].number - 1];
+        const to = stopX[inPart[inPart.length - 1].number - 1];
+        const out = [
+          `<line x1="${stopX[0]}" y1="22" x2="${stopX[55]}" y2="22" stroke="#2a3142" stroke-width="3" stroke-linecap="round"/>`,
+          `<line x1="${n1(from)}" y1="22" x2="${n1(to)}" y2="22" stroke="${accent}" stroke-width="3" stroke-linecap="round" opacity="0.55"/>`,
+        ];
+        LESSONS.forEach((lesson, i) => {
+          const x = n1(stopX[i]);
+          if (lesson.number === current.number)
+            out.push(
+              `<circle cx="${x}" cy="22" r="14" fill="none" stroke="${accent}" stroke-width="2.5" opacity="0.5"/>`,
+              `<circle cx="${x}" cy="22" r="8.5" fill="${accent}" data-lesson="${lesson.number}"/>`,
+            );
+          else
+            out.push(
+              `<circle cx="${x}" cy="22" r="4" fill="${lesson.number < current.number ? "#ece9e0" : "#3b4458"}" data-lesson="${lesson.number}"/>`,
+            );
+        });
+        $("route").innerHTML = out.join("");
+      }
+
+      // The widest title that fits the column and the room under the number.
+      function fitTitle() {
+        const title = $("title");
+        const room = 460 - $("num").parentElement.offsetHeight - $("part").offsetHeight - 30;
+        let size = 84;
+        const tooBig = () =>
+          title.offsetHeight > room ||
+          [...title.children].some((lineElement) => lineElement.offsetWidth > 556);
+        title.style.fontSize = `${size}px`;
+        while (size > 40 && tooBig()) {
+          size -= 2;
+          title.style.fontSize = `${size}px`;
+        }
+      }
+
+      let shown = 1;
+      window.setThumb = ({ lesson }) => {
+        const current = LESSONS.find((entry) => entry.number === lesson);
+        if (!current) throw new Error(`no lesson ${lesson}`);
+        shown = lesson;
+        const accent = INK[ACCENTS[(current.part - 1) % 3]];
+        $("thumb").style.setProperty("--accent", accent);
+        $("num").textContent = String(current.number).padStart(2, "0");
+        $("part").innerHTML = `Part ${current.part} · ${withMyanmar(PARTS[current.part - 1])}`;
+        $("title").innerHTML = current.lines
+          .map((text) => `<span class="line">${withMyanmar(text)}</span>`)
+          .join("");
+        $("tab").textContent = `notebook/${current.doc}`;
+        $("glyph").innerHTML = `<defs>${markers}</defs>${GLYPHS[current.number]().flat().join("")}`;
+        renderRoute(current);
+        fitTitle();
+      };
+
+      // What is wrong with the diagram on screen: a shape or a word outside the board's
+      // safe area, or a label wider than the shape it sits in. render.ts fails on any.
+      window.glyphProblems = () => {
+        const svg = $("glyph");
+        const frame = svg.getBoundingClientRect();
+        const problems = [];
+        for (const node of svg.querySelectorAll(
+          "rect, circle, ellipse, path, line, polyline, polygon, text",
+        )) {
+          if (node.closest("defs")) continue;
+          const b = node.getBoundingClientRect();
+          const x = b.left - frame.left;
+          const y = b.top - frame.top;
+          const name = node.tagName === "text" ? `"${node.textContent}"` : node.tagName;
+          if (x < 26 || y < 48 || x + b.width > 526 || y + b.height > 436)
+            problems.push(
+              `${name} leaves the safe area (${Math.round(x)},${Math.round(y)} ${Math.round(b.width)}×${Math.round(b.height)})`,
+            );
+          const maxw = Number(node.getAttribute("data-maxw"));
+          if (maxw && b.width > maxw)
+            problems.push(`${name} is ${Math.round(b.width)} wide in a ${maxw} space`);
+        }
+        const title = $("title");
+        if (parseFloat(title.style.fontSize) <= 40)
+          problems.push("the title is at its smallest size");
+        return problems;
+      };
+
+      $("route").addEventListener("click", (event) => {
+        const lesson = Number(event.target.getAttribute("data-lesson"));
+        if (lesson) window.setThumb({ lesson });
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" && shown < 56) window.setThumb({ lesson: shown + 1 });
+        if (event.key === "ArrowLeft" && shown > 1) window.setThumb({ lesson: shown - 1 });
+      });
+
+      window.setThumb({ lesson: 1 });
+      window.thumbReady = Promise.all(
+        [
+          '700 36px "Google Sans"',
+          '600 36px "Google Sans"',
+          '500 36px "Google Sans"',
+          '600 36px "Google Sans Code"',
+          '700 36px "Google Sans Code"',
+          '700 36px "Noto Sans Myanmar"',
+          '500 36px "Noto Sans Myanmar"',
+        ].map((face) => document.fonts.load(face, "Aa မြန်မာ").catch(() => [])),
+      )
+        .then(() => document.fonts.ready)
+        .then(() => window.setThumb({ lesson: shown }));
+    </script>
+  </body>
+</html>

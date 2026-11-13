@@ -270,6 +270,23 @@ trailing newline (the document replay passes); and six lessons sit close to the 
 length ceiling the audits kept to (32, 34, 37, 43, 47, 52), so an edit to them should be
 length-neutral.
 
+## Thumbnails
+
+`docs/architect-path-thumbnail.html` renders all 56 cards (`bun docs/architect-path-thumbnails/render.ts`,
+PNGs in `docs/architect-path-thumbnails/`, one per lesson, named by the lesson's slug). The course has
+its own look rather than the cream page and mascot of the other courses: an ink ground like the
+lessons' whiteboard, and on it one diagram drawn for the lesson (a scale for trade-offs, a leader and
+two followers for replication, a chain with its undo arrows for sagas). The big number, the part label
+and the highlighted stretch of the route take the part's accent (yellow, teal and purple in turn), so
+the ten parts band the gallery; the route along the bottom is the course's 56 stops; the tab on the
+board names the notebook document the lesson types. Every diagram is original, drawn from the shapes
+in the template's small drawing DSL, with the colour jobs the lessons' boards use.
+
+The renderer checks each card before it writes it: the title lines must join to the lesson's title in
+its YAML, every shape and word must sit inside the board, and a label must fit the shape it is in
+(`--check` runs the checks alone). The card design and an overview of all 56 are also on a Claude
+Design canvas (private to Chan): <https://claude.ai/artifact/RsF5Vid5hDeuoyMDG4jNLw>.
+
 ## Working files
 
 Everything used to build the course lives outside this repository, in
