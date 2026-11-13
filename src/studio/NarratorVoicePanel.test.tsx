@@ -115,7 +115,8 @@ describe("NarratorVoicePanel reporting", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith("Pocket-TTS failed to load"));
-    expect(lastTask()).toEqual({ busy: null, recording: false });
+    // The task ends in a later render than the one that reports the error.
+    await waitFor(() => expect(lastTask()).toEqual({ busy: null, recording: false }));
   });
 });
 
