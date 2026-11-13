@@ -51,7 +51,12 @@ function stagedChecks(stagedFileNames: readonly string[]): string[] {
     .map(quoteShellArgument);
 
   return [
-    ...(files.length > 0 ? [`vp fmt --threads=1 ${files.join(" ")}`] : []),
+    // The formatter takes every staged file and skips what it does not format.
+    // A commit of only such files (images, a notebook and its Python sources)
+    // matches nothing, which is not an error.
+    ...(files.length > 0
+      ? [`vp fmt --threads=1 --no-error-on-unmatched-pattern ${files.join(" ")}`]
+      : []),
     // Vite+ bundles its own oxlint (it no longer ships an `oxlint` binary), and
     // `vp lint` applies the `lint` block below — plugins, rules, denyWarnings.
     ...(lintableFiles.length > 0 ? [`vp lint --fix --threads=1 ${lintableFiles.join(" ")}`] : []),
