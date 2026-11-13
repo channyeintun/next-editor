@@ -1912,7 +1912,7 @@ scenes:
       [[mark:open-recap]] pseudo-class တွေကို ရေးပုံ နှစ်မျိုး ခွဲလို့ ရပါတယ်။
       [[mark:draw-func]] functional pseudo-class က ကွင်းထဲမှာ တစ်ခုခု လက်ခံပါတယ်။ selector
       list ဒါမှမဟုတ် nth-child ထဲက ပုံသေနည်းလိုမျိုးပါ။ [[mark:draw-plain]] hover၊
-      checked၊ target လို ရိုးရိုး pseudo-class က ဘာမှ မလက်ခံပါဘူး။ [[mark:draw-fake]]
+      checked၊ target လို ရိုးရိုး pseudo-class က ဘာမှ လက်မခံပါဘူး။ [[mark:draw-fake]]
       တချို့ နာမည်တွေက မှန်သလို ထင်ရပေမယ့် တကယ် မရှိပါဘူး။ fresh နဲ့ loading လိုမျိုးပါ။
       [[mark:draw-more]] ကိုယ်တိုင် ရှာကြည့်စရာတွေလည်း ရှိပါသေးတယ်။ html element အတွက်
       root၊ link အားလုံးအတွက် any link၊ ပြင်လို့ မရတဲ့ field အတွက် read only၊ ပွင့်နေတဲ့

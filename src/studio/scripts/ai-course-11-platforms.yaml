@@ -1778,7 +1778,7 @@ scenes:
       များလဲ ဆိုတာပါ။ compatibility ဆိုတာ fallback မလိုဘဲ browser၊ device ဘယ်လောက် များများမှာ
       အလုပ်လုပ်လဲ ဆိုတာပါ။ browser က API ကိုပဲ ခေါ်ရတဲ့ server side က ဒီမှာ ၅ ရပါတယ်။ built in AI က browser နဲ့ device ပေါ် မူတည်ပြီး၊ custom
       model က user ရဲ့ hardware ပေါ် မူတည်လို့ အမှတ် နည်းပါတယ်။ user ဘက်ကလည်း client side မှာ model ကို
-      အရင် ယူထားရလို့ server side လောက် မအဆင်ပြေပါဘူး။ [[mark:sel-dev]] developer ဘက်ကတော့ setup နည်းနည်းနဲ့
+      အရင် ယူထားရလို့ server side လောက် အဆင်မပြေပါဘူး။ [[mark:sel-dev]] developer ဘက်ကတော့ setup နည်းနည်းနဲ့
       AI ကျွမ်းကျင်မှု သိပ် မလိုတဲ့ built in AI က ၅ ရပြီး၊ server၊ model နဲ့ စောင့်ကြည့်တာ အားလုံး ကိုယ်တိုင်
       လုပ်ရတဲ့ self hosted model က ၁ ပဲ ရပါတယ်။ [[mark:sel-maint]] ထိန်းသိမ်းရတဲ့ အလုပ်မှာတော့ ပိုင်ရှင်
       ကုမ္ပဏီက ထိန်းပေးတဲ့ managed service က ၅ ရပါတယ်။ ဒီလို အမှတ် ၅ ချည်း ရတဲ့ platform မရှိလို့၊ ကိုယ့် feature

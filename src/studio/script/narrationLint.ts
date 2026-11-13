@@ -42,6 +42,22 @@ const BURMESE_RUN_TOGETHER: readonly { spelling: RegExp; write: string; reads: s
   { word: "စရိုက်", write: "စ ရိုက်", reads: "စရိုက်, character" },
 ].map(({ word, ...rest }) => ({ spelling: new RegExp(word + BEFORE_VERB_PARTICLE, "u"), ...rest }));
 
+/**
+ * A Burmese compound of a noun and a verb takes its negative မ between the two:
+ * လက်ခံ ("accept") is negated လက်မခံ, never မလက်ခံ (Chan, 2026-11-13). The
+ * misplaced form reads as a mistake to a native listener.
+ */
+const BURMESE_MISPLACED_NEGATIVE: readonly { wrong: string; write: string }[] = [
+  { wrong: "မလက်ခံ", write: "လက်မခံ" },
+  { wrong: "မအဆင်ပြေ", write: "အဆင်မပြေ" },
+  { wrong: "မနားလည်", write: "နားမလည်" },
+  { wrong: "မသဘောတူ", write: "သဘောမတူ" },
+  { wrong: "မစိတ်ဝင်စား", write: "စိတ်မဝင်စား" },
+  { wrong: "မဂရုစိုက်", write: "ဂရုမစိုက်" },
+  { wrong: "မအသုံးပြု", write: "အသုံးမပြု" },
+  { wrong: "မခွင့်ပြု", write: "ခွင့်မပြု" },
+];
+
 export function narrationIssues(
   locale: string,
   { dialogs, speechTexts }: Pick<ScriptNarration, "dialogs" | "speechTexts">,
@@ -75,6 +91,14 @@ export function narrationIssues(
         issue(
           "error",
           `writes "${run[0]}", which the voice reads as ${word.reads} — write "${word.write}" with the space`,
+        );
+      }
+    }
+    for (const { wrong, write } of burmese ? BURMESE_MISPLACED_NEGATIVE : []) {
+      if (text.includes(wrong)) {
+        issue(
+          "error",
+          `writes "${wrong}" — the negative goes inside the compound: write "${write}"`,
         );
       }
     }

@@ -60,6 +60,9 @@ describe("narrationLexiconFor", () => {
     expect(spokenFormOf("className", burmese)).toBe("class name");
     expect(spokenFormOf("Appက", burmese)).toBe("Upက");
     expect(spokenFormOf("app", burmese)).toBe("up");
+    // A percentile is said in English, also with a Burmese pause mark after it.
+    expect(spokenFormOf("p95", burmese)).toBe("p ninety-five");
+    expect(spokenFormOf("p99၊", burmese)).toBe("p ninety-nine၊");
     expect(spokenFormOf("dev", burmese)).toBe("Deaf");
   });
 });

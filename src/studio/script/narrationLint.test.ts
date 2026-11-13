@@ -66,4 +66,13 @@ describe("narrationIssues", () => {
       ),
     ).toEqual([]);
   });
+
+  // "Not မလက်ခံ, it's လက်မခံ" — the negative sits between the noun and the verb.
+  it("fails a Burmese negative put in front of a noun-and-verb compound", () => {
+    const [issue] = narrationIssues("my-MM", spoken("ဒီ plan ကို မလက်ခံပါဘူး။"));
+    expect(issue).toMatchObject({ severity: "error" });
+    expect(issue.message).toContain('write "လက်မခံ"');
+    expect(severities("my-MM", "server side လောက် မအဆင်ပြေပါဘူး။")).toEqual(["scene.0 error"]);
+    expect(severities("my-MM", "ဒီ plan ကို လက်မခံပါဘူး။", "အဆင်မပြေပါဘူး။")).toEqual([]);
+  });
 });

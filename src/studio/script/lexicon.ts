@@ -109,6 +109,10 @@ const BURMESE_RESPELLINGS: PronunciationLexicon = {
     app: "up",
     // Read as "deev"; developers say "dev" (a dev server) like the word "deaf".
     dev: "Deaf",
+    // A percentile is a term, said in English ("p ninety-five"), never the letter
+    // p before a Burmese number (Chan, 2026-11-13). Narration writes it as p95.
+    p95: "p ninety-five",
+    p99: "p ninety-nine",
   },
 };
 

@@ -189,7 +189,7 @@ lesson:
         fontSize: 28,
         strokeColor: "#e03131",
       }
-    # Board 2 — the quiz, asked before the façade is shown: white question
+    # Board 2 — the quiz, asked before the facade is shown: white question
     # and options, green answer, red the risk, green the way instead.
     - {
         id: q-title,
@@ -263,9 +263,9 @@ lesson:
         fontSize: 28,
         strokeColor: "#2f9e44",
       }
-    # Board 3 — a façade in front, the old app and the new service side by
-    # side. Orange = the façade, blue = old and new, violet = requests,
-    # green = what the façade buys.
+    # Board 3 — a facade in front, the old app and the new service side by
+    # side. Orange = the facade, blue = old and new, violet = requests,
+    # green = what the facade buys.
     - {
         id: f-req,
         kind: text,
@@ -306,7 +306,7 @@ lesson:
         y: 377,
         width: 170,
         height: 35,
-        text: "façade",
+        text: "facade",
         fontSize: 28,
       }
     - {
@@ -1091,7 +1091,7 @@ scenes:
         at: { mark: type-2 }
         cadence: line-by-line
         target: { file: notebook/36-plan.md, after: "ခေါ်ရင် build ကျ\n" }
-        text: "2. façade နောက်မှာ Search service တင်၊ request 5 % ကနေ စ\n   - ပြီးပြီ: 100 % ကို အသစ်က ဖြေ၊ အဖြေ မတူတာ မရှိ\n"
+        text: "2. facade နောက်မှာ Search service တင်၊ request 5 % ကနေ စ\n   - ပြီးပြီ: 100 % ကို အသစ်က ဖြေ၊ အဖြေ မတူတာ မရှိ\n"
       - id: type-3
         type: editor.type
         at: { mark: type-3 }
@@ -1103,12 +1103,12 @@ scenes:
         at: { mark: type-4 }
         cadence: line-by-line
         target: { file: notebook/36-plan.md, after: "တိုက်ရိုက် မဖတ်တော့\n" }
-        text: "4. app အဟောင်းထဲက search code ကို ဖျက်\n   - ပြီးပြီ: façade မှာ လမ်းကြောင်းဟောင်း မရှိတော့\n"
+        text: "4. app အဟောင်းထဲက search code ကို ဖျက်\n   - ပြီးပြီ: facade မှာ လမ်းကြောင်းဟောင်း မရှိတော့\n"
       - id: expect-4
         type: expect.file
         at: { afterAction: type-4 }
         path: notebook/36-plan.md
-        contains: "4. app အဟောင်းထဲက search code ကို ဖျက်\n   - ပြီးပြီ: façade မှာ လမ်းကြောင်းဟောင်း မရှိတော့\n"
+        contains: "4. app အဟောင်းထဲက search code ကို ဖျက်\n   - ပြီးပြီ: facade မှာ လမ်းကြောင်းဟောင်း မရှိတော့\n"
       - id: type-not
         type: editor.type
         at: { mark: type-not }

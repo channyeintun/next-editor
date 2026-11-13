@@ -260,8 +260,10 @@ Words a Burmese voice may misread; listen for them and add lexicon entries where
   `idempotent`, `linearizability`, `CAP theorem`, `consensus`, `outbox`, `saga`, `granularity`.
 - Production and governance: `time out`, `circuit breaker`, `half open`, `bulkhead`,
   `back pressure`, `fitness function`, `ADR`, `technology radar`, `Conway's law`, `Cynefin`.
-- Mixed forms: `p ၉၅` and `p ၉၉` (the letter p before a Burmese number); `facade` in narration
-  (boards write `façade`); `worker A` / `worker B` (lesson 33); the lexicon respells `app` as `up`.
+- Mixed forms: `p95` and `p99` are written as terms and the lexicon says them in English
+  ("p ninety-five"); `facade` is spelled the plain English way in narration and on screen and
+  should sound as it does in English; `worker A` / `worker B` (lesson 33); the lexicon respells
+  `app` as `up`.
 
 Two things to watch on screen: lesson 22 types its ADR title at the end of the first line with no
 trailing newline (the document replay passes); and six lessons sit close to the 8,200-character

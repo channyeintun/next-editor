@@ -53,7 +53,8 @@ or changes what it reports. A change to this guide bumps the version here and
   pronunciation lexicon handles speech, never the display text. English
   narration gets the Pocket voice's respellings. Burmese narration gets only a
   short list of English terms the Burmese voice says wrong (Vite → "veet",
-  Vitest → "Veet test", DOM → "Dom", className → "class name", App → "Up", dev → "Deaf"), and everything else is spoken as
+  Vitest → "Veet test", DOM → "Dom", className → "class name", App → "Up", dev → "Deaf",
+  p95 → "p ninety-five"), and everything else is spoken as
   written. When the Burmese voice mispronounces another term, add it to that
   list in the studio's pronunciation lexicon rather than respelling the
   narration.
@@ -61,6 +62,13 @@ or changes what it reports. A change to this guide bumps the version here and
   otherwise spell another word, because the voice says that word: "dev server
   ကို စ နေပါပြီ", never စနေပါပြီ, which it reads as စနေ (Saturday). The
   compile check fails the run-together spellings it knows.
+- In Burmese narration, a compound of a noun and a verb takes its negative
+  between the two: လက်မခံ, အဆင်မပြေ, နားမလည်, never မလက်ခံ, မအဆင်ပြေ or
+  မနားလည်. The compile check fails the misplaced forms it knows.
+- In Burmese narration, numbers are Burmese digits, but a percentile is a
+  term: write p95 and p99 as on screen (never the letter p before a Burmese
+  number); the lexicon says them in English. An English word keeps its plain
+  English spelling in narration and on screen ("facade", not "façade").
 - In Burmese narration, keep the technical terms Burmese developers say in
   English in English: screen, tree, memory, component, state and the like,
   not မျက်နှာပြင်, သစ်ပင် or မှတ်ဉာဏ်. Say "handle လုပ်ပေး" for
