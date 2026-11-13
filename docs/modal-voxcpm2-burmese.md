@@ -25,9 +25,10 @@ available only when the signed-in user has the
 
 ### Why a job, not one request
 
-The first dialog of a render usually meets a cold L4 container: about 10 s to
-boot, 23 s to load the model, and 27 s of first-inference warm-up before the
-first generation step, plus however long Modal waits for a free GPU. Cloudflare
+The first dialog of a render (or of a workflow's narration pass) usually meets
+a cold L4 container: about 10 s to boot, 23 s to load the model, and 27 s of
+first-inference warm-up before the first generation step, plus however long
+Modal waits for a free GPU. Cloudflare
 ends a Worker subrequest that has sent no response within its proxy read
 timeout (125 s; not configurable below Enterprise) with HTTP 524, and a render
 failed that way on 2026-10-05 when a single request was held open across all
@@ -97,8 +98,11 @@ The deployment pins:
 - one GPU container maximum: an L4, or an A10G or L40S when Modal has no free L4
   (a ranked fallback list; on 2026-10-25 no L4 was free for ten minutes and a
   lesson's first dialog outlasted the Worker's 280 s wait while still queued)
-- scaling to zero after 15 idle minutes, so a Studio workflow keeps the warm GPU
-  while it records each lesson and the next lesson's narration skips the cold start
+- scaling to zero after 2 idle minutes. An idle container is billed like a
+  working one, so it only bridges the gap between two jobs of one run. A Studio
+  workflow narrates all of its lessons in one pass before it records the first
+  ("Narrate every lesson first", on by default), so the GPU starts once per
+  workflow and is not kept warm through the recordings
 - a separate CPU `jobs` web app (FastAPI only) that validates, spawns, polls,
   and cancels synthesis jobs, so a malformed request never starts an L4
 

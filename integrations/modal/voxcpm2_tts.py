@@ -214,10 +214,14 @@ reference_cache = modal.Dict.from_name(f"{APP_NAME}-references", create_if_missi
 # still queued; Modal falls back down this list instead of waiting for an L4.
 # The image's PyPI torch runs the same eager inference on all three.
 GPU_TYPES = ["L4", "A10G", "L40S"]
-# A Studio workflow records each lesson (about 8–15 minutes) between one
-# lesson's narration and the next. Staying warm that long keeps the next
-# lesson off a cold start, and off the GPU queue that comes with one.
-SCALEDOWN_SECONDS = 15 * 60
+# An idle container is billed like a working one, so it stays up only long
+# enough to bridge the gap between two jobs of one run: a render sends its
+# dialogs back to back, and a Studio workflow narrates all of its lessons in
+# one pass before it records the first (src/studio/workflow), so the next job
+# is seconds away, or a retry's wait. This was 15 minutes while a workflow
+# narrated each lesson between two 8–15 minute recordings; that kept the GPU
+# billed through every recording to save a cold start of about a minute.
+SCALEDOWN_SECONDS = 2 * 60
 
 
 @app.cls(
