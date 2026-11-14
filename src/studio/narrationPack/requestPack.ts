@@ -25,8 +25,10 @@ import {
 export interface NarrationPackDialog {
   /** The dialog cache's key for this take; the notebook names its audio file by it. */
   hash: string;
-  /** The lesson that asks for it, to report progress by. */
+  /** The first lesson that asks for it; the notebook reports progress by lesson. */
   lesson: string;
+  /** Later lessons of the pack that say the same dialog: its one take serves them too. */
+  sharedWith?: string[];
   text: string;
   seed: number;
 }
@@ -110,7 +112,15 @@ export async function buildNarrationRequestPack(
       if (tooLong) {
         throw new Error(`"${slug}", ${request.label}: ${tooLong}`);
       }
-      if (dialogs.has(request.requestHash)) continue;
+      const asked = dialogs.get(request.requestHash);
+      if (asked) {
+        // One take serves every lesson that says this dialog, and none of them
+        // is whole without it: the notebook counts it towards each.
+        if (asked.lesson !== slug && !asked.sharedWith?.includes(slug)) {
+          (asked.sharedWith ??= []).push(slug);
+        }
+        continue;
+      }
       const cached = await hasCached(request.requestHash, (reason) => {
         cacheUnavailable ??= reason;
       });

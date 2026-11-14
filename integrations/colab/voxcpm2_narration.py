@@ -24,6 +24,11 @@
 # written. Keep this tab open while it works, and let step 8 finish before you download the
 # audio or disconnect.
 #
+# **A part is not a lesson.** Each `audio-….zip` holds the next few dozen dialogs, so 36 parts
+# are not 36 lessons. Steps 5, 7 and 8 print which lessons have all their audio, and the same is
+# kept in `progress.txt` beside the parts. A lesson with some of its audio missing still renders,
+# but the studio then asks its hosted voice for the missing dialogs.
+#
 # The notebook works as a batch you run yourself: it starts no server, opens no tunnel and
 # serves nothing, which is what Colab's rules ask for. Use it only with your own voice, or a
 # voice you have permission to use.
@@ -38,7 +43,8 @@ SAVE_TO = "Google Drive"  #@param ["Google Drive", "This runtime (lost if the se
 DRIVE_FOLDER = "next-editor-narration"  #@param {type:"string"}
 #@markdown FLAC is lossless and half the size of WAV; the studio reads both.
 AUDIO_FORMAT = "flac"  #@param ["flac", "wav"]
-#@markdown Takes are written out in parts of this many dialogs, so little is lost with a session.
+#@markdown Takes are written out in parts of at most this many dialogs, so little is lost with a
+#@markdown session. A part also ends where a lesson ends, and after ten minutes.
 PART_DIALOGS = 25  #@param {type:"integer"}
 #@markdown Untested: runs the model in float16, which a T4 computes faster than the model's own
 #@markdown bfloat16. Its takes go to a separate `…-float16` folder, so they never mix with the
@@ -153,9 +159,13 @@ REFERENCE_PATH = os.path.join(tempfile.gettempdir(), "narrator-reference.wav")
 with open(REFERENCE_PATH, "wb") as reference_file:
     reference_file.write(pack.reference_wav)
 
-todo = pending_dialogs(pack, OUT_DIR)
-lessons = {dialog.lesson for dialog in pack.dialogs}
-print(f"{len(pack.dialogs)} dialogs of {len(lessons)} lesson(s); {len(todo)} still to synthesize.")
+todo, progress = pack_state(pack, OUT_DIR)
+write_progress(OUT_DIR, progress)
+print(
+    f"{counted(len(pack.dialogs), 'dialog')} of {counted(len(progress.lessons), 'lesson')};"
+    f" {len(todo)} still to synthesize."
+)
+print(describe_lessons(progress))
 print(f"The audio goes to: {OUT_DIR}")
 if USE_DRIVE:
     print(f"To go on in a later session, set PACK_PATH in step 1 to: {saved_pack}")
@@ -218,7 +228,9 @@ if todo:
     print(describe(trial, OUT_DIR))
 else:
     print("Every dialog already has a take: nothing to try.")
-todo = pending_dialogs(pack, OUT_DIR)
+todo, progress = pack_state(pack, OUT_DIR)
+# The trial wrote parts too: the progress kept beside them must count those.
+write_progress(OUT_DIR, progress)
 if trial.synthesized:
     rest = seconds_for(sum(len(dialog.text) for dialog in todo), trial)
     print(f"At this pace the other {len(todo)} dialogs take about {duration(rest)}.")
@@ -234,25 +246,33 @@ if trial.synthesized:
 # Stop it whenever you like (Runtime > Interrupt execution): the takes made so far are
 # written out, and running this cell again goes on from there.
 require_output_folder()
-todo = pending_dialogs(pack, OUT_DIR)
+todo, progress = pack_state(pack, OUT_DIR)
 if todo:
-    summary = run_batch(todo, OUT_DIR, synthesize, extension=AUDIO_FORMAT, part_dialogs=PART_DIALOGS)
+    summary = run_batch(
+        todo,
+        OUT_DIR,
+        synthesize,
+        extension=AUDIO_FORMAT,
+        part_dialogs=PART_DIALOGS,
+        lessons=progress,
+    )
     print(describe(summary, OUT_DIR))
 else:
     print("Every dialog already has a take.")
+print(describe_lessons(progress))
 
 # %%
 #@title 8. Get the audio
 require_output_folder()
 part_names = sorted(name for name in os.listdir(OUT_DIR) if PART_PATTERN.fullmatch(name))
 megabytes = sum(os.path.getsize(os.path.join(OUT_DIR, name)) for name in part_names) / 1e6
-left = pending_dialogs(pack, OUT_DIR)
+left, progress = pack_state(pack, OUT_DIR)
+write_progress(OUT_DIR, progress)
 print(f"{len(part_names)} part(s), {megabytes:.0f} MB, in {OUT_DIR}")
-print(
-    "Every dialog has a take."
-    if not left
-    else f"{len(left)} dialog(s) still have no take: run step 7 again."
-)
+print(describe_lessons(progress))
+if left:
+    print(f"{len(left)} dialog(s) still have no take: run step 7 again.")
+    print(PARTS_NOTE)
 if USE_DRIVE:
     # Drive takes files in the background; this waits until it has them all.
     print("Sending the last parts to Google Drive. Wait for this cell before you download or disconnect.")
@@ -266,4 +286,5 @@ elif IN_COLAB:
 print(
     "In the studio: Workflow > Narrate on Google Colab > Import audio…, then choose the"
     " audio-….zip files (or the zip Google Drive makes when you download this folder)."
+    " Pick the lessons there to see which of them still lack audio before you render."
 )

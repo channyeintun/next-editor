@@ -430,6 +430,7 @@ function WorkflowSetup({
         <OfflineNarrationSection
           api={offlineNarration}
           slugs={queue.map((lesson) => lesson.slug)}
+          onPickOnly={(narrated) => setSelected(new Set(narrated))}
         />
       ) : null}
 

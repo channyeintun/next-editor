@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { NarrationAudioImport } from "./audioImport";
+import type { NarrationCoverage } from "./coverage";
 import {
+  coverageReportOf,
   exportNarrationRequests,
   exportStatusOf,
   importNarrationFiles,
@@ -49,6 +51,26 @@ function apiOf(overrides: Partial<OfflineNarrationApi> = {}): OfflineNarrationAp
     exportBlockedReason: null,
     exportRequests: vi.fn<OfflineNarrationApi["exportRequests"]>(async () => exported()),
     importAudio: vi.fn<OfflineNarrationApi["importAudio"]>(async () => imported({ imported: 3 })),
+    coverageOf: vi.fn<OfflineNarrationApi["coverageOf"]>(async () => coverage([])),
+    ...overrides,
+  };
+}
+
+/** Coverage of lessons given as [slug, dialogs, dialogs missing], 100 characters a missing dialog. */
+function coverage(
+  lessons: [string, number, number][],
+  overrides: Partial<NarrationCoverage> = {},
+): NarrationCoverage {
+  const missing = lessons.reduce((sum, [, , missingCount]) => sum + missingCount, 0);
+  return {
+    lessons: lessons.map(([slug, dialogCount, missingCount]) => ({
+      slug,
+      dialogCount,
+      missingCount,
+    })),
+    missingDialogCount: missing,
+    missingCharacterCount: missing * 100,
+    cacheUnavailable: null,
     ...overrides,
   };
 }
@@ -72,6 +94,8 @@ describe("exportNarrationRequests", () => {
     expect(context()).toEqual({
       busy: null,
       importedTakes: 0,
+      // An export changes nothing about the takes this browser keeps.
+      importsEnded: 0,
       status: {
         tone: "ok",
         text: "Exported 1,234 dialogs of 2 lessons (56,789 characters).",
@@ -136,6 +160,7 @@ describe("importNarrationFiles", () => {
     expect(context()).toMatchObject({
       busy: "import",
       importedTakes: 2,
+      importsEnded: 0,
       status: { text: "Importing the audio…" },
     });
     // A render started now would buy the takes the import has not reached.
@@ -147,6 +172,8 @@ describe("importNarrationFiles", () => {
     finish(imported({ imported: 2, alreadyCached: 1 }));
     await running;
     expect(selectNarrationImportRunning(context())).toBe(false);
+    // What the browser keeps has changed: a count of it made before is stale.
+    expect(context().importsEnded).toBe(1);
     expect(context().status).toEqual({
       tone: "ok",
       text: "Imported 2 takes. 1 take was already in this browser.",
@@ -170,6 +197,140 @@ describe("importNarrationFiles", () => {
     expect(context()).toMatchObject({
       busy: null,
       status: { tone: "error", text: "out of memory" },
+    });
+  });
+});
+
+describe("what the picked lessons' coverage reports", () => {
+  it("has nothing to say for no lessons", () => {
+    expect(coverageReportOf(coverage([]))).toBeNull();
+  });
+
+  it("says when a render needs no speech service", () => {
+    expect(coverageReportOf(coverage([["intro", 40, 0]]))).toEqual({
+      status: {
+        tone: "ok",
+        text: "The picked lesson has all its narration in this browser: a render asks no speech service for it.",
+      },
+      completeOnly: null,
+    });
+    expect(
+      coverageReportOf(
+        coverage([
+          ["intro", 40, 0],
+          ["loops", 38, 0],
+        ]),
+      )?.status.text,
+    ).toBe(
+      "All 2 picked lessons have their narration in this browser: a render asks no speech service for it.",
+    );
+  });
+
+  it("says what a render buys when nothing is here yet, without alarm", () => {
+    expect(
+      coverageReportOf(
+        coverage([
+          ["intro", 700, 700],
+          ["loops", 807, 807],
+        ]),
+      ),
+    ).toEqual({
+      status: {
+        tone: "ok",
+        text: "None of the narration of the 2 picked lessons is in this browser yet: a render asks the speech service for all of it, 1,507 dialogs (150,700 characters).",
+      },
+      completeOnly: null,
+    });
+    expect(coverageReportOf(coverage([["intro", 1, 1]]))?.status.text).toBe(
+      "None of the narration of the picked lesson is in this browser yet: a render asks the speech service for all of it, 1 dialog (100 characters).",
+    );
+  });
+
+  it("warns when only some picked lessons are narrated here, naming the first that are not", () => {
+    expect(
+      coverageReportOf(
+        coverage([
+          ["architect-19", 36, 0],
+          ["architect-20", 39, 2],
+          ["architect-21", 34, 34],
+          ["architect-22", 43, 43],
+          ["architect-23", 37, 37],
+          ["architect-24", 38, 38],
+        ]),
+      ),
+    ).toEqual({
+      status: {
+        tone: "warning",
+        text: "1 of the 6 picked lessons has all its narration in this browser. The other 5 lack 154 dialogs (15,400 characters), which a render asks the speech service for: architect-20 lacks 2 of its 39 dialogs, architect-21 lacks all 34 of its dialogs, architect-22 lacks all 43 of its dialogs, and 2 more lessons.",
+      },
+      completeOnly: ["architect-19"],
+    });
+    expect(
+      coverageReportOf(
+        coverage([
+          ["a", 10, 0],
+          ["b", 10, 0],
+          ["c", 10, 4],
+        ]),
+      ),
+    ).toEqual({
+      status: {
+        tone: "warning",
+        text: "2 of the 3 picked lessons have all their narration in this browser. The other one lacks 4 dialogs (400 characters), which a render asks the speech service for: c lacks 4 of its 10 dialogs.",
+      },
+      completeOnly: ["a", "b"],
+    });
+  });
+
+  it("offers no narrower selection when no picked lesson is whole", () => {
+    expect(
+      coverageReportOf(
+        coverage([
+          ["a", 10, 3],
+          ["b", 10, 10],
+        ]),
+      ),
+    ).toEqual({
+      status: {
+        tone: "warning",
+        text: "None of the 2 picked lessons have all their narration in this browser. They lack 13 dialogs (1,300 characters), which a render asks the speech service for: a lacks 3 of its 10 dialogs, b lacks all 10 of its dialogs.",
+      },
+      completeOnly: null,
+    });
+    expect(coverageReportOf(coverage([["a", 39, 2]]))?.status).toEqual({
+      tone: "warning",
+      text: "The picked lesson lacks 2 of its 39 dialogs in this browser: a render asks the speech service for those (200 characters).",
+    });
+    expect(coverageReportOf(coverage([["a", 39, 1]]))?.status.text).toBe(
+      "The picked lesson lacks 1 of its 39 dialogs in this browser: a render asks the speech service for it (100 characters).",
+    );
+    // One lesson more than the report names, and a lesson of a single dialog.
+    expect(
+      coverageReportOf(
+        coverage([
+          ["a", 10, 0],
+          ["b", 1, 1],
+          ["c", 5, 5],
+          ["d", 5, 1],
+          ["e", 5, 5],
+        ]),
+      )?.status.text,
+    ).toBe(
+      "1 of the 5 picked lessons has all its narration in this browser. The other 4 lack 12 dialogs (1,200 characters), which a render asks the speech service for: b lacks its one dialog, c lacks all 5 of its dialogs, d lacks 1 of its 5 dialogs, and 1 more lesson.",
+    );
+  });
+
+  it("says when the browser cannot keep narration at all", () => {
+    expect(
+      coverageReportOf(
+        coverage([["a", 10, 10]], { cacheUnavailable: "Cache storage is not available" }),
+      ),
+    ).toEqual({
+      status: {
+        tone: "warning",
+        text: "This browser cannot keep narration (Cache storage is not available): a render asks the speech service for every dialog of the picked lessons.",
+      },
+      completeOnly: null,
     });
   });
 });

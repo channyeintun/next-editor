@@ -24,7 +24,7 @@ import re
 import time
 import wave
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 PACK_FORMAT = "next-editor-narration-requests"
 PACK_VERSION = 1
@@ -36,6 +36,12 @@ AUDIO_FORMATS = {"flac": "FLAC", "wav": "WAV"}
 SILENCE_PEAK = 0.004
 # What to do when the output folder stops answering.
 STORAGE_HINT = "If the audio goes to Google Drive, run step 5 again: it mounts Drive again"
+# Kept beside the parts: which lessons have all their audio, in words.
+PROGRESS_FILE = "progress.txt"
+PARTS_NOTE = (
+    "A part (audio-0001.zip, audio-0002.zip, ...) holds a few dozen dialogs, not one lesson:"
+    " the number of parts does not say how many lessons are finished."
+)
 
 
 class PackError(ValueError):
@@ -48,6 +54,13 @@ class Dialog:
     lesson: str
     text: str
     seed: int
+    # Later lessons of the pack that say this same dialog: one take serves them all.
+    shared_with: tuple[str, ...] = ()
+
+    @property
+    def lessons(self) -> tuple[str, ...]:
+        """Every lesson that needs this take, the one the pack files it under first."""
+        return (self.lesson, *self.shared_with)
 
 
 @dataclass(frozen=True)
@@ -99,12 +112,24 @@ def _dialog_of(item: object, position: int, limits: dict) -> Dialog:
         raise PackError(f"{where} must have 1-{limits['maxTextChars']} characters of text")
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= limits["maxSeed"]:
         raise PackError(f"{where} must have a seed between 0 and {limits['maxSeed']}")
+    lesson = lesson if isinstance(lesson, str) and lesson else "lesson"
+    shared = item.get("sharedWith")
     return Dialog(
         hash=digest,
-        lesson=lesson if isinstance(lesson, str) and lesson else "lesson",
+        lesson=lesson,
         text=text.strip(),
         seed=seed,
+        shared_with=_merged((), shared if isinstance(shared, list) else [], lesson),
     )
+
+
+def _merged(known: tuple[str, ...], more, lesson: str) -> tuple[str, ...]:
+    """`known` with the lesson names in `more` it lacks, never `lesson` itself."""
+    merged = list(known)
+    for name in more:
+        if isinstance(name, str) and name and name != lesson and name not in merged:
+            merged.append(name)
+    return tuple(merged)
 
 
 def load_pack(data: object, engine: dict, limits: dict) -> Pack:
@@ -141,7 +166,14 @@ def load_pack(data: object, engine: dict, limits: dict) -> Pack:
     dialogs: dict[str, Dialog] = {}
     for position, item in enumerate(items, start=1):
         dialog = _dialog_of(item, position, limits)
-        dialogs.setdefault(dialog.hash, dialog)
+        first = dialogs.get(dialog.hash)
+        if first is None:
+            dialogs[dialog.hash] = dialog
+        else:
+            # One take per hash, and every lesson that asked for it still counts on it.
+            dialogs[dialog.hash] = replace(
+                first, shared_with=_merged(first.shared_with, dialog.lessons, first.lesson)
+            )
     created_at = data.get("createdAt")
     return Pack(
         created_at=created_at if isinstance(created_at, str) else "",
@@ -194,10 +226,148 @@ def finished_hashes(out_dir: str, log=print) -> set[str]:
     return finished
 
 
+class LessonProgress:
+    """How many of each lesson's dialogs have a take written, in the pack's order.
+
+    The parts in a folder do not show this: a part holds the next few dozen
+    dialogs, whichever lessons they belong to. A lesson can be rendered without
+    a speech service only once every one of its dialogs has a take.
+    """
+
+    def __init__(self, dialogs, finished=()):
+        dialogs = list(dialogs)
+        self._lessons_of: dict[str, tuple[str, ...]] = {}
+        self._total: dict[str, int] = {}
+        self._written: dict[str, int] = {}
+        self._hashes: set[str] = set()
+        # The pack's order is the order of the lessons its dialogs are filed under; a
+        # lesson that only shares dialogs with earlier ones comes after them.
+        for dialog in dialogs:
+            self._total.setdefault(dialog.lesson, 0)
+        for dialog in dialogs:
+            # A dialog two lessons say is one take, and each of them needs it.
+            self._lessons_of[dialog.hash] = dialog.lessons
+            for lesson in dialog.lessons:
+                self._total[lesson] = self._total.get(lesson, 0) + 1
+        self._written = dict.fromkeys(self._total, 0)
+        self.add(finished)
+
+    def add(self, hashes) -> list[str]:
+        """Count these takes as written; returns the lessons they completed."""
+        completed = []
+        for digest in hashes:
+            if digest in self._hashes:
+                continue
+            self._hashes.add(digest)
+            for lesson in self._lessons_of.get(digest, ()):
+                self._written[lesson] += 1
+                if self._written[lesson] == self._total[lesson]:
+                    completed.append(lesson)
+        return completed
+
+    def completes(self, hashes) -> bool:
+        """Whether writing these takes would complete a lesson."""
+        staged: dict[str, int] = {}
+        for digest in set(hashes) - self._hashes:
+            for lesson in self._lessons_of.get(digest, ()):
+                staged[lesson] = staged.get(lesson, 0) + 1
+        return any(
+            count == self._total[lesson] - self._written[lesson] for lesson, count in staged.items()
+        )
+
+    @property
+    def lessons(self) -> list[tuple[str, int, int]]:
+        """(lesson, dialogs with a take, dialogs) for every lesson, in the pack's order."""
+        return [(lesson, self._written[lesson], total) for lesson, total in self._total.items()]
+
+    @property
+    def complete(self) -> int:
+        """The number of lessons with a take for every dialog."""
+        return sum(1 for _, written, total in self.lessons if written == total)
+
+
+def counted(number: int, one: str) -> str:
+    """`number` with its noun, singular for one: "1 dialog", "2 dialogs"."""
+    return f"{number} {one}" if number == 1 else f"{number} {one}s"
+
+
+def describe_lessons(progress: LessonProgress) -> str:
+    """Which lessons have all their audio, for the notebook to print.
+
+    A dialog two lessons share counts for each of them, so the dialogs counted
+    here can be more than the takes in the parts.
+    """
+    lessons = progress.lessons
+    if len(lessons) == 1:
+        lesson, written, total = lessons[0]
+        if written == total:
+            return f"The one lesson, {lesson}, has all its audio ({counted(total, 'dialog')})."
+        return f"The one lesson, {lesson}, has {written} of its {counted(total, 'dialog')}."
+    written = sum(count for _, count, _ in lessons)
+    total = sum(count for _, _, count in lessons)
+    if progress.complete == len(lessons):
+        return f"All {len(lessons)} lessons have all their audio ({counted(total, 'dialog')})."
+    lines = [
+        f"{progress.complete} of {len(lessons)} lessons have all their audio"
+        f" ({written} of {counted(total, 'dialog')})."
+    ]
+    # Lessons in a row that are complete, or that have nothing, share a line.
+    runs: list[tuple[str, list[str]]] = []
+    for lesson, count, of in lessons:
+        if 0 < count < of:
+            runs.append((f"{count} of {counted(of, 'dialog')}", [lesson]))
+            continue
+        state = "complete" if count == of else "no audio yet"
+        if runs and runs[-1][0] == state:
+            runs[-1][1].append(lesson)
+        else:
+            runs.append((state, [lesson]))
+    for state, names in runs:
+        span = names[0] if len(names) == 1 else f"{names[0]} ... {names[-1]} ({len(names)} lessons)"
+        lines.append(f"  {state}: {span}")
+    return "\n".join(lines)
+
+
+def write_progress(out_dir: str, progress: LessonProgress) -> None:
+    """Leave the lessons' progress beside the parts, for whoever opens the folder.
+
+    Never raises: the parts are what matters, and a folder that is gone is
+    reported by the next part that cannot be written.
+    """
+    text = "\n".join(
+        [
+            describe_lessons(progress),
+            "",
+            PARTS_NOTE,
+            "Import every part into the studio. Its Narrate on Google Colab section then shows"
+            " which of the lessons you pick still lack audio.",
+            "",
+        ]
+    )
+    path = os.path.join(out_dir, PROGRESS_FILE)
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        with open(path + ".partial", "w", encoding="utf-8") as target:
+            target.write(text)
+        os.replace(path + ".partial", path)
+    except OSError:
+        pass
+
+
+def pack_state(pack: Pack, out_dir: str, log=print) -> tuple[list[Dialog], LessonProgress]:
+    """The dialogs with no take in `out_dir` yet, and the lessons' progress.
+
+    Both come from one reading of the parts: on a mounted drive each reading
+    opens every part.
+    """
+    finished = finished_hashes(out_dir, log)
+    pending = [dialog for dialog in pack.dialogs if dialog.hash not in finished]
+    return pending, LessonProgress(pack.dialogs, finished)
+
+
 def pending_dialogs(pack: Pack, out_dir: str, log=print) -> list[Dialog]:
     """The pack's dialogs that have no take in `out_dir` yet, in the pack's order."""
-    finished = finished_hashes(out_dir, log)
-    return [dialog for dialog in pack.dialogs if dialog.hash not in finished]
+    return pack_state(pack, out_dir, log)[0]
 
 
 def write_part(out_dir: str, takes: list[tuple[str, bytes]], extension: str) -> str:
@@ -257,6 +427,7 @@ def run_batch(
     part_dialogs: int = 25,
     part_seconds: float = 600.0,
     max_consecutive_failures: int = 5,
+    lessons: LessonProgress | None = None,
     clock=time.monotonic,
     log=print,
 ) -> RunSummary:
@@ -267,6 +438,10 @@ def run_batch(
     cause is then the runtime (out of memory, a lost GPU) and not the dialog.
     Takes are written out every `part_dialogs` dialogs or `part_seconds`
     seconds, and when the run is interrupted, so little is lost with a session.
+
+    With `lessons` (the pack's progress so far), a part is also written when a
+    lesson's last take is made, each lesson is named in the log once all its
+    audio is written, and the progress is kept in a file beside the parts.
     """
     if extension not in AUDIO_FORMATS:
         raise ValueError(f"unknown audio format {extension!r}")
@@ -291,7 +466,17 @@ def run_batch(
                 )
                 staged.clear()
                 return False
+            # The takes are on disk: nothing below may leave them staged, or an
+            # interrupt there would write them out a second time on the way out.
+            written = [digest for digest, _ in staged]
             staged.clear()
+            if lessons is not None:
+                for lesson in lessons.add(written):
+                    log(
+                        f"{lesson}: all its audio is written"
+                        f" ({lessons.complete} of {counted(len(lessons.lessons), 'lesson')})."
+                    )
+                write_progress(out_dir, lessons)
         last_write = clock()
         return True
 
@@ -320,7 +505,11 @@ def run_batch(
                 f"[{position}/{len(dialogs)}] {dialog.lesson}: {seconds:.1f} s of audio in {took:.1f} s"
                 f" ({summary.speed:.1f}x) · about {duration(remaining)} left"
             )
-            if len(staged) >= part_dialogs or clock() - last_write >= part_seconds:
+            if (
+                len(staged) >= part_dialogs
+                or clock() - last_write >= part_seconds
+                or (lessons is not None and lessons.completes(digest for digest, _ in staged))
+            ):
                 if not write_staged():
                     break
     except KeyboardInterrupt:

@@ -1,6 +1,7 @@
 import { createStore } from "@xstate/store-react";
 import { downloadBlob } from "../../utils/downloadBlob";
 import type { NarrationAudioImport } from "./audioImport";
+import type { LessonNarrationCoverage, NarrationCoverage } from "./coverage";
 import type { NarrationRequestPackExport } from "./requestPack";
 
 /**
@@ -21,6 +22,8 @@ export interface OfflineNarrationApi {
     files: readonly File[],
     onProgress: (takes: number) => void,
   ) => Promise<NarrationAudioImport>;
+  /** How much of these lessons' narration this browser keeps. Rejects with the reason. */
+  coverageOf: (slugs: readonly string[], signal: AbortSignal) => Promise<NarrationCoverage>;
 }
 
 export interface OfflineNarrationStatus {
@@ -34,18 +37,30 @@ interface OfflineNarrationContext {
   busy: "export" | "import" | null;
   /** Takes the running import has filed or found kept. */
   importedTakes: number;
+  /** Imports that have ended: what this browser keeps may have changed with each. */
+  importsEnded: number;
   status: OfflineNarrationStatus | null;
 }
 
-const INITIAL_CONTEXT: OfflineNarrationContext = { busy: null, importedTakes: 0, status: null };
+const INITIAL_CONTEXT: OfflineNarrationContext = {
+  busy: null,
+  importedTakes: 0,
+  importsEnded: 0,
+  status: null,
+};
 
 export const offlineNarrationStore = createStore({
   context: INITIAL_CONTEXT,
   on: {
     started: (
-      _context,
+      context,
       event: { kind: "export" | "import"; status: OfflineNarrationStatus },
-    ): OfflineNarrationContext => ({ busy: event.kind, importedTakes: 0, status: event.status }),
+    ): OfflineNarrationContext => ({
+      ...context,
+      busy: event.kind,
+      importedTakes: 0,
+      status: event.status,
+    }),
     progressed: (context, event: { takes: number }): OfflineNarrationContext => ({
       ...context,
       importedTakes: event.takes,
@@ -53,6 +68,7 @@ export const offlineNarrationStore = createStore({
     finished: (context, event: { status: OfflineNarrationStatus }): OfflineNarrationContext => ({
       ...context,
       busy: null,
+      importsEnded: context.importsEnded + (context.busy === "import" ? 1 : 0),
       status: event.status,
     }),
     reset: (): OfflineNarrationContext => INITIAL_CONTEXT,
@@ -70,6 +86,8 @@ const count = (value: number) => value.toLocaleString("en-US");
 const plural = (value: number, one: string, many = `${one}s`) =>
   `${count(value)} ${value === 1 ? one : many}`;
 const reasonOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/** Lessons a coverage report names before it counts the rest. */
+const COVERAGE_LESSONS_NAMED = 3;
 
 export function exportStatusOf(exported: NarrationRequestPackExport): OfflineNarrationStatus {
   if (!exported.pack) {
@@ -123,6 +141,99 @@ export function importStatusOf(imported: NarrationAudioImport): OfflineNarration
     tone: imported.storageFailure ? "error" : imported.unusable.length > 0 ? "warning" : "ok",
     text: parts.join(" "),
   };
+}
+
+/** What the picked lessons' coverage means for a render, in words. */
+export interface NarrationCoverageReport {
+  status: OfflineNarrationStatus;
+  /** The lessons with all their narration here, when only some of the picked ones have it. */
+  completeOnly: string[] | null;
+}
+
+/**
+ * Whether a render of these lessons would ask the speech service for anything.
+ * Audio is imported in parts of a few dozen dialogs, so this, and not the
+ * number of files imported, is what says which lessons are ready.
+ */
+export function coverageReportOf(coverage: NarrationCoverage): NarrationCoverageReport | null {
+  const total = coverage.lessons.length;
+  if (total === 0) return null;
+  if (coverage.cacheUnavailable) {
+    return {
+      status: {
+        tone: "warning",
+        text: `This browser cannot keep narration (${coverage.cacheUnavailable}): a render asks the speech service for every dialog of the picked lessons.`,
+      },
+      completeOnly: null,
+    };
+  }
+  const complete = coverage.lessons.filter((lesson) => lesson.missingCount === 0);
+  const incomplete = coverage.lessons.filter((lesson) => lesson.missingCount > 0);
+  if (incomplete.length === 0) {
+    return {
+      status: {
+        tone: "ok",
+        text:
+          total === 1
+            ? "The picked lesson has all its narration in this browser: a render asks no speech service for it."
+            : `All ${count(total)} picked lessons have their narration in this browser: a render asks no speech service for it.`,
+      },
+      completeOnly: null,
+    };
+  }
+  const missing = `${plural(coverage.missingDialogCount, "dialog")} (${count(coverage.missingCharacterCount)} characters)`;
+  if (
+    incomplete.every((lesson) => lesson.missingCount === lesson.dialogCount) &&
+    complete.length === 0
+  ) {
+    return {
+      status: {
+        tone: "ok",
+        text: `None of the narration of the ${total === 1 ? "picked lesson" : `${count(total)} picked lessons`} is in this browser yet: a render asks the speech service for all of it, ${missing}.`,
+      },
+      completeOnly: null,
+    };
+  }
+  if (total === 1) {
+    const [lesson] = incomplete;
+    return {
+      status: {
+        tone: "warning",
+        text: `The picked lesson lacks ${count(lesson.missingCount)} of its ${plural(lesson.dialogCount, "dialog")} in this browser: a render asks the speech service for ${lesson.missingCount === 1 ? "it" : "those"} (${count(coverage.missingCharacterCount)} characters).`,
+      },
+      completeOnly: null,
+    };
+  }
+  const named = incomplete
+    .slice(0, COVERAGE_LESSONS_NAMED)
+    .map((lesson) => `${lesson.slug} ${lackOf(lesson)}`)
+    .join(", ");
+  const more =
+    incomplete.length > COVERAGE_LESSONS_NAMED
+      ? `, and ${plural(incomplete.length - COVERAGE_LESSONS_NAMED, "more lesson")}`
+      : "";
+  const one = complete.length === 1;
+  const whole =
+    complete.length === 0
+      ? `None of the ${count(total)} picked lessons have all their narration in this browser. They lack`
+      : `${count(complete.length)} of the ${count(total)} picked lessons ${one ? "has" : "have"} all ${one ? "its" : "their"} narration in this browser. ${incomplete.length === 1 ? "The other one lacks" : `The other ${count(incomplete.length)} lack`}`;
+  return {
+    status: {
+      tone: "warning",
+      text: `${whole} ${missing}, which a render asks the speech service for: ${named}${more}.`,
+    },
+    completeOnly: complete.length > 0 ? complete.map((lesson) => lesson.slug) : null,
+  };
+}
+
+/** What one lesson is missing, after its name: "lacks 2 of its 39 dialogs". */
+function lackOf(lesson: LessonNarrationCoverage): string {
+  if (lesson.missingCount < lesson.dialogCount) {
+    return `lacks ${count(lesson.missingCount)} of its ${plural(lesson.dialogCount, "dialog")}`;
+  }
+  return lesson.dialogCount === 1
+    ? "lacks its one dialog"
+    : `lacks all ${count(lesson.dialogCount)} of its dialogs`;
 }
 
 /** Export these lessons' requests and download the pack. One export or import runs at a time. */

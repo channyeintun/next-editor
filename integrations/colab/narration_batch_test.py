@@ -278,6 +278,223 @@ class RunBatch(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown audio format"):
             nb.run_batch([], self.out, self.synthesizer(), extension="mp3")
 
+    def test_with_the_lessons_progress_a_part_ends_where_a_lesson_does(self):
+        pack = lesson_pack({"a": 4, "b": 2, "c": 1})
+        progress = nb.LessonProgress(pack.dialogs)
+        summary = self.run_batch(list(pack.dialogs), synthesize=self.synthesizer(), lessons=progress)
+        # Three dialogs, then the lesson's fourth; then each of the short lessons.
+        self.assertEqual([takes_in(path) for path in summary.parts], [3, 1, 2, 1])
+        finished = [line for line in self.log if "all its audio is written" in line]
+        self.assertEqual(
+            finished,
+            [
+                "a: all its audio is written (1 of 3 lessons).",
+                "b: all its audio is written (2 of 3 lessons).",
+                "c: all its audio is written (3 of 3 lessons).",
+            ],
+        )
+        # A lesson is named only once its last take is in a part.
+        self.assertLess(self.log.index(finished[0]), self.log.index(next(line for line in self.log if line.startswith("[5/7]"))))
+        self.assertEqual(progress.complete, 3)
+        with open(os.path.join(self.out, nb.PROGRESS_FILE), encoding="utf-8") as kept:
+            self.assertIn("All 3 lessons have all their audio (7 dialogs).", kept.read())
+
+    def test_a_lesson_with_a_failed_dialog_is_not_called_finished(self):
+        pack = lesson_pack({"a": 2, "b": 2})
+        progress = nb.LessonProgress(pack.dialogs)
+        summary = self.run_batch(
+            list(pack.dialogs), synthesize=self.synthesizer(fail={digest(2)}), lessons=progress
+        )
+        self.assertEqual(summary.synthesized, 3)
+        self.assertEqual(progress.lessons, [("a", 1, 2), ("b", 2, 2)])
+        self.assertFalse([line for line in self.log if line.startswith("a: all its audio")])
+        self.assertIn("b: all its audio is written (1 of 2 lessons).", self.log)
+
+    def test_a_later_run_counts_what_the_parts_already_hold(self):
+        pack = lesson_pack({"a": 2, "b": 2})
+        self.run_batch(list(pack.dialogs)[:3], synthesize=self.synthesizer())
+        pending, progress = nb.pack_state(pack, self.out)
+        self.assertEqual([d.hash for d in pending], [digest(4)])
+        self.assertEqual(progress.lessons, [("a", 2, 2), ("b", 1, 2)])
+        self.run_batch(pending, synthesize=self.synthesizer(), lessons=progress)
+        self.assertEqual(self.log[-1], "b: all its audio is written (2 of 2 lessons).")
+        self.assertEqual(nb.pack_state(pack, self.out)[1].complete, 2)
+
+    def test_a_shared_dialog_that_fails_leaves_both_its_lessons_unfinished(self):
+        pack = nb.load_pack(
+            pack_data(
+                dialogs=[
+                    {"hash": digest(1), "lesson": "a", "sharedWith": ["b"], "text": "hello", "seed": 1},
+                    {"hash": digest(2), "lesson": "a", "text": "only in a", "seed": 1},
+                    {"hash": digest(3), "lesson": "b", "text": "only in b", "seed": 1},
+                ]
+            ),
+            ENGINE,
+            LIMITS,
+        )
+        progress = nb.LessonProgress(pack.dialogs)
+        self.run_batch(list(pack.dialogs), synthesize=self.synthesizer(fail={digest(1)}), lessons=progress)
+        self.assertEqual(progress.lessons, [("a", 1, 2), ("b", 1, 2)])
+        self.assertFalse([line for line in self.log if "all its audio" in line])
+        self.assertIn("0 of 2 lessons have all their audio (2 of 4 dialogs).", nb.describe_lessons(progress))
+
+    def test_an_interrupt_after_a_part_is_written_does_not_write_it_again(self):
+        pack = lesson_pack({"a": 2})
+        progress = nb.LessonProgress(pack.dialogs)
+        real_write = nb.write_progress
+        interrupts = []
+
+        def interrupted_write(out_dir, lessons):
+            if not interrupts:
+                interrupts.append(True)
+                raise KeyboardInterrupt
+            real_write(out_dir, lessons)
+
+        nb.write_progress = interrupted_write
+        self.addCleanup(setattr, nb, "write_progress", real_write)
+        summary = self.run_batch(list(pack.dialogs), synthesize=self.synthesizer(), lessons=progress)
+        self.assertEqual(summary.stopped, "interrupted")
+        self.assertEqual([os.path.basename(path) for path in summary.parts], ["audio-0001.zip"])
+        self.assertEqual(sorted(name for name in os.listdir(self.out) if name.endswith(".zip")), ["audio-0001.zip"])
+        self.assertEqual(nb.pending_dialogs(pack, self.out), [])
+
+    def test_a_write_that_fails_names_no_lesson_finished(self):
+        pack = lesson_pack({"a": 1})
+        progress = nb.LessonProgress(pack.dialogs)
+
+        def failing_write(out_dir, takes, extension):
+            raise OSError(107, "Transport endpoint is not connected")
+
+        real_write = nb.write_part
+        nb.write_part = failing_write
+        self.addCleanup(setattr, nb, "write_part", real_write)
+        summary = self.run_batch(list(pack.dialogs), synthesize=self.synthesizer(), lessons=progress)
+        self.assertIn("could not write", summary.stopped)
+        self.assertEqual(progress.complete, 0)
+        self.assertFalse([line for line in self.log if "all its audio" in line])
+
+
+def lesson_pack(sizes):
+    """A pack whose lessons follow one another, as the studio exports them."""
+    dialogs, number = [], 0
+    for lesson, size in sizes.items():
+        for _ in range(size):
+            number += 1
+            dialogs.append({"hash": digest(number), "lesson": lesson, "text": f"dialog {number}", "seed": number})
+    return nb.load_pack(pack_data(dialogs=dialogs), ENGINE, LIMITS)
+
+
+def takes_in(path):
+    with zipfile.ZipFile(path) as part:
+        return len(part.namelist())
+
+
+class Lessons(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.out = os.path.join(self.folder.name, "out")
+        self.addCleanup(self.folder.cleanup)
+
+    def test_counts_the_takes_of_each_lesson_in_the_packs_order(self):
+        pack = lesson_pack({"one": 2, "two": 3, "three": 1})
+        progress = nb.LessonProgress(pack.dialogs, {digest(1), digest(2), digest(3), "f" * 64})
+        self.assertEqual(progress.lessons, [("one", 2, 2), ("two", 1, 3), ("three", 0, 1)])
+        self.assertEqual(progress.complete, 1)
+        # The same take twice counts once; a take that completes a lesson names it.
+        self.assertEqual(progress.add([digest(3), digest(4)]), [])
+        self.assertTrue(progress.completes([digest(5)]))
+        self.assertFalse(progress.completes([digest(4)]))
+        self.assertEqual(progress.add([digest(5), digest(6)]), ["two", "three"])
+        self.assertEqual(progress.complete, 3)
+
+    def test_says_which_lessons_have_all_their_audio(self):
+        pack = lesson_pack({"l1": 2, "l2": 2, "l3": 3, "l4": 1, "l5": 1})
+        progress = nb.LessonProgress(pack.dialogs, {digest(i) for i in range(1, 7)})
+        self.assertEqual(
+            nb.describe_lessons(progress),
+            "2 of 5 lessons have all their audio (6 of 9 dialogs).\n"
+            "  complete: l1 ... l2 (2 lessons)\n"
+            "  2 of 3 dialogs: l3\n"
+            "  no audio yet: l4 ... l5 (2 lessons)",
+        )
+        progress.add({digest(7)})
+        self.assertIn("  complete: l1 ... l3 (3 lessons)\n  no audio yet: l4 ... l5", nb.describe_lessons(progress))
+        progress.add({digest(8), digest(9)})
+        self.assertEqual(nb.describe_lessons(progress), "All 5 lessons have all their audio (9 dialogs).")
+
+    def test_one_lesson_alone_is_named_without_a_range(self):
+        pack = lesson_pack({"l1": 1, "l2": 1})
+        progress = nb.LessonProgress(pack.dialogs, {digest(1)})
+        self.assertEqual(
+            nb.describe_lessons(progress),
+            "1 of 2 lessons have all their audio (1 of 2 dialogs).\n"
+            "  complete: l1\n"
+            "  no audio yet: l2",
+        )
+
+    def test_a_pack_of_one_lesson_is_told_in_the_singular(self):
+        pack = lesson_pack({"only": 2})
+        progress = nb.LessonProgress(pack.dialogs, {digest(1)})
+        self.assertEqual(nb.describe_lessons(progress), "The one lesson, only, has 1 of its 2 dialogs.")
+        progress.add({digest(2)})
+        self.assertEqual(nb.describe_lessons(progress), "The one lesson, only, has all its audio (2 dialogs).")
+        single = nb.LessonProgress(lesson_pack({"only": 1}).dialogs, {digest(1)})
+        self.assertEqual(nb.describe_lessons(single), "The one lesson, only, has all its audio (1 dialog).")
+        self.assertEqual(nb.counted(1, "lesson"), "1 lesson")
+        self.assertEqual(nb.counted(0, "lesson"), "0 lessons")
+
+    def test_a_dialog_two_lessons_share_counts_for_each_of_them(self):
+        # The studio files a shared dialog under the first lesson and names the others.
+        pack = nb.load_pack(
+            pack_data(
+                dialogs=[
+                    {"hash": digest(1), "lesson": "a", "sharedWith": ["b", "a", "b", 7], "text": "hello", "seed": 1},
+                    {"hash": digest(2), "lesson": "a", "text": "only in a", "seed": 1},
+                    {"hash": digest(3), "lesson": "b", "text": "only in b", "seed": 1},
+                ]
+            ),
+            ENGINE,
+            LIMITS,
+        )
+        self.assertEqual(pack.dialogs[0].lessons, ("a", "b"))
+        progress = nb.LessonProgress(pack.dialogs, {digest(2), digest(3)})
+        # Neither lesson is whole while the take they share is missing.
+        self.assertEqual(progress.lessons, [("a", 1, 2), ("b", 1, 2)])
+        self.assertEqual(progress.complete, 0)
+        self.assertTrue(progress.completes([digest(1)]))
+        self.assertEqual(progress.add([digest(1)]), ["a", "b"])
+
+    def test_the_same_hash_under_two_lessons_is_one_dialog_that_both_need(self):
+        pack = nb.load_pack(
+            pack_data(
+                dialogs=[
+                    {"hash": digest(1), "lesson": "a", "text": "hello", "seed": 1},
+                    {"hash": digest(1), "lesson": "b", "text": "hello", "seed": 1},
+                    {"hash": digest(2), "lesson": "c", "sharedWith": ["a"], "text": "bye", "seed": 1},
+                ]
+            ),
+            ENGINE,
+            LIMITS,
+        )
+        self.assertEqual([d.lessons for d in pack.dialogs], [("a", "b"), ("c", "a")])
+        # A lesson with no dialog filed under it comes after those that have one.
+        self.assertEqual(nb.LessonProgress(pack.dialogs).lessons, [("a", 0, 2), ("c", 0, 1), ("b", 0, 1)])
+
+    def test_keeps_the_progress_beside_the_parts_and_never_fails_for_it(self):
+        pack = lesson_pack({"l1": 1, "l2": 1})
+        nb.write_progress(self.out, nb.LessonProgress(pack.dialogs, {digest(1)}))
+        with open(os.path.join(self.out, nb.PROGRESS_FILE), encoding="utf-8") as kept:
+            text = kept.read()
+        self.assertIn("1 of 2 lessons have all their audio", text)
+        self.assertIn("not one lesson", text)
+        self.assertEqual(os.listdir(self.out), [nb.PROGRESS_FILE])
+        # The progress file is not a part: it changes nothing about what is finished.
+        self.assertEqual(nb.finished_hashes(self.out), set())
+        blocked = os.path.join(self.folder.name, "a-file")
+        with open(blocked, "w") as other:
+            other.write("")
+        nb.write_progress(os.path.join(blocked, "inside"), nb.LessonProgress(pack.dialogs))
+
 
 class FakeWave(list):
     """Stands in for the model's numpy array: len(), abs() and max() are all it is asked."""

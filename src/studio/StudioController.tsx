@@ -39,6 +39,7 @@ import {
   selectNarrationImportRunning,
   type OfflineNarrationApi,
 } from "./narrationPack/offlineNarration";
+import { narrationCoverageOf } from "./narrationPack/coverage";
 import { buildNarrationRequestPack } from "./narrationPack/requestPack";
 import { defaultRuntimeModeOf, type StudioRuntimeMode } from "./plan";
 import { parseRuntimeModeParam, shouldAutostartRender } from "./renderLaunch";
@@ -742,6 +743,28 @@ export default function StudioController() {
   // the ones narrateLesson and the render make, from the same setup.
   // Only where the Burmese voice exists at all: without it no render looks
   // these takes up.
+  /** These lessons as a render narrates them; throws naming the ones it cannot. */
+  const narrationLessonsOf = (slugs: readonly string[], cannotBe: string) => {
+    const lessons = [];
+    const failures: string[] = [];
+    for (const slug of slugs) {
+      try {
+        const { script, voiceProfile } = narrationSetupOf(slug);
+        lessons.push({ slug, script, voiceProfile });
+      } catch (error) {
+        failures.push(`${slug}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (failures.length > 0) {
+      const shown = failures.slice(0, 3).join("; ");
+      throw new Error(
+        failures.length > 3
+          ? `${failures.length} lessons cannot be ${cannotBe}. ${shown}; …`
+          : shown,
+      );
+    }
+    return lessons;
+  };
   const offlineNarration: OfflineNarrationApi | null = studioCapabilities.burmeseVoxCpm2
     ? {
         exportBlockedReason:
@@ -750,28 +773,11 @@ export default function StudioController() {
             : !selectedVoiceIsBurmeseReady
               ? NARRATOR_REFERENCE_NEEDED
               : null,
-        exportRequests: async (slugs) => {
-          const lessons = [];
-          const failures: string[] = [];
-          for (const slug of slugs) {
-            try {
-              const { script, voiceProfile } = narrationSetupOf(slug);
-              lessons.push({ slug, script, voiceProfile });
-            } catch (error) {
-              failures.push(`${slug}: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          }
-          if (failures.length > 0) {
-            const shown = failures.slice(0, 3).join("; ");
-            throw new Error(
-              failures.length > 3
-                ? `${failures.length} lessons cannot be exported. ${shown}; …`
-                : shown,
-            );
-          }
-          return buildNarrationRequestPack(lessons);
-        },
+        exportRequests: async (slugs) =>
+          buildNarrationRequestPack(narrationLessonsOf(slugs, "exported")),
         importAudio: (files, onProgress) => importNarrationAudio(files, { onProgress }),
+        coverageOf: async (slugs, signal) =>
+          narrationCoverageOf(narrationLessonsOf(slugs, "counted"), { signal }),
       }
     : null;
 

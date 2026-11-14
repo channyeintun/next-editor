@@ -24,8 +24,21 @@ lands in the browser under the right hashes:
    Google Drive makes when you download their folder (a folder you zipped yourself works too). Each
    take is checked the way a render checks a cached take, then filed under its hash. Renders and
    workflows wait until the import has finished, so none of them buys a take that is on its way in.
-4. **Render.** Start the workflow as usual, with "Narrate every lesson first" on. The narration pass
-   finds every dialog in the browser and finishes at once; nothing is sent to Modal.
+4. **Check.** With lessons picked, the section says how many of them have all their narration in
+   this browser, and how many dialogs a render would still ask the speech service for. When only
+   some are whole, **Pick only the … lessons with all their narration** narrows the selection to
+   those.
+5. **Render.** Start the workflow as usual, with "Narrate every lesson first" on. For the lessons
+   that are whole, the narration pass finds every dialog in the browser and finishes at once;
+   nothing is sent to Modal.
+
+**A part is not a lesson.** Each `audio-NNNN.zip` holds the next 25 dialogs or so (fewer when ten
+minutes pass first, or when a lesson ends), whichever lessons they belong to. A lesson has about 40
+dialogs, so 36 parts are about 19 lessons, not 36. A lesson with even one dialog missing still
+renders, and the studio then asks the hosted voice for what is missing, at its price. To know
+which lessons are whole, read the notebook's output (steps 5, 7 and 8 list them, and each lesson
+is named in the log once all its audio is written), `progress.txt` in the Drive folder, or the
+studio's count in step 4.
 
 The export and the import must happen in the same browser profile, with the same narrator reference
 selected: the hash includes the narrator.
@@ -51,34 +64,31 @@ the account a GPU" below has the ways to go on that the rules allow.
 
 ## What to expect
 
-The notebook has run on a free Colab GPU (the first 36 Architect Path lessons, November 2026), but
-its pace there was not recorded, so the numbers below are still estimates. Step 6 of the notebook
-synthesizes two dialogs, plays one, and prints the pace and the time the rest will take, so each
-run answers these for itself.
+The numbers below are from the one run so far, read from the parts it wrote: a free Colab GPU in
+November 2026 (its model was not recorded), with the default settings. It made 843 dialogs of the Architect Path course, 153 minutes of audio. Its first part and its last are 5 hours 18 minutes apart, and the session ended some time after the last.
+Step 6 of the notebook synthesizes two dialogs, plays one, and prints the pace and the time the
+rest will take, so each run answers these for itself.
 
 - **Fit.** The model's authors give about 8 GB of GPU memory for VoxCPM2. A T4 has about 15 GB
-  usable.
-- **Pace.** On the hosted GPUs, synthesis takes about as long as the audio on an A10G or L40S and
-  about 1.7 to 1.9 times as long on an L4 (from Modal's billing). A T4 has no fast path for the
-  model's number format (bfloat16), so expect it to be slower than an L4: an estimate of 2.5 to 3.5
-  times the audio's length, which nothing public confirms.
+  usable. The run had no failed dialog; its longest take was 27 seconds of audio.
+- **Pace.** 2.1 times the audio's length on that free Colab GPU (parts 3 to 36: 153 minutes of audio in 318 minutes), about 125 ms of work for each character of narration. On the hosted GPUs, synthesis takes about as long as the audio on an A10G
+  or L40S and about 1.7 to 1.9 times as long on an L4 (from Modal's billing).
 - **The float16 switch.** It may be faster on a T4, and it is untested: nobody has published what
   the model sounds like in float16. Its takes go to a separate `pack-<date>-float16` folder, so
   they never mix with the others. Listen to step 6's sample first. Once imported, the studio cannot
   tell these takes from the hosted voice's.
 - **Sessions.** Colab's free tier runs a notebook for at most 12 hours, ends idle sessions, and
-  rations GPU time without publishing the limits. A long batch takes several sessions. The notebook
-  is written for that: it writes a part every 25 dialogs, and run again it goes on from the parts
-  already written. For a later session, paste the path step 5 printed into `PACK_PATH` (or upload
+  rations GPU time without publishing the limits. The one run so far wrote parts for 5 hours 18 minutes before it ended. A long batch takes several sessions. The notebook
+  is written for that: it writes a part every 25 dialogs or sooner (when a lesson ends, or ten minutes pass), and run again it goes on from the parts already written. For a later session, paste the path step 5 printed into `PACK_PATH` (or upload
   the same request file again). Keep the tab open while it works.
 - **Saving.** Audio saved to Google Drive survives the session. Let step 8 finish before you
   download the folder or disconnect: Drive takes files in the background, and step 8 waits until it
   has them all. The other setting keeps the audio on the runtime only, where a session that ends
   takes all of it along, finished or not.
-- **Size.** FLAC takes are about half the size of WAV: roughly 3 MB per minute of speech.
+- **Size.** FLAC takes are well under half the size of WAV: 2.2 MB per minute of speech.
 
-For scale, the 56 Architect Path lessons are about 7.5 hours of narration: on a T4 at the estimated
-pace, 19 to 26 hours of GPU time.
+For scale, the 56 Architect Path lessons are 2,368 dialogs, about 7 hours of speech: at the measured
+pace, about 15 hours of GPU time, so three sessions as long as the first.
 
 ## When something goes wrong
 
@@ -103,6 +113,11 @@ pace, 19 to 26 hours of GPU time.
 - **"Could not write to …" or "Google Drive is not mounted."** The Drive folder stopped answering.
   Run step 5 again (it mounts Drive again), then the step that stopped. The takes not yet written
   out are made again; the parts already on Drive are kept.
+- **A render synthesizes dialogs although the audio was imported.** The imported parts did not
+  hold every dialog of that lesson: a part is a few dozen dialogs, not a lesson (see "A part is not
+  a lesson" above). Stop the workflow, pick the lessons again, and read the count under **Narrate on
+  Google Colab**: it names the lessons that lack audio. Takes the hosted voice made before you
+  stopped are kept, and the next export leaves them out.
 - **The import reports files it could not use.** The message names the first file and the reason:
   not 48 kHz mono 16-bit audio, silent, or not a readable zip. Those dialogs have no take; export
   again to get a pack of just the missing ones.
@@ -113,9 +128,10 @@ pace, 19 to 26 hours of GPU time.
 ## For maintainers
 
 - The offline narration domain is `src/studio/narrationPack/`: `requestPack.ts` (export),
-  `audioImport.ts`, `zipDirectory.ts` and `flac.ts` (import), `offlineNarration.ts` (what is running
-  and how it ended, kept in a store so the console can hold renders back during an import), and
-  `OfflineNarrationSection.tsx` (the Workflow tab's controls). The requests come from the Director
+  `audioImport.ts`, `zipDirectory.ts` and `flac.ts` (import), `coverage.ts` (which picked lessons
+  have all their takes here), `offlineNarration.ts` (what is running and how it ended, kept in a
+  store so the console can hold renders back during an import), and `OfflineNarrationSection.tsx`
+  (the Workflow tab's controls). The requests come from the Director
   (`narrationRequestsOf` in `inPageDirector.ts`) and are never derived a second time.
 - Zips are read by their directory, never split from the front: a zip made by a streaming zipper
   (Finder, most folder downloads) does not say where an entry ends until after its data.
@@ -128,5 +144,8 @@ pace, 19 to 26 hours of GPU time.
   dialog) differ from the notebook's. After changing the prompt, the profile or either Python file,
   rebuild the notebook.
 - The batch code is tested without a GPU: `python3 integrations/colab/narration_batch_test.py`.
+- The notebook counts by lesson with `LessonProgress` (in `narration_batch.py`): it ends a part
+  where a lesson ends, names each lesson in the log once its audio is written, and rewrites
+  `progress.txt` beside the parts after every part.
 - A take made on another GPU is not sample-for-sample the hosted one for the same seed. It is a
   take of the same request, filed under the same hash.

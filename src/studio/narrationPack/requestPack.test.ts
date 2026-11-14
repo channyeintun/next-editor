@@ -144,6 +144,13 @@ describe("buildNarrationRequestPack", () => {
 
     expect(exported.pack?.dialogs.map((dialog) => dialog.hash)).toEqual(["intro#1", "intro#2"]);
     expect(deps.hasCached).toHaveBeenCalledTimes(2);
+    // The notebook counts the one take towards both lessons: neither is whole without it.
+    expect(
+      exported.pack?.dialogs.map(({ lesson, sharedWith }) => ({ lesson, sharedWith })),
+    ).toEqual([
+      { lesson: "intro", sharedWith: ["intro-again"] },
+      { lesson: "intro", sharedWith: ["intro-again"] },
+    ]);
   });
 
   it("refuses a lesson that another voice narrates, naming it", async () => {
