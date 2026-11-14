@@ -45,11 +45,16 @@ The same list has "creating deepfakes", with no definition. Narrating your own l
 voice, labelled as AI-generated, is not what that word usually means, but Google does not say where
 the line is. Use the notebook only with your own voice or one you have permission to use.
 
+The list also has "using multiple accounts to work around access or resource usage restrictions".
+A second Google account, opened because the first one is refused a GPU, is that. "Colab stops giving
+the account a GPU" below has the ways to go on that the rules allow.
+
 ## What to expect
 
-None of this has been measured on Colab yet: the notebook was checked against a stand-in model, not
-on a Colab GPU. Step 6 of the notebook synthesizes two dialogs, plays one, and prints the pace and
-the time the rest will take, so the first run answers these.
+The notebook has run on a free Colab GPU (the first 36 Architect Path lessons, November 2026), but
+its pace there was not recorded, so the numbers below are still estimates. Step 6 of the notebook
+synthesizes two dialogs, plays one, and prints the pace and the time the rest will take, so each
+run answers these for itself.
 
 - **Fit.** The model's authors give about 8 GB of GPU memory for VoxCPM2. A T4 has about 15 GB
   usable.
@@ -84,6 +89,15 @@ pace, 19 to 26 hours of GPU time.
   VoxCPM 2.0.3 asks for Python 3.10 or newer and PyTorch 2.5 or newer; the notebook keeps Colab's
   own PyTorch. Read pip's message for the package that does not install.
 - **"This runtime has no GPU."** Runtime → Change runtime type → T4 GPU, then run all again.
+- **Colab stops giving the account a GPU** (its message names "usage limits"). The free tier rations
+  GPU time and does not publish the limits or when they lift. The parts already on Drive are kept.
+  To go on:
+  - Wait until Colab gives the account a GPU again, then run all with the same request file. It
+    goes on from the parts on Drive.
+  - Or buy compute units for the same account and run all again.
+  - Or import what is finished, then export the same lessons again. The new request file holds only
+    the dialogs still missing. Run it through the notebook in a later session, or skip the export
+    and let a normal render ask the hosted voice for just those dialogs.
 - **Dialogs fail one after another.** Five in a row end the run: the cause is then the runtime
   (out of memory, a lost GPU), not a dialog. Restart the runtime and run all again.
 - **"Could not write to …" or "Google Drive is not mounted."** The Drive folder stopped answering.
