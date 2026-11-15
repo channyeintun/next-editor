@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="my">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architect Path poster</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&family=Google+Sans+Code:wght@400..700&family=Noto+Sans+Myanmar:wght@400;500;700&display=block"
+    />
+    <!--
+      Architect Path course (Burmese) poster for social media feeds, 1080×1350 (4:5 portrait).
+      architect-path-poster.png is a screenshot of #poster at 2× (2160×2700).
+
+      It belongs with the lesson thumbnails (architect-path-thumbnail.html): the lesson's dark
+      whiteboard, the brand colours and type, the file tab, the language pill, the Next Editor
+      mark. The board holds the course itself: its ten parts as ten stops on one route, with
+      the names the course guide uses. Yellow is the one thing in focus (the 56 lessons and
+      where the route ends); teal is the first half of the route, purple the second.
+
+      The numbers are the published course's: 56 lessons, 7 h 22 min in total, ten parts.
+    -->
+    <style>
+      :root {
+        --ground: #0c0f16;
+        --panel: #131722;
+        --rule: #2a3142;
+        --cream: #ece9e0;
+        --dim: #8d96a9;
+        --yellow: #ffd255;
+        --teal: #4de5d6;
+        --purple: #a394ff;
+        --pill: #6d57ff;
+        --sans: "Google Sans", "Noto Sans Myanmar", system-ui, sans-serif;
+        --mono: "Google Sans Code", ui-monospace, monospace;
+        --mm: "Noto Sans Myanmar", "Google Sans", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: max-content;
+        padding: 32px;
+        background: #2b2b2e;
+        font-family: var(--sans);
+      }
+
+      #poster {
+        position: relative;
+        width: 1080px;
+        height: 1350px;
+        overflow: hidden;
+        color: var(--cream);
+        background-color: var(--ground);
+        background-image: radial-gradient(rgb(236 233 224 / 0.075) 1.6px, transparent 1.6px);
+        background-size: 32px 32px;
+        background-position: 16px 16px;
+      }
+
+      /* Burmese is never letter-spaced and needs room above and below its line. */
+      .mm {
+        font-family: var(--mm);
+        letter-spacing: 0;
+      }
+
+      .top {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .tag,
+      .lang {
+        padding: 7px 26px 9px;
+        border-radius: 999px;
+        font: 700 28px/1.5 var(--mm);
+      }
+
+      .tag {
+        border: 3px solid var(--teal);
+        color: var(--teal);
+      }
+
+      .lang {
+        border: 3px solid var(--pill);
+        background: var(--pill);
+        color: #fff;
+      }
+
+      .title {
+        position: absolute;
+        left: 64px;
+        top: 146px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        font: 700 122px/1 var(--sans);
+        letter-spacing: -0.025em;
+        white-space: nowrap;
+      }
+
+      .title svg {
+        flex: none;
+        width: 118px;
+        height: 82px;
+      }
+
+      .hook {
+        position: absolute;
+        left: 64px;
+        top: 274px;
+        margin: 0;
+        font: 700 70px/1.5 var(--sans);
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+      }
+
+      .hook .to {
+        color: var(--teal);
+      }
+
+      /* The board on the left, the numbers on the right, between the same two edges. */
+      .body {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 432px;
+        height: 632px;
+        display: grid;
+        grid-template-columns: 572px 1fr;
+        column-gap: 44px;
+      }
+
+      .board {
+        position: relative;
+        padding: 48px 30px 26px;
+        border: 3px solid var(--rule);
+        border-radius: 28px;
+        background: var(--panel);
+      }
+
+      .tab {
+        position: absolute;
+        left: 30px;
+        top: -25px;
+        height: 46px;
+        padding: 0 20px;
+        display: flex;
+        align-items: center;
+        border-radius: 23px;
+        background: var(--cream);
+        color: var(--ground);
+        font: 700 23px/1 var(--mono);
+      }
+
+      .route {
+        position: relative;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        list-style: none;
+      }
+
+      /* The route runs from the first stop to the last, through the middle of each. */
+      .route::before {
+        content: "";
+        position: absolute;
+        left: 16px;
+        top: 5%;
+        bottom: 5%;
+        width: 8px;
+        border-radius: 4px;
+        background: var(--cream);
+      }
+
+      .route li {
+        position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .stop {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--teal);
+        color: var(--ground);
+        font: 700 19px/1 var(--mono);
+      }
+
+      .later .stop {
+        background: var(--purple);
+      }
+
+      .last .stop {
+        background: var(--yellow);
+      }
+
+      .name {
+        font: 600 32px/1.6 var(--sans);
+        white-space: nowrap;
+      }
+
+      .flag {
+        flex: none;
+        width: 30px;
+        height: 36px;
+        margin-left: -4px;
+      }
+
+      .numbers {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 6px 0 2px;
+      }
+
+      .n56 {
+        margin-left: -14px;
+        font: 700 312px/0.78 var(--sans);
+        letter-spacing: -0.05em;
+        color: var(--yellow);
+      }
+
+      .n56-label {
+        margin-top: 14px;
+        font: 700 52px/1.5 var(--mm);
+        color: var(--yellow);
+      }
+
+      .pair {
+        padding-top: 22px;
+        border-top: 3px solid var(--rule);
+      }
+
+      .stat {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+      }
+
+      .stat .num {
+        min-width: 132px;
+        font: 700 96px/1.16 var(--sans);
+        letter-spacing: -0.03em;
+      }
+
+      /* A Burmese label sits low on a shared baseline; lift it to the numeral's. */
+      .stat .lbl {
+        position: relative;
+        top: -7px;
+        font: 700 42px/1.5 var(--mm);
+      }
+
+      .teal {
+        color: var(--teal);
+      }
+
+      .purple {
+        color: var(--purple);
+      }
+
+      .cta {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 1094px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .cta-line {
+        font: 700 54px/1.5 var(--mm);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 700 32px/1 var(--sans);
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 54px;
+        height: 54px;
+      }
+
+      /* Where to go, set like an address bar. */
+      .url {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        top: 1198px;
+        height: 78px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid var(--rule);
+        border-radius: 39px;
+        background: var(--panel);
+        color: var(--yellow);
+        font: 600 32px/1 var(--mono);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="poster">
+      <div class="top">
+        <span class="tag">သင်တန်းသစ်</span>
+        <span class="lang">မြန်မာလို</span>
+      </div>
+
+      <h1 class="title">
+        <svg viewBox="0 0 52 36" aria-hidden="true">
+          <path
+            d="M6,28 C22,28 18,8 34,8 H44"
+            fill="none"
+            stroke="#ece9e0"
+            stroke-width="4"
+            stroke-linecap="round"
+          />
+          <circle cx="6" cy="28" r="5" fill="#ece9e0" />
+          <circle cx="44" cy="8" r="6.5" fill="#ffd255" />
+        </svg>
+        Architect Path
+      </h1>
+
+      <p class="hook">Developer ကနေ <span class="to">Architect ဆီ</span></p>
+
+      <div class="body">
+        <section class="board">
+          <div class="tab">architect-path/README.md</div>
+          <ol class="route">
+            <li><span class="stop">01</span><span class="name">Architect အမြင်</span></li>
+            <li><span class="stop">02</span><span class="name">Module နဲ့ coupling</span></li>
+            <li>
+              <span class="stop">03</span><span class="name">Architecture characteristic</span>
+            </li>
+            <li><span class="stop">04</span><span class="name">Architecture style</span></li>
+            <li><span class="stop">05</span><span class="name">Domain ကို နားလည်ခြင်း</span></li>
+            <li class="later"><span class="stop">06</span><span class="name">Data</span></li>
+            <li class="later">
+              <span class="stop">07</span><span class="name">Distributed architecture</span>
+            </li>
+            <li class="later"><span class="stop">08</span><span class="name">Production</span></li>
+            <li class="later">
+              <span class="stop">09</span><span class="name">Evolution နဲ့ governance</span>
+            </li>
+            <li class="last">
+              <span class="stop">10</span><span class="name">လူနဲ့ အဖွဲ့အစည်း</span>
+              <svg class="flag" viewBox="0 0 30 36" aria-hidden="true">
+                <path d="M5,3 V33" stroke="#ece9e0" stroke-width="4" stroke-linecap="round" />
+                <path d="M7,4 L28,11 L7,18 Z" fill="#ffd255" />
+              </svg>
+            </li>
+          </ol>
+        </section>
+
+        <aside class="numbers">
+          <div>
+            <div class="n56">56</div>
+            <div class="n56-label">သင်ခန်းစာ</div>
+          </div>
+          <div class="pair">
+            <div class="stat"><span class="num teal">7+</span><span class="lbl">နာရီ</span></div>
+            <div class="stat"><span class="num purple">10</span><span class="lbl">အပိုင်း</span></div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="cta">
+        <div class="cta-line">အခမဲ့ လေ့လာနိုင်ပါပြီ</div>
+        <div class="brand">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true">
+            <defs>
+              <linearGradient
+                id="g2c"
+                x1="300"
+                y1="312"
+                x2="724"
+                y2="712"
+                gradientUnits="userSpaceOnUse"
+              >
+                <stop stop-color="#4DE5D6" />
+                <stop offset="0.5" stop-color="#FFD255" />
+                <stop offset="1" stop-color="#6D57FF" />
+              </linearGradient>
+            </defs>
+            <rect
+              x="72"
+              y="72"
+              width="880"
+              height="880"
+              rx="200"
+              fill="#0B0E14"
+              stroke="#2a3142"
+              stroke-width="36"
+            />
+            <polygon
+              points="300,712 300,312 420,312 604,548 604,312 724,312 724,712 604,712 420,476 420,712"
+              fill="url(#g2c)"
+            />
+          </svg>
+          Next Editor
+        </div>
+      </div>
+
+      <div class="url">nexteditor.dev/learn/playlist/architect-path</div>
+    </div>
+  </body>
+</html>
