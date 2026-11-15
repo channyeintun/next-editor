@@ -93,6 +93,15 @@ export const selectIsTakeInProgress = (state: EditorMachineSnapshot) =>
 export const selectIsPlaying = (state: EditorMachineSnapshot) =>
   state.matches({ playback: "playing" });
 
+/**
+ * Playing, but held for the narration: the timeline waits until the sound that belongs
+ * to this moment has loaded. selectIsPlaying stays true meanwhile. Not part of the
+ * metadata: a seek holds for a few milliseconds, and that must not re-render everything
+ * that reads a flag.
+ */
+export const selectIsBuffering = (state: EditorMachineSnapshot) =>
+  state.matches({ playback: { playing: "buffering" } });
+
 // Timeline selectors (high-frequency updates)
 export const selectPlaybackSpeed = (state: EditorMachineSnapshot) => state.context.timeline.speed;
 export const selectVolume = (state: EditorMachineSnapshot) => state.context.timeline.volume;

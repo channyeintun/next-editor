@@ -55,14 +55,16 @@ export const loadRecordingActor = fromPromise<
 
   let duration = normalizeTimelineDuration(recording.duration);
 
+  // Only a narration in memory is measured. One that is streamed from its URL is not
+  // downloaded for this: the recording's own duration stands.
   const playbackAudioState = getPlaybackAudioState(recording);
-  if (playbackAudioState?.finalized && recording.audioSource !== "external") {
+  const narrationBlob = playbackAudioState?.blob;
+  if (playbackAudioState?.finalized && narrationBlob && recording.audioSource !== "external") {
     try {
       // An edit above already knows its output's length from the samples it
       // encoded, so only an unedited file is decoded to measure it.
       const exactDurationMs =
-        editedAudioDurationMs ??
-        (await measureAudioDurationSeconds(playbackAudioState.blob)) * 1000;
+        editedAudioDurationMs ?? (await measureAudioDurationSeconds(narrationBlob)) * 1000;
       // Use audio duration as the source of truth if it exists
       // This prevents trailing silence from wall-clock overhead
       duration = normalizeTimelineDuration(exactDurationMs, duration);

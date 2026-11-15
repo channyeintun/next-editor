@@ -19,6 +19,7 @@ import MediaControls from "./MediaControls";
 import DragDropOverlay from "./DragDropOverlay";
 import SlidePanel from "./SlidePanel";
 import FloatingPlayButton from "./FloatingPlayButton";
+import PlaybackBufferingIndicator from "./PlaybackBufferingIndicator";
 import { NextEditorProvider } from "../contexts/NextEditorProvider.tsx";
 import { PreviewAdapterHandleProvider } from "../contexts/PreviewAdapterHandleContext";
 import { SlidesStoreProvider } from "../contexts/SlidesStoreContext";
@@ -33,7 +34,6 @@ import { CollaborationVoiceProvider } from "../contexts/CollaborationVoiceContex
 import { PreviewPanelProvider } from "../contexts/PreviewPanelContext";
 import { useDragAndDropUrl } from "../hooks/useDragAndDropUrl";
 import { useUrlLoader } from "../hooks/useUrlLoader";
-import { whenNarrationMayDownload } from "../hooks/narrationDownloadGate";
 import { useUrlQuery } from "../hooks/useUrlQuery";
 import { POSTHOG_SENSITIVE_ROOT_CLASS } from "../utils/posthogExceptionFilter";
 import { isReadOnlyView } from "../utils/embed";
@@ -145,7 +145,7 @@ function EditorLayout({
   const { editorActor, playbackSpeed, volume } = useNextEditorPlayback();
   // One loader for the `?url=` lesson and for drops, so whichever load is newest wins and its
   // state is the one shown. A URL lesson's narration waits for Monaco's chunk, or for Play.
-  const recordingLoader = useUrlLoader((signal) => whenNarrationMayDownload(editorActor, signal));
+  const recordingLoader = useUrlLoader();
   useUrlQuery(recordingLoader, recordingUrl);
   const { isDragging } = useDragAndDropUrl(recordingLoader);
   const {
@@ -309,6 +309,7 @@ function EditorLayout({
       <DragDropOverlay isDragging={isDragging} />
 
       {!recordingLoading && !loadError ? <FloatingPlayButton /> : null}
+      <PlaybackBufferingIndicator />
 
       {postRecordingTarget && !collaboration?.provider && renderPostRecordingModal
         ? renderPostRecordingModal({

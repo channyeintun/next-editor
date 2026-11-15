@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import { NextEditorActorContext } from "../../contexts/NextEditorActorContext";
-import { selectIsPlaying } from "../../core/src/useNextEditor";
+import { selectIsBuffering, selectIsPlaying } from "../../core/src/useNextEditor";
 import { mapRecordingTimeToMediaTime, type MediaSpan } from "../../core/src/utils/mediaSpans";
 
 const DRIFT_THRESHOLD_MS = 250;
@@ -102,7 +102,19 @@ export function useTimelineSyncedVideo(
     void video.play().catch(() => {});
 
     let animationFrameId = 0;
+    // The timeline can be held for the narration (a slow connection). The camera waits
+    // with it, rather than running on and being pulled back every DRIFT_THRESHOLD_MS.
+    let heldForNarration = false;
     const syncVideo = () => {
+      const held = selectIsBuffering(actorRef.getSnapshot());
+      if (held !== heldForNarration) {
+        heldForNarration = held;
+        if (held) {
+          video.pause();
+        } else {
+          void video.play().catch(() => {});
+        }
+      }
       applyTimeline();
       animationFrameId = requestAnimationFrame(syncVideo);
     };

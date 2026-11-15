@@ -5,10 +5,15 @@ import type { MediaSpan } from "../../core/src/utils/mediaSpans";
 
 const editor = vi.hoisted(() => {
   const timeline = { currentTime: 0, speed: 1 };
-  const state = { playing: false };
+  const state = { playing: false, buffering: false };
   const listeners = new Set<() => void>();
   const actor = {
-    getSnapshot: () => ({ matches: () => state.playing, context: { timeline } }),
+    getSnapshot: () => ({
+      // `{ playback: "playing" }`, or the held substate `{ playback: { playing: "buffering" } }`.
+      matches: (value: { playback: unknown }) =>
+        typeof value.playback === "string" ? state.playing : state.playing && state.buffering,
+      context: { timeline },
+    }),
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return { unsubscribe: () => listeners.delete(listener) };
@@ -68,6 +73,7 @@ afterEach(() => {
   editor.timeline.currentTime = 0;
   editor.timeline.speed = 1;
   editor.state.playing = false;
+  editor.state.buffering = false;
 });
 
 const runNextFrame = () => {
@@ -133,5 +139,28 @@ describe("useTimelineSyncedVideo", () => {
     unmount();
     expect(video.handlers.has("playing")).toBe(false);
     expect(cancelAnimationFrame).toHaveBeenCalled();
+  });
+
+  // A slow connection: the timeline stops until the narration has sound. A camera that ran
+  // on was pulled back to the held frame every quarter second.
+  it("waits with a timeline that is held for the narration", () => {
+    editor.state.playing = true;
+    const video = fakeVideo();
+    const { unmount } = syncVideo(video);
+    expect(video.play).toHaveBeenCalledTimes(1);
+
+    runNextFrame();
+    expect(video.pause).not.toHaveBeenCalled();
+
+    editor.state.buffering = true;
+    runNextFrame();
+    runNextFrame();
+    expect(video.pause).toHaveBeenCalledTimes(1);
+
+    editor.state.buffering = false;
+    runNextFrame();
+    expect(video.play).toHaveBeenCalledTimes(2);
+
+    unmount();
   });
 });

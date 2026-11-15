@@ -78,19 +78,15 @@ describe("useWhiteboardPanelPrefetch", () => {
     expect(prefetchWhiteboardPanel).not.toHaveBeenCalled();
   });
 
-  it("waits for the narration download first", async () => {
-    const downloading = recordingWith({
-      whiteboardEvents: OPENS_BOARD,
-      audioUrl: "https://example.com/lesson.ogg",
-    });
-    const { rerender } = renderPrefetch(downloading);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(whenCodeEditorLoaded).not.toHaveBeenCalled();
-    expect(prefetchWhiteboardPanelWhenIdle).not.toHaveBeenCalled();
+  // The player streams the narration while the lesson plays; none of it is in memory.
+  it("does not wait for a narration that is only streamed from its URL", async () => {
+    renderPrefetch(
+      recordingWith({
+        whiteboardEvents: OPENS_BOARD,
+        audioUrl: "https://example.com/lesson.ogg",
+      }),
+    );
 
-    rerender({ recording: narratedBoardLesson, isPlaying: false });
     await loadEditorChunk();
 
     expect(prefetchWhiteboardPanelWhenIdle).toHaveBeenCalledTimes(1);

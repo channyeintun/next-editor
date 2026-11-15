@@ -207,18 +207,17 @@ export async function fetchSiblingCaptions(
 }
 
 /**
- * Finds a working audio candidate (a sibling file referenced by `audioFile` / `audioUrl`, or
- * the `.ne` basename fallback) and downloads it, without touching the recording — the caller
- * applies the result via `extendRecording` on top of any camera fix, so the two out-of-band
- * resolutions never race and clobber each other. `beforeDownload` is awaited once, only when
- * there is a candidate to download, before the first request.
+ * Finds the narration's working URL. Playback streams `audioUrl` through an <audio> element,
+ * which fails without saying why, so a renamed or re-hosted `.ne` gets its candidates probed
+ * (cheaply, no download) before one is trusted. Returns `null` when the narration is already
+ * in memory, when the current URL is the only candidate (nothing to choose from: the player
+ * finds out whether it works) or probes fine, or when nothing works.
  */
-export async function findWorkingAudioBlob(
+export async function findWorkingAudioUrl(
   recording: Recording,
   neUrl: string | undefined,
   signal?: AbortSignal,
-  beforeDownload?: () => Promise<void>,
-): Promise<{ url: string; blob: Blob } | null> {
+): Promise<string | null> {
   if (recording.audioBlob instanceof Blob) {
     return null;
   }
@@ -229,45 +228,29 @@ export async function findWorkingAudioBlob(
     DEFAULT_AUDIO_EXTENSION,
     recording.audioSource === "external",
   );
-  if (candidates.length > 0 && beforeDownload) {
-    await beforeDownload();
+  if (
+    candidates.length === 0 ||
+    (candidates.length === 1 && candidates[0] === recording.audioUrl)
+  ) {
+    return null;
   }
   for (const url of candidates) {
-    signal?.throwIfAborted();
-    try {
-      const response = await fetchNextEditorUrl(url, { signal });
-      if (!response.ok) {
-        console.warn(`External audio fetch failed (${response.status}): ${url}`);
-        continue;
-      }
-      const raw = await response.blob();
-      if (raw.size === 0 || raw.type.includes("text/html")) {
-        continue;
-      }
-      // Some hosts serve sibling audio without a usable content type; fall back to the
-      // extension-derived MIME so `decodeAudioData` and track metadata behave.
-      const type =
-        raw.type ||
-        (audioMimeFromFilename(recording.audioFile ?? url) ??
-          AUDIO_MIME_BY_EXT[DEFAULT_AUDIO_EXTENSION]);
-      const blob = raw.type === type ? raw : new Blob([raw], { type });
-      return { url, blob };
-    } catch (err) {
-      // An abort ends the search (the lesson was left); it says nothing about this candidate.
-      if (signal?.aborted) throw err;
-      console.warn(`Failed to fetch external audio from ${url}:`, err);
+    if (await probeMediaUrl(url, signal)) {
+      return url !== recording.audioUrl ? url : null;
     }
   }
+  console.warn("External audio probe failed for all candidates:", candidates);
   return null;
 }
 
 /**
- * The recording's narration as a Blob: a take holds it in memory, an imported lesson may only
- * link it by `audioUrl`. Null when it has neither; a failed download throws with its status.
- * The edit panel draws its waveform from this and caption generation transcribes it.
+ * The recording's narration as a Blob: a take holds it in memory, a lesson loaded from a URL
+ * only links it by `audioUrl` (playback streams it). Null when it has neither; a failed
+ * download throws with its status. The edit panel draws its waveform from this, caption
+ * generation transcribes it, and an export or upload writes it out (withNarrationInMemory).
  */
 export async function loadRecordingNarration(
-  recording: Pick<Recording, "audioBlob" | "audioUrl">,
+  recording: Pick<Recording, "audioBlob" | "audioUrl" | "audioFile">,
 ): Promise<Blob | null> {
   if (recording.audioBlob instanceof Blob) return recording.audioBlob;
   if (!recording.audioUrl) return null;
@@ -277,7 +260,26 @@ export async function loadRecordingNarration(
     ? await fetchNextEditorUrl(recording.audioUrl)
     : await fetch(recording.audioUrl);
   if (!response.ok) throw new Error(`The narration could not be loaded (${response.status}).`);
-  return response.blob();
+  const raw = await response.blob();
+  // Some hosts serve sibling audio without a usable content type; fall back to the
+  // extension-derived MIME so `decodeAudioData`, track metadata and the exported file's
+  // extension behave.
+  const type =
+    raw.type ||
+    (audioMimeFromFilename(recording.audioFile ?? recording.audioUrl) ??
+      AUDIO_MIME_BY_EXT[DEFAULT_AUDIO_EXTENSION]);
+  return raw.type === type ? raw : new Blob([raw], { type });
+}
+
+/**
+ * The recording with its narration attached as `audioBlob`, downloading it first when it
+ * is only linked by `audioUrl`. Writing a recording out (an export, an upload) needs the
+ * bytes; the recording itself when it has no narration or already holds it.
+ */
+export async function withNarrationInMemory(recording: Recording): Promise<Recording> {
+  if (recording.audioBlob instanceof Blob) return recording;
+  const narration = await loadRecordingNarration(recording);
+  return narration && narration.size > 0 ? { ...recording, audioBlob: narration } : recording;
 }
 
 /**

@@ -9,6 +9,7 @@ import {
 } from "../contexts/NextEditorContext";
 import {
   selectDuration,
+  selectIsBuffering,
   selectLiveTime,
   selectNextEditorMetadata,
   selectPlaybackSpeed,
@@ -78,6 +79,12 @@ export const useNextEditorPlayback = (): NextEditorPlayback => {
  */
 export const useTimelineDurationMs = (): number =>
   NextEditorActorContext.useSelector(selectDuration);
+
+/**
+ * Whether the playing lesson is held for its narration (a slow connection). A flag of its
+ * own, not part of the metadata, so only what shows the wait re-renders with it.
+ */
+export const useIsBuffering = (): boolean => NextEditorActorContext.useSelector(selectIsBuffering);
 
 /**
  * Hook to access live playback time with high frequency.

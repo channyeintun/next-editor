@@ -1,5 +1,6 @@
 import type { CaptionCue, Recording } from "@app/core/src";
 import { buildRecordingFiles } from "@app/storage/recordingExport";
+import { withNarrationInMemory } from "@app/storage/recordingSiblingMedia";
 import { serializeCuesToVtt } from "@app/captions/serializeVtt";
 import { apiClient } from "../apiClient";
 import { DEFAULT_THUMBNAIL_PATH } from "../../lessons/defaultThumbnail";
@@ -79,7 +80,8 @@ export async function uploadLesson(
   });
 
   const files = await buildRecordingFiles(
-    input.recording,
+    // A lesson loaded from a URL only streams its narration; the upload needs the file.
+    await withNarrationInMemory(input.recording),
     lessonId,
     captionTargets.length > 0
       ? { captionFiles: captionTargets.map((target) => target.filename) }

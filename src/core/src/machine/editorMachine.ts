@@ -109,6 +109,8 @@ import {
   syncPlaybackAudioVolume,
   startPlaybackActors,
   pausePlaybackActors,
+  holdPlaybackForNarration,
+  releasePlaybackHold,
 } from "./playbackActors";
 import { reportMachineError } from "./machineError";
 import { isAtPlaybackEnd } from "./playbackValues";
@@ -364,10 +366,12 @@ export const editorMachine = setup({
       });
       syncPlaybackAudio(context, enqueue, {
         spawnIfMissing: true,
+        syncSource: true,
         seek: true,
         syncRate: true,
         syncVolume: true,
-        play: check(stateIn({ playback: "playing" })),
+        // Not while the timeline is held for the narration: a PLAY ends the hold.
+        play: check(stateIn({ playback: { playing: "running" } })),
       });
     }),
     // Timeline and narration sends — bodies live in playbackActors.ts.
@@ -378,6 +382,8 @@ export const editorMachine = setup({
     syncPlaybackAudioVolume: enqueueActions(syncPlaybackAudioVolume),
     startPlaybackActors: enqueueActions(startPlaybackActors),
     pausePlaybackActors: enqueueActions(pausePlaybackActors),
+    holdPlaybackForNarration: enqueueActions(holdPlaybackForNarration),
+    releasePlaybackHold: enqueueActions(releasePlaybackHold),
 
     // Shared/general — neither pure capture nor pure replay
     clearError: assign({ error: null }),
@@ -918,6 +924,7 @@ export const editorMachine = setup({
         },
 
         playing: {
+          initial: "running",
           entry: [
             "invalidateAppliedPlaybackState",
             "reopenRecordedFile",
@@ -925,6 +932,25 @@ export const editorMachine = setup({
             "startPlaybackActors",
           ],
           exit: "pausePlaybackActors",
+          // The lesson waits for its narration: while the player has no sound to give
+          // (a slow connection), the timeline is held and nothing replays, then both go
+          // on together. Still `playing` to the viewer, who can pause or seek meanwhile.
+          states: {
+            running: {
+              on: {
+                AUDIO_PLAYBACK_STALLED: "buffering",
+              },
+            },
+            buffering: {
+              entry: "holdPlaybackForNarration",
+              on: {
+                AUDIO_PLAYBACK_RESUMED: {
+                  target: "running",
+                  actions: "releasePlaybackHold",
+                },
+              },
+            },
+          },
           on: {
             PAUSE: {
               target: "paused",

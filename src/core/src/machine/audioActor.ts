@@ -30,6 +30,17 @@ const AUDIO_SYNC_DRIFT_THRESHOLD_MS = 500;
  */
 const AUDIO_EXACT_SYNC_EPSILON_MS = 50;
 
+/** `HTMLMediaElement.HAVE_FUTURE_DATA`: enough data to play on from the current position. */
+const HAVE_FUTURE_DATA = 3;
+
+/**
+ * How long a streamed narration waits before each reload after its element fails, one
+ * entry per attempt. A weak connection drops a download partway, and an element that
+ * failed stays silent for the rest of the lesson unless it is loaded again. Once these
+ * are used up the failure is reported; the next PLAY tries once more.
+ */
+const AUDIO_SOURCE_RETRY_DELAYS_MS = [1000, 2000, 4000];
+
 // ============================================================================
 // Audio Actor Types
 // ============================================================================
@@ -39,19 +50,22 @@ export interface AudioRecordingInput {
   deviceId?: string;
 }
 
-export interface AudioPlaybackInput {
+/** Where the narration plays from. At least one of the two is present. */
+export interface AudioPlaybackSource {
   /**
-   * Audio blob used for immediate playback after recording, before the lesson
-   * is published and an audioUrl is available. Always present; used as the
-   * source when audioUrl is absent.
+   * The narration in memory: a take that was just recorded, or a file the author
+   * picked or imported. Played when there is no usable audioUrl.
    */
-  blob: Blob;
+  blob?: Blob;
   /**
-   * Permanent URL for the audio track, set after the lesson is published and
-   * the audio is uploaded to storage. Takes precedence over the blob when
-   * present. Absent for in-progress or unpublished recordings.
+   * Where a published lesson's narration is stored. Takes precedence over the blob.
+   * A web URL is streamed: the element downloads it as it plays, so a long narration
+   * starts after its first seconds have arrived, not after the whole file.
    */
   audioUrl?: string;
+}
+
+export interface AudioPlaybackInput extends AudioPlaybackSource {
   /** Initial volume (0-1) */
   volume: number;
   /** Initial playback rate */
@@ -71,7 +85,14 @@ export type AudioPlaybackEvent =
   | { type: "SEEK"; timeMs: number }
   | { type: "SET_VOLUME"; volume: number }
   | { type: "SET_PLAYBACK_RATE"; rate: number }
-  | { type: "SYNC"; timeMs: number };
+  | { type: "SYNC"; timeMs: number }
+  /**
+   * The timeline stopped at `timeMs` to wait for this narration (the answer to
+   * AUDIO_PLAYBACK_STALLED). The element keeps loading; PLAY counts on from here.
+   */
+  | { type: "HOLD"; timeMs: number }
+  /** The recording's narration is now this one. Ignored when it is what already plays. */
+  | ({ type: "SET_SOURCE" } & AudioPlaybackSource);
 
 export type AudioRecordingEmit =
   | {
@@ -87,7 +108,11 @@ export type AudioRecordingEmit =
 export type AudioPlaybackEmit =
   | { type: "AUDIO_PLAYBACK_READY"; durationMs: number }
   | { type: "AUDIO_PLAYBACK_FINISHED" }
-  | { type: "AUDIO_PLAYBACK_ERROR"; error: string };
+  | { type: "AUDIO_PLAYBACK_ERROR"; error: string }
+  /** Asked to play, but the next stretch of sound has not arrived (or is being reloaded). */
+  | { type: "AUDIO_PLAYBACK_STALLED" }
+  /** No longer stalled: sound is flowing, or the narration ended or was given up on. */
+  | { type: "AUDIO_PLAYBACK_RESUMED" };
 
 // ============================================================================
 // Audio Recording Actor
@@ -242,6 +267,19 @@ export const audioRecordingActor = fromTypedCallback<
 // Audio Playback Actor
 // ============================================================================
 
+/** What the element is loaded from: a URL that passed the scheme check, or the blob. */
+type LoadedAudioSource = { url: string; blob?: undefined } | { url?: undefined; blob: Blob };
+
+/**
+ * The recording's audioUrl is decoded from the `.ne` header with no runtime validation,
+ * so it is scheme-checked before it reaches `src`. A rejected URL falls through to the
+ * blob, the same path a recording with no external audio takes.
+ */
+const resolveAudioSource = ({ audioUrl, blob }: AudioPlaybackSource): LoadedAudioSource | null => {
+  if (isAllowedRecordingMediaUrl(audioUrl)) return { url: audioUrl };
+  return blob ? { blob } : null;
+};
+
 /**
  * Audio playback actor — plays recording audio through a native HTMLAudioElement, synchronized to the
  * editor timeline. By bypassing Web Audio API decoding, startup is instant.
@@ -254,6 +292,12 @@ export const audioRecordingActor = fromTypedCallback<
  * `play()`'s real startup latency — can seek to where the timeline actually is
  * by then, instead of freezing in the startup lag forever. PLAY restarts the
  * count where PAUSE froze it.
+ *
+ * Buffering: a narration that is streamed from its URL can run out of data. The actor
+ * says so (AUDIO_PLAYBACK_STALLED, then AUDIO_PLAYBACK_RESUMED) and leaves the answer
+ * to its parent. A replay stops its timeline and sends HOLD, so the lesson waits for
+ * the sound instead of running on without it; a take ignores both and nothing changes
+ * for it.
  */
 export const audioPlaybackActor = fromTypedCallback<
   AudioPlaybackEvent,
@@ -263,6 +307,8 @@ export const audioPlaybackActor = fromTypedCallback<
   let disposed = false;
   const startOffsetMs = normalizeNonNegativeTime(input.startOffsetMs ?? 0);
   let requestedPlay = false;
+  // The parent stopped its timeline to wait for the narration (HOLD), until the next PLAY.
+  let held = false;
   // Timeline position last reported by the machine, and when it was reported.
   let lastKnownTimelineMs = normalizeNonNegativeTime(input.startPositionMs);
   let lastKnownAtPerf = performance.now();
@@ -271,17 +317,48 @@ export const audioPlaybackActor = fromTypedCallback<
   audio.crossOrigin = "anonymous";
   audio.preservesPitch = true;
 
+  let loadedSource: LoadedAudioSource | null = null;
   let currentObjectUrl: string | null = null;
-  // The recording's audioUrl is decoded from the `.ne` header with no runtime
-  // validation, so it is scheme-checked before it reaches `src`. A rejected URL
-  // falls through to the local blob, which is the same path a recording with no
-  // external audio already takes.
-  if (isAllowedRecordingMediaUrl(input.audioUrl)) {
-    audio.src = input.audioUrl;
-  } else {
-    currentObjectUrl = URL.createObjectURL(input.blob);
-    audio.src = currentObjectUrl;
-  }
+  // A web URL the element downloads as it plays. A blob, or a `blob:` URL, is already here.
+  let streamed = false;
+  // Reloads of a streamed narration after its element failed: the one waiting to run,
+  // and how many ran since sound last flowed.
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let failedLoads = 0;
+
+  const releaseObjectUrl = () => {
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+  };
+
+  const cancelRetry = () => {
+    if (retryTimer !== null) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+  };
+
+  const loadSource = (source: LoadedAudioSource) => {
+    cancelRetry();
+    failedLoads = 0;
+    releaseObjectUrl();
+    loadedSource = source;
+    streamed = source.url !== undefined && !/^blob:/i.test(source.url);
+    // Nothing plays the narration before PLAY, and a download started earlier only
+    // shares the connection with the code editor's chunk. PLAY lifts this.
+    if (streamed && !requestedPlay) audio.preload = "none";
+    if (source.url !== undefined) {
+      audio.src = source.url;
+    } else {
+      currentObjectUrl = URL.createObjectURL(source.blob);
+      audio.src = currentObjectUrl;
+    }
+  };
+
+  const initialSource = resolveAudioSource(input);
+  if (initialSource) loadSource(initialSource);
 
   audio.volume = normalizePlaybackVolume(input.volume);
   audio.playbackRate = normalizePlaybackSpeed(input.playbackRate);
@@ -291,14 +368,17 @@ export const audioPlaybackActor = fromTypedCallback<
     lastKnownAtPerf = performance.now();
   };
 
-  /** Where the machine's timeline is right now, extrapolated while playing. */
+  /** Where the machine's timeline is right now, extrapolated while it runs. */
   const currentTargetMs = () => {
-    const elapsed = requestedPlay ? (performance.now() - lastKnownAtPerf) * audio.playbackRate : 0;
+    const elapsed =
+      requestedPlay && !held ? (performance.now() - lastKnownAtPerf) * audio.playbackRate : 0;
     return lastKnownTimelineMs + elapsed;
   };
 
+  const targetSeconds = () => Math.max(0, currentTargetMs() - startOffsetMs) / 1000;
+
   const applyTargetTime = (driftThresholdMs: number) => {
-    const targetSec = Math.max(0, currentTargetMs() - startOffsetMs) / 1000;
+    const targetSec = targetSeconds();
     if (Math.abs(audio.currentTime - targetSec) > driftThresholdMs / 1000) {
       audio.currentTime = targetSec;
     }
@@ -306,6 +386,29 @@ export const audioPlaybackActor = fromTypedCallback<
 
   // Seek immediately on spawn if needed
   applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
+
+  // Whether the narration was asked to play and cannot: its next stretch has not
+  // arrived, or the element failed and is waiting to be loaded again. An element that is
+  // paused (a blocked play()), has ended, or failed for good is not waiting for anything.
+  const isStarved = () => {
+    if (!requestedPlay) return false;
+    if (retryTimer !== null) return true;
+    return !audio.paused && !audio.ended && !audio.error && audio.readyState < HAVE_FUTURE_DATA;
+  };
+
+  let reportedStarved = false;
+  const reportStarvation = () => {
+    if (disposed) return;
+    const starved = isStarved();
+    if (starved === reportedStarved) return;
+    reportedStarved = starved;
+    sendBack({ type: starved ? "AUDIO_PLAYBACK_STALLED" : "AUDIO_PLAYBACK_RESUMED" });
+  };
+
+  audio.onwaiting = reportStarvation;
+  audio.onpause = reportStarvation;
+  // A second sign that sound is flowing, for a browser that skips `playing` after a stall.
+  audio.ontimeupdate = reportStarvation;
 
   audio.onplaying = () => {
     if (disposed) return;
@@ -315,7 +418,10 @@ export const audioPlaybackActor = fromTypedCallback<
     // not persist below the SYNC dead zone for the rest of playback. The seek
     // this triggers refires `playing`, but the residual drift is then just the
     // seek latency, which lands inside the epsilon and terminates the cycle.
+    // A held timeline did not move meanwhile, so there is nothing to catch up with.
     applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
+    failedLoads = 0;
+    reportStarvation();
   };
 
   // MediaRecorder WebM, our own exported `.weba` narration included, reports
@@ -333,17 +439,16 @@ export const audioPlaybackActor = fromTypedCallback<
     lastReportedDurationMs = durationMs;
     sendBack({ type: "AUDIO_PLAYBACK_READY", durationMs });
   };
-  audio.oncanplay = reportDuration;
+  audio.oncanplay = () => {
+    reportDuration();
+    reportStarvation();
+  };
   audio.ondurationchange = reportDuration;
 
   audio.onended = () => {
     if (disposed) return;
     sendBack({ type: "AUDIO_PLAYBACK_FINISHED" });
-  };
-
-  audio.onerror = () => {
-    if (disposed) return;
-    sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" });
+    reportStarvation();
   };
 
   // An autoplay block rejects `play()` without raising a media error, so `onerror` never
@@ -352,8 +457,13 @@ export const audioPlaybackActor = fromTypedCallback<
   // AbortError (a pause() or src change interrupting play) is routine and stays ignored.
   let blockedReported = false;
   const playAudio = () => {
+    // From here on the element may load ahead of the playhead, through pauses too.
+    if (streamed) audio.preload = "auto";
     audio.play().catch((error: unknown) => {
-      if (disposed || blockedReported) return;
+      if (disposed) return;
+      // A refused play() leaves the element paused: it is not waiting for data.
+      reportStarvation();
+      if (blockedReported) return;
       if ((error as { name?: unknown } | null)?.name !== "NotAllowedError") return;
       blockedReported = true;
       sendBack({
@@ -363,16 +473,52 @@ export const audioPlaybackActor = fromTypedCallback<
     });
   };
 
+  /** Loads the same source again from the start and puts it back where the timeline is. */
+  const reloadSource = () => {
+    audio.load();
+    audio.currentTime = targetSeconds();
+    // Not once the audio has ended: see PLAY.
+    if (requestedPlay && !audio.ended) playAudio();
+  };
+
+  audio.onerror = () => {
+    if (disposed) return;
+    const retryDelayMs = streamed ? AUDIO_SOURCE_RETRY_DELAYS_MS[failedLoads] : undefined;
+    if (retryDelayMs === undefined) {
+      sendBack({ type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" });
+      reportStarvation();
+      return;
+    }
+    failedLoads++;
+    cancelRetry();
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      if (disposed) return;
+      reloadSource();
+      reportStarvation();
+    }, retryDelayMs);
+    reportStarvation();
+  };
+
   receive((event) => {
     if (disposed) return;
 
     switch (event.type) {
-      case "PLAY":
+      case "PLAY": {
         // Restart the count from now. A resume can come without a SEEK (a selected-file
-        // take's RESUME_RECORDING sends only PLAY), and the time spent paused must not be
-        // extrapolated.
+        // take's RESUME_RECORDING sends only PLAY, and so does the end of a HOLD), and the
+        // time spent paused or held must not be extrapolated.
         setKnownTimelineTime(currentTargetMs());
+        const endsHold = held;
         requestedPlay = true;
+        held = false;
+        // A narration that was given up on gets another try when the viewer plays again.
+        // Not at the end of a hold: giving up is what ended it, and trying again there
+        // would hold the lesson again, for as long as the narration cannot be loaded.
+        if (!endsHold && streamed && audio.error && retryTimer === null) {
+          failedLoads = 0;
+          audio.load();
+        }
         // Exact re-align at (re)start: a pause can leave the element a few
         // hundred ms off the timeline, and letting that ride under the SYNC
         // dead zone would accumulate more lag with every play/pause cycle.
@@ -383,12 +529,24 @@ export const audioPlaybackActor = fromTypedCallback<
         // SEEK, or a seek above the dead zone) clears `ended` synchronously, and a play()
         // the autoplay policy blocked leaves it false, so those resumes still happen.
         if (!audio.ended) playAudio();
+        reportStarvation();
         break;
+      }
       case "PAUSE":
         // Freeze extrapolation at the current target before clearing the flag.
         setKnownTimelineTime(currentTargetMs());
         requestedPlay = false;
+        held = false;
+        // Nothing waits for a paused narration; the next PLAY reports afresh.
+        reportedStarved = false;
         audio.pause();
+        break;
+      case "HOLD":
+        setKnownTimelineTime(event.timeMs);
+        held = true;
+        // The element is waiting for data anyway, so this is the moment to line it up
+        // exactly: the PLAY that ends the hold then has nothing left to seek.
+        applyTargetTime(AUDIO_EXACT_SYNC_EPSILON_MS);
         break;
       case "SEEK":
         // Explicit repositioning is exact — even a sub-500ms nudge must move the audio.
@@ -412,16 +570,27 @@ export const audioPlaybackActor = fromTypedCallback<
         setKnownTimelineTime(currentTargetMs());
         audio.playbackRate = normalizePlaybackSpeed(event.rate, audio.playbackRate);
         break;
+      case "SET_SOURCE": {
+        const source = resolveAudioSource(event);
+        if (!source || (source.url === loadedSource?.url && source.blob === loadedSource?.blob)) {
+          break;
+        }
+        // A new `src` starts the element over: put it back where the timeline is.
+        loadSource(source);
+        audio.currentTime = targetSeconds();
+        // Not once the audio has ended: see PLAY.
+        if (requestedPlay && !audio.ended) playAudio();
+        reportStarvation();
+        break;
+      }
     }
   });
 
   return () => {
     disposed = true;
+    cancelRetry();
     audio.pause();
     audio.removeAttribute("src");
-    if (currentObjectUrl) {
-      URL.revokeObjectURL(currentObjectUrl);
-      currentObjectUrl = null;
-    }
+    releaseObjectUrl();
   };
 });

@@ -571,13 +571,21 @@ describe("audioPlaybackActor", () => {
     /** Seconds; NaN until metadata, Infinity for a MediaRecorder WebM whose end is not yet read. */
     duration = Number.NaN;
     paused = true;
+    preload = "";
+    /** HAVE_ENOUGH_DATA unless a test starves the element. */
+    readyState = 4;
+    error: { code: number } | null = null;
     oncanplay: (() => void) | null = null;
     ondurationchange: (() => void) | null = null;
     onplaying: (() => void) | null = null;
+    onwaiting: (() => void) | null = null;
+    onpause: (() => void) | null = null;
+    ontimeupdate: (() => void) | null = null;
     onended: (() => void) | null = null;
     onerror: (() => void) | null = null;
     playCalls = 0;
     pauseCalls = 0;
+    loadCalls = 0;
 
     constructor() {
       MockAudio.instances.push(this);
@@ -602,7 +610,15 @@ describe("audioPlaybackActor", () => {
     }
 
     removeAttribute(_name: string) {}
-    load() {}
+
+    /** Like a real element, load() starts over: no error, no data, paused, at the start. */
+    load() {
+      this.loadCalls++;
+      this.error = null;
+      this.readyState = 0;
+      this.paused = true;
+      this.currentTime = 0;
+    }
   }
 
   const originalAudio = Object.getOwnPropertyDescriptor(globalThis, "Audio");
@@ -649,7 +665,11 @@ describe("audioPlaybackActor", () => {
   };
 
   // The actor reports through sendBack, so it needs a parent to report to.
-  const observePlayback = () => {
+  const observePlayback = (
+    source: Pick<AudioPlaybackInput, "blob" | "audioUrl"> = {
+      blob: new Blob(["audio"], { type: "audio/webm" }),
+    },
+  ) => {
     const reported: AudioPlaybackEmit[] = [];
     const parent = createActor(
       setup({
@@ -660,7 +680,7 @@ describe("audioPlaybackActor", () => {
           id: "player",
           src: "player",
           input: {
-            blob: new Blob(["audio"], { type: "audio/webm" }),
+            ...source,
             volume: 1,
             playbackRate: 1,
             startPositionMs: 0,
@@ -669,6 +689,8 @@ describe("audioPlaybackActor", () => {
         on: {
           AUDIO_PLAYBACK_READY: { actions: ({ event }) => reported.push(event) },
           AUDIO_PLAYBACK_ERROR: { actions: ({ event }) => reported.push(event) },
+          AUDIO_PLAYBACK_STALLED: { actions: ({ event }) => reported.push(event) },
+          AUDIO_PLAYBACK_RESUMED: { actions: ({ event }) => reported.push(event) },
         },
       }),
     ).start();
@@ -1146,5 +1168,400 @@ describe("audioPlaybackActor", () => {
     actor.send({ type: "STOP" });
     expect(timelineTime()).toBe(0);
     expect(audio.currentTime).toBe(0);
+  });
+
+  // A published lesson's narration is not in memory: the element downloads it as it plays.
+  describe("a narration streamed from its URL", () => {
+    const NARRATION_URL = "https://cdn.example.com/lesson.ogg";
+    const STALLED = { type: "AUDIO_PLAYBACK_STALLED" } as const;
+    const RESUMED = { type: "AUDIO_PLAYBACK_RESUMED" } as const;
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("plays from the URL alone, and loads none of it before PLAY", () => {
+      const { player } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+
+      expect(audio.src).toBe(NARRATION_URL);
+      expect(audio.preload).toBe("none");
+
+      player.send({ type: "PLAY" });
+
+      expect(audio.preload).toBe("auto");
+      expect(audio.playCalls).toBe(1);
+    });
+
+    it("leaves a narration that is already in memory to load as the browser does", () => {
+      const { player } = observePlayback();
+      const audio = MockAudio.instances[0]!;
+
+      player.send({ type: "PLAY" });
+
+      expect(audio.src).toBe("blob:mock");
+      expect(audio.preload).toBe("");
+    });
+
+    it("says when the sound has not arrived, and when it flows again", () => {
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+
+      // Asked to play before anything has downloaded.
+      audio.readyState = 0;
+      player.send({ type: "PLAY" });
+      expect(reported).toEqual([STALLED]);
+
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(reported).toEqual([STALLED, RESUMED]);
+
+      // The download falls behind the playhead mid-lesson.
+      audio.readyState = 2;
+      audio.onwaiting?.();
+      audio.onwaiting?.();
+      expect(reported).toEqual([STALLED, RESUMED, STALLED]);
+
+      // A browser that skips `playing` after a stall still moves the playhead.
+      audio.readyState = 4;
+      audio.ontimeupdate?.();
+      expect(reported).toEqual([STALLED, RESUMED, STALLED, RESUMED]);
+    });
+
+    it("reports a stall only while it is asked to play", () => {
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      audio.readyState = 0;
+
+      // Not playing yet: nothing waits for it.
+      audio.onwaiting?.();
+      expect(reported).toEqual([]);
+
+      player.send({ type: "PLAY" });
+      player.send({ type: "PAUSE" });
+      audio.onpause?.();
+      expect(reported).toEqual([STALLED]);
+
+      // Still without data on the next PLAY: said again.
+      player.send({ type: "PLAY" });
+      expect(reported).toEqual([STALLED, STALLED]);
+    });
+
+    it("is not waiting for data once it has ended, or when play() was refused", async () => {
+      MockAudio.playRejection = new DOMException("play() not allowed", "NotAllowedError");
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      audio.readyState = 0;
+
+      player.send({ type: "PLAY" });
+      await settle();
+
+      expect(reported).toEqual([
+        {
+          type: "AUDIO_PLAYBACK_ERROR",
+          error: "Audio playback was blocked by the browser's autoplay policy",
+        },
+      ]);
+
+      MockAudio.playRejection = null;
+      audio.duration = 60;
+      player.send({ type: "SEEK", timeMs: 60_000 });
+      player.send({ type: "PLAY" });
+      expect(reported).toHaveLength(1);
+    });
+
+    // The parent stops its timeline while the narration loads. Extrapolating across that
+    // wait made the narration jump ahead by as long as it took: the lost opening words.
+    it("does not skip the narration a held timeline waited for", () => {
+      const clock = pinPerformanceClock();
+      const { player } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      audio.readyState = 0;
+      player.send({ type: "PLAY" });
+      player.send({ type: "HOLD", timeMs: 0 });
+
+      // Eight seconds of a slow connection.
+      clock.now += 8000;
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(audio.currentTime).toBe(0);
+
+      // The hold ends: the count goes on from where it was held.
+      player.send({ type: "PLAY" });
+      expect(audio.currentTime).toBe(0);
+      clock.now += 2000;
+      audio.onplaying?.();
+      expect(audio.currentTime).toBe(2);
+    });
+
+    it("lines up with the held timeline while it waits, and follows a seek made meanwhile", () => {
+      pinPerformanceClock();
+      const { player } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+      audio.currentTime = 4.8;
+
+      player.send({ type: "HOLD", timeMs: 5000 });
+      expect(audio.currentTime).toBe(5);
+
+      player.send({ type: "SEEK", timeMs: 20_000 });
+      player.send({ type: "PLAY" });
+      expect(audio.currentTime).toBe(20);
+    });
+
+    it("loads again after a failed download, from where the timeline is", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      pinPerformanceClock();
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "SEEK", timeMs: 30_000 });
+      player.send({ type: "PLAY" });
+
+      audio.error = { code: 2 };
+      audio.onerror?.();
+      // Waiting to load again counts as waiting for sound; no failure is reported yet.
+      expect(reported).toEqual([STALLED]);
+      expect(audio.loadCalls).toBe(0);
+
+      vi.advanceTimersByTime(1000);
+      expect(audio.loadCalls).toBe(1);
+      expect(audio.currentTime).toBe(30);
+      expect(audio.playCalls).toBe(2);
+      expect(reported).toEqual([STALLED]);
+
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(reported).toEqual([STALLED, RESUMED]);
+    });
+
+    it("gives up after a few reloads, and tries once more on the next PLAY", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+
+      for (const delayMs of [1000, 2000, 4000]) {
+        audio.error = { code: 4 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(delayMs);
+      }
+      expect(audio.loadCalls).toBe(3);
+      expect(reported).toEqual([STALLED]);
+
+      audio.error = { code: 4 };
+      audio.onerror?.();
+      vi.advanceTimersByTime(60_000);
+      expect(audio.loadCalls).toBe(3);
+      expect(reported).toEqual([
+        STALLED,
+        { type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" },
+        RESUMED,
+      ]);
+
+      // The viewer plays again: one more try.
+      player.send({ type: "PAUSE" });
+      player.send({ type: "PLAY" });
+      expect(audio.loadCalls).toBe(4);
+    });
+
+    // Giving up ends the parent's hold with a PLAY. Loading again there would stall and
+    // hold the lesson once more, for as long as the narration cannot be loaded.
+    it("does not try again at the PLAY that ends a hold", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { player } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+      player.send({ type: "HOLD", timeMs: 0 });
+      for (const delayMs of [1000, 2000, 4000, 0]) {
+        audio.error = { code: 4 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(delayMs);
+      }
+
+      player.send({ type: "PLAY" });
+
+      expect(audio.loadCalls).toBe(3);
+    });
+
+    it("reports a narration in memory that fails at once: loading it again cannot help", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { player, reported } = observePlayback();
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+
+      audio.error = { code: 3 };
+      audio.onerror?.();
+      vi.advanceTimersByTime(60_000);
+
+      expect(reported).toEqual([{ type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" }]);
+      expect(audio.loadCalls).toBe(0);
+    });
+
+    it("does not reload once the player is gone", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const actor = createActor(audioPlaybackActor, {
+        input: { audioUrl: NARRATION_URL, volume: 1, playbackRate: 1, startPositionMs: 0 },
+      }).start();
+      const audio = MockAudio.instances[0]!;
+      actor.send({ type: "PLAY" });
+      audio.error = { code: 2 };
+      audio.onerror?.();
+
+      actor.stop();
+      vi.advanceTimersByTime(60_000);
+
+      expect(audio.loadCalls).toBe(0);
+    });
+
+    it("moves to a narration found elsewhere and keeps playing from the same moment", () => {
+      pinPerformanceClock();
+      const { player } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "SEEK", timeMs: 12_000 });
+      player.send({ type: "PLAY" });
+
+      // The same narration again: nothing to do.
+      player.send({ type: "SET_SOURCE", audioUrl: NARRATION_URL });
+      expect(audio.playCalls).toBe(1);
+
+      audio.currentTime = 0;
+      player.send({ type: "SET_SOURCE", audioUrl: "https://cdn.example.com/renamed.ogg" });
+      expect(audio.src).toBe("https://cdn.example.com/renamed.ogg");
+      expect(audio.currentTime).toBe(12);
+      expect(audio.playCalls).toBe(2);
+    });
+  });
+
+  // The timeline is the clock, and it waits for the narration: a lesson on a slow
+  // connection used to play on in silence until the whole file had downloaded.
+  describe("a replay whose narration is still loading", () => {
+    const NARRATION_URL = "https://cdn.example.com/lesson.ogg";
+
+    const loadStreamedLesson = async () => {
+      const actor = createActor(editorMachine, {
+        input: { editorRef: { current: null } },
+      }).start();
+      spawnedActors.push(actor);
+      const recording: Recording = { ...createRecording(), audioUrl: NARRATION_URL };
+      actor.send({ type: "LOAD_RECORDING", recording });
+      await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+      const timeline = () => actor.getSnapshot().children.timelineActor!.getSnapshot();
+      return { actor, recording, audio: MockAudio.instances[0]!, timeline };
+    };
+
+    it("gives the narration a player though none of it is in memory", async () => {
+      const { audio } = await loadStreamedLesson();
+
+      expect(audio.src).toBe(NARRATION_URL);
+      expect(audio.preload).toBe("none");
+      expect(audio.playCalls).toBe(0);
+    });
+
+    it("holds the timeline until the narration has sound, then goes on from there", async () => {
+      const { actor, audio, timeline } = await loadStreamedLesson();
+      audio.readyState = 0;
+
+      actor.send({ type: "PLAY" });
+
+      // Still playing to the viewer; the clock is not counting.
+      expect(actor.getSnapshot().matches({ playback: "playing" })).toBe(true);
+      expect(actor.getSnapshot().matches({ playback: { playing: "buffering" } })).toBe(true);
+      expect(timeline().value).toBe("paused");
+      expect(audio.playCalls).toBe(1);
+
+      audio.readyState = 4;
+      audio.onplaying?.();
+
+      expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
+      expect(timeline().value).toBe("running");
+      expect(timeline().context.currentTime).toBe(0);
+      expect(audio.currentTime).toBe(0);
+    });
+
+    it("holds again when the download falls behind mid-lesson", async () => {
+      const { actor, audio, timeline } = await loadStreamedLesson();
+      actor.send({ type: "PLAY" });
+      expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
+
+      audio.readyState = 2;
+      audio.onwaiting?.();
+      expect(actor.getSnapshot().matches({ playback: { playing: "buffering" } })).toBe(true);
+      expect(timeline().value).toBe("paused");
+
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(timeline().value).toBe("running");
+    });
+
+    it("lets the viewer pause and seek while it waits", async () => {
+      const { actor, audio, timeline } = await loadStreamedLesson();
+      audio.readyState = 0;
+      actor.send({ type: "PLAY" });
+
+      actor.send({ type: "SEEK", time: 400 });
+      expect(actor.getSnapshot().matches({ playback: { playing: "buffering" } })).toBe(true);
+      expect(timeline().context.currentTime).toBe(400);
+      expect(audio.currentTime).toBe(0.4);
+
+      actor.send({ type: "PAUSE" });
+      expect(actor.getSnapshot().matches({ playback: "paused" })).toBe(true);
+      expect(audio.paused).toBe(true);
+
+      // Played again while the narration is still without data: it waits again.
+      actor.send({ type: "PLAY" });
+      expect(actor.getSnapshot().matches({ playback: { playing: "buffering" } })).toBe(true);
+
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(timeline().value).toBe("running");
+      expect(timeline().context.currentTime).toBe(400);
+    });
+
+    it("plays on without a narration that cannot be loaded", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { actor, audio, timeline } = await loadStreamedLesson();
+        audio.readyState = 0;
+        actor.send({ type: "PLAY" });
+
+        for (const delayMs of [1000, 2000, 4000, 0]) {
+          audio.error = { code: 4 };
+          audio.onerror?.();
+          vi.advanceTimersByTime(delayMs);
+        }
+
+        expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
+        expect(timeline().value).toBe("running");
+        // It was given up on: the lesson is not held again for another round of reloads.
+        expect(audio.loadCalls).toBe(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("moves its player to a narration the loader found under another name", async () => {
+      const { actor, recording, audio } = await loadStreamedLesson();
+
+      actor.send({
+        type: "EXTEND_RECORDING",
+        recording: { ...recording, audioUrl: "https://cdn.example.com/renamed.ogg" },
+      });
+
+      expect(MockAudio.instances).toHaveLength(1);
+      expect(audio.src).toBe("https://cdn.example.com/renamed.ogg");
+    });
+
+    it("does not end a hold when the lesson grows while it waits", async () => {
+      const { actor, recording, audio, timeline } = await loadStreamedLesson();
+      audio.readyState = 0;
+      actor.send({ type: "PLAY" });
+      const playsWhileHeld = audio.playCalls;
+
+      actor.send({ type: "EXTEND_RECORDING", recording: { ...recording } });
+
+      expect(actor.getSnapshot().matches({ playback: { playing: "buffering" } })).toBe(true);
+      expect(timeline().value).toBe("paused");
+      expect(audio.playCalls).toBe(playsWhileHeld);
+    });
   });
 });

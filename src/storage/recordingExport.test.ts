@@ -111,9 +111,22 @@ describe("buildRecordingFiles", () => {
   });
 });
 
+/** Serves the narration a recording only links by URL, as its host would. */
+function stubNarrationHost(contentType = "audio/webm") {
+  const fetchMock = vi.fn<typeof fetch>(
+    async () =>
+      new Response(new TextEncoder().encode("narration"), {
+        headers: { "content-type": contentType },
+      }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 describe("exportRecordingFiles", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("strips blob: cameraUrl/audioUrl before encoding — they'd defeat sibling resolution on next load", async () => {
@@ -123,6 +136,7 @@ describe("exportRecordingFiles", () => {
       audioFile: "lesson.weba",
       audioUrl: "blob:https://example.com/abcd-efgh",
     });
+    stubNarrationHost();
 
     const decoded = await exportAndDecode(recording, "lesson");
 
@@ -154,6 +168,7 @@ describe("exportRecordingFiles", () => {
       cameraFile: "lesson.webm",
       cameraUrl: "https://old-host.example.com/lesson.webm",
     });
+    stubNarrationHost();
 
     const decoded = await exportAndDecode(recording, "lesson");
 
@@ -161,5 +176,37 @@ describe("exportRecordingFiles", () => {
     expect(decoded.cameraUrl).toBeUndefined();
     expect(decoded.audioFile).toBe("lesson.weba");
     expect(decoded.cameraFile).toBe("lesson.webm");
+  });
+
+  // A lesson loaded from a URL streams its narration and holds no copy of it.
+  it("downloads a narration that is only linked, so the export still carries it", async () => {
+    const recording = createRecording({
+      audioFile: "published.ogg",
+      audioUrl: "https://host.example.com/published.ogg",
+    });
+    const fetchMock = stubNarrationHost("audio/ogg");
+
+    const decoded = await exportAndDecode(recording, "copy");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(decoded.audioFile).toBe("copy.ogg");
+    const narration = downloads.saved.find((entry) => entry.filename === "copy.ogg");
+    expect(narration?.blob.type).toBe("audio/ogg");
+    expect(narration?.blob.size).toBe("narration".length);
+  });
+
+  it("fails, rather than export a lesson without its narration, when the download does", async () => {
+    const recording = createRecording({
+      audioFile: "published.ogg",
+      audioUrl: "https://host.example.com/published.ogg",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => new Response(null, { status: 503 })),
+    );
+
+    await expect(exportRecordingFiles(recording, "copy")).rejects.toThrow(
+      "Failed to export recording: The narration could not be loaded (503).",
+    );
   });
 });

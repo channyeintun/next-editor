@@ -158,10 +158,23 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
   and workspace/runtime state replay from any decodable prefix.
 - **Audio and camera never ride the SCR3 stream.** The metadata carries only their references
   (`audioFile`/`audioUrl`, `cameraFile`/`cameraUrl`) and start offsets, so no prefix decode
-  produces media bytes. The URL loader resolves them out of band once the `.ne` has loaded: the
-  sibling audio is downloaded and attached as `audioBlob` through `extendRecording`, and the
-  camera plays from `cameraUrl` in a native `<video>` that range-streams it, with `CameraOverlay`
-  deriving video time from `timeline.currentTime - cameraStartOffsetMs`.
+  produces media bytes. Neither file is downloaded by the loader. The narration is streamed by
+  the player (`audioPlaybackActor`, an `<audio>` element on `audioUrl`), which exists from the
+  first load and fetches nothing before the first `PLAY`; the camera plays from `cameraUrl` in a
+  native `<video>` that range-streams it, with `CameraOverlay` deriving video time from
+  `timeline.currentTime - cameraStartOffsetMs`. Once the `.ne` has loaded, the URL loader only
+  checks, with a `HEAD` probe, where each file really lives when the media may have been renamed
+  or re-hosted, and hands a corrected `audioUrl`/`cameraUrl` over through `extendRecording`.
+- **The lesson waits for its narration.** A streamed narration can run out of data on a slow
+  connection. The player reports it (`AUDIO_PLAYBACK_STALLED`, then `AUDIO_PLAYBACK_RESUMED`)
+  and `playing` moves between its `running` and `buffering` substates: while buffering, the
+  timeline is paused and nothing replays, so the lesson never runs on without its sound. The
+  timeline stays the clock. `PlaybackBufferingIndicator` shows the wait once it has lasted half
+  a second. A download that fails is loaded again a few times before the lesson plays on
+  without narration.
+- **The narration's bytes are fetched only when something needs the file**: the edit panel's
+  waveform, caption generation, an export or an upload (`loadRecordingNarration` /
+  `withNarrationInMemory` in `recordingSiblingMedia.ts`).
 - **Captions load out of band.** Inline `captions` arrive with the SCR3 metadata prefix; sibling
   `captionFiles` are fetched separately (relative to the `.ne` URL) and merged via `addCaptionTrack`
   once available, so a long download shows captions as soon as the small sidecar resolves rather than
@@ -198,7 +211,7 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
 
 - Both `EXTEND_RECORDING` and `APPEND_RECORDING_DELTA` are guarded by `isForLoadedRecording`:
   the extended recording (or the delta's `recordingId`) must have the loaded recording's `id`.
-  Growth from a lesson that is no longer open — a late sibling-audio download after another
+  Growth from a lesson that is no longer open — a late sibling-media fix after another
   file was imported, for example — is ignored whole, including its audio seek.
 
 - `extendRecording` (action) replaces `context.recording` with the larger prefix. Since it is an
@@ -214,12 +227,13 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
   always in `paused`, and in `ready`/`ended` after a `WORKSPACE_EVENT`), the detach has reset the
   replay cursors, so growth only updates the recording, the duration and the audio. The next
   `PLAY` or `SEEK` reattaches and applies the new data.
-- `EXTEND_RECORDING` also updates media playback. The machine spawns `audioPlayer` when the first
-  usable audio prefix appears, and later `EXTEND_RECORDING` events append larger blob snapshots to
-  the same actor while preserving time/rate/volume.
+- `EXTEND_RECORDING` also updates media playback. The machine spawns `audioPlayer` as soon as the
+  recording has narration to play (a blob in memory, or an `audioUrl` to stream), and a later
+  `EXTEND_RECORDING` that carries a different narration (`SET_SOURCE`) moves the same actor to
+  it while preserving time/rate/volume.
 - Later playback control sends (`SYNC`, `SEEK`, `SET_SPEED`, `SET_VOLUME`, `PAUSE`) are guarded by
-  `playbackAudioSpawned`, not just `recording.audioBlob`, so a partially-downloaded recording can
-  play safely before the audio actor exists.
+  `playbackAudioSpawned`, not by the recording's audio fields, so a partially-downloaded recording
+  can play safely before the audio actor exists.
 
 This is purely additive — no delta, codec, or actor redesign — because the replay cursors already
 operate on growing arrays.

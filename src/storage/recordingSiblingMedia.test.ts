@@ -2,13 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { Recording } from "../core/src";
 import {
-  findWorkingAudioBlob,
+  findWorkingAudioUrl,
   loadRecordingNarration,
+  withNarrationInMemory,
   withResolvedMediaUrls,
 } from "./recordingSiblingMedia";
 import { decodeRecordingStream } from "./streamingRecordingCodec/decode";
 
-function recordingWith(media: Pick<Recording, "audioBlob" | "audioUrl">): Recording {
+function recordingWith(
+  media: Pick<Recording, "audioBlob" | "audioUrl" | "audioFile" | "audioSource">,
+): Recording {
   return { id: "recording-1", name: "Narrated", ...media } as Recording;
 }
 
@@ -92,13 +95,116 @@ describe("loadRecordingNarration", () => {
   });
 });
 
+describe("loadRecordingNarration, for a host that does not say what the file is", () => {
+  it("types the narration by its file name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => new Response(new TextEncoder().encode("OggS"))),
+    );
+
+    const narration = await loadRecordingNarration(
+      recordingWith({
+        audioUrl: `${window.location.origin}/media/narration.ogg`,
+        audioFile: "narration.ogg",
+      }),
+    );
+
+    expect(narration?.type).toBe("audio/ogg");
+  });
+});
+
+describe("withNarrationInMemory", () => {
+  it("downloads a narration that is only linked, for an export or an upload", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(
+        async () =>
+          new Response(new TextEncoder().encode("OggS"), {
+            headers: { "content-type": "audio/ogg" },
+          }),
+      ),
+    );
+    const recording = recordingWith({ audioUrl: `${window.location.origin}/media/narration.ogg` });
+
+    const attached = await withNarrationInMemory(recording);
+
+    expect(attached.audioBlob?.type).toBe("audio/ogg");
+    expect(attached.audioBlob?.size).toBe(4);
+    // The loaded recording itself is left as it was.
+    expect(recording.audioBlob).toBeUndefined();
+  });
+
+  it("leaves a recording that holds its narration, or has none, as it is", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+    const take = recordingWith({ audioBlob: new Blob(["take"], { type: "audio/webm" }) });
+    const silent = recordingWith({});
+
+    await expect(withNarrationInMemory(take)).resolves.toBe(take);
+    await expect(withNarrationInMemory(silent)).resolves.toBe(silent);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("findWorkingAudioUrl", () => {
+  const neUrl = `${window.location.origin}/lessons/intro-01.ne`;
+  const urlOf = (file: string) => `${window.location.origin}/lessons/${file}`;
+
+  it("probes a renamed narration's candidates and returns the one that is there", async () => {
+    // The static host: a missing file falls back to the app shell, 200 text/html.
+    const fetchMock = vi.fn<typeof fetch>(async (input) =>
+      String(input) === urlOf("intro-01.ogg")
+        ? new Response(null, { headers: { "content-type": "audio/ogg" } })
+        : new Response(null, { headers: { "content-type": "text/html" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const recording = withResolvedMediaUrls(
+      recordingWith({ audioFile: "lesson.ogg", audioSource: "external" }),
+      neUrl,
+    );
+
+    await expect(findWorkingAudioUrl(recording, neUrl)).resolves.toBe(urlOf("intro-01.ogg"));
+    expect(fetchMock.mock.calls.map(([input, init]) => [String(input), init?.method])).toEqual([
+      [urlOf("lesson.ogg"), "HEAD"],
+      [urlOf("intro-01.ogg"), "HEAD"],
+    ]);
+  });
+
+  it("finds the narration an older export declared without naming its file", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(
+        async () => new Response(null, { headers: { "content-type": "audio/webm" } }),
+      ),
+    );
+
+    await expect(
+      findWorkingAudioUrl(recordingWith({ audioSource: "external" }), neUrl),
+    ).resolves.toBe(urlOf("intro-01.weba"));
+  });
+
+  it("asks nothing for a narration that is in memory, or that a lesson does not have", async () => {
+    const fetchMock = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      findWorkingAudioUrl(
+        recordingWith({ audioBlob: new Blob(["take"]), audioFile: "lesson.ogg" }),
+        neUrl,
+      ),
+    ).resolves.toBeNull();
+    await expect(findWorkingAudioUrl(recordingWith({}), neUrl)).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("the bundled introduction lesson", () => {
   // The landing demo and /learn play public/lessons/introduction/introduction.ne.
   const directory = "public/lessons/introduction";
   const fileOnDisk = (url: string) =>
     `${directory}/${decodeURIComponent(new URL(url).pathname.split("/").at(-1) ?? "")}`;
 
-  it("names a narration file that ships beside it, so the first request finds it", async () => {
+  it("names a narration file that ships beside it, so the player's first request finds it", async () => {
     const recording = decodeRecordingStream(
       new Uint8Array(readFileSync(`${directory}/introduction.ne`)),
     );
@@ -112,12 +218,20 @@ describe("the bundled introduction lesson", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const found = await findWorkingAudioBlob(recording, neUrl);
+    const resolved = withResolvedMediaUrls(recording, neUrl);
 
+    // Its file is not named after the `.ne`, so it is probed: the first candidate is there,
+    // and the player streams that URL as it is.
+    await expect(findWorkingAudioUrl(resolved, neUrl)).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(found?.blob.type).toBe("audio/ogg");
-    expect(new TextDecoder().decode(await found!.blob.slice(0, 4).arrayBuffer())).toBe("OggS");
-    // The URL playback streams before that download completes is the same file.
-    expect(withResolvedMediaUrls(recording, neUrl).audioUrl).toBe(found?.url);
+    expect(fetchMock.mock.calls[0]).toEqual([
+      resolved.audioUrl,
+      expect.objectContaining({ method: "HEAD" }),
+    ]);
+
+    const narration = await loadRecordingNarration(resolved);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(narration?.type).toBe("audio/ogg");
+    expect(new TextDecoder().decode(await narration!.slice(0, 4).arrayBuffer())).toBe("OggS");
   });
 });

@@ -1,6 +1,7 @@
 import type { Recording } from "../core/src";
 import { encodeRecordingToStream } from "./recordingCodecClient";
 import { downloadBlob } from "../utils/downloadBlob";
+import { withNarrationInMemory } from "./recordingSiblingMedia";
 import { audioExtensionFromMime, cameraExtensionFromMime } from "../shared/recordingMediaFiles";
 
 // Writing a recording out as files: the `.ne` stream plus its sibling camera video
@@ -103,7 +104,8 @@ export async function buildRecordingFiles(
 export async function exportRecordingFiles(recording: Recording, filename?: string): Promise<void> {
   try {
     const baseFilename = filename?.replace(/\.(json|ne)$/, "") || `recording-${recording.id}`;
-    const files = await buildRecordingFiles(recording, baseFilename);
+    // A lesson loaded from a URL only streams its narration; the export needs the file.
+    const files = await buildRecordingFiles(await withNarrationInMemory(recording), baseFilename);
 
     downloadBlob(files.ne, `${baseFilename}.ne`);
 

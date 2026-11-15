@@ -226,6 +226,13 @@ function gate() {
   return { opened, open };
 }
 
+/** Lets the sibling-media probes that follow a load run to their end. */
+async function settleMedia() {
+  await act(async () => {
+    for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 function renderLoader(actions: NextEditorActions) {
   const wrapper = ({ children }: { children: React.ReactNode }) =>
     createElement(NextEditorActionsContext.Provider, { value: actions }, children);
@@ -283,7 +290,8 @@ describe("useUrlLoader", () => {
 
     const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
     expect(extended.audioUrl).toBe("https://example.com/intro-01.weba");
-    expect(extended.audioBlob).toBeInstanceOf(Blob);
+    // Found with a probe: the player streams it, nothing is downloaded here.
+    expect(extended.audioBlob).toBeUndefined();
   });
 
   it("resolves audio via the .ne basename when external audio is declared without a filename", async () => {
@@ -322,7 +330,8 @@ describe("useUrlLoader", () => {
 
     const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
     expect(extended.audioUrl).toBe("https://example.com/intro-01.weba");
-    expect(extended.audioBlob).toBeInstanceOf(Blob);
+    // Found with a probe: the player streams it, nothing is downloaded here.
+    expect(extended.audioBlob).toBeUndefined();
   });
 
   it("never invents a basename candidate for media the recording didn't reference", async () => {
@@ -376,13 +385,16 @@ describe("useUrlLoader", () => {
     const { result } = renderHook(() => useUrlLoader(), { wrapper });
 
     await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+    await settleMedia();
 
-    await waitFor(() => {
-      expect(extendRecordingMock).toHaveBeenCalled();
-    });
-
-    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
-    expect(extended.audioUrl).toBe("https://cdn.example.com/hosted-audio.weba");
+    // It probes fine, so the lesson keeps it and the other candidates are never asked.
+    const [loaded] = vi.mocked(actions.loadRecording).mock.calls[0] as [Recording];
+    expect(loaded.audioUrl).toBe("https://cdn.example.com/hosted-audio.weba");
+    expect(extendRecordingMock).not.toHaveBeenCalled();
+    const asked = fetchMock.mock.calls.map(([input]) => targetUrl(String(input)));
+    expect(asked.filter((url) => !url.endsWith(".ne"))).toEqual([
+      "https://cdn.example.com/hosted-audio.weba",
+    ]);
   });
 
   it("falls back to the stored sibling filename when no configured URL is set", async () => {
@@ -411,13 +423,15 @@ describe("useUrlLoader", () => {
     const { result } = renderHook(() => useUrlLoader(), { wrapper });
 
     await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
+    await settleMedia();
 
-    await waitFor(() => {
-      expect(extendRecordingMock).toHaveBeenCalled();
-    });
-
-    const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
-    expect(extended.audioUrl).toBe("https://example.com/lesson.weba");
+    const [loaded] = vi.mocked(actions.loadRecording).mock.calls[0] as [Recording];
+    expect(loaded.audioUrl).toBe("https://example.com/lesson.weba");
+    expect(extendRecordingMock).not.toHaveBeenCalled();
+    const asked = fetchMock.mock.calls.map(([input]) => targetUrl(String(input)));
+    expect(asked.filter((url) => !url.endsWith(".ne"))).toEqual([
+      "https://example.com/lesson.weba",
+    ]);
   });
 
   it("resolves a relative configured audio URL against the .ne URL instead of throwing", async () => {
@@ -459,7 +473,7 @@ describe("useUrlLoader", () => {
 
     const [extended] = extendRecordingMock.mock.calls.at(-1) as [Recording];
     expect(extended.audioUrl).toBe("https://example.com/media/hosted-audio.weba");
-    expect(extended.audioBlob).toBeInstanceOf(Blob);
+    expect(extended.audioBlob).toBeUndefined();
   });
 
   it("deduplicates candidates when the configured URL equals the stored-filename resolution", async () => {
@@ -492,13 +506,11 @@ describe("useUrlLoader", () => {
     const { result } = renderHook(() => useUrlLoader(), { wrapper });
 
     await result.current.fetchNextEditorFile("https://example.com/intro-01/intro-01.ne");
+    await settleMedia();
 
-    await waitFor(() => {
-      expect(extendRecordingMock).toHaveBeenCalled();
-    });
-
-    // Only one fetch for the (deduplicated) audio candidate.
+    // Only one probe for the (deduplicated) audio candidate, which is the one in use.
     expect(audioFetchCount).toBe(1);
+    expect(extendRecordingMock).not.toHaveBeenCalled();
   });
 
   it("probes a camera URL with HEAD first, falling back to a ranged GET when HEAD is rejected", async () => {
@@ -915,12 +927,13 @@ describe("useUrlLoader", () => {
     });
   });
 
-  it("extends late audio onto everything a footer-less stream decoded", async () => {
+  it("extends a late narration fix onto everything a footer-less stream decoded", async () => {
     // A stream that ends without its footer (a still-writing or cut-off file) is never
     // finalized; the player gets it as a first load plus appended deltas.
     const lesson = largeRecording(60, 4000, {
       id: "lesson",
-      audioFile: "lesson.weba",
+      // Renamed since: the narration now lives under the `.ne` basename, `lesson.weba`.
+      audioFile: "old-name.weba",
       audioSource: "external",
     });
     const encoded = await encodeRecordingToStream(lesson);
@@ -942,9 +955,9 @@ describe("useUrlLoader", () => {
 
     await result.current.fetchNextEditorFile("https://example.com/lesson.ne");
     await waitFor(() => {
-      expect(
-        vi.mocked(actions.extendRecording).mock.calls.some(([recording]) => recording.audioBlob),
-      ).toBe(true);
+      expect(vi.mocked(actions.extendRecording).mock.calls.at(-1)?.[0].audioUrl).toBe(
+        "https://example.com/lesson.weba",
+      );
     });
 
     const [firstLoad] = vi.mocked(actions.loadRecording).mock.calls[0] ?? [];
@@ -953,7 +966,6 @@ describe("useUrlLoader", () => {
       .mock.calls.reduce((count, [delta]) => count + delta.newFrames.length, 0);
     expect(appendedFrames).toBeGreaterThan(0);
     const [withAudio] = vi.mocked(actions.extendRecording).mock.calls.at(-1) ?? [];
-    expect(withAudio?.audioBlob).toBeInstanceOf(Blob);
     expect(withAudio?.frames).toHaveLength((firstLoad?.frames.length ?? 0) + appendedFrames);
   });
 
@@ -1020,7 +1032,8 @@ describe("useUrlLoader", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("holds the narration download until the narration gate opens", async () => {
+  // The player streams the narration from its URL once the lesson plays.
+  it("loads a narrated lesson without downloading its narration", async () => {
     const recording = createRecording({ audioFile: "intro-01.weba", audioSource: "external" });
     const neBytes = await encodeRecordingToStream(recording);
     const requested: string[] = [];
@@ -1034,32 +1047,19 @@ describe("useUrlLoader", () => {
           : fakeResponse(new Uint8Array([1, 2, 3]), { ok: true, contentType: "audio/webm" });
       }),
     );
-    const narration = gate();
-    const narrationGate = vi.fn<(signal: AbortSignal) => Promise<void>>(() => narration.opened);
     const actions = makeActionsMock();
     const wrapper = ({ children }: { children: React.ReactNode }) =>
       createElement(NextEditorActionsContext.Provider, { value: actions }, children);
-    const { result } = renderHook(() => useUrlLoader(narrationGate), { wrapper });
+    const { result } = renderHook(() => useUrlLoader(), { wrapper });
 
     await result.current.fetchNextEditorFile("https://example.com/intro-01.ne");
-    await waitFor(() => {
-      expect(narrationGate).toHaveBeenCalledTimes(1);
-    });
+    await settleMedia();
 
-    expect(narrationGate.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
+    const [loaded] = vi.mocked(actions.loadRecording).mock.calls[0] as [Recording];
+    expect(loaded.audioUrl).toBe("https://example.com/intro-01.weba");
+    expect(loaded.audioBlob).toBeUndefined();
     expect(requested).toEqual(["https://example.com/intro-01.ne"]);
     expect(actions.extendRecording).not.toHaveBeenCalled();
-
-    narration.open();
-    await waitFor(() => {
-      expect(actions.extendRecording).toHaveBeenCalledTimes(1);
-    });
-    const [extended] = vi.mocked(actions.extendRecording).mock.calls[0] as [Recording];
-    expect(extended.audioBlob).toBeInstanceOf(Blob);
-    expect(requested).toEqual([
-      "https://example.com/intro-01.ne",
-      "https://example.com/intro-01.weba",
-    ]);
   });
 
   it("stops looking for sibling media once the lesson is left", async () => {

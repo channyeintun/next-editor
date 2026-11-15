@@ -48,6 +48,28 @@ describe("getPlaybackAudioState", () => {
     expect(state!.audioUrl).toBe("https://cdn.example.com/audio.weba");
   });
 
+  // A lesson loaded from a URL: the player streams the narration, nothing is in memory.
+  it("returns state with the audioUrl alone when the narration is only streamed", () => {
+    const state = getPlaybackAudioState(
+      makeRecording({ audioBlob: undefined, audioUrl: "https://cdn.example.com/audio.ogg" }),
+    );
+    expect(state).not.toBeNull();
+    expect(state!.blob).toBeUndefined();
+    expect(state!.audioUrl).toBe("https://cdn.example.com/audio.ogg");
+  });
+
+  // The audioUrl comes out of the .ne header without runtime validation.
+  it("does not count an audioUrl the player would refuse as narration", () => {
+    expect(
+      getPlaybackAudioState(
+        makeRecording({ audioBlob: undefined, audioUrl: "javascript:alert(1)" }),
+      ),
+    ).toBeNull();
+    const state = getPlaybackAudioState(makeRecording({ audioUrl: "javascript:alert(1)" }));
+    expect(state!.blob).toBe(audioBlob);
+    expect(state!.audioUrl).toBeUndefined();
+  });
+
   it("includes startOffsetMs from recording", () => {
     const state = getPlaybackAudioState(makeRecording({ audioStartOffsetMs: 500 }));
     expect(state!.startOffsetMs).toBe(500);
