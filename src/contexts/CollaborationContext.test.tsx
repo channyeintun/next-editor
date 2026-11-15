@@ -95,6 +95,7 @@ vi.mock("../hooks/useNextEditorContext", () => ({
     handleSlideEvent: mocks.handleSlideEvent,
     handleWhiteboardEvent: mocks.handleWhiteboardEvent,
   }),
+  useIsBuffering: () => false,
 }));
 
 import { CollaborationProvider, useCollaboration } from "./CollaborationContext";

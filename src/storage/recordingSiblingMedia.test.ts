@@ -93,6 +93,41 @@ describe("loadRecordingNarration", () => {
       loadRecordingNarration(recordingWith({ audioUrl: "https://example.test/missing.ogg" })),
     ).rejects.toThrow("The narration could not be loaded (404).");
   });
+
+  // A host with a single-page fallback answers 200 with its HTML page for a missing file.
+  // Taken as the narration, an export or an upload wrote that page out as the audio file.
+  it("refuses a web page served in place of the narration", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(
+        async () =>
+          new Response(new TextEncoder().encode("<!doctype html><title>App</title>"), {
+            headers: { "content-type": "text/html; charset=utf-8" },
+          }),
+      ),
+    );
+
+    await expect(
+      loadRecordingNarration(recordingWith({ audioUrl: "https://example.test/missing.ogg" })),
+    ).rejects.toThrow(
+      "The narration could not be loaded (the link does not lead to an audio file).",
+    );
+  });
+
+  it("refuses an empty file", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(
+        async () => new Response(new Uint8Array(0), { headers: { "content-type": "audio/ogg" } }),
+      ),
+    );
+
+    await expect(
+      loadRecordingNarration(recordingWith({ audioUrl: "https://example.test/empty.ogg" })),
+    ).rejects.toThrow(
+      "The narration could not be loaded (the link does not lead to an audio file).",
+    );
+  });
 });
 
 describe("loadRecordingNarration, for a host that does not say what the file is", () => {

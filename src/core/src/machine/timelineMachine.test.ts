@@ -148,6 +148,62 @@ describe("timelineMachine ticker lifecycle", () => {
       actor.stop();
     });
 
+    // A hidden tab draws no frames, so no pulse moves the playhead while the clock
+    // counts on. A PAUSE there stops at the last pulse; a HOLD must not.
+    it("holds where the clock is, not at the last pulse, and reports it", () => {
+      const { actor, timelineActor, position } = startTimeline();
+
+      clock.now = 300;
+      runNextFrame();
+      // Three minutes with no frame drawn.
+      clock.now = 180_300;
+      timelineActor.send({ type: "SET_DURATION", duration: 600_000 });
+      timelineActor.send({ type: "HOLD" });
+
+      expect(timelineActor.getSnapshot().value).toBe("paused");
+      expect(position()).toBe(180_300);
+      expect(actor.getSnapshot().context.ticks).toEqual([300, 180_300]);
+      expect(frames.size).toBe(0);
+
+      // The time spent held is not counted, and the count goes on from the hold.
+      clock.now = 500_000;
+      timelineActor.send({ type: "START" });
+      clock.now = 500_100;
+      runNextFrame();
+      expect(position()).toBe(180_400);
+      actor.stop();
+    });
+
+    it("finishes, rather than holds, when the clock had reached the end unseen", () => {
+      const { actor, timelineActor, position } = startTimeline();
+
+      clock.now = 300;
+      runNextFrame();
+      clock.now = 60_000;
+      timelineActor.send({ type: "HOLD" });
+
+      expect(timelineActor.getSnapshot().value).toBe("stopped");
+      expect(position()).toBe(1000);
+      expect(actor.getSnapshot().context.ticks).toEqual([300, 1000]);
+      expect(actor.getSnapshot().context.finished).toBe(1);
+      actor.stop();
+    });
+
+    it("ignores a hold while it is not running", () => {
+      const { actor, timelineActor, position } = startTimeline();
+
+      clock.now = 300;
+      runNextFrame();
+      timelineActor.send({ type: "PAUSE" });
+      clock.now = 9_000;
+      timelineActor.send({ type: "HOLD" });
+
+      expect(timelineActor.getSnapshot().value).toBe("paused");
+      expect(position()).toBe(300);
+      expect(actor.getSnapshot().context.ticks).toEqual([300]);
+      actor.stop();
+    });
+
     it("counts on from where it stopped", () => {
       const { actor, timelineActor, position } = startTimeline();
 

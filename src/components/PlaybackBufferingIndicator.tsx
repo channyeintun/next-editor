@@ -9,29 +9,49 @@ import LoadingSpinner from "./LoadingSpinner";
  */
 const BUFFERING_INDICATOR_DELAY_MS = 500;
 
-/** Mounted for one hold, so each hold starts hidden and counts its own delay. */
-function BufferingSpinner() {
+/** Whether the lesson has been held long enough to say so. */
+function useShowsBuffering(): boolean {
+  const isBuffering = useIsBuffering();
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
+    if (!isBuffering) return;
     const timer = setTimeout(() => setShown(true), BUFFERING_INDICATOR_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, []);
+    // Each hold starts hidden and counts its own delay.
+    return () => {
+      clearTimeout(timer);
+      setShown(false);
+    };
+  }, [isBuffering]);
 
-  if (!shown) return null;
-
-  return (
-    <div className="pointer-events-none fixed top-1/2 left-1/2 z-110 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#11141c]/85 p-4">
-      <LoadingSpinner label="Loading narration" />
-    </div>
-  );
+  return isBuffering && shown;
 }
 
 /**
  * Shown in the middle of the lesson while it is held for its narration (a slow
  * connection): the lesson is waiting for the sound, not stuck. Pause and seek keep
  * working underneath.
+ *
+ * The live region stays mounted and only its text changes: a screen reader announces
+ * what a live region comes to say, and often says nothing for one inserted already filled.
+ * It is a polite live region of its own, not a second `role="status"`: the editor already
+ * keeps one for a lesson that is loading.
  */
-const PlaybackBufferingIndicator = () => (useIsBuffering() ? <BufferingSpinner /> : null);
+const PlaybackBufferingIndicator = () => {
+  const shown = useShowsBuffering();
+
+  return (
+    <>
+      <div aria-atomic="true" aria-live="polite" className="sr-only">
+        {shown ? "Loading narration" : ""}
+      </div>
+      {shown && (
+        <div className="pointer-events-none fixed top-1/2 left-1/2 z-110 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#11141c]/85 p-4">
+          <LoadingSpinner label={null} />
+        </div>
+      )}
+    </>
+  );
+};
 
 export default PlaybackBufferingIndicator;

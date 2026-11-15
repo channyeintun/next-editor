@@ -367,7 +367,12 @@ export const editorMachine = setup({
       syncPlaybackAudio(context, enqueue, {
         spawnIfMissing: true,
         syncSource: true,
-        seek: true,
+        // Not while the replay plays: the narration follows the running clock by its own
+        // count, and `context.timeline.currentTime` is only as fresh as the last TICK. In
+        // a hidden tab that is the moment the tab was hidden, and a seek there with every
+        // chunk wound the narration back to it. A new player and a new source are placed
+        // where the timeline is without it.
+        seek: !check(stateIn({ playback: "playing" })),
         syncRate: true,
         syncVolume: true,
         // Not while the timeline is held for the narration: a PLAY ends the hold.

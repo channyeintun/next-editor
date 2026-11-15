@@ -19,41 +19,71 @@ afterEach(() => {
 
 const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms));
 
+/** The live region a screen reader listens to. It is always there; only its text changes. */
+const liveRegion = () => document.querySelector('[aria-live="polite"]')!;
+const announced = () => liveRegion().textContent;
+/** The spinner the sighted viewer sees. */
+const spinner = (container: HTMLElement) => container.querySelector(".animate-spin");
+
 describe("PlaybackBufferingIndicator", () => {
-  it("shows nothing while the lesson is not held", () => {
-    render(<PlaybackBufferingIndicator />);
+  it("shows and says nothing while the lesson is not held", () => {
+    const { container } = render(<PlaybackBufferingIndicator />);
     wait(5_000);
 
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(announced()).toBe("");
+    expect(spinner(container)).toBeNull();
   });
 
   it("says the narration is loading once a hold has lasted", () => {
     playback.buffering = true;
-    render(<PlaybackBufferingIndicator />);
+    const { container } = render(<PlaybackBufferingIndicator />);
 
     // A seek holds the lesson for a few milliseconds: no blink for that.
     wait(499);
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(announced()).toBe("");
+    expect(spinner(container)).toBeNull();
 
     wait(1);
-    expect(screen.getByRole("status").textContent).toBe("Loading narration");
+    expect(announced()).toBe("Loading narration");
+    expect(spinner(container)).not.toBeNull();
+  });
+
+  // A live region that is inserted already filled is often not announced at all, so
+  // the region is there from the start and the hold only changes its text.
+  it("announces through a live region that was there before the hold", () => {
+    const { rerender } = render(<PlaybackBufferingIndicator />);
+    const region = liveRegion();
+    expect(region.textContent).toBe("");
+
+    playback.buffering = true;
+    rerender(<PlaybackBufferingIndicator />);
+    wait(500);
+
+    expect(liveRegion()).toBe(region);
+    expect(region.textContent).toBe("Loading narration");
+    // The spinner is decoration: one announcement, and no status region beside the
+    // one the editor keeps for a lesson that is loading.
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("goes away when the hold ends, and counts the next hold from its start", () => {
     playback.buffering = true;
-    const { rerender } = render(<PlaybackBufferingIndicator />);
+    const { container, rerender } = render(<PlaybackBufferingIndicator />);
     wait(500);
-    expect(screen.queryByRole("status")).not.toBeNull();
+    expect(spinner(container)).not.toBeNull();
 
     playback.buffering = false;
     rerender(<PlaybackBufferingIndicator />);
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(announced()).toBe("");
+    expect(spinner(container)).toBeNull();
 
     playback.buffering = true;
     rerender(<PlaybackBufferingIndicator />);
     wait(499);
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(announced()).toBe("");
+    expect(spinner(container)).toBeNull();
     wait(1);
-    expect(screen.queryByRole("status")).not.toBeNull();
+    expect(announced()).toBe("Loading narration");
+    expect(spinner(container)).not.toBeNull();
   });
 });

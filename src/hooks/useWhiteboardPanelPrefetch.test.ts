@@ -37,10 +37,11 @@ const narratedBoardLesson = recordingWith({
   audioBlob: new Blob(["ogg"], { type: "audio/ogg" }),
 });
 
-function renderPrefetch(recording: Recording | null, isPlaying = false) {
+function renderPrefetch(recording: Recording | null, isPlaying = false, isBuffering = false) {
   return renderHook(
-    ({ recording, isPlaying }) => useWhiteboardPanelPrefetch(recording, isPlaying),
-    { initialProps: { recording, isPlaying } },
+    ({ recording, isPlaying, isBuffering }) =>
+      useWhiteboardPanelPrefetch(recording, isPlaying, isBuffering),
+    { initialProps: { recording, isPlaying, isBuffering } },
   );
 }
 
@@ -117,7 +118,23 @@ describe("useWhiteboardPanelPrefetch", () => {
   it("starts at once, rather than at idle, while the lesson plays", async () => {
     const { rerender } = renderPrefetch(narratedBoardLesson);
 
-    rerender({ recording: narratedBoardLesson, isPlaying: true });
+    rerender({ recording: narratedBoardLesson, isPlaying: true, isBuffering: false });
+    await loadEditorChunk();
+
+    expect(prefetchWhiteboardPanel).toHaveBeenCalledTimes(1);
+    expect(prefetchWhiteboardPanelWhenIdle).not.toHaveBeenCalled();
+  });
+
+  // The learner is waiting for the narration's first bytes: the board's chunk must not
+  // share a slow connection with them.
+  it("waits while the lesson is held for its narration, then starts", async () => {
+    const { rerender } = renderPrefetch(narratedBoardLesson, true, true);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(whenCodeEditorLoaded).not.toHaveBeenCalled();
+
+    rerender({ recording: narratedBoardLesson, isPlaying: true, isBuffering: false });
     await loadEditorChunk();
 
     expect(prefetchWhiteboardPanel).toHaveBeenCalledTimes(1);
@@ -128,7 +145,7 @@ describe("useWhiteboardPanelPrefetch", () => {
     const { rerender } = renderPrefetch(narratedBoardLesson);
     await loadEditorChunk();
 
-    rerender({ recording: null as unknown as Recording, isPlaying: false });
+    rerender({ recording: null as unknown as Recording, isPlaying: false, isBuffering: false });
 
     expect(cancelIdlePrefetch).toHaveBeenCalledTimes(1);
   });

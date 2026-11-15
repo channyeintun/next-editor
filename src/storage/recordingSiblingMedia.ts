@@ -261,6 +261,11 @@ export async function loadRecordingNarration(
     : await fetch(recording.audioUrl);
   if (!response.ok) throw new Error(`The narration could not be loaded (${response.status}).`);
   const raw = await response.blob();
+  // A host with a single-page fallback answers 200 with its HTML page for a file it does
+  // not have. Written out as the narration, that page would ship as a broken audio file.
+  if (raw.size === 0 || raw.type.includes("text/html")) {
+    throw new Error("The narration could not be loaded (the link does not lead to an audio file).");
+  }
   // Some hosts serve sibling audio without a usable content type; fall back to the
   // extension-derived MIME so `decodeAudioData`, track metadata and the exported file's
   // extension behave.

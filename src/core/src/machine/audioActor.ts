@@ -87,10 +87,10 @@ export type AudioPlaybackEvent =
   | { type: "SET_PLAYBACK_RATE"; rate: number }
   | { type: "SYNC"; timeMs: number }
   /**
-   * The timeline stopped at `timeMs` to wait for this narration (the answer to
+   * The timeline stopped to wait for this narration (the answer to
    * AUDIO_PLAYBACK_STALLED). The element keeps loading; PLAY counts on from here.
    */
-  | { type: "HOLD"; timeMs: number }
+  | { type: "HOLD" }
   /** The recording's narration is now this one. Ignored when it is what already plays. */
   | ({ type: "SET_SOURCE" } & AudioPlaybackSource);
 
@@ -509,16 +509,17 @@ export const audioPlaybackActor = fromTypedCallback<
         // take's RESUME_RECORDING sends only PLAY, and so does the end of a HOLD), and the
         // time spent paused or held must not be extrapolated.
         setKnownTimelineTime(currentTargetMs());
-        const endsHold = held;
+        const startsPlayback = !requestedPlay;
         requestedPlay = true;
         held = false;
-        // A narration that was given up on gets another try when the viewer plays again.
-        // Not at the end of a hold: giving up is what ended it, and trying again there
-        // would hold the lesson again, for as long as the narration cannot be loaded.
-        if (!endsHold && streamed && audio.error && retryTimer === null) {
-          failedLoads = 0;
-          audio.load();
-        }
+        // A narration that was given up on gets another try when the viewer plays again:
+        // one load, not the whole series (`failedLoads` stays spent until sound flows), so
+        // a narration that can never be loaded costs each Play one failed request and no
+        // more. Only a PLAY that starts playback asks for it. The one that ends a hold
+        // does not (giving up is what ended it), nor does a repeated one (a recording
+        // still streaming in sends a PLAY with every chunk): either would hold the lesson
+        // again and again, for as long as the narration cannot be loaded.
+        if (startsPlayback && streamed && audio.error && retryTimer === null) audio.load();
         // Exact re-align at (re)start: a pause can leave the element a few
         // hundred ms off the timeline, and letting that ride under the SYNC
         // dead zone would accumulate more lag with every play/pause cycle.
@@ -542,7 +543,11 @@ export const audioPlaybackActor = fromTypedCallback<
         audio.pause();
         break;
       case "HOLD":
-        setKnownTimelineTime(event.timeMs);
+        // Freeze at this player's own count of the timeline, as PAUSE does. The parent's
+        // copy of the time is as old as its last TICK, and a hidden tab draws no frames
+        // and so sends none: a hold from that copy wound the narration back to the moment
+        // the tab was hidden. The timeline reports where it stopped, and SYNC brings it.
+        setKnownTimelineTime(currentTargetMs());
         held = true;
         // The element is waiting for data anyway, so this is the moment to line it up
         // exactly: the PLAY that ends the hold then has nothing left to seek.
@@ -590,7 +595,11 @@ export const audioPlaybackActor = fromTypedCallback<
     disposed = true;
     cancelRetry();
     audio.pause();
+    // Removing `src` alone leaves the element downloading: only load() ends its fetch.
+    // A streamed narration left running would share a slow connection with the next
+    // lesson's files, and with its narration.
     audio.removeAttribute("src");
+    audio.load();
     releaseObjectUrl();
   };
 });

@@ -18,6 +18,14 @@ export type TimelineEvent =
   | { type: "START" }
   | { type: "STOP" }
   | { type: "PAUSE" }
+  /**
+   * Like PAUSE, but stops where the clock really is and reports it with a last TICK.
+   * PAUSE stops at the last pulse, which is what the viewer was shown; pulses come from
+   * drawn frames, so in a hidden tab the last one is as old as the tab's last frame
+   * while the count went on. A stop made without the viewer (a hold for the narration)
+   * can come then, and stopping at that pulse would wind the lesson back to it.
+   */
+  | { type: "HOLD" }
   | { type: "SEEK"; time: number }
   | { type: "SET_DURATION"; duration: number }
   | { type: "SET_SPEED"; speed: number };
@@ -31,6 +39,14 @@ const seekTimeline = (context: TimelineContext, time: number) => {
 const setTimelineSpeed = (context: TimelineContext, speed: number) => ({
   speed: normalizePlaybackSpeed(speed, context.speed),
 });
+
+/** Where a running clock is right now: the count so far plus the time since it last restarted. */
+const clockPosition = (context: TimelineContext) =>
+  normalizeTimelineTime(
+    context.accumulatedTime + (performance.now() - context.startedAt) * context.speed,
+    context.duration,
+    context.currentTime,
+  );
 
 export const timelineMachine = setup({
   types: {
@@ -65,6 +81,7 @@ export const timelineMachine = setup({
     }),
   },
   actions: {
+    readClock: assign(({ context }) => ({ currentTime: clockPosition(context) })),
     emitTick: sendParent(({ context }) => ({
       type: "TICK",
       currentTime: context.currentTime,
@@ -122,16 +139,7 @@ export const timelineMachine = setup({
       on: {
         PULSE: {
           actions: [
-            assign(({ context }) => {
-              const now = performance.now();
-              const elapsed = (now - context.startedAt) * context.speed;
-              const position = normalizeTimelineTime(
-                context.accumulatedTime + elapsed,
-                context.duration,
-                context.currentTime,
-              );
-              return { currentTime: position };
-            }),
+            { type: "readClock" },
             { type: "emitTick" },
             enqueueActions(({ context, enqueue }) => {
               if (context.currentTime >= context.duration) {
@@ -142,6 +150,23 @@ export const timelineMachine = setup({
           ],
         },
         PAUSE: "paused",
+        // Read the clock while still running (the exit below freezes the count at
+        // `currentTime`), report it, then leave: paused, or finished when the count
+        // reached the end while no pulse came to say so.
+        HOLD: {
+          actions: [
+            { type: "readClock" },
+            { type: "emitTick" },
+            enqueueActions(({ context, enqueue }) => {
+              if (context.currentTime >= context.duration) {
+                enqueue.raise({ type: "STOP" });
+                enqueue({ type: "emitFinished" });
+              } else {
+                enqueue.raise({ type: "PAUSE" });
+              }
+            }),
+          ],
+        },
         STOP: "stopped",
         // While running, a seek or a speed change also restarts the clock's count, so
         // the next pulse measures from here at the new rate.

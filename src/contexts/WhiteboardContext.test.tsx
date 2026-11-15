@@ -25,6 +25,7 @@ vi.mock("../hooks/useNextEditorContext", () => ({
     handleViewerPanelViewChange: mocks.holdViewerPanelView,
   }),
   useNextEditorMetadata: () => metadata,
+  useIsBuffering: () => false,
 }));
 vi.mock("./CollaborationContext", () => ({
   useOptionalCollaboration: () => collaborationState,

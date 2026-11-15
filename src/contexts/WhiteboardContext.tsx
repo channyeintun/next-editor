@@ -1,7 +1,11 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { useWhiteboardController } from "../hooks/useWhiteboardController";
 import { useWhiteboardStore } from "./WhiteboardStoreContext";
-import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
+import {
+  useIsBuffering,
+  useNextEditorActions,
+  useNextEditorMetadata,
+} from "../hooks/useNextEditorContext";
 import { useOptionalCollaboration } from "./CollaborationContext";
 import { useWhiteboardPanelPrefetch } from "../hooks/useWhiteboardPanelPrefetch";
 import type { WhiteboardEvent } from "../core/src/whiteboard";
@@ -18,7 +22,7 @@ export function WhiteboardProvider({ children }: WhiteboardProviderProps) {
     useNextEditorMetadata();
   const { store } = useWhiteboardStore();
   const collaboration = useOptionalCollaboration();
-  useWhiteboardPanelPrefetch(currentRecording, isPlaying);
+  useWhiteboardPanelPrefetch(currentRecording, isPlaying, useIsBuffering());
 
   const handleEvent = (event: WhiteboardEvent) => {
     // The board was opened, closed, maximized or restored, and the store already shows it.

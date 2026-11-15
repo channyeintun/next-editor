@@ -252,7 +252,7 @@ The overview diagram above draws the `playback` substates and every transition b
 Important current behavior:
 
 - `SET_SPEED` and `SET_VOLUME` are meaningful in any playback substate; they forward to `timelineActor` and, if spawned, `audioPlayer`.
-- `playing` has two substates of its own, `running` and `buffering`. The narration player reports when it was asked to play and has no sound to give (`AUDIO_PLAYBACK_STALLED`: a streamed narration on a slow connection, a seek, the first moments after `PLAY`) and when it has again (`AUDIO_PLAYBACK_RESUMED`). `buffering` pauses `timelineActor` and tells the player where it was held (`holdPlaybackForNarration`); leaving it starts both again (`releasePlaybackHold`). The timeline stays the clock, it only does not count meanwhile. The viewer still sees `playing` (`selectIsPlaying`), can pause or seek, and `selectIsBuffering` drives the wait indicator. A take's narration-file player sends the same two events, which `recording` ignores.
+- `playing` has two substates of its own, `running` and `buffering`. The narration player reports when it was asked to play and has no sound to give (`AUDIO_PLAYBACK_STALLED`: a streamed narration on a slow connection, a seek, the first moments after `PLAY`) and when it has again (`AUDIO_PLAYBACK_RESUMED`). `buffering` stops `timelineActor` with `HOLD` and tells the player to hold too (`holdPlaybackForNarration`); leaving it starts both again (`releasePlaybackHold`). The timeline stops where its clock is and reports that in a last `TICK`, and the player freezes at its own count of the same clock: neither uses `context.timeline.currentTime`, which is only as fresh as the last `TICK` and so is out of date in a hidden tab, where a learner may be listening. For the same reason `syncStreamedRecordingGrowth` does not seek the narration while the replay plays. The timeline stays the clock, it only does not count meanwhile. The viewer still sees `playing` (`selectIsPlaying`), can pause or seek, and `selectIsBuffering` drives the wait indicator. A take's narration-file player sends the same two events, which `recording` ignores.
 - `STOP` resets to `.ready` and seeks the timeline/audio back to `0` without unloading the recording.
 - `PLAY` from `ended` restarts from the beginning when the playhead is at the end (`isAtPlaybackEnd`), and otherwise plays on from where a seek left it. Only `ready`'s `PLAY` is guarded by `canPlay`.
 - Every entry into `playing` runs `reopenRecordedFile` before the first frame is applied. Frames carry no file path and the workspace cursor survives a hand-over (panel-width deltas), so a file the viewer opened from `ready`, `paused` or `ended` is swapped back for the one the recording has open at the cursor. Only `activeFilePath` changes: the viewer's files, edits, folders, scroll and widths stay. When the cursor is ahead of the playhead (a restart from the end), it does nothing: the rewind in `applyReplayStateAtTime` applies the recorded snapshot itself.
@@ -269,7 +269,7 @@ Owns clock progression and emits `TICK` updates.
 stateDiagram-v2
     [*] --> stopped
     stopped --> running : START
-    running --> paused : PAUSE
+    running --> paused : PAUSE / HOLD (reads the clock and sends a last TICK first)
     paused --> running : START
     running --> running : PULSE (sends TICK) / SEEK / SET_SPEED (restart the count)
     running --> stopped : STOP (raised by PULSE at the end, which also sends FINISHED)
@@ -280,7 +280,8 @@ stateDiagram-v2
 - `running` invokes a `requestAnimationFrame` ticker that sends `PULSE`. Each pulse moves the playhead and sends the editor `TICK`; once the playhead reaches the end, it raises `STOP` and sends `FINISHED`.
 - `SEEK`, `SET_DURATION` and `SET_SPEED` are handled at the machine root, so they work in every state. `running` has its own `SEEK` and `SET_SPEED`, which also restart the count, so the next pulse measures from there.
 - Leaving `running` freezes the count at the playhead, so `START` from `paused` or `stopped` resumes there.
-- The editor only sends `START`, `PAUSE`, `SEEK`, `SET_SPEED` and `SET_DURATION`. `STOP` is only raised by the timeline itself, from `running`, so nothing sends `paused` its `STOP` today.
+- `PAUSE` stops at the last pulse, which is what the viewer was shown. `HOLD` stops where the clock really is: it reads the clock once more, sends that as a last `TICK`, then pauses (or finishes, when the count had reached the end). The difference matters when no frame is drawn, since pulses come from `requestAnimationFrame`: in a hidden tab the last pulse is as old as the tab's last frame while the clock counted on. A stop made without the viewer (the hold for the narration) can come then.
+- The editor only sends `START`, `PAUSE`, `HOLD`, `SEEK`, `SET_SPEED` and `SET_DURATION`. `STOP` is only raised by the timeline itself, from `running`, so nothing sends `paused` its `STOP` today.
 
 ### Recorder actors
 

@@ -92,6 +92,7 @@ vi.mock("../hooks/useNextEditorContext", () => ({
   useNextEditorActions: () => ({
     handleWhiteboardEvent: (event: WhiteboardEvent) => recorded.push(event),
   }),
+  useIsBuffering: () => false,
 }));
 vi.mock("../contexts/CollaborationContext", () => ({
   useOptionalCollaboration: () => null,

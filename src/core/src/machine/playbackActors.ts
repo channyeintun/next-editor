@@ -271,11 +271,16 @@ export const pausePlaybackActors = ({ context, enqueue }: PlaybackActorsArgs): v
  * The narration ran out of data while the replay played (AUDIO_PLAYBACK_STALLED): stop
  * the timeline where it is and tell the narration, so the lesson waits for the sound
  * instead of running on without it. The timeline stays the clock; it is only not counting.
+ *
+ * "Where it is" is the clock's own reading, not `context.timeline.currentTime`: that copy
+ * is as old as the last TICK, and a hidden tab (a learner listening from another tab)
+ * sends none. So the timeline stops with HOLD, which reads the clock and reports it in a
+ * last TICK, and the narration freezes at its own count of the same clock.
  */
 export const holdPlaybackForNarration = ({ context, enqueue }: PlaybackActorsArgs): void => {
-  enqueue.sendTo("timelineActor", { type: "PAUSE" });
+  enqueue.sendTo("timelineActor", { type: "HOLD" });
   if (context.playbackAudioSpawned) {
-    enqueue.sendTo("audioPlayer", { type: "HOLD", timeMs: context.timeline.currentTime });
+    enqueue.sendTo("audioPlayer", { type: "HOLD" });
   }
 };
 

@@ -609,7 +609,9 @@ describe("audioPlaybackActor", () => {
       this.paused = true;
     }
 
-    removeAttribute(_name: string) {}
+    removeAttribute(name: string) {
+      if (name === "src") this.src = "";
+    }
 
     /** Like a real element, load() starts over: no error, no data, paused, at the start. */
     load() {
@@ -1278,7 +1280,7 @@ describe("audioPlaybackActor", () => {
       const audio = MockAudio.instances[0]!;
       audio.readyState = 0;
       player.send({ type: "PLAY" });
-      player.send({ type: "HOLD", timeMs: 0 });
+      player.send({ type: "HOLD" });
 
       // Eight seconds of a slow connection.
       clock.now += 8000;
@@ -1295,18 +1297,51 @@ describe("audioPlaybackActor", () => {
     });
 
     it("lines up with the held timeline while it waits, and follows a seek made meanwhile", () => {
-      pinPerformanceClock();
+      const clock = pinPerformanceClock();
       const { player } = observePlayback({ audioUrl: NARRATION_URL });
       const audio = MockAudio.instances[0]!;
       player.send({ type: "PLAY" });
+      clock.now += 5000;
       audio.currentTime = 4.8;
 
-      player.send({ type: "HOLD", timeMs: 5000 });
+      player.send({ type: "HOLD" });
+      expect(audio.currentTime).toBe(5);
+
+      // The timeline reports where it stopped; a few ms apart is not worth a seek.
+      player.send({ type: "SYNC", timeMs: 5012 });
       expect(audio.currentTime).toBe(5);
 
       player.send({ type: "SEEK", timeMs: 20_000 });
       player.send({ type: "PLAY" });
       expect(audio.currentTime).toBe(20);
+    });
+
+    // A learner listening from another tab: no frame is drawn, so the parent's copy of
+    // the time stays at the moment the tab was hidden while the narration plays on. A
+    // hold taken from that copy wound the narration back to it, at every stall.
+    it("holds where the narration has got to when the parent's time is long out of date", () => {
+      const clock = pinPerformanceClock();
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "SEEK", timeMs: 120_000 });
+      player.send({ type: "PLAY" });
+
+      // Three minutes of sound with no SYNC, then the stream runs dry.
+      clock.now += 180_000;
+      audio.currentTime = 300;
+      audio.readyState = 2;
+      audio.onwaiting?.();
+      expect(reported).toEqual([STALLED]);
+
+      player.send({ type: "HOLD" });
+      expect(audio.currentTime).toBe(300);
+
+      // Waiting does not move it, and the hold ends where it began.
+      clock.now += 20_000;
+      audio.readyState = 4;
+      audio.onplaying?.();
+      player.send({ type: "PLAY" });
+      expect(audio.currentTime).toBe(300);
     });
 
     it("loads again after a failed download, from where the timeline is", () => {
@@ -1364,6 +1399,83 @@ describe("audioPlaybackActor", () => {
       expect(audio.loadCalls).toBe(4);
     });
 
+    // A narration that is not there (a 404) fails every load. Each Play may ask once;
+    // the whole 1 s, 2 s, 4 s series again would hold the lesson seven seconds a Play.
+    it("tries a narration it gave up on once per Play, not the whole series again", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+      for (const delayMs of [1000, 2000, 4000, 0]) {
+        audio.error = { code: 4 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(delayMs);
+      }
+      expect(audio.loadCalls).toBe(3);
+      player.send({ type: "PAUSE" });
+      reported.length = 0;
+
+      player.send({ type: "PLAY" });
+      expect(audio.loadCalls).toBe(4);
+      expect(reported).toEqual([STALLED]);
+
+      audio.error = { code: 4 };
+      audio.onerror?.();
+      vi.advanceTimersByTime(60_000);
+      expect(audio.loadCalls).toBe(4);
+      expect(reported).toEqual([
+        STALLED,
+        { type: "AUDIO_PLAYBACK_ERROR", error: "Audio playback error" },
+        RESUMED,
+      ]);
+    });
+
+    it("has all its reloads back once sound has flowed again", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { player } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+      for (const delayMs of [1000, 2000, 4000, 0]) {
+        audio.error = { code: 4 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(delayMs);
+      }
+      player.send({ type: "PAUSE" });
+      player.send({ type: "PLAY" });
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(audio.loadCalls).toBe(4);
+
+      // The connection drops again later: the series starts over.
+      for (const delayMs of [1000, 2000, 4000]) {
+        audio.error = { code: 2 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(delayMs);
+      }
+      expect(audio.loadCalls).toBe(7);
+    });
+
+    // A recording that is still streaming in sends the player a PLAY with every chunk.
+    // Loading a failed narration again at each one held the lesson again and again.
+    it("does not try again at a PLAY repeated while it already plays", () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { player, reported } = observePlayback({ audioUrl: NARRATION_URL });
+      const audio = MockAudio.instances[0]!;
+      player.send({ type: "PLAY" });
+      for (const delayMs of [1000, 2000, 4000, 0]) {
+        audio.error = { code: 4 };
+        audio.onerror?.();
+        vi.advanceTimersByTime(delayMs);
+      }
+      reported.length = 0;
+
+      player.send({ type: "PLAY" });
+      player.send({ type: "PLAY" });
+
+      expect(audio.loadCalls).toBe(3);
+      expect(reported).toEqual([]);
+    });
+
     // Giving up ends the parent's hold with a PLAY. Loading again there would stall and
     // hold the lesson once more, for as long as the narration cannot be loaded.
     it("does not try again at the PLAY that ends a hold", () => {
@@ -1371,7 +1483,7 @@ describe("audioPlaybackActor", () => {
       const { player } = observePlayback({ audioUrl: NARRATION_URL });
       const audio = MockAudio.instances[0]!;
       player.send({ type: "PLAY" });
-      player.send({ type: "HOLD", timeMs: 0 });
+      player.send({ type: "HOLD" });
       for (const delayMs of [1000, 2000, 4000, 0]) {
         audio.error = { code: 4 };
         audio.onerror?.();
@@ -1408,9 +1520,27 @@ describe("audioPlaybackActor", () => {
       audio.onerror?.();
 
       actor.stop();
+      const loadsAtDisposal = audio.loadCalls;
       vi.advanceTimersByTime(60_000);
 
-      expect(audio.loadCalls).toBe(0);
+      expect(audio.loadCalls).toBe(loadsAtDisposal);
+      expect(audio.src).toBe("");
+    });
+
+    // Removing `src` does not end the element's download; only load() does. Left
+    // running, the old lesson's narration shared a slow connection with the next one's.
+    it("stops downloading when the player is gone", () => {
+      const actor = createActor(audioPlaybackActor, {
+        input: { audioUrl: NARRATION_URL, volume: 1, playbackRate: 1, startPositionMs: 0 },
+      }).start();
+      const audio = MockAudio.instances[0]!;
+      actor.send({ type: "PLAY" });
+
+      actor.stop();
+
+      expect(audio.src).toBe("");
+      expect(audio.loadCalls).toBe(1);
+      expect(audio.paused).toBe(true);
     });
 
     it("moves to a narration found elsewhere and keeps playing from the same moment", () => {
@@ -1437,12 +1567,16 @@ describe("audioPlaybackActor", () => {
   describe("a replay whose narration is still loading", () => {
     const NARRATION_URL = "https://cdn.example.com/lesson.ogg";
 
-    const loadStreamedLesson = async () => {
+    const loadStreamedLesson = async (overrides: Partial<Recording> = {}) => {
       const actor = createActor(editorMachine, {
         input: { editorRef: { current: null } },
       }).start();
       spawnedActors.push(actor);
-      const recording: Recording = { ...createRecording(), audioUrl: NARRATION_URL };
+      const recording: Recording = {
+        ...createRecording(),
+        audioUrl: NARRATION_URL,
+        ...overrides,
+      };
       actor.send({ type: "LOAD_RECORDING", recording });
       await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
       const timeline = () => actor.getSnapshot().children.timelineActor!.getSnapshot();
@@ -1458,6 +1592,7 @@ describe("audioPlaybackActor", () => {
     });
 
     it("holds the timeline until the narration has sound, then goes on from there", async () => {
+      pinPerformanceClock();
       const { actor, audio, timeline } = await loadStreamedLesson();
       audio.readyState = 0;
 
@@ -1493,7 +1628,64 @@ describe("audioPlaybackActor", () => {
       expect(timeline().value).toBe("running");
     });
 
+    // A learner listening from another tab: no frame is drawn there, so no TICK comes and
+    // the machine's copy of the time stays at the moment the tab was hidden, while the
+    // clock and the narration go on. The hold stopped both at that old moment, and the
+    // learner heard minutes of narration again, at every stall.
+    it("holds where the clock is, not where the last drawn frame was", async () => {
+      const clock = pinPerformanceClock();
+      const { actor, audio, timeline } = await loadStreamedLesson({ duration: 600_000 });
+      actor.send({ type: "PLAY" });
+      expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
+
+      // Three minutes of narration with no frame drawn, then the download falls behind.
+      clock.now += 180_000;
+      audio.currentTime = 180;
+      audio.readyState = 2;
+      audio.onwaiting?.();
+
+      expect(actor.getSnapshot().matches({ playback: { playing: "buffering" } })).toBe(true);
+      expect(timeline().value).toBe("paused");
+      expect(timeline().context.currentTime).toBe(180_000);
+      expect(actor.getSnapshot().context.timeline.currentTime).toBe(180_000);
+      expect(audio.currentTime).toBe(180);
+
+      // The wait is not counted, and both go on from where they stopped.
+      clock.now += 30_000;
+      audio.readyState = 4;
+      audio.onplaying?.();
+      expect(timeline().value).toBe("running");
+      expect(timeline().context.currentTime).toBe(180_000);
+      expect(audio.currentTime).toBe(180);
+    });
+
+    // The same out-of-date copy of the time went to the narration as a seek with every
+    // chunk of a lesson that was still streaming in.
+    it("does not wind the narration back when the lesson grows while no frame is drawn", async () => {
+      const clock = pinPerformanceClock();
+      const { actor, recording, audio } = await loadStreamedLesson({ duration: 600_000 });
+      actor.send({ type: "PLAY" });
+
+      clock.now += 180_000;
+      audio.currentTime = 180;
+      actor.send({ type: "EXTEND_RECORDING", recording: { ...recording } });
+
+      expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
+      expect(audio.currentTime).toBe(180);
+    });
+
+    it("still places the narration when the lesson grows while it is not playing", async () => {
+      const { actor, recording, audio } = await loadStreamedLesson();
+      actor.send({ type: "SEEK", time: 400 });
+      audio.currentTime = 0;
+
+      actor.send({ type: "EXTEND_RECORDING", recording: { ...recording } });
+
+      expect(audio.currentTime).toBe(0.4);
+    });
+
     it("lets the viewer pause and seek while it waits", async () => {
+      pinPerformanceClock();
       const { actor, audio, timeline } = await loadStreamedLesson();
       audio.readyState = 0;
       actor.send({ type: "PLAY" });
@@ -1520,7 +1712,7 @@ describe("audioPlaybackActor", () => {
     it("plays on without a narration that cannot be loaded", async () => {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       try {
-        const { actor, audio, timeline } = await loadStreamedLesson();
+        const { actor, recording, audio, timeline } = await loadStreamedLesson();
         audio.readyState = 0;
         actor.send({ type: "PLAY" });
 
@@ -1533,6 +1725,13 @@ describe("audioPlaybackActor", () => {
         expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
         expect(timeline().value).toBe("running");
         // It was given up on: the lesson is not held again for another round of reloads.
+        expect(audio.loadCalls).toBe(3);
+
+        // Nor when the lesson is still streaming in, which plays the narration again
+        // with every chunk.
+        actor.send({ type: "EXTEND_RECORDING", recording: { ...recording } });
+        expect(actor.getSnapshot().matches({ playback: { playing: "running" } })).toBe(true);
+        expect(timeline().value).toBe("running");
         expect(audio.loadCalls).toBe(3);
       } finally {
         vi.useRealTimers();

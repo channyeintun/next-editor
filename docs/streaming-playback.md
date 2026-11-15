@@ -170,8 +170,11 @@ prefix and let later prefixes fill in **without any re-seek or visible jump**.
   and `playing` moves between its `running` and `buffering` substates: while buffering, the
   timeline is paused and nothing replays, so the lesson never runs on without its sound. The
   timeline stays the clock. `PlaybackBufferingIndicator` shows the wait once it has lasted half
-  a second. A download that fails is loaded again a few times before the lesson plays on
-  without narration.
+  a second. A download that fails is loaded again a few times (after 1 s, 2 s and 4 s) before
+  the lesson plays on without narration; after that each new `PLAY` tries it once more, and
+  the full series is back once sound has flowed again. The hold also works in a hidden tab,
+  where the narration plays on but no frame is drawn: the timeline stops where its clock is
+  (`HOLD`), not at the last drawn frame.
 - **The narration's bytes are fetched only when something needs the file**: the edit panel's
   waveform, caption generation, an export or an upload (`loadRecordingNarration` /
   `withNarrationInMemory` in `recordingSiblingMedia.ts`).
