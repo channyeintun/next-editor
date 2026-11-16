@@ -1,0 +1,9 @@
+{
+  // Type-checks the engine alone (`npx tsc --noEmit -p src/core/webnode`). The
+  // root project also includes these files, with the same options.
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../../node_modules/.tmp/tsconfig.webnode.tsbuildinfo"
+  },
+  "include": ["."]
+}

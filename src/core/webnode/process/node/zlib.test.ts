@@ -1,0 +1,476 @@
+// @vitest-environment node
+// The `zlib` builtin: round trips, cross-checks with Node's own zlib in both
+// directions, streaming, corrupt input, and the constants table.
+import * as nodeZlib from "node:zlib";
+import { describe, expect, it } from "vitest";
+import { Buffer } from "./buffer";
+import stream from "./stream";
+import zlib from "./zlib";
+
+type Sync = (data: Uint8Array, options?: object) => Uint8Array;
+
+interface Format {
+  name: string;
+  compress: Sync;
+  decompress: Sync;
+  nodeCompress: Sync;
+  nodeDecompress: Sync;
+  create: () => ReturnType<typeof zlib.createGzip>;
+  createDecompress: () => ReturnType<typeof zlib.createGzip>;
+}
+
+const FORMATS: Format[] = [
+  {
+    name: "gzip",
+    compress: zlib.gzipSync,
+    decompress: zlib.gunzipSync,
+    nodeCompress: nodeZlib.gzipSync,
+    nodeDecompress: nodeZlib.gunzipSync,
+    create: zlib.createGzip,
+    createDecompress: zlib.createGunzip,
+  },
+  {
+    name: "deflate",
+    compress: zlib.deflateSync,
+    decompress: zlib.inflateSync,
+    nodeCompress: nodeZlib.deflateSync,
+    nodeDecompress: nodeZlib.inflateSync,
+    create: zlib.createDeflate,
+    createDecompress: zlib.createInflate,
+  },
+  {
+    name: "deflateRaw",
+    compress: zlib.deflateRawSync,
+    decompress: zlib.inflateRawSync,
+    nodeCompress: nodeZlib.deflateRawSync,
+    nodeDecompress: nodeZlib.inflateRawSync,
+    create: zlib.createDeflateRaw,
+    createDecompress: zlib.createInflateRaw,
+  },
+];
+
+function random(size: number, seed = 1): Uint8Array {
+  const out = new Uint8Array(size);
+  let x = seed;
+  for (let i = 0; i < size; i++) {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    out[i] = x & 0xff;
+  }
+  return out;
+}
+
+function compressible(size: number): Uint8Array {
+  const words = new TextEncoder().encode("the quick brown fox jumps over the lazy dog 0123456789 ");
+  const out = new Uint8Array(size);
+  for (let i = 0; i < size; i++) {
+    out[i] = words[(i * 7 + (i >> 9)) % words.length];
+  }
+  return out;
+}
+
+const SAMPLES: [string, Uint8Array][] = [
+  ["0 bytes", new Uint8Array(0)],
+  ["1 byte", new Uint8Array([42])],
+  ["1 MB random", random(1 << 20)],
+  ["1 MB compressible", compressible(1 << 20)],
+];
+
+function same(a: Uint8Array, b: Uint8Array): boolean {
+  return Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(b);
+}
+
+function capture(fn: () => unknown): { code?: string; errno?: number; message: string } | null {
+  try {
+    fn();
+  } catch (error) {
+    const e = error as Error & { code?: string; errno?: number };
+    return { code: e.code, errno: e.errno, message: e.message };
+  }
+  return null;
+}
+
+async function pipeChunks(
+  transform: ReturnType<typeof zlib.createGzip>,
+  data: Uint8Array,
+  chunk: number,
+): Promise<Uint8Array> {
+  const parts: Uint8Array[] = [];
+  transform.on("data", (part: Uint8Array) => parts.push(part));
+  const finished = new Promise<void>((resolve, reject) => {
+    transform.on("end", resolve);
+    transform.on("error", reject);
+  });
+  for (let at = 0; at < data.length; at += chunk) {
+    transform.write(data.subarray(at, at + chunk));
+  }
+  transform.end();
+  await finished;
+  return Buffer.concat(parts);
+}
+
+describe("zlib: sync round trips and cross-checks with node:zlib", () => {
+  for (const format of FORMATS) {
+    for (const [label, data] of SAMPLES) {
+      it(`${format.name} ${label}`, () => {
+        const ours = format.compress(data);
+        expect(Buffer.isBuffer(ours)).toBe(true);
+        expect(same(format.decompress(ours), data)).toBe(true);
+        expect(same(format.nodeDecompress(ours), data)).toBe(true);
+        expect(same(format.decompress(format.nodeCompress(data)), data)).toBe(true);
+      });
+    }
+    it(`${format.name} at every level`, () => {
+      const data = compressible(70000);
+      for (let level = -1; level <= 9; level++) {
+        const ours = format.compress(data, { level });
+        expect(same(format.nodeDecompress(ours), data), `level ${level}`).toBe(true);
+      }
+    });
+  }
+
+  it("unzipSync detects gzip and zlib", () => {
+    const data = compressible(5000);
+    expect(same(zlib.unzipSync(nodeZlib.gzipSync(data)), data)).toBe(true);
+    expect(same(zlib.unzipSync(nodeZlib.deflateSync(data)), data)).toBe(true);
+    expect(same(nodeZlib.unzipSync(zlib.gzipSync(data)), data)).toBe(true);
+  });
+
+  it("accepts strings, ArrayBuffers and DataViews", () => {
+    expect(zlib.gunzipSync(zlib.gzipSync("héllo")).toString()).toBe("héllo");
+    const bytes = new TextEncoder().encode("view");
+    expect(zlib.inflateSync(zlib.deflateSync(bytes.buffer)).toString()).toBe("view");
+    expect(zlib.inflateSync(zlib.deflateSync(new DataView(bytes.buffer))).toString()).toBe("view");
+    expect(capture(() => zlib.gzipSync(5 as never))).toEqual(
+      capture(() => nodeZlib.gzipSync(5 as never)),
+    );
+  });
+
+  it("writes Node's gzip header (mtime 0, Unix)", () => {
+    const header = Array.from(zlib.gzipSync("").subarray(0, 10));
+    expect(header).toEqual([0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3]);
+    expect(zlib.deflateSync("").toString("hex")).toBe(nodeZlib.deflateSync("").toString("hex"));
+    expect(zlib.deflateRawSync("").toString("hex")).toBe(
+      nodeZlib.deflateRawSync("").toString("hex"),
+    );
+  });
+
+  it("multi-member gzip and zero padding", () => {
+    const joined = Buffer.concat([nodeZlib.gzipSync("hello"), nodeZlib.gzipSync(" world")]);
+    expect(zlib.gunzipSync(joined).toString()).toBe("hello world");
+    const padded = Buffer.concat([nodeZlib.gzipSync("pad"), Buffer.alloc(7)]);
+    expect(zlib.gunzipSync(padded).toString()).toBe("pad");
+    const garbage = Buffer.concat([nodeZlib.gzipSync("x"), Buffer.from("junk")]);
+    expect(capture(() => zlib.gunzipSync(garbage))).toEqual(
+      capture(() => nodeZlib.gunzipSync(garbage)),
+    );
+    const trailing = Buffer.concat([nodeZlib.deflateSync("hello"), Buffer.from("xyz")]);
+    expect(zlib.inflateSync(trailing).toString()).toBe("hello");
+  });
+
+  it("gzip headers with name, comment, extra and header CRC", () => {
+    const body = nodeZlib.deflateRawSync("named");
+    const header = [0x1f, 0x8b, 8, 0x1e, 0, 0, 0, 0, 0, 3, 2, 0, 0xaa, 0xbb];
+    header.push(...new TextEncoder().encode("file.txt"), 0, ...new TextEncoder().encode("note"), 0);
+    const crc = zlib.crc32(new Uint8Array(header)) & 0xffff;
+    header.push(crc & 0xff, crc >> 8);
+    const size = 5;
+    const sum = zlib.crc32("named");
+    const trailer = [
+      sum & 0xff,
+      (sum >>> 8) & 0xff,
+      (sum >>> 16) & 0xff,
+      sum >>> 24,
+      size,
+      0,
+      0,
+      0,
+    ];
+    const member = Buffer.concat([new Uint8Array(header), body, new Uint8Array(trailer)]);
+    expect(nodeZlib.gunzipSync(member).toString()).toBe("named");
+    expect(zlib.gunzipSync(member).toString()).toBe("named");
+  });
+
+  it("preset dictionaries", () => {
+    const dictionary = Buffer.from("hello world dictionary");
+    const data = "hello world dictionary hello world";
+    const ours = zlib.deflateSync(data, { dictionary });
+    expect(nodeZlib.inflateSync(ours, { dictionary }).toString()).toBe(data);
+    const theirs = nodeZlib.deflateSync(data, { dictionary });
+    expect(zlib.inflateSync(theirs, { dictionary }).toString()).toBe(data);
+    expect(capture(() => zlib.inflateSync(theirs))).toEqual(
+      capture(() => nodeZlib.inflateSync(theirs)),
+    );
+    const wrong = { dictionary: Buffer.from("x") };
+    expect(capture(() => zlib.inflateSync(theirs, wrong))).toEqual(
+      capture(() => nodeZlib.inflateSync(theirs, wrong)),
+    );
+    const raw = zlib.deflateRawSync(data, { dictionary });
+    expect(nodeZlib.inflateRawSync(raw, { dictionary }).toString()).toBe(data);
+    expect(
+      zlib.inflateRawSync(nodeZlib.deflateRawSync(data, { dictionary }), { dictionary }).toString(),
+    ).toBe(data);
+  });
+
+  it("small windowBits still produce output Node can read", () => {
+    const data = compressible(100000);
+    const ours = zlib.deflateRawSync(data, { windowBits: 10 });
+    expect(same(nodeZlib.inflateRawSync(ours, { windowBits: 10 }), data)).toBe(true);
+    const wrapped = zlib.deflateSync(data, { windowBits: 9 });
+    expect(same(nodeZlib.inflateSync(wrapped, { windowBits: 9 }), data)).toBe(true);
+  });
+
+  it("finishFlush Z_SYNC_FLUSH reads truncated input", () => {
+    const full = nodeZlib.deflateSync("truncated but readable");
+    const cut = full.subarray(0, full.length - 4);
+    const options = { finishFlush: zlib.constants.Z_SYNC_FLUSH };
+    expect(zlib.inflateSync(cut, options).toString()).toBe(
+      nodeZlib.inflateSync(cut, options).toString(),
+    );
+  });
+
+  it("maxOutputLength", () => {
+    const packed = zlib.gzipSync(Buffer.alloc(1000));
+    expect(capture(() => zlib.gunzipSync(packed, { maxOutputLength: 10 }))).toEqual(
+      capture(() => nodeZlib.gunzipSync(packed, { maxOutputLength: 10 })),
+    );
+  });
+
+  it("option validation matches Node", () => {
+    for (const options of [
+      { level: 12 },
+      { level: "1" },
+      { windowBits: 20 },
+      { chunkSize: 10 },
+      { strategy: 9 },
+      { dictionary: "x" },
+    ]) {
+      expect(
+        capture(() => zlib.gzipSync("a", options as never)),
+        `${JSON.stringify(options)}`,
+      ).toEqual(capture(() => nodeZlib.gzipSync("a", options as never)));
+    }
+  });
+});
+
+describe("zlib: corrupt input", () => {
+  const cases: [string, Uint8Array][] = [
+    ["empty", new Uint8Array(0)],
+    ["garbage", new TextEncoder().encode("garbage!")],
+  ];
+  const pairs: [string, Sync, Sync][] = [
+    ["inflate", zlib.inflateSync, nodeZlib.inflateSync],
+    ["gunzip", zlib.gunzipSync, nodeZlib.gunzipSync],
+    ["inflateRaw", zlib.inflateRawSync, nodeZlib.inflateRawSync],
+    ["unzip", zlib.unzipSync, nodeZlib.unzipSync],
+  ];
+  for (const [name, ours, theirs] of pairs) {
+    for (const [label, data] of cases) {
+      it(`${name} ${label}`, () => {
+        const expected = capture(() => theirs(data));
+        expect(expected).not.toBeNull();
+        expect(capture(() => ours(data))).toEqual(expected);
+      });
+    }
+  }
+
+  it("truncated input, bad checksums, bad lengths", () => {
+    const gz = nodeZlib.gzipSync(compressible(20000));
+    const truncated = gz.subarray(0, gz.length - 3);
+    expect(capture(() => zlib.gunzipSync(truncated))).toEqual(
+      capture(() => nodeZlib.gunzipSync(truncated)),
+    );
+    const badCrc = Buffer.from(gz);
+    badCrc[badCrc.length - 6] ^= 1;
+    expect(capture(() => zlib.gunzipSync(badCrc))).toEqual(
+      capture(() => nodeZlib.gunzipSync(badCrc)),
+    );
+    const badLength = Buffer.from(gz);
+    badLength[badLength.length - 2] ^= 1;
+    expect(capture(() => zlib.gunzipSync(badLength))).toEqual(
+      capture(() => nodeZlib.gunzipSync(badLength)),
+    );
+    const z = nodeZlib.deflateSync("adler");
+    const badAdler = Buffer.from(z);
+    badAdler[badAdler.length - 1] ^= 1;
+    expect(capture(() => zlib.inflateSync(badAdler))).toEqual(
+      capture(() => nodeZlib.inflateSync(badAdler)),
+    );
+    const badBlock = Buffer.from([0x78, 0x9c, 0xff, 0xff]);
+    expect(capture(() => zlib.inflateSync(badBlock))).toEqual(
+      capture(() => nodeZlib.inflateSync(badBlock)),
+    );
+  });
+
+  it("callback forms report errors with code and errno", async () => {
+    const error = await new Promise<Error & { code?: string; errno?: number }>((resolve) => {
+      zlib.gunzip(Buffer.from("nope"), (e: Error | null) => resolve(e as Error));
+    });
+    expect(error.code).toBe("Z_DATA_ERROR");
+    expect(error.errno).toBe(-3);
+    const truncated = nodeZlib.deflateSync("cut").subarray(0, 4);
+    const eof = await new Promise<Error & { code?: string; errno?: number }>((resolve) => {
+      zlib.inflate(truncated, (e: Error | null) => resolve(e as Error));
+    });
+    expect(eof.code).toBe("Z_BUF_ERROR");
+    expect(eof.errno).toBe(-5);
+  });
+
+  it("streams emit the error", async () => {
+    const gunzip = zlib.createGunzip();
+    const error = await new Promise<Error & { code?: string }>((resolve) => {
+      gunzip.on("error", resolve);
+      gunzip.end(Buffer.from("not gzip at all"));
+    });
+    expect(error.code).toBe("Z_DATA_ERROR");
+    expect(error.message).toBe("incorrect header check");
+  });
+});
+
+describe("zlib: callbacks", () => {
+  it("complete asynchronously", async () => {
+    let sync = true;
+    const result = await new Promise<Buffer>((resolve, reject) => {
+      zlib.gzip("later", (error: Error | null, out?: unknown) =>
+        error ? reject(error) : resolve(out as Buffer),
+      );
+      sync = false;
+    });
+    expect(sync).toBe(false);
+    expect(nodeZlib.gunzipSync(result).toString()).toBe("later");
+    const back = await new Promise<Buffer>((resolve) => {
+      zlib.unzip(result, {}, (_error: Error | null, out?: unknown) => resolve(out as Buffer));
+    });
+    expect(back.toString()).toBe("later");
+    expect(() => zlib.gzip("x", undefined as never)).toThrow(/callback/);
+  });
+});
+
+describe("zlib: streaming", () => {
+  for (const format of FORMATS) {
+    it(`${format.name} with many small chunks, both directions`, async () => {
+      const data = compressible(300000);
+      const packed = await pipeChunks(format.create(), data, 997);
+      expect(same(format.nodeDecompress(packed), data)).toBe(true);
+      const nodePacked = format.nodeCompress(data);
+      const unpacked = await pipeChunks(format.createDecompress(), nodePacked, 13);
+      expect(same(unpacked, data)).toBe(true);
+    });
+
+    it(`${format.name} random data in one-byte chunks`, async () => {
+      const data = random(5000, 7);
+      const packed = format.nodeCompress(data);
+      expect(same(await pipeChunks(format.createDecompress(), packed, 1), data)).toBe(true);
+    });
+  }
+
+  it("pipeline with Unzip and bounded output chunks", async () => {
+    const data = compressible(200000);
+    const parts: Uint8Array[] = [];
+    await stream.promises.pipeline(
+      stream.Readable.from([nodeZlib.gzipSync(data)]),
+      zlib.createUnzip({ chunkSize: 1024 }),
+      new stream.Writable({
+        write(chunk: Uint8Array, _encoding: string, callback: () => void) {
+          parts.push(chunk);
+          callback();
+        },
+      }),
+    );
+    expect(Math.max(...parts.map((part) => part.length))).toBeLessThanOrEqual(1024);
+    expect(same(Buffer.concat(parts), data)).toBe(true);
+  });
+
+  it("flush(Z_SYNC_FLUSH) makes everything so far decodable (the ws pattern)", async () => {
+    const deflate = zlib.createDeflateRaw();
+    const inflate = zlib.createInflateRaw();
+    const packed: Uint8Array[] = [];
+    deflate.on("data", (chunk: Uint8Array) => packed.push(chunk));
+    const messages = ["first message", "second message", "first message again"];
+    for (const message of messages) {
+      packed.length = 0;
+      deflate.write(message);
+      await new Promise<void>((resolve) => deflate.flush(zlib.constants.Z_SYNC_FLUSH, resolve));
+      const frame = Buffer.concat(packed);
+      expect(Array.from(frame.subarray(-4))).toEqual([0, 0, 0xff, 0xff]);
+      const out: Uint8Array[] = [];
+      const onData = (chunk: Uint8Array) => out.push(chunk);
+      inflate.on("data", onData);
+      inflate.write(frame);
+      await new Promise<void>((resolve) => inflate.flush(resolve));
+      inflate.removeListener("data", onData);
+      expect(Buffer.concat(out).toString()).toBe(message);
+    }
+    deflate.close();
+    inflate.close();
+  });
+
+  it("bytesWritten, reset, params, close", async () => {
+    const gzip = new zlib.Gzip();
+    gzip.write("12345");
+    await new Promise<void>((resolve) => gzip.flush(resolve));
+    expect(gzip.bytesWritten).toBe(5);
+    await new Promise<void>((resolve) => gzip.params(1, 0, resolve));
+    const inflate = zlib.Inflate();
+    expect(inflate).toBeInstanceOf(zlib.Inflate);
+    expect(inflate).toBeInstanceOf(stream.Transform);
+    inflate.reset();
+    await new Promise<void>((resolve) => {
+      gzip.close(() => resolve());
+    });
+    expect(gzip.destroyed).toBe(true);
+  });
+
+  it("level 0 streams", async () => {
+    const data = random(200000, 3);
+    const packed = await pipeChunks(zlib.createGzip({ level: 0 }), data, 4096);
+    expect(same(nodeZlib.gunzipSync(packed), data)).toBe(true);
+  });
+});
+
+describe("zlib: module", () => {
+  it("constants equal Node's", () => {
+    expect({ ...zlib.constants }).toEqual({ ...nodeZlib.constants });
+    expect(Object.isFrozen(zlib.constants)).toBe(true);
+    expect({ ...zlib.codes }).toEqual({ ...(nodeZlib as unknown as { codes: object }).codes });
+  });
+
+  it("has Node's zlib exports, legacy constants included", () => {
+    // Node 26's zip-archive API is newer than Node 22.
+    const newer = new Set([
+      "default",
+      "ZipEntry",
+      "ZipFile",
+      "ZipBuffer",
+      "createZipArchive",
+      "createZipArchiveSync",
+      "zipFiles",
+      "getMaxZipContentSize",
+      "setMaxZipContentSize",
+    ]);
+    expect(Object.keys(nodeZlib).filter((name) => !newer.has(name) && !(name in zlib))).toEqual([]);
+    const legacy = zlib as unknown as Record<string, unknown>;
+    expect(legacy.Z_SYNC_FLUSH).toBe(2);
+    expect(Object.keys(zlib)).not.toContain("Z_SYNC_FLUSH");
+  });
+
+  it("crc32 matches Node", () => {
+    expect(zlib.crc32("hello")).toBe(nodeZlib.crc32("hello"));
+    expect(zlib.crc32(Buffer.from("world"), 12345)).toBe(
+      nodeZlib.crc32(Buffer.from("world"), 12345),
+    );
+    const big = random(100003);
+    expect(zlib.crc32(big)).toBe(nodeZlib.crc32(big));
+    expect(() => zlib.crc32(5 as never)).toThrow(/data/);
+  });
+
+  it("brotli and zstd throw an error naming the member", () => {
+    expect(() => zlib.brotliCompressSync("x")).toThrow(
+      "zlib.brotliCompressSync is not available in webnode",
+    );
+    expect(() => zlib.createBrotliDecompress()).toThrow(/createBrotliDecompress/);
+    expect(() => new zlib.BrotliCompress()).toThrow(/BrotliCompress/);
+    expect(() => zlib.zstdDecompressSync("x")).toThrow(/zstdDecompressSync/);
+  });
+});

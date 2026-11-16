@@ -1,0 +1,268 @@
+// What a command line runs: the lookup `execvp` does. A command name is found
+// on PATH, its `#!` line names an interpreter, and the result is one of the
+// built-in programs with the argv it should see. The built-in commands exist as
+// small marker files in /bin so `which node` and PATH lookups find them.
+import { createSystemError } from "../errors";
+import type { ProgramName } from "../protocol";
+import type { VfsApi } from "./vfs/types";
+import { O_CREAT, O_TRUNC, O_WRONLY } from "./vfs/types";
+
+export interface ResolvedExec {
+  program: ProgramName;
+  argv: string[];
+  execArgv: string[];
+}
+
+const MARKER = "#!webnode ";
+
+const SHELL_NAMES = ["sh", "bash", "zsh", "jsh", "dash"];
+const PACKAGE_MANAGER_NAMES = ["npm", "npx", "pnpm", "pnpx", "yarn"];
+
+/** Commands the shell implements itself, reachable from `child_process` too. */
+const SHELL_COMMAND_NAMES = [
+  "ls",
+  "cat",
+  "mkdir",
+  "rm",
+  "rmdir",
+  "cp",
+  "mv",
+  "touch",
+  "ln",
+  "chmod",
+  "head",
+  "tail",
+  "wc",
+  "grep",
+  "find",
+  "sort",
+  "uniq",
+  "tr",
+  "cut",
+  "sed",
+  "basename",
+  "dirname",
+  "realpath",
+  "readlink",
+  "sleep",
+  "date",
+  "whoami",
+  "hostname",
+  "uname",
+  "xargs",
+  "tee",
+  "seq",
+  "curl",
+  "echo",
+  "printf",
+  "pwd",
+  "env",
+  "which",
+  "true",
+  "false",
+  "test",
+  "clear",
+  "kill",
+];
+
+/**
+ * Packages whose command cannot run here as published and that a built-in
+ * stands in for, keyed by the end of the script's real path. `tsx` drives
+ * esbuild through loader hooks; the `node` program runs TypeScript itself.
+ */
+const SCRIPT_STAND_INS: { suffix: string; argv0: string }[] = [
+  { suffix: "/node_modules/tsx/dist/cli.mjs", argv0: "tsx" },
+  { suffix: "/node_modules/tsx/dist/cli.cjs", argv0: "tsx" },
+];
+
+const decoder = new TextDecoder();
+const encoder = new TextEncoder();
+
+/** Writes the marker files for the built-in commands into /bin. */
+export function installBuiltinCommands(vfs: VfsApi): void {
+  vfs.mkdir("/bin", true, 0o755);
+  vfs.mkdir("/usr/bin", true, 0o755);
+  vfs.mkdir("/usr/local/bin", true, 0o755);
+
+  const write = (name: string, kind: string) => {
+    vfs.writeFile(
+      `/bin/${name}`,
+      encoder.encode(`${MARKER}${kind}\n`),
+      O_WRONLY | O_CREAT | O_TRUNC,
+      0o755,
+    );
+    vfs.chmod(`/bin/${name}`, 0o755, true);
+  };
+
+  write("node", "node");
+  write("tsx", "tsx");
+  for (const name of SHELL_NAMES) {
+    write(name, "shell");
+  }
+  for (const name of PACKAGE_MANAGER_NAMES) {
+    write(name, "npm");
+  }
+  for (const name of SHELL_COMMAND_NAMES) {
+    write(name, "shell-command");
+  }
+  // `#!/usr/bin/env node` is the usual first line of a package's command.
+  vfs.writeFile(
+    "/usr/bin/env",
+    encoder.encode(`${MARKER}shell-command\n`),
+    O_WRONLY | O_CREAT | O_TRUNC,
+    0o755,
+  );
+  vfs.chmod("/usr/bin/env", 0o755, true);
+}
+
+function isExecutableFile(vfs: VfsApi, path: string): boolean {
+  try {
+    const stat = vfs.stat(path, true);
+    return (stat.mode & 0o170000) === 0o100000 && (stat.mode & 0o111) !== 0;
+  } catch {
+    return false;
+  }
+}
+
+function isFile(vfs: VfsApi, path: string): boolean {
+  try {
+    return (vfs.stat(path, true).mode & 0o170000) === 0o100000;
+  } catch {
+    return false;
+  }
+}
+
+function joinPath(directory: string, name: string): string {
+  if (name.startsWith("/")) {
+    return name;
+  }
+  return directory.endsWith("/") ? `${directory}${name}` : `${directory}/${name}`;
+}
+
+/** The file `command` names: a path as given, or the first match on PATH. */
+function findCommand(
+  vfs: VfsApi,
+  command: string,
+  env: Record<string, string>,
+  cwd: string,
+): string {
+  if (command.includes("/")) {
+    const path = joinPath(cwd, command);
+    if (!isFile(vfs, path)) {
+      throw createSystemError("ENOENT", "spawn", command);
+    }
+    return path;
+  }
+
+  for (const directory of (env.PATH ?? "").split(":")) {
+    if (!directory) {
+      continue;
+    }
+    const candidate = joinPath(joinPath(cwd, directory), command);
+    if (isExecutableFile(vfs, candidate)) {
+      return candidate;
+    }
+  }
+  throw createSystemError("ENOENT", "spawn", command);
+}
+
+/** The arguments `tsx` passes its script, without its own flags and sub-command. */
+function tsxArguments(args: string[]): string[] {
+  const rest = [...args];
+  if (rest[0] === "watch" || rest[0] === "run") {
+    rest.shift();
+  }
+  while (rest.length > 0 && rest[0].startsWith("--") && !rest[0].startsWith("--import")) {
+    // tsx's own options (--tsconfig, --clear-screen=false, --no-cache, …).
+    const [flag] = rest.splice(0, 1);
+    if (flag === "--tsconfig" && rest.length > 0) {
+      rest.shift();
+    }
+  }
+  return rest;
+}
+
+function fromMarker(kind: string, name: string, args: string[]): ResolvedExec {
+  switch (kind) {
+    case "node":
+      return { program: "node", argv: ["node", ...args], execArgv: [] };
+    case "tsx":
+      return { program: "node", argv: ["node", ...tsxArguments(args)], execArgv: [] };
+    case "shell":
+      return { program: "shell", argv: [name, ...args], execArgv: [] };
+    case "npm":
+      return { program: "npm", argv: [name, ...args], execArgv: [] };
+    default:
+      // A shell built-in run as a program: `sh -c 'ls "$@"' ls <args>`.
+      return {
+        program: "shell",
+        argv: ["sh", "-c", `${name} "$@"`, name, ...args],
+        execArgv: [],
+      };
+  }
+}
+
+/**
+ * Resolves `command` with `args` to the program a new process runs. Throws
+ * `ENOENT` when the command does not exist and `EACCES` when it is not a file
+ * that can run.
+ */
+export function resolveExec(
+  vfs: VfsApi,
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  cwd: string,
+): ResolvedExec {
+  const path = findCommand(vfs, command, env, cwd);
+  const name = path.slice(path.lastIndexOf("/") + 1);
+
+  let realPath = path;
+  try {
+    realPath = vfs.realpath(path);
+  } catch {
+    // A dangling link fails the read below.
+  }
+  const stand = SCRIPT_STAND_INS.find(({ suffix }) => realPath.endsWith(suffix));
+  if (stand) {
+    return fromMarker(stand.argv0, stand.argv0, args);
+  }
+
+  const head = decoder.decode(vfs.readFile(path).subarray(0, 256));
+  const firstLine = head.split("\n", 1)[0];
+
+  if (firstLine.startsWith(MARKER)) {
+    return fromMarker(firstLine.slice(MARKER.length).trim(), name, args);
+  }
+
+  if (firstLine.startsWith("#!")) {
+    const words = firstLine.slice(2).trim().split(/\s+/);
+    let interpreter = words.shift() ?? "";
+    if (interpreter.endsWith("/env")) {
+      if (words[0] === "-S") {
+        words.shift();
+      }
+      interpreter = words.shift() ?? "";
+    }
+    const interpreterName = interpreter.slice(interpreter.lastIndexOf("/") + 1);
+    if (interpreterName === "node" || interpreterName === "nodejs") {
+      return { program: "node", argv: ["node", path, ...args], execArgv: words };
+    }
+    if (interpreterName === "tsx" || interpreterName === "ts-node") {
+      return { program: "node", argv: ["node", path, ...args], execArgv: [] };
+    }
+    if (SHELL_NAMES.includes(interpreterName)) {
+      return { program: "shell", argv: [interpreterName, ...words, path, ...args], execArgv: [] };
+    }
+    throw createSystemError("ENOENT", "spawn", command);
+  }
+
+  if (/\.(?:[cm]?js|[cm]?ts)$/.test(name)) {
+    return { program: "node", argv: ["node", path, ...args], execArgv: [] };
+  }
+  if (command.includes("/") && !isExecutableFile(vfs, path)) {
+    throw createSystemError("EACCES", "spawn", command);
+  }
+  // No `#!` line: a shell script, as `execvp` falls back to.
+  return { program: "shell", argv: ["sh", path, ...args], execArgv: [] };
+}

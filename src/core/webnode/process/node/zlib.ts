@@ -1,0 +1,630 @@
+// The `zlib` builtin: gzip, zlib (deflate) and raw deflate over fflate, with
+// Node's framing, checks and errors from zlib/engine.ts. Streaming classes are
+// `stream.Transform`s; the `*Sync` functions run an engine in one call; the
+// callback forms run it on a later task. Brotli and zstd are present and throw.
+import { Buffer } from "./buffer";
+import {
+  invalidArgType,
+  makeNodeError,
+  outOfRange,
+  validateFunction,
+  validateInteger,
+} from "./internalErrors";
+import stream from "./stream";
+import type { StreamCallback, TransformOptions } from "./stream";
+import { crc32Update } from "./zlib/checksum";
+import { codes, constants } from "./zlib/constants";
+import {
+  Z_FINISH,
+  Z_FULL_FLUSH,
+  Z_NO_FLUSH,
+  Z_SYNC_FLUSH,
+  createEngine,
+  type Engine,
+  type Mode,
+} from "./zlib/engine";
+
+export { codes, constants };
+
+const kMaxLength = 2 ** 53 - 1;
+
+/** The options every zlib class takes. */
+export interface ZlibOptions extends Omit<TransformOptions, "flush"> {
+  flush?: number;
+  finishFlush?: number;
+  chunkSize?: number;
+  windowBits?: number;
+  level?: number;
+  memLevel?: number;
+  strategy?: number;
+  dictionary?: ArrayBufferView | ArrayBuffer;
+  info?: boolean;
+  maxOutputLength?: number;
+}
+
+/** `checkFiniteNumber` (lib/zlib.js): false for undefined/NaN, throws for the rest. */
+function checkFiniteNumber(value: unknown, name: string): value is number {
+  if (value === undefined) {
+    return false;
+  }
+  if (Number.isFinite(value)) {
+    return true;
+  }
+  if (Number.isNaN(value)) {
+    return false;
+  }
+  if (typeof value !== "number") {
+    throw invalidArgType(name, "number", value);
+  }
+  throw outOfRange(name, "a finite number", value);
+}
+
+/** `checkRangesOrGetDefault` (lib/zlib.js). */
+function checkRange(
+  value: unknown,
+  name: string,
+  lower: number,
+  upper: number,
+  fallback: number,
+): number {
+  if (!checkFiniteNumber(value, name)) {
+    return fallback;
+  }
+  if (value < lower || value > upper) {
+    throw outOfRange(name, `>= ${lower} and <= ${upper}`, value);
+  }
+  return value;
+}
+
+function toBytes(value: unknown, name: string, allowString: boolean): Uint8Array {
+  if (allowString && typeof value === "string") {
+    return Buffer.from(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (
+    value instanceof ArrayBuffer ||
+    (typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer)
+  ) {
+    return new Uint8Array(value);
+  }
+  throw invalidArgType(
+    name,
+    allowString
+      ? ["string", "Buffer", "TypedArray", "DataView", "ArrayBuffer"]
+      : ["Buffer", "TypedArray", "DataView", "ArrayBuffer"],
+    value,
+  );
+}
+
+function asBuffer(bytes: Uint8Array): Buffer {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+function concatAll(parts: Uint8Array[], total: number): Buffer {
+  if (parts.length === 1) {
+    return asBuffer(parts[0]);
+  }
+  const out = Buffer.allocUnsafe(total);
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
+function bufferTooLarge(max: number): Error {
+  return makeNodeError(
+    "ERR_BUFFER_TOO_LARGE",
+    `Cannot create a Buffer larger than ${max} bytes`,
+    RangeError,
+  );
+}
+
+/** The base of every zlib stream: Node's `ZlibBase` + `Zlib` over an engine. */
+class ZlibBase extends stream.Transform {
+  /** Input bytes taken so far. */
+  bytesWritten = 0;
+  _chunkSize: number;
+  _defaultFlushFlag: number;
+  _finishFlushFlag: number;
+  _defaultFullFlushFlag: number;
+  _maxOutputLength: number;
+  _info: boolean;
+  _level: number;
+  _strategy: number;
+  #engine: Engine | null;
+  #pendingFlushes: number[] = [];
+
+  constructor(options: ZlibOptions | undefined, mode: Mode) {
+    let opts = options;
+    let chunkSize: number = constants.Z_DEFAULT_CHUNK;
+    let flush = Z_NO_FLUSH;
+    let finishFlush = Z_FINISH;
+    let maxOutputLength = kMaxLength;
+    let windowBits: number = constants.Z_DEFAULT_WINDOWBITS;
+    let level: number = constants.Z_DEFAULT_COMPRESSION;
+    let strategy: number = constants.Z_DEFAULT_STRATEGY;
+    let dictionary: Uint8Array | undefined;
+    if (opts) {
+      if (!checkFiniteNumber(opts.chunkSize, "options.chunkSize")) {
+        chunkSize = constants.Z_DEFAULT_CHUNK;
+      } else if (opts.chunkSize < constants.Z_MIN_CHUNK) {
+        throw outOfRange("options.chunkSize", `>= ${constants.Z_MIN_CHUNK}`, opts.chunkSize);
+      } else {
+        chunkSize = opts.chunkSize;
+      }
+      flush = checkRange(opts.flush, "options.flush", Z_NO_FLUSH, constants.Z_BLOCK, flush);
+      finishFlush = checkRange(
+        opts.finishFlush,
+        "options.finishFlush",
+        Z_NO_FLUSH,
+        constants.Z_BLOCK,
+        finishFlush,
+      );
+      maxOutputLength = checkRange(
+        opts.maxOutputLength,
+        "options.maxOutputLength",
+        1,
+        kMaxLength,
+        kMaxLength,
+      );
+      if (
+        (opts.windowBits == null || opts.windowBits === 0) &&
+        (mode === "inflate" || mode === "gunzip" || mode === "unzip")
+      ) {
+        windowBits = 0;
+      } else {
+        const min = constants.Z_MIN_WINDOWBITS + (mode === "gzip" ? 1 : 0);
+        windowBits = checkRange(
+          opts.windowBits,
+          "options.windowBits",
+          min,
+          constants.Z_MAX_WINDOWBITS,
+          constants.Z_DEFAULT_WINDOWBITS,
+        );
+      }
+      level = checkRange(
+        opts.level,
+        "options.level",
+        constants.Z_MIN_LEVEL,
+        constants.Z_MAX_LEVEL,
+        constants.Z_DEFAULT_COMPRESSION,
+      );
+      checkRange(
+        opts.memLevel,
+        "options.memLevel",
+        constants.Z_MIN_MEMLEVEL,
+        constants.Z_MAX_MEMLEVEL,
+        constants.Z_DEFAULT_MEMLEVEL,
+      );
+      strategy = checkRange(
+        opts.strategy,
+        "options.strategy",
+        constants.Z_DEFAULT_STRATEGY,
+        constants.Z_FIXED,
+        constants.Z_DEFAULT_STRATEGY,
+      );
+      if (opts.dictionary !== undefined) {
+        dictionary = new Uint8Array(toBytes(opts.dictionary, "options.dictionary", false));
+      }
+      if (
+        opts.encoding ||
+        opts.objectMode ||
+        (opts as { writableObjectMode?: boolean }).writableObjectMode
+      ) {
+        opts = { ...opts, encoding: null, objectMode: false };
+        (opts as { writableObjectMode?: boolean }).writableObjectMode = false;
+      }
+    }
+    // Transform ignores a non-function `flush`, as in Node.
+    super({ autoDestroy: true, ...opts } as TransformOptions);
+    this._chunkSize = chunkSize;
+    this._defaultFlushFlag = flush;
+    this._finishFlushFlag = finishFlush;
+    this._defaultFullFlushFlag = Z_FULL_FLUSH;
+    this._maxOutputLength = maxOutputLength;
+    this._info = Boolean(opts?.info);
+    this._level = level;
+    this._strategy = strategy;
+    this.#engine = createEngine(mode, { level, windowBits, strategy, dictionary });
+  }
+
+  /** Whether the engine is gone (after `close()`/`destroy()`). */
+  get _closed(): boolean {
+    return this.#engine === null;
+  }
+
+  /** Runs the engine over `chunk`; returns its output, unsplit. */
+  _runEngine(chunk: Uint8Array, flushFlag: number): Uint8Array[] {
+    const engine = this.#engine;
+    if (engine === null) {
+      throw makeNodeError("ERR_ZLIB_BINDING_CLOSED", "zlib binding closed", Error);
+    }
+    const output = engine.write(chunk, flushFlag);
+    this.bytesWritten += chunk.length;
+    return output;
+  }
+
+  #pushOutput(output: Uint8Array[]): void {
+    const size = this._chunkSize;
+    for (const part of output) {
+      for (let at = 0; at < part.length; at += size) {
+        this.push(asBuffer(at === 0 && part.length <= size ? part : part.subarray(at, at + size)));
+      }
+    }
+  }
+
+  override _transform(chunk: Uint8Array, _encoding: string, callback: StreamCallback): void {
+    let flushFlag = this._defaultFlushFlag;
+    if (chunk.length === 0 && this.#pendingFlushes.length > 0) {
+      flushFlag = this.#pendingFlushes.shift() as number;
+    }
+    let output: Uint8Array[];
+    try {
+      output = this._runEngine(chunk, flushFlag);
+    } catch (error) {
+      callback(error as Error);
+      return;
+    }
+    this.#pushOutput(output);
+    callback();
+  }
+
+  override _flush(callback: StreamCallback): void {
+    let output: Uint8Array[];
+    try {
+      output = this._runEngine(new Uint8Array(0), this._finishFlushFlag);
+    } catch (error) {
+      callback(error as Error);
+      return;
+    }
+    this.#pushOutput(output);
+    callback();
+  }
+
+  override _destroy(error: Error | null, callback: StreamCallback): void {
+    this.#engine = null;
+    callback(error);
+  }
+
+  /** Flushes what the engine holds; `kind` defaults to `Z_FULL_FLUSH`. */
+  flush(kind?: number | (() => void), callback?: () => void): void {
+    if (typeof kind === "function" || (kind === undefined && !callback)) {
+      callback = kind as (() => void) | undefined;
+      kind = this._defaultFullFlushFlag;
+    }
+    const flushKind = (kind ?? this._defaultFullFlushFlag) as number;
+    if (this.writableFinished) {
+      if (callback) {
+        queueMicrotask(callback);
+      }
+    } else if (this.writableEnded) {
+      if (callback) {
+        this.once("end", callback);
+      }
+    } else {
+      this.#pendingFlushes.push(flushKind);
+      this.write(Buffer.alloc(0), "", callback as StreamCallback | undefined);
+    }
+  }
+
+  /** Destroys the stream; `callback` runs once it has closed. */
+  close(callback?: (error?: Error | null) => void): void {
+    if (callback) {
+      stream.finished(this, callback);
+    }
+    this.destroy();
+  }
+
+  /** Restarts the engine, dropping its state. */
+  reset(): void {
+    if (this.#engine === null) {
+      throw makeNodeError("ERR_ZLIB_BINDING_CLOSED", "zlib binding closed", Error);
+    }
+    this.#engine.reset();
+  }
+
+  /**
+   * Node's `params(level, strategy, callback)`. Validates both and flushes;
+   * the engine keeps compressing at its original level (fflate cannot switch
+   * mid-stream), which keeps the output valid.
+   */
+  params(level: number, strategy: number, callback?: () => void): void {
+    checkRange(level, "level", constants.Z_MIN_LEVEL, constants.Z_MAX_LEVEL, 0);
+    checkRange(strategy, "strategy", constants.Z_DEFAULT_STRATEGY, constants.Z_FIXED, 0);
+    this.flush(Z_SYNC_FLUSH, callback);
+  }
+
+  /** Node's legacy synchronous `_processChunk(chunk, flushFlag)`. */
+  _processChunk(chunk: Uint8Array, flushFlag: number, callback?: unknown): Buffer {
+    if (callback !== undefined) {
+      throw new Error("zlib._processChunk with a callback is not available in webnode");
+    }
+    const output = this._runEngine(toBytes(chunk, "buffer", true), flushFlag);
+    let total = 0;
+    for (const part of output) {
+      total += part.length;
+    }
+    if (total > this._maxOutputLength) {
+      throw bufferTooLarge(this._maxOutputLength);
+    }
+    return total === 0 ? Buffer.alloc(0) : concatAll(output, total);
+  }
+}
+
+/** Lets a class be called without `new`, as Node's zlib constructors can. */
+function callable<C extends new (options?: ZlibOptions) => ZlibBase>(
+  Class: C,
+): C & ((options?: ZlibOptions) => InstanceType<C>) {
+  return new Proxy(Class, {
+    apply: (target, _thisArg, args: [ZlibOptions?]) => new target(...args),
+  }) as C & ((options?: ZlibOptions) => InstanceType<C>);
+}
+
+class DeflateImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    super(options, "deflate");
+  }
+}
+class InflateImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    super(options, "inflate");
+  }
+}
+class GzipImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    super(options, "gzip");
+  }
+}
+class GunzipImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    super(options, "gunzip");
+  }
+}
+class DeflateRawImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    // Node turns windowBits 8 into 9 for raw deflate.
+    super(
+      options && options.windowBits === 8 ? { ...options, windowBits: 9 } : options,
+      "deflateRaw",
+    );
+  }
+}
+class InflateRawImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    super(options, "inflateRaw");
+  }
+}
+class UnzipImpl extends ZlibBase {
+  constructor(options?: ZlibOptions) {
+    super(options, "unzip");
+  }
+}
+Object.defineProperty(DeflateImpl, "name", { value: "Deflate" });
+Object.defineProperty(InflateImpl, "name", { value: "Inflate" });
+Object.defineProperty(GzipImpl, "name", { value: "Gzip" });
+Object.defineProperty(GunzipImpl, "name", { value: "Gunzip" });
+Object.defineProperty(DeflateRawImpl, "name", { value: "DeflateRaw" });
+Object.defineProperty(InflateRawImpl, "name", { value: "InflateRaw" });
+Object.defineProperty(UnzipImpl, "name", { value: "Unzip" });
+
+/** A zlib stream instance. */
+export type ZlibStream = ZlibBase;
+
+/** `zlib.Deflate`. */
+export const Deflate = callable(DeflateImpl);
+/** `zlib.Inflate`. */
+export const Inflate = callable(InflateImpl);
+/** `zlib.Gzip`. */
+export const Gzip = callable(GzipImpl);
+/** `zlib.Gunzip`. */
+export const Gunzip = callable(GunzipImpl);
+/** `zlib.DeflateRaw`. */
+export const DeflateRaw = callable(DeflateRawImpl);
+/** `zlib.InflateRaw`. */
+export const InflateRaw = callable(InflateRawImpl);
+/** `zlib.Unzip`. */
+export const Unzip = callable(UnzipImpl);
+
+type ZlibClass = new (options?: ZlibOptions) => ZlibBase;
+
+/** Node's `zlibBufferSync`: one engine run over the whole input. */
+function runSync(
+  Class: ZlibClass,
+  buffer: unknown,
+  options?: ZlibOptions,
+): Buffer | { buffer: Buffer; engine: ZlibBase } {
+  const input = toBytes(buffer, "buffer", true);
+  const engine = new Class(options);
+  const result = engine._processChunk(input, engine._finishFlushFlag);
+  engine.destroy();
+  return engine._info ? { buffer: result, engine } : result;
+}
+
+type ZlibCallback = (
+  error: Error | null,
+  result?: Buffer | { buffer: Buffer; engine: ZlibBase },
+) => void;
+
+/** Node's `zlibBuffer`: the callback form, completing on a later task. */
+function runAsync(Class: ZlibClass, buffer: unknown, options: unknown, callback: unknown): void {
+  if (typeof options === "function") {
+    callback = options;
+    options = {};
+  }
+  validateFunction(callback, "callback");
+  const input = toBytes(buffer, "buffer", true);
+  const done = callback as ZlibCallback;
+  const copy = new Uint8Array(input);
+  setTimeout(() => {
+    let result: Buffer | { buffer: Buffer; engine: ZlibBase };
+    try {
+      result = runSync(Class, copy, options as ZlibOptions | undefined);
+    } catch (error) {
+      done(error as Error);
+      return;
+    }
+    done(null, result);
+  }, 0);
+}
+
+function syncFn(Class: ZlibClass, name: string) {
+  const fn = (buffer: unknown, options?: ZlibOptions): Buffer =>
+    runSync(Class, buffer, options) as Buffer;
+  Object.defineProperty(fn, "name", { value: name });
+  return fn;
+}
+
+function asyncFn(Class: ZlibClass, name: string) {
+  const fn = (buffer: unknown, options: unknown, callback?: unknown): void =>
+    runAsync(Class, buffer, options, callback);
+  Object.defineProperty(fn, "name", { value: name });
+  return fn;
+}
+
+/** `zlib.deflateSync`. */
+export const deflateSync = syncFn(DeflateImpl, "deflateSync");
+/** `zlib.inflateSync`. */
+export const inflateSync = syncFn(InflateImpl, "inflateSync");
+/** `zlib.gzipSync`. */
+export const gzipSync = syncFn(GzipImpl, "gzipSync");
+/** `zlib.gunzipSync`. */
+export const gunzipSync = syncFn(GunzipImpl, "gunzipSync");
+/** `zlib.deflateRawSync`. */
+export const deflateRawSync = syncFn(DeflateRawImpl, "deflateRawSync");
+/** `zlib.inflateRawSync`. */
+export const inflateRawSync = syncFn(InflateRawImpl, "inflateRawSync");
+/** `zlib.unzipSync`. */
+export const unzipSync = syncFn(UnzipImpl, "unzipSync");
+
+/** `zlib.deflate`. */
+export const deflate = asyncFn(DeflateImpl, "deflate");
+/** `zlib.inflate`. */
+export const inflate = asyncFn(InflateImpl, "inflate");
+/** `zlib.gzip`. */
+export const gzip = asyncFn(GzipImpl, "gzip");
+/** `zlib.gunzip`. */
+export const gunzip = asyncFn(GunzipImpl, "gunzip");
+/** `zlib.deflateRaw`. */
+export const deflateRaw = asyncFn(DeflateRawImpl, "deflateRaw");
+/** `zlib.inflateRaw`. */
+export const inflateRaw = asyncFn(InflateRawImpl, "inflateRaw");
+/** `zlib.unzip`. */
+export const unzip = asyncFn(UnzipImpl, "unzip");
+
+/** `zlib.createDeflate`. */
+export const createDeflate = (options?: ZlibOptions) => new DeflateImpl(options);
+/** `zlib.createInflate`. */
+export const createInflate = (options?: ZlibOptions) => new InflateImpl(options);
+/** `zlib.createGzip`. */
+export const createGzip = (options?: ZlibOptions) => new GzipImpl(options);
+/** `zlib.createGunzip`. */
+export const createGunzip = (options?: ZlibOptions) => new GunzipImpl(options);
+/** `zlib.createDeflateRaw`. */
+export const createDeflateRaw = (options?: ZlibOptions) => new DeflateRawImpl(options);
+/** `zlib.createInflateRaw`. */
+export const createInflateRaw = (options?: ZlibOptions) => new InflateRawImpl(options);
+/** `zlib.createUnzip`. */
+export const createUnzip = (options?: ZlibOptions) => new UnzipImpl(options);
+
+/** `zlib.crc32(data, value)`: the CRC-32 of `data`, continuing from `value`. */
+export function crc32(data: unknown, value: unknown = 0): number {
+  let bytes: Uint8Array;
+  if (typeof data === "string") {
+    bytes = Buffer.from(data);
+  } else if (ArrayBuffer.isView(data)) {
+    bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  } else {
+    throw invalidArgType("data", ["Buffer", "TypedArray", "DataView", "string"], data);
+  }
+  validateInteger(value, "value", 0, 0xffffffff);
+  return crc32Update(value, bytes);
+}
+
+function unavailable(name: string): Error {
+  return makeNodeError(
+    "ERR_FEATURE_UNAVAILABLE_ON_PLATFORM",
+    `zlib.${name} is not available in webnode`,
+    Error,
+  );
+}
+
+function unavailableFn(name: string): (...args: unknown[]) => never {
+  const fn = (): never => {
+    throw unavailable(name);
+  };
+  Object.defineProperty(fn, "name", { value: name });
+  return fn;
+}
+
+/** A constructor that throws: brotli and zstd have no engine in webnode. */
+function unavailableClass(name: string): new (...args: unknown[]) => never {
+  const Class = function (): never {
+    throw unavailable(name);
+  } as unknown as new (...args: unknown[]) => never;
+  Object.defineProperty(Class, "name", { value: name });
+  return Class;
+}
+
+/** What `require("zlib")` returns. */
+const zlibModule = {
+  crc32,
+  Deflate,
+  Inflate,
+  Gzip,
+  Gunzip,
+  DeflateRaw,
+  InflateRaw,
+  Unzip,
+  BrotliCompress: unavailableClass("BrotliCompress"),
+  BrotliDecompress: unavailableClass("BrotliDecompress"),
+  ZstdCompress: unavailableClass("ZstdCompress"),
+  ZstdDecompress: unavailableClass("ZstdDecompress"),
+  deflate,
+  deflateSync,
+  gzip,
+  gzipSync,
+  deflateRaw,
+  deflateRawSync,
+  unzip,
+  unzipSync,
+  inflate,
+  inflateSync,
+  gunzip,
+  gunzipSync,
+  inflateRaw,
+  inflateRawSync,
+  brotliCompress: unavailableFn("brotliCompress"),
+  brotliCompressSync: unavailableFn("brotliCompressSync"),
+  brotliDecompress: unavailableFn("brotliDecompress"),
+  brotliDecompressSync: unavailableFn("brotliDecompressSync"),
+  zstdCompress: unavailableFn("zstdCompress"),
+  zstdCompressSync: unavailableFn("zstdCompressSync"),
+  zstdDecompress: unavailableFn("zstdDecompress"),
+  zstdDecompressSync: unavailableFn("zstdDecompressSync"),
+  createDeflate,
+  createInflate,
+  createDeflateRaw,
+  createInflateRaw,
+  createGzip,
+  createGunzip,
+  createUnzip,
+  createBrotliCompress: unavailableFn("createBrotliCompress"),
+  createBrotliDecompress: unavailableFn("createBrotliDecompress"),
+  createZstdCompress: unavailableFn("createZstdCompress"),
+  createZstdDecompress: unavailableFn("createZstdDecompress"),
+  constants,
+  codes,
+};
+
+// Node still exposes the Z_* constants on the module, non-enumerable (deprecated).
+for (const [key, value] of Object.entries(constants)) {
+  if (!key.startsWith("BROTLI")) {
+    Object.defineProperty(zlibModule, key, { enumerable: false, value, writable: false });
+  }
+}
+
+export default zlibModule;
