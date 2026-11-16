@@ -13,4 +13,5 @@ export {
   toMonacoModelPath,
   toPlaybackModelPath,
   workspacePathFromMonacoModelUri,
+  workspacePathFromPlaybackModelUri,
 } from "./models";

@@ -24,6 +24,7 @@ vi.mock("../monaco", () => ({
   toMonacoModelPath: (path: string) => path,
   toPlaybackModelPath: (path: string) => path,
   workspacePathFromMonacoModelUri: () => null,
+  workspacePathFromPlaybackModelUri: () => null,
 }));
 
 // One focusable control stands in for the header; the other workspace panels

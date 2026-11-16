@@ -16,6 +16,7 @@ import {
   toMonacoModelPath,
   toPlaybackModelPath,
   workspacePathFromMonacoModelUri,
+  workspacePathFromPlaybackModelUri,
 } from "./models";
 
 interface FakeUri {
@@ -121,6 +122,12 @@ describe("workspace model URIs", () => {
     const model = syncWorkspaceModel(monaco, path, "", "plaintext");
 
     expect(workspacePathFromMonacoModelUri(model.uri)).toBe(path);
+    // The playback model of the same file names that file too, and only it does: the
+    // editor carries its view over to the workspace model when a lesson pauses.
+    const playbackModel = getOrCreatePlaybackModel(monaco, path, "", "plaintext");
+    expect(workspacePathFromPlaybackModelUri(playbackModel.uri)).toBe(path);
+    expect(workspacePathFromPlaybackModelUri(model.uri)).toBeNull();
+    expect(workspacePathFromMonacoModelUri(playbackModel.uri)).toBeNull();
   });
 
   it("keeps the active playback model when named by its playback path", () => {

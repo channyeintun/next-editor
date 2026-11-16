@@ -33,6 +33,19 @@ export function isPlaybackModelUri(uri: { toString(): string }) {
   return uri.toString().startsWith(`${PLAYBACK_MODEL_ROOT}/`);
 }
 
+/** The workspace file a playback model replays, or null for any other model. */
+export function workspacePathFromPlaybackModelUri(uri: { toString(): string }) {
+  const modelUri = uri.toString();
+  const playbackPrefix = `${PLAYBACK_MODEL_ROOT}/`;
+
+  if (!modelUri.startsWith(playbackPrefix)) {
+    return null;
+  }
+
+  // decodeURIComponent, as in workspacePathFromMonacoModelUri below.
+  return normalizeWorkspacePath(decodeURIComponent(modelUri.slice(playbackPrefix.length)));
+}
+
 export function disposePlaybackModels(
   monaco: Monaco,
   preservedUri: { toString(): string } | null = null,

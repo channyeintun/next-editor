@@ -72,6 +72,7 @@ vi.mock("../monaco", async () => {
     toMonacoModelPath: (path: string) => path,
     toPlaybackModelPath: (path: string) => path,
     workspacePathFromMonacoModelUri: () => "index.html",
+    workspacePathFromPlaybackModelUri: () => null,
   };
 });
 

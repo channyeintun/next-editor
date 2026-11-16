@@ -1,4 +1,12 @@
-import { Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  Suspense,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { useNextEditorActions, useNextEditorMetadata } from "../hooks/useNextEditorContext";
 import {
@@ -19,6 +27,7 @@ import FileSidebar from "./FileSidebar";
 import { WorkspaceEventRecorder } from "./WorkspaceEventRecorder";
 import BinaryFilePreview from "./BinaryFilePreview";
 import RuntimeDock from "./terminalPanel/RuntimeDock";
+import { createEditorViewStates } from "./codeEditor/editorViewStates";
 import { createMonacoTextEditEvent } from "./codeEditor/textEditEvent";
 import { useCollaborationPresence } from "./codeEditor/useCollaborationPresence";
 import { useFollowViewport } from "./codeEditor/useFollowViewport";
@@ -30,7 +39,6 @@ import {
   disposePlaybackModels,
   disposeRemovedWorkspaceModels,
   getEditorOptions,
-  isPlaybackModelUri,
   MonacoEditor,
   monaco,
   getOrCreatePlaybackModel,
@@ -94,7 +102,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
   const isWorkspaceCovered = useIsWorkspaceCovered();
   const editorDisposablesRef = useRef<{ dispose(): void }[]>([]);
   const monacoRef = useRef<Monaco | null>(null);
-  const viewStatesRef = useRef(new Map<string, monaco.editor.ICodeEditorViewState | null>());
+  // The view each file is shown with, carried from a lesson's playback model to the
+  // file the lesson hands over (codeEditor/editorViewStates.ts).
+  const [viewStates] = useState(createEditorViewStates);
   const isApplyingExternalModelValueRef = useRef(false);
   const pendingExternalModelCaptureRef = useRef(false);
   const modelVersionByUriRef = useRef(new Map<string, number>());
@@ -324,30 +334,6 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
     editorDisposablesRef.current = [];
   };
 
-  const saveNormalViewState = useEffectEvent((editor: StandaloneEditor | null) => {
-    const model = editor?.getModel();
-
-    if (!editor || !model || isPlaybackModelUri(model.uri)) {
-      return;
-    }
-
-    viewStatesRef.current.set(model.uri.toString(), editor.saveViewState());
-  });
-
-  const restoreNormalViewState = useEffectEvent(
-    (editor: StandaloneEditor, model: monaco.editor.ITextModel | null) => {
-      if (!model || isPlaybackModelUri(model.uri)) {
-        return;
-      }
-
-      const viewState = viewStatesRef.current.get(model.uri.toString());
-
-      if (viewState) {
-        editor.restoreViewState(viewState);
-      }
-    },
-  );
-
   const detachEditorOnUnmount = useEffectEvent(() => {
     // The view state was already saved by MonacoEditor's onWillDispose — its
     // cleanup runs before this one and the editor is disposed by now.
@@ -390,7 +376,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
       yMonacoBinding.getActive()?.model,
     ]);
     for (const uri of disposedUris) {
-      viewStatesRef.current.delete(uri);
+      viewStates.forget(uri);
       modelVersionByUriRef.current.delete(uri);
     }
   }, [treeVersion]);
@@ -591,7 +577,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
     if (mountedModel) {
       modelVersionByUriRef.current.set(mountedModel.uri.toString(), mountedModel.getVersionId());
     }
-    restoreNormalViewState(editor, editor.getModel());
+    viewStates.restore(editor, editor.getModel());
 
     focusEditorIfNeeded(editor);
 
@@ -714,9 +700,9 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
                   className="size-full"
                   model={activeModel}
                   onMount={handleEditorDidMount}
-                  onBeforeModelChange={saveNormalViewState}
-                  onAfterModelChange={restoreNormalViewState}
-                  onWillDispose={saveNormalViewState}
+                  onBeforeModelChange={viewStates.save}
+                  onAfterModelChange={viewStates.restore}
+                  onWillDispose={viewStates.save}
                   options={editorOptions}
                 />
               )}
