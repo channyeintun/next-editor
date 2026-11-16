@@ -15,8 +15,8 @@ import {
   toInternalModelUri,
   toMonacoModelPath,
   toPlaybackModelPath,
+  workspaceModelUriFromPlaybackModelUri,
   workspacePathFromMonacoModelUri,
-  workspacePathFromPlaybackModelUri,
 } from "./models";
 
 interface FakeUri {
@@ -122,12 +122,28 @@ describe("workspace model URIs", () => {
     const model = syncWorkspaceModel(monaco, path, "", "plaintext");
 
     expect(workspacePathFromMonacoModelUri(model.uri)).toBe(path);
-    // The playback model of the same file names that file too, and only it does: the
-    // editor carries its view over to the workspace model when a lesson pauses.
+    // The playback model of the same file names that file's workspace model, and only
+    // a playback model does: the editor carries its view over when a lesson pauses.
     const playbackModel = getOrCreatePlaybackModel(monaco, path, "", "plaintext");
-    expect(workspacePathFromPlaybackModelUri(playbackModel.uri)).toBe(path);
-    expect(workspacePathFromPlaybackModelUri(model.uri)).toBeNull();
+    expect(workspaceModelUriFromPlaybackModelUri(monaco, playbackModel.uri)).toBe(
+      model.uri.toString(),
+    );
+    expect(workspaceModelUriFromPlaybackModelUri(monaco, model.uri)).toBeNull();
     expect(workspacePathFromMonacoModelUri(playbackModel.uri)).toBeNull();
+  });
+
+  // Monaco lowercases a leading `X:` in a file URI as a drive letter, so the path read
+  // back from the workspace model is not the file's. The two models are matched by URI.
+  it("names the workspace model of a file whose name looks like a drive letter", () => {
+    const { monaco } = createFakeMonaco((value): FakeUri => URI.parse(value));
+    const path = "X:notes.md";
+    const model = syncWorkspaceModel(monaco, path, "", "markdown");
+    const playbackModel = getOrCreatePlaybackModel(monaco, path, "", "markdown");
+
+    expect(workspacePathFromMonacoModelUri(model.uri)).not.toBe(path);
+    expect(workspaceModelUriFromPlaybackModelUri(monaco, playbackModel.uri)).toBe(
+      model.uri.toString(),
+    );
   });
 
   it("keeps the active playback model when named by its playback path", () => {

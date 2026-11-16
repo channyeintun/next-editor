@@ -1,9 +1,4 @@
-import {
-  isPlaybackModelUri,
-  workspacePathFromMonacoModelUri,
-  workspacePathFromPlaybackModelUri,
-  type monaco,
-} from "../../monaco";
+import { isPlaybackModelUri, monaco, workspaceModelUriFromPlaybackModelUri } from "../../monaco";
 
 type StandaloneEditor = monaco.editor.IStandaloneCodeEditor;
 type TextModel = monaco.editor.ITextModel;
@@ -34,19 +29,19 @@ export interface EditorViewStates {
 export function createEditorViewStates(): EditorViewStates {
   const savedByUri = new Map<string, ViewState | null>();
   // The view on a playback model as the editor left it, for the workspace model of
-  // the same file if that is what the editor shows next.
-  let handedOver: { path: string; viewState: ViewState | null } | null = null;
+  // the same file (named by its URI) if that is what the editor shows next.
+  let handedOver: { workspaceUri: string; viewState: ViewState | null } | null = null;
 
   return {
     save(editor) {
       const model = editor?.getModel();
       if (!editor || !model) return;
 
-      const playbackPath = workspacePathFromPlaybackModelUri(model.uri);
-      if (playbackPath !== null) {
+      const workspaceUri = workspaceModelUriFromPlaybackModelUri(monaco, model.uri);
+      if (workspaceUri !== null) {
         // Replay rebuilds a playback model's view from the recording, so it is kept
         // only for the hand-over.
-        handedOver = { path: playbackPath, viewState: editor.saveViewState() };
+        handedOver = { workspaceUri, viewState: editor.saveViewState() };
         return;
       }
 
@@ -58,10 +53,11 @@ export function createEditorViewStates(): EditorViewStates {
       handedOver = null;
       if (!model || isPlaybackModelUri(model.uri)) return;
 
+      const modelUri = model.uri.toString();
       const viewState =
-        lastPlaybackView && lastPlaybackView.path === workspacePathFromMonacoModelUri(model.uri)
+        lastPlaybackView?.workspaceUri === modelUri
           ? lastPlaybackView.viewState
-          : savedByUri.get(model.uri.toString());
+          : savedByUri.get(modelUri);
 
       if (viewState) {
         editor.restoreViewState(viewState);

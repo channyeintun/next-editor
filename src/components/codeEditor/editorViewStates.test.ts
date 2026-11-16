@@ -1,22 +1,26 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+// The monaco-editor package is mocked under test (vite.config.ts), so take Monaco's real
+// URI class from its file: models are matched by the URI Monaco serialises.
+// @ts-expect-error -- Monaco publishes no types for its internal modules.
+import { URI } from "../../../node_modules/monaco-editor/esm/vs/base/common/uri.js";
 import type { monaco } from "../../monaco";
 import { toMonacoModelPath, toPlaybackModelPath } from "../../monaco/models";
 
-// Only the model-path rules are needed, not the Monaco runtime the package's
-// index sets up.
-vi.mock("../../monaco", async () => await import("../../monaco/models"));
+// Only the model-path rules and Monaco's URI are needed, not the Monaco runtime the
+// package's index sets up.
+vi.mock("../../monaco", async () => ({
+  ...(await import("../../monaco/models")),
+  monaco: { Uri: URI },
+}));
 
 const { createEditorViewStates } = await import("./editorViewStates");
 
 type ViewState = monaco.editor.ICodeEditorViewState;
 type Model = { uri: { toString(): string } };
 
-const workspaceModel = (path: string): Model => ({
-  uri: { toString: () => toMonacoModelPath(path) },
-});
-const playbackModel = (path: string): Model => ({
-  uri: { toString: () => toPlaybackModelPath(path) },
-});
+// Models carry the URI Monaco parsed their path into, as real ones do.
+const workspaceModel = (path: string): Model => ({ uri: URI.parse(toMonacoModelPath(path)) });
+const playbackModel = (path: string): Model => ({ uri: URI.parse(toPlaybackModelPath(path)) });
 
 /** A view with the caret on `line`, enough to tell one saved view from another. */
 const viewOn = (line: number) =>
@@ -74,6 +78,20 @@ describe("editor view states", () => {
     expect(fake.view()).toEqual(viewOn(20));
   });
 
+  // Monaco rewrites some file URIs (a leading `X:` becomes a lowercase drive letter),
+  // so the two models are matched by URI, not by a path decoded from each.
+  it.each(["X:notes.md", "src/routes/posts/$postId.tsx", "notes;v2 & more=1,2.md", "ü/😀.md"])(
+    "hands the view over for a file named %s",
+    (path) => {
+      const viewStates = createEditorViewStates();
+      const fake = fakeEditor(playbackModel(path), viewOn(20));
+
+      fake.show(viewStates, workspaceModel(path));
+
+      expect(fake.view()).toEqual(viewOn(20));
+    },
+  );
+
   it("prefers the view just handed over to the one saved at the previous pause", () => {
     const viewStates = createEditorViewStates();
     const fake = fakeEditor(workspaceModel("src/App.tsx"), viewOn(5));
@@ -119,7 +137,7 @@ describe("editor view states", () => {
     const fake = fakeEditor(workspaceModel("src/App.tsx"), viewOn(5));
     fake.show(viewStates, workspaceModel("src/other.ts"));
 
-    viewStates.forget(toMonacoModelPath("src/App.tsx"));
+    viewStates.forget(workspaceModel("src/App.tsx").uri.toString());
     fake.show(viewStates, workspaceModel("src/App.tsx"));
 
     expect(fake.view()).toBeNull();

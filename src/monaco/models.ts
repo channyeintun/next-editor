@@ -46,6 +46,23 @@ export function workspacePathFromPlaybackModelUri(uri: { toString(): string }) {
   return normalizeWorkspacePath(decodeURIComponent(modelUri.slice(playbackPrefix.length)));
 }
 
+/**
+ * The URI of the workspace model for the file a playback model replays, as Monaco
+ * serialises it (what that model's `uri.toString()` gives), or null for any other
+ * model. Compare models through this, not through decoded paths: Monaco rewrites a
+ * file URI on the way (a leading `X:` is lowercased as a drive letter), so a path read
+ * back from the workspace model need not equal the one read from the playback model.
+ */
+export function workspaceModelUriFromPlaybackModelUri(
+  monaco: Monaco,
+  uri: { toString(): string },
+): string | null {
+  const workspacePath = workspacePathFromPlaybackModelUri(uri);
+  return workspacePath === null
+    ? null
+    : monaco.Uri.parse(toMonacoModelPath(workspacePath)).toString();
+}
+
 export function disposePlaybackModels(
   monaco: Monaco,
   preservedUri: { toString(): string } | null = null,

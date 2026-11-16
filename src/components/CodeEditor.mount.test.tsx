@@ -21,6 +21,8 @@ const harness = vi.hoisted(() => ({
   editor: null as unknown,
   model: null as unknown,
   actions: null as unknown,
+  // The props CodeEditor last gave the editor view.
+  monacoEditorProps: null as unknown,
 }));
 
 // Monaco itself is not under test. The editor view mounts the way
@@ -56,9 +58,10 @@ vi.mock("../monaco", async () => {
         ScrollType: { Smooth: 0, Immediate: 1 },
       },
     },
-    MonacoEditor: ({ onMount }: { onMount?: (editor: unknown) => void }) => {
+    MonacoEditor: (props: { onMount?: (editor: unknown) => void }) => {
+      harness.monacoEditorProps = props;
       useLayoutEffect(() => {
-        onMount?.(harness.editor);
+        props.onMount?.(harness.editor);
       }, []);
       return null;
     },
@@ -68,11 +71,13 @@ vi.mock("../monaco", async () => {
     acknowledgeWorkspaceModelContent: () => {},
     disposePlaybackModels: () => {},
     disposeRemovedWorkspaceModels: () => [],
-    isPlaybackModelUri: () => false,
+    // A lesson's playback model of a file, by a scheme of this mock's own.
+    isPlaybackModelUri: (uri: { toString(): string }) => uri.toString().startsWith("playback:"),
     toMonacoModelPath: (path: string) => path,
     toPlaybackModelPath: (path: string) => path,
     workspacePathFromMonacoModelUri: () => "index.html",
-    workspacePathFromPlaybackModelUri: () => null,
+    workspaceModelUriFromPlaybackModelUri: (_monaco: unknown, uri: { toString(): string }) =>
+      uri.toString().startsWith("playback:") ? uri.toString().replace("playback:", "file:") : null,
   };
 });
 
@@ -319,6 +324,31 @@ describe("CodeEditor's Monaco listeners", () => {
     editor.fire("onDidChangeCursorSelection");
 
     expect(handleEditorChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CodeEditor's model swaps", () => {
+  // Issue 14: the key that pauses a lesson is typed after the editor has swapped the
+  // lesson's playback model for the file's own, which Monaco starts with the caret on
+  // line 1. MonacoEditor calls these props around every swap.
+  it("hands the view on a lesson's playback model over to the file itself", () => {
+    render(<CodeEditor />);
+    const { onBeforeModelChange, onAfterModelChange } = harness.monacoEditorProps as {
+      onBeforeModelChange: (editor: unknown, model: unknown) => void;
+      onAfterModelChange: (editor: unknown, model: unknown) => void;
+    };
+    const playbackModel = { uri: { toString: () => "playback:///index.html" } };
+    const workspaceModel = { uri: { toString: () => "file:///index.html" } };
+    const viewOnPlaybackModel = { cursorState: [{ position: { lineNumber: 20, column: 8 } }] };
+    const restoreViewState = vi.fn<(viewState: unknown) => void>();
+
+    onBeforeModelChange(
+      { getModel: () => playbackModel, saveViewState: () => viewOnPlaybackModel },
+      playbackModel,
+    );
+    onAfterModelChange({ getModel: () => workspaceModel, restoreViewState }, workspaceModel);
+
+    expect(restoreViewState.mock.calls).toEqual([[viewOnPlaybackModel]]);
   });
 });
 
