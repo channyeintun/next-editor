@@ -13,18 +13,20 @@ import {
 import { findFrameIndexAtTime } from "../utils/timedIndex";
 import { isEditorReady, isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../utils/equality";
-import { applyContentDiff, applySelectionDiff, areSelectionsEqual } from "../utils/editorDiff";
+import { applyContentDiff } from "../utils/editorDiff";
 import { reportMachineError } from "./machineError";
+import { clearRecordedCaret, isLearnerCaretHeld, showRecordedCaret } from "./playbackCaret";
 import { resolveBoundedReplayTime } from "./replayStep";
 
 // ============================================================================
 // Editor frame replay
 //
 // Brings the Monaco editor to the playhead: folding the recorded frames
-// (applyFrameAtTime), applying one to the editor (applyFrameState), and the
-// playback caret's decorations. applyFrameAtTime is one of the replay steps in
-// replayActions.ts; the frames' slide and preview fallbacks for recordings
-// without those tracks ride along with it.
+// (applyFrameAtTime) and applying one to the editor (applyFrameState). How the
+// recorded caret is shown, and whether the editor's caret is the recording's or
+// the learner's, belongs to playbackCaret.ts. applyFrameAtTime is one of the
+// replay steps in replayActions.ts; the frames' slide and preview fallbacks for
+// recordings without those tracks ride along with it.
 // ============================================================================
 
 /**
@@ -35,9 +37,6 @@ export const RENDERED_FRAME_RESET = {
   currentFrame: null,
   lastAppliedFrameIndex: -1,
 } as const satisfies EditorContextUpdate;
-
-/** Color of the playback caret's marks in the minimap and the overview ruler. */
-const PLAYBACK_CURSOR_COLOR = "#007ACC";
 
 /**
  * Preview scroll offsets within this many pixels count as unchanged, so fractional scroll
@@ -97,12 +96,10 @@ function latestEditorModelBoundaryTime(
 export const applyFrameState = (
   editor: monaco.editor.IStandaloneCodeEditor,
   frame: EditorFrame,
-  decorationsCollection: monaco.editor.IEditorDecorationsCollection | null,
   previousFrame?: EditorFrame | null,
-): monaco.editor.IEditorDecorationsCollection | null => {
-  if (!frame.state || !isEditorReady(editor)) return decorationsCollection;
+): void => {
+  if (!frame.state || !isEditorReady(editor)) return;
 
-  let collection = decorationsCollection;
   // Replay frames are already normalized: recording keyframes by the load and the
   // codec, delta results by applyFrameDelta. A keyframe is the recording's own
   // object, though, so Monaco gets a copy of its view state.
@@ -122,68 +119,23 @@ export const applyFrameState = (
     // Monaco cursorState inside viewState cannot override the recorded caret.
     if (viewStateChanged) {
       try {
-        editor.restoreViewState(structuredClone(state.viewState));
+        const viewState = structuredClone(state.viewState);
+        // The learner has placed the editor's caret (playbackCaret.ts): the view still
+        // follows the recording, the caret stays theirs. Monaco skips the cursor
+        // restore for an empty cursor state.
+        if (viewState && isLearnerCaretHeld(editor)) {
+          viewState.cursorState = [];
+        }
+        editor.restoreViewState(viewState);
       } catch (err) {
         console.error("Failed to restore view state:", err);
       }
     }
 
-    applySelectionDiff(editor, state.selection);
-
-    // Add cursor decorations only when Monaco's own caret is not visible. This
-    // avoids duplicate carets and preserves native multi-cursor behavior while
-    // the editor has text focus.
-    if (!editor.hasTextFocus()) {
-      // Only update decorations if selection changed or collection is missing
-      const selectionChanged =
-        !previousFrame || !areSelectionsEqual(previousFrame.state.selection, frame.state.selection);
-
-      if (selectionChanged || viewStateChanged || !collection) {
-        const newDecorations: monaco.editor.IModelDeltaDecoration[] = [];
-        const currentSelections = editor.getSelections() || [frame.state.selection];
-
-        currentSelections.forEach((selection) => {
-          newDecorations.push({
-            // Plain IRange (not `new Range(...)`) so this core machine never
-            // value-imports monaco-editor; Monaco's decoration API lifts IRange
-            // internally. Keeps the 3.7 MB editor chunk out of the eager route
-            // graph (it loads lazily with CodeEditor instead).
-            range: {
-              startLineNumber: selection.positionLineNumber,
-              startColumn: selection.positionColumn,
-              endLineNumber: selection.positionLineNumber,
-              endColumn: selection.positionColumn,
-            },
-            options: {
-              className: "playback-cursor-decoration",
-              stickiness: 1, // NeverGrowsWhenTypingAtEdges
-              minimap: {
-                color: PLAYBACK_CURSOR_COLOR,
-                position: 1, // Inline
-              },
-              overviewRuler: {
-                color: PLAYBACK_CURSOR_COLOR,
-                position: 2, // Center
-              },
-            },
-          });
-        });
-
-        // Create collection if it doesn't exist, otherwise update it
-        if (!collection) {
-          collection = editor.createDecorationsCollection(newDecorations);
-        } else {
-          collection.set(newDecorations);
-        }
-      }
-    } else if (collection) {
-      collection.clear();
-    }
+    showRecordedCaret(editor, state.selection);
   } catch (error) {
     console.error("Error applying editor state:", error);
   }
-
-  return collection;
 };
 
 /**
@@ -359,24 +311,12 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
     return { lastAppliedFrameIndex: frameIndex, currentFrame: null };
   }
 
-  const newCollection = applyFrameState(
-    editorRefs.editor,
-    frame,
-    editorRefs.cursorDecorationsCollection,
-    currentFrame,
-  );
+  applyFrameState(editorRefs.editor, frame, currentFrame);
 
   const updates: EditorContextUpdate = {
     lastAppliedFrameIndex: frameIndex,
     currentFrame: frame,
   };
-
-  if (newCollection !== editorRefs.cursorDecorationsCollection) {
-    updates.editorRefs = {
-      ...editorRefs,
-      cursorDecorationsCollection: newCollection,
-    };
-  }
 
   mirrorFrameSlideState(context, frame, currentFrame);
   const previewState = mirrorFramePreviewState(context, frame);
@@ -387,15 +327,8 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
   return updates;
 };
 
-export const clearCursorDecorations = ({ context }: EditorActionArgs): EditorContextUpdate => {
-  const { editorRefs } = context;
-  if (editorRefs.cursorDecorationsCollection) {
-    editorRefs.cursorDecorationsCollection.clear();
-  }
-  return {
-    editorRefs: {
-      ...editorRefs,
-      cursorDecorationsCollection: null,
-    },
-  };
+/** Leaving playback: the recorded caret's marks go with the lesson. */
+export const clearCursorDecorations = ({ context }: EditorActionArgs): void => {
+  const { editor } = context.editorRefs;
+  if (editor) clearRecordedCaret(editor);
 };

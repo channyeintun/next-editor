@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorFrame, EditorSelection } from "../types";
 import { applyFrameState } from "./frameReplay";
+import { trackLearnerCaret } from "./playbackCaret";
 
 describe("applyFrameState cursor", () => {
   // Monaco's selection carries the caret, so one setSelection is the whole cursor
@@ -77,7 +78,7 @@ describe("applyFrameState cursor", () => {
       positionColumn: 1,
     });
 
-    applyFrameState(editor, frameWith(target), null, previous);
+    applyFrameState(editor, frameWith(target), previous);
 
     expect(setPosition).not.toHaveBeenCalled();
     expect(setSelection).toHaveBeenCalledTimes(1);
@@ -87,7 +88,91 @@ describe("applyFrameState cursor", () => {
     });
 
     // Already there: no cursor write at all.
-    applyFrameState(editor, frameWith(target), null, frameWith(target));
+    applyFrameState(editor, frameWith(target), frameWith(target));
     expect(setSelection).toHaveBeenCalledTimes(1);
+  });
+
+  // A learner who clicks into the code while the lesson plays keeps that caret
+  // (playbackCaret.ts): what they type next, which pauses the lesson, must land there.
+  it("follows the recorded view but leaves a caret the learner placed", () => {
+    const caretAt = (line: number, column: number): EditorSelection => ({
+      startLineNumber: line,
+      startColumn: column,
+      endLineNumber: line,
+      endColumn: column,
+      selectionStartLineNumber: line,
+      selectionStartColumn: column,
+      positionLineNumber: line,
+      positionColumn: column,
+    });
+    let selection = caretAt(1, 1);
+    const cursorListeners: ((event: { source: string }) => void)[] = [];
+    const setSelection = vi.fn<(next: EditorSelection) => void>((next) => {
+      selection = next;
+    });
+    const restoreViewState = vi.fn<(state: monaco.editor.ICodeEditorViewState | null) => void>();
+    const model = {
+      getLineCount: () => 30,
+      getLineLength: () => 80,
+      getValueLength: () => 2400,
+      getValue: () => "",
+      isDisposed: () => false,
+      deltaDecorations: (_oldIds: string[], marks: unknown[]) => marks.map((_, i) => `mark-${i}`),
+    };
+    const editor = {
+      getModel: () => model,
+      getSelection: () => selection,
+      getSelections: () => [selection],
+      setSelection,
+      restoreViewState,
+      hasTextFocus: () => true,
+      onDidChangeCursorSelection(listener: (event: { source: string }) => void) {
+        cursorListeners.push(listener);
+        return { dispose: () => {} };
+      },
+      onDidChangeModel: () => ({ dispose: () => {} }),
+    } as unknown as monaco.editor.IStandaloneCodeEditor;
+    const viewStateAt = (line: number): monaco.editor.ICodeEditorViewState => ({
+      cursorState: [
+        {
+          inSelectionMode: false,
+          selectionStart: { lineNumber: line, column: 1 },
+          position: { lineNumber: line, column: 1 },
+        },
+      ],
+      viewState: {
+        scrollLeft: 0,
+        firstPosition: { lineNumber: line, column: 1 },
+        firstPositionDeltaTop: 0,
+      },
+      contributionsState: {},
+    });
+    const frameAt = (line: number): EditorFrame => ({
+      timestamp: 0,
+      state: {
+        content: "",
+        selection: caretAt(line, 1),
+        position: { lineNumber: line, column: 1 },
+        viewState: viewStateAt(line),
+      },
+    });
+    const tracking = trackLearnerCaret(editor, () => true);
+
+    applyFrameState(editor, frameAt(3), null);
+    expect(selection).toEqual(caretAt(3, 1));
+    expect(restoreViewState).toHaveBeenLastCalledWith(viewStateAt(3));
+
+    // The learner clicks on line 20, and the recording moves on to line 4.
+    selection = caretAt(20, 7);
+    for (const listener of cursorListeners) listener({ source: "mouse" });
+    setSelection.mockClear();
+    applyFrameState(editor, frameAt(4), frameAt(3));
+
+    // The view scrolls with the recording; the cursor in it is not restored.
+    expect(restoreViewState).toHaveBeenLastCalledWith({ ...viewStateAt(4), cursorState: [] });
+    expect(setSelection).not.toHaveBeenCalled();
+    expect(selection).toEqual(caretAt(20, 7));
+
+    tracking.dispose();
   });
 });

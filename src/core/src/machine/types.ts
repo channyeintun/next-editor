@@ -151,7 +151,7 @@ export interface RecordingSession extends RecordingTracks {
 }
 
 /**
- * Editor references and decorations
+ * Editor references
  */
 export interface EditorRefs {
   /**
@@ -160,8 +160,6 @@ export interface EditorRefs {
    * SET_EDITOR_REF is what resyncs playback onto a new editor (shouldSyncPlaybackEditorRef).
    */
   editor: monaco.editor.IStandaloneCodeEditor | null;
-  /** Current cursor decorations collection */
-  cursorDecorationsCollection: monaco.editor.IEditorDecorationsCollection | null;
 }
 
 /** The slide deck's state as a recording frame stores it. */
@@ -687,7 +685,6 @@ export const createInitialContext = (input: EditorMachineInput): EditorMachineCo
     screenStream: null,
     editorRefs: {
       editor: input.editorRef.current,
-      cursorDecorationsCollection: null,
     },
     getEditorInstance: () => input.editorRef.current,
     enableAudioRecording: input.enableAudioRecording ?? false,

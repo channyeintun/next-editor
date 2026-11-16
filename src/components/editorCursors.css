@@ -1,5 +1,5 @@
 /* CodeEditor's Monaco cursors and paint layer: the local cursors and the
-   playback cursor decoration (frameReplay) are drawn in the app's yellow, and
+   playback cursor decoration (core's playbackCaret) are drawn in the app's yellow, and
    .editor-paint-layer keeps Monaco on its own compositor layer. */
 
 /* Monaco Editor cursor decoration for playback - match native animation */
@@ -8,6 +8,12 @@
   border: none !important;
   width: 2px !important;
   animation: nb-cursor-blink 1s step-end infinite !important;
+}
+
+/* The recorded selection, drawn as a decoration while the learner holds the
+   editor's own caret (core's playbackCaret.ts) - match the native selection */
+.playback-selection-decoration {
+  background-color: var(--vscode-editor-selectionBackground, #30455f);
 }
 
 /* Override other cursors' color only - keep their native animation */

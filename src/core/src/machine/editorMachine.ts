@@ -340,7 +340,7 @@ export const editorMachine = setup({
     stopAudioPlayer: stopChild("audioPlayer"),
     setPlaybackSpeed: assign(setPlaybackSpeed),
     setVolume: assign(setVolume),
-    clearCursorDecorations: assign(clearCursorDecorations),
+    clearCursorDecorations,
     adoptPlaybackWorkspaceAtPause,
     captureLearnerWorkspaceBaseline: assign(captureLearnerWorkspaceBaseline),
     preserveLearnerWorkspace: enqueueActions(preserveLearnerWorkspace),

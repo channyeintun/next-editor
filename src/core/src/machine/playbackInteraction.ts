@@ -4,11 +4,13 @@ import { useSelector } from "@xstate/react";
 import { selectIsPlaying, type EditorActorRef, type EditorMachineSnapshot } from "../useNextEditor";
 import { isLetterKey } from "../utils/letterKey";
 import { isPressableTarget, isTypingTarget } from "../utils/playerKeyTargets";
+import { trackLearnerCaret } from "./playbackCaret";
 
 // ============================================================================
 // Pausing playback when the learner takes over: typing or pasting in the editor,
 // or pressing Space, sends USER_INTERACTION, which pauses a playing lesson (when
-// pauseOnUserInteraction allows it).
+// pauseOnUserInteraction allows it). A caret the learner places before that is
+// theirs from then on (playbackCaret.ts), so what they type lands where they put it.
 // ============================================================================
 
 const IGNORED_PLAYBACK_INPUT_KEYS = new Set([
@@ -74,6 +76,9 @@ export const usePlaybackInteractionPause = (actorRef: EditorActorRef): void => {
   useEffect(() => {
     if (isPlaying && editor) {
       const disposables: monaco.IDisposable[] = [];
+
+      // A click or an arrow key in the code takes the editor's caret from the recording
+      disposables.push(trackLearnerCaret(editor, () => selectIsPlaying(actorRef.getSnapshot())));
 
       // Listen for user keyboard input during replay
       disposables.push(

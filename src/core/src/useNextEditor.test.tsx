@@ -41,6 +41,8 @@ const createMockEditor = (content: string) => {
     hasTextFocus: () => true,
     onKeyDown: () => disposable,
     onDidPaste: () => disposable,
+    onDidChangeCursorSelection: () => disposable,
+    onDidChangeModel: () => disposable,
   } as unknown as monaco.editor.IStandaloneCodeEditor;
 };
 

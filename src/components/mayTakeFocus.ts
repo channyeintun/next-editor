@@ -24,7 +24,7 @@
  * clicked with the mouse, still moves into the editor as before. Keeping focus
  * on Play costs a keyboard user nothing: while a lesson plays in an editor
  * without text focus, replay draws its own caret decoration in place of
- * Monaco's hidden one (`applyFrameState` in core's frameReplay.ts).
+ * Monaco's hidden one (core's playbackCaret.ts).
  */
 export function mayTakeFocus(domNode: HTMLElement | null | undefined): boolean {
   const doc = domNode?.ownerDocument;
