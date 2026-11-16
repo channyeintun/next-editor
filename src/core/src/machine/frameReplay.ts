@@ -15,7 +15,7 @@ import { isEditorReady, isValidEditorState } from "../utils/validation";
 import { arePreviewSizesEqual, areStructuredDataEqual } from "../utils/equality";
 import { applyContentDiff } from "../utils/editorDiff";
 import { reportMachineError } from "./machineError";
-import { clearRecordedCaret, isLearnerCaretHeld, showRecordedCaret } from "./playbackCaret";
+import { asReplayWrite, isLearnerCaretHeld, showRecordedCaret } from "./playbackCaret";
 import { resolveBoundedReplayTime } from "./replayStep";
 
 // ============================================================================
@@ -24,9 +24,10 @@ import { resolveBoundedReplayTime } from "./replayStep";
 // Brings the Monaco editor to the playhead: folding the recorded frames
 // (applyFrameAtTime) and applying one to the editor (applyFrameState). How the
 // recorded caret is shown, and whether the editor's caret is the recording's or
-// the learner's, belongs to playbackCaret.ts. applyFrameAtTime is one of the
-// replay steps in replayActions.ts; the frames' slide and preview fallbacks for
-// recordings without those tracks ride along with it.
+// the learner's, belongs to playbackCaret.ts, as do the caret's machine actions.
+// applyFrameAtTime is one of the replay steps in replayActions.ts; the frames'
+// slide and preview fallbacks for recordings without those tracks ride along
+// with it.
 // ============================================================================
 
 /**
@@ -106,33 +107,37 @@ export const applyFrameState = (
   const { state } = frame;
 
   try {
-    // Apply content changes
-    if (!previousFrame || previousFrame.state.content !== state.content) {
-      applyContentDiff(editor, state.content);
-    }
-
-    const viewStateChanged =
-      !!state.viewState &&
-      (!previousFrame || !areStructuredDataEqual(state.viewState, previousFrame.state.viewState));
-
-    // Restore scroll/layout first, then explicitly reapply selection so
-    // Monaco cursorState inside viewState cannot override the recorded caret.
-    if (viewStateChanged) {
-      try {
-        const viewState = structuredClone(state.viewState);
-        // The learner has placed the editor's caret (playbackCaret.ts): the view still
-        // follows the recording, the caret stays theirs. Monaco skips the cursor
-        // restore for an empty cursor state.
-        if (viewState && isLearnerCaretHeld(editor)) {
-          viewState.cursorState = [];
-        }
-        editor.restoreViewState(viewState);
-      } catch (err) {
-        console.error("Failed to restore view state:", err);
+    // Every write below is replay's: the cursor changes Monaco reports for them must
+    // not be taken for a caret the learner placed (playbackCaret.ts).
+    asReplayWrite(() => {
+      // Apply content changes
+      if (!previousFrame || previousFrame.state.content !== state.content) {
+        applyContentDiff(editor, state.content);
       }
-    }
 
-    showRecordedCaret(editor, state.selection);
+      const viewStateChanged =
+        !!state.viewState &&
+        (!previousFrame || !areStructuredDataEqual(state.viewState, previousFrame.state.viewState));
+
+      // Restore scroll/layout first, then explicitly reapply selection so
+      // Monaco cursorState inside viewState cannot override the recorded caret.
+      if (viewStateChanged) {
+        try {
+          const viewState = structuredClone(state.viewState);
+          // The learner has placed the editor's caret: the view still follows the
+          // recording, the caret stays theirs. Monaco skips the cursor restore for an
+          // empty cursor state.
+          if (viewState && isLearnerCaretHeld(editor)) {
+            viewState.cursorState = [];
+          }
+          editor.restoreViewState(viewState);
+        } catch (err) {
+          console.error("Failed to restore view state:", err);
+        }
+      }
+
+      showRecordedCaret(editor, state.selection);
+    });
   } catch (error) {
     console.error("Error applying editor state:", error);
   }
@@ -325,10 +330,4 @@ export const applyFrameAtTime = ({ context, event }: EditorActionArgs): EditorCo
   }
 
   return updates;
-};
-
-/** Leaving playback: the recorded caret's marks go with the lesson. */
-export const clearCursorDecorations = ({ context }: EditorActionArgs): void => {
-  const { editor } = context.editorRefs;
-  if (editor) clearRecordedCaret(editor);
 };

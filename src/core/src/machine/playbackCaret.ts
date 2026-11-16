@@ -1,6 +1,7 @@
 import type * as monaco from "monaco-editor";
 import type { EditorSelection } from "../types";
 import { applySelectionDiff } from "../utils/editorDiff";
+import type { EditorActionArgs } from "./types";
 
 // ============================================================================
 // The caret in the editor while a lesson plays.
@@ -10,13 +11,15 @@ import { applySelectionDiff } from "../utils/editorDiff";
 // replay leaves it where they put it, so what they type next (which pauses the
 // lesson, see playbackInteraction.ts) lands there and not where the recording
 // had last put it. The recorded caret and selection are drawn as decorations
-// meanwhile. The same caret mark stands in whenever the editor has no focus and
-// Monaco hides its own caret.
+// meanwhile, dimmed, so the bright caret is plainly the learner's. The caret
+// mark also stands in whenever the editor has no focus and Monaco hides its own.
 //
-// frameReplay.ts reports each recorded selection (showRecordedCaret);
-// playbackInteraction.ts watches for the learner's moves while the lesson plays
-// (trackLearnerCaret). Everything is kept per editor, so a remounted editor
-// starts clean.
+// The caret is the learner's only while the lesson plays and only in the model
+// they placed it in. frameReplay.ts wraps its writes in asReplayWrite and reports
+// each recorded selection (showRecordedCaret); playbackInteraction.ts watches for
+// the learner's gestures while the lesson plays (trackLearnerCaret); the machine
+// takes the caret back when `playing` is left (releaseLearnerCaretHold).
+// Everything is kept per editor.
 // ============================================================================
 
 type Editor = monaco.editor.IStandaloneCodeEditor;
@@ -25,12 +28,29 @@ type Mark = monaco.editor.IModelDeltaDecoration;
 /** Color of the playback caret's marks in the minimap and the overview ruler. */
 const PLAYBACK_CURSOR_COLOR = "#007ACC";
 
+const CARET_CLASS = "playback-cursor-decoration";
+/** Added to the caret mark while the learner holds the editor's caret: dimmed and steady. */
+const CARET_BESIDE_LEARNER_CLASS = `${CARET_CLASS} playback-cursor-decoration--beside-learner`;
+const SELECTION_CLASS = "playback-selection-decoration";
+
 /**
- * Cursor changes the learner makes: a click, a drag or a tap, and keyboard navigation.
- * Replay's own writes report "api" (setSelection), "restoreState" (restoreViewState),
- * "modelChange" (a replayed edit moving the caret along) or "model" (setValue).
+ * Cursor changes that are nobody's gesture: Monaco moving the caret along with a
+ * change of content ("modelChange", "model") or of layout ("viewModel"), and a view
+ * state being restored ("restoreState", CodeEditor's own as it shows a file). Any other
+ * change outside a replay write is the learner's: a click or a drag ("mouse"), a key
+ * ("keyboard"), Go to Line ("code.jump"), Find or a right-click ("api").
  */
-const LEARNER_CURSOR_SOURCES: ReadonlySet<string> = new Set(["mouse", "keyboard"]);
+const UNATTENDED_CURSOR_SOURCES: ReadonlySet<string> = new Set([
+  "modelChange",
+  "model",
+  "viewModel",
+  "restoreState",
+]);
+
+// monaco.editor.MouseTargetType, as numbers so that this core module never
+// value-imports monaco-editor (see the marks below).
+const MOUSE_TARGET_CONTENT_TEXT = 6;
+const MOUSE_TARGET_CONTENT_EMPTY = 7;
 
 interface PlaybackCaret {
   /** The recorded selection replay last showed, to mark the moment the learner takes the caret. */
@@ -41,10 +61,13 @@ interface PlaybackCaret {
    * only in that model: Monaco starts another one with a caret of its own.
    */
   learnerModel: monaco.editor.ITextModel | null;
-  /** The marks drawn, with their ids in the model they were drawn on. */
+  /**
+   * The marks last drawn, in a collection the editor owns: Monaco takes an editor's
+   * decorations off a model as the editor leaves it or is disposed, so no mark is left
+   * behind for the next editor on that model.
+   */
   marks: Mark[];
-  markIds: string[];
-  markedModel: monaco.editor.ITextModel | null;
+  decorations: monaco.editor.IEditorDecorationsCollection | null;
 }
 
 const carets = new WeakMap<Editor, PlaybackCaret>();
@@ -52,7 +75,7 @@ const carets = new WeakMap<Editor, PlaybackCaret>();
 function caretOf(editor: Editor): PlaybackCaret {
   let caret = carets.get(editor);
   if (!caret) {
-    caret = { recorded: null, learnerModel: null, marks: [], markIds: [], markedModel: null };
+    caret = { recorded: null, learnerModel: null, marks: [], decorations: null };
     carets.set(editor, caret);
   }
   return caret;
@@ -62,6 +85,24 @@ function caretOf(editor: Editor): PlaybackCaret {
 const learnerHoldsCaret = (editor: Editor, caret: PlaybackCaret): boolean =>
   caret.learnerModel !== null && caret.learnerModel === editor.getModel();
 
+/**
+ * True while replay itself writes to the editor. Monaco reports the cursor changes
+ * such a write causes before the write returns, so a change reported meanwhile is
+ * replay's own and never the learner's.
+ */
+let isReplayWriting = false;
+
+/** Runs replay's write to the editor, so the cursor changes it causes are not taken for the learner's. */
+export function asReplayWrite(write: () => void): void {
+  const wasWriting = isReplayWriting;
+  isReplayWriting = true;
+  try {
+    write();
+  } finally {
+    isReplayWriting = wasWriting;
+  }
+}
+
 // The marks are plain IRanges (not `new Range(...)`) so this core module never
 // value-imports monaco-editor; Monaco's decoration API lifts an IRange itself.
 // That keeps the 3.7 MB editor chunk out of the eager route graph (it loads
@@ -69,6 +110,7 @@ const learnerHoldsCaret = (editor: Editor, caret: PlaybackCaret): boolean =>
 
 const caretMark = (
   selection: Pick<EditorSelection, "positionLineNumber" | "positionColumn">,
+  className: string = CARET_CLASS,
 ): Mark => ({
   range: {
     startLineNumber: selection.positionLineNumber,
@@ -77,7 +119,7 @@ const caretMark = (
     endColumn: selection.positionColumn,
   },
   options: {
-    className: "playback-cursor-decoration",
+    className,
     stickiness: 1, // NeverGrowsWhenTypingAtEdges
     minimap: {
       color: PLAYBACK_CURSOR_COLOR,
@@ -98,7 +140,7 @@ const selectionMark = (selection: EditorSelection): Mark => ({
     endColumn: selection.endColumn,
   },
   options: {
-    className: "playback-selection-decoration",
+    className: SELECTION_CLASS,
     stickiness: 1, // NeverGrowsWhenTypingAtEdges
   },
 });
@@ -120,24 +162,20 @@ const areMarksEqual = (current: readonly Mark[], next: readonly Mark[]): boolean
     );
   });
 
-/** Replaces the drawn marks, touching the model only when they differ. */
+/** Replaces the drawn marks, touching the editor only when they differ. */
 function setMarks(editor: Editor, caret: PlaybackCaret, marks: Mark[]): void {
-  const model = editor.getModel();
-
-  if (caret.markedModel !== model) {
-    // The editor shows another model (the lesson handed the file over, or took it
-    // back): the marks stayed on the one it left.
-    if (caret.markedModel && caret.markIds.length > 0 && !caret.markedModel.isDisposed()) {
-      caret.markedModel.deltaDecorations(caret.markIds, []);
-    }
-    caret.markedModel = model;
-    caret.markIds = [];
-    caret.marks = [];
-  }
-
-  if (!model || areMarksEqual(caret.marks, marks)) return;
-  caret.markIds = model.deltaDecorations(caret.markIds, marks);
+  // The marks last drawn are gone if the editor has since shown another model, or the
+  // model's text was replaced: the collection then has no range for them.
+  const stillDrawn = caret.marks.length > 0 && caret.decorations?.getRange(0) != null;
+  const drawn = stillDrawn ? caret.marks : [];
   caret.marks = marks;
+  if (areMarksEqual(drawn, marks)) return;
+
+  if (caret.decorations) {
+    caret.decorations.set(marks);
+  } else {
+    caret.decorations = editor.createDecorationsCollection(marks);
+  }
 }
 
 function drawRecordedCaret(editor: Editor, caret: PlaybackCaret): void {
@@ -145,13 +183,12 @@ function drawRecordedCaret(editor: Editor, caret: PlaybackCaret): void {
   if (!recorded) return;
 
   if (learnerHoldsCaret(editor, caret)) {
-    // The editor's caret is the learner's: the recording's is drawn.
+    // The editor's caret is the learner's: the recording's is drawn beside it.
+    const recordedCaret = caretMark(recorded, CARET_BESIDE_LEARNER_CLASS);
     setMarks(
       editor,
       caret,
-      isEmptySelection(recorded)
-        ? [caretMark(recorded)]
-        : [selectionMark(recorded), caretMark(recorded)],
+      isEmptySelection(recorded) ? [recordedCaret] : [selectionMark(recorded), recordedCaret],
     );
   } else if (editor.hasTextFocus()) {
     // Monaco shows its own caret, which replay has put on the recorded one. A mark
@@ -160,7 +197,11 @@ function drawRecordedCaret(editor: Editor, caret: PlaybackCaret): void {
   } else {
     // Monaco hides its caret without focus. Every cursor is marked, so a recorded
     // multi-cursor (restored with the view state) shows all of its carets.
-    setMarks(editor, caret, (editor.getSelections() ?? [recorded]).map(caretMark));
+    setMarks(
+      editor,
+      caret,
+      (editor.getSelections() ?? [recorded]).map((selection) => caretMark(selection)),
+    );
   }
 }
 
@@ -172,7 +213,7 @@ export function showRecordedCaret(editor: Editor, selection: EditorSelection): v
   const caret = caretOf(editor);
   caret.recorded = selection;
   if (!learnerHoldsCaret(editor, caret)) {
-    applySelectionDiff(editor, selection);
+    asReplayWrite(() => applySelectionDiff(editor, selection));
   }
   drawRecordedCaret(editor, caret);
 }
@@ -184,36 +225,50 @@ export function isLearnerCaretHeld(editor: Editor): boolean {
 }
 
 /**
- * While a lesson plays, hands the editor's caret to the learner the moment they move it.
- * `isPlaying` is asked on each move, since a key that pauses the lesson also moves the
- * caret before this tracking is disposed.
+ * Gives the editor's caret back to the recording. Writes nothing to the editor, which
+ * may already show the file handed over to the learner, with the caret they placed:
+ * replay's next write moves it.
+ */
+export function releaseLearnerCaret(editor: Editor): void {
+  const caret = carets.get(editor);
+  if (caret) caret.learnerModel = null;
+}
+
+/**
+ * While a lesson plays, hands the editor's caret to the learner the moment they place
+ * it: any cursor change that is neither replay's write nor Monaco following the text,
+ * and a press on the text itself (a click on the very spot the recorded caret is on
+ * changes no cursor). `isPlaying` is asked each time, since the key that pauses the
+ * lesson moves the caret too, before this tracking is disposed.
  *
  * The caret goes back to the recording when the editor shows another model (the
  * recording opened another file: the learner's caret stayed in the one it left) and
- * when the tracking is disposed, for the next stretch of playback. Neither writes
- * anything to the editor, which by then may show the file handed over to the learner,
- * with the caret they placed.
+ * when the tracking is disposed.
  */
 export function trackLearnerCaret(editor: Editor, isPlaying: () => boolean): monaco.IDisposable {
-  const release = () => {
-    const caret = carets.get(editor);
-    if (caret) caret.learnerModel = null;
-  };
-  const cursorListener = editor.onDidChangeCursorSelection((event) => {
-    if (!LEARNER_CURSOR_SOURCES.has(event.source) || !isPlaying()) return;
+  const take = () => {
+    if (isReplayWriting || !isPlaying()) return;
     const caret = caretOf(editor);
     if (learnerHoldsCaret(editor, caret)) return;
     caret.learnerModel = editor.getModel();
-    // The editor's caret was the recording's until this move: mark where that is now.
+    // The editor's caret was the recording's until now: mark where that is.
     drawRecordedCaret(editor, caret);
-  });
-  const modelListener = editor.onDidChangeModel(release);
+  };
+  const listeners = [
+    editor.onDidChangeCursorSelection((event) => {
+      if (!UNATTENDED_CURSOR_SOURCES.has(event.source)) take();
+    }),
+    editor.onMouseDown((event) => {
+      const target = event.target.type;
+      if (target === MOUSE_TARGET_CONTENT_TEXT || target === MOUSE_TARGET_CONTENT_EMPTY) take();
+    }),
+    editor.onDidChangeModel(() => releaseLearnerCaret(editor)),
+  ];
 
   return {
     dispose() {
-      cursorListener.dispose();
-      modelListener.dispose();
-      release();
+      for (const listener of listeners) listener.dispose();
+      releaseLearnerCaret(editor);
     },
   };
 }
@@ -222,6 +277,26 @@ export function trackLearnerCaret(editor: Editor, isPlaying: () => boolean): mon
 export function clearRecordedCaret(editor: Editor): void {
   const caret = carets.get(editor);
   if (!caret) return;
-  setMarks(editor, caret, []);
+  caret.decorations?.clear();
   carets.delete(editor);
 }
+
+// ----------------------------------------------------------------------------
+// Machine actions, registered in editorMachine.ts.
+// ----------------------------------------------------------------------------
+
+/**
+ * Leaving `playing` (pause, end, stop, restoring saved edits): whatever replay applies
+ * next, a rewind or a seek, moves the editor's caret again. It runs before the
+ * transition's own actions, and before React disposes the tracking.
+ */
+export const releaseLearnerCaretHold = ({ context }: EditorActionArgs): void => {
+  const { editor } = context.editorRefs;
+  if (editor) releaseLearnerCaret(editor);
+};
+
+/** Leaving playback: the recorded caret's marks go with the lesson. */
+export const clearCursorDecorations = ({ context }: EditorActionArgs): void => {
+  const { editor } = context.editorRefs;
+  if (editor) clearRecordedCaret(editor);
+};

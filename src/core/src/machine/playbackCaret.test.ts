@@ -2,14 +2,19 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorSelection } from "../types";
 import {
+  asReplayWrite,
+  clearCursorDecorations,
   clearRecordedCaret,
   isLearnerCaretHeld,
+  releaseLearnerCaretHold,
   showRecordedCaret,
   trackLearnerCaret,
 } from "./playbackCaret";
+import type { EditorActionArgs } from "./types";
 
 type Mark = monaco.editor.IModelDeltaDecoration;
 type CursorListener = (event: { source: string }) => void;
+type MouseListener = (event: { target: { type: number } }) => void;
 
 /** A selection from `(startLine, startColumn)` to the caret at `(line, column)`. */
 const selectionTo = (
@@ -30,62 +35,103 @@ const selectionTo = (
 
 const caretAt = (line: number, column: number) => selectionTo(line, column, line, column);
 
-/** A text model that keeps decorations by id, as Monaco's does. */
+// monaco.editor.MouseTargetType
+const CONTENT_TEXT = 6;
+const CONTENT_EMPTY = 7;
+const GUTTER_LINE_NUMBERS = 3;
+const SCROLLBAR = 11;
+
+/**
+ * A text model that keeps decorations by id with the editor that owns each, as Monaco's
+ * does: every editor on the model draws them all, and an editor's own are removed when
+ * it leaves the model or is disposed.
+ */
 function fakeModel() {
   let nextId = 0;
-  let disposed = false;
-  const decorations = new Map<string, Mark>();
-  const deltaDecorations = vi.fn<(oldIds: string[], next: Mark[]) => string[]>((oldIds, next) => {
-    for (const id of oldIds) decorations.delete(id);
-    return next.map((mark) => {
-      const id = `mark-${nextId++}`;
-      decorations.set(id, mark);
-      return id;
-    });
-  });
+  const decorations = new Map<string, { owner: number; mark: Mark }>();
   return {
-    deltaDecorations,
-    isDisposed: () => disposed,
-    dispose() {
-      disposed = true;
+    deltaDecorations(owner: number, oldIds: readonly string[], next: readonly Mark[]) {
+      for (const id of oldIds) decorations.delete(id);
+      return next.map((mark) => {
+        const id = `mark-${nextId++}`;
+        decorations.set(id, { owner, mark });
+        return id;
+      });
     },
-    /** What is drawn: each mark's class and where its range starts and ends. */
+    removeAllDecorationsWithOwnerId(owner: number) {
+      for (const [id, decoration] of decorations) {
+        if (decoration.owner === owner) decorations.delete(id);
+      }
+    },
+    getDecorationRange: (id: string) => decorations.get(id)?.mark.range ?? null,
+    /** What any editor on the model draws: each mark's class and range. */
     marks: () =>
-      Array.from(decorations.values(), ({ range, options }) => [
+      Array.from(decorations.values(), ({ mark: { range, options } }) => [
         options.className,
         `${range.startLineNumber}:${range.startColumn}-${range.endLineNumber}:${range.endColumn}`,
       ]),
   };
 }
 
+let nextEditorId = 1;
+
 /** An editor with one cursor, whose moves a test makes as replay or as the learner. */
-function fakeEditor() {
+function fakeEditor(initialModel = fakeModel()) {
+  const id = nextEditorId++;
   let selection = caretAt(1, 1);
   let focused = true;
-  let model: ReturnType<typeof fakeModel> | null = fakeModel();
+  let model: ReturnType<typeof fakeModel> | null = initialModel;
   const cursorListeners = new Set<CursorListener>();
+  const mouseListeners = new Set<MouseListener>();
   const modelListeners = new Set<() => void>();
+  const draws = vi.fn<(marks: readonly Mark[]) => void>();
+  const reportCursorChange = (source: string) => {
+    for (const listener of cursorListeners) listener({ source });
+  };
+  // Monaco reports the cursor change a write causes before the write returns.
   const setSelection = vi.fn<(next: EditorSelection) => void>((next) => {
     selection = next;
+    reportCursorChange("api");
   });
+  const subscribe =
+    <T>(listeners: Set<T>) =>
+    (listener: T) => {
+      listeners.add(listener);
+      return { dispose: () => listeners.delete(listener) };
+    };
   const editor = {
     setSelection,
     getSelection: () => selection,
     getSelections: () => [selection],
     getModel: () => model,
     hasTextFocus: () => focused,
-    onDidChangeCursorSelection(listener: CursorListener) {
-      cursorListeners.add(listener);
-      return { dispose: () => cursorListeners.delete(listener) };
-    },
-    onDidChangeModel(listener: () => void) {
-      modelListeners.add(listener);
-      return { dispose: () => modelListeners.delete(listener) };
+    onDidChangeCursorSelection: subscribe(cursorListeners),
+    onMouseDown: subscribe(mouseListeners),
+    onDidChangeModel: subscribe(modelListeners),
+    // An editor's decorations collection: its marks are owned by this editor.
+    createDecorationsCollection(initial: readonly Mark[] = []) {
+      let ids: string[] = [];
+      const collection = {
+        set(marks: readonly Mark[]) {
+          draws(marks);
+          if (model) ids = model.deltaDecorations(id, ids, marks);
+          return ids;
+        },
+        clear() {
+          if (ids.length > 0) collection.set([]);
+        },
+        getRange: (index: number) =>
+          model && index < ids.length ? model.getDecorationRange(ids[index]) : null,
+      };
+      if (initial.length > 0) collection.set(initial);
+      return collection;
     },
   };
   return {
     editor: editor as unknown as monaco.editor.IStandaloneCodeEditor,
     setSelection,
+    /** Each time the editor's decorations were rewritten. */
+    draws,
     selection: () => selection,
     model: () => model!,
     blur() {
@@ -96,19 +142,34 @@ function fakeEditor() {
      * does. Monaco starts the new model with the caret on line 1.
      */
     show(next: ReturnType<typeof fakeModel>) {
+      model?.removeAllDecorationsWithOwnerId(id);
       model = next;
       selection = caretAt(1, 1);
       for (const listener of modelListeners) listener();
     },
+    /** Disposes the editor, as showing an image in its place does. The model lives on. */
+    dispose() {
+      model?.removeAllDecorationsWithOwnerId(id);
+      model = null;
+    },
     /** Moves the cursor and reports the move with Monaco's `source` for it. */
     moveCaret(source: string, next: EditorSelection) {
       selection = next;
-      for (const listener of cursorListeners) listener({ source });
+      reportCursorChange(source);
+    },
+    /** A press on the editor that moves no cursor (it is already there). */
+    pressOn(target: number) {
+      for (const listener of mouseListeners) listener({ target: { type: target } });
     },
   };
 }
 
+/** The part of a machine action's arguments the caret actions read. */
+const actionArgsFor = (editor: monaco.editor.IStandaloneCodeEditor | null) =>
+  ({ context: { editorRefs: { editor } } }) as unknown as EditorActionArgs;
+
 const CARET = "playback-cursor-decoration";
+const DIMMED_CARET = "playback-cursor-decoration playback-cursor-decoration--beside-learner";
 const SELECTION = "playback-selection-decoration";
 
 describe("the recorded caret", () => {
@@ -119,7 +180,7 @@ describe("the recorded caret", () => {
 
     expect(fake.selection()).toEqual(caretAt(3, 5));
     // Monaco draws that caret itself: a mark would draw it twice.
-    expect(fake.model().deltaDecorations).not.toHaveBeenCalled();
+    expect(fake.draws).not.toHaveBeenCalled();
   });
 
   it("is marked while the editor has no focus, and the mark follows it", () => {
@@ -133,23 +194,47 @@ describe("the recorded caret", () => {
     expect(fake.model().marks()).toEqual([[CARET, "4:2-4:2"]]);
 
     // Frames that leave the caret where it is redraw nothing.
-    const draws = fake.model().deltaDecorations.mock.calls.length;
+    const draws = fake.draws.mock.calls.length;
     showRecordedCaret(fake.editor, caretAt(4, 2));
-    expect(fake.model().deltaDecorations).toHaveBeenCalledTimes(draws);
+    expect(fake.draws).toHaveBeenCalledTimes(draws);
   });
 
-  it("leaves its marks behind on a model the editor no longer shows", () => {
+  it("is drawn again on a model the editor comes to, and on one it comes back to", () => {
     const fake = fakeEditor();
     fake.blur();
     const playbackModel = fake.model();
     showRecordedCaret(fake.editor, caretAt(3, 5));
 
+    // The lesson hands the file over: Monaco took the marks off the model it left.
     const workspaceModel = fakeModel();
     fake.show(workspaceModel);
-    showRecordedCaret(fake.editor, caretAt(3, 5));
-
     expect(playbackModel.marks()).toEqual([]);
+    showRecordedCaret(fake.editor, caretAt(3, 5));
     expect(workspaceModel.marks()).toEqual([[CARET, "3:5-3:5"]]);
+
+    // Back on the first model, with the caret where it was last drawn there.
+    fake.show(playbackModel);
+    showRecordedCaret(fake.editor, caretAt(3, 5));
+    expect(playbackModel.marks()).toEqual([[CARET, "3:5-3:5"]]);
+    expect(workspaceModel.marks()).toEqual([]);
+  });
+
+  // The marks were once model decorations with no owner. An editor disposed while a
+  // lesson played (the recording opened an image) left them on the playback model, and
+  // the editor mounted on that model afterwards drew a second, frozen caret.
+  it("leaves no mark behind for the next editor on the same model", () => {
+    const model = fakeModel();
+    const first = fakeEditor(model);
+    first.blur();
+    showRecordedCaret(first.editor, caretAt(3, 5));
+    expect(model.marks()).toEqual([[CARET, "3:5-3:5"]]);
+
+    first.dispose();
+    const second = fakeEditor(model);
+    second.blur();
+    showRecordedCaret(second.editor, caretAt(8, 2));
+
+    expect(model.marks()).toEqual([[CARET, "8:2-8:2"]]);
   });
 
   it("is cleared with the lesson", () => {
@@ -157,14 +242,17 @@ describe("the recorded caret", () => {
     fake.blur();
     showRecordedCaret(fake.editor, caretAt(3, 5));
 
-    clearRecordedCaret(fake.editor);
+    clearCursorDecorations(actionArgsFor(fake.editor));
 
     expect(fake.model().marks()).toEqual([]);
+    // Nothing to clear without an editor, or for one that showed no caret.
+    clearCursorDecorations(actionArgsFor(null));
+    clearRecordedCaret(fakeEditor().editor);
   });
 });
 
 describe("a caret the learner places while the lesson plays", () => {
-  it("stays where they put it, with the recorded caret marked beside it", () => {
+  it("stays where they put it, with the recorded caret drawn dimmed beside it", () => {
     const fake = fakeEditor();
     const tracking = trackLearnerCaret(fake.editor, () => true);
     showRecordedCaret(fake.editor, caretAt(3, 5));
@@ -174,7 +262,7 @@ describe("a caret the learner places while the lesson plays", () => {
     // waiting for the recording's next frame.
     fake.moveCaret("mouse", caretAt(20, 7));
     expect(isLearnerCaretHeld(fake.editor)).toBe(true);
-    expect(fake.model().marks()).toEqual([[CARET, "3:5-3:5"]]);
+    expect(fake.model().marks()).toEqual([[DIMMED_CARET, "3:5-3:5"]]);
 
     // The recording goes on: it selects a word, and the learner's caret does not move.
     showRecordedCaret(fake.editor, selectionTo(3, 5, 3, 11));
@@ -182,25 +270,77 @@ describe("a caret the learner places while the lesson plays", () => {
     expect(fake.selection()).toEqual(caretAt(20, 7));
     expect(fake.model().marks()).toEqual([
       [SELECTION, "3:5-3:11"],
-      [CARET, "3:11-3:11"],
+      [DIMMED_CARET, "3:11-3:11"],
     ]);
 
     tracking.dispose();
   });
 
-  it("is theirs after keyboard navigation too", () => {
+  // Arrow keys, Go to Line, Find's next match and a right-click all place the caret.
+  it.each(["keyboard", "code.jump", "api"])("is theirs after a %s cursor change too", (source) => {
     const fake = fakeEditor();
     const tracking = trackLearnerCaret(fake.editor, () => true);
     showRecordedCaret(fake.editor, caretAt(3, 5));
 
-    fake.moveCaret("keyboard", caretAt(4, 5));
+    fake.moveCaret(source, caretAt(4, 5));
 
     expect(isLearnerCaretHeld(fake.editor)).toBe(true);
     tracking.dispose();
   });
 
-  it.each(["api", "restoreState", "modelChange", "model"])(
-    "is not taken from a cursor change replay made itself (%s)",
+  // A click on the very spot the recorded caret is on changes no cursor, so Monaco
+  // reports nothing: the press itself is the gesture.
+  it.each([
+    ["the text", CONTENT_TEXT],
+    ["the space after a line", CONTENT_EMPTY],
+  ])("is theirs after a press on %s that moves no cursor", (_name, target) => {
+    const fake = fakeEditor();
+    const tracking = trackLearnerCaret(fake.editor, () => true);
+    showRecordedCaret(fake.editor, caretAt(3, 5));
+
+    fake.pressOn(target);
+
+    expect(isLearnerCaretHeld(fake.editor)).toBe(true);
+    expect(fake.model().marks()).toEqual([[DIMMED_CARET, "3:5-3:5"]]);
+    tracking.dispose();
+  });
+
+  it.each([
+    ["the scrollbar", SCROLLBAR],
+    ["a line number", GUTTER_LINE_NUMBERS],
+  ])("is not taken by a press on %s that moves no cursor", (_name, target) => {
+    const fake = fakeEditor();
+    const tracking = trackLearnerCaret(fake.editor, () => true);
+    showRecordedCaret(fake.editor, caretAt(3, 5));
+
+    fake.pressOn(target);
+
+    expect(isLearnerCaretHeld(fake.editor)).toBe(false);
+    tracking.dispose();
+  });
+
+  // Replay sets the selection, restores view states and edits the text; Monaco reports
+  // a cursor change for each before the write returns.
+  it("is not taken by the cursor changes replay's own writes cause", () => {
+    const fake = fakeEditor();
+    const tracking = trackLearnerCaret(fake.editor, () => true);
+
+    // The selection write inside showRecordedCaret reports "api".
+    showRecordedCaret(fake.editor, caretAt(3, 5));
+    // So would any other write a frame makes.
+    asReplayWrite(() => fake.moveCaret("api", caretAt(3, 6)));
+    asReplayWrite(() => fake.moveCaret("keyboard", caretAt(3, 7)));
+
+    expect(isLearnerCaretHeld(fake.editor)).toBe(false);
+    showRecordedCaret(fake.editor, caretAt(3, 8));
+    expect(fake.selection()).toEqual(caretAt(3, 8));
+    tracking.dispose();
+  });
+
+  // Monaco moving the caret along with the text or the layout, and CodeEditor restoring
+  // a file's view, are nobody's gesture, whenever they happen.
+  it.each(["modelChange", "model", "viewModel", "restoreState"])(
+    "is not taken by a %s cursor change",
     (source) => {
       const fake = fakeEditor();
       const tracking = trackLearnerCaret(fake.editor, () => true);
@@ -225,9 +365,10 @@ describe("a caret the learner places while the lesson plays", () => {
 
     playing = false;
     fake.moveCaret("keyboard", caretAt(3, 6));
+    fake.pressOn(CONTENT_TEXT);
 
     expect(isLearnerCaretHeld(fake.editor)).toBe(false);
-    expect(fake.model().deltaDecorations).not.toHaveBeenCalled();
+    expect(fake.draws).not.toHaveBeenCalled();
     tracking.dispose();
   });
 
@@ -247,23 +388,43 @@ describe("a caret the learner places while the lesson plays", () => {
     tracking.dispose();
   });
 
-  it("goes back to the recording when the lesson plays on", () => {
+  // Stop rewinds the lesson in the same machine step that leaves `playing`, before
+  // React disposes the tracking: the opening frame's caret must be the editor's.
+  it("goes back to the recording the moment the lesson stops playing", () => {
     const fake = fakeEditor();
     const tracking = trackLearnerCaret(fake.editor, () => true);
     showRecordedCaret(fake.editor, caretAt(3, 5));
     fake.moveCaret("mouse", caretAt(20, 7));
     fake.setSelection.mockClear();
 
-    // The lesson pauses. Ending the tracking writes nothing: the editor may already
-    // show the file handed over, with the caret the learner placed.
-    tracking.dispose();
+    // Leaving `playing` writes nothing: the editor may be about to show the file handed
+    // over, with the caret the learner placed.
+    releaseLearnerCaretHold(actionArgsFor(fake.editor));
+    releaseLearnerCaretHold(actionArgsFor(null));
     expect(isLearnerCaretHeld(fake.editor)).toBe(false);
     expect(fake.setSelection).not.toHaveBeenCalled();
     expect(fake.selection()).toEqual(caretAt(20, 7));
 
-    // It plays again: the editor's caret is the recording's once more, unmarked.
-    showRecordedCaret(fake.editor, caretAt(3, 9));
-    expect(fake.selection()).toEqual(caretAt(3, 9));
+    // The rewind's frame moves the editor's caret, and its mark is gone.
+    showRecordedCaret(fake.editor, caretAt(1, 1));
+    expect(fake.selection()).toEqual(caretAt(1, 1));
     expect(fake.model().marks()).toEqual([]);
+    tracking.dispose();
+  });
+
+  it("goes back to the recording when the tracking ends", () => {
+    const fake = fakeEditor();
+    const tracking = trackLearnerCaret(fake.editor, () => true);
+    showRecordedCaret(fake.editor, caretAt(3, 5));
+    fake.moveCaret("mouse", caretAt(20, 7));
+    fake.setSelection.mockClear();
+
+    tracking.dispose();
+    expect(isLearnerCaretHeld(fake.editor)).toBe(false);
+    expect(fake.setSelection).not.toHaveBeenCalled();
+
+    // Nothing listens any more.
+    fake.moveCaret("mouse", caretAt(21, 1));
+    expect(isLearnerCaretHeld(fake.editor)).toBe(false);
   });
 });

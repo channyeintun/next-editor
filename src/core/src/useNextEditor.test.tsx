@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createActor, waitFor } from "xstate";
 import type * as monaco from "monaco-editor";
 import { editorMachine } from "./machine/editorMachine";
+import { isLearnerCaretHeld } from "./machine/playbackCaret";
 import type { Recording } from "./types";
 import {
   useNextEditorActorActions,
@@ -42,6 +43,7 @@ const createMockEditor = (content: string) => {
     onKeyDown: () => disposable,
     onDidPaste: () => disposable,
     onDidChangeCursorSelection: () => disposable,
+    onMouseDown: () => disposable,
     onDidChangeModel: () => disposable,
   } as unknown as monaco.editor.IStandaloneCodeEditor;
 };
@@ -168,6 +170,120 @@ describe("useNextEditorInteractionEffects", () => {
       target.tabIndex = 0;
       expect(await pressSpaceOn(target)).toEqual({ paused: true, defaultPrevented: true });
     });
+  });
+});
+
+describe("the learner's caret during playback", () => {
+  const caretAt = (column: number) => ({
+    ...selection,
+    startColumn: column,
+    endColumn: column,
+    selectionStartColumn: column,
+    positionColumn: column,
+  });
+  const recording: Recording = {
+    version: 4,
+    id: "recording-caret",
+    name: "Recording",
+    createdAt: 1,
+    duration: 60_000,
+    keyframeInterval: 120,
+    frames: [
+      {
+        timestamp: 0,
+        isKeyframe: true,
+        state: {
+          content: "hello",
+          selection: caretAt(3),
+          position: { lineNumber: 1, column: 3 },
+          viewState: null,
+          mouseCursor: { x: 0, y: 0, visible: false },
+        },
+      },
+    ],
+  };
+
+  // An editor whose cursor a test can move as the learner; like Monaco, it reports the
+  // change a selection write causes before the write returns.
+  const createCaretEditor = () => {
+    let editorSelection = caretAt(1);
+    const cursorListeners = new Set<(event: { source: string }) => void>();
+    const report = (source: string) => cursorListeners.forEach((listener) => listener({ source }));
+    const model = {
+      uri: { toString: () => "inmemory://next-editor/playback/main.ts" },
+      getVersionId: () => 1,
+      getValue: () => "hello",
+    };
+    const editor = {
+      ...createMockEditor("hello"),
+      getModel: () => model,
+      getSelection: () => editorSelection,
+      getSelections: () => [editorSelection],
+      setSelection: (next: typeof selection) => {
+        editorSelection = next;
+        report("api");
+      },
+      onDidChangeCursorSelection: (listener: (event: { source: string }) => void) => {
+        cursorListeners.add(listener);
+        return { dispose: () => cursorListeners.delete(listener) };
+      },
+      createDecorationsCollection: () => ({ set: () => [], clear: () => {}, getRange: () => null }),
+    } as unknown as monaco.editor.IStandaloneCodeEditor;
+    return {
+      editor,
+      caret: () => editorSelection.positionColumn,
+      click: (column: number) => {
+        editorSelection = caretAt(column);
+        report("mouse");
+      },
+    };
+  };
+
+  // Issue 14: a learner clicks into the code while a lesson plays. The caret is theirs
+  // until the lesson stops playing; Stop rewinds in the same machine step, before React
+  // disposes the hook's tracking, and the opening frame's caret must be the editor's.
+  it("is theirs from their click until the lesson stops playing", async () => {
+    const { editor, caret, click } = createCaretEditor();
+    const editorRef: EditorRef = { current: editor };
+    const actor = startActor(editorRef);
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "playing" }));
+    renderHook(() => useNextEditorInteractionEffects(actor, editorRef));
+
+    // Replay put the editor's caret on the recorded one, and that write is not a click.
+    expect(caret()).toBe(3);
+    expect(isLearnerCaretHeld(editor)).toBe(false);
+
+    click(5);
+    expect(isLearnerCaretHeld(editor)).toBe(true);
+
+    // A seek while it plays re-applies the frame and leaves the learner's caret alone.
+    act(() => actor.send({ type: "SEEK", time: 10 }));
+    expect(caret()).toBe(5);
+
+    act(() => actor.send({ type: "STOP" }));
+    expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true);
+    expect(isLearnerCaretHeld(editor)).toBe(false);
+    expect(caret()).toBe(3);
+  });
+
+  it("is not taken by a click once the lesson is paused", async () => {
+    const { editor, click } = createCaretEditor();
+    const editorRef: EditorRef = { current: editor };
+    const actor = startActor(editorRef);
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "playing" }));
+    renderHook(() => useNextEditorInteractionEffects(actor, editorRef));
+
+    // The pause reaches the machine before React re-renders the hook.
+    actor.send({ type: "PAUSE" });
+    click(5);
+
+    expect(isLearnerCaretHeld(editor)).toBe(false);
   });
 });
 

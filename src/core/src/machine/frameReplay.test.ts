@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type * as monaco from "monaco-editor";
 import type { EditorFrame, EditorSelection } from "../types";
 import { applyFrameState } from "./frameReplay";
-import { trackLearnerCaret } from "./playbackCaret";
+import { isLearnerCaretHeld, trackLearnerCaret } from "./playbackCaret";
 
 describe("applyFrameState cursor", () => {
   // Monaco's selection carries the caret, so one setSelection is the whole cursor
@@ -107,17 +107,27 @@ describe("applyFrameState cursor", () => {
     });
     let selection = caretAt(1, 1);
     const cursorListeners: ((event: { source: string }) => void)[] = [];
+    const reportCursorChange = (source: string) => {
+      for (const listener of cursorListeners) listener({ source });
+    };
+    // As in Monaco, each write reports the cursor change it causes before it returns.
     const setSelection = vi.fn<(next: EditorSelection) => void>((next) => {
       selection = next;
+      reportCursorChange("api");
     });
-    const restoreViewState = vi.fn<(state: monaco.editor.ICodeEditorViewState | null) => void>();
+    const restoreViewState = vi.fn<(state: monaco.editor.ICodeEditorViewState | null) => void>(
+      (state) => {
+        const cursor = state?.cursorState[0];
+        if (!cursor) return;
+        selection = caretAt(cursor.position.lineNumber, cursor.position.column);
+        reportCursorChange("restoreState");
+      },
+    );
     const model = {
       getLineCount: () => 30,
       getLineLength: () => 80,
       getValueLength: () => 2400,
       getValue: () => "",
-      isDisposed: () => false,
-      deltaDecorations: (_oldIds: string[], marks: unknown[]) => marks.map((_, i) => `mark-${i}`),
     };
     const editor = {
       getModel: () => model,
@@ -130,7 +140,9 @@ describe("applyFrameState cursor", () => {
         cursorListeners.push(listener);
         return { dispose: () => {} };
       },
+      onMouseDown: () => ({ dispose: () => {} }),
       onDidChangeModel: () => ({ dispose: () => {} }),
+      createDecorationsCollection: () => ({ set: () => [], clear: () => {}, getRange: () => null }),
     } as unknown as monaco.editor.IStandaloneCodeEditor;
     const viewStateAt = (line: number): monaco.editor.ICodeEditorViewState => ({
       cursorState: [
@@ -158,13 +170,24 @@ describe("applyFrameState cursor", () => {
     });
     const tracking = trackLearnerCaret(editor, () => true);
 
+    // Replay's own writes move the cursor too, and are not the learner's: the caret
+    // goes on following the recording.
     applyFrameState(editor, frameAt(3), null);
     expect(selection).toEqual(caretAt(3, 1));
     expect(restoreViewState).toHaveBeenLastCalledWith(viewStateAt(3));
+    expect(isLearnerCaretHeld(editor)).toBe(false);
+    applyFrameState(
+      editor,
+      { ...frameAt(3), state: { ...frameAt(3).state, selection: caretAt(3, 9) } },
+      frameAt(3),
+    );
+    expect(selection).toEqual(caretAt(3, 9));
+    expect(isLearnerCaretHeld(editor)).toBe(false);
 
     // The learner clicks on line 20, and the recording moves on to line 4.
     selection = caretAt(20, 7);
-    for (const listener of cursorListeners) listener({ source: "mouse" });
+    reportCursorChange("mouse");
+    expect(isLearnerCaretHeld(editor)).toBe(true);
     setSelection.mockClear();
     applyFrameState(editor, frameAt(4), frameAt(3));
 

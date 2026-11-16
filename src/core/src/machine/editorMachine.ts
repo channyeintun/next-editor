@@ -92,7 +92,7 @@ import {
   notifySeek,
   setEditorRef,
 } from "./replayActions";
-import { clearCursorDecorations } from "./frameReplay";
+import { clearCursorDecorations, releaseLearnerCaretHold } from "./playbackCaret";
 import { holdViewerPanelView } from "./viewerPanels";
 import {
   adoptPlaybackWorkspaceAtPause,
@@ -341,6 +341,7 @@ export const editorMachine = setup({
     setPlaybackSpeed: assign(setPlaybackSpeed),
     setVolume: assign(setVolume),
     clearCursorDecorations,
+    releaseLearnerCaretHold,
     adoptPlaybackWorkspaceAtPause,
     captureLearnerWorkspaceBaseline: assign(captureLearnerWorkspaceBaseline),
     preserveLearnerWorkspace: enqueueActions(preserveLearnerWorkspace),
@@ -936,7 +937,7 @@ export const editorMachine = setup({
             "applyReplayStateAtTime",
             "startPlaybackActors",
           ],
-          exit: "pausePlaybackActors",
+          exit: ["pausePlaybackActors", "releaseLearnerCaretHold"],
           // The lesson waits for its narration: while the player has no sound to give
           // (a slow connection), the timeline is held and nothing replays, then both go
           // on together. Still `playing` to the viewer, who can pause or seek meanwhile.

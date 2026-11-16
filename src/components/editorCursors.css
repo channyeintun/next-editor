@@ -10,10 +10,23 @@
   animation: nb-cursor-blink 1s step-end infinite !important;
 }
 
-/* The recorded selection, drawn as a decoration while the learner holds the
-   editor's own caret (core's playbackCaret.ts) - match the native selection */
+/* While the learner holds the editor's own caret (core's playbackCaret.ts), the
+   recorded caret is drawn beside it, dimmed and steady: the bright blinking caret
+   is the one their typing goes to */
+.playback-cursor-decoration.playback-cursor-decoration--beside-learner {
+  opacity: 0.55;
+  animation: none !important;
+}
+
+/* The recorded selection is a decoration then too - a lighter tint than the
+   learner's own selection */
 .playback-selection-decoration {
-  background-color: var(--vscode-editor-selectionBackground, #30455f);
+  background-color: #30455f99;
+  background-color: color-mix(
+    in srgb,
+    var(--vscode-editor-selectionBackground, #30455f) 60%,
+    transparent
+  );
 }
 
 /* Override other cursors' color only - keep their native animation */
