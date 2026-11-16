@@ -27,8 +27,18 @@ import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
 import { serveLearnGalleryDocument } from "./ssr/learnGalleryRoute";
 import { serveStaticFile } from "./staticAssets";
 import { localDevHostGuard } from "./localDevHost";
+import { isWebnodeHost, serveWebnodeHost } from "./webnodePreviewHost";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// A webnode host runs lesson code. It serves the runtime's own pages and
+// scripts and nothing of the app, so it is answered before every other route.
+app.use("*", async (c, next) => {
+  if (isWebnodeHost(new URL(c.req.url).hostname, c.env)) {
+    return serveWebnodeHost(c.req.raw, c.env);
+  }
+  await next();
+});
 
 // The app requires cross-origin isolation on every response (WebContainers
 // need SharedArrayBuffer). Static Assets/ASSETS.fetch don't add it, so it
