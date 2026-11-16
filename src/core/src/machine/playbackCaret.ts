@@ -52,6 +52,12 @@ const UNATTENDED_CURSOR_SOURCES: ReadonlySet<string> = new Set([
 const MOUSE_TARGET_CONTENT_TEXT = 6;
 const MOUSE_TARGET_CONTENT_EMPTY = 7;
 
+/**
+ * The event Monaco dispatches on its text for a finger or pen tap (EventType.Tap in its
+ * base/browser/touch.js). It does not bubble, and a touch never reaches onMouseDown.
+ */
+const MONACO_TAP_EVENT = "-monaco-gesturetap";
+
 interface PlaybackCaret {
   /** The recorded selection replay last showed, to mark the moment the learner takes the caret. */
   recorded: EditorSelection | null;
@@ -237,9 +243,13 @@ export function releaseLearnerCaret(editor: Editor): void {
 /**
  * While a lesson plays, hands the editor's caret to the learner the moment they place
  * it: any cursor change that is neither replay's write nor Monaco following the text,
- * and a press on the text itself (a click on the very spot the recorded caret is on
- * changes no cursor). `isPlaying` is asked each time, since the key that pauses the
+ * and a press or a tap on the text itself (one on the very spot the recorded caret is
+ * on changes no cursor). `isPlaying` is asked each time, since the key that pauses the
  * lesson moves the caret too, before this tracking is disposed.
+ *
+ * Escape places no caret. It is the first key of the way out of the editor (Escape,
+ * then Tab), and over a recorded selection Monaco answers it by collapsing that
+ * selection, which reports a cursor change like any other key's.
  *
  * The caret goes back to the recording when the editor shows another model (the
  * recording opened another file: the learner's caret stayed in the one it left) and
@@ -254,9 +264,27 @@ export function trackLearnerCaret(editor: Editor, isPlaying: () => boolean): mon
     // The editor's caret was the recording's until now: mark where that is.
     drawRecordedCaret(editor, caret);
   };
+
+  // Set for the rest of an Escape keydown's dispatch, during which Monaco runs the key's
+  // command. A timer and not a microtask: those run between two listeners of one event.
+  let isEscapeKeyDown = false;
+  const noteEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    isEscapeKeyDown = true;
+    setTimeout(() => {
+      isEscapeKeyDown = false;
+    }, 0);
+  };
+
+  // Both in the capture phase, on the editor's own node: ahead of Monaco's listeners
+  // inside it, and reached by the tap event, which does not bubble.
+  const domNode = editor.getDomNode();
+  domNode?.addEventListener("keydown", noteEscape, true);
+  domNode?.addEventListener(MONACO_TAP_EVENT, take, true);
+
   const listeners = [
     editor.onDidChangeCursorSelection((event) => {
-      if (!UNATTENDED_CURSOR_SOURCES.has(event.source)) take();
+      if (!isEscapeKeyDown && !UNATTENDED_CURSOR_SOURCES.has(event.source)) take();
     }),
     editor.onMouseDown((event) => {
       const target = event.target.type;
@@ -268,6 +296,8 @@ export function trackLearnerCaret(editor: Editor, isPlaying: () => boolean): mon
   return {
     dispose() {
       for (const listener of listeners) listener.dispose();
+      domNode?.removeEventListener("keydown", noteEscape, true);
+      domNode?.removeEventListener(MONACO_TAP_EVENT, take, true);
       releaseLearnerCaret(editor);
     },
   };

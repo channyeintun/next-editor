@@ -84,6 +84,7 @@ function fakeEditor(initialModel = fakeModel()) {
   const cursorListeners = new Set<CursorListener>();
   const mouseListeners = new Set<MouseListener>();
   const modelListeners = new Set<() => void>();
+  const domNode = document.createElement("div");
   const draws = vi.fn<(marks: readonly Mark[]) => void>();
   const reportCursorChange = (source: string) => {
     for (const listener of cursorListeners) listener({ source });
@@ -104,6 +105,7 @@ function fakeEditor(initialModel = fakeModel()) {
     getSelection: () => selection,
     getSelections: () => [selection],
     getModel: () => model,
+    getDomNode: () => domNode,
     hasTextFocus: () => focused,
     onDidChangeCursorSelection: subscribe(cursorListeners),
     onMouseDown: subscribe(mouseListeners),
@@ -160,6 +162,20 @@ function fakeEditor(initialModel = fakeModel()) {
     /** A press on the editor that moves no cursor (it is already there). */
     pressOn(target: number) {
       for (const listener of mouseListeners) listener({ target: { type: target } });
+    },
+    /** A finger tap on the text: Monaco's own event, which never reaches onMouseDown. */
+    tap() {
+      domNode.dispatchEvent(new Event("-monaco-gesturetap"));
+    },
+    /**
+     * Presses a key in the editor. `command` is what Monaco runs for it, within the
+     * same keydown, as it does for a key bound to a cursor command.
+     */
+    pressKey(key: string, command?: () => void) {
+      const inner = domNode.appendChild(document.createElement("textarea"));
+      inner.addEventListener("keydown", () => command?.());
+      inner.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      inner.remove();
     },
   };
 }
@@ -302,6 +318,44 @@ describe("a caret the learner places while the lesson plays", () => {
 
     expect(isLearnerCaretHeld(fake.editor)).toBe(true);
     expect(fake.model().marks()).toEqual([[DIMMED_CARET, "3:5-3:5"]]);
+    tracking.dispose();
+  });
+
+  // On a phone a tap never reaches onMouseDown, and one on the recorded caret's own
+  // spot moves no cursor either.
+  it("is theirs after a tap on the text", () => {
+    const fake = fakeEditor();
+    const tracking = trackLearnerCaret(fake.editor, () => true);
+    showRecordedCaret(fake.editor, caretAt(3, 5));
+
+    fake.tap();
+    expect(isLearnerCaretHeld(fake.editor)).toBe(true);
+
+    // Nothing listens once the tracking is disposed.
+    tracking.dispose();
+    fake.tap();
+    expect(isLearnerCaretHeld(fake.editor)).toBe(false);
+  });
+
+  // Escape, then Tab, is how a keyboard user leaves the editor. Over a recorded
+  // selection Monaco answers Escape by collapsing the selection, a "keyboard" cursor
+  // change like an arrow key's, and the learner has placed nothing.
+  it("is not taken by Escape collapsing the recorded selection", async () => {
+    const fake = fakeEditor();
+    const tracking = trackLearnerCaret(fake.editor, () => true);
+    showRecordedCaret(fake.editor, selectionTo(3, 5, 3, 11));
+
+    fake.pressKey("Escape", () => fake.moveCaret("keyboard", caretAt(3, 11)));
+    expect(isLearnerCaretHeld(fake.editor)).toBe(false);
+
+    // The recording's next frame puts its selection back.
+    showRecordedCaret(fake.editor, selectionTo(3, 5, 3, 12));
+    expect(fake.selection()).toEqual(selectionTo(3, 5, 3, 12));
+
+    // Only that keydown is exempt: an arrow key afterwards places the caret.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fake.pressKey("ArrowDown", () => fake.moveCaret("keyboard", caretAt(4, 12)));
+    expect(isLearnerCaretHeld(fake.editor)).toBe(true);
     tracking.dispose();
   });
 

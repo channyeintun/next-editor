@@ -131,6 +131,7 @@ describe("applyFrameState cursor", () => {
     };
     const editor = {
       getModel: () => model,
+      getDomNode: () => null,
       getSelection: () => selection,
       getSelections: () => [selection],
       setSelection,

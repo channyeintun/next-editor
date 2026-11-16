@@ -42,6 +42,7 @@ const createMockEditor = (content: string) => {
     hasTextFocus: () => true,
     onKeyDown: () => disposable,
     onDidPaste: () => disposable,
+    getDomNode: () => null,
     onDidChangeCursorSelection: () => disposable,
     onMouseDown: () => disposable,
     onDidChangeModel: () => disposable,
@@ -267,6 +268,30 @@ describe("the learner's caret during playback", () => {
     expect(actor.getSnapshot().matches({ playback: "ready" })).toBe(true);
     expect(isLearnerCaretHeld(editor)).toBe(false);
     expect(caret()).toBe(3);
+  });
+
+  // The pause the learner's first key causes hands the file over with the editor's
+  // caret as it is, so nothing in that step, or in the lesson ending, may write the
+  // recorded caret back first: typed text would land at the recording's caret again.
+  it.each([
+    ["the key that pauses the lesson", { type: "USER_INTERACTION" } as const, "paused" as const],
+    ["the lesson ending", { type: "FINISHED" } as const, "ended" as const],
+  ])("stays where they put it through %s", async (_name, event, state) => {
+    const { editor, caret, click } = createCaretEditor();
+    const editorRef: EditorRef = { current: editor };
+    const actor = startActor(editorRef);
+    actor.send({ type: "LOAD_RECORDING", recording });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "ready" }));
+    actor.send({ type: "PLAY" });
+    await waitFor(actor, (snapshot) => snapshot.matches({ playback: "playing" }));
+    renderHook(() => useNextEditorInteractionEffects(actor, editorRef));
+    click(5);
+
+    act(() => actor.send(event));
+
+    expect(actor.getSnapshot().matches({ playback: state })).toBe(true);
+    expect(caret()).toBe(5);
+    expect(isLearnerCaretHeld(editor)).toBe(false);
   });
 
   it("is not taken by a click once the lesson is paused", async () => {
