@@ -132,6 +132,37 @@ describe("editor view states", () => {
     expect(fake.view()).toEqual(viewOn(9));
   });
 
+  // The recording opens an image, so the editor is disposed while it shows a playback
+  // model. No swap follows: the editor that next shows that file, perhaps in the next
+  // lesson, must not open on where this lesson's recording had left it.
+  it("does not hand over the view of a playback model the editor was disposed on", () => {
+    const viewStates = createEditorViewStates();
+    const disposed = fakeEditor(playbackModel("src/App.tsx"), viewOn(80));
+    viewStates.saveBeforeDispose(disposed.editor);
+
+    const mounted = fakeEditor(workspaceModel("src/App.tsx"));
+    viewStates.restore(
+      mounted.editor,
+      workspaceModel("src/App.tsx") as unknown as monaco.editor.ITextModel,
+    );
+
+    expect(mounted.restoreViewState).not.toHaveBeenCalled();
+  });
+
+  it("keeps a file's own view across the editor being disposed", () => {
+    const viewStates = createEditorViewStates();
+    const disposed = fakeEditor(workspaceModel("src/App.tsx"), viewOn(12));
+    viewStates.saveBeforeDispose(disposed.editor);
+
+    const mounted = fakeEditor(workspaceModel("src/App.tsx"));
+    viewStates.restore(
+      mounted.editor,
+      workspaceModel("src/App.tsx") as unknown as monaco.editor.ITextModel,
+    );
+
+    expect(mounted.view()).toEqual(viewOn(12));
+  });
+
   it("forgets the view of a file that left the project", () => {
     const viewStates = createEditorViewStates();
     const fake = fakeEditor(workspaceModel("src/App.tsx"), viewOn(5));

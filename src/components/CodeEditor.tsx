@@ -702,7 +702,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
                   onMount={handleEditorDidMount}
                   onBeforeModelChange={viewStates.save}
                   onAfterModelChange={viewStates.restore}
-                  onWillDispose={viewStates.save}
+                  onWillDispose={viewStates.saveBeforeDispose}
                   options={editorOptions}
                 />
               )}

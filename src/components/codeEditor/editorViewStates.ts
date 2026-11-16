@@ -18,8 +18,14 @@ type ViewState = monaco.editor.ICodeEditorViewState;
  * line 1.
  */
 export interface EditorViewStates {
-  /** Call while `editor` still shows the model it is about to leave. */
+  /** Call while `editor` still shows the model it is about to swap for another. */
   save(editor: StandaloneEditor | null): void;
+  /**
+   * Call before `editor` is disposed. A file's view is kept for the next editor; a
+   * lesson's is not handed over, since no swap follows: whichever editor next shows
+   * that file, in this lesson or the next, would open on a view from another time.
+   */
+  saveBeforeDispose(editor: StandaloneEditor | null): void;
   /** Call once `editor` shows `model`. */
   restore(editor: StandaloneEditor, model: TextModel | null): void;
   /** Drops what was saved for the model at `uri` (its file left the project). */
@@ -32,20 +38,27 @@ export function createEditorViewStates(): EditorViewStates {
   // the same file (named by its URI) if that is what the editor shows next.
   let handedOver: { workspaceUri: string; viewState: ViewState | null } | null = null;
 
+  const save: EditorViewStates["save"] = (editor) => {
+    const model = editor?.getModel();
+    if (!editor || !model) return;
+
+    const workspaceUri = workspaceModelUriFromPlaybackModelUri(monaco, model.uri);
+    if (workspaceUri !== null) {
+      // Replay rebuilds a playback model's view from the recording, so it is kept
+      // only for the hand-over.
+      handedOver = { workspaceUri, viewState: editor.saveViewState() };
+      return;
+    }
+
+    savedByUri.set(model.uri.toString(), editor.saveViewState());
+  };
+
   return {
-    save(editor) {
-      const model = editor?.getModel();
-      if (!editor || !model) return;
+    save,
 
-      const workspaceUri = workspaceModelUriFromPlaybackModelUri(monaco, model.uri);
-      if (workspaceUri !== null) {
-        // Replay rebuilds a playback model's view from the recording, so it is kept
-        // only for the hand-over.
-        handedOver = { workspaceUri, viewState: editor.saveViewState() };
-        return;
-      }
-
-      savedByUri.set(model.uri.toString(), editor.saveViewState());
+    saveBeforeDispose(editor) {
+      save(editor);
+      handedOver = null;
     },
 
     restore(editor, model) {

@@ -350,6 +350,24 @@ describe("CodeEditor's model swaps", () => {
 
     expect(restoreViewState.mock.calls).toEqual([[viewOnPlaybackModel]]);
   });
+
+  // The editor is disposed when the recording opens an image. That is no swap, and the
+  // editor that next shows the file must not get the view of a moment long past.
+  it("hands nothing over from a playback model the editor is disposed on", () => {
+    render(<CodeEditor />);
+    const { onWillDispose, onAfterModelChange } = harness.monacoEditorProps as {
+      onWillDispose: (editor: unknown, model: unknown) => void;
+      onAfterModelChange: (editor: unknown, model: unknown) => void;
+    };
+    const playbackModel = { uri: { toString: () => "playback:///index.html" } };
+    const workspaceModel = { uri: { toString: () => "file:///index.html" } };
+    const restoreViewState = vi.fn<(viewState: unknown) => void>();
+
+    onWillDispose({ getModel: () => playbackModel, saveViewState: () => ({}) }, playbackModel);
+    onAfterModelChange({ getModel: () => workspaceModel, restoreViewState }, workspaceModel);
+
+    expect(restoreViewState).not.toHaveBeenCalled();
+  });
 });
 
 describe("CodeEditor's remote cursors", () => {
