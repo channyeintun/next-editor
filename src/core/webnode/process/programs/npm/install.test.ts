@@ -176,6 +176,12 @@ describe("install", () => {
     );
   });
 
+  it("installs a project that has no dependencies", async () => {
+    const { rt, run } = await setup({});
+    expect((await run()).status).toBe(0);
+    expect(rt.vfs.exists("/project/node_modules/.webnode-lock.json")).toBe(true);
+  });
+
   it("prints npm's and yarn's summaries", async () => {
     const npm = await setup({ dependencies: { react: "19.0.0" } });
     await npm.run({ tool: "npm" });

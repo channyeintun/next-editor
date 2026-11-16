@@ -499,6 +499,8 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
       ...(node.manifest.dist.integrity ? { integrity: node.manifest.dist.integrity } : {}),
     };
   }
+  // A project with no dependencies has no node_modules until now.
+  fs.mkdir(nodeModules, true, 0o755);
   fs.writeFile(lockPath, encoder.encode(`${JSON.stringify(lock, null, 2)}\n`), WRITE_FLAGS, 0o644);
 
   const installed = new Map<string, string>();

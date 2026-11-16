@@ -473,15 +473,54 @@ export async function resolveDependencies(options: ResolveOptions): Promise<Reso
     ),
   );
 
+  /**
+   * A peer dependency is the copy the package's own dependent already has: when
+   * `a` depends on `b` and on `c`, and `b` names `c` as a peer, `b` uses `a`'s
+   * `c`. (napi's wasm runtime names the emnapi packages as peers, and the
+   * binding that depends on it pins them; a second, newer emnapi beside the
+   * pinned one does not load.)
+   */
+  const linkPeers = () => {
+    const dependents = new Map<string, ResolvedNode[]>();
+    for (const key of [...nodes.keys()].sort(compare)) {
+      const node = nodes.get(key)!;
+      for (const dependency of node.dependencies.values()) {
+        const list = dependents.get(dependency) ?? [];
+        list.push(node);
+        dependents.set(dependency, list);
+      }
+    }
+    const rootKeys = new Set(root.values());
+    for (const key of [...nodes.keys()].sort(compare)) {
+      const node = nodes.get(key)!;
+      for (const [peer, range] of Object.entries(node.manifest.peerDependencies ?? {})) {
+        if (node.dependencies.has(peer)) {
+          continue;
+        }
+        let provided = rootKeys.has(key) ? root.get(peer) : undefined;
+        for (const dependent of dependents.get(key) ?? []) {
+          provided ??= dependent.dependencies.get(peer);
+        }
+        if (provided !== undefined && provided !== key) {
+          node.dependencies.set(peer, provided);
+          node.ranges.set(peer, range);
+        }
+      }
+    }
+  };
+
   // Missing peers are installed once, at the top level, as npm 7+ and pnpm do.
   const tried = new Set<string>();
   for (;;) {
+    linkPeers();
     const missing = new Map<string, string>();
     for (const key of [...nodes.keys()].sort(compare)) {
-      const manifest = nodes.get(key)!.manifest;
+      const node = nodes.get(key)!;
+      const manifest = node.manifest;
       for (const [peer, range] of Object.entries(manifest.peerDependencies ?? {})) {
         if (
           manifest.peerDependenciesMeta?.[peer]?.optional ||
+          node.dependencies.has(peer) ||
           root.has(peer) ||
           requested.has(peer) ||
           tried.has(peer) ||

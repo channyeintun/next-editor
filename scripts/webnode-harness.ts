@@ -19,7 +19,8 @@ import { webnodeHostAsset, webnodeHostResponse } from "../src/core/webnode/previ
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 // A second harness run at the same time needs its own port and build directory.
-const OUT_DIR = resolve(ROOT, process.env.WEBNODE_HARNESS_OUT ?? "node_modules/.cache/webnode");
+// `||`: an empty value must not make the repository root the output directory.
+const OUT_DIR = resolve(ROOT, process.env.WEBNODE_HARNESS_OUT || "node_modules/.cache/webnode");
 const CASES_DIR = resolve(ROOT, "src/core/webnode/test/cases");
 const PORT = Number(process.env.WEBNODE_HARNESS_PORT ?? 5199);
 

@@ -9,7 +9,6 @@ import repl from "./repl";
 import sys from "./sys";
 import traceEvents from "./trace_events";
 import util from "./util";
-import wasi from "./wasi";
 
 const unavailable = (text: string) =>
   expect.objectContaining({ message: expect.stringContaining(text) as unknown });
@@ -150,11 +149,7 @@ describe("trace_events", () => {
   });
 });
 
-describe("wasi and sys", () => {
-  it("wasi.WASI throws a named error", () => {
-    expect(() => new wasi.WASI({})).toThrow(unavailable("wasi.WASI is not available in webnode"));
-  });
-
+describe("sys", () => {
   it("sys is util", () => {
     expect(sys).toBe(util);
   });

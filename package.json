@@ -35,6 +35,7 @@
     "@simplewebauthn/server": "^14.1.0",
     "@tanstack/react-query": "^5.107.1",
     "@tanstack/react-virtual": "^3.14.26",
+    "@tybys/wasm-util": "0.10.3",
     "@upstash/qstash": "^2.12.1",
     "@webcontainer/api": "^1.6.4",
     "@xstate/react": "^6.1.0",

@@ -174,6 +174,14 @@ class ControlLink {
         headers.push([name, value]);
       }
     });
+    // The browser keeps its Sec-Fetch-* headers from a service worker, and
+    // servers read them (Vite decides from Sec-Fetch-Dest whether a path with
+    // an unknown extension is a module to transform), so they are restated.
+    headers.push(
+      ["Sec-Fetch-Dest", request.destination || "empty"],
+      ["Sec-Fetch-Mode", request.mode],
+      ["Sec-Fetch-Site", "same-origin"],
+    );
     if (request.credentials !== "omit") {
       const cookie = this.#jar.header(url.pathname);
       if (cookie !== null) {

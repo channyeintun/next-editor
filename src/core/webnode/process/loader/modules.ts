@@ -16,9 +16,11 @@ import {
 import type { ResolveMode } from "./resolve";
 import {
   DYNAMIC_IMPORT_BINDING,
+  exportNameStandIn,
   EXPORTS_BINDING,
   hasTopLevelAwait,
   IMPORT_META_BINDING,
+  isIdentifierName,
   prepareSource,
   STATIC_IMPORT_BINDING,
   stripTypes,
@@ -84,9 +86,17 @@ function compileFunction(
   isAsync: boolean,
 ): (...args: unknown[]) => unknown {
   const source = `(${isAsync ? "async " : ""}function (${parameters.join(", ")}) {${code}\n})\n//# sourceURL=${filename}`;
-  // Indirect eval: the function sees only the global scope.
-  // eslint-disable-next-line no-eval -- the loader exists to evaluate module source
-  return (0, eval)(source) as (...args: unknown[]) => unknown;
+  try {
+    // Indirect eval: the function sees only the global scope.
+    // eslint-disable-next-line no-eval -- the loader exists to evaluate module source
+    return (0, eval)(source) as (...args: unknown[]) => unknown;
+  } catch (error) {
+    if (error instanceof SyntaxError && !error.message.includes(filename)) {
+      // The engine reports no position for evaluated code; name the file at least.
+      error.message = `${error.message} (${filename})`;
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +173,26 @@ function namespaceOfExports(read: () => unknown, includeHidden = false): Namespa
       });
     }
   }
+  aliasStringNames(namespace);
   return namespace;
+}
+
+/**
+ * Gives every export whose name is not an identifier its stand-in, hidden, so
+ * a module that imports it by a string name (`import { "a-b" as c }`) reads it.
+ * An ES module does this for its own exports (loader/transform.ts); this covers
+ * the names a namespace gets any other way: CommonJS exports and `export *`.
+ */
+function aliasStringNames(namespace: Namespace): void {
+  for (const key of Object.keys(namespace)) {
+    if (isIdentifierName(key)) {
+      continue;
+    }
+    const standIn = exportNameStandIn(key);
+    if (!Object.hasOwn(namespace, standIn)) {
+      Object.defineProperty(namespace, standIn, { get: () => namespace[key] });
+    }
+  }
 }
 
 function namespaceOfModule(module: Module): Namespace {
@@ -722,6 +751,7 @@ function evaluate(record: EsmRecord, ancestors: Set<EsmRecord>): void | Promise<
   ancestors.add(record);
 
   const succeed = () => {
+    aliasStringNames(record.namespace);
     record.state = "evaluated";
     record.pending = null;
   };
@@ -825,6 +855,10 @@ function requireRecord(record: EsmRecord): Namespace {
   // Node decides before anything runs: an async graph is not evaluated at all.
   if (graphIsAsync(record, new Set()) || evaluate(record, new Set())) {
     throw asyncModuleError(record.filename);
+  }
+  // An ES module names what `require()` returns with an export called "module.exports".
+  if (Object.hasOwn(record.namespace, "module.exports")) {
+    return record.namespace["module.exports"] as Namespace;
   }
   return requiredView(record);
 }

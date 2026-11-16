@@ -49,7 +49,8 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
   its own `require` or `exports`.
 - **Native binaries are swapped at install time** the way WebContainer does it:
   `esbuild` → `esbuild-wasm`, `rollup` → `@rollup/wasm-node`, at the same
-  version (process/programs/npm/substitutions.ts). The runtime reports `linux` /
+  version, and a platform family's `wasm32-wasi` member in place of its native
+  ones (process/programs/npm/substitutions.ts). The runtime reports `linux` /
   `x64` and sets `process.versions.webcontainer`, so packages that special-case
   WebContainer take the same paths here.
 
@@ -130,22 +131,33 @@ is supported when a case, or a unit test against real Node, proves it.
 
 ## What runs, and what does not yet
 
-Verified in headless Chrome against the lessons' own workspaces: `pnpm install`
-from the npm registry; Vite 5.4 and Vite 7 dev servers with HMR over the
-preview's WebSocket bridge; React 18 and 19; Vitest 5; the TypeScript 6
-compiler; `tsx`-style TypeScript entry files; Express; esbuild (as
-`esbuild-wasm`) and rollup (as `@rollup/wasm-node`).
+Verified in headless Chrome against the lessons' own workspaces and every
+starter template: `pnpm install` from the npm registry; Vite 5.4, 7 and 8 dev
+servers with HMR over the preview's WebSocket bridge; rolldown; Tailwind v4;
+React 18 and 19, Vue, Solid and Svelte; TanStack Start with Nitro (server
+rendering); Vitest 5; the TypeScript 6 compiler; `tsx`-style TypeScript entry
+files; Express; esbuild (as `esbuild-wasm`) and rollup (as `@rollup/wasm-node`).
+
+**napi packages built for `wasm32-wasi`** (rolldown, Tailwind v4's oxide, oxc)
+load through `node:wasi` (process/node/wasi.ts): the system calls are
+`@tybys/wasm-util`'s over this runtime's `fs`, and the package's threads are
+`worker_threads` workers sharing one `WebAssembly.Memory`. The installer picks
+the `wasm32-wasi` member of a platform family and gives a peer dependency the
+copy its dependent pins, which is what keeps the emnapi packages on one version.
+
+Known differences from Node:
+
+- **An ES module's namespace is a plain object.** Its keys are in the order the
+  module declares them, not sorted, it prints as an object rather than as
+  `[Module: null prototype]`, and assigning to it does not fail.
+- **`AsyncLocalStorage` across `await`** on a native promise: the browser has no
+  async context, so a store set by `run()` can be lost after such an `await`.
 
 Not supported:
 
-- **napi packages built for `wasm32-wasi`** (Tailwind v4's oxide, rolldown,
-  oxc): they need `node:wasi` with threads, which is not implemented, so
-  Tailwind v4 and rolldown-based Vite do not start.
 - **Native addons** (`.node` files) and any package that downloads a binary.
 - **Raw TCP, TLS, HTTP/2 and UDP.** `http`/`https` to another host go through
   the browser's `fetch`, so the remote server's CORS policy applies.
-- **`AsyncLocalStorage` across `await`** on a native promise: the browser has no
-  async context, so a store set by `run()` can be lost after such an `await`.
 - **`module.register()` loader hooks, `vm` contexts with their own globals,
   `worker_threads.receiveMessageOnPort`, the interactive `node` REPL.**
 - **Install scripts of dependencies** are not run (the project's own are).

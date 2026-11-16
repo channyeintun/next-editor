@@ -181,6 +181,42 @@ describe("resolveDependencies", () => {
     expect(root.get("host")).toBe("host@2.0.0");
   });
 
+  it("gives a peer the copy its dependent already depends on", async () => {
+    // The emnapi shape: a package pins a prerelease of two packages, and one of
+    // them names the other as a peer. The peer is the pinned copy, not `latest`.
+    const { nodes, root, keys } = await resolveWith(
+      [
+        {
+          name: "wasm-runtime",
+          version: "1.0.0",
+          dependencies: { core: "2.0.0-beta.2", runtime: "2.0.0-beta.2" },
+        },
+        { name: "core", version: "2.0.0-beta.2", peerDependencies: { runtime: "*" } },
+        { name: "runtime", version: "1.11.3" },
+        { name: "runtime", version: "2.0.0-beta.2" },
+      ],
+      { "wasm-runtime": "1.0.0" },
+      { tags: { runtime: { latest: "1.11.3" } } },
+    );
+    expect(nodes.get("core@2.0.0-beta.2")?.dependencies.get("runtime")).toBe(
+      "runtime@2.0.0-beta.2",
+    );
+    expect(keys).not.toContain("runtime@1.11.3");
+    expect(root.has("runtime")).toBe(false);
+  });
+
+  it("gives the project's dependency its peer from the project", async () => {
+    const { nodes } = await resolveWith(
+      [
+        { name: "plugin", version: "1.0.0", peerDependencies: { host: "^2.0.0" } },
+        { name: "host", version: "2.0.0" },
+        { name: "host", version: "2.5.0" },
+      ],
+      { plugin: "1.0.0", host: "2.0.0" },
+    );
+    expect(nodes.get("plugin@1.0.0")?.dependencies.get("host")).toBe("host@2.0.0");
+  });
+
   it("skips optional native binaries and keeps wasm32 builds", async () => {
     const { keys } = await resolveWith(
       [

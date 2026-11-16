@@ -168,6 +168,15 @@ async function add(session: Session, command: Extract<Command, { kind: "add" }>)
       entries[name] = parsed.source === name ? saved : `npm:${parsed.source}@${saved}`;
     }),
   );
+  // Adding a package where there is no package.json starts a project, as npm and pnpm do.
+  if (!fs.exists(join(dir, "package.json"))) {
+    fs.writeFile(
+      join(dir, "package.json"),
+      new TextEncoder().encode("{}\n"),
+      O_WRONLY | O_CREAT | O_TRUNC,
+      0o644,
+    );
+  }
   return withManifestChange(
     session,
     dir,

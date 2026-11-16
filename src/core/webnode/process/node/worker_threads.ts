@@ -27,7 +27,10 @@ interface NodePort extends MessagePort {
 interface PortState {
   listeners: Map<string, { listener: Listener; native: EventListener }[]>;
   reffed: boolean;
-  /** False once `unref()` was called: listeners no longer keep the process alive. */
+  /**
+   * The port holds the process open: set by `ref()` and by its first message
+   * listener, cleared by `unref()` and when its last message listener goes.
+   */
   wantsRef: boolean;
   /** This end, or the one it is entangled with, was closed. */
   closed: boolean;
@@ -49,7 +52,7 @@ function stateOf(port: object): PortState {
     state = {
       listeners: new Map(),
       reffed: false,
-      wantsRef: true,
+      wantsRef: false,
       closed: false,
       watching: false,
       raw: false,
@@ -59,11 +62,13 @@ function stateOf(port: object): PortState {
   return state;
 }
 
-/** A port keeps the process alive while it has a message listener and was not unref'd. */
+/**
+ * Holds or releases the process for `port`. As in Node, a port holds it after
+ * `ref()` or while it has a message listener, until `unref()` or the port closes.
+ */
 function updateRef(port: object): void {
   const state = stateOf(port);
-  const wanted =
-    state.wantsRef && !state.closed && (state.listeners.get("message")?.length ?? 0) > 0;
+  const wanted = state.wantsRef && !state.closed;
   if (wanted !== state.reffed) {
     state.reffed = wanted;
     try {
@@ -185,6 +190,9 @@ export function addNodePortInterface(prototype: object): void {
     if (event === "message") {
       // A Node port starts delivering as soon as it has a listener.
       (this as { start?: () => void }).start?.();
+      if (list.length === 1) {
+        state.wantsRef = true;
+      }
       updateRef(this);
     }
     return this;
@@ -197,6 +205,9 @@ export function addNodePortInterface(prototype: object): void {
     if (list && index >= 0) {
       this.removeEventListener(event, list[index].native);
       list.splice(index, 1);
+      if (event === "message" && list.length === 0) {
+        state.wantsRef = false;
+      }
       updateRef(this);
     }
     return this;
@@ -222,6 +233,9 @@ export function addNodePortInterface(prototype: object): void {
             this.removeEventListener(name, entry.native);
           }
           state.listeners.delete(name);
+          if (name === "message") {
+            state.wantsRef = false;
+          }
         }
       }
       updateRef(this);
@@ -332,7 +346,10 @@ export const Worker = function Worker(
   }
 
   const env =
-    options.env === undefined || typeof options.env === "symbol" ? { ...rt.env } : options.env;
+    // A plain copy: `process.env` itself is a proxy, which cannot be sent to another thread.
+    options.env === undefined || typeof options.env === "symbol"
+      ? { ...rt.env }
+      : { ...options.env };
   const handle = rt.threads.spawn({
     filename: script,
     eval: options.eval === true,
