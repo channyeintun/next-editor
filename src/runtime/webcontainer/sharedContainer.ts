@@ -3,6 +3,7 @@
 // serializes work on it.
 import type { WebContainer } from "@webcontainer/api";
 import { isMobileBrowser } from "../../utils/isMobileBrowser";
+import { bootRuntimeEngine, selectedRuntimeEngine } from "./engine";
 
 const sharedWebContainerState: {
   instance: WebContainer | null;
@@ -86,7 +87,9 @@ export function isWebContainerRuntimeSupported(): boolean {
 }
 
 function bootSharedWebContainer(): Promise<WebContainer> {
-  preconnectWebContainerCdn();
+  if (selectedRuntimeEngine() === "webcontainer") {
+    preconnectWebContainerCdn();
+  }
   // Fetched alongside the boot, not statically: it carries the ~77 KB recorder
   // bundle as text, which no page that never boots a WebContainer (mobile,
   // playback) should fetch. A failure surfaces where it is awaited below; this
@@ -97,14 +100,7 @@ function bootSharedWebContainer(): Promise<WebContainer> {
   // Only one WebContainer boots at a time, so a boot a reset gave up on lands
   // and goes down before this one starts.
   const boot: Promise<WebContainer> = (sharedWebContainerState.retiringBoot ?? Promise.resolve())
-    .then(() => import("@webcontainer/api"))
-    .then(({ WebContainer }) =>
-      WebContainer.boot({
-        coep: "require-corp",
-        forwardPreviewErrors: true,
-        workdirName: "next-editor-runtime",
-      }),
-    )
+    .then(() => bootRuntimeEngine())
     .then(async (instance) => {
       // Install the rrweb recorder into every preview HTML response up front,
       // so replay works regardless of how the app renders (SSR/CSR/hybrid).

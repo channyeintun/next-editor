@@ -7,6 +7,7 @@ import { proxyPlugin } from "./tube/vite/proxyPlugin";
 import { openrouterProxyPlugin } from "./tube/vite/openrouterProxyPlugin";
 import { DEV_SERVER_FS_DENY } from "./tube/vite/devServerFsDeny";
 import { rrwebRecorderBundlePlugin } from "./build/rrwebRecorderBundlePlugin";
+import { webnodeBundlePlugin } from "./build/webnodeBundlePlugin";
 import { posthogReleasePlugins } from "./build/posthogReleasePlugins";
 import { landingPrerenderPlugin } from "./build/landingPrerenderPlugin";
 import { precompressAssetsPlugin } from "./build/precompressAssetsPlugin";
@@ -76,6 +77,9 @@ export default ({ mode }: { mode: string }) => {
     staged: stagedChecks,
     plugins: [
       rrwebRecorderBundlePlugin(),
+      // The webnode runtime's worker scripts and, in dev, its preview hosts
+      // (`*.localhost`); see src/runtime/webcontainer/engine.ts.
+      webnodeBundlePlugin(),
       // Dev-server equivalent of infra/worker/routes/proxy.ts: lets
       // `bun run dev` resolve the same /api/proxy route the Worker
       // serves in production.
@@ -359,6 +363,10 @@ export default ({ mode }: { mode: string }) => {
     },
     server: {
       headers: crossOriginHeaders,
+      // Vite's default lets any `*.localhost` page read the dev server. Those
+      // hosts run lesson code under the webnode runtime (webnodeBundlePlugin),
+      // so only the dev server's own origin may.
+      cors: { origin: /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/ },
       hmr: {
         overlay: true, // Show errors in overlay
       },

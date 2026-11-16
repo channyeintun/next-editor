@@ -1,0 +1,95 @@
+// Which engine runs the in-browser Node runtime, and how it boots: StackBlitz's
+// WebContainer (the default) or webnode, the engine in src/core/webnode. Both
+// present the `@webcontainer/api` surface, so everything past this module is the
+// same code for either.
+import type { WebContainer } from "@webcontainer/api";
+import { readStoredPreference, writeStoredPreference } from "../../stores/preferenceStorage";
+
+export type RuntimeEngine = "webcontainer" | "webnode";
+
+const ENGINE_PREFERENCE_KEY = "next-editor:runtime-engine";
+const ENGINE_QUERY_PARAMETER = "runtime";
+const RUNTIME_WORKDIR_NAME = "next-editor-runtime";
+
+interface PreviewBase {
+  protocol: "http:" | "https:";
+  host: string;
+}
+
+function isRuntimeEngine(value: string | null): value is RuntimeEngine {
+  return value === "webcontainer" || value === "webnode";
+}
+
+/**
+ * The host webnode runs under, or null where it cannot run. The runtime never
+ * runs on this page's origin: its kernel and processes run on `runtime.<host>`
+ * and each preview on `<session>-<port>.<host>`. The dev server answers for
+ * `*.localhost`; a deployment names its wildcard host in
+ * VITE_WEBNODE_PREVIEW_HOST.
+ */
+export function webnodePreviewBase(): PreviewBase | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const configured = (import.meta.env.VITE_WEBNODE_PREVIEW_HOST as string | undefined)?.trim();
+  if (configured) {
+    return { protocol: "https:", host: configured };
+  }
+  if (window.location.hostname === "localhost") {
+    return {
+      protocol: window.location.protocol === "https:" ? "https:" : "http:",
+      host: window.location.host,
+    };
+  }
+  return null;
+}
+
+/**
+ * The engine this browser runs. `?runtime=webnode` (or `=webcontainer`) in the
+ * address chooses one and is remembered; webnode is only chosen where it can
+ * serve previews.
+ */
+export function selectedRuntimeEngine(): RuntimeEngine {
+  if (typeof window === "undefined") {
+    return "webcontainer";
+  }
+  const requested = new URLSearchParams(window.location.search).get(ENGINE_QUERY_PARAMETER);
+  if (isRuntimeEngine(requested)) {
+    writeStoredPreference(ENGINE_PREFERENCE_KEY, requested === "webcontainer" ? null : requested);
+  }
+  const stored = readStoredPreference(ENGINE_PREFERENCE_KEY);
+  return stored === "webnode" && webnodePreviewBase() ? "webnode" : "webcontainer";
+}
+
+/** Boots the selected engine with the options the app uses for both. */
+export async function bootRuntimeEngine(): Promise<WebContainer> {
+  if (selectedRuntimeEngine() === "webnode") {
+    const { WebNode } = await import("../../core/webnode/api");
+    const instance = await WebNode.boot({
+      previewBase: webnodePreviewBase()!,
+      workdirName: RUNTIME_WORKDIR_NAME,
+      coep: "require-corp",
+      forwardPreviewErrors: true,
+    });
+    // The app uses the part of the WebContainer API that webnode implements.
+    return instance as unknown as WebContainer;
+  }
+
+  const { WebContainer } = await import("@webcontainer/api");
+  return WebContainer.boot({
+    coep: "require-corp",
+    forwardPreviewErrors: true,
+    workdirName: RUNTIME_WORKDIR_NAME,
+  });
+}
+
+/** Reloads the preview in `iframe` the way the selected engine does it. */
+export async function reloadRuntimeEnginePreview(iframe: HTMLIFrameElement): Promise<void> {
+  if (selectedRuntimeEngine() === "webnode") {
+    const { reloadPreview } = await import("../../core/webnode/api");
+    await reloadPreview(iframe);
+    return;
+  }
+  const { reloadPreview } = await import("@webcontainer/api");
+  reloadPreview(iframe);
+}

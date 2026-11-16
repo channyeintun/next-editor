@@ -142,8 +142,8 @@ export async function refreshRuntimePreview(
   fallbackUrl: string,
 ): Promise<void> {
   try {
-    const { reloadPreview } = await import("@webcontainer/api");
-    reloadPreview(iframe);
+    const { reloadRuntimeEnginePreview } = await import("../../runtime/webcontainer/engine");
+    await reloadRuntimeEnginePreview(iframe);
   } catch {
     iframe.removeAttribute("srcdoc");
     iframe.src = fallbackUrl;
