@@ -33,10 +33,26 @@ describe("local development Host allowlist", () => {
     "http://[::1]:8787/api/health",
     // The plaintext form of the PUBLIC_URL host, as production may see it.
     "http://nexteditor.dev/api/health",
-    // TLS already binds the name, so https traffic is never touched.
     "https://nexteditor.dev/api/health",
   ])("serves %s", async (url) => {
     const response = await app.request(url, {}, env);
+
+    expect(response.status).toBe(200);
+  });
+
+  it.each([
+    // What a wildcard route would send here besides the webnode hosts.
+    "https://www.nexteditor.dev/api/health",
+    "https://anything.nexteditor.dev/",
+    "https://stray.preview-host.example/api/auth/me",
+  ])("refuses the app on another https host: %s", async (url) => {
+    const response = await app.request(url, {}, env);
+
+    expect(response.status).toBe(403);
+  });
+
+  it("serves any https host when no PUBLIC_URL names one", async () => {
+    const response = await app.request("https://whatever.example/api/health", {}, {} as never);
 
     expect(response.status).toBe(200);
   });

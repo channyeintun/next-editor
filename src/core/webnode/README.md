@@ -39,8 +39,21 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
 - **One owner for the filesystem.** Only the kernel holds file data. A process
   reaches it through `FsBackend` (process/runtime.ts): every call is a
   synchronous round trip. There are no per-process copies to drift.
+- **The runtime's hosts are another site than the editor's.** In a deployment
+  they live on a registrable domain of their own (`isSeparateSite` in
+  preview/origin.ts; the app and the Worker both refuse a host on the editor's
+  site). A subdomain of the editor would be another origin but the same site:
+  lesson code there could plant cookies for the editor's domain, which takes
+  over or locks a visitor's session, and could share a process with the
+  editor's page. In development every `*.localhost` name is its own site.
 - **Cross-origin isolation is required** (SharedArrayBuffer). The editor serves
   COOP/COEP and delegates isolation to the runtime frame.
+- **One build's scripts never run against another's.** Every script carries its
+  build's id (buildId.ts) and asks for the others by it. A host that serves a
+  newer build answers a request for an older one with an error, so an editor
+  left open across a deploy is told to reload instead of driving a kernel it
+  does not match, and the kernel and process scripts of a named build are
+  cached for good.
 - **ES modules are linked by our own loader** (process/loader): each module is
   rewritten (es-module-lexer + sucrase) into a function and evaluated in
   dependency order, with top-level await. Nothing is loaded through native
@@ -62,6 +75,7 @@ directory; the files marked _hub_ only wire.
 | Path                       | What it owns                                                     |
 | -------------------------- | ---------------------------------------------------------------- |
 | `errors.ts`                | errno table, `SystemError`                                       |
+| `buildId.ts`               | the id of the build a script belongs to                          |
 | `protocol.ts`              | every message that crosses a thread                              |
 | `api.ts`                   | the page-facing API (WebContainer-compatible)                    |
 | `kernel/vfs/`              | the in-memory filesystem                                         |
@@ -128,6 +142,27 @@ bun scripts/webnode-harness.ts serve          # then open the printed URL
 A conformance case (`test/cases/*.cjs`, `*.mjs`) runs under real Node and inside
 webnode; both must print the same output and exit with the same code. A feature
 is supported when a case, or a unit test against real Node, proves it.
+
+A deployment ships the scripts minified, and serves them from a Worker. Both
+are checked the same way:
+
+```bash
+WEBNODE_HARNESS_MINIFY=1 bun scripts/webnode-harness.ts cases
+WEBNODE_HARNESS_TARGET=http://localhost:8787 bun scripts/webnode-harness.ts cases
+WEBNODE_HARNESS_TARGET=https://nexteditor.dev WEBNODE_HARNESS_PREVIEW_HOST=<domain> bun scripts/webnode-harness.ts cases
+```
+
+The last two run the cases against hosts a server already serves: a
+`wrangler dev` listener started with `--var WEBNODE_PREVIEW_HOST:localhost`,
+and the deployment, whose runtime hosts live under `<domain>`.
+
+## Deploying
+
+webnode is off in a deployment until it has a domain of its own:
+`infra/wrangler.toml` lists the steps (a Worker variable, a wildcard route, and
+`VITE_WEBNODE_PREVIEW_HOST` at build time). A visitor chooses it with
+`?runtime=webnode`, for that page load only; when it does not start, the app
+runs the lesson on WebContainer.
 
 ## What runs, and what does not yet
 

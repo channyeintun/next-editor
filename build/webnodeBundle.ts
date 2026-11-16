@@ -10,7 +10,16 @@ export interface WebnodeBundleOptions {
   /** The directory the three scripts are written to. */
   outDir: string;
   minify?: boolean;
+  /**
+   * What every script of this build calls itself (src/core/webnode/buildId.ts).
+   * The scripts ask for each other by it, so a host can keep two builds apart
+   * across a deploy. Left out, the scripts are unversioned.
+   */
+  buildId?: string;
 }
+
+/** The file, beside the scripts, that names the build they belong to. */
+export const WEBNODE_BUILD_MANIFEST = "build.json";
 
 /** The scripts the webnode runtime loads at run time, by file name in `outDir`. */
 export const WEBNODE_BUNDLE_FILES = {
@@ -96,11 +105,21 @@ async function bundle(entry: string, file: string, options: WebnodeBundleOptions
     platform: "browser",
     plugins: [nodeBuiltinAliases(), sucraseModuleBindings()],
     logLevel: "warn",
+    transform: { define: { __WEBNODE_BUILD_ID__: JSON.stringify(options.buildId ?? "") } },
     output: {
       file: `${options.outDir}/${file}`,
       // Classic worker scripts: one file each, no imports.
       format: "iife",
-      minify: options.minify ?? false,
+      // Node programs read `name` off functions and classes (`<Buffer 68 69>`,
+      // `error.constructor.name`, `Module {}`), so neither the bundler's
+      // renaming of clashing names nor the minifier may change it.
+      keepNames: true,
+      minify: options.minify
+        ? {
+            mangle: { keepNames: true },
+            compress: { keepNames: { function: true, class: true } },
+          }
+        : false,
       codeSplitting: false,
     },
   });

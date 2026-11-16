@@ -16,11 +16,14 @@ import type { Env } from "./env";
 // before the Worker runs, so a rebinding Host would arrive as the PUBLIC_URL
 // host and pass.
 //
-// Only plaintext requests are checked. Rebinding needs plaintext: over https
-// the browser refuses the local listener's certificate for the attacker's
-// name. Production is unchanged: it serves only the PUBLIC_URL host (the
-// custom domain; workers.dev is off), which this allows, and its https traffic
-// is never inspected.
+// Plaintext is where rebinding lives: over https the browser refuses the local
+// listener's certificate for the attacker's name.
+//
+// Over https the same rule keeps the app to its own name. A deployment may
+// route more hostnames to this Worker than the PUBLIC_URL host (the wildcard
+// route of the webnode hosts, webnodePreviewHost.ts). The app, its API and its
+// cookies are served on the PUBLIC_URL host only: any other name would be a
+// second origin for the whole app, under a certificate that covers it.
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -35,14 +38,16 @@ function publicHostname(publicUrl: string | undefined): string | null {
 
 /** Whether a request may be served under the Host it names. */
 export function isAllowedRequestHost(requestUrl: URL, publicUrl: string | undefined): boolean {
-  if (requestUrl.protocol !== "http:") return true;
-  return (
-    LOOPBACK_HOSTNAMES.has(requestUrl.hostname) || requestUrl.hostname === publicHostname(publicUrl)
-  );
+  const publicHost = publicHostname(publicUrl);
+  if (LOOPBACK_HOSTNAMES.has(requestUrl.hostname) || requestUrl.hostname === publicHost) {
+    return true;
+  }
+  // With no PUBLIC_URL there is no name to hold an https request to.
+  return requestUrl.protocol !== "http:" && publicHost === null;
 }
 
-/** Refuses a plaintext request whose Host is not the PUBLIC_URL host or a loopback name. */
-export const localDevHostGuard: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+/** Refuses a request whose Host is not the PUBLIC_URL host or a loopback name. */
+export const requestHostGuard: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
   if (isAllowedRequestHost(new URL(c.req.url), c.env?.PUBLIC_URL)) return next();
   return c.text("Blocked request. This host is not allowed.", 403);
 };

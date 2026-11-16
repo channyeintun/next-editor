@@ -27,8 +27,18 @@ const script = (editorOrigin: string) => `(function () {
     note.textContent = detail || "";
     if (!keepSpinner) spin.style.display = "none";
   }
+  // The editor shows this beside the preview: the page itself may be hidden.
+  function fail(text, detail) {
+    show(text, detail);
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type: "webnode:preview-message",
+        payload: { type: "preview_unavailable", message: detail ? text + " " + detail : text }
+      }, EDITOR);
+    }
+  }
   if (!("serviceWorker" in navigator)) {
-    show("This browser cannot show the preview.", "Service workers are unavailable here (a private window can disable them).");
+    fail("This browser cannot show the preview.", "Service workers are unavailable here (a private window can disable them).");
     return;
   }
   navigator.serviceWorker
@@ -70,7 +80,11 @@ const script = (editorOrigin: string) => `(function () {
       setInterval(ask, 1000);
     })
     .catch(function (error) {
-      show("The preview could not start.", String((error && error.message) || error));
+      // A browser that blocks third-party cookies refuses a service worker in an embedded page.
+      fail(
+        "The preview could not start.",
+        String((error && error.message) || error) + " If this browser blocks third-party cookies, allow them for " + location.host + "."
+      );
     });
 })();`;
 

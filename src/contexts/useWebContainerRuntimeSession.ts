@@ -14,6 +14,7 @@ import {
 } from "../runtime/webcontainer/commands";
 import {
   formatPreviewMessage,
+  previewUnavailableText,
   getRuntimeErrorMessage,
   sanitizeTerminalChunk,
 } from "../runtime/webcontainer/console";
@@ -490,6 +491,17 @@ export function useWebContainerRuntimeSession({
 
     const onPreviewMessage = instance.on("preview-message", (message) => {
       if (!isRuntimeGenerationActive(generation) || instanceRef.current !== instance) {
+        return;
+      }
+
+      const unavailable = previewUnavailableText(message);
+      if (unavailable !== null) {
+        pushLifecycleEvent({
+          kind: "internal-error",
+          text: unavailable,
+          port: typeof message.port === "number" ? message.port : null,
+          url: null,
+        });
         return;
       }
 

@@ -34,7 +34,9 @@ Static assets are uploaded incrementally — only new/changed files get
 re-uploaded — so most deploys are fast.
 
 **Smoke test after every deploy** (replace the domain if not yet cut over,
-use the `*.workers.dev` URL instead):
+use the `*.workers.dev` URL instead, with `PUBLIC_URL` set to that URL: the
+Worker answers on the `PUBLIC_URL` host only and refuses any other name with
+403, `worker/localDevHost.ts`):
 
 ```sh
 curl -s https://<your-domain>/api/health                      # {"status":"ok"}
@@ -167,7 +169,8 @@ npx wrangler deploy
 
 Without a `[[routes]]` entry in `wrangler.toml`, this deploys to the free
 `https://<worker-name>.<your-subdomain>.workers.dev` URL. Smoke test there
-first (see above) before touching any domain/DNS.
+first (see above, with `PUBLIC_URL` naming that URL) before touching any
+domain/DNS.
 
 Verify that provisioning succeeded:
 

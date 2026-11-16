@@ -86,6 +86,33 @@ export function isWebnodeHostname(hostname: string, baseHostname: string): boole
   return label === RUNTIME_LABEL || LABEL.test(label);
 }
 
+/** The last two labels of a hostname: what two hosts of one site have in common. */
+function siteOf(hostname: string): string {
+  return hostname.toLowerCase().split(".").slice(-2).join(".");
+}
+
+/**
+ * Whether hosts under `baseHostname` are another site than the editor at
+ * `editorHostname` (both without a port). The runtime's hosts run lesson code;
+ * on the editor's own site that code could plant cookies for the editor's
+ * domain (taking over or locking a visitor's session) and share a process
+ * with the editor's page, which no header can undo. So a deployment gives them
+ * a registrable domain of their own, as StackBlitz does with
+ * webcontainer-api.io.
+ *
+ * Without the public suffix list this compares the last two labels, which is
+ * exact for one-label suffixes (`.dev`, `.com`) and refuses, wrongly but
+ * safely, two different domains under a two-label suffix (`a.co.uk`,
+ * `b.co.uk`). Development is exempt: every `*.localhost` name is its own site.
+ */
+export function isSeparateSite(editorHostname: string, baseHostname: string): boolean {
+  const base = baseHostname.toLowerCase();
+  if (base === "localhost" || base.endsWith(".localhost")) {
+    return true;
+  }
+  return siteOf(editorHostname) !== siteOf(base);
+}
+
 /** A fresh random session id: lowercase letters and digits. */
 export function createSessionId(): string {
   let id = "";

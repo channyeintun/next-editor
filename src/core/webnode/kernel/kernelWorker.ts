@@ -2,6 +2,7 @@
 // (api.ts is the other end) and forwards the kernel's events. The runtime frame
 // that starts this worker (runtimeFrame.ts) hands it the port the page talks
 // on. This hub only wires the page to kernel.ts and the preview gateway.
+import { versionedPath } from "../buildId";
 import { toSystemErrorRecord } from "../errors";
 import { PreviewGateway } from "../preview/gateway";
 import type {
@@ -29,7 +30,8 @@ interface KernelScope {
 
 const scope = globalThis as unknown as KernelScope;
 /** The process worker script: this origin's own, never one the page names. */
-const PROCESS_SCRIPT_URL = new URL("/__webnode__/process.js", scope.location.href).href;
+const PROCESS_SCRIPT_URL = new URL(versionedPath("/__webnode__/process.js"), scope.location.href)
+  .href;
 
 let page: MessagePort | null = null;
 const send = (message: PageReply | KernelEvent) => page?.postMessage(message);

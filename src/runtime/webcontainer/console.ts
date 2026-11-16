@@ -80,6 +80,24 @@ function stringifyPreviewMessageArg(value: unknown): string {
   }
 }
 
+/**
+ * What a preview says when the browser would not let it start (webnode's
+ * connect page, when a service worker is refused), or null for any other
+ * message. It is the runtime's problem to report, not an error in the
+ * lesson's code, which is what every other preview message is.
+ */
+export function previewUnavailableText(message: {
+  message?: unknown;
+  type?: unknown;
+}): string | null {
+  if (message.type !== "preview_unavailable") {
+    return null;
+  }
+  return typeof message.message === "string" && message.message.trim()
+    ? message.message.trim()
+    : "The preview could not start.";
+}
+
 export function formatPreviewMessage(message: {
   args?: unknown[];
   message?: string;

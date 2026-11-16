@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vite-plus/test";
-import { sanitizeTerminalChunk } from "./console";
+import { formatPreviewMessage, previewUnavailableText, sanitizeTerminalChunk } from "./console";
 
 const ESCAPE = String.fromCharCode(27);
 const BELL = String.fromCharCode(7);
@@ -66,5 +66,35 @@ describe("sanitizeTerminalChunk", () => {
     expect(sanitizeTerminalChunk(`${chunk}${BELL}done\n`)).toBe("done\n");
     // Linear is well under a millisecond. Generous, so this is not timing-flaky.
     expect(performance.now() - startedAt).toBeLessThan(1_000);
+  });
+});
+
+describe("previewUnavailableText", () => {
+  it("is the text of a preview that the browser would not start", () => {
+    expect(
+      previewUnavailableText({
+        type: "preview_unavailable",
+        message: " The preview could not start. Allow third-party cookies for abc-5173.example. ",
+      }),
+    ).toBe("The preview could not start. Allow third-party cookies for abc-5173.example.");
+  });
+
+  it("has a text of its own when the page sent none", () => {
+    expect(previewUnavailableText({ type: "preview_unavailable" })).toBe(
+      "The preview could not start.",
+    );
+    expect(previewUnavailableText({ type: "preview_unavailable", message: 42 })).toBe(
+      "The preview could not start.",
+    );
+  });
+
+  it("is null for the errors of the lesson's own code", () => {
+    for (const type of ["console-error", "PREVIEW_UNHANDLED_REJECTION", "error", undefined]) {
+      expect(previewUnavailableText({ type, message: "boom" })).toBeNull();
+    }
+    // Those are still what formatPreviewMessage reports.
+    expect(formatPreviewMessage({ type: "error", message: "boom" }).kind).toBe(
+      "uncaught-exception",
+    );
   });
 });

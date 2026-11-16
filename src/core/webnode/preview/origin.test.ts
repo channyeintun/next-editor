@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { createSessionId, parsePreviewOrigin, previewUrl } from "./origin";
+import { createSessionId, isSeparateSite, parsePreviewOrigin, previewUrl } from "./origin";
 import type { PreviewBase } from "./origin";
 
 const DEV: PreviewBase = { protocol: "http:", host: "localhost:5173" };
@@ -67,5 +67,30 @@ describe("preview origins", () => {
         port: 80,
       });
     }
+  });
+});
+
+describe("isSeparateSite", () => {
+  it("is true for another registrable domain", () => {
+    expect(isSeparateSite("nexteditor.dev", "nexteditor-preview.dev")).toBe(true);
+    expect(isSeparateSite("app.example.com", "usercontent.example.net")).toBe(true);
+    expect(isSeparateSite("editor.example", "preview.example.dev")).toBe(true);
+  });
+
+  it("is false for the editor's own host, a subdomain of it, its parent and a sibling", () => {
+    expect(isSeparateSite("nexteditor.dev", "nexteditor.dev")).toBe(false);
+    expect(isSeparateSite("nexteditor.dev", "preview.nexteditor.dev")).toBe(false);
+    expect(isSeparateSite("nexteditor.dev", "a.b.NextEditor.dev")).toBe(false);
+    expect(isSeparateSite("app.example.com", "example.com")).toBe(false);
+    expect(isSeparateSite("app.example.com", "preview.example.com")).toBe(false);
+  });
+
+  it("refuses two domains under one two-label suffix, which it cannot tell apart", () => {
+    expect(isSeparateSite("editor.co.uk", "preview.co.uk")).toBe(false);
+  });
+
+  it("is true in development, where every *.localhost name is its own site", () => {
+    expect(isSeparateSite("localhost", "localhost")).toBe(true);
+    expect(isSeparateSite("localhost", "preview.localhost")).toBe(true);
   });
 });

@@ -2,9 +2,10 @@
 // when a server starts listening. The shape follows `@webcontainer/api` (boot,
 // mount, fs, spawn, on, teardown, setPreviewScript), so an app written against
 // that can use either.
+import { BUILD_ID, versionedPath } from "./buildId";
 import { systemErrorFromRecord } from "./errors";
 import type { DirEntry } from "./kernel/vfs/types";
-import { RUNTIME_FRAME_PATH } from "./preview/hostResponses";
+import { RUNTIME_FRAME_PATH, STALE_BUILD_MESSAGE } from "./preview/hostResponses";
 import { createSessionId, parsePreviewOrigin, previewUrl, runtimeOrigin } from "./preview/origin";
 import type { PreviewBase } from "./preview/origin";
 import { createPreviewPageBridge } from "./preview/pageBridge";
@@ -109,6 +110,8 @@ interface Listeners {
 
 const SESSION_STORAGE_KEY = "webnode:session";
 const RUNTIME_START_TIMEOUT_MS = 30000;
+/** How long a frame that has loaded may take to say it is a runtime. */
+const RUNTIME_READY_GRACE_MS = 5000;
 
 interface Session {
   id: string;
@@ -180,7 +183,7 @@ function startRuntimeFrame(
   frame.title = "webnode runtime";
   // The frame needs SharedArrayBuffer, which a cross-origin frame gets only when delegated.
   frame.setAttribute("allow", "cross-origin-isolated");
-  frame.src = `${origin}${RUNTIME_FRAME_PATH}`;
+  frame.src = `${origin}${versionedPath(RUNTIME_FRAME_PATH)}`;
 
   return new Promise((resolve, reject) => {
     const fail = (message: string) => {
@@ -192,11 +195,29 @@ function startRuntimeFrame(
       () => fail(`webnode: the runtime at ${origin} did not start`),
       RUNTIME_START_TIMEOUT_MS,
     );
-    const onMessage = (event: MessageEvent<{ type?: string; message?: string }>) => {
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
+    // A host that is not serving the runtime (switched off, or another site's
+    // page) loads something that never answers: say so soon, not after the
+    // whole start timeout.
+    const onLoad = () => {
+      clearTimeout(graceTimer);
+      graceTimer = setTimeout(
+        () => fail(`webnode: ${origin} did not answer as a runtime`),
+        RUNTIME_READY_GRACE_MS,
+      );
+    };
+    const onMessage = (
+      event: MessageEvent<{ type?: string; message?: string; buildId?: string }>,
+    ) => {
       if (event.origin !== origin || event.source !== frame.contentWindow) {
         return;
       }
       if (event.data?.type === "webnode:runtime-ready" && event.ports[0]) {
+        const theirs = event.data.buildId;
+        if (BUILD_ID && theirs && theirs !== BUILD_ID) {
+          fail(`webnode: ${STALE_BUILD_MESSAGE}`);
+          return;
+        }
         cleanup();
         resolve({ frame, port: event.ports[0] });
       } else if (event.data?.type === "webnode:runtime-error") {
@@ -205,8 +226,11 @@ function startRuntimeFrame(
     };
     const cleanup = () => {
       clearTimeout(timer);
+      clearTimeout(graceTimer);
+      frame.removeEventListener("load", onLoad);
       window.removeEventListener("message", onMessage);
     };
+    frame.addEventListener("load", onLoad);
     window.addEventListener("message", onMessage);
     document.body.append(frame);
   });
@@ -312,11 +336,34 @@ export class WebNode {
       editorOrigin: window.location.origin,
     };
     const { port } = runtime;
+    const origin = runtimeOrigin(options.previewBase);
     const booted = await new Promise<{ workdir: string; path: string }>((resolve, reject) => {
+      // The frame says it is ready before its kernel worker has loaded. A
+      // kernel that never loads (its script refused or unreachable) answers
+      // nothing, so the wait ends on the frame's report or on a timeout.
+      const settle = () => {
+        clearTimeout(timer);
+        window.removeEventListener("message", onFrameMessage);
+      };
+      const timer = setTimeout(() => {
+        settle();
+        reject(new Error(`webnode: the kernel at ${origin} did not answer`));
+      }, RUNTIME_START_TIMEOUT_MS);
+      const onFrameMessage = (event: MessageEvent<{ type?: string; message?: string }>) => {
+        if (event.origin !== origin || event.source !== runtime.frame.contentWindow) {
+          return;
+        }
+        if (event.data?.type === "webnode:runtime-error") {
+          settle();
+          reject(new Error(`webnode: ${event.data.message ?? "the kernel failed to start"}`));
+        }
+      };
+      window.addEventListener("message", onFrameMessage);
       port.onmessage = (event: MessageEvent<PageReply>) => {
         if (event.data.id !== 0) {
           return;
         }
+        settle();
         if (event.data.ok) {
           resolve(event.data.value as { workdir: string; path: string });
         } else {

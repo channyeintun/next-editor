@@ -5,6 +5,16 @@
 //   bun scripts/webnode-harness.ts run '<command>'  run one shell command line and print its output
 //   bun scripts/webnode-harness.ts cases [filter]   run each case under real node and under webnode
 //   bun scripts/webnode-harness.ts script <file>    run a scenario script (default export: (api) => Promise)
+//
+// WEBNODE_HARNESS_MINIFY=1 builds the runtime's scripts minified, as a
+// deployment ships them.
+//
+// WEBNODE_HARNESS_TARGET=<editor origin> runs `run`, `cases` and `script`
+// against hosts something else serves: a `wrangler dev` listener
+// (http://localhost:8787, whose hosts are *.localhost:8787), or the deployment
+// (https://nexteditor.dev, with WEBNODE_HARNESS_PREVIEW_HOST=<the domain its
+// runtime and preview hosts live under>). The harness page is put on the
+// editor origin by request interception; the hosts are the real ones.
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -23,6 +33,14 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT_DIR = resolve(ROOT, process.env.WEBNODE_HARNESS_OUT || "node_modules/.cache/webnode");
 const CASES_DIR = resolve(ROOT, "src/core/webnode/test/cases");
 const PORT = Number(process.env.WEBNODE_HARNESS_PORT ?? 5199);
+/** The editor origin of a server that already serves the webnode hosts, when testing one. */
+const TARGET = process.env.WEBNODE_HARNESS_TARGET
+  ? new URL(process.env.WEBNODE_HARNESS_TARGET).origin
+  : null;
+/** The host a target's runtime and preview hosts live under, when it is not the editor's own. */
+const TARGET_PREVIEW_HOST = process.env.WEBNODE_HARNESS_PREVIEW_HOST?.trim() || null;
+/** Where the harness page lives on a target origin: a path the target never serves itself. */
+const TARGET_PAGE_PATH = "/__webnode_harness__/";
 
 const ISOLATION_HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
@@ -31,16 +49,18 @@ const ISOLATION_HEADERS = {
   "Cache-Control": "no-store",
 };
 
-const HARNESS_HTML = `<!doctype html><meta charset="utf-8"><title>webnode harness</title>
+const harnessHtml = (
+  scriptUrl: string,
+) => `<!doctype html><meta charset="utf-8"><title>webnode harness</title>
 <body style="font:14px system-ui;margin:24px"><h1>webnode harness</h1>
 <p>Open the console: <code>await webnodeHarness.boot()</code>, then <code>await webnodeHarness.run("sh", ["-c", "echo hi"])</code>.</p>
 <iframe id="preview" style="width:100%;height:60vh;border:1px solid #888"></iframe>
-<script src="/harness.js"></script></body>`;
+<script src="${scriptUrl}"></script></body>`;
 
 export async function buildAll(): Promise<void> {
   mkdirSync(OUT_DIR, { recursive: true });
   await Promise.all([
-    buildWebnodeBundles({ outDir: OUT_DIR }),
+    buildWebnodeBundles({ outDir: OUT_DIR, minify: process.env.WEBNODE_HARNESS_MINIFY === "1" }),
     build({
       input: resolve(ROOT, "src/core/webnode/test/harnessPage.ts"),
       platform: "browser",
@@ -83,7 +103,7 @@ export async function serve(): Promise<{ stop(): void; url: string }> {
         send(
           200,
           { ...ISOLATION_HEADERS, "Content-Type": "text/html; charset=utf-8" },
-          HARNESS_HTML,
+          harnessHtml("/harness.js"),
         );
         return;
       case "/harness.js":
@@ -114,11 +134,43 @@ export interface HarnessApi {
   ): Promise<{ code: number | null; output: string; timedOut: boolean }>;
 }
 
+/** Puts the harness page on the target origin; every other request reaches the target. */
+async function interceptHarnessPage(page: Page, target: string): Promise<string> {
+  const script = readFileSync(resolve(OUT_DIR, "harness.js"), "utf8");
+  await page.route(`${target}${TARGET_PAGE_PATH}**`, (route) => {
+    const isScript = new URL(route.request().url()).pathname.endsWith("/harness.js");
+    return route.fulfill({
+      status: 200,
+      headers: {
+        ...ISOLATION_HEADERS,
+        "Content-Type": isScript ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8",
+      },
+      body: isScript ? script : harnessHtml(`${TARGET_PAGE_PATH}harness.js`),
+    });
+  });
+  // The page boots the runtime under this host (test/harnessPage.ts).
+  const query = TARGET_PREVIEW_HOST
+    ? `?previewHost=${encodeURIComponent(TARGET_PREVIEW_HOST)}`
+    : "";
+  return `${target}${TARGET_PAGE_PATH}${query}`;
+}
+
 export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Promise<T> {
-  const server = await serve();
+  if (TARGET && !TARGET_PREVIEW_HOST && new URL(TARGET).hostname !== "localhost") {
+    throw new Error(
+      "WEBNODE_HARNESS_TARGET is a deployment: name the domain of its runtime hosts in WEBNODE_HARNESS_PREVIEW_HOST",
+    );
+  }
+  const server = TARGET ? null : await serve();
   const browser = await chromium.launch({
     channel: "chrome",
     headless: process.env.WEBNODE_HARNESS_HEADED !== "1",
+    // An intercepted page has no address, so Chrome takes it for a public one
+    // and refuses to let it frame a loopback target's hosts.
+    args:
+      TARGET && new URL(TARGET).hostname === "localhost"
+        ? ["--disable-features=LocalNetworkAccessChecks"]
+        : [],
   });
   try {
     const page = await browser.newPage();
@@ -128,7 +180,12 @@ export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Prom
       }
     });
     page.on("pageerror", (error) => console.error(`[browser pageerror] ${error.message}`));
-    await page.goto(server.url);
+    page.on("requestfailed", (request) => {
+      if (process.env.WEBNODE_HARNESS_CONSOLE === "1") {
+        console.error(`[browser requestfailed] ${request.url()} ${request.failure()?.errorText}`);
+      }
+    });
+    await page.goto(server ? server.url : await interceptHarnessPage(page, TARGET!));
     const call = <R>(method: string, ...args: unknown[]) =>
       page.evaluate(
         ([name, parameters]) =>
@@ -147,7 +204,7 @@ export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Prom
     });
   } finally {
     await browser.close();
-    server.stop();
+    server?.stop();
   }
 }
 

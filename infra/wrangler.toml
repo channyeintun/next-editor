@@ -63,6 +63,22 @@ RUST_PLAYGROUND_ENABLED = "true"
 # caches deterministic outcomes and holds a lower per-caller ceiling. Zig editing
 # and recorded playback work regardless of this flag.
 ZIG_PLAYGROUND_ENABLED = "true"
+# webnode (src/core/webnode), the in-browser Node runtime that can stand in for
+# WebContainer. Its hosts run lesson code, so they live on a registrable domain
+# of their own: never nexteditor.dev or a subdomain of it, where that code
+# could plant cookies for this site and share a process with the editor (the
+# Worker and the client both refuse such a host). Off until it has one. To
+# switch it on, with <domain> a zone in this account that has a proxied
+# wildcard DNS record (`*`):
+#   1. uncomment the variable below and the route under the Custom Domain,
+#      with <domain> filled in
+#   2. set VITE_WEBNODE_PREVIEW_HOST=<domain> in .env, run `bun run build`,
+#      and deploy
+#   3. check it:
+#      WEBNODE_HARNESS_TARGET=https://nexteditor.dev WEBNODE_HARNESS_PREVIEW_HOST=<domain> bun scripts/webnode-harness.ts cases
+# Commenting the variable out again and deploying switches it off: a visitor
+# who had chosen webnode falls back to WebContainer.
+# WEBNODE_PREVIEW_HOST = "<domain>"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
 #   wrangler secret put GOOGLE_CLIENT_SECRET --config infra/wrangler.toml
@@ -91,6 +107,13 @@ ZIG_PLAYGROUND_ENABLED = "true"
 [[routes]]
 pattern = "nexteditor.dev"
 custom_domain = true
+
+# The webnode hosts (see WEBNODE_PREVIEW_HOST above): runtime.<domain> and
+# <session>-<port>.<domain>. Any other name under <domain> is refused
+# (worker/localDevHost.ts).
+# [[routes]]
+# pattern = "*.<domain>/*"
+# zone_name = "<domain>"
 
 # The SPA build output (bun run build, from the repo root). Served through the
 # Worker (see run_worker_first below): its catch-all (worker/index.ts) hands

@@ -3,6 +3,7 @@
 // present the `@webcontainer/api` surface, so everything past this module is the
 // same code for either.
 import type { WebContainer } from "@webcontainer/api";
+import { isSeparateSite } from "../../core/webnode/preview/origin";
 import { readStoredPreference, writeStoredPreference } from "../../stores/preferenceStorage";
 
 export type RuntimeEngine = "webcontainer" | "webnode";
@@ -16,63 +17,100 @@ interface PreviewBase {
   host: string;
 }
 
-function isRuntimeEngine(value: string | null): value is RuntimeEngine {
-  return value === "webcontainer" || value === "webnode";
-}
-
 /**
  * The host webnode runs under, or null where it cannot run. The runtime never
  * runs on this page's origin: its kernel and processes run on `runtime.<host>`
  * and each preview on `<session>-<port>.<host>`. The dev server answers for
  * `*.localhost`; a deployment names its wildcard host in
- * VITE_WEBNODE_PREVIEW_HOST.
+ * VITE_WEBNODE_PREVIEW_HOST, and that host must be another site than the
+ * editor's (isSeparateSite says why): one on this site is not used.
  */
 export function webnodePreviewBase(): PreviewBase | null {
   if (typeof window === "undefined") {
     return null;
   }
-  const configured = (import.meta.env.VITE_WEBNODE_PREVIEW_HOST as string | undefined)?.trim();
+  return webnodePreviewBaseFor(
+    window.location,
+    import.meta.env.VITE_WEBNODE_PREVIEW_HOST as string | undefined,
+  );
+}
+
+/** `webnodePreviewBase` for a page at `page` in a build configured with `configuredHost`. */
+export function webnodePreviewBaseFor(
+  page: Pick<Location, "protocol" | "hostname" | "host">,
+  configuredHost: string | undefined,
+): PreviewBase | null {
+  const configured = configuredHost?.trim();
   if (configured) {
-    return { protocol: "https:", host: configured };
+    let url: URL;
+    try {
+      url = new URL(`https://${configured}`);
+    } catch {
+      return null;
+    }
+    // A host and nothing else: a value with a scheme or a path is a mistake, not a host.
+    if (url.host !== configured.toLowerCase() || !isSeparateSite(page.hostname, url.hostname)) {
+      return null;
+    }
+    return { protocol: "https:", host: url.host };
   }
-  if (window.location.hostname === "localhost") {
-    return {
-      protocol: window.location.protocol === "https:" ? "https:" : "http:",
-      host: window.location.host,
-    };
+  if (page.hostname === "localhost") {
+    return { protocol: page.protocol === "https:" ? "https:" : "http:", host: page.host };
   }
   return null;
 }
 
+/** What this page load runs: decided once, so every caller agrees with the runtime that booted. */
+let pageEngine: RuntimeEngine | null = null;
+
+function chooseRuntimeEngine(): RuntimeEngine {
+  const requested = new URLSearchParams(window.location.search).get(ENGINE_QUERY_PARAMETER);
+  if (requested === "webcontainer") {
+    writeStoredPreference(ENGINE_PREFERENCE_KEY, null);
+    return "webcontainer";
+  }
+  // A link chooses for this page load and is not remembered: following one
+  // must not move a visitor's later lessons onto another runtime. The stored
+  // preference is the lasting choice, and only the visitor's own action sets it.
+  const wantsWebnode =
+    requested === "webnode" || readStoredPreference(ENGINE_PREFERENCE_KEY) === "webnode";
+  return wantsWebnode && webnodePreviewBase() ? "webnode" : "webcontainer";
+}
+
 /**
- * The engine this browser runs. `?runtime=webnode` (or `=webcontainer`) in the
- * address chooses one and is remembered; webnode is only chosen where it can
- * serve previews.
+ * The engine this page load runs. `?runtime=webnode` in the address chooses
+ * webnode for the load, where it can serve previews; `?runtime=webcontainer`
+ * also forgets a stored choice of webnode.
  */
 export function selectedRuntimeEngine(): RuntimeEngine {
   if (typeof window === "undefined") {
     return "webcontainer";
   }
-  const requested = new URLSearchParams(window.location.search).get(ENGINE_QUERY_PARAMETER);
-  if (isRuntimeEngine(requested)) {
-    writeStoredPreference(ENGINE_PREFERENCE_KEY, requested === "webcontainer" ? null : requested);
-  }
-  const stored = readStoredPreference(ENGINE_PREFERENCE_KEY);
-  return stored === "webnode" && webnodePreviewBase() ? "webnode" : "webcontainer";
+  pageEngine ??= chooseRuntimeEngine();
+  return pageEngine;
 }
 
 /** Boots the selected engine with the options the app uses for both. */
 export async function bootRuntimeEngine(): Promise<WebContainer> {
   if (selectedRuntimeEngine() === "webnode") {
-    const { WebNode } = await import("../../core/webnode/api");
-    const instance = await WebNode.boot({
-      previewBase: webnodePreviewBase()!,
-      workdirName: RUNTIME_WORKDIR_NAME,
-      coep: "require-corp",
-      forwardPreviewErrors: true,
-    });
-    // The app uses the part of the WebContainer API that webnode implements.
-    return instance as unknown as WebContainer;
+    try {
+      const { WebNode } = await import("../../core/webnode/api");
+      const instance = await WebNode.boot({
+        previewBase: webnodePreviewBase()!,
+        workdirName: RUNTIME_WORKDIR_NAME,
+        coep: "require-corp",
+        forwardPreviewErrors: true,
+      });
+      // The app uses the part of the WebContainer API that webnode implements.
+      return instance as unknown as WebContainer;
+    } catch (error) {
+      // webnode is switched off for this deployment, or this editor is older
+      // than the scripts its hosts serve: run the lesson on WebContainer, for
+      // the rest of this page load and until the visitor chooses webnode again.
+      console.warn("webnode did not start; using WebContainer instead:", error);
+      writeStoredPreference(ENGINE_PREFERENCE_KEY, null);
+      pageEngine = "webcontainer";
+    }
   }
 
   const { WebContainer } = await import("@webcontainer/api");
