@@ -27,22 +27,57 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
+const CHROME =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+const SAFARI =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15";
+const FIREFOX =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:139.0) Gecko/20100101 Firefox/139.0";
+
+function browser(userAgent: string): void {
+  vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(userAgent);
+}
+
 describe("selectedRuntimeEngine", () => {
-  it("is WebContainer unless the visitor chose webnode", async () => {
+  it("is webnode in a Chromium browser", async () => {
+    browser(CHROME);
+    expect((await loadPage()).selectedRuntimeEngine()).toBe("webnode");
+    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
+  });
+
+  it.each([
+    ["Safari", SAFARI],
+    ["Firefox", FIREFOX],
+  ])("is WebContainer in %s, where webnode is not verified", async (_name, userAgent) => {
+    browser(userAgent);
     expect((await loadPage()).selectedRuntimeEngine()).toBe("webcontainer");
   });
 
-  it("lets a link choose webnode for the page load without remembering it", async () => {
-    const engine = await loadPage("?runtime=webnode");
-    expect(engine.selectedRuntimeEngine()).toBe("webnode");
-    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
+  it("tries webnode in any browser when the link asks for it", async () => {
+    browser(SAFARI);
+    expect((await loadPage("?runtime=webnode")).selectedRuntimeEngine()).toBe("webnode");
+  });
 
-    // The next page load, without the link, is back on WebContainer.
+  it("leaves webnode for WebContainer when a link asks, and remembers it", async () => {
+    browser(CHROME);
+    expect((await loadPage("?runtime=webcontainer")).selectedRuntimeEngine()).toBe("webcontainer");
+    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBe("webcontainer");
+
+    // Later page loads, without the link, stay on WebContainer.
     expect((await loadPage()).selectedRuntimeEngine()).toBe("webcontainer");
+  });
+
+  it("comes back to webnode when a link asks, and forgets the opt-out", async () => {
+    browser(CHROME);
+    window.localStorage.setItem(PREFERENCE_KEY, "webcontainer");
+    expect((await loadPage("?runtime=webnode")).selectedRuntimeEngine()).toBe("webnode");
+    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
+    expect((await loadPage()).selectedRuntimeEngine()).toBe("webnode");
   });
 
   it("keeps the engine it chose when the address changes within the page load", async () => {
-    const engine = await loadPage("?runtime=webnode");
+    browser(CHROME);
+    const engine = await loadPage();
     expect(engine.selectedRuntimeEngine()).toBe("webnode");
 
     window.history.replaceState(null, "", "/learn?runtime=webcontainer");
@@ -50,15 +85,11 @@ describe("selectedRuntimeEngine", () => {
     expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
   });
 
-  it("follows the choice the visitor stored", async () => {
-    window.localStorage.setItem(PREFERENCE_KEY, "webnode");
-    expect((await loadPage()).selectedRuntimeEngine()).toBe("webnode");
-  });
-
-  it("forgets a stored choice of webnode when a link asks for WebContainer", async () => {
-    window.localStorage.setItem(PREFERENCE_KEY, "webnode");
-    expect((await loadPage("?runtime=webcontainer")).selectedRuntimeEngine()).toBe("webcontainer");
-    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
+  it("is WebContainer in a lesson embedded on another site", async () => {
+    // webnode's hosts let only the editor's own origin frame them.
+    browser(CHROME);
+    vi.spyOn(window, "top", "get").mockReturnValue({} as Window);
+    expect((await loadPage()).selectedRuntimeEngine()).toBe("webcontainer");
   });
 });
 
@@ -115,10 +146,11 @@ describe("webnodePreviewBaseFor", () => {
 });
 
 describe("bootRuntimeEngine", () => {
-  it("boots webnode when it is the engine of the page load", async () => {
+  it("boots webnode by default in a Chromium browser", async () => {
+    browser(CHROME);
     const instance = { name: "webnode" };
     boots.webnode.mockResolvedValue(instance);
-    const engine = await loadPage("?runtime=webnode");
+    const engine = await loadPage();
 
     await expect(engine.bootRuntimeEngine()).resolves.toBe(instance);
     expect(boots.webnode).toHaveBeenCalledWith(
@@ -127,26 +159,30 @@ describe("bootRuntimeEngine", () => {
     expect(boots.webcontainer).not.toHaveBeenCalled();
   });
 
-  it("falls back to WebContainer when webnode does not start, and stays there", async () => {
+  it("falls back to WebContainer for the page load when webnode does not start", async () => {
+    browser(CHROME);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const instance = { name: "webcontainer" };
     boots.webnode.mockRejectedValue(new Error("webnode: the runtime did not answer"));
     boots.webcontainer.mockResolvedValue(instance);
-    window.localStorage.setItem(PREFERENCE_KEY, "webnode");
     const engine = await loadPage();
 
     await expect(engine.bootRuntimeEngine()).resolves.toBe(instance);
     expect(warn).toHaveBeenCalledOnce();
-    // Reloading the preview, and the next page load, use WebContainer too.
+    // Reloading the preview, and a second boot in this page, use WebContainer too.
     expect(engine.selectedRuntimeEngine()).toBe("webcontainer");
-    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
-
     await engine.bootRuntimeEngine();
     expect(boots.webnode).toHaveBeenCalledOnce();
     expect(boots.webcontainer).toHaveBeenCalledTimes(2);
+
+    // Nothing is remembered: the next page load tries webnode again.
+    expect(window.localStorage.getItem(PREFERENCE_KEY)).toBeNull();
+    expect((await loadPage()).selectedRuntimeEngine()).toBe("webnode");
   });
 
-  it("boots WebContainer by default", async () => {
+  it("boots WebContainer for a visitor who left webnode", async () => {
+    browser(CHROME);
+    window.localStorage.setItem(PREFERENCE_KEY, "webcontainer");
     const instance = { name: "webcontainer" };
     boots.webcontainer.mockResolvedValue(instance);
     const engine = await loadPage();

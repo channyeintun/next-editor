@@ -170,9 +170,11 @@ deployment.
 
 `infra/wrangler.toml` names the host the runtime lives under
 (`WEBNODE_PREVIEW_HOST`) and routes its subdomains to the Worker; the build
-names the same host in `VITE_WEBNODE_PREVIEW_HOST`. A visitor chooses webnode
-with `?runtime=webnode`, for that page load only; when it does not start, the
-app runs the lesson on WebContainer. After a deploy:
+names the same host in `VITE_WEBNODE_PREVIEW_HOST`. webnode is the app's
+default runtime in Chromium browsers; `?runtime=webcontainer` in the address
+takes a visitor back to WebContainer and is remembered, `?runtime=webnode`
+undoes that. When webnode does not start, the app runs the lesson on
+WebContainer for that page load. After a deploy:
 
 ```bash
 WEBNODE_HARNESS_TARGET=https://nexteditor.dev WEBNODE_HARNESS_PREVIEW_HOST=nexteditor.dev bun scripts/webnode-harness.ts cases

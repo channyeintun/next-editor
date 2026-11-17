@@ -1,5 +1,5 @@
-// Which engine runs the in-browser Node runtime, and how it boots: StackBlitz's
-// WebContainer (the default) or webnode, the engine in src/core/webnode. Both
+// Which engine runs the in-browser Node runtime, and how it boots: webnode, the
+// engine in src/core/webnode (the default), or StackBlitz's WebContainer. Both
 // present the `@webcontainer/api` surface, so everything past this module is the
 // same code for either.
 import type { WebContainer } from "@webcontainer/api";
@@ -63,24 +63,53 @@ export function webnodePreviewBaseFor(
 /** What this page load runs: decided once, so every caller agrees with the runtime that booted. */
 let pageEngine: RuntimeEngine | null = null;
 
-function chooseRuntimeEngine(): RuntimeEngine {
-  const requested = new URLSearchParams(window.location.search).get(ENGINE_QUERY_PARAMETER);
-  if (requested === "webcontainer") {
-    writeStoredPreference(ENGINE_PREFERENCE_KEY, null);
-    return "webcontainer";
-  }
-  // A link chooses for this page load and is not remembered: following one
-  // must not move a visitor's later lessons onto another runtime. The stored
-  // preference is the lasting choice, and only the visitor's own action sets it.
-  const wantsWebnode =
-    requested === "webnode" || readStoredPreference(ENGINE_PREFERENCE_KEY) === "webnode";
-  return wantsWebnode && webnodePreviewBase() ? "webnode" : "webcontainer";
+/** Whether this browser is of the family webnode is verified in: Chromium. */
+function isVerifiedBrowser(): boolean {
+  const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } })
+    .userAgentData?.brands;
+  return brands
+    ? brands.some((entry) => entry.brand === "Chromium")
+    : /\bChrome\/\d+/.test(navigator.userAgent);
 }
 
 /**
- * The engine this page load runs. `?runtime=webnode` in the address chooses
- * webnode for the load, where it can serve previews; `?runtime=webcontainer`
- * also forgets a stored choice of webnode.
+ * Whether a page of another origin frames this one (a lesson embedded on
+ * another site). webnode's hosts let only the editor's own origin frame them,
+ * every ancestor included, so its runtime cannot start there.
+ */
+function isFramedByAnotherOrigin(): boolean {
+  if (window.self === window.top) {
+    return false;
+  }
+  const ancestors = window.location.ancestorOrigins;
+  return !ancestors || Array.from(ancestors).some((origin) => origin !== window.location.origin);
+}
+
+function chooseRuntimeEngine(): RuntimeEngine {
+  const requested = new URLSearchParams(window.location.search).get(ENGINE_QUERY_PARAMETER);
+  const canRunWebnode = webnodePreviewBase() !== null;
+  if (requested === "webcontainer") {
+    writeStoredPreference(ENGINE_PREFERENCE_KEY, "webcontainer");
+    return "webcontainer";
+  }
+  if (requested === "webnode") {
+    writeStoredPreference(ENGINE_PREFERENCE_KEY, null);
+    return canRunWebnode ? "webnode" : "webcontainer";
+  }
+  if (readStoredPreference(ENGINE_PREFERENCE_KEY) === "webcontainer") {
+    return "webcontainer";
+  }
+  return canRunWebnode && isVerifiedBrowser() && !isFramedByAnotherOrigin()
+    ? "webnode"
+    : "webcontainer";
+}
+
+/**
+ * The engine this page load runs: webnode, where it can serve previews and in
+ * the browsers it is verified in; WebContainer anywhere else. A visitor leaves
+ * webnode with `?runtime=webcontainer` in the address, which is remembered,
+ * and comes back with `?runtime=webnode`, which also tries webnode in a
+ * browser it is not the default for.
  */
 export function selectedRuntimeEngine(): RuntimeEngine {
   if (typeof window === "undefined") {
@@ -105,10 +134,9 @@ export async function bootRuntimeEngine(): Promise<WebContainer> {
       return instance as unknown as WebContainer;
     } catch (error) {
       // webnode is switched off for this deployment, or this editor is older
-      // than the scripts its hosts serve: run the lesson on WebContainer, for
-      // the rest of this page load and until the visitor chooses webnode again.
+      // than the scripts its hosts serve: run the lesson on WebContainer for
+      // the rest of this page load. The next load tries webnode again.
       console.warn("webnode did not start; using WebContainer instead:", error);
-      writeStoredPreference(ENGINE_PREFERENCE_KEY, null);
       pageEngine = "webcontainer";
     }
   }

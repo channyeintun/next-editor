@@ -67,16 +67,17 @@ ZIG_PLAYGROUND_ENABLED = "true"
 # WebContainer. Its hosts are subdomains of this name: the kernel and processes
 # run on runtime.nexteditor.dev and each preview on
 # <session>-<port>.nexteditor.dev, sent here by the wildcard route below. The
-# build names the same host in VITE_WEBNODE_PREVIEW_HOST (.env). A visitor
-# chooses webnode with ?runtime=webnode; without it the app runs WebContainer.
+# build names the same host in VITE_WEBNODE_PREVIEW_HOST (.env). It is the
+# default runtime in Chromium browsers; ?runtime=webcontainer in the address
+# takes a visitor back to WebContainer (src/runtime/webcontainer/engine.ts).
 #
 # Those hosts run lesson code on this site, so what protects the editor from
 # them is listed in src/core/webnode/README.md ("The runtime's hosts"). Moving
 # them to a registrable domain of their own later is this variable, the route
 # and the build variable, nothing else.
 #
-# Switching it off: comment this variable out and deploy. A visitor who had
-# chosen webnode falls back to WebContainer.
+# Switching it off: comment this variable out and deploy. Every visitor then
+# falls back to WebContainer.
 WEBNODE_PREVIEW_HOST = "nexteditor.dev"
 # Required for authentication — auth fails at runtime without these. Set them with:
 #   wrangler secret put GOOGLE_CLIENT_ID     --config infra/wrangler.toml
