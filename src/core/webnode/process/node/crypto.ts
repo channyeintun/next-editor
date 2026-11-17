@@ -12,6 +12,7 @@ import {
 } from "./crypto/cipher";
 import { constants } from "./crypto/constants";
 import { Hash, Hmac, createHash, createHmac, getHashes, hash } from "./crypto/hash";
+import { KeyObject, createSecretKey } from "./crypto/keys";
 import { hkdf, hkdfSync, pbkdf2, pbkdf2Sync, scrypt, scryptSync } from "./crypto/kdf";
 import {
   getRandomValues,
@@ -67,6 +68,9 @@ const crypto = {
   Decipheriv,
   // Comparison
   timingSafeEqual,
+  // Keys
+  createSecretKey,
+  KeyObject,
   // Unavailable on this platform
   checkPrime: unavailable.checkPrime,
   checkPrimeSync: unavailable.checkPrimeSync,
@@ -75,7 +79,6 @@ const crypto = {
   createECDH: unavailable.createECDH,
   createPrivateKey: unavailable.createPrivateKey,
   createPublicKey: unavailable.createPublicKey,
-  createSecretKey: unavailable.createSecretKey,
   createSign: unavailable.createSign,
   createVerify: unavailable.createVerify,
   diffieHellman: unavailable.diffieHellman,
@@ -101,7 +104,6 @@ const crypto = {
   DiffieHellman: unavailable.DiffieHellman,
   DiffieHellmanGroup: unavailable.DiffieHellmanGroup,
   ECDH: unavailable.ECDH,
-  KeyObject: unavailable.KeyObject,
   Sign: unavailable.Sign,
   Verify: unavailable.Verify,
   X509Certificate: unavailable.X509Certificate,

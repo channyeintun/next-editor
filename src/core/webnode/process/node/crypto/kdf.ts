@@ -6,6 +6,7 @@ import { pbkdf2 as noblePbkdf2, pbkdf2Async } from "@noble/hashes/pbkdf2.js";
 import { scrypt as nobleScrypt, scryptAsync } from "@noble/hashes/scrypt.js";
 import type { Buffer } from "buffer/";
 import { byteSource, toBuffer } from "./encoding";
+import { secretKeyObjectBytes } from "./keys";
 import {
   codedError,
   invalidArgType,
@@ -288,6 +289,10 @@ function byteSourceStrict(value: unknown, name: string): Uint8Array {
 function hkdfKey(ikm: unknown): Uint8Array {
   if (typeof ikm === "string" || ArrayBuffer.isView(ikm) || ikm instanceof ArrayBuffer) {
     return byteSource(ikm, "ikm");
+  }
+  const fromKeyObject = secretKeyObjectBytes(ikm);
+  if (fromKeyObject) {
+    return fromKeyObject;
   }
   throw invalidArgType(
     "ikm",

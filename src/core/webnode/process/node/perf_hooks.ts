@@ -513,7 +513,8 @@ export interface EventLoopUtilization {
 /**
  * `performance.eventLoopUtilization()`. A browser does not report how long its
  * event loop sat idle, so every figure is 0 (what Node reports before the loop
- * starts). Callers such as Vite read it unconditionally and crash without it.
+ * starts). A documented exception to "throw what the browser cannot do":
+ * callers such as Vite read it unconditionally and crash without it.
  */
 function eventLoopUtilization(
   _utilization1?: EventLoopUtilization,

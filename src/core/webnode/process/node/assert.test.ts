@@ -50,6 +50,11 @@ function describeError(error: unknown, actual?: unknown, expected?: unknown): Ou
   };
 }
 
+/** 0 … n-1 with the entries at `at` replaced by their negation minus one. */
+function changed(n: number, at: number[]): number[] {
+  return Array.from({ length: n }, (_, i) => (at.includes(i) ? -i - 1 : i));
+}
+
 function run(fn: () => void, actual?: unknown, expected?: unknown): Outcome {
   try {
     fn();
@@ -403,6 +408,12 @@ describe("AssertionError", () => {
       ["equal", 1, 2],
       ["notEqual", 1, 1],
       ["deepEqual", { a: 1 }, { a: 2 }],
+      // Collapsed runs of equal lines, and the last entry's missing comma.
+      ["deepStrictEqual", Array.from({ length: 30 }, (_, i) => i), changed(30, [2, 29])],
+      ["deepStrictEqual", Array.from({ length: 12 }, (_, i) => i), changed(12, [3, 10])],
+      ["deepStrictEqual", { a: 1, b: [1, 2, 3] }, { a: 1, b: [1, 2, 4], c: 2 }],
+      ["deepStrictEqual", [1, 2, 3, 4], [1, 2, 3]],
+      ["deepStrictEqual", { x: [1, 2], y: "s" }, { z: { q: 1 }, x: [2, 1] }],
     ];
     for (const [method, actual, expected] of calls) {
       const message = (a: typeof assert | Assert) => {
@@ -418,6 +429,41 @@ describe("AssertionError", () => {
       };
       expect([method, message(assert)]).toEqual([method, message(nodeAssert)]);
     }
+  });
+
+  it("diffs large values in linear-ish time, like Node", () => {
+    const lines = 5000;
+    const big = (last: number) =>
+      Object.fromEntries(
+        Array.from({ length: lines }, (_, i) => [`k${i}`, i === lines - 1 ? last : i]),
+      );
+    const messageOf = (a: typeof assert | Assert) => {
+      try {
+        a.deepStrictEqual(big(1), big(2));
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return null;
+    };
+    const started = performance.now();
+    const ours = messageOf(assert);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(ours).toBe(messageOf(nodeAssert));
+  });
+
+  it("falls back to a plain report when the values share almost nothing", () => {
+    const a = Array.from({ length: 4000 }, (_, i) => i);
+    const b = a.map((i) => -i - 1);
+    const started = performance.now();
+    let message = "";
+    try {
+      assert.deepStrictEqual(a, b);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(message).toContain("+   3999\n");
+    expect(message).toContain("-   -4000\n");
   });
 });
 

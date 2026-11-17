@@ -345,6 +345,18 @@ describe("zlib: callbacks", () => {
     expect(back.toString()).toBe("later");
     expect(() => zlib.gzip("x", undefined as never)).toThrow(/callback/);
   });
+
+  it("validate options before returning, as Node does", () => {
+    for (const z of [zlib, nodeZlib] as const) {
+      expect(
+        capture(() => (z.gzip as (...a: unknown[]) => void)("abc", { level: 99 }, () => {})),
+      ).toEqual(capture(() => nodeZlib.gzipSync("abc", { level: 99 })));
+      expect(
+        capture(() => (z.inflate as (...a: unknown[]) => void)("abc", { windowBits: 3 }, () => {}))
+          ?.code,
+      ).toBe("ERR_OUT_OF_RANGE");
+    }
+  });
 });
 
 describe("zlib: streaming", () => {
@@ -472,5 +484,125 @@ describe("zlib: module", () => {
     expect(() => zlib.createBrotliDecompress()).toThrow(/createBrotliDecompress/);
     expect(() => new zlib.BrotliCompress()).toThrow(/BrotliCompress/);
     expect(() => zlib.zstdDecompressSync("x")).toThrow(/zstdDecompressSync/);
+  });
+});
+
+// minizlib (the zlib layer of `tar` v6/v7) drives a core zlib object by hand:
+// for each write it makes `_handle.close` and `close` no-ops, runs
+// `_processChunk(chunk, flushFlag)` (which closes the handle in Node), then
+// puts `_handle` back. This replays minizlib 3.1's `write` and `params`.
+describe("zlib: minizlib's call pattern", () => {
+  type Core = {
+    _handle: { close(): void } | null;
+    close(): void;
+    flush(kind?: unknown, cb?: () => void): void;
+    params(level: number, strategy: number, cb?: () => void): void;
+    _processChunk(chunk: Uint8Array, flag: number): Uint8Array | Uint8Array[];
+    removeAllListeners(event: string): void;
+    on(event: string, fn: () => void): void;
+  };
+
+  function minizlib(core: Core) {
+    const out: Uint8Array[] = [];
+    const write = (chunk: Uint8Array, flushFlag: number) => {
+      const nativeHandle = core._handle!;
+      const originalNativeClose = nativeHandle.close;
+      nativeHandle.close = () => {};
+      const originalClose = core.close;
+      core.close = () => {};
+      let result: Uint8Array | Uint8Array[];
+      try {
+        result = core._processChunk(chunk, flushFlag);
+      } finally {
+        core._handle = nativeHandle;
+        nativeHandle.close = originalNativeClose;
+        core.close = originalClose;
+        core.removeAllListeners("error");
+      }
+      core.on("error", () => {});
+      for (const part of Array.isArray(result) ? result : [result]) {
+        out.push(Uint8Array.from(part));
+      }
+    };
+    const params = (level: number, strategy: number) => {
+      write(new Uint8Array(0), nodeZlib.constants.Z_SYNC_FLUSH);
+      const origFlush = core.flush;
+      core.flush = (flag: unknown, cb?: () => void) => {
+        write(new Uint8Array(0), flag as number);
+        cb?.();
+      };
+      try {
+        core.params(level, strategy);
+      } finally {
+        core.flush = origFlush;
+      }
+    };
+    return { out, write, params };
+  }
+
+  it("gzips and gunzips through _handle and _processChunk", () => {
+    const text = compressible(50_000);
+    for (const z of [zlib, nodeZlib] as const) {
+      const gzip = z.createGzip() as unknown as Core;
+      expect(gzip._handle).toBeTruthy();
+      expect(typeof gzip._handle!.close).toBe("function");
+      const mz = minizlib(gzip);
+      mz.write(text.subarray(0, 20_000), nodeZlib.constants.Z_NO_FLUSH);
+      mz.write(new Uint8Array(0), nodeZlib.constants.Z_FULL_FLUSH);
+      mz.params(9, nodeZlib.constants.Z_DEFAULT_STRATEGY);
+      mz.write(text.subarray(20_000), nodeZlib.constants.Z_NO_FLUSH);
+      mz.write(new Uint8Array(0), nodeZlib.constants.Z_FINISH);
+      const gz = Buffer.concat(mz.out);
+      expect(same(nodeZlib.gunzipSync(gz), text)).toBe(true);
+
+      const gunzip = z.createGunzip() as unknown as Core;
+      const back = minizlib(gunzip);
+      back.write(gz.subarray(0, 100), nodeZlib.constants.Z_NO_FLUSH);
+      back.write(gz.subarray(100), nodeZlib.constants.Z_NO_FLUSH);
+      back.write(new Uint8Array(0), nodeZlib.constants.Z_FINISH);
+      expect(same(Buffer.concat(back.out), text)).toBe(true);
+      // The real close still closes.
+      gunzip.close();
+      expect(gunzip._handle).toBeNull();
+    }
+  });
+
+  it("closes the handle after a plain _processChunk, as Node does", () => {
+    const ours = zlib.createGzip() as unknown as Core & { _closed: boolean; destroyed: boolean };
+    const theirs = nodeZlib.createGzip() as unknown as typeof ours;
+    for (const core of [ours, theirs]) {
+      core._processChunk(Buffer.from("hi"), nodeZlib.constants.Z_FINISH);
+      expect([core._handle, core._closed, core.destroyed]).toEqual([null, true, false]);
+      // Node fails reading the null handle; webnode names the closed binding.
+      expect(capture(() => core._processChunk(Buffer.from("hi"), 0))).not.toBeNull();
+    }
+  });
+});
+
+describe("zlib: truncated input with finishFlush Z_SYNC_FLUSH", () => {
+  // The same compressed bytes (Node's) decode to as much as Node decodes at
+  // every cut. (Output from different compressors differs at a given cut.)
+  it("returns every byte Node decodes", () => {
+    const text = Buffer.from(
+      "hello world ".repeat(5000) +
+        Array.from({ length: 3000 }, (_, i) => String((i * 7919) % 1000)).join(","),
+    );
+    const options = { finishFlush: nodeZlib.constants.Z_SYNC_FLUSH };
+    const pairs = [
+      [nodeZlib.gzipSync(text), "gunzipSync"],
+      [nodeZlib.deflateSync(text), "inflateSync"],
+      [nodeZlib.deflateRawSync(text), "inflateRawSync"],
+      [nodeZlib.gzipSync(text), "unzipSync"],
+    ] as const;
+    for (const [compressed, method] of pairs) {
+      for (const cut of [12, 50, 100, 101, 257, 1000, compressed.length - 4]) {
+        const input = compressed.subarray(0, cut);
+        expect([method, cut, zlib[method](input, options).length]).toEqual([
+          method,
+          cut,
+          nodeZlib[method](input, options).length,
+        ]);
+      }
+    }
   });
 });

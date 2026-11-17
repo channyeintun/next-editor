@@ -342,3 +342,29 @@ describe("requests to other hosts go through fetch", () => {
     expect(await readBody(res)).toBe("");
   });
 });
+
+describe("Expect: 100-continue through fetch", () => {
+  it("emits continue so the caller writes the body, then sends it", async () => {
+    stubFetch(() => new Response("ok"));
+    const events: string[] = [];
+    const status = await new Promise<number | string>((resolve) => {
+      const req = https.request(
+        {
+          host: "example.com",
+          method: "PUT",
+          headers: { Expect: "100-continue", "Content-Length": 4 },
+        },
+        (res) => resolve(res.statusCode ?? 0),
+      );
+      req.on("continue", () => {
+        events.push("continue");
+        req.end("body");
+      });
+      setTimeout(() => resolve("timeout"), 1000);
+    });
+    expect(status).toBe(200);
+    expect(events).toEqual(["continue"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toBe("body");
+  });
+});

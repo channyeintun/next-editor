@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../../kernel/vfs/types";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime } from "../testing/fakeRuntime";
@@ -65,5 +65,58 @@ describe("wasi", () => {
     expect(instance.start(wasm)).toBe(0);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fake.stdout()).toContain("hi");
+  });
+
+  /** HELLO with its three output bytes replaced. */
+  function writing(bytes: [number, number, number]): Uint8Array<ArrayBuffer> {
+    return new Uint8Array([...HELLO.subarray(0, HELLO.length - 3), ...bytes]);
+  }
+
+  async function run(module: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
+    const written: Uint8Array[] = [];
+    const write = fake.fdStream.write.bind(fake.fdStream);
+    vi.spyOn(fake.fdStream, "write").mockImplementation((fd, chunk, done) => {
+      if (fd === 1) {
+        written.push(chunk);
+      }
+      write(fd, chunk, done);
+    });
+    const instance = new WASI({ version: "preview1", args: [], env: {} });
+    const wasm = await WebAssembly.instantiate(
+      await WebAssembly.compile(module),
+      instance.getImportObject(),
+    );
+    expect(instance.start(wasm)).toBe(0);
+    return new Uint8Array(written.flatMap((chunk) => [...chunk]));
+  }
+
+  it("writes stdout without waiting for a newline", async () => {
+    expect([...(await run(writing([0x68, 0x69, 0x21])))]).toEqual([0x68, 0x69, 0x21]);
+    expect(fake.stdout()).toBe("hi!");
+  });
+
+  it("writes stdout bytes that are not UTF-8 unchanged", async () => {
+    expect([...(await run(writing([0xff, 0xfe, 0x0a])))]).toEqual([0xff, 0xfe, 0x0a]);
+  });
+
+  it("reads stdin from the process's fd 0", () => {
+    const instance = new WASI({ version: "preview1", args: [], env: {} });
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    instance.initialize({ exports: { memory } } as unknown as WebAssembly.Instance);
+    const view = new DataView(memory.buffer);
+    // One iovec at 8: 8 bytes at 64; the count goes to 16.
+    view.setUint32(8, 64, true);
+    view.setUint32(12, 8, true);
+    const fdRead = instance.getImportObject().wasi_snapshot_preview1.fd_read as (
+      ...args: number[]
+    ) => number;
+    expect(fdRead(0, 8, 1, 16)).toBe(6); // EAGAIN: nothing fed yet
+    fake.feedStdin("abc");
+    expect(fdRead(0, 8, 1, 16)).toBe(0);
+    expect(view.getUint32(16, true)).toBe(3);
+    expect(new TextDecoder().decode(new Uint8Array(memory.buffer, 64, 3))).toBe("abc");
+    fake.feedStdin(null);
+    expect(fdRead(0, 8, 1, 16)).toBe(0);
+    expect(view.getUint32(16, true)).toBe(0);
   });
 });

@@ -32,43 +32,163 @@ function inspectValue(value: unknown): string {
   });
 }
 
-/** A line diff of `actual` against `expected`: `[op, line]`, op is "+" (actual), "-" (expected) or " ". */
-function lineDiff(actual: string[], expected: string[]): [string, string][] {
+// Line diff operations, as Node's lib/internal/assert/myers_diff.js names them.
+const kDelete = -1;
+const kNop = 0;
+const kInsert = 1;
+// Runs of equal lines longer than this are collapsed to "...".
+const kNopLinesToCollapse = 5;
+// A Myers diff costs time and memory in the number of differing lines (D).
+// Past this many, the diff falls back to a plain report (common head and tail,
+// then every other actual line, then every other expected line), so a failing
+// comparison of two very different large values stays fast.
+const kMaxDiffLevel = 1000;
+
+type DiffEntry = [op: number, line: string];
+
+function areLinesEqual(actual: string, expected: string, checkCommaDisparity: boolean): boolean {
+  if (actual === expected) {
+    return true;
+  }
+  // The last entry of an object or array has no trailing comma.
+  return checkCommaDisparity && (`${actual},` === expected || actual === `${expected},`);
+}
+
+/**
+ * Node's Myers diff of the inspected lines, newest entry first (Node prints
+ * from the end). Each level keeps only the diagonals it reached, so memory is
+ * O(D²) rather than O(D·(n+m)).
+ */
+function myersDiff(
+  actual: string[],
+  expected: string[],
+  checkCommaDisparity: boolean,
+): DiffEntry[] {
   const n = actual.length;
   const m = expected.length;
-  // Longest common subsequence table; inputs are inspect output, so small.
-  const table: number[][] = Array.from({ length: n + 1 }, () =>
-    Array.from({ length: m + 1 }, () => 0),
-  );
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      table[i][j] =
-        actual[i] === expected[j]
-          ? table[i + 1][j + 1] + 1
-          : Math.max(table[i + 1][j], table[i][j + 1]);
+  const max = n + m;
+  const v = new Int32Array(2 * max + 1);
+  // trace[d] is v over diagonals -d+1 … d-1 before level d ran.
+  const trace: Int32Array[] = [];
+  for (let d = 0; d <= Math.min(max, kMaxDiffLevel); d++) {
+    trace.push(d === 0 ? new Int32Array(0) : v.slice(max - d + 1, max + d));
+    for (let k = -d; k <= d; k += 2) {
+      const offset = k + max;
+      let x =
+        k === -d || (k !== d && v[offset - 1] < v[offset + 1]) ? v[offset + 1] : v[offset - 1] + 1;
+      let y = x - k;
+      while (x < n && y < m && areLinesEqual(actual[x], expected[y], checkCommaDisparity)) {
+        x++;
+        y++;
+      }
+      v[offset] = x;
+      if (x >= n && y >= m) {
+        return backtrack(trace, actual, expected, checkCommaDisparity);
+      }
     }
   }
-  const result: [string, string][] = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (actual[i] === expected[j]) {
-      result.push([" ", actual[i]]);
-      i++;
-      j++;
-    } else if (table[i + 1][j] >= table[i][j + 1]) {
-      result.push(["+", actual[i++]]);
-    } else {
-      result.push(["-", expected[j++]]);
+  return plainDiff(actual, expected, checkCommaDisparity);
+}
+
+function backtrack(
+  trace: Int32Array[],
+  actual: string[],
+  expected: string[],
+  checkCommaDisparity: boolean,
+): DiffEntry[] {
+  let x = actual.length;
+  let y = expected.length;
+  const result: DiffEntry[] = [];
+  for (let d = trace.length - 1; d >= 0; d--) {
+    const level = trace[d];
+    // Diagonal k of level d sits at index k + d - 1.
+    const at = (k: number): number => level[k + d - 1];
+    const k = x - y;
+    const prevK = k === -d || (k !== d && at(k - 1) < at(k + 1)) ? k + 1 : k - 1;
+    const prevX = d === 0 ? 0 : at(prevK);
+    const prevY = prevX - prevK;
+    while (x > prevX && y > prevY) {
+      const actualItem = actual[x - 1];
+      result.push([
+        kNop,
+        checkCommaDisparity && !actualItem.endsWith(",") ? expected[y - 1] : actualItem,
+      ]);
+      x--;
+      y--;
     }
-  }
-  while (i < n) {
-    result.push(["+", actual[i++]]);
-  }
-  while (j < m) {
-    result.push(["-", expected[j++]]);
+    if (d > 0) {
+      result.push(x > prevX ? [kInsert, actual[--x]] : [kDelete, expected[--y]]);
+    }
   }
   return result;
+}
+
+/** The fallback past kMaxDiffLevel: linear, but not a minimal diff. */
+function plainDiff(
+  actual: string[],
+  expected: string[],
+  checkCommaDisparity: boolean,
+): DiffEntry[] {
+  let head = 0;
+  while (
+    head < actual.length &&
+    head < expected.length &&
+    areLinesEqual(actual[head], expected[head], checkCommaDisparity)
+  ) {
+    head++;
+  }
+  let tail = 0;
+  while (
+    tail < actual.length - head &&
+    tail < expected.length - head &&
+    areLinesEqual(
+      actual[actual.length - 1 - tail],
+      expected[expected.length - 1 - tail],
+      checkCommaDisparity,
+    )
+  ) {
+    tail++;
+  }
+  const forward: DiffEntry[] = [];
+  for (let i = 0; i < head; i++) forward.push([kNop, actual[i]]);
+  for (let i = head; i < actual.length - tail; i++) forward.push([kInsert, actual[i]]);
+  for (let j = head; j < expected.length - tail; j++) forward.push([kDelete, expected[j]]);
+  for (let i = actual.length - tail; i < actual.length; i++) forward.push([kNop, actual[i]]);
+  return forward.reverse();
+}
+
+/** Node's printMyersDiff without colours: long runs of equal lines become "...". */
+function printDiff(diff: DiffEntry[]): { message: string; skipped: boolean } {
+  let message = "";
+  let skipped = false;
+  let nopCount = 0;
+  for (let i = diff.length - 1; i >= 0; i--) {
+    const [operation, value] = diff[i];
+    const previousOperation = i < diff.length - 1 ? diff[i + 1][0] : null;
+    // A run is collapsed only when that hides more than one line.
+    if (previousOperation === kNop && operation !== previousOperation) {
+      if (nopCount === kNopLinesToCollapse + 1) {
+        message += `  ${diff[i + 1][1]}\n`;
+      } else if (nopCount === kNopLinesToCollapse + 2) {
+        message += `  ${diff[i + 2][1]}\n  ${diff[i + 1][1]}\n`;
+      } else if (nopCount >= kNopLinesToCollapse + 3) {
+        message += `...\n  ${diff[i + 1][1]}\n`;
+        skipped = true;
+      }
+      nopCount = 0;
+    }
+    if (operation === kInsert) {
+      message += `+ ${value}\n`;
+    } else if (operation === kDelete) {
+      message += `- ${value}\n`;
+    } else {
+      if (nopCount < kNopLinesToCollapse) {
+        message += `  ${value}\n`;
+      }
+      nopCount++;
+    }
+  }
+  return { message: message.trimEnd(), skipped };
 }
 
 function createErrDiff(actual: unknown, expected: unknown, operator: string): string {
@@ -122,9 +242,12 @@ function createErrDiff(actual: unknown, expected: unknown, operator: string): st
     return `${kReadableOperator[operator]}\n+ actual - expected\n\n+ ${actualInspected}\n- ${expectedInspected}\n`;
   }
 
-  const diff = lineDiff(actualLines, expectedLines);
-  const body = diff.map(([op, line]) => `${op} ${line}`).join("\n");
-  return `${kReadableOperator[operator]}\n+ actual - expected\n\n${body}${indicator}\n`;
+  const checkCommaDisparity = actual != null && typeof actual === "object";
+  const { message, skipped } = printDiff(
+    myersDiff(actualLines, expectedLines, checkCommaDisparity),
+  );
+  const skippedMessage = skipped ? "\n... Skipped lines" : "";
+  return `${kReadableOperator[operator]}\n+ actual - expected${skippedMessage}\n\n${message}${indicator}\n`;
 }
 
 /** The options `new AssertionError(options)` takes. */

@@ -1,5 +1,6 @@
 // Node's `console`: formats with `util.format` and writes to the process's
 // stdout and stderr streams, so a program's output reaches its terminal or pipe.
+import { invalidArgType } from "./internalErrors";
 import util from "./util";
 
 interface OutputStream {
@@ -60,14 +61,18 @@ export class Console {
     return stream.isTTY === true && (stream.getColorDepth?.() ?? 1) > 2;
   }
 
+  private inspectOptionsFor(stream: OutputStream): Record<string, unknown> {
+    return { ...this.inspectOptions, colors: this.useColors(stream) };
+  }
+
   private write(stream: OutputStream, args: unknown[]): void {
-    const options = { ...this.inspectOptions, colors: this.useColors(stream) };
-    let text = util.formatWithOptions(options, ...args);
+    this.writeText(stream, util.formatWithOptions(this.inspectOptionsFor(stream), ...args));
+  }
+
+  /** Writes `text` and a newline, every line indented by the current group. */
+  private writeText(stream: OutputStream, text: string): void {
     if (this.indent) {
-      text = text
-        .split("\n")
-        .map((line) => this.indent + line)
-        .join("\n");
+      text = this.indent + text.replace(/\n/g, `\n${this.indent}`);
     }
     stream.write(`${text}\n`);
   }
@@ -93,8 +98,13 @@ export class Console {
   }
 
   dir(value: unknown, options?: Record<string, unknown>): void {
-    this.out.write(
-      `${this.indent}${util.inspect(value, { customInspect: false, colors: this.useColors(this.out), ...options })}\n`,
+    this.writeText(
+      this.out,
+      util.inspect(value, {
+        customInspect: false,
+        ...this.inspectOptionsFor(this.out),
+        ...options,
+      }),
     );
   }
 
@@ -188,49 +198,105 @@ export class Console {
 
   profileEnd(): void {}
 
-  table(data: unknown, columns?: string[]): void {
-    if (data === null || typeof data !== "object") {
-      this.write(this.out, [data]);
+  /** Node's console.table (lib/internal/console/constructor.js and cli_table.js). */
+  table(tabularData: unknown, properties?: string[]): void {
+    if (properties !== undefined && !Array.isArray(properties)) {
+      throw invalidArgType("properties", "Array", properties);
+    }
+    if (tabularData === null || typeof tabularData !== "object") {
+      this.log(tabularData);
       return;
     }
-    const rows = Object.entries(data as Record<string, unknown>);
-    const keys = new Set<string>();
-    let hasValues = false;
-    for (const [, row] of rows) {
-      if (row !== null && typeof row === "object") {
-        for (const key of Object.keys(row)) {
-          keys.add(key);
-        }
+    const inspectCell = (value: unknown): string => {
+      const depth =
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        !util.types.isTypedArray(value) &&
+        Object.keys(value).length > 2
+          ? -1
+          : 0;
+      return util.inspect(value, {
+        depth,
+        maxArrayLength: 3,
+        breakLength: Infinity,
+        ...this.inspectOptionsFor(this.out),
+      });
+    };
+    const indexes = (length: number) => Array.from({ length }, (_, i) => inspectCell(i));
+    const final = (head: string[], columns: string[][]) => this.log(renderTable(head, columns));
+
+    if (util.types.isMap(tabularData)) {
+      const keys: string[] = [];
+      const values: string[] = [];
+      for (const [key, value] of tabularData as Map<unknown, unknown>) {
+        keys.push(inspectCell(key));
+        values.push(inspectCell(value));
+      }
+      final(["(iteration index)", "Key", "Values"], [indexes(keys.length), keys, values]);
+      return;
+    }
+    if (util.types.isSet(tabularData)) {
+      const values = [...(tabularData as Set<unknown>)].map(inspectCell);
+      final(["(iteration index)", "Values"], [indexes(values.length), values]);
+      return;
+    }
+
+    const columns: Record<string, string[]> = Object.create(null);
+    let hasPrimitives = false;
+    const primitiveValues: string[] = [];
+    const indexKeys = Object.keys(tabularData);
+    for (let i = 0; i < indexKeys.length; i++) {
+      const item = (tabularData as Record<string, unknown>)[indexKeys[i]];
+      const primitive = item === null || (typeof item !== "function" && typeof item !== "object");
+      if (properties === undefined && primitive) {
+        hasPrimitives = true;
+        primitiveValues[i] = inspectCell(item);
       } else {
-        hasValues = true;
+        for (const key of properties ?? Object.keys(item as object)) {
+          columns[key] ??= [];
+          columns[key][i] =
+            (primitive && properties) || !Object.prototype.hasOwnProperty.call(item, key)
+              ? ""
+              : inspectCell((item as Record<string, unknown>)[key]);
+        }
       }
     }
-    const headers = ["(index)", ...(columns ?? [...keys]), ...(hasValues ? ["Values"] : [])];
-    const cell = (value: unknown) =>
-      value === undefined ? "" : util.inspect(value, { depth: 0, breakLength: Infinity });
-    const lines = rows.map(([index, row]) => {
-      const isObject = row !== null && typeof row === "object";
-      return headers.map((header, position) => {
-        if (position === 0) {
-          return index;
-        }
-        if (header === "Values" && hasValues && position === headers.length - 1) {
-          return isObject ? "" : cell(row);
-        }
-        return isObject ? cell((row as Record<string, unknown>)[header]) : "";
-      });
-    });
-    const widths = headers.map((header, position) =>
-      Math.max(header.length, ...lines.map((line) => line[position].length)),
-    );
-    const rule = (left: string, middle: string, right: string) =>
-      left + widths.map((width) => "─".repeat(width + 2)).join(middle) + right;
-    const format = (line: string[]) =>
-      `│${line.map((text, position) => ` ${text.padEnd(widths[position])} `).join("│")}│`;
-    this.out.write(
-      `${[rule("┌", "┬", "┐"), format(headers), rule("├", "┼", "┤"), ...lines.map(format), rule("└", "┴", "┘")].join("\n")}\n`,
-    );
+    const head = Object.keys(columns);
+    const values = Object.values(columns);
+    if (hasPrimitives) {
+      head.push("Values");
+      values.push(primitiveValues);
+    }
+    head.unshift("(index)");
+    values.unshift(indexKeys);
+    final(head, values);
   }
+}
+
+/** Node's cli_table: `head` over `columns`, cells left-justified. */
+function renderTable(head: string[], columns: string[][]): string {
+  const rows: string[][] = [];
+  const widths = head.map((h) => h.length);
+  const longest = Math.max(...columns.map((column) => column.length));
+  for (let i = 0; i < head.length; i++) {
+    const column = columns[i];
+    for (let j = 0; j < longest; j++) {
+      rows[j] ??= [];
+      const value = (rows[j][i] = Object.prototype.hasOwnProperty.call(column, j) ? column[j] : "");
+      widths[i] = Math.max(widths[i] || 0, value.length);
+    }
+  }
+  const renderRow = (row: string[]) =>
+    `│ ${row.map((cell, i) => cell + " ".repeat(widths[i] - cell.length)).join(" │ ")} │`;
+  const divider = widths.map((width) => "─".repeat(width + 2));
+  return [
+    `┌${divider.join("┬")}┐`,
+    renderRow(head),
+    `├${divider.join("┼")}┤`,
+    ...rows.map(renderRow),
+    `└${divider.join("┴")}┘`,
+  ].join("\n");
 }
 
 /** The global console for a process with the given stdout and stderr. */

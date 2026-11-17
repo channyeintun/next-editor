@@ -123,6 +123,35 @@ function bufferTooLarge(max: number): Error {
   );
 }
 
+function bindingClosed(): Error {
+  return makeNodeError("ERR_ZLIB_BINDING_CLOSED", "zlib binding closed", Error);
+}
+
+/**
+ * Stands in for Node's native zlib handle (`stream._handle`) and holds the
+ * engine. minizlib, the zlib layer of `tar`, reaches for it: it turns
+ * `_handle.close` into a no-op around each `_processChunk` call (which closes
+ * the handle in Node) and puts `_handle` back afterwards.
+ */
+class ZlibHandle {
+  engine: Engine | null;
+
+  constructor(engine: Engine) {
+    this.engine = engine;
+  }
+
+  close(): void {
+    this.engine = null;
+  }
+
+  reset(): void {
+    if (this.engine === null) {
+      throw bindingClosed();
+    }
+    this.engine.reset();
+  }
+}
+
 /** The base of every zlib stream: Node's `ZlibBase` + `Zlib` over an engine. */
 class ZlibBase extends stream.Transform {
   /** Input bytes taken so far. */
@@ -135,7 +164,8 @@ class ZlibBase extends stream.Transform {
   _info: boolean;
   _level: number;
   _strategy: number;
-  #engine: Engine | null;
+  /** Node's native handle; null once the stream is closed. */
+  _handle: ZlibHandle | null;
   #pendingFlushes: number[] = [];
 
   constructor(options: ZlibOptions | undefined, mode: Mode) {
@@ -229,19 +259,25 @@ class ZlibBase extends stream.Transform {
     this._info = Boolean(opts?.info);
     this._level = level;
     this._strategy = strategy;
-    this.#engine = createEngine(mode, { level, windowBits, strategy, dictionary });
+    this._handle = new ZlibHandle(createEngine(mode, { level, windowBits, strategy, dictionary }));
   }
 
-  /** Whether the engine is gone (after `close()`/`destroy()`). */
+  /** Whether the handle is gone (after `close()`, `destroy()` or `_processChunk`). */
   get _closed(): boolean {
-    return this.#engine === null;
+    return !this._handle;
+  }
+
+  /** Node's `_close`: closes the handle and lets go of it. */
+  #closeHandle(): void {
+    this._handle?.close();
+    this._handle = null;
   }
 
   /** Runs the engine over `chunk`; returns its output, unsplit. */
   _runEngine(chunk: Uint8Array, flushFlag: number): Uint8Array[] {
-    const engine = this.#engine;
+    const engine = this._handle?.engine ?? null;
     if (engine === null) {
-      throw makeNodeError("ERR_ZLIB_BINDING_CLOSED", "zlib binding closed", Error);
+      throw bindingClosed();
     }
     const output = engine.write(chunk, flushFlag);
     this.bytesWritten += chunk.length;
@@ -286,7 +322,7 @@ class ZlibBase extends stream.Transform {
   }
 
   override _destroy(error: Error | null, callback: StreamCallback): void {
-    this.#engine = null;
+    this.#closeHandle();
     callback(error);
   }
 
@@ -321,10 +357,10 @@ class ZlibBase extends stream.Transform {
 
   /** Restarts the engine, dropping its state. */
   reset(): void {
-    if (this.#engine === null) {
-      throw makeNodeError("ERR_ZLIB_BINDING_CLOSED", "zlib binding closed", Error);
+    if (!this._handle) {
+      throw bindingClosed();
     }
-    this.#engine.reset();
+    this._handle.reset();
   }
 
   /**
@@ -343,7 +379,13 @@ class ZlibBase extends stream.Transform {
     if (callback !== undefined) {
       throw new Error("zlib._processChunk with a callback is not available in webnode");
     }
-    const output = this._runEngine(toBytes(chunk, "buffer", true), flushFlag);
+    let output: Uint8Array[];
+    try {
+      output = this._runEngine(toBytes(chunk, "buffer", true), flushFlag);
+    } finally {
+      // Node closes the handle after a synchronous run.
+      this.#closeHandle();
+    }
     let total = 0;
     for (const part of output) {
       total += part.length;
@@ -438,7 +480,14 @@ function runSync(
   options?: ZlibOptions,
 ): Buffer | { buffer: Buffer; engine: ZlibBase } {
   const input = toBytes(buffer, "buffer", true);
-  const engine = new Class(options);
+  return runEngine(new Class(options), input);
+}
+
+/** One run of `engine` over all of `input`, then the engine is done. */
+function runEngine(
+  engine: ZlibBase,
+  input: Uint8Array,
+): Buffer | { buffer: Buffer; engine: ZlibBase } {
   const result = engine._processChunk(input, engine._finishFlushFlag);
   engine.destroy();
   return engine._info ? { buffer: result, engine } : result;
@@ -455,6 +504,8 @@ function runAsync(Class: ZlibClass, buffer: unknown, options: unknown, callback:
     callback = options;
     options = {};
   }
+  // Made first, so bad options throw here, as in Node; only the run waits.
+  const engine = new Class(options as ZlibOptions | undefined);
   validateFunction(callback, "callback");
   const input = toBytes(buffer, "buffer", true);
   const done = callback as ZlibCallback;
@@ -462,7 +513,7 @@ function runAsync(Class: ZlibClass, buffer: unknown, options: unknown, callback:
   setTimeout(() => {
     let result: Buffer | { buffer: Buffer; engine: ZlibBase };
     try {
-      result = runSync(Class, copy, options as ZlibOptions | undefined);
+      result = runEngine(engine, copy);
     } catch (error) {
       done(error as Error);
       return;

@@ -1,7 +1,7 @@
 // Brings the `buffer` npm package (v6.0.3) up to Node 22's Buffer: every
 // encoding (base64url included) in toString/write/from/byteLength/isEncoding/
 // fill/indexOf, the native `*Slice`/`*Write` prototype methods, Node's
-// argument validation, `copyBytesFrom`, `inspect` output, Uint8Array arguments
+// argument validation (numeric reads and writes in buffer/numeric.ts), `copyBytesFrom`, `inspect` output, Uint8Array arguments
 // to `equals`/`compare`, and TextDecoder-backed utf8 decoding. The package's
 // own Buffer is patched in place, so Buffers stay `Uint8Array` subclasses and
 // every copy of the package in one bundle agrees.
@@ -15,6 +15,7 @@ import {
   writeString,
   type Encoding,
 } from "./encodings";
+import { installNumericChecks, validateAllocSize } from "./numeric";
 
 /** Node's `kMaxLength` on 64-bit (Node 22). */
 export const K_MAX_LENGTH = 2 ** 53 - 1;
@@ -703,6 +704,18 @@ export function installBufferPatches(): BufferConstructor {
     );
     return asBuffer(new Uint8Array(bytes));
   };
+
+  installNumericChecks(proto as unknown as Parameters<typeof installNumericChecks>[0]);
+
+  for (const name of ["alloc", "allocUnsafe", "allocUnsafeSlow"] as const) {
+    const original = statics[name] as (size: number, ...rest: unknown[]) => Buffer;
+    statics[name] = {
+      [name](size: unknown, ...rest: unknown[]): Buffer {
+        validateAllocSize(size, K_MAX_LENGTH);
+        return original.call(PkgBuffer, size, ...rest);
+      },
+    }[name];
+  }
 
   statics.of = function of(...items: number[]): Buffer {
     const out = BufferCtor.allocUnsafe(items.length);

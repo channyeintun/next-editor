@@ -4,6 +4,7 @@
 // (`defaultOptions`, `replDefaults`).
 import * as extracted from "node-inspect-extracted";
 import { invalidArgType } from "./nodeErrors";
+import { installWebInspectors, withHiddenStateInspectors } from "./webInspect";
 
 /** The options `util.inspect` accepts. */
 export type InspectOptions = extracted.InspectOptions;
@@ -28,8 +29,32 @@ const defaultOptions: InspectOptions = lib.inspectDefaultOptions;
 // loads; here it is always present.
 const replDefaults: InspectOptions = { ...defaultOptions, showProxy: true };
 
+// Some values need the hidden-state inspectors (util/webInspect.ts) while they
+// are printed; a call that prints only primitives does not install them.
+function hasObject(values: unknown[]): boolean {
+  return values.some(
+    (value) => (typeof value === "object" && value !== null) || typeof value === "function",
+  );
+}
+
+function withHooks<F extends (...args: never[]) => string>(fn: F): F {
+  return function (this: unknown, ...args: Parameters<F>): string {
+    return hasObject(args)
+      ? withHiddenStateInspectors(() => fn.apply(this, args))
+      : fn.apply(this, args);
+  } as F;
+}
+
 /** `util.inspect`, with `custom`, `colors`, `styles`, `defaultOptions` and `replDefaults`. */
-export const inspect = lib.inspect;
+export const inspect: typeof lib.inspect = withHooks(lib.inspect);
+// The package's members of `inspect` (custom, colors, styles …), its name and length.
+for (const key of Reflect.ownKeys(lib.inspect)) {
+  if (key !== "prototype") {
+    Object.defineProperty(inspect, key, Object.getOwnPropertyDescriptor(lib.inspect, key)!);
+  }
+}
+
+installWebInspectors(globalThis as unknown as Record<string, unknown>);
 
 function validateOptionsObject(options: unknown): asserts options is object {
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
@@ -98,11 +123,12 @@ for (const [alias, target] of colorAliases) {
 }
 
 /** `util.format`: printf-like formatting with `%s %d %i %f %j %o %O %c %%`. */
-export const format: (...args: unknown[]) => string = lib.format;
+export const format: (...args: unknown[]) => string = withHooks(lib.format);
 
 /** `util.formatWithOptions(inspectOptions, ...args)`. */
-export const formatWithOptions: (options: InspectOptions, ...args: unknown[]) => string =
-  lib.formatWithOptions;
+export const formatWithOptions: (options: InspectOptions, ...args: unknown[]) => string = withHooks(
+  lib.formatWithOptions,
+);
 
 /** `util.stripVTControlCharacters`: removes ANSI escape codes, validating the argument. */
 export const stripVTControlCharacters: (value: string) => string = lib.stripVTControlCharacters;

@@ -15,7 +15,10 @@
 // async function is resumed by the engine without calling `then`, so it cannot
 // be intercepted. A store set by `run()` is visible synchronously and through
 // the wrapped callbacks above, but may be lost (or show an outer store) after
-// such an `await`.
+// such an `await`. For the same reason a store set by `enterWith()` outside
+// any wrapped callback (after such an `await`, say) lasts only until the
+// current synchronous run ends: past that, nothing could tell which code it
+// belongs to, and it would show up in other, unrelated code.
 import { invalidArgType, makeNodeError, validateFunction, validateString } from "./internalErrors";
 
 type AnyFunction = (...args: never[]) => unknown;
@@ -25,14 +28,25 @@ type Frame = ReadonlyMap<AsyncLocalStorage<unknown>, unknown> | null;
 let currentFrame: Frame = null;
 /** True once an `AsyncLocalStorage` exists: before that, binding is the identity. */
 let tracking = false;
+/** How many frame-setting wrappers are running; 0 in unwrapped code. */
+let wrapperDepth = 0;
+/** The frame to go back to when the current synchronous run ends (see `enterWith`). */
+let frameAfterRun: { frame: Frame } | null = null;
+// Captured now: installPropagation replaces the global with a binding one.
+const nativeQueueMicrotask: ((callback: VoidFunction) => void) | undefined =
+  typeof globalThis.queueMicrotask === "function"
+    ? globalThis.queueMicrotask.bind(globalThis)
+    : undefined;
 
 /** Runs `fn` with `frame` as the current context, restoring the previous one after. */
 function runInFrame<R>(frame: Frame, fn: () => R): R {
   const previous = currentFrame;
   currentFrame = frame;
+  wrapperDepth++;
   try {
     return fn();
   } finally {
+    wrapperDepth--;
     currentFrame = previous;
   }
 }
@@ -41,13 +55,35 @@ function bindFrame<T extends AnyFunction>(frame: Frame, fn: T): T {
   const bound = function (this: unknown, ...args: unknown[]): unknown {
     const previous = currentFrame;
     currentFrame = frame;
+    wrapperDepth++;
     try {
       return (fn as unknown as (...a: unknown[]) => unknown).apply(this, args);
     } finally {
+      wrapperDepth--;
       currentFrame = previous;
     }
   };
   return bound as unknown as T;
+}
+
+/**
+ * Sets the current frame for the rest of the synchronous run. Inside a wrapper
+ * the wrapper restores the previous frame when it returns. Outside one (top
+ * level, or after a native `await`) nothing would, so the previous frame comes
+ * back on the next microtask: by then the run is over.
+ */
+function enterFrame(frame: Frame): void {
+  if (wrapperDepth === 0 && frameAfterRun === null && nativeQueueMicrotask) {
+    const pending = { frame: currentFrame };
+    frameAfterRun = pending;
+    nativeQueueMicrotask(() => {
+      if (frameAfterRun === pending) {
+        frameAfterRun = null;
+        currentFrame = pending.frame;
+      }
+    });
+  }
+  currentFrame = frame;
 }
 
 /**
@@ -176,7 +212,7 @@ export class AsyncLocalStorage<T = unknown> {
     this.#enabled = true;
     const next = new Map(currentFrame ?? undefined);
     next.set(this as AsyncLocalStorage<unknown>, store);
-    currentFrame = next;
+    enterFrame(next);
   }
 
   /** Stops this storage: `getStore()` returns undefined until the next `run`/`enterWith`. */
@@ -314,7 +350,9 @@ export interface AsyncHook {
  * `async_hooks.createHook`: validates the callbacks like Node and returns a hook
  * whose `enable`/`disable` do nothing. Hooks observe the engine's async
  * machinery (promises, handles, requests), which a browser does not expose, so
- * the callbacks never run.
+ * the callbacks never run. A documented exception to "throw what the browser
+ * cannot do": the users are diagnostics (why-is-node-running, cls-hooked style
+ * tracing), which keep running without the events.
  */
 export function createHook(callbacks: HookCallbacks): AsyncHook {
   if (callbacks === null || typeof callbacks !== "object") {

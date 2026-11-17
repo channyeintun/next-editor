@@ -141,6 +141,32 @@ describe("AsyncLocalStorage", () => {
     expect(later).toBe("entered");
   });
 
+  it("enterWith after an await does not leak into unrelated code", async () => {
+    const als = new AsyncLocalStorage<{ user: string }>();
+    const seen: unknown[] = [];
+    async function middleware() {
+      await Promise.resolve();
+      als.enterWith({ user: "u1" });
+      // The rest of this run, and continuations it schedules, see the store.
+      seen.push(als.getStore()?.user);
+      await new Promise<void>((resolve) =>
+        setTimeout(() => {
+          seen.push(`timer:${als.getStore()?.user}`);
+          resolve();
+        }, 1),
+      );
+    }
+    async function other() {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      seen.push(als.getStore());
+    }
+    await Promise.all([middleware(), other()]);
+    expect(seen).toEqual(["u1", undefined, "timer:u1"]);
+    expect(als.getStore()).toBeUndefined();
+  });
+
   it("disable clears the store until the next run", () => {
     const als = new AsyncLocalStorage<number>();
     als.run(1, () => {

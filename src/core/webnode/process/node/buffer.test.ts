@@ -411,3 +411,102 @@ describe("buffer: module exports", () => {
     expect(() => transcode(Buffer.from("a"), "utf8", "hex")).toThrow(/Unable to transcode/);
   });
 });
+
+describe("buffer: numeric reads and writes validate like Node", () => {
+  type Call = [method: string, ...args: unknown[]];
+  const sizes: Record<string, number> = { 8: 1, 16: 2, 32: 4 };
+  const reads: Call[] = [];
+  const writes: Call[] = [];
+  for (const bits of ["8", "16", "32"]) {
+    for (const end of bits === "8" ? [""] : ["LE", "BE"]) {
+      for (const sign of ["UInt", "Uint", "Int"]) {
+        const read = `read${sign}${bits}${end}`;
+        const write = `write${sign}${bits}${end}`;
+        const size = sizes[bits];
+        for (const offset of [undefined, 0, 1, 1.5, -1, 16 - size, 17 - size, NaN, "1", null]) {
+          reads.push([read, offset]);
+        }
+        const max = sign === "Int" ? 2 ** (size * 8 - 1) - 1 : 2 ** (size * 8) - 1;
+        const min = sign === "Int" ? -(2 ** (size * 8 - 1)) : 0;
+        for (const value of [max, min, max + 1, min - 1, "7", 1.5, NaN]) {
+          writes.push([write, value, 0]);
+        }
+        for (const offset of [undefined, 1.5, -1, 16 - size, 17 - size, "1"]) {
+          writes.push([write, 1, offset]);
+        }
+      }
+    }
+  }
+  for (const name of ["Float", "Double"]) {
+    for (const end of ["LE", "BE"]) {
+      for (const offset of [undefined, 0, 1.5, -1, 8, 13, "1"]) {
+        reads.push([`read${name}${end}`, offset]);
+        writes.push([`write${name}${end}`, 1.25, offset]);
+      }
+      writes.push([`write${name}${end}`, "x", 0]);
+    }
+  }
+  for (const sign of ["UInt", "Int"]) {
+    for (const end of ["LE", "BE"]) {
+      for (const [offset, length] of [
+        [0, 6],
+        [10, 6],
+        [11, 6],
+        [0, 7],
+        [0, 0],
+        [0, 1.5],
+        [undefined, 2],
+        [0, undefined],
+        [1.5, 2],
+        [0, "2"],
+      ] as const) {
+        reads.push([`read${sign}${end}`, offset, length]);
+        writes.push([`write${sign}${end}`, 5, offset, length]);
+      }
+      writes.push([`write${sign}${end}`, 2 ** 48, 0, 6]);
+      writes.push([`write${sign}${end}`, -(2 ** 47) - 1, 0, 6]);
+      writes.push([`write${sign}${end}`, 256, 0, 1]);
+    }
+  }
+  for (const end of ["LE", "BE"]) {
+    for (const offset of [undefined, 1.5, -1, 8, 9]) {
+      reads.push([`readBigUInt64${end}`, offset]);
+      reads.push([`readBigInt64${end}`, offset]);
+      writes.push([`writeBigUInt64${end}`, 1n, offset]);
+      writes.push([`writeBigInt64${end}`, 1n, offset]);
+    }
+    writes.push([`writeBigUInt64${end}`, -1n, 0]);
+    writes.push([`writeBigInt64${end}`, 2n ** 63n, 0]);
+  }
+
+  function run(B: typeof NodeBuffer | typeof Buffer, [method, ...args]: Call) {
+    const buf = (B as typeof NodeBuffer).from(Array.from({ length: 16 }, (_, i) => i * 17));
+    try {
+      const result = (buf as unknown as Record<string, (...a: unknown[]) => unknown>)[method](
+        ...args,
+      );
+      return { result, bytes: [...buf] };
+    } catch (error) {
+      const e = error as Error & { code?: string };
+      return { name: e.name, code: e.code, message: e.message };
+    }
+  }
+
+  it.each([...reads, ...writes])("%s(%o, %o, %o)", (...call) => {
+    expect(run(Buffer, call as Call)).toEqual(run(NodeBuffer, call as Call));
+  });
+
+  it.each([[-1], [1.5], ["8"], [NaN], [2 ** 53]])("alloc and allocUnsafe(%o)", (size) => {
+    for (const method of ["alloc", "allocUnsafe", "allocUnsafeSlow"] as const) {
+      const outcome = (B: typeof NodeBuffer | typeof Buffer) => {
+        try {
+          return (B as typeof NodeBuffer)[method](size as number).length;
+        } catch (error) {
+          const e = error as Error & { code?: string };
+          return { name: e.name, code: e.code, message: e.message };
+        }
+      };
+      expect([method, outcome(Buffer)]).toEqual([method, outcome(NodeBuffer)]);
+    }
+  });
+});

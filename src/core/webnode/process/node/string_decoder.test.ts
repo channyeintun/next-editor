@@ -59,4 +59,97 @@ describe("string_decoder", () => {
     expect(new StringDecoder("ucs2").encoding).toBe(new NodeStringDecoder("ucs2").encoding);
     expect(() => new StringDecoder("nope")).toThrow(/Unknown encoding: nope/);
   });
+
+  /** Runs `fn` with a decoder class; the result, or the error's name, code and message. */
+  function outcome(fn: (D: typeof NodeStringDecoder) => unknown) {
+    return (D: typeof NodeStringDecoder) => {
+      try {
+        return fn(D);
+      } catch (error) {
+        const e = error as Error & { code?: string };
+        return { name: e.name, code: e.code, message: e.message };
+      }
+    };
+  }
+
+  const behaviours: [string, (D: typeof NodeStringDecoder) => unknown][] = [
+    ["a plain Uint8Array", (D) => new D("utf8").write(new Uint8Array([104, 105]))],
+    ["a plain Uint8Array as hex", (D) => new D("hex").write(new Uint8Array([104, 105]))],
+    [
+      "a character split across Uint8Arrays",
+      (D) => {
+        const d = new D("utf8");
+        return d.write(new Uint8Array([0x68, 0xc3])) + d.write(new Uint8Array([0xa9]));
+      },
+    ],
+    ["a Uint16Array", (D) => new D("utf8").write(new Uint16Array([0x6968]) as never)],
+    [
+      "a DataView",
+      (D) => new D("utf8").write(new DataView(new TextEncoder().encode("hi").buffer) as never),
+    ],
+    ["an ArrayBuffer", (D) => new D("utf8").write(new Uint8Array(2).buffer as never)],
+    ["a number", (D) => new D("utf8").write(5 as never)],
+    ["null", (D) => new D("utf8").write(null as never)],
+    ["end with a number", (D) => new D("utf8").end(5 as never)],
+    ["end with a string", (D) => new D("utf8").end("abc")],
+    ["a string", (D) => new D("utf8").write("abc")],
+    ["an unknown encoding's error", (D) => new D("nope")],
+    [
+      "base64url",
+      (D) => {
+        const d = new D("base64url");
+        return [
+          d.encoding,
+          d.write(Buffer.from([0xfb, 0xff])),
+          d.end(),
+          d.write(Buffer.from([0xfb, 0xff, 0xbf, 1])),
+          d.end(),
+        ];
+      },
+    ],
+    ["BASE64URL", (D) => new D("BASE64URL").encoding],
+    [
+      "utf8 after end()",
+      (D) => {
+        const d = new D("utf8");
+        return [
+          d.write(Buffer.from([0xe2])),
+          d.end(),
+          d.write(Buffer.from("A")),
+          d.write(Buffer.from([0xe2])),
+          d.end(),
+          d.write(Buffer.from([0xff, 0x41])),
+        ];
+      },
+    ],
+    [
+      "base64 after end()",
+      (D) => {
+        const d = new D("base64");
+        return [d.write(Buffer.from([1])), d.end(), d.write(Buffer.from([2])), d.end()];
+      },
+    ],
+    [
+      "utf16le after end()",
+      (D) => {
+        const d = new D("utf16le");
+        return [d.write(Buffer.from([0x41])), d.end(), d.write(Buffer.from([0x42, 0])), d.end()];
+      },
+    ],
+    [
+      "the partial-character fields",
+      (D) => {
+        const d = new D("utf8");
+        d.write(Buffer.from([0xe2]));
+        const d2 = d as unknown as { lastNeed: number; lastTotal: number; lastChar: Uint8Array };
+        return [d2.lastNeed, d2.lastTotal, [...d2.lastChar], Object.keys(d)];
+      },
+    ],
+  ];
+
+  it.each(behaviours)("handles %s as Node does", (_label, fn) => {
+    expect(outcome(fn)(StringDecoder as unknown as typeof NodeStringDecoder)).toEqual(
+      outcome(fn)(NodeStringDecoder),
+    );
+  });
 });

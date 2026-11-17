@@ -29,15 +29,19 @@ function performanceMemory(): PerformanceMemory | undefined {
 
 /**
  * `v8.getHeapStatistics()`. The heap sizes come from `performance.memory`
- * (Chromium); a browser without it reports nothing, so they are 0. The fields
- * a browser never exposes (malloc, handles, contexts) are 0 too, apart from
- * the one native context a worker has.
+ * (Chromium). Where the browser does not report it (a worker may not), there
+ * are no figures to give, and zeros would read as a heap with no room left, so
+ * it throws. The fields a browser never exposes (malloc, handles, contexts)
+ * are 0, apart from the one native context a worker has.
  */
 export function getHeapStatistics(): Record<string, number> {
   const memory = performanceMemory();
-  const total = memory?.totalJSHeapSize ?? 0;
-  const used = memory?.usedJSHeapSize ?? 0;
-  const limit = memory?.jsHeapSizeLimit ?? 0;
+  if (!memory) {
+    throw unavailable("getHeapStatistics");
+  }
+  const total = memory.totalJSHeapSize;
+  const used = memory.usedJSHeapSize;
+  const limit = memory.jsHeapSizeLimit;
   return {
     total_heap_size: total,
     total_heap_size_executable: 0,
@@ -71,7 +75,12 @@ export function getHeapCodeStatistics(): Record<string, number> {
   };
 }
 
-/** `v8.setFlagsFromString(flags)`: accepted; page JavaScript cannot change engine flags. */
+/**
+ * `v8.setFlagsFromString(flags)`: accepted with no effect, a documented
+ * exception to "throw what the browser cannot do". Page JavaScript cannot
+ * change engine flags, and Node itself calls changing them after start-up
+ * undefined behaviour; programs set flags to tune, and keep running without.
+ */
 export function setFlagsFromString(flags: string): void {
   validateString(flags, "flags");
 }
@@ -129,7 +138,9 @@ const noHook = (_hook?: unknown) => () => {};
 
 /**
  * `v8.promiseHooks`: registering is accepted and returns the stop function,
- * but the hooks never run; the browser does not expose V8's promise hooks.
+ * but the hooks never run; the browser does not expose V8's promise hooks. A
+ * documented exception, like `async_hooks.createHook`: the users are
+ * diagnostics tools, which keep working without the events.
  */
 export const promiseHooks = Object.freeze({
   onInit: noHook,
@@ -684,7 +695,19 @@ class Reader {
         this.fail();
       }
       const key = this.string();
-      target[key] = this.value();
+      const value = this.value();
+      if (key === "__proto__") {
+        // An own "__proto__" key (JSON.parse makes one) stays a property;
+        // assigning it would replace the object's prototype.
+        Object.defineProperty(target, key, {
+          value,
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      } else {
+        target[key] = value;
+      }
     }
   }
 }

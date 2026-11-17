@@ -1,4 +1,5 @@
-// The parts of Node's `crypto` webnode does not provide: asymmetric keys,
+// The parts of Node's `crypto` webnode does not provide: asymmetric keys
+// (secret keys are in crypto/keys.ts),
 // signatures, Diffie-Hellman, X.509, primes, engines and FIPS mode. Each exists
 // with Node's name and throws `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` naming
 // itself when called or constructed.
@@ -34,7 +35,6 @@ export const generateKey = unavailableFunction("generateKey");
 export const generateKeySync = unavailableFunction("generateKeySync");
 export const createPublicKey = unavailableFunction("createPublicKey");
 export const createPrivateKey = unavailableFunction("createPrivateKey");
-export const createSecretKey = unavailableFunction("createSecretKey");
 export const createDiffieHellman = unavailableFunction("createDiffieHellman");
 export const createDiffieHellmanGroup = unavailableFunction("createDiffieHellmanGroup");
 export const getDiffieHellman = unavailableFunction("getDiffieHellman");
@@ -52,7 +52,6 @@ export const setEngine = unavailableFunction("setEngine");
 export const secureHeapUsed = unavailableFunction("secureHeapUsed");
 export const setFips = unavailableFunction("setFips");
 
-export const KeyObject = unavailableClass("KeyObject");
 export const Sign = unavailableClass("Sign");
 export const Verify = unavailableClass("Verify");
 export const DiffieHellman = unavailableClass("DiffieHellman");

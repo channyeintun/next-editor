@@ -697,7 +697,6 @@ describe("module surface", () => {
       "generateKeySync",
       "createPublicKey",
       "createPrivateKey",
-      "createSecretKey",
       "createDiffieHellman",
       "createDiffieHellmanGroup",
       "getDiffieHellman",
@@ -724,7 +723,6 @@ describe("module surface", () => {
       });
     }
     for (const name of [
-      "KeyObject",
       "X509Certificate",
       "Certificate",
       "DiffieHellman",
@@ -738,6 +736,61 @@ describe("module surface", () => {
         `crypto.${name} is not available in webnode`,
       );
     }
+  });
+
+  it("makes secret KeyObjects like Node (jsonwebtoken's HS256 path)", () => {
+    // eslint-disable-next-line typescript/no-explicit-any -- both modules, one shape
+    const run = (c: any) => {
+      const k = c.createSecretKey(NodeBuffer.from("my-hs256-secret") as never);
+      const same = c.createSecretKey(NodeBuffer.from("my-hs256-secret") as never);
+      const source = NodeBuffer.from("ab");
+      const copied = c.createSecretKey(source as never);
+      source[0] = 0;
+      const exported = k.export() as Uint8Array;
+      exported[0] = 0;
+      return {
+        type: k.type,
+        size: k.symmetricKeySize,
+        isKeyObject: k instanceof c.KeyObject,
+        tag: Object.prototype.toString.call(k),
+        ctor: k.constructor.name,
+        exported: NodeBuffer.from(k.export() as Uint8Array).toString(),
+        isBuffer: NodeBuffer.isBuffer(NodeBuffer.from(k.export() as Uint8Array)),
+        buffer: NodeBuffer.from(k.export({ format: "buffer" }) as Uint8Array).toString("hex"),
+        jwk: k.export({ format: "jwk" }),
+        copied: NodeBuffer.from(copied.export() as Uint8Array).toString(),
+        equals: [k.equals(same), k.equals(copied)],
+        hex: NodeBuffer.from(c.createSecretKey("abc", "hex").export() as Uint8Array).toString(
+          "hex",
+        ),
+        view: NodeBuffer.from(
+          c
+            .createSecretKey(new DataView(new Uint8Array([1, 2, 3]).buffer, 1))
+            .export() as Uint8Array,
+        ).toString("hex"),
+        empty: c.createSecretKey(new Uint8Array(0)).symmetricKeySize,
+        hmac: c.createHmac("sha256", k).update("a").digest("hex"),
+        hkdf: NodeBuffer.from(c.hkdfSync("sha256", k, "s", "i", 8)).toString("hex"),
+        cipher: c
+          .createCipheriv("aes-128-cbc", c.createSecretKey(new Uint8Array(16)), new Uint8Array(16))
+          .final("hex"),
+        json: JSON.stringify(k),
+        errors: [
+          errorOf(() => c.createSecretKey(5 as never)),
+          errorOf(() => c.createSecretKey(k as never)),
+          errorOf(() => k.export({ format: "pem" } as never)),
+          errorOf(() => k.export(5 as never)),
+          errorOf(() => k.equals("x" as never)),
+          errorOf(() => new (c.KeyObject as unknown as new (...a: unknown[]) => unknown)("x", {})),
+          errorOf(
+            () => new (c.KeyObject as unknown as new (...a: unknown[]) => unknown)("secret", {}),
+          ),
+          errorOf(() => c.KeyObject.from({} as never)),
+          errorOf(() => c.pbkdf2Sync(k as never, "s", 1, 8, "sha256")),
+        ],
+      };
+    };
+    expect(run(crypto)).toEqual(run(nodeCrypto));
   });
 
   it("has every key node 22's crypto has", () => {

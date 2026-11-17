@@ -97,14 +97,41 @@ describe("v8.serialize / deserialize", () => {
   });
 });
 
+describe("v8.deserialize and own __proto__ keys", () => {
+  it("keeps an own __proto__ key as a property, as Node does", async () => {
+    const nodeV8 = await import("node:v8");
+    for (const m of [v8, nodeV8]) {
+      const r = m.deserialize(m.serialize(JSON.parse('{"__proto__":{"x":1},"y":2}'))) as Record<
+        string,
+        unknown
+      >;
+      expect(Object.prototype.hasOwnProperty.call(r, "__proto__")).toBe(true);
+      expect(r.x).toBeUndefined();
+      expect(Object.getPrototypeOf(r)).toBe(Object.prototype);
+      expect(Object.keys(r)).toEqual(["__proto__", "y"]);
+    }
+  });
+});
+
 describe("v8 heap and engine members", () => {
   it("reports heap statistics with Node's keys", async () => {
     const real = (await import("node:v8")).getHeapStatistics();
-    const ours = v8.getHeapStatistics();
+    // Node has no performance.memory; Chromium's main thread does.
+    const memory = { usedJSHeapSize: 10, totalJSHeapSize: 20, jsHeapSizeLimit: 100 };
+    Object.defineProperty(performance, "memory", { value: memory, configurable: true });
+    let ours: Record<string, number>;
+    try {
+      ours = v8.getHeapStatistics();
+    } finally {
+      delete (performance as { memory?: unknown }).memory;
+    }
     for (const key of Object.keys(ours)) {
       expect(real).toHaveProperty(key);
       expect(typeof ours[key]).toBe("number");
     }
+    expect([ours.heap_size_limit, ours.used_heap_size, ours.total_available_size]).toEqual([
+      100, 10, 90,
+    ]);
     expect(Object.keys(v8.getHeapCodeStatistics()).sort()).toEqual(
       Object.keys((await import("node:v8")).getHeapCodeStatistics()).sort(),
     );
@@ -126,6 +153,13 @@ describe("v8 heap and engine members", () => {
   });
 
   it("throws named errors for what the browser lacks", () => {
+    // No made-up zeros where the browser reports no heap figures.
+    expect(() => v8.getHeapStatistics()).toThrow(
+      expect.objectContaining({
+        code: "ERR_FEATURE_UNAVAILABLE_ON_PLATFORM",
+        message: "v8.getHeapStatistics is not available in webnode",
+      }),
+    );
     expect(() => v8.getHeapSnapshot()).toThrow("v8.getHeapSnapshot is not available in webnode");
     expect(() => v8.writeHeapSnapshot()).toThrow("not available in webnode");
     expect(() => new v8.Serializer()).toThrow("v8.Serializer is not available in webnode");
