@@ -124,6 +124,34 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
    * way. The answer to the close comes after all of that data.
    */
   const closingFds = new Map<number, number>();
+  /** Fds a stream was started on: only these can have data on its way when they are closed. */
+  const streamedFds = new Set<number>();
+
+  /**
+   * Drops what is known of the stream on `fd` and refuses data for that
+   * number until the kernel has answered a close of it: whatever arrives
+   * before that answer was sent for the stream the number had. The request
+   * closes the fd when it is still open, and is refused, which marks the same
+   * point, when the caller has closed it already.
+   */
+  const forgetStream = (fd: number): void => {
+    streamedFds.delete(fd);
+    fdReaders.delete(fd);
+    fdBacklogs.delete(fd);
+    closingFds.set(fd, (closingFds.get(fd) ?? 0) + 1);
+    const confirmed = () => {
+      const left = (closingFds.get(fd) ?? 1) - 1;
+      if (left > 0) {
+        closingFds.set(fd, left);
+      } else {
+        closingFds.delete(fd);
+      }
+    };
+    // Answered in order with the fd's data, and handled before the next message.
+    const id = nextCallId++;
+    pendingCalls.set(id, { resolve: confirmed, reject: confirmed });
+    scope.postMessage({ type: "call", id, op: "fd.close", args: [fd] });
+  };
   const exitListeners = new Map<number, ((status: ExitStatus) => void)[]>();
   const exitedChildren = new Map<number, ExitStatus>();
   const threadExitListeners = new Map<number, ((code: number) => void)[]>();
@@ -177,7 +205,13 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
     readFile: (path) => callSync("fs.readFile", path) as Uint8Array,
     writeFile: (path, data, flags, mode) => void callSync("fs.writeFile", path, data, flags, mode),
     open: (path, flags, mode) => callSync("fs.open", path, flags, mode) as number,
-    close: (fd) => void callSync("fs.close", fd),
+    close: (fd) => {
+      callSync("fs.close", fd);
+      // A pipe or terminal closed this way (the shell does) is a stream too.
+      if (streamedFds.has(fd)) {
+        forgetStream(fd);
+      }
+    },
     read: (fd, length, position) => callSync("fs.read", fd, length, position) as Uint8Array,
     readAsync: (fd, length, position) =>
       call("fs.read", fd, length, position) as Promise<Uint8Array>,
@@ -209,6 +243,7 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
     fdStream: {
       kind: (fd) => callSync("fd.kind", fd) as FdKind,
       readStart(fd, onChunk) {
+        streamedFds.add(fd);
         fdReaders.set(fd, onChunk);
         const backlog = fdBacklogs.get(fd);
         while (backlog && backlog.length > 0) {
@@ -250,23 +285,7 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
           post("fd.write", [fd, chunk]);
         }
       },
-      close(fd) {
-        fdReaders.delete(fd);
-        fdBacklogs.delete(fd);
-        closingFds.set(fd, (closingFds.get(fd) ?? 0) + 1);
-        const confirmed = () => {
-          const left = (closingFds.get(fd) ?? 1) - 1;
-          if (left > 0) {
-            closingFds.set(fd, left);
-          } else {
-            closingFds.delete(fd);
-          }
-        };
-        // Answered in order with the fd's data, and handled before the next message.
-        const id = nextCallId++;
-        pendingCalls.set(id, { resolve: confirmed, reject: confirmed });
-        scope.postMessage({ type: "call", id, op: "fd.close", args: [fd] });
-      },
+      close: forgetStream,
     },
 
     tty: {

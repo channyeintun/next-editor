@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { ProcessInit, ProcessMessage } from "../protocol";
 import { INITIAL_SYNC_BUFFER_BYTES } from "../protocol";
+import { encodePayload, writeSyncAnswer } from "../kernel/codec";
 import { createProcess } from "./node/process";
 import { createProcessClient } from "./sysClient";
 import { setRuntime } from "./runtime";
@@ -30,7 +31,18 @@ function makeClient() {
     terminal: { cols: 80, rows: 24 },
     ipc: null,
   };
-  const client = createProcessClient({ postMessage: (message) => sent.push(message) }, init);
+  const client = createProcessClient(
+    {
+      postMessage: (message) => {
+        sent.push(message);
+        if (message.type === "sync") {
+          // The kernel answers a blocking call in the shared buffer at once.
+          writeSyncAnswer(init.syncBuffer, true, encodePayload(undefined));
+        }
+      },
+    },
+    init,
+  );
   const posts = (op: string) =>
     sent.filter(
       (message): message is Extract<ProcessMessage, { type: "post" }> =>
@@ -133,6 +145,40 @@ describe("fd reuse", () => {
     client.receive(data(3, "child B"));
     expect(old).toEqual([]);
     expect(fresh).toEqual(["child B"]);
+  });
+
+  it("does the same for a stream closed as a file descriptor, as the shell closes its pipes", () => {
+    const { client, sent } = makeClient();
+    const fresh: (string | null)[] = [];
+    client.runtime.fdStream.readStart(3, () => {});
+    client.runtime.fdStream.readStop(3);
+    client.runtime.fs.close(3);
+    // The next pipe takes fd 3 at once, and its reader starts.
+    client.runtime.fdStream.readStart(3, (chunk) => fresh.push(chunk && decoder.decode(chunk)));
+    // The end of the old pipe, sent before the kernel saw the close.
+    client.receive(data(3, null));
+    expect(fresh).toEqual([]);
+    const marker = sent.find(
+      (message): message is Extract<ProcessMessage, { type: "call" }> =>
+        message.type === "call" && message.op === "fd.close",
+    );
+    expect(marker?.args).toEqual([3]);
+    // The fd is closed already, so the kernel refuses: that marks the same point.
+    client.receive({
+      type: "reply",
+      id: marker!.id,
+      ok: false,
+      error: { name: "Error", message: "EBADF: bad file descriptor, close", system: null },
+    } as never);
+    client.receive(data(3, "second pipe"));
+    client.receive(data(3, null));
+    expect(fresh).toEqual(["second pipe", null]);
+  });
+
+  it("asks nothing more of the kernel when a plain file is closed", () => {
+    const { client, sent } = makeClient();
+    client.runtime.fs.close(7);
+    expect(sent.filter((message) => message.type === "call")).toEqual([]);
   });
 });
 
