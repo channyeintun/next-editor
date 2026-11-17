@@ -86,7 +86,7 @@ describe("googleAuthRoute redirect callback", () => {
     expect(response.status).toBe(502);
     expect(await response.text()).toBe("OAuth error: Google token exchange failed (unreachable).");
     expect(tokenFetch.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
-    expect(response.headers.getSetCookie().join("\n")).not.toMatch(/ne_session=/);
+    expect(response.headers.getSetCookie().join("\n")).not.toMatch(/__Host-ne_session=/);
     expect(logged).toHaveBeenCalledOnce();
   });
 });

@@ -78,7 +78,9 @@ describe("passkey sign-in challenge", () => {
 
     expect(response.status).toBe(200);
     // The session cookie lives exactly as long as the session row.
-    expect(response.headers.get("set-cookie")).toContain("ne_session=session-1; Max-Age=2592000;");
+    expect(response.headers.get("set-cookie")).toContain(
+      "__Host-ne_session=session-1; Max-Age=2592000;",
+    );
   });
 
   it("refuses a challenge once it has expired, even though its signature is valid", async () => {

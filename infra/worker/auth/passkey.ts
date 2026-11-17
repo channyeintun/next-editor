@@ -20,7 +20,7 @@ import {
 } from "../../db/passkeyQueries";
 import { passkeyRowToSummary, userRowToAuthUser } from "../../db/types";
 import { requireRecentSignIn, requireUser } from "./requireUser";
-import { isHttps, startSession } from "./session";
+import { isHttps, signInCookiePrefix, startSession } from "./session";
 
 const RP_NAME = "Next Editor";
 // A WebAuthn registration or authentication response is a few KB at most.
@@ -91,8 +91,10 @@ async function setChallengeCookie<E extends { Bindings: Env }>(
     httpOnly: true,
     secure: isHttps(c),
     sameSite: "Lax",
+    // Over https the prefix widens this to "/", which `__Host-` requires.
     path: "/api/auth/passkey",
     maxAge: CHALLENGE_MAX_AGE_SECONDS,
+    prefix: signInCookiePrefix(c),
   });
 }
 
@@ -103,8 +105,9 @@ async function takeChallengeCookie<E extends { Bindings: Env }>(
   c: Context<E>,
   purpose: ChallengePayload["purpose"],
 ): Promise<ChallengePayload | null> {
-  const raw = await getSignedCookie(c, c.env.SESSION_SECRET, CHALLENGE_COOKIE);
-  deleteCookie(c, CHALLENGE_COOKIE, { path: "/api/auth/passkey" });
+  const prefix = signInCookiePrefix(c);
+  const raw = await getSignedCookie(c, c.env.SESSION_SECRET, CHALLENGE_COOKIE, prefix);
+  deleteCookie(c, CHALLENGE_COOKIE, { path: "/api/auth/passkey", prefix });
   if (!raw) return null;
   try {
     const payload = JSON.parse(raw) as ChallengePayload;

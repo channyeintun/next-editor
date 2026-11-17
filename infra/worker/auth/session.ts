@@ -14,7 +14,8 @@ import {
 } from "../../db/queries";
 import { type SessionRow, userRowToAuthUser } from "../../db/types";
 
-export const SESSION_COOKIE = "ne_session";
+/** The session cookie's name, before the prefix it carries over https (signInCookiePrefix). */
+const SESSION_COOKIE = "ne_session";
 // A username change carries one short username.
 const MAX_USERNAME_REQUEST_BYTES = 1024;
 
@@ -25,6 +26,28 @@ const MAX_USERNAME_REQUEST_BYTES = 1024;
  */
 export function isHttps(c: Context): boolean {
   return new URL(c.req.url).protocol === "https:";
+}
+
+/**
+ * The prefix every sign-in cookie carries over https: `__Host-`. A browser
+ * takes a `__Host-` cookie only from this host itself, with no Domain, so a
+ * page on a subdomain cannot set one that reaches this host. Subdomains run
+ * lesson code (the webnode hosts, webnodePreviewHost.ts); without the prefix
+ * that code could set a `Domain=` cookie of the same name and have the
+ * visitor's requests carry the attacker's session, or plant a sign-in
+ * handshake. The prefix needs Secure, so plain http (local development) goes
+ * without it.
+ *
+ * Only the prefixed name is read over https: falling back to the bare name
+ * would let a subdomain's cookie through again.
+ */
+export function signInCookiePrefix(c: Context): "host" | undefined {
+  return isHttps(c) ? "host" : undefined;
+}
+
+/** The id in this request's session cookie, if it has one. */
+export function sessionCookieValue(c: Context): string | undefined {
+  return getCookie(c, SESSION_COOKIE, signInCookiePrefix(c));
 }
 
 // Plain (unsigned) opaque token — it's validated against the sessions table on
@@ -39,6 +62,7 @@ function setSessionCookie(c: Context, session: SessionRow): void {
     sameSite: "Lax",
     path: "/",
     maxAge: Math.floor((session.expires_at - session.created_at) / 1000),
+    prefix: signInCookiePrefix(c),
   });
 }
 
@@ -53,14 +77,14 @@ export async function startSession<E extends { Bindings: Env }>(
   userId: string,
 ): Promise<SessionRow> {
   const session = await createSession(c.env.DB, userId, {
-    replaces: getCookie(c, SESSION_COOKIE),
+    replaces: sessionCookieValue(c),
   });
   setSessionCookie(c, session);
   return session;
 }
 
 export function clearSessionCookie(c: Context): void {
-  deleteCookie(c, SESSION_COOKIE, { path: "/" });
+  deleteCookie(c, SESSION_COOKIE, { path: "/", prefix: signInCookiePrefix(c) });
 }
 
 /**
@@ -71,7 +95,7 @@ export function clearSessionCookie(c: Context): void {
 export async function getCurrentSession<E extends { Bindings: Env }>(
   c: Context<E>,
 ): Promise<LiveSession | null> {
-  const sessionId = getCookie(c, SESSION_COOKIE);
+  const sessionId = sessionCookieValue(c);
   if (!sessionId) return null;
   return getLiveSession(c.env.DB, sessionId);
 }
@@ -120,7 +144,7 @@ authRoute.patch("/username", async (c) => {
 });
 
 authRoute.post("/logout", async (c) => {
-  const sessionId = getCookie(c, SESSION_COOKIE);
+  const sessionId = sessionCookieValue(c);
   if (sessionId) {
     await deleteSession(c.env.DB, sessionId);
   }

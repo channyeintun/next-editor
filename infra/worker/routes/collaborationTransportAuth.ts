@@ -1,7 +1,6 @@
 import type { Context } from "hono";
-import { getCookie } from "hono/cookie";
 import type { UserRow } from "../../db/types";
-import { getCurrentUser, SESSION_COOKIE } from "../auth/session";
+import { getCurrentUser, sessionCookieValue } from "../auth/session";
 import type { Env } from "../env";
 
 // What a collaboration transport (the room socket, the voice socket and the
@@ -44,7 +43,7 @@ export function isAllowedCollaborationOrigin<E extends { Bindings: Env }>(c: Con
 export async function currentTransportUser<E extends { Bindings: Env }>(
   c: Context<E>,
 ): Promise<{ user: UserRow; authSessionId: string } | null> {
-  const authSessionId = getCookie(c, SESSION_COOKIE);
+  const authSessionId = sessionCookieValue(c);
   if (!authSessionId) return null;
   const user = await getCurrentUser(c);
   return user ? { user, authSessionId } : null;

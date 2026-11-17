@@ -57,7 +57,7 @@ function request(
   executionCtx?: ExecutionContext,
 ) {
   const headers = new Headers(init.headers);
-  headers.set("Cookie", "ne_session=session-1");
+  headers.set("Cookie", "__Host-ne_session=session-1");
   return studioRoute.request(
     `https://nexteditor.dev${path}`,
     { ...init, headers },

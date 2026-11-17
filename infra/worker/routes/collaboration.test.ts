@@ -26,8 +26,8 @@ import {
 import type { Env } from "../env";
 import { collaborationRoute } from "./collaboration";
 
-vi.mock("../auth/session", () => ({
-  SESSION_COOKIE: "ne_session",
+vi.mock("../auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../auth/session")>()),
   getCurrentUser: vi.fn<typeof getCurrentUser>(),
 }));
 
@@ -544,7 +544,10 @@ describe("GET /rooms/:roomId/websocket", () => {
 
   const AUTH_SESSION_ID = "50000000-0000-4000-8000-000000000001";
 
-  function upgrade(origin: string | null, cookie: string | null = `ne_session=${AUTH_SESSION_ID}`) {
+  function upgrade(
+    origin: string | null,
+    cookie: string | null = `__Host-ne_session=${AUTH_SESSION_ID}`,
+  ) {
     return collaborationRoute.request(
       `https://nexteditor.dev/rooms/${ROOM_ID}/websocket?${SOCKET_QUERY}`,
       {

@@ -64,7 +64,7 @@ function sessionIds(): string[] {
 function challengeCookie(response: Response): string {
   const cookie = response.headers
     .getSetCookie()
-    .find((value) => value.startsWith("ne_webauthn="))
+    .find((value) => value.startsWith("__Host-ne_webauthn="))
     ?.split(";")[0];
   if (!cookie) throw new Error("expected a challenge cookie");
   return cookie;
@@ -73,7 +73,7 @@ function challengeCookie(response: Response): string {
 function registerOptions(sessionId: string) {
   return passkeyRoute.request(
     `${ORIGIN}/register/options`,
-    { method: "POST", headers: { cookie: `ne_session=${sessionId}` } },
+    { method: "POST", headers: { cookie: `__Host-ne_session=${sessionId}` } },
     env,
   );
 }
@@ -84,7 +84,7 @@ function registerVerify(sessionId: string, challenge: string, credentialId = "cr
     {
       method: "POST",
       headers: {
-        cookie: `ne_session=${sessionId}; ${challenge}`,
+        cookie: `__Host-ne_session=${sessionId}; ${challenge}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({ id: credentialId, response: {} }),
@@ -109,7 +109,7 @@ async function signInWithPasskey(credentialId: string) {
 function removePasskey(sessionId: string, credentialId: string) {
   return passkeyRoute.request(
     `${ORIGIN}/credentials/${encodeURIComponent(credentialId)}`,
-    { method: "DELETE", headers: { cookie: `ne_session=${sessionId}` } },
+    { method: "DELETE", headers: { cookie: `__Host-ne_session=${sessionId}` } },
     env,
   );
 }
@@ -160,7 +160,7 @@ describe("adding a passkey", () => {
 
     expect(options.status).toBe(403);
     expect(await options.json()).toMatchObject({ reauthenticate: true });
-    expect(options.headers.getSetCookie().join("\n")).not.toMatch(/ne_webauthn=/);
+    expect(options.headers.getSetCookie().join("\n")).not.toMatch(/__Host-ne_webauthn=/);
   });
 
   it("refuses the verify step from an old session even with a valid challenge", async () => {
@@ -200,7 +200,7 @@ describe("removing a passkey", () => {
     expect(passkeyIds()).toEqual([]);
     const signIn = await signInWithPasskey("cred-x");
     expect(signIn.status).toBe(400);
-    expect(signIn.headers.getSetCookie().join("\n")).not.toMatch(/ne_session=/);
+    expect(signIn.headers.getSetCookie().join("\n")).not.toMatch(/__Host-ne_session=/);
   });
 
   it("answers 404 for another account's passkey and leaves it in place", async () => {
@@ -235,13 +235,13 @@ describe("signing out everywhere", () => {
 
     const response = await authRoute.request(
       `${ORIGIN}/logout-everywhere`,
-      { method: "POST", headers: { cookie: "ne_session=s-here" } },
+      { method: "POST", headers: { cookie: "__Host-ne_session=s-here" } },
       env,
     );
 
     expect(response.status).toBe(200);
     expect(sessionIds()).toEqual(["s-other-account"]);
-    expect(response.headers.getSetCookie().join("\n")).toMatch(/ne_session=;/);
+    expect(response.headers.getSetCookie().join("\n")).toMatch(/__Host-ne_session=;/);
   });
 
   it("needs a session", async () => {

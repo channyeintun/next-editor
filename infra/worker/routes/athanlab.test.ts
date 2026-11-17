@@ -63,7 +63,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
 
 function call(path: string, env: Env, init: RequestInit = { method: "GET" }) {
   const headers = new Headers(init.headers);
-  headers.set("Cookie", `ne_session=${SESSION_ID}`);
+  headers.set("Cookie", `__Host-ne_session=${SESSION_ID}`);
   return athanlabRoute.request(`https://nexteditor.dev${path}`, { ...init, headers }, env);
 }
 
@@ -83,7 +83,7 @@ function postTts(env: Env, body: unknown = { text: `  ${TEXT}\n`, voiceId: VOICE
       headers: {
         "Content-Type": "application/json",
         Accept: "audio/wav",
-        Cookie: `ne_session=${SESSION_ID}`,
+        Cookie: `__Host-ne_session=${SESSION_ID}`,
       },
       body: typeof body === "string" ? body : JSON.stringify(body),
     },
@@ -717,7 +717,10 @@ describe("PUT /api/studio/athanlab/key", () => {
           "https://nexteditor.dev/key",
           {
             method: "PUT",
-            headers: { "Content-Type": "application/json", Cookie: `ne_session=session-${user}` },
+            headers: {
+              "Content-Type": "application/json",
+              Cookie: `__Host-ne_session=session-${user}`,
+            },
             body: JSON.stringify({ apiKey: `ak_live_${index.toString(16).padStart(32, "0")}` }),
           },
           env,
@@ -747,7 +750,10 @@ describe("PUT /api/studio/athanlab/key", () => {
         "https://nexteditor.dev/key",
         {
           method: "PUT",
-          headers: { "Content-Type": "application/json", Cookie: `ne_session=session-${user}` },
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: `__Host-ne_session=session-${user}`,
+          },
           body: JSON.stringify({ apiKey }),
         },
         env,

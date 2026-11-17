@@ -17,7 +17,7 @@ function patchUsername(body: string) {
     {
       method: "PATCH",
       body,
-      headers: { cookie: "ne_session=session-1", "content-type": "application/json" },
+      headers: { cookie: "__Host-ne_session=session-1", "content-type": "application/json" },
     },
     env,
   );

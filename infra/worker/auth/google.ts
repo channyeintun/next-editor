@@ -5,7 +5,7 @@ import { isJsonObject, readJsonWithLimit } from "../httpBody";
 import { upsertUserByGoogleSub, type UpsertUserResult } from "../../db/queries";
 import { userRowToAuthUser } from "../../db/types";
 import { base64UrlDecodeToBytes, base64UrlEncode, randomBase64Url } from "../base64url";
-import { isHttps, startSession } from "./session";
+import { isHttps, signInCookiePrefix, startSession } from "./session";
 import {
   googleIdentityFromClaims,
   verifyGoogleIdToken,
@@ -163,8 +163,10 @@ googleAuthRoute.get("/login", async (c) => {
     httpOnly: true,
     secure: isHttps(c),
     sameSite: "Lax",
+    // Over https the prefix widens this to "/", which `__Host-` requires.
     path: "/api/auth/google",
     maxAge: HANDSHAKE_MAX_AGE_SECONDS,
+    prefix: signInCookiePrefix(c),
   });
 
   const authUrl = new URL(GOOGLE_AUTH_URL);
@@ -182,8 +184,9 @@ googleAuthRoute.get("/login", async (c) => {
 googleAuthRoute.get("/callback", async (c) => {
   const code = c.req.query("code");
   const returnedState = c.req.query("state");
-  const handshakeJson = await getSignedCookie(c, c.env.SESSION_SECRET, HANDSHAKE_COOKIE);
-  deleteCookie(c, HANDSHAKE_COOKIE, { path: "/api/auth/google" });
+  const prefix = signInCookiePrefix(c);
+  const handshakeJson = await getSignedCookie(c, c.env.SESSION_SECRET, HANDSHAKE_COOKIE, prefix);
+  deleteCookie(c, HANDSHAKE_COOKIE, { path: "/api/auth/google", prefix });
 
   if (!code || !returnedState || !handshakeJson) {
     return c.text(

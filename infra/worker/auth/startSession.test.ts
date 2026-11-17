@@ -61,7 +61,7 @@ describe("startSession", () => {
     insertLiveSession("s-old", "u1");
     insertLiveSession("s-other-device", "u1");
 
-    const fresh = await signIn("u1", "ne_session=s-old");
+    const fresh = await signIn("u1", "__Host-ne_session=s-old");
 
     expect(sessionIds()).toEqual([fresh, "s-other-device"].sort());
   });
@@ -71,7 +71,7 @@ describe("startSession", () => {
   it("ends it when the browser signs in to another account", async () => {
     insertLiveSession("s-old", "u1");
 
-    const fresh = await signIn("u2", "ne_session=s-old");
+    const fresh = await signIn("u2", "__Host-ne_session=s-old");
 
     expect(sessionIds()).toEqual([fresh]);
   });
