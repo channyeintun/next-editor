@@ -96,6 +96,30 @@ describe("readOverrides", () => {
       }),
     ).toEqual({ a: "1.0.0", react: "^19.0.0", d: "npm:e@2", h: "3.0.0" });
   });
+
+  it("reads a nested override's own `.` and warns about each form it cannot apply", () => {
+    const warnings: string[] = [];
+    expect(
+      readOverrides(
+        {
+          overrides: {
+            "react-scripts": { typescript: "^5" },
+            b: { ".": "2.0.0" },
+            "nth-check@<2": "2.1.1",
+          },
+          pnpm: { overrides: { "react-scripts>typescript": "^5" } },
+          resolutions: { "a/b": "1" },
+        },
+        (message) => warnings.push(message),
+      ),
+    ).toEqual({ b: "2.0.0" });
+    expect(warnings).toEqual([
+      'resolutions: "a/b" is not applied (only a plain package name is supported)',
+      'pnpm.overrides: "react-scripts>typescript" is not applied (only a plain package name is supported)',
+      'overrides: "react-scripts" > "typescript" is not applied (only a plain package name is supported)',
+      'overrides: "nth-check@<2" is not applied (only a plain package name is supported)',
+    ]);
+  });
 });
 
 describe("resolveDependencies", () => {

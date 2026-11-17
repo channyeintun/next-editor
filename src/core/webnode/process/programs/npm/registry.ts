@@ -81,6 +81,10 @@ export interface RegistryOptions {
   retries?: number;
   /** The wait before the first retry, in milliseconds; it doubles for each one after. */
   retryDelayMs?: number;
+  /** How long a packument or version request may wait for headers or the next bytes (ms). */
+  packumentTimeoutMs?: number;
+  /** The same for a tarball (ms). */
+  tarballTimeoutMs?: number;
 }
 
 /**
@@ -89,6 +93,13 @@ export interface RegistryOptions {
  * install of hundreds of requests.
  */
 const RETRY_DELAY_MS = 300;
+
+/**
+ * A stalled connection otherwise leaves an install waiting forever. The clock
+ * restarts whenever bytes arrive, so a large tarball on a slow link is not cut off.
+ */
+const PACKUMENT_TIMEOUT_MS = 30_000;
+const TARBALL_TIMEOUT_MS = 120_000;
 
 /** The registry used when the environment names none. */
 export const DEFAULT_REGISTRY = "https://registry.npmjs.org";
@@ -140,22 +151,42 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
   const versions = new Map<string, Promise<PackageVersion | null>>();
   const cache = options.cache ?? null;
 
-  async function request(url: string, init: RequestInit, what: string): Promise<Response> {
+  const packumentTimeoutMs = options.packumentTimeoutMs ?? PACKUMENT_TIMEOUT_MS;
+  const tarballTimeoutMs = options.tarballTimeoutMs ?? TARBALL_TIMEOUT_MS;
+
+  /**
+   * GETs `url` and reads its whole body. One attempt is the request and the
+   * body together, so a connection that drops mid-body is retried like one
+   * that fails outright.
+   */
+  async function request(
+    url: string,
+    init: RequestInit,
+    what: string,
+    timeoutMs: number,
+  ): Promise<Uint8Array> {
     let lastError: unknown = null;
     for (let attempt = 0; attempt <= retries; attempt++) {
       if (attempt > 0 && retryDelayMs > 0) {
         const delay = retryDelayMs * 2 ** (attempt - 1);
         await new Promise<void>((resolve) => setTimeout(resolve, delay));
       }
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const restartTimer = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => controller.abort(), timeoutMs);
+      };
+      restartTimer();
       try {
-        const response = await options.fetch(url, init);
+        const response = await options.fetch(url, { ...init, signal: controller.signal });
         if (response.status === 404) {
           throw new PmError("E404", `GET ${url}: Not Found - 404`, [
             `${what} is not in this registry.`,
           ]);
         }
         if (response.ok) {
-          return response;
+          return await readBody(response, restartTimer, controller.signal);
         }
         lastError = new PmError(
           "EFETCH",
@@ -168,7 +199,11 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
         if (error instanceof PmError && error.code === "E404") {
           throw error;
         }
-        lastError = error;
+        lastError = controller.signal.aborted
+          ? new PmError("EFETCH", `GET ${url}: timed out after ${timeoutMs / 1000} s`)
+          : error;
+      } finally {
+        clearTimeout(timer);
       }
     }
     if (lastError instanceof PmError) {
@@ -183,7 +218,7 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
     if (!pending) {
       const url = packumentUrl(registry, name);
       pending = packumentLimit(async () => {
-        const response = await request(
+        const body = await request(
           url,
           {
             headers: {
@@ -191,11 +226,11 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
             },
           },
           `'${name}'`,
+          packumentTimeoutMs,
         );
-        const text = await response.text();
         let parsed: unknown;
         try {
-          parsed = JSON.parse(text);
+          parsed = JSON.parse(new TextDecoder().decode(body));
         } catch {
           throw new PmError("EJSONPARSE", `Invalid packument for ${name} from ${url}`);
         }
@@ -217,12 +252,13 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
     if (!pending) {
       const url = `${packumentUrl(registry, name)}/${encodeURIComponent(versionOrTag)}`;
       pending = packumentLimit(async () => {
-        let response: Response;
+        let body: Uint8Array;
         try {
-          response = await request(
+          body = await request(
             url,
             { headers: { accept: "application/json" } },
             `'${name}@${versionOrTag}'`,
+            packumentTimeoutMs,
           );
         } catch (error) {
           if (error instanceof PmError && error.code === "E404") {
@@ -232,7 +268,7 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
         }
         let document: Partial<PackageVersion>;
         try {
-          document = (await response.json()) as Partial<PackageVersion>;
+          document = JSON.parse(new TextDecoder().decode(body)) as Partial<PackageVersion>;
         } catch {
           throw new PmError("EJSONPARSE", `Invalid version document for ${memo} from ${url}`);
         }
@@ -266,8 +302,8 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
             // A broken cache is not fatal; fall through to the network.
           }
         }
-        const response = await request(url, {}, `The tarball ${url}`);
-        return { bytes: new Uint8Array(await response.arrayBuffer()), cached: false };
+        const bytes = await request(url, {}, `The tarball ${url}`, tarballTimeoutMs);
+        return { bytes, cached: false };
       });
     },
     async remember(url, bytes) {
@@ -291,6 +327,56 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
       }
     },
   };
+}
+
+/**
+ * Reads a response body, calling `progress` for each chunk (which restarts the
+ * request's timeout). An aborted `signal` ends the read even when the body
+ * stream does not notice the abort itself.
+ */
+async function readBody(
+  response: Response,
+  progress: () => void,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  if (!response.body) {
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  const reader = response.body.getReader();
+  const aborted = new Promise<never>((_resolve, reject) => {
+    const fail = () => reject(signal.reason);
+    if (signal.aborted) {
+      fail();
+    }
+    signal.addEventListener("abort", fail, { once: true });
+  });
+  aborted.catch(() => {});
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) {
+        break;
+      }
+      chunks.push(value);
+      length += value.length;
+      progress();
+    }
+  } catch (error) {
+    reader.cancel().catch(() => {});
+    throw error;
+  }
+  if (chunks.length === 1) {
+    return chunks[0];
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return bytes;
 }
 
 /** The fields the installer reads, from a full version document. */

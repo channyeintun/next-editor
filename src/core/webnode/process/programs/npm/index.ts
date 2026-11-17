@@ -140,8 +140,9 @@ async function withManifestChange(session: Session, dir: string, next: Manifest)
 }
 
 async function add(session: Session, command: Extract<Command, { kind: "add" }>): Promise<number> {
-  const dir = projectDir(session);
   const fs = runtime().fs;
+  // With no package.json above, the package starts a project in the working directory.
+  const dir = findProjectDir(fs, session.cwd) ?? session.cwd;
   const registry = await session.registry();
   const entries: Record<string, string> = {};
   await Promise.all(

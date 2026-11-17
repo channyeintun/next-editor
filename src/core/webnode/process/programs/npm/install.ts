@@ -11,6 +11,7 @@ import { linkBins, nodeModulesOf } from "./bins";
 import type { InstalledPackage } from "./bins";
 import { PmError } from "./errors";
 import { hoist } from "./hoist";
+import type { Layout } from "./hoist";
 import { sha256Hex, verifyIntegrity } from "./integrity";
 import { readManifest, rootDependencies } from "./manifest";
 import type { Manifest } from "./manifest";
@@ -26,7 +27,7 @@ import type { TarEntry } from "./tar";
 
 /** The state file the installer keeps in node_modules (never a lockfile in the project). */
 export const LOCK_NAME = ".webnode-lock.json";
-const STAGING_NAME = ".webnode-staging";
+export const STAGING_NAME = ".webnode-staging";
 const LOCK_VERSION = 1;
 /** The root project's install lifecycle, in the order npm runs it. */
 const ROOT_SCRIPTS = ["preinstall", "install", "postinstall", "prepare"];
@@ -222,6 +223,8 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
         installed.set(entry.name, entry.version);
       }
     }
+    // Staging left by an install that failed (or was killed) holds no package.
+    fs.rm(staging, true, true);
     if (!quiet) {
       reporter.upToDate(Date.now() - started, Object.keys(oldLock!.packages).length);
     }
@@ -262,6 +265,8 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
   };
   const downloads = new Map<string, Promise<Manifest>>();
   const failures: unknown[] = [];
+  /** Set when resolving fails: a download still in flight then extracts nothing. */
+  let abandoned = false;
 
   const fetchPackage = async (node: ResolvedNode): Promise<Manifest> => {
     const { tarball, integrity, shasum } = node.manifest.dist;
@@ -308,6 +313,9 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
         `Could not read the tarball of ${node.source}@${node.version}: ${String(error)}`,
       );
     }
+    if (abandoned) {
+      return {};
+    }
     writeEntries(fs, join(staging, stagingKey(node.key)), entries);
     const packageJson = entries.find((entry) => entry.path === "package.json");
     if (!packageJson) {
@@ -320,32 +328,42 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     }
   };
 
-  const graph = await resolveDependencies({
-    registry,
-    dependencies: directs,
-    overrides: readOverrides(manifest),
-    warn: (message) => reporter.warn(message),
-    onResolved: (node) => {
-      counts.resolved++;
-      if (onDisk.has(node.key)) {
-        counts.reused++;
-      } else {
-        const pending = fetchPackage(node);
-        pending.catch((error: unknown) => failures.push(error));
-        downloads.set(node.key, pending);
-      }
-      progress();
-    },
-  });
-  if (!quiet) {
-    reporter.step(2);
-  }
-
-  const layout = hoist(graph);
-  for (const location of layout.keys()) {
-    if (!isPackageLocation(location)) {
-      throw new PmError("EOTHER", `Refusing to install outside node_modules: ${location}`);
+  let layout: Layout;
+  let graph: Awaited<ReturnType<typeof resolveDependencies>>;
+  try {
+    graph = await resolveDependencies({
+      registry,
+      dependencies: directs,
+      overrides: readOverrides(manifest, (message) => reporter.warn(message)),
+      warn: (message) => reporter.warn(message),
+      onResolved: (node) => {
+        counts.resolved++;
+        if (onDisk.has(node.key)) {
+          counts.reused++;
+        } else {
+          const pending = fetchPackage(node);
+          pending.catch((error: unknown) => failures.push(error));
+          downloads.set(node.key, pending);
+        }
+        progress();
+      },
+    });
+    if (!quiet) {
+      reporter.step(2);
     }
+
+    layout = hoist(graph);
+    for (const location of layout.keys()) {
+      if (!isPackageLocation(location)) {
+        throw new PmError("EOTHER", `Refusing to install outside node_modules: ${location}`);
+      }
+    }
+  } catch (error) {
+    // Downloads started for the packages resolved so far: they extract
+    // nothing more, and what they extracted goes now.
+    abandoned = true;
+    fs.rm(staging, true, true);
+    throw error;
   }
 
   // A location is kept when the same package is already there and so is every

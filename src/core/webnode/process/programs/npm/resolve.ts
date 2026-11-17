@@ -33,6 +33,8 @@ export interface ResolvedNode {
   dependencies: Map<string, string>;
   /** Dependency name → the range it was requested with (after overrides). */
   ranges: Map<string, string>;
+  /** The dependency names linked as peers to a dependent's copy (see linkPeers). */
+  peers: Set<string>;
 }
 
 /** The project's own dependency on a package. */
@@ -137,8 +139,16 @@ export function pickVersion(
   return maxSatisfying(Object.keys(versions), spec.range);
 }
 
-/** Reads the simple `name → spec` forms of `overrides`, `pnpm.overrides` and `resolutions`. */
-export function readOverrides(manifest: Record<string, unknown>): Record<string, string> {
+/**
+ * Reads the simple `name → spec` forms of `overrides`, `pnpm.overrides` and
+ * `resolutions`, and an npm nested override's own `"."`. A form scoped to a
+ * parent or a version (`a>b`, `a/b`, `{ a: { b } }`, `a@<2`) is not applied,
+ * and `warn` says so for each one, so the tree never differs silently.
+ */
+export function readOverrides(
+  manifest: Record<string, unknown>,
+  warn: (message: string) => void = () => {},
+): Record<string, string> {
   const result: Record<string, string> = {};
   const direct: Record<string, string> = {};
   for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) {
@@ -147,13 +157,31 @@ export function readOverrides(manifest: Record<string, unknown>): Record<string,
       Object.assign(direct, deps);
     }
   }
-  const add = (table: unknown, keyFilter: (key: string) => string | null) => {
+  const ignored = (field: string, key: string) =>
+    warn(`${field}: ${key} is not applied (only a plain package name is supported)`);
+  const add = (field: string, table: unknown, keyFilter: (key: string) => string | null) => {
     if (!table || typeof table !== "object") {
       return;
     }
-    for (const [rawKey, value] of Object.entries(table as Record<string, unknown>)) {
+    for (const [rawKey, raw] of Object.entries(table as Record<string, unknown>)) {
       const key = keyFilter(rawKey);
-      if (key === null || typeof value !== "string") {
+      let value = raw;
+      if (raw && typeof raw === "object") {
+        // npm's nested form: `"."` is the package's own override, the other
+        // keys apply only below it.
+        const nested = raw as Record<string, unknown>;
+        value = nested["."];
+        for (const child of Object.keys(nested)) {
+          if (child !== ".") {
+            ignored(field, `"${rawKey}" > "${child}"`);
+          }
+        }
+      }
+      if (key === null) {
+        ignored(field, `"${rawKey}"`);
+        continue;
+      }
+      if (typeof value !== "string") {
         continue;
       }
       result[key] = value.startsWith("$") ? (direct[value.slice(1)] ?? value) : value;
@@ -161,9 +189,9 @@ export function readOverrides(manifest: Record<string, unknown>): Record<string,
   };
   const plainName = (key: string) => (/^(@[^/@]+\/)?[^/@>]+$/.test(key) ? key : null);
   const pnpm = manifest.pnpm as { overrides?: unknown } | undefined;
-  add(manifest.resolutions, (key) => plainName(key.replace(/^\*\*\//, "")));
-  add(pnpm?.overrides, plainName);
-  add(manifest.overrides, plainName);
+  add("resolutions", manifest.resolutions, (key) => plainName(key.replace(/^\*\*\//, "")));
+  add("pnpm.overrides", pnpm?.overrides, plainName);
+  add("overrides", manifest.overrides, plainName);
   return result;
 }
 
@@ -407,6 +435,7 @@ export async function resolveDependencies(options: ResolveOptions): Promise<Reso
       manifest,
       dependencies: new Map(),
       ranges: new Map(),
+      peers: new Set(),
     };
     nodes.set(key, node);
     options.onResolved?.(node);
@@ -504,6 +533,7 @@ export async function resolveDependencies(options: ResolveOptions): Promise<Reso
         if (provided !== undefined && provided !== key) {
           node.dependencies.set(peer, provided);
           node.ranges.set(peer, range);
+          node.peers.add(peer);
         }
       }
     }

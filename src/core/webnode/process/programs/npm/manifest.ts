@@ -110,15 +110,34 @@ function sorted(record: Record<string, string>): Record<string, string> {
   );
 }
 
+/** The list an already-listed name stays in when no save flag is given (npm's inferSaveType). */
+function listedType(manifest: Manifest, name: string): SaveType {
+  for (const type of ["dev", "optional", "prod"] as const) {
+    const list = manifest[FIELDS[type]];
+    if (list && typeof list === "object" && name in list) {
+      return type;
+    }
+  }
+  return "prod";
+}
+
 /**
  * Records `entries` (name → spec) in the `type` list, removing the name from
- * the other install lists. Returns a new manifest.
+ * the other install lists. With no `type`, each name goes to the list that
+ * already has it, else to `dependencies`. Returns a new manifest.
  */
 export function addToManifest(
   manifest: Manifest,
   entries: Record<string, string>,
-  type: SaveType,
+  type: SaveType | null,
 ): Manifest {
+  if (type === null) {
+    let next = manifest;
+    for (const [name, spec] of Object.entries(entries)) {
+      next = addToManifest(next, { [name]: spec }, listedType(manifest, name));
+    }
+    return next;
+  }
   const next: Manifest = { ...manifest };
   for (const other of ["prod", "dev", "optional"] as const) {
     if (other === type) {

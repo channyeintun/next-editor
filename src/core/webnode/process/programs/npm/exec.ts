@@ -8,7 +8,7 @@ import { binEntries } from "./bins";
 import { splitSpec } from "./cli";
 import type { ExecMode } from "./cli";
 import { PmError } from "./errors";
-import { assertPackageName } from "./names";
+import { assertPackageName, packageNameProblem } from "./names";
 import { install } from "./install";
 import { readManifest, writeManifest } from "./manifest";
 import type { Manifest } from "./manifest";
@@ -133,6 +133,28 @@ export function defaultBin(manifest: Manifest, packageName: string): string | nu
   return match ? match[0] : null;
 }
 
+/**
+ * The bin of `name` when the package is installed in a node_modules from
+ * `cwd` upward (`npx @tailwindcss/cli` in a project that has it), or null.
+ */
+function findLocalPackageBin(cwd: string, name: string): string | null {
+  const fs = runtime().fs;
+  for (const dir of binDirs(cwd)) {
+    const packageDir = join(dir, "..", name);
+    if (!fs.exists(join(packageDir, "package.json"))) {
+      continue;
+    }
+    let bin: string | null = null;
+    try {
+      bin = defaultBin(readManifest(fs, packageDir), name);
+    } catch {
+      // A broken package.json: install a fresh copy instead.
+    }
+    return bin !== null && fs.exists(join(dir, bin)) ? join(dir, bin) : null;
+  }
+  return null;
+}
+
 function notFound(context: ExecContext, command: string): PmError {
   const tool = context.reporter.tool;
   if (tool === "npm") {
@@ -175,7 +197,17 @@ export async function runExec(context: ExecContext, request: ExecRequest): Promi
     if (local) {
       return run(local, withLocal);
     }
-    if (request.command.includes("/") || onPath(request.command, base.PATH ?? DEFAULT_PATH)) {
+    // A `/` makes the command a path, unless it is a scoped package name (`@scope/cli`).
+    const spec = splitSpec(request.command);
+    if (request.command.includes("/") && packageNameProblem(spec.name) === null) {
+      const bin = spec.range === null ? findLocalPackageBin(cwd, spec.name) : null;
+      if (bin) {
+        return run(bin, withLocal);
+      }
+    } else if (
+      request.command.includes("/") ||
+      onPath(request.command, base.PATH ?? DEFAULT_PATH)
+    ) {
       return run(request.command, withLocal);
     }
     if (request.mode === "local") {

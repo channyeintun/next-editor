@@ -120,6 +120,31 @@ describe("add and remove", () => {
     expect(manifest()).toEqual({ devDependencies: { react: "18.3.1", vite: "5.4.21" } });
   });
 
+  it("keeps a name in its own list when no save flag is given", async () => {
+    const { pm, manifest, fake } = await setup({
+      dependencies: { react: "^18.0.0" },
+      devDependencies: { vite: "^5.0.0" },
+    });
+    await fake.add({ name: "vite", version: "6.0.0" });
+    expect(await pm("npm", "install", "vite@latest", "cowsay")).toBe(0);
+    expect(manifest()).toEqual({
+      dependencies: { cowsay: "^1.6.0", react: "^18.0.0" },
+      devDependencies: { vite: "^6.0.0" },
+    });
+    expect(await pm("pnpm", "add", "--save-prod", "vite")).toBe(0);
+    expect(manifest()).toEqual({
+      dependencies: { cowsay: "^1.6.0", react: "^18.0.0", vite: "^6.0.0" },
+    });
+  });
+
+  it("starts a project when adding a package where there is no package.json", async () => {
+    for (const tool of ["npm", "pnpm"]) {
+      const { pm, manifest } = await setup(null);
+      expect(await pm(tool, tool === "npm" ? "install" : "add", "react@18")).toBe(0);
+      expect(manifest()).toEqual({ dependencies: { react: "^18.3.1" } });
+    }
+  });
+
   it("removes dependencies and their files", async () => {
     const { rt, pm, manifest } = await setup({ dependencies: { react: "19.0.0", vite: "5.4.21" } });
     await pm("pnpm", "install");
@@ -179,7 +204,7 @@ describe("run", () => {
   };
 
   it("runs a script through sh with the lifecycle environment and pnpm's header", async () => {
-    const { rt, pm, spawned } = await setup(manifest);
+    const { rt, pm, spawned } = await setup({ ...manifest, scripts: { dev: "vite" } });
     expect(await pm("pnpm", "dev", "--port", "3000")).toBe(0);
     expect(spawned).toHaveLength(1);
     const [request] = spawned;
@@ -207,7 +232,7 @@ describe("run", () => {
     expect(rt.stdout()).toBe("\n> app@1.2.3 dev /project\n> vite --port 3000\n\n");
   });
 
-  it("runs pre and post scripts for npm and yarn, not pnpm", async () => {
+  it("runs pre and post scripts for every tool", async () => {
     const npm = await setup(manifest);
     await npm.pm("npm", "run", "dev");
     expect(npm.spawned.map((request) => request.args[1])).toEqual([
@@ -226,9 +251,20 @@ describe("run", () => {
     expect(yarn.rt.stdout()).toMatch(
       /^yarn run v1\.22\.22\n\$ echo pre\n\$ vite\n\$ echo post\nDone in/,
     );
-    const pnpm = await setup(manifest);
-    await pnpm.pm("pnpm", "run", "dev");
-    expect(pnpm.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    // pnpm (since v8) and bun run the hooks too, for `run` and for a bare script name.
+    for (const argv of [
+      ["pnpm", "run", "dev"],
+      ["pnpm", "dev"],
+      ["bun", "run", "dev"],
+    ]) {
+      const other = await setup(manifest);
+      await other.pm(...argv);
+      expect(other.spawned.map((request) => request.args[1])).toEqual([
+        "echo pre",
+        "vite",
+        "echo post",
+      ]);
+    }
   });
 
   it("returns the script's exit status", async () => {
@@ -307,6 +343,39 @@ describe("exec", () => {
     expect(rt.fs.exists("/project/node_modules")).toBe(false);
   });
 
+  it("installs a scoped package and runs its bin, or runs the project's copy", async () => {
+    const { pm, spawned, fake } = await setup({});
+    await fake.add({
+      name: "@tailwindcss/cli",
+      version: "4.1.0",
+      bin: { tailwindcss: "dist/index.mjs" },
+      files: { "dist/index.mjs": "#!/usr/bin/env node" },
+    });
+    for (const argv of [
+      ["npx", "@tailwindcss/cli", "-i", "in.css"],
+      ["npm", "exec", "@tailwindcss/cli@4", "--", "-i", "in.css"],
+      ["bunx", "@tailwindcss/cli", "-i", "in.css"],
+    ]) {
+      expect(await pm(...argv)).toBe(0);
+    }
+    expect(spawned.map((request) => [request.command, ...request.args])).toEqual(
+      Array(3).fill([
+        "/tmp/.npx/@tailwindcss+cli@4.1.0/node_modules/.bin/tailwindcss",
+        "-i",
+        "in.css",
+      ]),
+    );
+    // Installed in the project, the package's own bin runs without a download.
+    expect(await pm("npm", "install", "@tailwindcss/cli")).toBe(0);
+    const before = fake.requests.length;
+    expect(await pm("npx", "@tailwindcss/cli", "-i", "in.css")).toBe(0);
+    expect(spawned.at(-1)?.command).toBe("/project/node_modules/.bin/tailwindcss");
+    expect(fake.requests.length).toBe(before);
+    // A path is still run as a path.
+    expect(await pm("npx", "./bin/tool", "x")).toBe(0);
+    expect(spawned.at(-1)?.command).toBe("./bin/tool");
+  });
+
   it("runs a named bin from -p packages", async () => {
     const { pm, spawned } = await setup({});
     expect(await pm("npx", "-p", "cowsay", "cowthink", "hm")).toBe(0);
@@ -330,7 +399,8 @@ describe("exec", () => {
     const { pm, spawned } = await setup(null);
     expect(await pm("npm", "create", "vite@latest", "my-app", "--", "--template", "react")).toBe(0);
     expect(spawned[0].command).toBe("/tmp/.npx/create-vite@6.1.1/node_modules/.bin/create-vite");
-    expect(spawned[0].args).toEqual(["my-app", "--", "--template", "react"]);
+    // npm consumes the `--`, so create-vite reads `--template` as its flag.
+    expect(spawned[0].args).toEqual(["my-app", "--template", "react"]);
   });
 });
 

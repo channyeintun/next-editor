@@ -181,6 +181,68 @@ describe("parseArgs", () => {
     expect(command("pnpm", "why", "react")).toEqual({ kind: "why", names: ["react"] });
   });
 
+  it("leaves the save type unset when no --save-* flag is given", () => {
+    expect(command("npm", "install", "vite@latest")).toMatchObject({ kind: "add", save: null });
+    expect(command("pnpm", "add", "--prod", "vite")).toMatchObject({ save: "prod" });
+  });
+
+  it("strips npm's own `--` for create, init and exec, but not for npx", () => {
+    // npm's option parser consumes the first `--`; the program sees its flags.
+    expect(command("npm", "create", "vite@latest", "my-app", "--", "--template", "react")).toEqual({
+      kind: "create",
+      name: "vite@latest",
+      args: ["my-app", "--template", "react"],
+    });
+    expect(command("npm", "init", "vite", "my-app", "--", "--template", "react")).toMatchObject({
+      args: ["my-app", "--template", "react"],
+    });
+    expect(command("npm", "exec", "create-vite", "my-app", "--", "--template", "x")).toMatchObject({
+      command: "create-vite",
+      args: ["my-app", "--template", "x"],
+    });
+    expect(command("npm", "exec", "--", "vite", "a", "--", "b")).toMatchObject({
+      command: "vite",
+      args: ["a", "--", "b"],
+    });
+    expect(command("npx", "create-vite", "my-app", "--", "--template", "x")).toMatchObject({
+      args: ["my-app", "--", "--template", "x"],
+    });
+    expect(command("pnpm", "create", "vite", "my-app", "--", "--template", "x")).toMatchObject({
+      args: ["my-app", "--", "--template", "x"],
+    });
+  });
+
+  it("passes flags after the command name to the program it runs", () => {
+    const npx = parseArgs(["npx", "vitest", "run", "--dir", "src"]);
+    expect(npx).toMatchObject({ dir: null, registry: null });
+    expect(npx.command).toMatchObject({ command: "vitest", args: ["run", "--dir", "src"] });
+    expect(parseArgs(["npx", "prettier", "--registry", "x"]).registry).toBeNull();
+    expect(parseArgs(["pnpm", "vitest", "--dir", "src"])).toMatchObject({
+      dir: null,
+      command: { kind: "implicit", args: ["--dir", "src"] },
+    });
+    expect(parseArgs(["pnpm", "run", "test", "--dir", "src"])).toMatchObject({
+      dir: null,
+      command: { args: ["--dir", "src"] },
+    });
+    expect(parseArgs(["npm", "run", "test", "--", "--dir", "src"])).toMatchObject({
+      dir: null,
+      command: { args: ["--dir", "src"] },
+    });
+    // Before the program's name they are still the tool's own.
+    expect(parseArgs(["pnpm", "--dir", "src", "dev"]).dir).toBe("src");
+    expect(parseArgs(["pnpm", "dev", "--dir", "src"]).dir).toBeNull();
+    expect(parseArgs(["npx", "--registry", "https://r.test", "vite"])).toMatchObject({
+      registry: "https://r.test",
+      command: { command: "vite", args: [] },
+    });
+    expect(parseArgs(["npx", "-p", "typescript", "--prefix", "app", "tsc"])).toMatchObject({
+      dir: "app",
+      command: { packages: ["typescript"], command: "tsc" },
+    });
+    expect(parseArgs(["npm", "run", "dev", "--prefix", "app"]).dir).toBe("app");
+  });
+
   it("reads -C, --prefix and --registry", () => {
     expect(parseArgs(["pnpm", "-C", "app", "install"])).toMatchObject({
       dir: "app",

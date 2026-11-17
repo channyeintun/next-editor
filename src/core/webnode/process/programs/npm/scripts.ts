@@ -242,8 +242,8 @@ export function missingScript(tool: Tool, name: string): PmError {
 }
 
 /**
- * `run <name> [args]`: the script with npm/yarn's `pre`/`post` hooks around
- * it (pnpm runs none). Resolves with the exit status; failures print the
+ * `run <name> [args]`: the script with its `pre`/`post` hooks around it, as
+ * every tool runs them (pnpm since v8, bun). Resolves with the exit status; failures print the
  * tool's lifecycle error.
  */
 export async function runScript(
@@ -259,9 +259,7 @@ export async function runScript(
   if (context.tool === "yarn") {
     context.reporter.line(`yarn run v${TOOL_VERSIONS.yarn}`);
   }
-  const hooks = context.tool === "npm" || context.tool === "yarn";
-  const order = hooks ? [`pre${name}`, name, `post${name}`] : [name];
-  for (const event of order) {
+  for (const event of [`pre${name}`, name, `post${name}`]) {
     if (scripts[event] === undefined) {
       continue;
     }

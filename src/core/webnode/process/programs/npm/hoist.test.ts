@@ -110,6 +110,70 @@ describe("hoist", () => {
     assertResolvable(input, layout);
   });
 
+  it("places a package beside the copy of its peer that its dependent has", () => {
+    // x depends on react@19 and on y, whose peer react is x's copy. y may not
+    // sit at the root, where react@18 is visible: that would nest a second
+    // react@19 under y, and x and y would load two Reacts.
+    const nodes = new Map([
+      [
+        "x@1",
+        {
+          name: "x",
+          dependencies: new Map([
+            ["react", "react@19"],
+            ["y", "y@1"],
+          ]),
+        },
+      ],
+      [
+        "y@1",
+        { name: "y", dependencies: new Map([["react", "react@19"]]), peers: new Set(["react"]) },
+      ],
+      ["react@18", { name: "react", dependencies: new Map() }],
+      ["react@19", { name: "react", dependencies: new Map() }],
+    ]);
+    const layout = hoist({
+      root: new Map([
+        ["react", "react@18"],
+        ["x", "x@1"],
+      ]),
+      nodes,
+    });
+    expect([...layout]).toEqual([
+      ["node_modules/react", "react@18"],
+      ["node_modules/x", "x@1"],
+      ["node_modules/x/node_modules/react", "react@19"],
+      ["node_modules/x/node_modules/y", "y@1"],
+    ]);
+    // With no conflict in the way the package is still hoisted.
+    const flat = hoist({ root: new Map([["x", "x@1"]]), nodes });
+    expect([...flat.keys()]).toEqual(["node_modules/react", "node_modules/x", "node_modules/y"]);
+  });
+
+  it("ends on a cycle between different versions", () => {
+    const node = (name: string, deps: Record<string, string>) => ({
+      name,
+      dependencies: new Map(Object.entries(deps)),
+    });
+    const nodes = new Map([
+      ["a@1", node("a", { b: "b@1" })],
+      ["b@1", node("b", { a: "a@2" })],
+      ["a@2", node("a", { b: "b@2" })],
+      ["b@2", node("b", { a: "a@1" })],
+    ]);
+    // No finite node_modules tree gives each copy its version: every copy of
+    // a@1 hides b@1 behind a b@2, and so on. It reports the cycle at once.
+    expect(() => hoist({ root: new Map([["a", "a@1"]]), nodes })).toThrow(
+      /dependency cycle: b@1 would be nested inside itself/,
+    );
+    // A cycle between the same versions reuses the copies above it.
+    nodes.set("b@1", node("b", { a: "a@1" }));
+    expect([...hoist({ root: new Map([["a", "a@1"]]), nodes }).keys()]).toEqual([
+      "node_modules/a",
+      "node_modules/b",
+    ]);
+  }, 2000);
+
   it("is deterministic and survives a randomized stress graph", () => {
     let seed = 7;
     const random = () => {

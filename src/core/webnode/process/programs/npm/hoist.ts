@@ -2,12 +2,19 @@
 // graph at the highest `node_modules` where Node's lookup from each dependent
 // still finds the version that dependent resolved to. A conflicting version
 // nests under its dependent. Breadth-first, names in order: deterministic.
+import { PmError } from "./errors";
 
 /** What hoisting needs to know about a package: its name and its dependency edges. */
 export interface HoistNode {
   name: string;
   /** Dependency name → key of the node it resolved to. */
   dependencies: Map<string, string>;
+  /**
+   * The dependency names that are peer edges: they must resolve to the very
+   * copy the package's dependent has, so the package is placed where that copy
+   * is the one Node's lookup finds.
+   */
+  peers?: ReadonlySet<string>;
 }
 
 export interface HoistInput {
@@ -22,6 +29,8 @@ export type Layout = Map<string, string>;
 interface Level {
   /** "" for the project; otherwise the package's location. */
   location: string;
+  /** The key of the package at `location` ("" for the project). */
+  key: string;
   parent: Level | null;
   /** Name → key of the package placed in this level's node_modules. */
   placed: Map<string, string>;
@@ -40,18 +49,53 @@ function compare(a: string, b: string): number {
 
 /** Lays out a resolved graph into node_modules directories. */
 export function hoist(input: HoistInput): Layout {
-  const rootLevel: Level = { location: "", parent: null, placed: new Map(), passing: new Map() };
+  const rootLevel: Level = {
+    location: "",
+    key: "",
+    parent: null,
+    placed: new Map(),
+    passing: new Map(),
+  };
   const queue: { level: Level; key: string }[] = [];
   const layout = new Map<string, string>();
 
   const place = (level: Level, name: string, key: string) => {
+    // A copy of a package inside its own subtree repeats that subtree, and so
+    // on without end (a@1 → b@1 → a@2 → b@2 → a@1): no node_modules layout
+    // gives every package the version it resolved to.
+    for (let above: Level | null = level; above; above = above.parent) {
+      if (above.key === key) {
+        throw new PmError(
+          "EOTHER",
+          `Cannot lay out a dependency cycle: ${key} would be nested inside itself at ${childLocation(level.location, name)}`,
+        );
+      }
+    }
     level.placed.set(name, key);
     const location = childLocation(level.location, name);
     layout.set(location, key);
     queue.push({
-      level: { location, parent: level, placed: new Map(), passing: new Map() },
+      level: { location, key, parent: level, placed: new Map(), passing: new Map() },
       key,
     });
+  };
+
+  /** True when, from `level` upward, each of `key`'s peers is the copy it was linked to. */
+  const peersVisible = (levels: Level[], from: number, key: string): boolean => {
+    const node = input.nodes.get(key);
+    for (const peer of node?.peers ?? []) {
+      const wanted = node!.dependencies.get(peer);
+      for (let i = from; i < levels.length; i++) {
+        const placed = levels[i].placed.get(peer);
+        if (placed !== undefined) {
+          if (placed !== wanted) {
+            return false;
+          }
+          break;
+        }
+      }
+    }
+    return true;
   };
 
   for (const [name, key] of [...input.root].sort(([a], [b]) => compare(a, b))) {
@@ -83,14 +127,26 @@ export function hoist(input: HoistInput): Layout {
         }
         continue;
       }
-      // Highest level below `found` where placing it breaks no one passing through.
-      let target = 0;
+      // Highest level below `found` where placing it breaks no one passing
+      // through and where its peers are its dependent's copies. When no level
+      // gives it those peers (two dependents with different copies), the
+      // first rule alone decides.
+      let target = -1;
+      let highest = -1;
       for (let i = found - 1; i >= 0; i--) {
         const passing = levels[i].passing.get(name);
         if (passing === undefined || passing === wanted) {
-          target = i;
-          break;
+          if (highest === -1) {
+            highest = i;
+          }
+          if (peersVisible(levels, i, wanted)) {
+            target = i;
+            break;
+          }
         }
+      }
+      if (target === -1) {
+        target = Math.max(highest, 0);
       }
       for (let i = 0; i < target; i++) {
         levels[i].passing.set(name, wanted);

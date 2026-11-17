@@ -5,7 +5,7 @@ import { setRuntime } from "../../runtime";
 import type { SpawnRequest } from "../../runtime";
 import { createFakeRuntime } from "../../testing/fakeRuntime";
 import type { FakeRuntime } from "../../testing/fakeRuntime";
-import { LOCK_NAME, install } from "./install";
+import { LOCK_NAME, STAGING_NAME, install } from "./install";
 import { Reporter, createRuntimeSink } from "./output";
 import type { Tool } from "./output";
 import { createRegistryClient } from "./registry";
@@ -412,5 +412,50 @@ describe("install", () => {
     );
     await Promise.resolve();
     expect(decoder.decode(store.get(url)!)).toBe("poisoned");
+  });
+});
+
+describe("install: peers and failed resolves", () => {
+  it("gives a peer its dependent's copy, not a second one", async () => {
+    // react-dom-like y names react as a peer; x pins react 19 while the
+    // project has react 18. One react 19 must serve both x and y.
+    const { run, read, fake } = await setup({
+      name: "app",
+      dependencies: { react: "19.0.0", x: "1.0.0" },
+    });
+    await fake.add({ name: "react", version: "18.3.1" });
+    await fake.add({ name: "x", version: "1.0.0", dependencies: { react: "18.3.1", y: "1.0.0" } });
+    await fake.add({ name: "y", version: "1.0.0", peerDependencies: { react: "*" } });
+    expect((await run()).status).toBe(0);
+    const lock = JSON.parse(read(`/project/node_modules/${LOCK_NAME}`)) as {
+      packages: Record<string, { key: string }>;
+    };
+    const where = (key: string) =>
+      Object.entries(lock.packages)
+        .filter(([, entry]) => entry.key === key)
+        .map(([location]) => location);
+    expect(where("react@18.3.1")).toEqual(["node_modules/x/node_modules/react"]);
+    expect(where("y@1.0.0")).toEqual(["node_modules/x/node_modules/y"]);
+  });
+
+  it("removes the staging directory when resolving fails, and on an up-to-date install", async () => {
+    const { rt, run, fake, writeManifest } = await setup({
+      name: "app",
+      dependencies: { a: "1.0.0" },
+    });
+    await fake.add({ name: "a", version: "1.0.0" });
+    await fake.add({ name: "big", version: "1.0.0", dependencies: { missing: "^9.0.0" } });
+    await fake.add({ name: "missing", version: "1.0.0" });
+    expect((await run()).status).toBe(0);
+    writeManifest({ name: "app", dependencies: { a: "1.0.0", big: "1.0.0" } });
+    await expect(run()).rejects.toMatchObject({ code: "ETARGET" });
+    // Let the download that started before the failure finish.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(rt.fs.exists(`/project/node_modules/${STAGING_NAME}`)).toBe(false);
+    // A directory left by an earlier session goes on the next install.
+    rt.fs.mkdir(`/project/node_modules/${STAGING_NAME}/old`, true, 0o755);
+    writeManifest({ name: "app", dependencies: { a: "1.0.0" } });
+    expect((await run()).upToDate).toBe(true);
+    expect(rt.fs.exists(`/project/node_modules/${STAGING_NAME}`)).toBe(false);
   });
 });

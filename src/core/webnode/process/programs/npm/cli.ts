@@ -12,7 +12,8 @@ export type ExecMode = "local" | "auto" | "dlx";
 /** A parsed command. */
 export type Command =
   | { kind: "install" }
-  | { kind: "add"; specs: string[]; save: SaveType; exact: boolean }
+  /** `save` is null when no `--save-*` flag names a list: the name stays in the list that has it. */
+  | { kind: "add"; specs: string[]; save: SaveType | null; exact: boolean }
   | { kind: "remove"; names: string[] }
   | { kind: "update" }
   | { kind: "run"; script: string | null; args: string[]; ifPresent: boolean }
@@ -209,11 +210,26 @@ export function parseArgs(argv: string[]): Invocation {
     return invocation;
   }
 
-  // Options after the command that are not the command's own.
+  // Options after the command that are not the command's own. A command that
+  // runs a program (exec, dlx, create, a pnpm/yarn/bun script) hands the
+  // program everything from its name on, and `--` always ends the tool's options.
+  const trial = parseCommand(tool, invokedAs, commandName, args);
+  const passThrough = passesThrough(tool, trial);
   const own: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
+    // An implicit script's name is the command itself: all that follows is its own.
+    if (arg === "--" || trial.kind === "implicit" || (passThrough && !arg.startsWith("-"))) {
+      own.push(...args.slice(i));
+      break;
+    }
     const name = flagName(arg);
+    if (trial.kind === "exec" && EXEC_VALUE_FLAGS.has(arg)) {
+      // `-p <pkg>` / `-c <line>`: the value is not the program's name.
+      own.push(arg, ...args.slice(i + 1, i + 2));
+      i++;
+      continue;
+    }
     if (name === "-g" || name === "--global") {
       global = true;
     }
@@ -233,14 +249,38 @@ export function parseArgs(argv: string[]): Invocation {
     own.push(arg);
   }
 
-  invocation.command = parseCommand(tool, commandName, args, own);
+  invocation.command = parseCommand(tool, invokedAs, commandName, own);
   if (global && ["install", "add", "remove", "update", "ls"].includes(invocation.command.kind)) {
     invocation.command = { kind: "global", name: commandName };
   }
   return invocation;
 }
 
-function parseCommand(tool: Tool, name: string, raw: string[], args: string[]): Command {
+/** Exec's own flags that take the next argument as their value. */
+const EXEC_VALUE_FLAGS = new Set(["-p", "--package", "-c", "--call"]);
+
+/** True when the command's first positional starts the arguments of a program it runs. */
+function passesThrough(tool: Tool, command: Command): boolean {
+  switch (command.kind) {
+    case "exec":
+    case "create":
+    case "implicit":
+      return true;
+    case "run":
+      // npm reads its own flags up to `--`; pnpm, yarn and bun stop at the script's name.
+      return tool !== "npm";
+    default:
+      return false;
+  }
+}
+
+/** Drops the first `--`, which npm's option parser consumes. */
+function dropFirstDashes(args: string[]): string[] {
+  const at = args.indexOf("--");
+  return at === -1 ? args : [...args.slice(0, at), ...args.slice(at + 1)];
+}
+
+function parseCommand(tool: Tool, invokedAs: string, name: string, args: string[]): Command {
   if (name === "help" || name === "--help") {
     return { kind: "help" };
   }
@@ -261,17 +301,24 @@ function parseCommand(tool: Tool, name: string, raw: string[], args: string[]): 
     return { kind: "update" };
   }
   if (RUN.has(name)) {
-    return parseRun(tool, raw);
+    return parseRun(tool, args);
   }
   if (name === "exec" || name === "x" || name === "dlx") {
     const mode: ExecMode =
       name === "dlx" ? "dlx" : tool === "npm" || tool === "bun" ? "auto" : "local";
-    return parseExec(mode, raw);
+    // `npx` passes a `--` after the command on; `npm exec` consumes the first one.
+    return parseExec(mode, args, invokedAs === "npm");
   }
   if (name === "create" || (tool === "npm" && (name === "init" || name === "innit"))) {
-    const positional = raw.findIndex((arg) => !arg.startsWith("-"));
+    const positional = args.findIndex((arg) => !arg.startsWith("-"));
     if (positional !== -1) {
-      return { kind: "create", name: raw[positional], args: raw.slice(positional + 1) };
+      const after = args.slice(positional + 1);
+      const consumed = tool === "npm" && !args.slice(0, positional).includes("--");
+      return {
+        kind: "create",
+        name: args[positional],
+        args: consumed ? dropFirstDashes(after) : after,
+      };
     }
     if (name === "create") {
       return { kind: "unknown", name: "create" };
@@ -292,15 +339,15 @@ function parseCommand(tool: Tool, name: string, raw: string[], args: string[]): 
   if (tool === "npm") {
     const script = NPM_IMPLICIT_RUN.get(name);
     if (script) {
-      return { ...parseRunArgs("npm", raw), kind: "run", script };
+      return { ...parseRunArgs("npm", args), kind: "run", script };
     }
     return { kind: "unknown", name };
   }
-  return { kind: "implicit", name, args: dropLeadingDashes(raw) };
+  return { kind: "implicit", name, args: dropLeadingDashes(args) };
 }
 
 function parseInstall(tool: Tool, args: string[]): Command {
-  let save: SaveType = "prod";
+  let save: SaveType | null = null;
   let exact = false;
   const specs: string[] = [];
   for (const arg of args) {
@@ -389,7 +436,7 @@ function parseRun(tool: Tool, raw: string[]): Command {
   return { kind: "run", script, args: parsed.args, ifPresent: ifPresent || parsed.ifPresent };
 }
 
-function parseExec(mode: ExecMode, raw: string[]): Command {
+function parseExec(mode: ExecMode, raw: string[], consumesDashes: boolean): Command {
   const packages: string[] = [];
   let shell: string | null = null;
   let i = 0;
@@ -398,6 +445,7 @@ function parseExec(mode: ExecMode, raw: string[]): Command {
     const name = flagName(arg);
     if (arg === "--") {
       i++;
+      consumesDashes = false;
       break;
     }
     if (name === "-p" || name === "--package") {
@@ -411,7 +459,8 @@ function parseExec(mode: ExecMode, raw: string[]): Command {
     i++;
   }
   const command = shell === null ? (raw[i] ?? null) : null;
-  const args = shell === null ? raw.slice(i + 1) : [];
+  const after = raw.slice(i + 1);
+  const args = shell === null ? (consumesDashes ? dropFirstDashes(after) : after) : [];
   return { kind: "exec", mode, command, args, packages, shell };
 }
 
