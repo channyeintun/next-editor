@@ -29,9 +29,13 @@ interface PortState {
   reffed: boolean;
   /**
    * The port holds the process open: set by `ref()` and by its first message
-   * listener, cleared by `unref()` and when its last message listener goes.
+   * listener of any kind, cleared by `unref()` and when its last one goes.
    */
   wantsRef: boolean;
+  /** Whether an `onmessage` handler is set. */
+  handler: boolean;
+  /** The `addEventListener("message", …)` listeners, each with what the engine was given. */
+  domListeners: Map<unknown, EventListener>;
   /** This end, or the one it is entangled with, was closed. */
   closed: boolean;
   /** The internal listeners that notice the other end closing are installed. */
@@ -53,6 +57,8 @@ function stateOf(port: object): PortState {
       listeners: new Map(),
       reffed: false,
       wantsRef: false,
+      handler: false,
+      domListeners: new Map(),
       closed: false,
       watching: false,
       raw: false,
@@ -81,6 +87,21 @@ function updateRef(port: object): void {
       // No runtime: nothing to keep alive.
     }
   }
+}
+
+/**
+ * Sets `handler` as the `onmessage` of a port that carries one of the
+ * platform's own protocols (a thread's control port, an IPC channel). Unlike a
+ * program's listener it does not hold the process: its owner decides that.
+ */
+export function listenOnPlatformPort(
+  port: MessagePort,
+  handler: (event: MessageEvent) => void,
+): void {
+  port.onmessage = handler;
+  const state = stateOf(port);
+  state.wantsRef = false;
+  updateRef(port);
 }
 
 /**
@@ -122,6 +143,29 @@ export function installMessagePortInterface(): void {
  */
 export function addNodePortInterface(prototype: object): void {
   const nativeClose = (prototype as { close: () => void }).close;
+  const nativeAddEventListener = (prototype as EventTarget).addEventListener;
+  const nativeRemoveEventListener = (prototype as EventTarget).removeEventListener;
+
+  /** How many message listeners of every kind (`on`, `onmessage`, `addEventListener`) `state` has. */
+  const messageListeners = (state: PortState) =>
+    (state.listeners.get("message")?.length ?? 0) +
+    state.domListeners.size +
+    (state.handler ? 1 : 0);
+  /**
+   * As in Node, the first message listener, of whichever kind, holds the
+   * process and the last one to go releases it; `unref()` in between wins.
+   */
+  const messageListenersChanged = (port: object, before: number) => {
+    const state = stateOf(port);
+    const after = messageListeners(state);
+    if (before === 0 && after > 0) {
+      state.wantsRef = true;
+    } else if (before > 0 && after === 0) {
+      state.wantsRef = false;
+    }
+    updateRef(port);
+  };
+
   const onmessage = Object.getOwnPropertyDescriptor(prototype, "onmessage");
   if (onmessage?.set && onmessage.get && onmessage.configurable) {
     const { get, set } = onmessage;
@@ -130,11 +174,73 @@ export function addNodePortInterface(prototype: object): void {
       enumerable: onmessage.enumerable,
       get,
       set(this: object, handler: unknown) {
-        stateOf(this).raw = true;
+        const state = stateOf(this);
+        const before = messageListeners(state);
+        state.raw = true;
         set.call(this, handler);
+        state.handler = typeof handler === "function";
+        messageListenersChanged(this, before);
       },
     });
   }
+
+  Object.assign(prototype, {
+    addEventListener(
+      this: EventTarget,
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      const state = stateOf(this);
+      if (type !== "message" || listener === null || state.domListeners.has(listener)) {
+        nativeAddEventListener.call(this, type, listener, options);
+        return;
+      }
+      const before = messageListeners(state);
+      const once = typeof options === "object" && options.once === true;
+      const forget = () => {
+        if (state.domListeners.get(listener) === native) {
+          const count = messageListeners(state);
+          state.domListeners.delete(listener);
+          messageListenersChanged(this, count);
+        }
+      };
+      const native: EventListener = (event) => {
+        if (once) {
+          forget();
+        }
+        if (typeof listener === "function") {
+          listener.call(this, event);
+        } else {
+          listener.handleEvent(event);
+        }
+      };
+      state.domListeners.set(listener, native);
+      nativeAddEventListener.call(this, type, native, options);
+      if (typeof options === "object") {
+        options.signal?.addEventListener("abort", forget, { once: true });
+      }
+      messageListenersChanged(this, before);
+    },
+    removeEventListener(
+      this: EventTarget,
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | EventListenerOptions,
+    ) {
+      const state = stateOf(this);
+      const native =
+        type === "message" && listener !== null ? state.domListeners.get(listener) : undefined;
+      if (native === undefined) {
+        nativeRemoveEventListener.call(this, type, listener, options);
+        return;
+      }
+      const before = messageListeners(state);
+      state.domListeners.delete(listener);
+      nativeRemoveEventListener.call(this, type, native, options);
+      messageListenersChanged(this, before);
+    },
+  });
 
   /** The port is closed (here or at the other end): drop its ref and emit 'close' once. */
   const markClosed = (port: NodePort) => {
@@ -156,7 +262,7 @@ export function addNodePortInterface(prototype: object): void {
       return;
     }
     state.watching = true;
-    port.addEventListener("message", (event) => {
+    nativeAddEventListener.call(port, "message", (event) => {
       if (isPortCloseMessage((event as MessageEvent).data)) {
         event.stopImmediatePropagation();
         markClosed(port);
@@ -164,11 +270,12 @@ export function addNodePortInterface(prototype: object): void {
       }
     });
     // Where the platform has one, its own close event covers a peer that died.
-    port.addEventListener("close", () => markClosed(port));
+    nativeAddEventListener.call(port, "close", () => markClosed(port));
   };
 
   const add = function (this: NodePort, event: string, listener: Listener, once: boolean) {
     const state = stateOf(this);
+    const before = messageListeners(state);
     watch(this);
     const native: EventListener = (domEvent) => {
       if (once) {
@@ -185,15 +292,12 @@ export function addNodePortInterface(prototype: object): void {
     state.listeners.set(event, list);
     // 'close' is emitted by markClosed, once, whatever told us.
     if (event !== "close") {
-      this.addEventListener(event, native);
+      nativeAddEventListener.call(this, event, native);
     }
     if (event === "message") {
       // A Node port starts delivering as soon as it has a listener.
       (this as { start?: () => void }).start?.();
-      if (list.length === 1) {
-        state.wantsRef = true;
-      }
-      updateRef(this);
+      messageListenersChanged(this, before);
     }
     return this;
   };
@@ -203,12 +307,12 @@ export function addNodePortInterface(prototype: object): void {
     const list = state.listeners.get(event);
     const index = list?.findIndex((entry) => entry.listener === listener) ?? -1;
     if (list && index >= 0) {
-      this.removeEventListener(event, list[index].native);
+      const before = messageListeners(state);
+      nativeRemoveEventListener.call(this, event, list[index].native);
       list.splice(index, 1);
-      if (event === "message" && list.length === 0) {
-        state.wantsRef = false;
+      if (event === "message") {
+        messageListenersChanged(this, before);
       }
-      updateRef(this);
     }
     return this;
   };
@@ -227,18 +331,16 @@ export function addNodePortInterface(prototype: object): void {
     removeListener: remove,
     removeAllListeners(this: NodePort, event?: string) {
       const state = stateOf(this);
+      const before = messageListeners(state);
       for (const [name, list] of state.listeners) {
         if (event === undefined || event === name) {
           for (const entry of list) {
-            this.removeEventListener(name, entry.native);
+            nativeRemoveEventListener.call(this, name, entry.native);
           }
           state.listeners.delete(name);
-          if (name === "message") {
-            state.wantsRef = false;
-          }
         }
       }
-      updateRef(this);
+      messageListenersChanged(this, before);
       return this;
     },
     emit(this: NodePort, event: string, ...args: unknown[]) {
@@ -315,6 +417,14 @@ export const SHARE_ENV = Symbol.for("nodejs.worker_threads.SHARE_ENV");
 export const THREAD_ERROR_MESSAGE = "__webnode_thread_error__";
 /** The message a thread sends once its entry module has started. */
 export const THREAD_ONLINE_MESSAGE = "__webnode_thread_online__";
+/**
+ * The last message a thread sends as it exits (process/sysClient.ts). Its
+ * messages travel on its port, its exit through the kernel: the parent emits
+ * 'exit' once this arrives, so nothing posted before the exit is lost.
+ */
+export const THREAD_EXIT_MESSAGE = "__webnode_thread_exit__";
+/** How long the parent waits for that message from a thread that ended without sending it. */
+const THREAD_DRAIN_TIMEOUT_MS = 1000;
 
 /** The `Worker` class: starts a thread running `filename`. */
 export const Worker = function Worker(
@@ -378,12 +488,44 @@ export const Worker = function Worker(
     }
   };
 
-  handle.port.onmessage = (event: MessageEvent<unknown>) => {
+  // The thread's exit code once the kernel reports it, and whether everything
+  // it posted before has arrived.
+  let exitCode: number | null = null;
+  let drained = false;
+  let drainTimer: ReturnType<typeof setTimeout> | null = null;
+  let resolveExit: ((code: number) => void) | null = null;
+  const exitPromise = new Promise<number>((resolve) => {
+    resolveExit = resolve;
+  });
+  const finishExit = () => {
+    if (exited || exitCode === null || !drained) {
+      return;
+    }
+    exited = true;
+    if (drainTimer !== null) {
+      clearTimeout(drainTimer);
+    }
+    handle.port.close();
+    release();
+    this.emit("exit", exitCode);
+    resolveExit?.(exitCode);
+  };
+  const drain = () => {
+    drained = true;
+    finishExit();
+  };
+
+  listenOnPlatformPort(handle.port, (event: MessageEvent<unknown>) => {
     if (isPortCloseMessage(event.data)) {
-      // The thread closed its parentPort; the thread's exit ends this side.
+      // The thread closed its parentPort: nothing more comes this way.
+      drain();
       return;
     }
     const data = event.data as { type?: string; error?: unknown } | null;
+    if (data !== null && typeof data === "object" && data.type === THREAD_EXIT_MESSAGE) {
+      drain();
+      return;
+    }
     if (data !== null && typeof data === "object" && data.type === THREAD_ONLINE_MESSAGE) {
       this.emit("online");
       return;
@@ -398,20 +540,26 @@ export const Worker = function Worker(
       return;
     }
     this.emit("message", event.data);
-  };
+  });
   handle.port.onmessageerror = () =>
     this.emit("messageerror", new Error("Message could not be deserialized"));
 
-  let resolveExit: ((code: number) => void) | null = null;
-  const exitPromise = new Promise<number>((resolve) => {
-    resolveExit = resolve;
-  });
+  let terminating = false;
   handle.onExit((code) => {
-    exited = true;
-    handle.port.close();
-    release();
-    this.emit("exit", code);
-    resolveExit?.(code);
+    exitCode = code;
+    if (terminating) {
+      // A terminated thread sends nothing more.
+      drain();
+      return;
+    }
+    if (!drained) {
+      // One that ended without its last message (killed, or its port was closed raw).
+      const nativeSetTimeout =
+        (globalThis as { __webnodeNativeSetTimeout?: typeof setTimeout })
+          .__webnodeNativeSetTimeout ?? setTimeout;
+      drainTimer = nativeSetTimeout(drain, THREAD_DRAIN_TIMEOUT_MS);
+    }
+    finishExit();
   });
 
   this.postMessage = (value, transferList) => {
@@ -421,7 +569,12 @@ export const Worker = function Worker(
   };
   this.terminate = () => {
     if (!exited) {
-      handle.terminate();
+      terminating = true;
+      if (exitCode !== null) {
+        drain();
+      } else {
+        handle.terminate();
+      }
     }
     return exitPromise;
   };

@@ -633,6 +633,7 @@ describe("watch", () => {
       seen.push(`${eventType}:${filename}`),
     );
     runtime.fs.writeFile("/f.txt", bytes("x"), O_WRONLY | O_TRUNC, 0o644);
-    expect(seen).toEqual(["change:f.txt"]);
+    // The truncation and the write are a change each, as on Linux.
+    expect(seen).toEqual(["change:f.txt", "change:f.txt"]);
   });
 });

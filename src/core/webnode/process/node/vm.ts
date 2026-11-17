@@ -21,7 +21,9 @@
 //   live on in the context's global lexical scope).
 // - Code is always run sloppy unless it starts with its own "use strict"
 //   directive; `timeout`, `breakOnSigint` and `microtaskMode` have no effect
-//   (nothing can interrupt synchronous code in a worker).
+//   (nothing can interrupt synchronous code in a worker): the first `timeout`
+//   or `breakOnSigint` a program passes gets a warning saying so.
+import { sourceUrlComment } from "../loader/transform";
 import { Buffer } from "./buffer";
 import {
   invalidArgType,
@@ -80,6 +82,7 @@ function readOptions(options: unknown): ScriptOptions {
       throw invalidArgType(`options.${name}`, "number", value);
     }
   }
+  warnIfInterruptible(read);
   if (read.cachedData !== undefined && !ArrayBuffer.isView(read.cachedData)) {
     throw invalidArgType(
       "options.cachedData",
@@ -90,8 +93,33 @@ function readOptions(options: unknown): ScriptOptions {
   return read;
 }
 
+let warnedInterruptible = false;
+
+/**
+ * Warns, once, that `timeout` and `breakOnSigint` cannot stop the code: a
+ * program that counts on them to end a runaway loop would otherwise hang
+ * without a word.
+ */
+function warnIfInterruptible(options: ScriptOptions | undefined): void {
+  if (
+    warnedInterruptible ||
+    options === undefined ||
+    options === null ||
+    typeof options !== "object" ||
+    (!(typeof options.timeout === "number" && options.timeout > 0) &&
+      options.breakOnSigint !== true)
+  ) {
+    return;
+  }
+  warnedInterruptible = true;
+  const process = (globalThis as { process?: { emitWarning?: (message: string) => void } }).process;
+  process?.emitWarning?.(
+    "vm: the timeout and breakOnSigint options have no effect in webnode; the code runs until it ends",
+  );
+}
+
 function sourceUrlSuffix(filename: string): string {
-  return `\n//# sourceURL=${filename}`;
+  return sourceUrlComment(filename);
 }
 
 /** The code as the engine sees it: `lineOffset` blank lines first, then the source and its sourceURL. */
@@ -627,13 +655,15 @@ export class Script {
   }
 
   /** Runs the script against the real global. */
-  runInThisContext(_options?: ScriptOptions): unknown {
+  runInThisContext(options?: ScriptOptions): unknown {
+    warnIfInterruptible(options);
     return indirectEval(this.#source);
   }
 
   /** Runs the script in a context made by `createContext`. */
-  runInContext(contextifiedObject: object, _options?: ScriptOptions): unknown {
+  runInContext(contextifiedObject: object, options?: ScriptOptions): unknown {
     validateContext(contextifiedObject);
+    warnIfInterruptible(options);
     // The leading blank lines of `lineOffset` and the sourceURL travel with the code.
     return evaluateInContext(this.#source, contextifiedObject);
   }

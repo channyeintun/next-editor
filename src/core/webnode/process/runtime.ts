@@ -176,6 +176,8 @@ export interface ByteChannel {
   onData: ((chunk: Uint8Array) => void) | null;
   onEnd: (() => void) | null;
   onClose: (() => void) | null;
+  /** The port the kernel labels this end with, for a channel a process connected itself. */
+  localPort?: number;
 }
 
 export interface NetBackend {

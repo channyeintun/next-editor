@@ -249,3 +249,29 @@ describe("unsupported members", () => {
     expect(() => measureMemory()).toThrow("vm.measureMemory is not available in webnode");
   });
 });
+
+describe("file names and run options", () => {
+  it("names a file whose path has a space in stack traces", () => {
+    const frame = runInThisContext('new Error("x").stack.split("\\n")[1]', {
+      filename: "/p/my app/a.js",
+    });
+    expect(frame).toContain("/p/my%20app/a.js:1:");
+  });
+
+  it("warns once that timeout cannot stop the code, and still runs it", () => {
+    const warnings: string[] = [];
+    const global = globalThis as { process?: unknown };
+    const saved = global.process;
+    global.process = { emitWarning: (message: string) => warnings.push(message) };
+    try {
+      expect(runInNewContext("1 + 1", {}, { timeout: 50 })).toBe(2);
+      expect(new Script("2").runInThisContext({ timeout: 10 })).toBe(2);
+      expect(runInNewContext("3", {}, { timeout: 50 })).toBe(3);
+    } finally {
+      global.process = saved;
+    }
+    expect(warnings).toEqual([
+      "vm: the timeout and breakOnSigint options have no effect in webnode; the code runs until it ends",
+    ]);
+  });
+});

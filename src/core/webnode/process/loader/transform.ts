@@ -5,6 +5,10 @@
 import { init as initLexer, parse as lex } from "es-module-lexer";
 import { transform } from "sucrase";
 import type { Transform } from "sucrase";
+import { parse as parseTokens } from "sucrase/dist/esm/parser/index.js";
+import type { SucraseToken } from "sucrase/dist/esm/parser/index.js";
+import { ContextualKeyword } from "sucrase/dist/esm/parser/tokenizer/keywords.js";
+import { TokenType } from "sucrase/dist/esm/parser/tokenizer/types.js";
 
 export interface PreparedSource {
   format: "esm" | "cjs";
@@ -12,6 +16,19 @@ export interface PreparedSource {
   code: string;
   /** For an ES module: its static import specifiers, in source order, without repeats. */
   specifiers: string[];
+  /**
+   * For an ES module: code, on one line, that runs when the module is linked,
+   * before any module of its graph runs. It publishes the exported function
+   * declarations, which a real module has from the start (they are hoisted),
+   * so a module in an import cycle can call them before this one has run.
+   */
+  prologue: string;
+  /** For an ES module: the names it exports itself and by `export … from`; null when unknown. */
+  exportNames: string[] | null;
+  /** For an ES module: the specifiers of its `export * from` statements. */
+  starExports: string[];
+  /** For an ES module: the names each `import … from` statement takes from its specifier. */
+  importedNames: { specifier: string; names: string[] }[];
 }
 
 /** Resolves once `prepareSource` may be called. */
@@ -69,6 +86,30 @@ function stringLiteralValue(body: string): string | null {
 
 const TYPESCRIPT = /\.(?:ts|mts|cts|tsx)$/;
 const JSX = /\.(?:tsx|jsx)$/;
+/** The modules sucrase's automatic JSX runtime imports. */
+const JSX_RUNTIME = /\/jsx-(?:dev-)?runtime$/;
+
+/** Whether `filename` is TypeScript, which the loader compiles before it runs. */
+export function isTypeScriptFile(filename: string): boolean {
+  return TYPESCRIPT.test(filename);
+}
+
+/** Whether `filename` is TypeScript or JSX: its package, not its syntax, says whether it is CommonJS. */
+export function isCompiledFile(filename: string): boolean {
+  return TYPESCRIPT.test(filename) || JSX.test(filename);
+}
+
+/**
+ * The `//# sourceURL=` comment that names evaluated code after `filename` in
+ * stack traces. The engine ignores a value with a space or a quote in it, so
+ * those are percent-encoded.
+ */
+export function sourceUrlComment(filename: string): string {
+  const url = filename.replace(/[\s"']/g, (character) =>
+    character === "'" ? "%27" : encodeURIComponent(character),
+  );
+  return `\n//# sourceURL=${url}`;
+}
 
 function syntaxError(error: unknown, filename: string): SyntaxError {
   const message = error instanceof Error ? error.message : String(error);
@@ -85,8 +126,119 @@ function withoutPreamble(source: string): string {
   return text;
 }
 
-/** `source` with its TypeScript types (and JSX) compiled away. */
-export function stripTypes(source: string, filename: string): string {
+/** Where `offset` is in `source`, as `line:column`. */
+function position(source: string, offset: number): string {
+  const before = source.slice(0, offset);
+  const line = before.split("\n").length;
+  return `${line}:${offset - before.lastIndexOf("\n")}`;
+}
+
+/** The index of the token that closes the brace opened at `open`, or -1. */
+function closingBrace(tokens: SucraseToken[], open: number): number {
+  let depth = 0;
+  for (let index = open; index < tokens.length; index += 1) {
+    const type = tokens[index].type;
+    if (type === TokenType.braceL || type === TokenType.dollarBraceL) {
+      depth += 1;
+    } else if (type === TokenType.braceR) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+/** The index of the `{` that opens the body of the declaration whose name starts at `index`, or -1. */
+function bodyBrace(tokens: SucraseToken[], index: number): number {
+  let open = index;
+  while (
+    tokens[open]?.type === TokenType.name ||
+    tokens[open]?.type === TokenType.dot ||
+    tokens[open]?.type === TokenType.string
+  ) {
+    open += 1;
+  }
+  return tokens[open]?.type === TokenType.braceL ? open : -1;
+}
+
+/** Whether the body of a namespace declares only types, so that erasing it loses nothing. */
+function declaresOnlyTypes(body: string): boolean {
+  let code: string;
+  try {
+    code = transform(body, { transforms: ["typescript"], disableESTransforms: true }).code;
+  } catch {
+    return false;
+  }
+  return code.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "").replace(/[\s;]/g, "") === "";
+}
+
+/**
+ * Throws a SyntaxError for TypeScript that sucrase cannot compile: it leaves
+ * decorators in place, which the engine cannot run, and drops a namespace that
+ * holds values, which would leave the program silently without it. Namespaces
+ * that hold only types, and every `declare` block, are erased as tsc would.
+ */
+function rejectUncompiledTypeScript(source: string, filename: string): void {
+  // Most files have neither; the parse below is only for the ones that may.
+  if (!/@|\bnamespace\b|\bmodule\s+[\p{ID_Start}_$]/u.test(source)) {
+    return;
+  }
+  let tokens: SucraseToken[];
+  try {
+    tokens = parseTokens(source, JSX.test(filename), true, false).tokens;
+  } catch {
+    // Not valid TypeScript: the transform reports it.
+    return;
+  }
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.type === TokenType.at && !token.isType) {
+      throw new SyntaxError(
+        `TypeScript decorators are not supported in webnode (${filename}:${position(source, token.start)})`,
+      );
+    }
+    if (token.type === TokenType._declare) {
+      // `declare namespace`, `declare module`, `declare global`: types only, nested ones too.
+      const next = tokens[index + 1];
+      const open =
+        next?.type === TokenType.name &&
+        (next.contextualKeyword === ContextualKeyword._namespace ||
+          next.contextualKeyword === ContextualKeyword._module ||
+          next.contextualKeyword === ContextualKeyword._global)
+          ? bodyBrace(tokens, index + 1)
+          : -1;
+      if (open >= 0) {
+        index = Math.max(index, closingBrace(tokens, open));
+      }
+      continue;
+    }
+    const keyword = token.contextualKeyword;
+    if (
+      token.type !== TokenType.name ||
+      !token.isType ||
+      (keyword !== ContextualKeyword._namespace && keyword !== ContextualKeyword._module) ||
+      tokens[index + 1]?.type !== TokenType.name
+    ) {
+      continue;
+    }
+    const open = bodyBrace(tokens, index + 1);
+    const close = open >= 0 ? closingBrace(tokens, open) : -1;
+    if (close < 0) {
+      continue;
+    }
+    // A namespace nested in this one is checked when the loop reaches it.
+    if (!declaresOnlyTypes(source.slice(tokens[open].end, tokens[close].start))) {
+      const name = source.slice(tokens[index + 1].start, tokens[open - 1].end);
+      throw new SyntaxError(
+        `TypeScript namespace "${name}" holds values, which webnode cannot compile; only namespaces of types are supported (${filename}:${position(source, token.start)})`,
+      );
+    }
+  }
+}
+
+function sucraseTransforms(filename: string): Transform[] {
   const transforms: Transform[] = [];
   if (TYPESCRIPT.test(filename)) {
     transforms.push("typescript");
@@ -94,8 +246,17 @@ export function stripTypes(source: string, filename: string): string {
   if (JSX.test(filename)) {
     transforms.push("jsx");
   }
+  return transforms;
+}
+
+/** `source` with its TypeScript types (and JSX) compiled away. */
+export function stripTypes(source: string, filename: string): string {
+  const transforms = sucraseTransforms(filename);
   if (transforms.length === 0) {
     return source;
+  }
+  if (TYPESCRIPT.test(filename)) {
+    rejectUncompiledTypeScript(source, filename);
   }
   try {
     return transform(source, {
@@ -108,6 +269,54 @@ export function stripTypes(source: string, filename: string): string {
   } catch (error) {
     throw syntaxError(error, filename);
   }
+}
+
+/**
+ * A TypeScript or JSX file that runs as CommonJS, with its `import`/`export`
+ * statements compiled to `require` and `exports`, as tsx does. The wrapper
+ * binds the loader's names for them (STATIC_IMPORT_BINDING, EXPORTS_BINDING)
+ * beside `require` and `module`. `strict` is whether the file was a module to
+ * begin with: a script keeps its own mode.
+ */
+function commonJsFromModule(source: string, filename: string, strict: boolean): PreparedSource {
+  let code: string;
+  try {
+    code = transform(source, {
+      transforms: [...sucraseTransforms(filename), "imports"],
+      preserveDynamicImport: true,
+      disableESTransforms: true,
+      jsxRuntime: "automatic",
+      production: false,
+      filePath: filename,
+    }).code;
+  } catch (error) {
+    throw syntaxError(error, filename);
+  }
+  if (!strict && code.startsWith('"use strict";')) {
+    code = code.slice('"use strict";'.length);
+  }
+  let imports: ReturnType<typeof lex>[0] = [];
+  try {
+    [imports] = lex(code, filename);
+  } catch {
+    // Left for the engine to report.
+  }
+  for (const entry of [...imports].reverse()) {
+    if (entry.type === "dynamic") {
+      code = `${code.slice(0, entry.importStart)}${DYNAMIC_IMPORT_BINDING}${code.slice(entry.dynamicStart)}`;
+    } else if (entry.type === "import-meta") {
+      code = `${code.slice(0, entry.start)}${IMPORT_META_BINDING}${code.slice(entry.end)}`;
+    }
+  }
+  return {
+    format: "cjs",
+    code,
+    specifiers: [],
+    prologue: "",
+    exportNames: null,
+    starExports: [],
+    importedNames: [],
+  };
 }
 
 /**
@@ -136,18 +345,90 @@ function needsTopLevelAwait(code: string): boolean {
   }
 }
 
+/** An identifier, a string name, or either followed by `as local`, then a comma or the end. */
+const IMPORT_SPECIFIER =
+  /\s*(?:(["'])((?:\\.|(?!\1)[^\\\n])*)\1|([\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*))(?:\s+as\s+[\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*)?\s*(?:,|$)/uy;
+
+/**
+ * The names an `import … from` clause takes (`default` for a default import),
+ * or null when the clause is not one this reads with certainty.
+ */
+function importedNamesOf(clause: string): string[] | null {
+  const text = clause.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, " ").trim();
+  if (text === "") {
+    return [];
+  }
+  const names: string[] = [];
+  const brace = text.indexOf("{");
+  const head = (brace >= 0 ? text.slice(0, brace) : text).trim().replace(/,$/, "").trim();
+  for (const part of head === "" ? [] : head.split(",")) {
+    const binding = part.trim();
+    if (/^\*\s*as\s/.test(binding)) {
+      continue;
+    }
+    if (!isIdentifierName(binding)) {
+      return null;
+    }
+    names.push("default");
+  }
+  if (brace < 0) {
+    return names;
+  }
+  const close = text.lastIndexOf("}");
+  if (close < brace || text.slice(close + 1).trim() !== "") {
+    return null;
+  }
+  const inner = text.slice(brace + 1, close).trim();
+  IMPORT_SPECIFIER.lastIndex = 0;
+  while (IMPORT_SPECIFIER.lastIndex < inner.length) {
+    const match = IMPORT_SPECIFIER.exec(inner);
+    if (!match) {
+      return null;
+    }
+    const name = match[3] ?? stringLiteralValue(match[2]);
+    if (name === null) {
+      return null;
+    }
+    names.push(name);
+  }
+  return names;
+}
+
+/** A function declaration's name: `function name(`, `function* name(`. */
+const FUNCTION_DECLARATION =
+  /\bfunction(?:\s*\*\s*|\s+)([\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*)\s*\(/gu;
+
+/** The names `text` declares functions by, at any depth: one pass over the module. */
+function declaredFunctionNames(text: string): Set<string> {
+  const names = new Set<string>();
+  for (const match of text.matchAll(FUNCTION_DECLARATION)) {
+    names.add(match[1]);
+  }
+  return names;
+}
+
+/** An exported function declaration's publication, for the module's prologue. */
+function hoistedExport(exported: string, local: string): string {
+  const key = JSON.stringify(isIdentifierName(exported) ? exported : exportNameStandIn(exported));
+  // `typeof` of a `let` or `class` not yet initialised throws: such a binding is not hoisted.
+  return `try{if(typeof ${local}==="function")${EXPORTS_BINDING}[${key}]=${local}}catch{}`;
+}
+
 /**
  * Prepares `source` to run. `format` is what the file's name and package say it
- * is, or null to let its syntax decide. A file with `import`/`export`
- * statements always runs as an ES module, and so does a file of undecided
- * format whose only module syntax is a top-level await.
+ * is, or null to let its syntax decide. A JavaScript file with
+ * `import`/`export` statements always runs as an ES module, and so does a file
+ * of undecided format whose only module syntax is a top-level await. A
+ * TypeScript or JSX file that is CommonJS by its name or package runs as
+ * CommonJS, with its `import`/`export` compiled to `require`, as tsx does.
  */
 export function prepareSource(
   source: string,
   filename: string,
   format: "esm" | "cjs" | null,
 ): PreparedSource {
-  let text = stripTypes(withoutPreamble(source), filename);
+  const original = withoutPreamble(source);
+  let text = stripTypes(original, filename);
 
   let imports: ReturnType<typeof lex>[0];
   let exports: ReturnType<typeof lex>[1];
@@ -156,7 +437,30 @@ export function prepareSource(
     [imports, exports, , hasModuleSyntax] = lex(text, filename);
   } catch {
     // Not parseable as a module; run it as it is and let the engine report the error.
-    return { format: format ?? "cjs", code: text, specifiers: [] };
+    return {
+      format: format ?? "cjs",
+      code: text,
+      specifiers: [],
+      prologue: "",
+      exportNames: null,
+      starExports: [],
+      importedNames: [],
+    };
+  }
+
+  if (isCompiledFile(filename) && hasModuleSyntax && format !== "esm") {
+    // The import sucrase adds for the automatic JSX runtime is not the file's own module syntax.
+    const ownModuleSyntax =
+      !JSX.test(filename) ||
+      exports.length > 0 ||
+      imports.some(
+        (entry) =>
+          entry.type === "import-meta" ||
+          (entry.type === "static" && !JSX_RUNTIME.test(entry.specifier ?? "")),
+      );
+    if (format === "cjs" || !ownModuleSyntax) {
+      return commonJsFromModule(original, filename, ownModuleSyntax);
+    }
   }
 
   const isModule =
@@ -220,6 +524,49 @@ export function prepareSource(
       }
     }
   }
+  // What the linker checks and hoists, read before the edits move the offsets.
+  const hoisted: string[] = [];
+  const exportNames: string[] = [];
+  const starExports: string[] = [];
+  const importedNames: { specifier: string; names: string[] }[] = [];
+  if (isModule) {
+    let functions: Set<string> | null = null;
+    for (const entry of exports) {
+      if (entry.typeOnly) {
+        continue;
+      }
+      if (entry.type === "reexport-all") {
+        starExports.push(entry.from);
+        continue;
+      }
+      exportNames.push(entry.name);
+      if (entry.type === "direct" && entry.localName !== undefined) {
+        functions ??= declaredFunctionNames(text);
+        if (functions.has(entry.localName)) {
+          hoisted.push(hoistedExport(entry.name, entry.localName));
+        }
+      }
+    }
+    for (const entry of imports) {
+      if (
+        entry.type !== "static" ||
+        entry.typeOnly ||
+        entry.phase !== null ||
+        typeof entry.specifier !== "string" ||
+        !text.startsWith("import", entry.importStart)
+      ) {
+        continue;
+      }
+      const clause = text
+        .slice(entry.importStart + "import".length, entry.start - 1)
+        .replace(/\bfrom\s*$/, "");
+      const names = importedNamesOf(clause);
+      if (names !== null && names.length > 0) {
+        importedNames.push({ specifier: entry.specifier, names });
+      }
+    }
+  }
+
   edits.sort((left, right) => right.start - left.start);
   for (const edit of edits) {
     text = `${text.slice(0, edit.start)}${edit.text}${text.slice(edit.end)}`;
@@ -236,7 +583,15 @@ export function prepareSource(
   }
 
   if (!isModule) {
-    return { format: "cjs", code: text, specifiers: [] };
+    return {
+      format: "cjs",
+      code: text,
+      specifiers: [],
+      prologue: "",
+      exportNames: null,
+      starExports: [],
+      importedNames: [],
+    };
   }
 
   try {
@@ -252,7 +607,15 @@ export function prepareSource(
         `\nObject.defineProperty(${EXPORTS_BINDING}, "${standIn}", { enumerable: false });` +
         `\nObject.defineProperty(${EXPORTS_BINDING}, ${JSON.stringify(name)}, { enumerable: true, configurable: true, get: () => ${EXPORTS_BINDING}.${standIn} });`;
     }
-    return { format: "esm", code, specifiers };
+    return {
+      format: "esm",
+      code,
+      specifiers,
+      prologue: hoisted.join(";"),
+      exportNames,
+      starExports,
+      importedNames,
+    };
   } catch (error) {
     throw syntaxError(error, filename);
   }

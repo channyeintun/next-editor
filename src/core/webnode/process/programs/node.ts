@@ -11,16 +11,22 @@ import {
   runEntry,
   runSource,
 } from "../loader/modules";
-import { resolveSpecifier } from "../loader/resolve";
-import { DYNAMIC_IMPORT_BINDING, prepareSource, transformReady } from "../loader/transform";
+import { findPackageScope, resolveSpecifier } from "../loader/resolve";
+import {
+  DYNAMIC_IMPORT_BINDING,
+  prepareSource,
+  sourceUrlComment,
+  transformReady,
+} from "../loader/transform";
 import { installGlobals } from "../node/globals";
 import { loadBuiltin, setProcessBuiltins } from "../node/index";
 import path from "../node/path";
-import { createProcess, runNextTicks } from "../node/process";
+import { createProcess, runNextTicks, unhandledRejectionError } from "../node/process";
 import type { NodeProcess } from "../node/process";
 import util from "../node/util";
 import { THREAD_ERROR_MESSAGE, THREAD_ONLINE_MESSAGE } from "../node/worker_threads";
 import type { ProcessClient } from "../sysClient";
+import { pathWithBins, shellQuote, spawnAndWait } from "./npm/scripts";
 import type { ProcessInit } from "../../protocol";
 
 interface NodeOptions {
@@ -30,7 +36,10 @@ interface NodeOptions {
   imports: string[];
   conditions: string[];
   inputType: string | null;
-  envFiles: string[];
+  envFiles: { path: string; ifExists: boolean }[];
+  /** `--run <script>`: the package.json script to run instead of a file. */
+  run: string | null;
+  watch: boolean;
   readStdin: boolean;
   script: string | null;
   scriptArgs: string[];
@@ -40,7 +49,7 @@ interface NodeOptions {
   help: boolean;
 }
 
-/** Options whose value is the next argument. */
+/** Options whose value is the next argument (`node --help` lists them as `--name=...`). */
 const VALUE_OPTIONS = new Set([
   "-e",
   "--eval",
@@ -55,15 +64,65 @@ const VALUE_OPTIONS = new Set([
   "--experimental-loader",
   "--env-file",
   "--env-file-if-exists",
+  "--run",
   "--title",
   "--input-type",
   "--stack-trace-limit",
   "--max-http-header-size",
+  "--max-old-space-size",
+  "--max-semi-space-size",
+  "--stack-size",
   "--watch-path",
+  "--watch-kill-signal",
   "--inspect-port",
+  "--inspect-publish-uid",
   "--diagnostic-dir",
   "--redirect-warnings",
   "--unhandled-rejections",
+  "--disable-warning",
+  "--disable-proto",
+  "--dns-result-order",
+  "--allow-fs-read",
+  "--allow-fs-write",
+  "--cpu-prof-dir",
+  "--cpu-prof-interval",
+  "--cpu-prof-name",
+  "--heap-prof-dir",
+  "--heap-prof-interval",
+  "--heap-prof-name",
+  "--heapsnapshot-near-heap-limit",
+  "--heapsnapshot-signal",
+  "--icu-data-dir",
+  "--localstorage-file",
+  "--max-old-space-size-percentage",
+  "--network-family-autoselection-attempt-timeout",
+  "--openssl-config",
+  "--report-filename",
+  "--report-signal",
+  "--secure-heap",
+  "--secure-heap-min",
+  "--snapshot-blob",
+  "--test-concurrency",
+  "--test-coverage-branches",
+  "--test-coverage-exclude",
+  "--test-coverage-functions",
+  "--test-coverage-include",
+  "--test-coverage-lines",
+  "--test-global-setup",
+  "--test-name-pattern",
+  "--test-random-seed",
+  "--test-reporter",
+  "--test-reporter-destination",
+  "--test-shard",
+  "--test-skip-pattern",
+  "--test-timeout",
+  "--tls-cipher-list",
+  "--tls-keylog",
+  "--trace-event-categories",
+  "--trace-event-file-pattern",
+  "--trace-require-module",
+  "--use-largepages",
+  "--v8-pool-size",
 ]);
 
 function splitWords(text: string): string[] {
@@ -84,6 +143,8 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
     conditions: [],
     inputType: null,
     envFiles: [],
+    run: null,
+    watch: false,
     readStdin: false,
     script: null,
     scriptArgs: [],
@@ -119,7 +180,13 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
         break;
       case "--env-file":
       case "--env-file-if-exists":
-        options.envFiles.push(value ?? "");
+        options.envFiles.push({ path: value ?? "", ifExists: name === "--env-file-if-exists" });
+        break;
+      case "--run":
+        options.run = value ?? "";
+        break;
+      case "--watch":
+        options.watch = true;
         break;
       case "--stack-trace-limit":
         Error.stackTraceLimit = Number(value);
@@ -138,12 +205,14 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
     }
   };
 
+  let afterDoubleDash = false;
   const consume = (list: string[], allowScript: boolean) => {
     let index = 0;
     while (index < list.length) {
       const argument = list[index];
       if (argument === "--") {
         index += 1;
+        afterDoubleDash = allowScript;
         break;
       }
       if (argument === "-" && allowScript) {
@@ -181,7 +250,11 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
 
   consume(splitWords(environment.NODE_OPTIONS ?? ""), false);
   const rest = consume(args, true);
-  if (options.evalSource === null && !options.readStdin && rest.length > 0) {
+  if (options.run !== null) {
+    // `node --run <script> -- <args>`: only what follows `--` goes to the script.
+    const dashes = rest.indexOf("--");
+    options.scriptArgs = afterDoubleDash ? rest : dashes >= 0 ? rest.slice(dashes + 1) : [];
+  } else if (options.evalSource === null && !options.readStdin && rest.length > 0) {
     options.script = rest[0];
     options.scriptArgs = rest.slice(1);
   } else {
@@ -221,8 +294,11 @@ function describeError(error: unknown): string {
 /** Runs the `node` program for the worker `init` describes. Does not return to its caller's flow. */
 export async function runNode(init: ProcessInit, client: ProcessClient): Promise<void> {
   const rt = runtime();
-  const options = parseOptions(init.argv.slice(1), init.env);
-  rt.execArgv = [...init.execArgv, ...options.execArgv];
+  const thread = init.thread;
+  // A thread's argv is its script's arguments; its options are its execArgv
+  // (the parent's, unless the Worker named others), as in Node.
+  const options = parseOptions(thread ? init.execArgv : init.argv.slice(1), init.env);
+  rt.execArgv = thread ? [...init.execArgv] : [...init.execArgv, ...options.execArgv];
 
   await transformReady;
   configureLoader({ loadBuiltin, conditions: options.conditions });
@@ -251,11 +327,13 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
     return process.exit(1);
   };
 
-  const thread = init.thread;
-  const reportUncaught = (error: unknown) => {
+  const reportUncaught = (
+    error: unknown,
+    origin: "uncaughtException" | "unhandledRejection" = "uncaughtException",
+  ) => {
     const handled = (
-      process as unknown as { _handleUncaught(error: unknown): boolean }
-    )._handleUncaught(error);
+      process as unknown as { _handleUncaught(error: unknown, origin: string): boolean }
+    )._handleUncaught(error, origin);
     if (handled) {
       return;
     }
@@ -282,31 +360,50 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
       process.emit("unhandledRejection", reason, promise);
       return;
     }
-    reportUncaught(reason);
+    reportUncaught(unhandledRejectionError(reason), "unhandledRejection");
   });
   globalThis.addEventListener("rejectionhandled", (event) => {
     process.emit("rejectionHandled", (event as PromiseRejectionEvent).promise);
   });
 
-  if (options.version) {
+  // A thread only takes the options that change how modules load.
+  if (options.version && !thread) {
     process.stdout.write(`v${NODE_VERSION}\n`);
     process.exit(0);
   }
-  if (options.help) {
+  if (options.help && !thread) {
     process.stdout.write(
       "Usage: node [options] [ script.js ] [arguments]\n       node [options] -e script [arguments]\n",
     );
     process.exit(0);
   }
 
-  for (const file of options.envFiles) {
+  for (const file of thread ? [] : options.envFiles) {
     try {
-      (process as unknown as { loadEnvFile(file: string): void }).loadEnvFile(file);
+      (process as unknown as { loadEnvFile(file: string): void }).loadEnvFile(file.path);
     } catch (error) {
-      process.stderr.write(`node: ${file}: not found\n`);
       void error;
+      if (file.ifExists) {
+        process.stderr.write(`${file.path} not found. Continuing without it.\n`);
+        continue;
+      }
+      process.stderr.write(`node: ${file.path}: not found\n`);
       process.exit(9);
     }
+  }
+
+  if (options.run !== null && !thread) {
+    process.exit(await runPackageScript(options.run, options.scriptArgs, process));
+  }
+  if (options.watch && !thread) {
+    if (options.evalSource !== null) {
+      process.stderr.write("node: either --watch or --eval can be used, not both\n");
+      process.exit(9);
+    }
+    // Restarting on changes is not implemented: say so rather than pretend.
+    process.stderr.write(
+      "node: --watch is not supported in webnode; the program runs once and is not restarted when files change\n",
+    );
   }
 
   // Exit once nothing is pending: no timer, server, socket, child or request.
@@ -396,6 +493,37 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
   scheduleExitCheck();
 }
 
+/** `node --run <name>`: runs the nearest package.json's script through the shell, as Node does. */
+async function runPackageScript(
+  name: string,
+  args: string[],
+  process: NodeProcess,
+): Promise<number> {
+  const rt = runtime();
+  const scope = findPackageScope(rt.cwd);
+  if (scope === null) {
+    process.stderr.write(`Can't find package.json for directory ${rt.cwd}\n`);
+    return 1;
+  }
+  const manifest = path.join(scope.directory, "package.json");
+  const scripts = (scope.json as { scripts?: Record<string, unknown> }).scripts ?? {};
+  const script = Object.hasOwn(scripts, name) ? scripts[name] : undefined;
+  if (typeof script !== "string") {
+    const available = Object.entries(scripts)
+      .map(([key, value]) => `  ${key}: ${String(value)}\n`)
+      .join("");
+    process.stderr.write(
+      `Missing script: "${name}" for ${manifest}\n${available ? `\nAvailable scripts are:\n${available}` : ""}`,
+    );
+    return 1;
+  }
+  const env = pathWithBins({ ...rt.env }, scope.directory);
+  env.NODE_RUN_SCRIPT_NAME = name;
+  env.NODE_RUN_PACKAGE_JSON_PATH = manifest;
+  const command = [script, ...args.map(shellQuote)].join(" ");
+  return spawnAndWait("sh", ["-c", command], scope.directory, env);
+}
+
 function resolveMain(script: string): string {
   const resolved = resolveSpecifier(script, `${runtime().cwd}/[main]`, "require", []);
   if ("builtin" in resolved) {
@@ -433,7 +561,7 @@ function runEval(
   global[DYNAMIC_IMPORT_BINDING] = (specifier: unknown) =>
     importModule(String(specifier), filename);
   // eslint-disable-next-line no-eval -- `node -e`/`-p` evaluates the given script
-  const value = (0, eval)(`${prepared.code}\n//# sourceURL=${filename}`) as unknown;
+  const value = (0, eval)(`${prepared.code}${sourceUrlComment(filename)}`) as unknown;
   if (options.print) {
     process.stdout.write(`${typeof value === "string" ? value : util.inspect(value)}\n`);
   }

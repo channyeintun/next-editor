@@ -114,6 +114,28 @@ describe("fd reading", () => {
   });
 });
 
+describe("fd reuse", () => {
+  it("drops data sent for a closed fd until the kernel answers the close", () => {
+    const { client, sent } = makeClient();
+    const old: string[] = [];
+    const fresh: string[] = [];
+    client.runtime.fdStream.readStart(3, (chunk) => old.push(decoder.decode(chunk!)));
+    client.runtime.fdStream.close(3);
+    // A spawn reuses fd 3 at once, and its stream starts reading.
+    client.runtime.fdStream.readStart(3, (chunk) => fresh.push(decoder.decode(chunk!)));
+    client.receive(data(3, "child A"));
+    const close = sent.find(
+      (message): message is Extract<ProcessMessage, { type: "call" }> =>
+        message.type === "call" && message.op === "fd.close",
+    );
+    expect(close?.args).toEqual([3]);
+    client.receive({ type: "reply", id: close!.id, ok: true, value: undefined });
+    client.receive(data(3, "child B"));
+    expect(old).toEqual([]);
+    expect(fresh).toEqual(["child B"]);
+  });
+});
+
 describe("child exits", () => {
   it("hands an early exit to the first onExit only", async () => {
     const { client } = makeClient();

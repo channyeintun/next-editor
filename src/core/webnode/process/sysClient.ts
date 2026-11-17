@@ -7,6 +7,7 @@ import { systemErrorFromRecord } from "../errors";
 import { decodePayload, readSyncAnswer } from "../kernel/codec";
 import type { DirEntry, StatData } from "../kernel/vfs/types";
 import { runNextTicks } from "./node/process";
+import { THREAD_EXIT_MESSAGE } from "./node/worker_threads";
 import type { KernelMessage, ProcessInit, ProcessMessage, SerializedError } from "../protocol";
 import { withDirectPaths } from "../sharedfs/processBackend";
 import {
@@ -115,6 +116,14 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
    * `readStart` gets them first, so no byte is lost when a reader pauses.
    */
   const fdBacklogs = new Map<number, (Uint8Array | null)[]>();
+  /**
+   * Fds closed here whose close the kernel has not yet answered, with how many
+   * such closes are pending. The kernel reuses the lowest free fd, and a spawn
+   * or pipe answers through the shared buffer at once, so a new stream can
+   * take the number while data the kernel sent for the old one is still on its
+   * way. The answer to the close comes after all of that data.
+   */
+  const closingFds = new Map<number, number>();
   const exitListeners = new Map<number, ((status: ExitStatus) => void)[]>();
   const exitedChildren = new Map<number, ExitStatus>();
   const threadExitListeners = new Map<number, ((code: number) => void)[]>();
@@ -244,7 +253,19 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
       close(fd) {
         fdReaders.delete(fd);
         fdBacklogs.delete(fd);
-        post("fd.close", [fd]);
+        closingFds.set(fd, (closingFds.get(fd) ?? 0) + 1);
+        const confirmed = () => {
+          const left = (closingFds.get(fd) ?? 1) - 1;
+          if (left > 0) {
+            closingFds.set(fd, left);
+          } else {
+            closingFds.delete(fd);
+          }
+        };
+        // Answered in order with the fd's data, and handled before the next message.
+        const id = nextCallId++;
+        pendingCalls.set(id, { resolve: confirmed, reject: confirmed });
+        scope.postMessage({ type: "call", id, op: "fd.close", args: [fd] });
       },
     },
 
@@ -299,6 +320,14 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
       pipe: () => callSync("proc.pipe") as { readFd: number; writeFd: number },
       kill: (pid, signal) => void callSync("proc.kill", pid, signal),
       exit(code): never {
+        if (init.thread) {
+          try {
+            // Last on the thread's port, after everything it posted (THREAD_EXIT_MESSAGE).
+            init.thread.port.postMessage({ type: THREAD_EXIT_MESSAGE });
+          } catch {
+            // The port is gone; the parent stops waiting for it.
+          }
+        }
         callSync("proc.exit", code);
         // The kernel stops this worker instead of answering.
         throw new Error("webnode: the process did not exit");
@@ -332,8 +361,12 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
         const result = (await call("net.connect", port)) as {
           port: MessagePort;
           channelId: number;
+          localPort: number;
         };
-        return adoptChannel(result.channelId, result.port);
+        // The port the kernel labels this end with: the socket's localPort.
+        return Object.assign(adoptChannel(result.channelId, result.port), {
+          localPort: result.localPort,
+        });
       },
     },
 
@@ -400,6 +433,10 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
         return;
       }
       case "fd-data": {
+        if (closingFds.has(message.fd)) {
+          // Sent for the stream this fd number had before it was closed.
+          return;
+        }
         const reader = fdReaders.get(message.fd);
         if (!reader) {
           fdBacklogs.get(message.fd)?.push(message.chunk);

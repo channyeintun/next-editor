@@ -12,6 +12,7 @@ import { invalidArgType } from "./internalErrors";
 import path from "./path";
 import { signalName, signalNumber } from "./process";
 import { promisify } from "./util";
+import { listenOnPlatformPort } from "./worker_threads";
 
 type StdioOption = string | number | null | undefined | { fd?: number };
 
@@ -237,14 +238,14 @@ function start(child: ChildProcess, file: string, args: string[], options: Spawn
   const ipc = handle.ipc;
   if (ipc) {
     child.connected = true;
-    ipc.onmessage = (event: MessageEvent<{ type: string; message?: unknown }>) => {
+    listenOnPlatformPort(ipc, (event: MessageEvent<{ type: string; message?: unknown }>) => {
       if (event.data.type === "message") {
         child.emit("message", event.data.message, undefined);
       } else if (event.data.type === "disconnect" && child.connected) {
         child.connected = false;
         child.emit("disconnect");
       }
-    };
+    });
   }
 
   child.kill = (signal) => {
@@ -517,8 +518,27 @@ export function fork(
       },
     );
   }
-  const execArgv = options.execArgv ?? runtime().execArgv;
+  const execArgv = options.execArgv ?? withoutEval(runtime().execArgv);
   return spawn(options.execPath ?? "node", [...execArgv, script, ...args], { ...options, stdio });
+}
+
+const EVAL_OPTIONS = new Set(["-e", "--eval", "-p", "--print"]);
+
+/**
+ * The parent's options without its `-e`/`-p` code, as Node's fork leaves them
+ * out: the child would run that code again, and fork again, without end.
+ */
+function withoutEval(execArgv: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (let index = 0; index < execArgv.length; index += 1) {
+    const option = execArgv[index];
+    if (EVAL_OPTIONS.has(option)) {
+      index += 1;
+    } else if (!/^--(?:eval|print)=/.test(option)) {
+      kept.push(option);
+    }
+  }
+  return kept;
 }
 
 interface SyncResult {

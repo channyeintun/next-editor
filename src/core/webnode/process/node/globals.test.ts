@@ -106,7 +106,8 @@ describe("WebSocket", () => {
   const RefedSocket = createRefedWebSocket(FakeSocket as unknown as typeof WebSocket);
 
   it("keeps the process alive from construction until close", () => {
-    const socket = new RefedSocket("ws://localhost:1/");
+    // A remote host: a local one is served inside the runtime (http/localWebSocket.ts).
+    const socket = new RefedSocket("ws://example.com/");
     expect(socket).toBeInstanceOf(FakeSocket);
     expect(fake.refCount).toBe(1);
     socket.dispatchEvent(new Event("open"));

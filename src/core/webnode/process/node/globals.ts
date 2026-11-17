@@ -5,6 +5,7 @@ import { NODE_VERSION } from "../platform";
 import { runtime } from "../runtime";
 import { Buffer } from "./buffer";
 import { createConsole } from "./console";
+import { isLocalWebSocketUrl, LocalWebSocket } from "./http/localWebSocket";
 import { createFetch } from "./internal/localFetch";
 import type { NodeProcess } from "./process";
 import timers from "./timers";
@@ -125,7 +126,18 @@ export function keepAliveWhileStreaming(prototype: ReadableStream | undefined): 
  */
 export function createRefedWebSocket(Native: typeof WebSocket): typeof WebSocket {
   return class WebSocket extends Native {
+    // A socket to a local host reaches the server inside the runtime; the
+    // native one would dial the visitor's own machine.
+    static [Symbol.hasInstance](value: unknown): boolean {
+      return (
+        value instanceof LocalWebSocket || Function.prototype[Symbol.hasInstance].call(this, value)
+      );
+    }
+
     constructor(url: string | URL, protocols?: string | string[]) {
+      if (isLocalWebSocketUrl(url)) {
+        return new LocalWebSocket(url, protocols) as unknown as WebSocket;
+      }
       super(url, protocols);
       let rt: ReturnType<typeof runtime>;
       try {

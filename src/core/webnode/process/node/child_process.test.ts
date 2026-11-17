@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createSystemError } from "../../errors";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
-import { spawn } from "./child_process";
+import { fork, spawn } from "./child_process";
 
 let fake: FakeRuntime;
 
@@ -34,5 +34,27 @@ describe("spawn", () => {
     ]);
     expect(child.exitCode).toBe(-2);
     expect(fake.refCount).toBe(0);
+  });
+});
+
+describe("fork", () => {
+  it("leaves out the parent's -e/-p code, as Node does, but keeps its other options", () => {
+    const requests: { command: string; args: string[] }[] = [];
+    fake.processes.spawn = (request) => {
+      requests.push(request);
+      throw createSystemError("ENOENT", "spawn node", "node");
+    };
+    const code = 'require("child_process").fork("c.js", ["a"])';
+    fake.execArgv = ["--conditions", "dev", "-e", code];
+    fork("c.js", ["a"]).on("error", () => {});
+    fake.execArgv = ["--print=1", "-r", "./pre.js", "-p", code];
+    fork("c.js").on("error", () => {});
+    // execArgv given by the caller is used as it is.
+    fork("c.js", { execArgv: ["-e", "1"] }).on("error", () => {});
+    expect(requests.map((request) => [request.command, ...request.args])).toEqual([
+      ["node", "--conditions", "dev", "c.js", "a"],
+      ["node", "-r", "./pre.js", "c.js"],
+      ["node", "-e", "1", "c.js"],
+    ]);
   });
 });

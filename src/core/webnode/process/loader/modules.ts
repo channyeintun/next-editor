@@ -20,8 +20,11 @@ import {
   EXPORTS_BINDING,
   hasTopLevelAwait,
   IMPORT_META_BINDING,
+  isCompiledFile,
   isIdentifierName,
+  isTypeScriptFile,
   prepareSource,
+  sourceUrlComment,
   STATIC_IMPORT_BINDING,
   stripTypes,
 } from "./transform";
@@ -59,6 +62,19 @@ function dirname(path: string): string {
   return index <= 0 ? "/" : path.slice(0, index);
 }
 
+/** `path` made absolute against the working directory, `.` and `..` resolved, as Node's `path.resolve`. */
+function absolutePath(path: string): string {
+  const segments: string[] = [];
+  for (const segment of (path.startsWith("/") ? path : `${runtime().cwd}/${path}`).split("/")) {
+    if (segment === "..") {
+      segments.pop();
+    } else if (segment !== "" && segment !== ".") {
+      segments.push(segment);
+    }
+  }
+  return `/${segments.join("/")}`;
+}
+
 function codedError<T extends Error>(error: T, code: string): T {
   (error as T & { code: string }).code = code;
   return error;
@@ -78,14 +94,19 @@ function pathFromFileUrl(url: string): string {
   return decodeURIComponent(new URL(url).pathname);
 }
 
-/** Runs `code` as the body of a function taking `parameters`, named after `filename` in stack traces. */
+/**
+ * Runs `code` as the body of a function taking `parameters`, named after
+ * `filename` in stack traces. A generator is for an ES module: its first step
+ * links it, the second runs it.
+ */
 function compileFunction(
   code: string,
   parameters: string[],
   filename: string,
   isAsync: boolean,
+  isGenerator = false,
 ): (...args: unknown[]) => unknown {
-  const source = `(${isAsync ? "async " : ""}function (${parameters.join(", ")}) {${code}\n})\n//# sourceURL=${filename}`;
+  const source = `(${isAsync ? "async " : ""}function${isGenerator ? "*" : ""} (${parameters.join(", ")}) {${code}\n})${sourceUrlComment(filename)}`;
   try {
     // Indirect eval: the function sees only the global scope.
     // eslint-disable-next-line no-eval -- the loader exists to evaluate module source
@@ -233,6 +254,33 @@ export interface NodeRequire {
 }
 
 const WRAPPER_PARAMETERS = ["exports", "require", "module", "__filename", "__dirname"];
+/**
+ * What a CommonJS wrapper binds beside Node's parameters: `import()`, and the
+ * names a TypeScript file's compiled `import`/`export` use (transform.ts).
+ */
+const COMMONJS_PARAMETERS = [
+  ...WRAPPER_PARAMETERS,
+  DYNAMIC_IMPORT_BINDING,
+  STATIC_IMPORT_BINDING,
+  EXPORTS_BINDING,
+];
+
+/** Runs compiled CommonJS `code` for `module`. */
+function runCommonJs(module: Module, code: string, filename: string): unknown {
+  const run = compileFunction(code, COMMONJS_PARAMETERS, filename, false);
+  const require = makeRequire(module);
+  return run.call(
+    module.exports,
+    module.exports,
+    require,
+    module,
+    filename,
+    dirname(filename),
+    (specifier: unknown) => importModule(String(specifier), filename),
+    require,
+    module.exports,
+  );
+}
 
 /** Node's `Module`: one loaded CommonJS module, and the module system's public API. */
 export class Module {
@@ -298,7 +346,7 @@ export class Module {
       try {
         const resolved = resolveSpecifier(
           request.startsWith("/") ? request : `./${request}`,
-          `${path}/noop.js`,
+          `${absolutePath(path)}/noop.js`,
           "require",
           host.conditions,
         );
@@ -322,7 +370,7 @@ export class Module {
       return request;
     }
     const parents = options?.paths
-      ? options.paths.map((path) => `${path}/noop.js`)
+      ? options.paths.map((path) => `${absolutePath(path)}/noop.js`)
       : [parent?.filename ?? `${runtime().cwd}/[eval]`];
     let failure: unknown;
     for (const from of parents) {
@@ -478,28 +526,18 @@ export class Module {
 
   _compile(content: string, filename: string): unknown {
     const named = formatByName(filename);
-    const prepared = prepareSource(content, filename, named === "esm" ? "esm" : null);
+    // A TypeScript or JSX file takes its format from its package, as tsx does;
+    // a JavaScript file's syntax still decides.
+    const prepared = prepareSource(
+      content,
+      filename,
+      named === "esm" || (named === "cjs" && isCompiledFile(filename)) ? named : null,
+    );
     if (prepared.format === "esm") {
       this.exports = requireEsmSource(filename, prepared);
       return undefined;
     }
-
-    const run = compileFunction(
-      prepared.code,
-      [...WRAPPER_PARAMETERS, DYNAMIC_IMPORT_BINDING],
-      filename,
-      false,
-    );
-    const directory = dirname(filename);
-    return run.call(
-      this.exports,
-      this.exports,
-      makeRequire(this),
-      this,
-      filename,
-      directory,
-      (specifier: unknown) => importModule(String(specifier), filename),
-    );
+    return runCommonJs(this, prepared.code, filename);
   }
 }
 
@@ -609,6 +647,13 @@ interface EsmRecord {
   error: unknown;
   /** Set while the module (or one it waits for) is in a top-level await. */
   pending: Promise<void> | null;
+  /** The module's code, linked and waiting for its turn to run (`compileFunction`). */
+  body: Iterator<unknown> | AsyncIterator<unknown> | null;
+  /** Whether the module awaits at its top level. */
+  isAsync: boolean;
+  /** What it exports by name (null when unknown) and the specifiers it `export *`s from. */
+  exportNames: Set<string> | null;
+  starExports: string[];
 }
 
 const esmRecords = new Map<string, EsmRecord>();
@@ -617,15 +662,23 @@ function esmRecord(filename: string, query: string, prepared?: PreparedSource): 
   const id = filename + query;
   let record = esmRecords.get(id);
   if (!record) {
+    // Marked as a namespace from the start: a module in an import cycle that
+    // runs before this one then reads its exports live, default and `* as` too.
+    const namespace: Namespace = {};
+    Object.defineProperty(namespace, "__esModule", { value: true });
     record = {
       id,
       filename,
-      namespace: {},
+      namespace,
       prepared: prepared ?? null,
       dependencies: new Map(),
       state: "new",
       error: undefined,
       pending: null,
+      body: null,
+      isAsync: false,
+      exportNames: null,
+      starExports: [],
     };
     esmRecords.set(id, record);
   }
@@ -664,52 +717,125 @@ function dependencyFor(specifier: string, parent: string, mode: ResolveMode): De
   return { kind: "other", load: () => loadNonEsm(filename, format), loaded: null };
 }
 
-/** Resolves a module's static imports, and theirs, before anything runs. */
+/**
+ * Resolves a module's static imports, and theirs, checks the names they import
+ * and compiles them, all before anything runs. A graph that fails to link
+ * leaves nothing behind: a later import reads its files again, as Node does.
+ */
 function link(record: EsmRecord): void {
   if (record.state !== "new") {
     return;
   }
-  record.state = "linked";
+  const linked: EsmRecord[] = [];
   try {
-    record.prepared ??= prepareSource(readText(record.filename), record.filename, "esm");
-    for (const specifier of record.prepared.specifiers) {
-      const dependency = dependencyFor(specifier, record.filename, "import");
-      record.dependencies.set(specifier, dependency);
-      if (dependency.kind === "esm") {
-        link(dependency.record);
-      }
+    linkGraph(record, linked);
+    for (const each of linked) {
+      checkImportedNames(each);
+    }
+    for (const each of linked) {
+      instantiate(each);
     }
   } catch (error) {
-    record.state = "errored";
-    record.error = error;
+    for (const each of linked) {
+      if (esmRecords.get(each.id) === each) {
+        esmRecords.delete(each.id);
+      }
+    }
     throw error;
   }
 }
 
-function importMetaFor(record: EsmRecord): Record<string, unknown> {
-  const query = record.id.slice(record.filename.length);
-  return {
-    url: fileUrl(record.filename) + query,
-    filename: record.filename,
-    dirname: dirname(record.filename),
-    resolve(specifier: string, parent?: string | URL): string {
-      const from = parent === undefined ? record.filename : pathFromFileUrl(String(parent));
-      const resolved = resolveSpecifier(String(specifier), from, "import", host.conditions);
-      return "builtin" in resolved
-        ? `node:${resolved.builtin}`
-        : fileUrl(resolved.filename) + resolved.query;
-    },
-  };
+function linkGraph(record: EsmRecord, linked: EsmRecord[]): void {
+  if (record.state !== "new") {
+    return;
+  }
+  record.state = "linked";
+  linked.push(record);
+  record.prepared ??= prepareSource(readText(record.filename), record.filename, "esm");
+  const exportNames = record.prepared.exportNames;
+  record.exportNames = exportNames === null ? null : new Set(exportNames);
+  record.starExports = record.prepared.starExports;
+  for (const specifier of record.prepared.specifiers) {
+    const dependency = dependencyFor(specifier, record.filename, "import");
+    record.dependencies.set(specifier, dependency);
+    if (dependency.kind === "esm") {
+      linkGraph(dependency.record, linked);
+    }
+  }
 }
 
-function execute(record: EsmRecord): unknown {
+/** Whether `record` exports `name`; true when that cannot be known (an `export *` of CommonJS). */
+function providesExport(record: EsmRecord, name: string, seen: Set<EsmRecord>): boolean {
+  if (record.exportNames === null || record.exportNames.has(name)) {
+    return true;
+  }
+  if (name === "default" || seen.has(record)) {
+    return false;
+  }
+  seen.add(record);
+  for (const specifier of record.starExports) {
+    const dependency = record.dependencies.get(specifier);
+    if (!dependency || dependency.kind !== "esm" || providesExport(dependency.record, name, seen)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Node's link-time check that an ES module exports each name imported from
+ * it. A CommonJS or builtin module is not checked, and neither is a
+ * TypeScript importer, whose imports of types sucrase cannot always tell from
+ * values.
+ */
+function checkImportedNames(record: EsmRecord): void {
+  if (isTypeScriptFile(record.filename)) {
+    return;
+  }
+  for (const { specifier, names } of record.prepared?.importedNames ?? []) {
+    const dependency = record.dependencies.get(specifier);
+    if (dependency?.kind !== "esm") {
+      continue;
+    }
+    for (const name of names) {
+      if (!providesExport(dependency.record, name, new Set())) {
+        throw new SyntaxError(
+          `The requested module '${specifier}' does not provide an export named '${name}'`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * The first steps of the async modules instantiated since evaluation last
+ * began. An async generator awaits at its `yield`, so until that step settles
+ * a second `next()` is only queued: the module's body would start a turn
+ * late, after the siblings that Node runs after it. Evaluation of a graph
+ * with such modules waits for these first (`instantiated`).
+ */
+let firstSteps: Promise<unknown>[] = [];
+
+/** Resolves once every async module instantiated so far can be resumed at once; null when none waits. */
+function instantiated(): Promise<void> | null {
+  if (firstSteps.length === 0) {
+    return null;
+  }
+  const waiting = firstSteps;
+  firstSteps = [];
+  return Promise.all(waiting).then(() => undefined);
+}
+
+/** Compiles a linked module and publishes its hoisted exports (`PreparedSource.prologue`). */
+function instantiate(record: EsmRecord): void {
   const prepared = record.prepared!;
-  record.prepared = null;
+  record.isAsync = hasTopLevelAwait(prepared.code);
   const run = compileFunction(
-    prepared.code,
+    `"use strict";${prepared.prologue};yield;${prepared.code}`,
     [EXPORTS_BINDING, STATIC_IMPORT_BINDING, IMPORT_META_BINDING, DYNAMIC_IMPORT_BINDING],
     record.filename,
-    hasTopLevelAwait(prepared.code),
+    record.isAsync,
+    true,
   );
 
   // The rewritten `import` statements call this with the specifiers linked above.
@@ -725,9 +851,52 @@ function execute(record: EsmRecord): unknown {
     return dependency.loaded;
   };
 
-  return run(record.namespace, requireImport, importMetaFor(record), (specifier: unknown) =>
+  const body = run(record.namespace, requireImport, importMetaFor(record), (specifier: unknown) =>
     importModule(String(specifier), record.filename),
-  );
+  ) as Iterator<unknown> | AsyncIterator<unknown>;
+  // An async module's first step settles later, but runs now, up to its `yield`.
+  const linked = body.next();
+  if (linked instanceof Promise) {
+    firstSteps.push(linked.catch(() => {}));
+  }
+  record.body = body;
+}
+
+function importMetaFor(record: EsmRecord): Record<string, unknown> {
+  const query = record.id.slice(record.filename.length);
+  return {
+    url: fileUrl(record.filename) + query,
+    filename: record.filename,
+    dirname: dirname(record.filename),
+    resolve(specifier: string, parent?: string | URL): string {
+      const from = parent === undefined ? record.filename : pathFromFileUrl(String(parent));
+      const text = String(specifier);
+      let resolved: ReturnType<typeof resolveSpecifier>;
+      try {
+        resolved = resolveSpecifier(text, from, "import", host.conditions);
+      } catch (error) {
+        // A path or file URL resolves whether or not the file exists, as in Node.
+        if (/^(?:\.{1,2}(?:\/|$)|\/|file:)/.test(text)) {
+          const url = new URL(text, fileUrl(from));
+          if (url.protocol === "file:") {
+            return url.href;
+          }
+        }
+        throw error;
+      }
+      return "builtin" in resolved
+        ? `node:${resolved.builtin}`
+        : fileUrl(resolved.filename) + resolved.query;
+    },
+  };
+}
+
+/** Runs a linked module's body: a promise when it awaits at its top level. */
+function execute(record: EsmRecord): unknown {
+  const body = record.body!;
+  record.body = null;
+  record.prepared = null;
+  return body.next();
 }
 
 /**
@@ -839,7 +1008,7 @@ function graphIsAsync(record: EsmRecord, seen: Set<EsmRecord>): boolean {
     return false;
   }
   seen.add(record);
-  if (record.prepared && hasTopLevelAwait(record.prepared.code)) {
+  if (record.isAsync) {
     return true;
   }
   for (const dependency of record.dependencies.values()) {
@@ -881,6 +1050,7 @@ export async function importModule(specifier: string, parent: string): Promise<N
     return dependency.loaded;
   }
   link(dependency.record);
+  await instantiated();
   await evaluate(dependency.record, new Set());
   return dependency.record.namespace;
 }
@@ -897,6 +1067,7 @@ export function runEntry(filename: string): void | Promise<unknown> {
 
 async function evaluateEntry(record: EsmRecord): Promise<Namespace> {
   link(record);
+  await instantiated();
   await evaluate(record, new Set());
   return record.namespace;
 }
@@ -914,7 +1085,8 @@ export function runSource(
   if (prepared.format === "esm") {
     const record = esmRecord(filename, "", prepared);
     link(record);
-    return evaluate(record, new Set());
+    const ready = instantiated();
+    return ready ? ready.then(() => evaluate(record, new Set())) : evaluate(record, new Set());
   }
   const module = new Module(filename, null);
   module.filename = filename;
@@ -922,21 +1094,7 @@ export function runSource(
   module.id = ".";
   Module.main = module;
   mainModuleListener?.(module);
-  const run = compileFunction(
-    prepared.code,
-    [...WRAPPER_PARAMETERS, DYNAMIC_IMPORT_BINDING],
-    filename,
-    false,
-  );
-  return run.call(
-    module.exports,
-    module.exports,
-    makeRequire(module),
-    module,
-    filename,
-    dirname(filename),
-    (specifier: unknown) => importModule(String(specifier), filename),
-  ) as void;
+  return runCommonJs(module, prepared.code, filename) as void;
 }
 
 /** Forgets what the loader knows about package.json files, for after an install. */

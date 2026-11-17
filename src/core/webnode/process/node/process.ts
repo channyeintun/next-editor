@@ -12,6 +12,7 @@ import path from "./path";
 import { Readable, Writable } from "./stream";
 import tty from "./tty";
 import { parseEnv } from "./util";
+import { listenOnPlatformPort } from "./worker_threads";
 
 // The browser's clock, captured now: a program may replace `globalThis.performance`
 // with one built on `process.hrtime` (Go's WebAssembly runtime does).
@@ -65,6 +66,40 @@ export function signalName(signal: string | number | undefined): string {
     throw Object.assign(new TypeError(`Unknown signal: ${signal}`), { code: "ERR_UNKNOWN_SIGNAL" });
   }
   return signal;
+}
+
+/** How V8 names a value without running its code: Node's text for a rejection reason. */
+function describeReason(reason: unknown): string {
+  if (typeof reason === "symbol") {
+    return reason.toString();
+  }
+  if (reason === null || (typeof reason !== "object" && typeof reason !== "function")) {
+    return String(reason);
+  }
+  if (Array.isArray(reason)) {
+    return reason
+      .map((item) => (item === null || item === undefined ? "" : describeReason(item)))
+      .join(",");
+  }
+  const constructor = (reason as { constructor?: { name?: unknown } }).constructor;
+  return `#<${typeof constructor?.name === "string" && constructor.name !== "" ? constructor.name : "Object"}>`;
+}
+
+/**
+ * What Node raises for a rejected promise nobody handled: the reason itself
+ * when it is an error (an object with its own `stack`), otherwise an
+ * `UnhandledPromiseRejection` with code ERR_UNHANDLED_REJECTION that quotes it.
+ */
+export function unhandledRejectionError(reason: unknown): unknown {
+  if (typeof reason === "object" && reason !== null && Object.hasOwn(reason, "stack")) {
+    return reason;
+  }
+  const error = new Error(
+    `This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason "${describeReason(reason)}".`,
+  );
+  Object.assign(error, { code: "ERR_UNHANDLED_REJECTION", name: "UnhandledPromiseRejection" });
+  error.stack = error.stack?.replace(/^Error/, "UnhandledPromiseRejection");
+  return error;
 }
 
 /** The number of signal `name`, or 0. */
@@ -149,8 +184,8 @@ function createOutput(fd: number): NodeProcess["stdout"] {
           ? Buffer.from(chunk, encoding as BufferEncoding)
           : (chunk as Uint8Array);
       if (kind === "pipe") {
-        // A broken pipe surfaces on the stream (the kernel has already sent
-        // SIGPIPE, which ends a process that does not handle it).
+        // A broken pipe surfaces on the stream: Node ignores SIGPIPE, so the
+        // write fails with EPIPE and the process lives.
         runtime().fdStream.write(fd, bytes, (error) => {
           if (error && !stream.destroyed) {
             stream.destroy(error);
@@ -562,8 +597,10 @@ export function createProcess(host: ProcessHost): NodeProcess {
   warningsShown = !noWarnings;
 
   // Signals: listening for one tells the kernel the process handles it.
+  // SIGPIPE is always handled: Node ignores it at startup, so a write to a
+  // closed pipe fails with EPIPE on the stream instead of ending the process.
   const handled = new Set<string>();
-  const publishSignals = () => rt.processes.setHandledSignals([...handled]);
+  const publishSignals = () => rt.processes.setHandledSignals([...handled, "SIGPIPE"]);
   const isSignalEvent = (event: unknown): event is string =>
     typeof event === "string" && event in SIGNAL_NUMBERS;
   process.on("newListener", (event: unknown) => {
@@ -588,7 +625,7 @@ export function createProcess(host: ProcessHost): NodeProcess {
   });
   rt.processes.onSignal((signal) => {
     if (process.listenerCount(signal) === 0) {
-      return false;
+      return signal === "SIGPIPE";
     }
     process.emit(signal, signal, SIGNAL_NUMBERS[signal] ?? 0);
     return true;
@@ -596,7 +633,7 @@ export function createProcess(host: ProcessHost): NodeProcess {
   publishSignals();
 
   if (host.ipc) {
-    host.ipc.onmessage = (event: MessageEvent<{ type: string; message?: unknown }>) => {
+    listenOnPlatformPort(host.ipc, (event: MessageEvent<{ type: string; message?: unknown }>) => {
       if (event.data.type === "message") {
         process.emit("message", event.data.message, undefined);
       } else if (event.data.type === "disconnect" && connected) {
@@ -604,17 +641,23 @@ export function createProcess(host: ProcessHost): NodeProcess {
         updateIpcRef();
         process.emit("disconnect");
       }
-    };
+    });
   }
 
-  /** Reports an error nothing caught. Returns false when the process should end. */
-  (process as { _handleUncaught?: unknown })._handleUncaught = (error: unknown): boolean => {
+  /**
+   * Reports an error nothing caught; `origin` is "unhandledRejection" for a
+   * rejected promise nobody handled. Returns false when the process should end.
+   */
+  (process as { _handleUncaught?: unknown })._handleUncaught = (
+    error: unknown,
+    origin: "uncaughtException" | "unhandledRejection" = "uncaughtException",
+  ): boolean => {
     if (captureCallback) {
       captureCallback(error);
       return true;
     }
     if (process.listenerCount("uncaughtException") > 0) {
-      process.emit("uncaughtException", error, "uncaughtException");
+      process.emit("uncaughtException", error, origin);
       return true;
     }
     return false;

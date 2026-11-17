@@ -71,6 +71,41 @@ function unavailable(name: string): never {
 
 const streamParts = stream as unknown as Record<string, unknown>;
 
+/**
+ * Node's older private names for parts of `http` (`require("_http_agent")`),
+ * each the same classes the `http` module exports.
+ */
+const httpParts: Record<string, () => unknown> = {
+  _http_agent: () => ({
+    Agent: http.Agent,
+    get globalAgent() {
+      return http.globalAgent;
+    },
+  }),
+  _http_client: () => ({ ClientRequest: http.ClientRequest }),
+  _http_common: () => ({
+    CRLF: "\r\n",
+    chunkExpression: /(?:^|\W)chunked(?:$|\W)/i,
+    continueExpression: /(?:^|\W)100-continue(?:$|\W)/i,
+    methods: [...http.METHODS].sort(),
+    _checkIsHttpToken: (value: string) => /^[\^_`a-zA-Z\-0-9!#$%&'*+.|~]+$/.test(value),
+    _checkInvalidHeaderChar: (value: string) => /[^\t\x20-\x7e\x80-\xff]/.test(value),
+  }),
+  _http_incoming: () => ({ IncomingMessage: http.IncomingMessage }),
+  _http_outgoing: () => ({
+    OutgoingMessage: http.OutgoingMessage,
+    validateHeaderName: http.validateHeaderName,
+    validateHeaderValue: http.validateHeaderValue,
+  }),
+  _http_server: () => ({
+    STATUS_CODES: http.STATUS_CODES,
+    Server: http.Server,
+    ServerResponse: http.ServerResponse,
+    _connectionListener: http._connectionListener,
+  }),
+};
+const httpPartCache = new Map<string, unknown>();
+
 const builtins: Record<string, () => unknown> = {
   assert: () => assert,
   "assert/strict": () => assertStrict,
@@ -131,6 +166,17 @@ const builtins: Record<string, () => unknown> = {
   _stream_readable: () => streamParts.Readable,
   _stream_transform: () => streamParts.Transform,
   _stream_writable: () => streamParts.Writable,
+  ...Object.fromEntries(
+    Object.entries(httpParts).map(([name, build]) => [
+      name,
+      () => {
+        if (!httpPartCache.has(name)) {
+          httpPartCache.set(name, build());
+        }
+        return httpPartCache.get(name);
+      },
+    ]),
+  ),
 };
 
 /** The exports of builtin module `name` (without the `node:` prefix). */
