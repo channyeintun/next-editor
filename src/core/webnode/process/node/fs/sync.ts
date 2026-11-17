@@ -382,6 +382,16 @@ export function mkdirSync(file: unknown, options?: unknown): string | undefined 
   try {
     first = backend().mkdir(absolute, recursive, mode);
   } catch (error) {
+    // The filesystem refuses to make a directory through a dangling symbolic
+    // link with EEXIST, as mkdir(2) does. Node's mkdir -p then stats the path
+    // and reports what that fails with (ENOENT), so this does too.
+    if (recursive && (error as { code?: unknown }).code === "EEXIST") {
+      try {
+        backend().stat(absolute, true);
+      } catch (statError) {
+        throw restate(statError, { absolute, shown, syscall: "mkdir" });
+      }
+    }
     throw restate(error, { absolute, shown });
   }
   if (!recursive || first === undefined) {
@@ -819,6 +829,67 @@ export async function readIntoAsync(
   } finally {
     rt.unref();
   }
+}
+
+/**
+ * Whether reading `fd` waits on another process (a pipe or a terminal), so an
+ * asynchronous read of it must not block: `read` there would stop the whole
+ * process until bytes arrive. A bad fd answers false; the read reports it.
+ */
+export function isStreamFd(fd: number): boolean {
+  let kind: string;
+  try {
+    kind = runtime().fdStream.kind(fd);
+  } catch {
+    return false;
+  }
+  return kind === "pipe" || kind === "tty";
+}
+
+/** As `readAllFromFd`, without blocking: for `readFile` on a pipe or terminal. */
+export async function readAllFromFdAsync(fd: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const chunk = new Uint8Array(READ_CHUNK);
+    const length = await readIntoAsync(fd, chunk, 0, READ_CHUNK, null);
+    if (length === 0) {
+      break;
+    }
+    chunks.push(chunk.subarray(0, length));
+    total += length;
+    if (total > kIoMaxLength) {
+      throw fileTooLarge(total);
+    }
+  }
+  return concatChunks(chunks, total);
+}
+
+/** As `readvSync`, without blocking: one read, spread over `buffers`, as readv(2) does. */
+export async function readvAsync(fd: number, buffers: ArrayBufferView[]): Promise<number> {
+  const views = buffers.map((buffer) => bytesOf(buffer));
+  const wanted = views.reduce((sum, view) => sum + view.length, 0);
+  if (wanted === 0) {
+    return 0;
+  }
+  const rt = runtime();
+  rt.ref();
+  let bytes: Uint8Array;
+  try {
+    bytes = await rt.fs.readAsync(fd, wanted, null);
+  } finally {
+    rt.unref();
+  }
+  let offset = 0;
+  for (const view of views) {
+    if (offset >= bytes.length) {
+      break;
+    }
+    const part = bytes.subarray(offset, offset + view.length);
+    view.set(part);
+    offset += part.length;
+  }
+  return bytes.length;
 }
 
 /** Validated `read` arguments: what `readSync`, `read` and `FileHandle.read` share after their overloads. */

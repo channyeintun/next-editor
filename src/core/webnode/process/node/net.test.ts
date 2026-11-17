@@ -428,3 +428,16 @@ describe("net servers and sockets", () => {
     server.close();
   });
 });
+
+describe("*.localhost names", () => {
+  it("connects to a local server through a subdomain of localhost", async () => {
+    const server = net.createServer((socket) => socket.end("hi"));
+    const port = await listen(server, 0, "127.0.0.1");
+    const client = net.connect(port, "api.localhost");
+    const lookups: unknown[] = [];
+    client.on("lookup", (...args: unknown[]) => lookups.push(args));
+    expect(await collect(client)).toBe("hi");
+    expect(lookups).toEqual([[null, "127.0.0.1", 4, "api.localhost"]]);
+    server.close();
+  });
+});

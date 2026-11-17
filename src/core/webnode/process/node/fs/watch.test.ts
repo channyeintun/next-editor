@@ -67,9 +67,17 @@ describe("fs.watch", () => {
     fs.writeFileSync("/work/r/file", "x");
     fs.writeFileSync("/work/r/deep/inner", "y");
     await tick();
-    expect(fileEvents).toEqual([["change", "file"]]);
-    expect(flat).toEqual([["change", "buffer:file"]]);
+    // Writing the empty file reports its O_TRUNC and then the write, as on Linux.
+    expect(fileEvents).toEqual([
+      ["change", "file"],
+      ["change", "file"],
+    ]);
+    expect(flat).toEqual([
+      ["change", "buffer:file"],
+      ["change", "buffer:file"],
+    ]);
     expect(deep).toEqual([
+      ["change", "file"],
       ["change", "file"],
       ["rename", "deep/inner"],
       ["change", "deep/inner"],

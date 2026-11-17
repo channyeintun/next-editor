@@ -620,6 +620,7 @@ function tickOnSocket(req: ClientRequest, socket: HttpSocket): void {
       },
     },
     req.maxHeaderSize || MAX_HEADER_SIZE,
+    req.insecureHTTPParser === true,
   );
   req.parser = state.parser;
   socket.parser = state;

@@ -541,12 +541,19 @@ impl<C: Clock, S: Space> Fs<C, S> {
 
     pub fn rmdir(&mut self, path: &[u8]) -> Result<()> {
         let found = self.lookup(path, false, Syscall::Rmdir, PATH_FIRST)?;
-        if found.node == Some(self.root) {
-            return fail(Errno::Ebusy, Syscall::Rmdir, PATH_FIRST);
-        }
         let Some(node) = found.node else {
             return fail(Errno::Enoent, Syscall::Rmdir, PATH_FIRST);
         };
+        // As Linux, by the path's own last part: `.` cannot be removed, and
+        // `..` is never empty (it holds the path walked through it).
+        match path::last_part(path) {
+            b"." => return fail(Errno::Einval, Syscall::Rmdir, PATH_FIRST),
+            b".." => return fail(Errno::Enotempty, Syscall::Rmdir, PATH_FIRST),
+            _ => {}
+        }
+        if node == self.root {
+            return fail(Errno::Ebusy, Syscall::Rmdir, PATH_FIRST);
+        }
         let Some(parent) = found.parent else {
             return fail(Errno::Einval, Syscall::Rmdir, PATH_FIRST);
         };
@@ -627,6 +634,11 @@ impl<C: Clock, S: Space> Fs<C, S> {
             return Ok(());
         }
         let moving_dir = self.node(node).is_dir();
+        // A trailing slash names a directory; only one can take that name.
+        // (A last part of `.` is another case, left as it was.)
+        if target.dir_tail && !moving_dir && path::last_part(to) != b"." {
+            return fail(Errno::Enotdir, RENAME, PATH_BOTH);
+        }
         if moving_dir && self.is_within(target_parent, node) {
             return fail(Errno::Einval, RENAME, PATH_BOTH);
         }
@@ -1441,7 +1453,13 @@ impl<C: Clock, S: Space> Fs<C, S> {
         let mut made: Vec<Made> = Vec::new();
         let mut current = path;
         let first = loop {
-            match self.resolve(current, true) {
+            let resolved = self.resolve(current, true);
+            if !matches!(&resolved, Ok(Lookup { node: Some(_), .. })) && self.is_link(current) {
+                // A symbolic link that leads nowhere: mkdir(2) does not make
+                // its target, so `mkdir -p` stops here, as on Linux.
+                return fail(Errno::Eexist, Syscall::Mkdir, PATH_FIRST);
+            }
+            match resolved {
                 Ok(found) => {
                     if let Some(node) = found.node {
                         if self.node(node).is_dir() {
@@ -1488,6 +1506,14 @@ impl<C: Clock, S: Space> Fs<C, S> {
             }
         }
         Ok(first)
+    }
+
+    /// Whether `path` itself (its last part, not followed) is a symbolic link.
+    fn is_link(&self, path: &[u8]) -> bool {
+        matches!(
+            self.resolve(path, false),
+            Ok(Lookup { node: Some(node), .. }) if self.node(node).is_symlink()
+        )
     }
 
     /// One directory of `mkdirp` on the way down: true when made, false when
@@ -1646,9 +1672,10 @@ impl<C: Clock, S: Space> Fs<C, S> {
                 node
             }
             Target::Existing(node) => {
-                // Truncating an empty file changes nothing, so it reports nothing.
-                let truncate = flags & O_TRUNC != 0
-                    && matches!(&self.node(node).kind, Kind::File(file) if file.size > 0);
+                // O_TRUNC always truncates, as on Linux: even an empty file
+                // gets new times and a change event (a "touch by empty write").
+                let truncate =
+                    flags & O_TRUNC != 0 && matches!(&self.node(node).kind, Kind::File(_));
                 if truncate {
                     // The buffer grows as the write would grow it, only earlier.
                     if let Opening::Write(writing) = opening {

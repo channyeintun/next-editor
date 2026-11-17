@@ -371,7 +371,8 @@ export class Socket extends Duplex {
           remotePort: port,
           remoteFamily: family(target.address),
           localAddress: target.family === 6 ? "::1" : "127.0.0.1",
-          localPort: undefined,
+          // The kernel's label for this end (sysClient puts it on the channel).
+          localPort: channel.localPort,
           localFamily: target.family === 6 ? "IPv6" : "IPv4",
         });
         this.emit("connect");

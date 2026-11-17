@@ -4,7 +4,6 @@
 // `ENOTFOUND`, and the DNS queries (`resolve*`, `reverse`) fail the way they
 // do with no reachable DNS server. `dns/promises` (dns_promises.ts) shares the
 // same rules through `lookupAddresses` and `queryError`.
-import { HOSTNAME } from "../platform";
 import {
   invalidArgType,
   invalidArgValue,
@@ -12,7 +11,7 @@ import {
   validateFunction,
   validateString,
 } from "./internalErrors";
-import { isIP, validatePort } from "./net/ip";
+import { isIP, isLocalHost, validatePort } from "./net/ip";
 
 /** One address `lookup` reports. */
 export interface LookupAddress {
@@ -127,11 +126,6 @@ export function queryError(syscall: string, hostname: string): Error {
   return error;
 }
 
-function isLocalName(hostname: string): boolean {
-  const name = hostname.toLowerCase().replace(/\.$/, "");
-  return name === "localhost" || name.endsWith(".localhost") || name === HOSTNAME.toLowerCase();
-}
-
 function validateFamily(family: unknown): 0 | 4 | 6 {
   if (family === undefined || family === null || family === 0) {
     return 0;
@@ -206,7 +200,7 @@ export function lookupAddresses(
     }
     return [{ address: hostname, family: literal }];
   }
-  if (!isLocalName(hostname)) {
+  if (!isLocalHost(hostname)) {
     return notFoundError(hostname);
   }
   const v4: LookupAddress = { address: "127.0.0.1", family: 4 };

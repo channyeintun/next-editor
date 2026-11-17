@@ -93,6 +93,24 @@ describe("instances on one memory", () => {
   });
 });
 
+describe("a path that does not exist", () => {
+  it("is told apart from a link that leads nowhere, without an error", () => {
+    const fs = boot().fs;
+    fs.mkdir("/d", false, 0o755);
+    fs.symlink("/nowhere", "/d/dangling");
+    fs.symlink("/d/loop", "/d/loop");
+    fs.writeFile("/d/file", encoder.encode("x"), WRITE, 0o644);
+    for (const path of ["/d/dangling", "/d/loop", "/d/loop/below"]) {
+      expect(fs.exists(path)).toBe(false);
+      expect(fs.isBrokenLink(path)).toBe(true);
+    }
+    for (const path of ["/d/missing", "/missing/too", "/d/file/below", "x".repeat(70_000)]) {
+      expect(fs.exists(path)).toBe(false);
+      expect(fs.isBrokenLink(path)).toBe(false);
+    }
+  });
+});
+
 describe("arguments", () => {
   it("raises ENAMETOOLONG when the paths do not fit the argument area", () => {
     const { fs } = boot();

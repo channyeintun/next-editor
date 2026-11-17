@@ -74,6 +74,12 @@ export function lexicalParent(path: string): string {
   return trimTrailingSlashes(trimmed.slice(0, cut));
 }
 
+/** The last part of `path` as written, trailing slashes ignored (`.` and `..` included); empty for `/`. */
+export function lastPart(path: string): string {
+  const trimmed = trimTrailingSlashes(path);
+  return trimmed.slice(trimmed.lastIndexOf("/") + 1);
+}
+
 /** `path` without trailing slashes; `/` stays `/`. */
 export function trimTrailingSlashes(path: string): string {
   let end = path.length;

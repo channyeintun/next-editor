@@ -22,11 +22,59 @@ function failed(cause: unknown): TypeError {
   return Object.assign(new TypeError("fetch failed"), { cause });
 }
 
-function send(request: Request, body: Uint8Array | null, redirects: number): Promise<Response> {
+/**
+ * The request headers to send: the `Request`'s, which a browser has already
+ * stripped of the names it forbids a page to set (Cookie, Origin, Referer …),
+ * plus the caller's own, read without that filter. Node's fetch sends them all,
+ * and here the request never leaves the runtime.
+ */
+function requestHeaders(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  request: Request,
+): Headers {
+  const headers = new Headers(request.headers);
+  const own =
+    init?.headers !== undefined
+      ? new Headers(init.headers)
+      : input instanceof Request
+        ? input.headers
+        : null;
+  own?.forEach((value, name) => {
+    if (!headers.has(name)) {
+      headers.set(name, value);
+    }
+  });
+  return headers;
+}
+
+/** Undici drops these when a redirect goes to another origin. */
+const CREDENTIAL_HEADERS = ["authorization", "cookie", "proxy-authorization"];
+
+/**
+ * A `Response` built by a page has Set-Cookie removed from its headers. The
+ * one handed back keeps the headers as they arrived, as Node's fetch does,
+ * clones included.
+ */
+function withHeaders(response: Response, headers: Headers): Response {
+  const clone = response.clone.bind(response);
+  Object.defineProperty(response, "headers", { value: headers });
+  Object.defineProperty(response, "clone", {
+    value: () => withHeaders(clone(), new Headers(headers)),
+  });
+  return response;
+}
+
+function send(
+  request: Request,
+  requestHeaderBag: Headers,
+  body: Uint8Array | null,
+  redirects: number,
+): Promise<Response> {
   const url = new URL(request.url);
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = {};
-    request.headers.forEach((value, name) => {
+    requestHeaderBag.forEach((value, name) => {
       headers[name] = value;
     });
     if (body && headers["content-length"] === undefined) {
@@ -59,14 +107,21 @@ function send(request: Request, body: Uint8Array | null, redirects: number): Pro
               return;
             }
             const keepsMethod = status === 307 || status === 308;
-            const next = new Request(new URL(location, url), {
+            const target = new URL(location, url);
+            const nextHeaders = new Headers(requestHeaderBag);
+            if (target.origin !== url.origin) {
+              for (const name of CREDENTIAL_HEADERS) {
+                nextHeaders.delete(name);
+              }
+            }
+            const next = new Request(target, {
               method: keepsMethod ? request.method : "GET",
-              headers: request.headers,
+              headers: nextHeaders,
               body: keepsMethod && body ? (body as BodyInit) : undefined,
               redirect: request.redirect,
               signal: request.signal,
             });
-            fetchLocalOrNative(next, keepsMethod ? body : null, redirects + 1).then(
+            fetchLocalOrNative(next, nextHeaders, keepsMethod ? body : null, redirects + 1).then(
               resolve,
               reject,
             );
@@ -108,7 +163,7 @@ function send(request: Request, body: Uint8Array | null, redirects: number): Pro
           });
           Object.defineProperty(result, "url", { value: request.url });
           Object.defineProperty(result, "redirected", { value: redirects > 0 });
-          resolve(result);
+          resolve(withHeaders(result, responseHeaders));
         } catch (error) {
           reject(failed(error));
         }
@@ -143,11 +198,12 @@ function isLocalUrl(url: URL): boolean {
 
 function fetchLocalOrNative(
   request: Request,
+  headers: Headers,
   body: Uint8Array | null,
   redirects: number,
 ): Promise<Response> {
   if (isLocalUrl(new URL(request.url))) {
-    return send(request, body, redirects);
+    return send(request, headers, body, redirects);
   }
   return nativeFetch!(request);
 }
@@ -169,7 +225,8 @@ export function createFetch(native: typeof fetch): typeof fetch {
       return native(input, init);
     }
     const request = new Request(input, init);
+    const headers = requestHeaders(input, init, request);
     const body = request.body ? new Uint8Array(await request.arrayBuffer()) : null;
-    return send(request, body, 0);
+    return send(request, headers, body, 0);
   };
 }

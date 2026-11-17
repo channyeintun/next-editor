@@ -351,6 +351,7 @@ function connectionListener(server: Server, socket: HttpSocket): void {
       },
     },
     server.maxHeaderSize || MAX_HEADER_SIZE,
+    server.insecureHTTPParser === true,
   );
   socket.parser = connection.parser;
   server[kConnections].set(socket, connection);

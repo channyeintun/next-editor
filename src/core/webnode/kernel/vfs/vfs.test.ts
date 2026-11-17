@@ -777,6 +777,80 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
     });
   });
 
+  describe("Linux path rules", () => {
+    it("O_TRUNC on an empty file sets its times and reports a change", () => {
+      const { vfs, tick } = setup();
+      put(vfs, "/e", "");
+      vfs.utimes("/e", 1, 1, true);
+      const events = watchAll(vfs, "/e", false);
+      const t = tick();
+      put(vfs, "/e", "");
+      expect(vfs.stat("/e", true).mtimeMs).toBe(t);
+      expect(vfs.stat("/e", true).ctimeMs).toBe(t);
+      expect(events).toEqual([{ eventType: "change", path: "/e" }]);
+    });
+
+    it("mkdir -p does not create through a dangling symbolic link", () => {
+      const { vfs } = setup();
+      vfs.mkdir("/t", false, 0o777);
+      vfs.symlink("/t/target", "/t/a");
+      vfs.symlink("missing/x", "/t/deep");
+      for (const path of ["/t/a/b", "/t/a", "/t/a/", "/t/deep", "/t/deep/c"]) {
+        expect(failure(() => vfs.mkdir(path, true, 0o777))).toEqual({
+          code: "EEXIST",
+          syscall: "mkdir",
+          path,
+          dest: undefined,
+        });
+      }
+      expect(vfs.readdir("/t").map((entry) => entry.name)).toEqual(["a", "deep"]);
+      // A link to a directory is still followed.
+      vfs.mkdir("/t/real", false, 0o777);
+      vfs.symlink("real", "/t/ok");
+      expect(vfs.mkdir("/t/ok/x/y", true, 0o777)).toBe("/t/ok/x");
+      expect(vfs.stat("/t/real/x/y", true).mode & S_IFMT).toBe(S_IFDIR);
+    });
+
+    it("a trailing slash names a directory: rename of a file to `name/` is ENOTDIR", () => {
+      const { vfs } = setup();
+      put(vfs, "/f", "1");
+      vfs.mkdir("/d", false, 0o777);
+      vfs.symlink("/d", "/l");
+      for (const target of ["/nf/", "/d/", "/nf//"]) {
+        expect(failure(() => vfs.rename("/f", target))).toEqual({
+          code: "ENOTDIR",
+          syscall: "rename",
+          path: "/f",
+          dest: target,
+        });
+      }
+      expect(failure(() => vfs.rename("/l", "/nl/"))).toMatchObject({ code: "ENOTDIR" });
+      expect(vfs.exists("/f")).toBe(true);
+      expect(vfs.exists("/nf")).toBe(false);
+      vfs.rename("/d", "/nd/");
+      expect(vfs.stat("/nd", true).mode & S_IFMT).toBe(S_IFDIR);
+      expect(failure(() => vfs.unlink("/f/"))).toMatchObject({ code: "ENOTDIR" });
+      expect(failure(() => vfs.open("/f/", O_RDONLY, 0))).toMatchObject({ code: "ENOTDIR" });
+      expect(failure(() => vfs.open("/nf/", WRITE, 0o666))).toMatchObject({ code: "EISDIR" });
+    });
+
+    it("rmdir of a last part `.` is EINVAL and of `..` is ENOTEMPTY", () => {
+      const { vfs } = setup();
+      vfs.mkdir("/t5", false, 0o777);
+      vfs.mkdir("/t6/a", true, 0o777);
+      expect(failure(() => vfs.rmdir("/t5/."))).toMatchObject({ code: "EINVAL" });
+      expect(failure(() => vfs.rmdir("/t5/./"))).toMatchObject({ code: "EINVAL" });
+      expect(failure(() => vfs.rmdir("/t5/../t5/."))).toMatchObject({ code: "EINVAL" });
+      expect(failure(() => vfs.rmdir("/t6/a/.."))).toMatchObject({ code: "ENOTEMPTY" });
+      expect(failure(() => vfs.rmdir("/t5/.."))).toMatchObject({ code: "ENOTEMPTY" });
+      expect(failure(() => vfs.rmdir("/nope/."))).toMatchObject({ code: "ENOENT" });
+      expect(vfs.exists("/t5")).toBe(true);
+      expect(vfs.exists("/t6/a")).toBe(true);
+      vfs.rmdir("/t5/");
+      expect(vfs.exists("/t5")).toBe(false);
+    });
+  });
+
   describe("unlink and rm", () => {
     it("removes a file with unlink", () => {
       const { vfs } = setup();
@@ -1421,7 +1495,9 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
       vfs.utimes("/f", 1, 2, true);
       vfs.truncate("/f", 0);
       put(vfs, "/g", "x");
+      // The first write's O_TRUNC reports too, though /f was empty (as Linux).
       expect(events.map((event) => event.eventType)).toEqual([
+        "change",
         "change",
         "change",
         "change",

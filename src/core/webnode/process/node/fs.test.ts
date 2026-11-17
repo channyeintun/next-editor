@@ -517,6 +517,42 @@ const scenarios: Scenario[] = [
       ];
     },
   },
+  {
+    name: "rmdir of a last part dot or dot-dot",
+    run: (f, d) => {
+      f.mkdirSync(`${d}/t5`);
+      f.mkdirSync(`${d}/t6/a`, { recursive: true });
+      return [
+        attempt(() => f.rmdirSync(`${d}/t5/.`)),
+        attempt(() => f.rmdirSync(`${d}/t6/a/..`)),
+        attempt(() => f.rmdirSync(`${d}/t5/../t5/.`)),
+        f.existsSync(`${d}/t5`),
+        f.existsSync(`${d}/t6/a`),
+      ];
+    },
+  },
+  {
+    name: "mkdir -p through a dangling symbolic link",
+    run: (f, d) => {
+      f.symlinkSync("m8r", `${d}/m8`);
+      f.symlinkSync("m9r", `${d}/m9`);
+      return [
+        attempt(() => f.mkdirSync(`${d}/m8/a`, { recursive: true })),
+        attempt(() => f.mkdirSync(`${d}/m9`, { recursive: true })),
+        f.existsSync(`${d}/m8r`),
+        f.existsSync(`${d}/m9r`),
+        f.readdirSync(d).sort(),
+      ];
+    },
+  },
+  {
+    name: "rename a file to a name with a trailing slash",
+    run: (f, d) => {
+      f.writeFileSync(`${d}/f`, "1");
+      return [attempt(() => f.renameSync(`${d}/f`, `${d}/nf/`)), f.readdirSync(d)];
+    },
+    linux: { value: [{ code: "ENOTDIR", syscall: "rename" }, ["f"]] },
+  },
 ];
 
 function runError(fn: () => unknown): unknown {

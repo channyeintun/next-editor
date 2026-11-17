@@ -22,6 +22,7 @@ interface ExchangeRequest {
   host: string;
   socket: HttpSocket | null;
   getHeaders(): Record<string, unknown>;
+  emit(event: string): boolean;
 }
 
 type WriteCallback = (error?: Error | null) => void;
@@ -130,6 +131,18 @@ export class FetchExchange {
     runtime().ref();
     if (this.#bodyEnded) {
       this.#fetch();
+      return;
+    }
+    // fetch drops Expect and only sends once the body has ended, while a
+    // caller that asked for 100-continue writes the body after 'continue'.
+    // The browser deals with the expectation itself, so go ahead at once.
+    const expect = this.#req.getHeaders().expect;
+    if (typeof expect === "string" && expect.toLowerCase() === "100-continue") {
+      queueMicrotask(() => {
+        if (!this.#cancelled) {
+          this.#req.emit("continue");
+        }
+      });
     }
   }
 

@@ -1,6 +1,6 @@
 // The callback `fs` API (`fs.stat(path, cb)` …). Each function runs the
-// matching sync operation at once and hands the result to the callback in a
-// microtask, never synchronously. Argument errors throw, as in Node; every
+// matching sync operation at once and hands the result to the callback from
+// the event loop (completion.ts), never synchronously. Argument errors throw, as in Node; every
 // other failure goes to the callback. `read`/`write` keep Node's overloads and
 // their `util.promisify` shapes; `rm` waits `retryDelay` between retries.
 import { Buffer } from "../buffer";
@@ -23,7 +23,12 @@ import {
   bytesOf,
   encodeData,
   backendPosition,
+  decodeContents,
+  getOptions,
+  isFd,
+  validateBufferArray,
 } from "./args";
+import { complete } from "./completion";
 import { cpAsync } from "./cp";
 import { isArgumentError, notImplemented } from "./errors";
 import { runtime } from "../../runtime";
@@ -32,7 +37,7 @@ import type { RmOptions } from "./sync";
 
 type AnyCallback = (...args: unknown[]) => unknown;
 
-/** Calls `callback(error)` or `callback(null, ...results)` in a microtask. */
+/** Calls `callback(error)` or `callback(null, ...results)` from the event loop. */
 function settle(callback: AnyCallback, op: () => unknown[]): void {
   let results: unknown[];
   try {
@@ -41,10 +46,10 @@ function settle(callback: AnyCallback, op: () => unknown[]): void {
     if (isArgumentError(error)) {
       throw error;
     }
-    queueMicrotask(() => callback(error));
+    complete(() => callback(error));
     return;
   }
-  queueMicrotask(() => callback(null, ...results));
+  complete(() => callback(null, ...results));
 }
 
 /**
@@ -104,7 +109,7 @@ function callbackWithSignal(
         : null;
     if (aborted !== null) {
       const callback = takeCallback(args, optionsIndex + 1);
-      queueMicrotask(() => callback(aborted));
+      complete(() => callback(aborted));
       return;
     }
     inner(...args);
@@ -133,7 +138,35 @@ export const mkdtemp = callbackFrom("mkdtemp", 2, sync.mkdtempSync, false);
 export const open = callbackFrom("open", 3, sync.openSync, false);
 export const opendir = callbackFrom("opendir", 2, sync.opendirSync, false);
 export const readdir = callbackFrom("readdir", 2, sync.readdirSync, false);
-export const readFile = callbackWithSignal("readFile", sync.readFileSync, 1, false);
+const readFileNow = callbackWithSignal("readFile", sync.readFileSync, 1, false);
+
+/** `fs.readFile(path | fd, options, callback)`; a pipe or terminal is read without blocking. */
+export const readFile = named("readFile", function (this: unknown, ...args: unknown[]) {
+  const file = args[0];
+  if (!isFd(file) || !sync.isStreamFd(file)) {
+    return Reflect.apply(readFileNow, this, args);
+  }
+  const callback = takeCallback(args, 2);
+  const opts = getOptions(args[1], { flag: "r" });
+  const aborted = abortedError(opts.signal);
+  if (aborted !== null) {
+    complete(() => callback(aborted));
+    return;
+  }
+  sync.readAllFromFdAsync(file).then(
+    (bytes) => {
+      let value: unknown;
+      try {
+        value = decodeContents(bytes, opts.encoding);
+      } catch (error) {
+        complete(() => callback(error));
+        return;
+      }
+      complete(() => callback(null, value));
+    },
+    (error: unknown) => complete(() => callback(error)),
+  );
+});
 export const readlink = callbackFrom("readlink", 2, sync.readlinkSync, false);
 export const rename = callbackFrom("rename", 2, sync.renameSync, true);
 export const rmdir = callbackFrom("rmdir", 2, sync.rmdirSync, true);
@@ -179,7 +212,7 @@ export function exists(path: unknown, callback: unknown): void {
     return;
   }
   const found = sync.existsSync(shown);
-  queueMicrotask(() => (callback as (value: boolean) => void)(found));
+  complete(() => (callback as (value: boolean) => void)(found));
 }
 
 Object.defineProperty(exists, promisify.custom, {
@@ -246,12 +279,12 @@ export function read(
   const view = target;
   const args = sync.checkReadArgs(view, offset, count, at);
   if (args === null) {
-    queueMicrotask(() => (done as AnyCallback)(null, 0, view));
+    complete(() => (done as AnyCallback)(null, 0, view));
     return;
   }
   sync.readIntoAsync(descriptor, view, args.offset, args.length, args.position).then(
-    (bytesRead) => (done as AnyCallback)(null, bytesRead, view),
-    (error: unknown) => (done as AnyCallback)(error, 0, view),
+    (bytesRead) => complete(() => (done as AnyCallback)(null, bytesRead, view)),
+    (error: unknown) => complete(() => (done as AnyCallback)(error, 0, view)),
   );
 }
 
@@ -374,6 +407,16 @@ export function readv(fd: unknown, buffers: unknown, position?: unknown, callbac
     at = null;
   }
   validateFunction(done, "cb");
+  const descriptor = getValidatedFd(fd);
+  if (at == null && sync.isStreamFd(descriptor)) {
+    // A pipe or terminal: wait for bytes without blocking the process.
+    validateBufferArray(buffers);
+    sync.readvAsync(descriptor, buffers as ArrayBufferView[]).then(
+      (bytesRead) => complete(() => (done as AnyCallback)(null, bytesRead, buffers)),
+      (error: unknown) => complete(() => (done as AnyCallback)(error, 0, buffers)),
+    );
+    return;
+  }
   settle(
     (error, bytesRead) => (done as AnyCallback)(error, bytesRead || 0, buffers),
     () => [sync.readvSync(fd, buffers, at)],
@@ -461,12 +504,12 @@ export function rm(path: unknown, options: unknown, callback?: unknown): void {
     if (isArgumentError(error)) {
       throw error;
     }
-    queueMicrotask(() => (done as AnyCallback)(error));
+    complete(() => (done as AnyCallback)(error));
     return;
   }
   removeWithRetries(shown, validated).then(
-    () => (done as AnyCallback)(null),
-    (error: unknown) => (done as AnyCallback)(error),
+    () => complete(() => (done as AnyCallback)(null)),
+    (error: unknown) => complete(() => (done as AnyCallback)(error)),
   );
 }
 
@@ -480,8 +523,8 @@ export function cp(src: unknown, dest: unknown, options: unknown, callback?: unk
   }
   validateFunction(done, "cb");
   cpAsync(src, dest, opts).then(
-    () => (done as AnyCallback)(null, undefined),
-    (error: unknown) => (done as AnyCallback)(error),
+    () => complete(() => (done as AnyCallback)(null, undefined)),
+    (error: unknown) => complete(() => (done as AnyCallback)(error)),
   );
 }
 

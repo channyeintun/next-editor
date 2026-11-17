@@ -105,7 +105,13 @@ export function isLocalHost(host: string): boolean {
   if (name.endsWith(".")) {
     name = name.slice(0, -1);
   }
-  if (name === "localhost" || name === HOSTNAME.toLowerCase() || name === "0.0.0.0") {
+  // Every *.localhost name is loopback (RFC 6761), as dns.lookup answers.
+  if (
+    name === "localhost" ||
+    name.endsWith(".localhost") ||
+    name === HOSTNAME.toLowerCase() ||
+    name === "0.0.0.0"
+  ) {
     return true;
   }
   if (name === "::" || name === "::1") {

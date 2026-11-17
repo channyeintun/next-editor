@@ -1,9 +1,10 @@
 // The `tls` builtin. webnode never speaks TLS itself: the browser terminates
 // TLS for `fetch` (https to other hosts) and the preview is already HTTPS.
-// So `connect` and `createServer` throw an error naming themselves;
+// So what needs a TLS implementation of its own throws an error naming itself:
+// `connect`, `createServer`, `createSecureContext`, `getCiphers` and reading
+// `rootCertificates` (no trust store ships with webnode; the browser holds it).
 // `TLSSocket` exists (a `net.Socket` with `encrypted`) for `instanceof` checks;
-// `checkServerIdentity` and `convertALPNProtocols` are real; the trust store
-// (`rootCertificates`) is empty because no certificates ship with webnode.
+// `checkServerIdentity` and `convertALPNProtocols` are real.
 import { Buffer } from "./buffer";
 import { invalidArgType, makeNodeError, outOfRange } from "./internalErrors";
 import { unsupported } from "./net/errors";
@@ -25,25 +26,24 @@ export const DEFAULT_MAX_VERSION = "TLSv1.3";
 export const CLIENT_RENEG_LIMIT = 3;
 export const CLIENT_RENEG_WINDOW = 600;
 
-/** `tls.rootCertificates`: empty, since webnode ships no trust store (the browser holds it). */
-export const rootCertificates: readonly string[] = Object.freeze([]);
-
-/** `tls.getCiphers()`: empty, since webnode has no TLS implementation of its own. */
-export function getCiphers(): string[] {
-  return [];
+/** `tls.getCiphers()`: throws; webnode has no TLS implementation, so no cipher list. */
+export function getCiphers(): never {
+  throw unsupported("tls.getCiphers", "webnode has no TLS implementation");
 }
 
-/** `tls.SecureContext`: an opaque context; nothing in webnode consumes it. */
+/** `tls.SecureContext`: for `instanceof` only; no context can be built. */
 export class SecureContext {
-  readonly context: object = {};
+  constructor() {
+    throw unsupported("tls.SecureContext", "webnode has no TLS implementation");
+  }
 }
 
-/** `tls.createSecureContext(options)`: an opaque `SecureContext`. */
-export function createSecureContext(options?: object): SecureContext {
+/** `tls.createSecureContext(options)`: throws; there is no TLS to give the keys to. */
+export function createSecureContext(options?: object): never {
   if (options !== undefined && (typeof options !== "object" || options === null)) {
     throw invalidArgType("options", "Object", options);
   }
-  return new SecureContext();
+  throw unsupported("tls.createSecureContext", "webnode has no TLS implementation");
 }
 
 /** `tls.TLSSocket`: for `instanceof` only; wrapping a socket in TLS is not possible here. */
@@ -279,7 +279,7 @@ const tls = {
   DEFAULT_MIN_VERSION,
   DEFAULT_MAX_VERSION,
   getCiphers,
-  rootCertificates,
+  rootCertificates: undefined as unknown as readonly string[],
   convertALPNProtocols,
   checkServerIdentity,
   createSecureContext,
@@ -289,5 +289,14 @@ const tls = {
   createServer,
   connect,
 };
+
+// A getter, as Node's is: reading it is what fails, not loading the module.
+Object.defineProperty(tls, "rootCertificates", {
+  enumerable: true,
+  configurable: false,
+  get(): never {
+    throw unsupported("tls.rootCertificates", "webnode ships no trust store; the browser holds it");
+  },
+});
 
 export default tls;

@@ -1,6 +1,7 @@
 // The promise `fs` API (`fs.promises`, `require("fs/promises")`) and its
-// `FileHandle`. Each function is async, so argument errors reject like any
-// other failure, as in Node. The work is the sync operation; `rm` waits
+// `FileHandle`. Each function returns a promise, so argument errors reject
+// like any other failure, as in Node. The work is the sync operation, and the
+// promise settles from the event loop (completion.ts); `rm` waits
 // `retryDelay` between retries and `cp` awaits an async `filter`.
 import EventEmitter from "../events";
 import type { EventEmitter as EventEmitterType } from "../events";
@@ -31,6 +32,7 @@ import {
   validateStringAfterArrayBufferView,
 } from "./args";
 import { removeWithRetries } from "./callback";
+import { settledLater, settleLater } from "./completion";
 import { constants } from "./constants";
 import { cpAsync } from "./cp";
 import { fileClosed, fileTooLarge, invalidState, notImplemented, restate } from "./errors";
@@ -286,6 +288,10 @@ export class FileHandle extends EmitterBase {
   ): Promise<{ bytesRead: number; buffers: unknown }> {
     const fd = this.#check("readv");
     validateBufferArray(buffers);
+    if (position == null && sync.isStreamFd(fd)) {
+      // A pipe or terminal: wait for bytes without blocking the process.
+      return { bytesRead: await sync.readvAsync(fd, buffers as ArrayBufferView[]), buffers };
+    }
     return { bytesRead: sync.readvSync(fd, buffers, position), buffers };
   }
 
@@ -294,6 +300,10 @@ export class FileHandle extends EmitterBase {
     const fd = this.#check("read");
     const opts = getOptions(options, { flag: "r" });
     checkAborted(opts.signal);
+    if (sync.isStreamFd(fd)) {
+      // A pipe or terminal: wait for bytes without blocking the process.
+      return decodeContents(await sync.readAllFromFdAsync(fd), opts.encoding);
+    }
     const chunks: Uint8Array[] = [];
     let total = 0;
     for (;;) {
@@ -539,33 +549,39 @@ export async function cp(src: unknown, dest: unknown, options?: unknown): Promis
 }
 
 /** `fsPromises.lutimes(path, atime, mtime)`. */
-export async function lutimes(path: unknown, atime: unknown, mtime: unknown): Promise<void> {
-  sync.lutimesSync(path, atime, mtime);
+export function lutimes(path: unknown, atime: unknown, mtime: unknown): Promise<void> {
+  return settleLater(() => sync.lutimesSync(path, atime, mtime));
 }
 
 /** `fsPromises.realpath(path, options)`: the kernel's realpath(3), as Node's promise API uses. */
-export async function realpath(path: unknown, options?: unknown): Promise<string | Buffer> {
-  return sync.realpathSyncNative(path, options);
+export function realpath(path: unknown, options?: unknown): Promise<string | Buffer> {
+  return settleLater(() => sync.realpathSyncNative(path, options));
 }
 
 /** `fsPromises.stat(path, { bigint })`. */
-export async function stat(
+export function stat(
   path: unknown,
   options: unknown = { bigint: false },
 ): Promise<Stats | BigIntStats> {
-  return sync.statSync(path, { bigint: (options as { bigint?: unknown } | null)?.bigint }) as
-    | Stats
-    | BigIntStats;
+  return settleLater(
+    () =>
+      sync.statSync(path, { bigint: (options as { bigint?: unknown } | null)?.bigint }) as
+        | Stats
+        | BigIntStats,
+  );
 }
 
 /** `fsPromises.lstat(path, { bigint })`. */
-export async function lstat(
+export function lstat(
   path: unknown,
   options: unknown = { bigint: false },
 ): Promise<Stats | BigIntStats> {
-  return sync.lstatSync(path, { bigint: (options as { bigint?: unknown } | null)?.bigint }) as
-    | Stats
-    | BigIntStats;
+  return settleLater(
+    () =>
+      sync.lstatSync(path, { bigint: (options as { bigint?: unknown } | null)?.bigint }) as
+        | Stats
+        | BigIntStats,
+  );
 }
 
 /** `fsPromises.glob`: not provided by webnode. */
@@ -577,22 +593,57 @@ function promised<A extends unknown[], R>(
   name: string,
   fn: (...args: A) => R,
 ): (...args: A) => Promise<R> {
-  const wrapper = async (...args: A): Promise<R> => fn(...args);
+  const wrapper = (...args: A): Promise<R> => settleLater(() => fn(...args));
   Object.defineProperty(wrapper, "name", { value: name, configurable: true });
   return wrapper;
+}
+
+/** An async function whose promise settles from the event loop, keeping its name. */
+function looped<A extends unknown[], R>(
+  fn: (...args: A) => Promise<R>,
+): (...args: A) => Promise<R> {
+  const wrapper = settledLater(fn);
+  Object.defineProperty(wrapper, "name", { value: fn.name, configurable: true });
+  return wrapper;
+}
+
+// A FileHandle's operations settle from the event loop as well.
+for (const name of [
+  "appendFile",
+  "chmod",
+  "chown",
+  "datasync",
+  "sync",
+  "read",
+  "readv",
+  "readFile",
+  "stat",
+  "truncate",
+  "utimes",
+  "write",
+  "writev",
+  "writeFile",
+  "close",
+] as const) {
+  const method = FileHandle.prototype[name] as (...args: unknown[]) => Promise<unknown>;
+  Object.defineProperty(FileHandle.prototype, name, {
+    value: looped(method),
+    writable: true,
+    configurable: true,
+  });
 }
 
 /** The `fs/promises` module object, in Node 22's key order. */
 export const promises = {
   access: promised("access", sync.accessSync),
   copyFile: promised("copyFile", sync.copyFileSync),
-  cp,
+  cp: looped(cp),
   glob,
-  open,
+  open: looped(open),
   opendir: promised("opendir", sync.opendirSync),
   rename: promised("rename", sync.renameSync),
   truncate: promised("truncate", (path: unknown, len?: unknown) => sync.truncateSync(path, len)),
-  rm,
+  rm: looped(rm),
   rmdir: promised("rmdir", sync.rmdirSync),
   mkdir: promised("mkdir", sync.mkdirSync),
   readdir: promised("readdir", sync.readdirSync),
@@ -611,9 +662,9 @@ export const promises = {
   lutimes,
   realpath,
   mkdtemp: promised("mkdtemp", sync.mkdtempSync),
-  writeFile,
-  appendFile,
-  readFile,
+  writeFile: looped(writeFile),
+  appendFile: looped(appendFile),
+  readFile: looped(readFile),
   watch: watchAsync,
   constants,
 };

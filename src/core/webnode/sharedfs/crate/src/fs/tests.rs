@@ -793,7 +793,8 @@ fn reads_the_clock_where_vfs_ts_does() {
     assert_eq!(clock_reads(&mut fs, |fs| put(fs, "/f", "abc")), 2);
     assert_eq!(clock_reads(&mut fs, |fs| put(fs, "/f", "de")), 2);
     assert_eq!(clock_reads(&mut fs, |fs| put(fs, "/e", "")), 1);
-    assert_eq!(clock_reads(&mut fs, |fs| put(fs, "/e", "")), 0);
+    // O_TRUNC of an empty file still sets its times.
+    assert_eq!(clock_reads(&mut fs, |fs| put(fs, "/e", "")), 1);
     assert_eq!(
         clock_reads(&mut fs, |fs| {
             fs.stat(b"/f", true).unwrap();
@@ -989,19 +990,37 @@ fn raises_the_errors_of_rmdir() {
         (Enoent, Syscall::Rmdir, PATH_FIRST)
     );
     assert_eq!(failure(fs.rmdir(b"/")), (Ebusy, Syscall::Rmdir, PATH_FIRST));
+    // Linux refuses a last part of `..` as not empty, and `.` as invalid.
     assert_eq!(
         failure(fs.rmdir(b"/d/..")),
-        (Ebusy, Syscall::Rmdir, PATH_FIRST)
+        (Enotempty, Syscall::Rmdir, PATH_FIRST)
     );
-    // `/d/.` names the entry `d`; only a final `..` ends at no entry.
+    mkdir(&mut fs, "/e");
+    for path in ["/e/.", "/e/./", "/e/../e/."] {
+        assert_eq!(
+            failure(fs.rmdir(path.as_bytes())),
+            (Einval, Syscall::Rmdir, PATH_FIRST)
+        );
+    }
+    assert_eq!(
+        failure(fs.rmdir(b"/e/..")),
+        (Enotempty, Syscall::Rmdir, PATH_FIRST)
+    );
+    assert_eq!(
+        failure(fs.rmdir(b"/nope/.")),
+        (Enoent, Syscall::Rmdir, PATH_FIRST)
+    );
+    assert!(fs.exists(b"/e"));
+    fs.rmdir(b"/e/").unwrap();
+    // The last part decides before the entry's contents do, as on Linux.
     assert_eq!(
         failure(fs.rmdir(b"/d/.")),
-        (Enotempty, Syscall::Rmdir, PATH_FIRST)
+        (Einval, Syscall::Rmdir, PATH_FIRST)
     );
     mkdir(&mut fs, "/d/e");
     assert_eq!(
         failure(fs.rmdir(b"/d/e/..")),
-        (Einval, Syscall::Rmdir, PATH_FIRST)
+        (Enotempty, Syscall::Rmdir, PATH_FIRST)
     );
     fs.rmdir(b"/d/e").unwrap();
     symlink(&mut fs, "/d", "/link");
@@ -1781,23 +1800,12 @@ fn logs_changes_to_a_file() {
     fs.chmod(b"/f", 0o600, true).unwrap();
     fs.utimes(b"/f", 1.0, 2.0, true).unwrap();
     fs.truncate(b"/f", 0.0).unwrap();
-    // O_TRUNC of an empty file changes nothing, so it reports nothing.
+    // O_TRUNC reports even on an empty file, as Linux does.
     put(&mut fs, "/f", "");
-    // O_TRUNC of a file with data reports, and so does the write after it.
+    // O_TRUNC reports, and so does the write after it.
     put(&mut fs, "/f", "ab");
     put(&mut fs, "/f", "c");
-    assert_eq!(
-        take_events(&mut fs),
-        vec![
-            changed("/f"),
-            changed("/f"),
-            changed("/f"),
-            changed("/f"),
-            changed("/f"),
-            changed("/f"),
-            changed("/f")
-        ]
-    );
+    assert_eq!(take_events(&mut fs), vec![changed("/f"); 10]);
     fs.copy_file(b"/f", b"/g", 0).unwrap();
     fs.copy_file(b"/f", b"/g", 0).unwrap();
     assert_eq!(take_events(&mut fs), vec![renamed("/g"), changed("/g")]);
@@ -1960,4 +1968,53 @@ fn stays_consistent_through_a_mixed_sequence() {
     }
     assert_eq!(fs.totals(), (1, 0));
     assert!(!fs.events().is_empty());
+}
+
+#[test]
+fn truncates_an_empty_file_on_open_with_new_times_and_an_event() {
+    let mut fs = setup();
+    put(&mut fs, "/e", "");
+    fs.utimes(b"/e", 1.0, 1.0, true).unwrap();
+    fs.watching = true;
+    let t = tick(&mut fs, 1.0);
+    put(&mut fs, "/e", "");
+    assert_eq!(stat(&fs, "/e", true)[MTIME], t);
+    assert_eq!(stat(&fs, "/e", true)[CTIME], t);
+    assert_eq!(take_events(&mut fs), vec![changed("/e")]);
+}
+
+#[test]
+fn makes_nothing_through_a_dangling_symbolic_link() {
+    let mut fs = setup();
+    mkdir(&mut fs, "/t");
+    symlink(&mut fs, "/t/target", "/t/a");
+    symlink(&mut fs, "missing/x", "/t/deep");
+    for path in ["/t/a/b", "/t/a", "/t/a/", "/t/deep", "/t/deep/c"] {
+        assert_eq!(
+            failure(fs.mkdir(path.as_bytes(), true, 0o777 as f64)),
+            (Eexist, Syscall::Mkdir, PATH_FIRST)
+        );
+    }
+    assert!(!exists(&fs, "/t/target"));
+    assert!(!exists(&fs, "/t/missing"));
+    mkdir(&mut fs, "/t/real");
+    symlink(&mut fs, "real", "/t/ok");
+    assert_eq!(mkdir_p(&mut fs, "/t/ok/x/y").as_deref(), Some("/t/ok/x"));
+}
+
+#[test]
+fn renames_only_a_directory_to_a_name_with_a_trailing_slash() {
+    let mut fs = setup();
+    put(&mut fs, "/f", "1");
+    mkdir(&mut fs, "/d");
+    for target in ["/nf/", "/d/", "/nf//"] {
+        assert_eq!(
+            failure(fs.rename(b"/f", target.as_bytes())),
+            (Enotdir, Syscall::Rename, PATH_BOTH)
+        );
+    }
+    assert!(exists(&fs, "/f"));
+    assert!(!exists(&fs, "/nf"));
+    fs.rename(b"/d", b"/nd/").unwrap();
+    assert!(exists(&fs, "/nd"));
 }

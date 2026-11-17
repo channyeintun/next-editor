@@ -40,9 +40,6 @@ describe("tls", () => {
     expect(tls.CLIENT_RENEG_LIMIT).toBe(3);
     expect(tls.CLIENT_RENEG_WINDOW).toBe(600);
     expect(tls.DEFAULT_CIPHERS.startsWith("TLS_AES_256_GCM_SHA384:")).toBe(true);
-    expect(tls.rootCertificates).toEqual([]);
-    expect(Object.isFrozen(tls.rootCertificates)).toBe(true);
-    expect(tls.getCiphers()).toEqual([]);
   });
 
   it("throws named errors for what needs a TLS implementation", () => {
@@ -54,12 +51,24 @@ describe("tls", () => {
     expect(() => new tls.TLSSocket(new Socket())).toThrow(/TLSSocket\(socket\)/);
   });
 
+  it("throws named errors instead of made-up ciphers, roots or contexts", () => {
+    expect(() => tls.getCiphers()).toThrow(/tls\.getCiphers is not supported in webnode/);
+    expect(() => tls.rootCertificates).toThrow(/tls\.rootCertificates is not supported/);
+    expect(() => tls.createSecureContext({ key: "x" })).toThrow(
+      expect.objectContaining({ code: "ERR_FEATURE_UNAVAILABLE_ON_PLATFORM" }),
+    );
+    expect(() => tls.createSecureContext({})).toThrow(/tls\.createSecureContext is not supported/);
+    expect(() => new tls.SecureContext()).toThrow(/tls\.SecureContext is not supported/);
+    expect(() => tls.createSecureContext(1 as never)).toThrow(
+      expect.objectContaining({ code: "ERR_INVALID_ARG_TYPE" }),
+    );
+  });
+
   it("TLSSocket is a net.Socket with encrypted set", () => {
     const socket = new tls.TLSSocket();
     expect(socket).toBeInstanceOf(Socket);
     expect(socket.encrypted).toBe(true);
     expect(socket.getPeerCertificate()).toBe(null);
-    expect(tls.createSecureContext({})).toBeInstanceOf(tls.SecureContext);
   });
 
   it("checks server identity like Node", () => {

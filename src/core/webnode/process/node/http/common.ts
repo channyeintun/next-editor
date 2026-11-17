@@ -236,10 +236,14 @@ export interface HttpParserHandlers {
 
 interface RawParser {
   initialize(type: "REQUEST" | "RESPONSE"): void;
+  reinitialize(type: "REQUEST" | "RESPONSE"): void;
   execute(chunk: Buffer): number | Error;
   finish(): Error | undefined | void;
   maxHeaderSize: number;
+  /** Read position inside the chunk being executed. */
+  offset: number;
   [key: number]: unknown;
+  [state: string]: unknown;
 }
 
 interface RawParserInfo {
@@ -256,6 +260,7 @@ interface RawParserInfo {
 
 const RawHTTPParser = HTTPParser as unknown as {
   new (type?: "REQUEST" | "RESPONSE"): RawParser;
+  prototype: Record<string, (this: RawParser) => unknown>;
   methods: string[];
   encoding: string;
   kOnHeaders: number;
@@ -287,6 +292,7 @@ const PARSE_ERROR_REASONS: Record<string, string> = {
   HPE_UNEXPECTED_CONTENT_LENGTH: "Duplicate Content-Length",
   HPE_INVALID_CHUNK_SIZE: "Invalid character in chunk size",
   HPE_INVALID_EOF_STATE: "Invalid EOF state",
+  HPE_INVALID_TRANSFER_ENCODING: "Transfer-Encoding can't be present with Content-Length",
 };
 
 function parseError(error: Error, bytesParsed: number): Error {
@@ -310,6 +316,17 @@ function parseError(error: Error, bytesParsed: number): Error {
   return result;
 }
 
+function hasLengthAndTransferEncoding(headers: readonly string[]): boolean {
+  let length = false;
+  let transfer = false;
+  for (let i = 0; i < headers.length; i += 2) {
+    const name = headers[i]!.toLowerCase();
+    length ||= name === "content-length";
+    transfer ||= name === "transfer-encoding";
+  }
+  return length && transfer;
+}
+
 /**
  * One HTTP/1.x message parser for a connection: requests on a server socket,
  * responses on a client socket. `execute` returns the bytes consumed or a
@@ -319,11 +336,52 @@ export class HttpParser {
   readonly #raw: RawParser;
   #consumed = 0;
 
-  constructor(kind: "REQUEST" | "RESPONSE", handlers: HttpParserHandlers, maxHeaderSize: number) {
+  /**
+   * `insecure` is Node's `insecureHTTPParser`: it accepts a head that carries
+   * both Content-Length and Transfer-Encoding.
+   */
+  constructor(
+    kind: "REQUEST" | "RESPONSE",
+    handlers: HttpParserHandlers,
+    maxHeaderSize: number,
+    insecure = false,
+  ) {
     configureParser();
     const raw = new RawHTTPParser(kind);
-    raw.maxHeaderSize = maxHeaderSize;
+    // http-parser-js adds every byte of an execute() call that ends in a head
+    // state to its own header count, body bytes included, and resets the
+    // limit to its 80 KB default after each message. So its count is turned
+    // off and the head is measured here: only the bytes its line and header
+    // states consume, from a message's first byte to its blank line.
+    raw.maxHeaderSize = Infinity;
+    raw.reinitialize = (type) => raw.initialize(type);
+    let headBytes = 0;
+    let headDone = false;
+    // A head the parser must refuse once it is whole; raised from the state
+    // step, outside the user callback, so execute() returns it as an error.
+    let rejected: Error | null = null;
+    for (const state of [`${kind}_LINE`, "HEADER"]) {
+      const step = RawHTTPParser.prototype[state];
+      raw[state] = function (this: RawParser) {
+        const start = this.offset;
+        headDone = false;
+        const result = step.call(this);
+        if (rejected !== null) {
+          throw rejected;
+        }
+        if (headDone) {
+          headBytes = 0;
+        } else {
+          headBytes += this.offset - start;
+          if (headBytes > maxHeaderSize) {
+            throw Object.assign(new Error("Parse Error"), { code: "HPE_HEADER_OVERFLOW" });
+          }
+        }
+        return result;
+      };
+    }
     raw[RawHTTPParser.kOnHeadersComplete] = (...args: unknown[]) => {
+      headDone = true;
       const info: RawParserInfo =
         typeof args[0] === "object" && args[0] !== null
           ? (args[0] as RawParserInfo)
@@ -338,6 +396,14 @@ export class HttpParser {
               upgrade: args[7] as boolean,
               shouldKeepAlive: args[8] as boolean,
             };
+      if (!insecure && hasLengthAndTransferEncoding(info.headers)) {
+        // llhttp refuses this framing (request smuggling); skip the message
+        // and let the step above report it.
+        rejected = Object.assign(new Error("Parse Error"), {
+          code: "HPE_INVALID_TRANSFER_ENCODING",
+        });
+        return 1;
+      }
       const method =
         kind === "REQUEST"
           ? typeof info.method === "string"
@@ -361,7 +427,11 @@ export class HttpParser {
         offset === 0 && length === chunk.length ? chunk : chunk.subarray(offset, offset + length),
       );
     };
-    raw[RawHTTPParser.kOnMessageComplete] = () => handlers.onMessageComplete();
+    raw[RawHTTPParser.kOnMessageComplete] = () => {
+      if (rejected === null) {
+        handlers.onMessageComplete();
+      }
+    };
     raw[RawHTTPParser.kOnHeaders] = (trailers: string[]) => handlers.onTrailers(trailers);
     this.#raw = raw;
   }

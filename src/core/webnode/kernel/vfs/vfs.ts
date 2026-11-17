@@ -15,7 +15,7 @@ import {
   type Inode,
   type LinkNode,
 } from "./inode";
-import { lastComponentIndex, lexicalParent, trimTrailingSlashes } from "./path";
+import { lastComponentIndex, lastPart, lexicalParent, trimTrailingSlashes } from "./path";
 import {
   COPYFILE_EXCL,
   O_ACCMODE,
@@ -140,11 +140,20 @@ export class Vfs implements VfsApi {
   rmdir(path: string): void {
     const found = this.lookup(path, false, "rmdir", path);
     const node = found.node;
-    if (node === this.root) {
-      fail("EBUSY", "rmdir", path);
-    }
     if (node === undefined) {
       fail("ENOENT", "rmdir", path);
+    }
+    // As Linux, by the path's own last part: `.` cannot be removed, and `..`
+    // is never empty (it holds the path walked through it).
+    const last = lastPart(path);
+    if (last === ".") {
+      fail("EINVAL", "rmdir", path);
+    }
+    if (last === "..") {
+      fail("ENOTEMPTY", "rmdir", path);
+    }
+    if (node === this.root) {
+      fail("EBUSY", "rmdir", path);
     }
     if (found.parent === null) {
       fail("EINVAL", "rmdir", path);
@@ -223,6 +232,11 @@ export class Vfs implements VfsApi {
     }
     if (target.node === node) {
       return;
+    }
+    // A trailing slash names a directory; only one can take that name.
+    // (A last part of `.` is another case, left as it was.)
+    if (target.dirTail && node.kind !== "dir" && lastPart(to) !== ".") {
+      fail("ENOTDIR", "rename", from, to);
     }
     if (node.kind === "dir" && isWithin(target.parent, node)) {
       fail("EINVAL", "rename", from, to);
@@ -501,8 +515,9 @@ export class Vfs implements VfsApi {
         if ((flags & O_DIRECTORY) !== 0) {
           fail("ENOTDIR", "open", path);
         }
-        // Truncating an empty file changes nothing, so it reports nothing.
-        if ((flags & O_TRUNC) !== 0 && node.size > 0) {
+        // O_TRUNC always truncates, as on Linux: even an empty file gets new
+        // times and a change event (a "touch by empty write").
+        if ((flags & O_TRUNC) !== 0) {
           this.resizeData(node, 0);
           this.emitFound("change", found);
         }
@@ -712,12 +727,23 @@ export class Vfs implements VfsApi {
     this.addEntry(found.parent, found.name, this.newDir(perm, t), t);
   }
 
+  /** Whether `path` itself (its last part, not followed) is a symbolic link. */
+  private isLink(path: string): boolean {
+    const found = this.resolve(path, false);
+    return typeof found !== "string" && found.node?.kind === "symlink";
+  }
+
   /**
    * `mkdir -p` the way libuv does it: try the directory, and on ENOENT make
    * its textual parent first. Returns the first directory created.
    */
   private mkdirp(path: string, perm: number, shown: string, final: boolean): string | undefined {
     const found = this.resolve(path, true);
+    if ((typeof found === "string" || found.node === undefined) && this.isLink(path)) {
+      // A symbolic link that leads nowhere: mkdir(2) does not make its
+      // target, so `mkdir -p` stops here, as on Linux.
+      fail("EEXIST", "mkdir", shown);
+    }
     if (typeof found !== "string") {
       if (found.node !== undefined) {
         if (found.node.kind === "dir") {

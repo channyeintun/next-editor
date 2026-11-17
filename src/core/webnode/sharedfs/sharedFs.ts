@@ -315,6 +315,25 @@ export class SharedFs implements VfsApi {
     });
   }
 
+  /**
+   * Whether a path that `exists` reports missing is a symbolic link that
+   * leads nowhere or into a loop, rather than nothing at all. It raises no
+   * error: a process asks this on every miss (module resolution misses far
+   * more often than it hits), and making an error costs ten times the call.
+   */
+  isBrokenLink(path: string): boolean {
+    return this.call("lstat", () => {
+      const a = writeText(path, this.args, 0);
+      if (a < 0) {
+        return false;
+      }
+      if (this.x.fs_stat(a, 0) >= 0) {
+        return true;
+      }
+      return ERRNO_CODES[this.unsigned[this.errnoIndex]] === "ELOOP";
+    });
+  }
+
   readdir(path: string): DirEntry[] {
     const entries = this.call("scandir", () => {
       const a = this.putFirst(path, "scandir");

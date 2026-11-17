@@ -1076,3 +1076,122 @@ describe("agents, connections and peers", () => {
     await closeServer(server);
   });
 });
+
+describe("message framing", () => {
+  it("accepts a 200 KB body written together with the head", async () => {
+    const server = http.createServer((req, res) => {
+      readBody(req).then((body) => res.end(String(body.length)));
+    });
+    const port = await listen(server, 0);
+    const body = "x".repeat(200_000);
+    const { res, body: reply } = await fetchOnce(
+      { port, method: "POST", headers: { "content-length": body.length } },
+      body,
+    );
+    expect([res.statusCode, reply]).toEqual([200, "200000"]);
+    await closeServer(server);
+  });
+
+  it("accepts a 200 KB body that arrives in one chunk after the head", async () => {
+    const server = http.createServer((req, res) => {
+      readBody(req).then((body) => res.end(`received ${body.length}`));
+    });
+    const port = await listen(server, 0);
+    const conn = await rawConnection(port);
+    conn.channel.write(
+      Buffer.from(
+        "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 200000\r\n\r\n",
+      ),
+    );
+    conn.channel.write(Buffer.alloc(200_000, 0x61));
+    const reply = await conn.ended;
+    expect(reply.startsWith("HTTP/1.1 200 OK")).toBe(true);
+    expect(reply.endsWith("received 200000")).toBe(true);
+    await closeServer(server);
+  });
+
+  it("reads a 100 KB response that arrives in one chunk", async () => {
+    const server = http.createServer((_req, res) => res.end(Buffer.alloc(100_000, 0x61)));
+    const port = await listen(server, 0);
+    const errors: string[] = [];
+    const { res, body } = await new Promise<Fetched>((resolve, reject) => {
+      const req = http.get({ port }, (res) => {
+        readBody(res).then((text) => resolve({ res, body: text, req }), reject);
+      });
+      req.on("error", (error: Error & { code?: string }) => errors.push(error.code ?? ""));
+    });
+    expect([res.statusCode, body.length, errors]).toEqual([200, 100_000, []]);
+    await closeServer(server);
+  });
+
+  it("refuses a 20 KB head that arrives in one chunk", async () => {
+    const server = http.createServer((_req, res) => res.end("ok"));
+    const errors: string[] = [];
+    server.on("clientError", (error: Error & { code?: string }, socket: Socket) => {
+      errors.push(error.code ?? "");
+      socket.destroy();
+    });
+    const port = await listen(server, 0);
+    const conn = await rawConnection(port);
+    conn.channel.write(
+      Buffer.from(`GET / HTTP/1.1\r\nHost: h\r\nx: ${"a".repeat(20_000)}\r\n\r\n`),
+    );
+    await conn.ended;
+    expect(errors).toEqual(["HPE_HEADER_OVERFLOW"]);
+    await closeServer(server);
+  });
+
+  it("keeps the head limit after the first message on a connection", async () => {
+    const server = http.createServer((_req, res) => res.end("ok"));
+    const errors: string[] = [];
+    server.on("clientError", (error: Error & { code?: string }, socket: Socket) => {
+      errors.push(error.code ?? "");
+      socket.destroy();
+    });
+    const port = await listen(server, 0);
+    const conn = await rawConnection(port);
+    conn.channel.write(Buffer.from("GET / HTTP/1.1\r\nHost: h\r\n\r\n"));
+    await conn.until("ok");
+    conn.channel.write(
+      Buffer.from(`GET / HTTP/1.1\r\nHost: h\r\nx: ${"a".repeat(20_000)}\r\n\r\n`),
+    );
+    await conn.ended;
+    expect(errors).toEqual(["HPE_HEADER_OVERFLOW"]);
+    await closeServer(server);
+  });
+
+  it("rejects Content-Length together with Transfer-Encoding", async () => {
+    const server = http.createServer((_req, res) => res.end("ok"));
+    const errors: string[] = [];
+    server.on("clientError", (error: Error & { code?: string }, socket: Socket) => {
+      errors.push(`${error.code} ${error.message}`);
+      socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+    });
+    const port = await listen(server, 0);
+    const conn = await rawConnection(port);
+    conn.channel.write(
+      Buffer.from(
+        "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+      ),
+    );
+    const reply = await conn.ended;
+    expect(errors).toEqual([
+      "HPE_INVALID_TRANSFER_ENCODING Parse Error: Transfer-Encoding can't be present with Content-Length",
+    ]);
+    expect(reply).toBe("HTTP/1.1 400 Bad Request\r\n\r\n");
+    await closeServer(server);
+  });
+
+  it("accepts Content-Length with Transfer-Encoding under insecureHTTPParser", async () => {
+    const server = http.createServer({ insecureHTTPParser: true }, (_req, res) => res.end("ok"));
+    const port = await listen(server, 0);
+    const conn = await rawConnection(port);
+    conn.channel.write(
+      Buffer.from(
+        "POST / HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Length: 3\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+      ),
+    );
+    expect((await conn.ended).startsWith("HTTP/1.1 200 OK")).toBe(true);
+    await closeServer(server);
+  });
+});

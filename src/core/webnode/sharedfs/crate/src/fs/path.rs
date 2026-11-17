@@ -31,6 +31,16 @@ pub fn last_component(text: &[u8]) -> Option<(usize, usize)> {
     }
 }
 
+/// The last part of `path` as written, trailing slashes ignored (`.` and
+/// `..` included); empty for `/`.
+pub fn last_part(path: &[u8]) -> &[u8] {
+    let trimmed = trim_trailing_slashes(path);
+    match trimmed.iter().rposition(|&byte| byte == SLASH) {
+        Some(cut) => &trimmed[cut + 1..],
+        None => trimmed,
+    }
+}
+
 /// `path` without trailing slashes; `/` stays `/`.
 pub fn trim_trailing_slashes(path: &[u8]) -> &[u8] {
     let mut end = path.len();
