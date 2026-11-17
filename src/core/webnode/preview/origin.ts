@@ -1,5 +1,5 @@
 // The preview origins: one per runtime session and server port, shaped
-// `<sessionId>-<port>.<base host>` (dev: `http://k3j2h1-5173.localhost:5173`).
+// `<sessionId>-<port>.<base host>` (dev: `http://k3j2h1x9ab-5173.localhost:5173`).
 // Building them, recognising them, and minting session ids.
 
 /** The origin every preview host hangs under. */
@@ -15,9 +15,12 @@ export interface PreviewOrigin {
   port: number;
 }
 
-const SESSION_ID = /^[a-z0-9]+$/;
-const LABEL = /^([a-z0-9]+)-([1-9][0-9]{0,4})$/;
 const SESSION_ID_LENGTH = 10;
+// A session id is exactly as long as the ones minted here. The hosts may live
+// beside a deployment's other subdomains, and a name such as `status-2` must
+// not read as a preview host.
+const SESSION_ID = new RegExp(`^[a-z0-9]{${SESSION_ID_LENGTH}}$`);
+const LABEL = new RegExp(`^([a-z0-9]{${SESSION_ID_LENGTH}})-([1-9][0-9]{0,4})$`);
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 function isPort(port: number): boolean {
@@ -27,6 +30,11 @@ function isPort(port: number): boolean {
 /** `base.host` as a URL normalises it (default port dropped, lower case). */
 function normalizedHost(base: PreviewBase): string {
   return new URL(`${base.protocol}//${base.host}`).host;
+}
+
+/** Whether `value` is a session id as `createSessionId` mints them. */
+export function isSessionId(value: string): boolean {
+  return SESSION_ID.test(value);
 }
 
 /** The root URL (`…/`) of the preview of `port` in session `sessionId`. */
@@ -68,8 +76,8 @@ const RUNTIME_LABEL = "runtime";
 
 /**
  * The origin every runtime's kernel and processes run on. It is not the
- * editor's, so the programs a lesson runs can reach none of the editor's
- * cookies, storage or API.
+ * editor's, so the programs a lesson runs can read none of the editor's
+ * cookies or storage and cannot call its API as the visitor.
  */
 export function runtimeOrigin(base: PreviewBase): string {
   return `${base.protocol}//${RUNTIME_LABEL}.${normalizedHost(base)}`;
@@ -84,33 +92,6 @@ export function isWebnodeHostname(hostname: string, baseHostname: string): boole
   }
   const label = host.slice(0, -base.length - 1);
   return label === RUNTIME_LABEL || LABEL.test(label);
-}
-
-/** The last two labels of a hostname: what two hosts of one site have in common. */
-function siteOf(hostname: string): string {
-  return hostname.toLowerCase().split(".").slice(-2).join(".");
-}
-
-/**
- * Whether hosts under `baseHostname` are another site than the editor at
- * `editorHostname` (both without a port). The runtime's hosts run lesson code;
- * on the editor's own site that code could plant cookies for the editor's
- * domain (taking over or locking a visitor's session) and share a process
- * with the editor's page, which no header can undo. So a deployment gives them
- * a registrable domain of their own, as StackBlitz does with
- * webcontainer-api.io.
- *
- * Without the public suffix list this compares the last two labels, which is
- * exact for one-label suffixes (`.dev`, `.com`) and refuses, wrongly but
- * safely, two different domains under a two-label suffix (`a.co.uk`,
- * `b.co.uk`). Development is exempt: every `*.localhost` name is its own site.
- */
-export function isSeparateSite(editorHostname: string, baseHostname: string): boolean {
-  const base = baseHostname.toLowerCase();
-  if (base === "localhost" || base.endsWith(".localhost")) {
-    return true;
-  }
-  return siteOf(editorHostname) !== siteOf(base);
 }
 
 /** A fresh random session id: lowercase letters and digits. */

@@ -3,7 +3,6 @@
 // present the `@webcontainer/api` surface, so everything past this module is the
 // same code for either.
 import type { WebContainer } from "@webcontainer/api";
-import { isSeparateSite } from "../../core/webnode/preview/origin";
 import { readStoredPreference, writeStoredPreference } from "../../stores/preferenceStorage";
 
 export type RuntimeEngine = "webcontainer" | "webnode";
@@ -22,8 +21,7 @@ interface PreviewBase {
  * runs on this page's origin: its kernel and processes run on `runtime.<host>`
  * and each preview on `<session>-<port>.<host>`. The dev server answers for
  * `*.localhost`; a deployment names its wildcard host in
- * VITE_WEBNODE_PREVIEW_HOST, and that host must be another site than the
- * editor's (isSeparateSite says why): one on this site is not used.
+ * VITE_WEBNODE_PREVIEW_HOST.
  */
 export function webnodePreviewBase(): PreviewBase | null {
   if (typeof window === "undefined") {
@@ -31,7 +29,10 @@ export function webnodePreviewBase(): PreviewBase | null {
   }
   return webnodePreviewBaseFor(
     window.location,
-    import.meta.env.VITE_WEBNODE_PREVIEW_HOST as string | undefined,
+    // A dev server has no deployment's hosts to use: they would refuse its page.
+    import.meta.env.DEV
+      ? undefined
+      : (import.meta.env.VITE_WEBNODE_PREVIEW_HOST as string | undefined),
   );
 }
 
@@ -40,24 +41,23 @@ export function webnodePreviewBaseFor(
   page: Pick<Location, "protocol" | "hostname" | "host">,
   configuredHost: string | undefined,
 ): PreviewBase | null {
-  const configured = configuredHost?.trim();
-  if (configured) {
-    let url: URL;
-    try {
-      url = new URL(`https://${configured}`);
-    } catch {
-      return null;
-    }
-    // A host and nothing else: a value with a scheme or a path is a mistake, not a host.
-    if (url.host !== configured.toLowerCase() || !isSeparateSite(page.hostname, url.hostname)) {
-      return null;
-    }
-    return { protocol: "https:", host: url.host };
-  }
+  // Development first: a local page uses the local hosts whatever the build is
+  // configured with, since a deployment's hosts take a port only from its own editor.
   if (page.hostname === "localhost") {
     return { protocol: page.protocol === "https:" ? "https:" : "http:", host: page.host };
   }
-  return null;
+  const configured = configuredHost?.trim();
+  if (!configured) {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(`https://${configured}`);
+  } catch {
+    return null;
+  }
+  // A host and nothing else: a value with a scheme or a path is a mistake, not a host.
+  return url.host === configured.toLowerCase() ? { protocol: "https:", host: url.host } : null;
 }
 
 /** What this page load runs: decided once, so every caller agrees with the runtime that booted. */

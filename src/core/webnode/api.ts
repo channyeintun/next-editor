@@ -6,7 +6,13 @@ import { BUILD_ID, versionedPath } from "./buildId";
 import { systemErrorFromRecord } from "./errors";
 import type { DirEntry } from "./kernel/vfs/types";
 import { RUNTIME_FRAME_PATH, STALE_BUILD_MESSAGE } from "./preview/hostResponses";
-import { createSessionId, parsePreviewOrigin, previewUrl, runtimeOrigin } from "./preview/origin";
+import {
+  createSessionId,
+  isSessionId,
+  parsePreviewOrigin,
+  previewUrl,
+  runtimeOrigin,
+} from "./preview/origin";
 import type { PreviewBase } from "./preview/origin";
 import { createPreviewPageBridge } from "./preview/pageBridge";
 import type {
@@ -122,7 +128,7 @@ interface Session {
 function storedSessionId(): string | null {
   try {
     const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    return stored && /^[a-z0-9]+$/.test(stored) ? stored : null;
+    return stored && isSessionId(stored) ? stored : null;
   } catch {
     return null;
   }

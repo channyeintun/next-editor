@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createPreviewPageBridge, reloadPreview } from "./pageBridge";
 
-const PREVIEW = "http://k3j2h1-5173.localhost:5173";
+const PREVIEW = "http://k3j2h1x9ab-5173.localhost:5173";
 
 function messageEvent(data: unknown, origin: string, source: unknown): MessageEvent {
   const event = new Event("message") as MessageEvent;

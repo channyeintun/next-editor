@@ -41,14 +41,24 @@ describe("local development Host allowlist", () => {
   });
 
   it.each([
-    // What a wildcard route would send here besides the webnode hosts.
+    // What the wildcard route sends here besides the webnode hosts.
     "https://www.nexteditor.dev/api/health",
     "https://anything.nexteditor.dev/",
-    "https://stray.preview-host.example/api/auth/me",
-  ])("refuses the app on another https host: %s", async (url) => {
-    const response = await app.request(url, {}, env);
+    "https://status-2.nexteditor.dev/api/auth/me",
+  ])("hands another https host to its own origin, untouched: %s", async (url) => {
+    const upstream = new Response("from the origin", { status: 404, headers: { via: "origin" } });
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>(async () => upstream);
+    vi.stubGlobal("fetch", fetchMock);
 
-    expect(response.status).toBe(403);
+    const response = await app.request(url, { headers: { cookie: "ne_session=abc" } }, env);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0].url).toBe(url);
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("from the origin");
+    // Nothing of the app is added: not its isolation headers, not a cookie.
+    expect(response.headers.get("cross-origin-opener-policy")).toBeNull();
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   it("serves any https host when no PUBLIC_URL names one", async () => {

@@ -35,8 +35,7 @@ re-uploaded — so most deploys are fast.
 
 **Smoke test after every deploy** (replace the domain if not yet cut over,
 use the `*.workers.dev` URL instead, with `PUBLIC_URL` set to that URL: the
-Worker answers on the `PUBLIC_URL` host only and refuses any other name with
-403, `worker/localDevHost.ts`):
+app is served on the `PUBLIC_URL` host only, `worker/localDevHost.ts`):
 
 ```sh
 curl -s https://<your-domain>/api/health                      # {"status":"ok"}

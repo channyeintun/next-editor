@@ -21,53 +21,42 @@ const env = {
 };
 
 describe("isWebnodeHost", () => {
-  const editor = { PUBLIC_URL: "https://editor.example" };
-
   it("is false for every host until the wildcard host is configured", () => {
-    expect(isWebnodeHost("abc123-5173.preview.example.dev", editor)).toBe(false);
-    expect(isWebnodeHost("runtime.preview.example.dev", editor)).toBe(false);
+    expect(isWebnodeHost("abc123defg-5173.preview.example.dev", {})).toBe(false);
+    expect(isWebnodeHost("runtime.preview.example.dev", {})).toBe(false);
   });
 
   it("recognises the runtime host and session-port hosts under the configured host only", () => {
-    const configured = { ...editor, WEBNODE_PREVIEW_HOST: "preview.example.dev" };
-    expect(isWebnodeHost("abc123-5173.preview.example.dev", configured)).toBe(true);
-    expect(isWebnodeHost("ABC123-5173.Preview.Example.dev", configured)).toBe(true);
+    const configured = { WEBNODE_PREVIEW_HOST: "preview.example.dev" };
+    expect(isWebnodeHost("abc123defg-5173.preview.example.dev", configured)).toBe(true);
+    expect(isWebnodeHost("ABC123DEFG-5173.Preview.Example.dev", configured)).toBe(true);
     expect(isWebnodeHost("runtime.preview.example.dev", configured)).toBe(true);
     expect(isWebnodeHost("preview.example.dev", configured)).toBe(false);
     expect(isWebnodeHost("a.b-1.preview.example.dev", configured)).toBe(false);
-    expect(isWebnodeHost("abc123.preview.example.dev", configured)).toBe(false);
+    expect(isWebnodeHost("abc123defg.preview.example.dev", configured)).toBe(false);
     expect(isWebnodeHost("other.preview.example.dev", configured)).toBe(false);
-    expect(isWebnodeHost("abc123-5173.preview.example.dev.evil.test", configured)).toBe(false);
+    expect(isWebnodeHost("abc123defg-5173.preview.example.dev.evil.test", configured)).toBe(false);
     expect(isWebnodeHost("example.dev", configured)).toBe(false);
   });
 
-  it("has no webnode hosts on the editor's own site", () => {
-    // Lesson code on a subdomain of the editor could plant cookies for it.
-    for (const base of ["editor.example", "preview.editor.example", "EDITOR.example"]) {
-      const configured = { ...editor, WEBNODE_PREVIEW_HOST: base };
-      expect(isWebnodeHost(`runtime.${base}`, configured)).toBe(false);
-      expect(isWebnodeHost(`abc123-5173.${base}`, configured)).toBe(false);
+  it("recognises them beside the editor, and none of the editor's other subdomains", () => {
+    // The deployment: the hosts are subdomains of the editor's own domain.
+    const configured = { WEBNODE_PREVIEW_HOST: "nexteditor.dev" };
+    expect(isWebnodeHost("runtime.nexteditor.dev", configured)).toBe(true);
+    expect(isWebnodeHost("abc123defg-5173.nexteditor.dev", configured)).toBe(true);
+    for (const other of ["nexteditor.dev", "www.nexteditor.dev", "status-2.nexteditor.dev"]) {
+      expect(isWebnodeHost(other, configured)).toBe(false);
     }
-    const sibling = { PUBLIC_URL: "https://app.example.dev", WEBNODE_PREVIEW_HOST: "example.dev" };
-    expect(isWebnodeHost("runtime.example.dev", sibling)).toBe(false);
-  });
-
-  it("has none without an editor to serve them for", () => {
-    const configured = { PUBLIC_URL: "", WEBNODE_PREVIEW_HOST: "preview.example.dev" };
-    expect(isWebnodeHost("runtime.preview.example.dev", configured)).toBe(false);
-  });
-
-  it("serves them beside a local editor", () => {
-    const local = { PUBLIC_URL: "http://localhost:8787", WEBNODE_PREVIEW_HOST: "localhost" };
-    expect(isWebnodeHost("runtime.localhost", local)).toBe(true);
-    expect(isWebnodeHost("abc123-5173.localhost", local)).toBe(true);
+    // A session id is ten characters: nothing shorter or longer is a preview host.
+    expect(isWebnodeHost("abc123-5173.nexteditor.dev", configured)).toBe(false);
+    expect(isWebnodeHost("abc123defgh-5173.nexteditor.dev", configured)).toBe(false);
   });
 });
 
 describe("serveWebnodeHost", () => {
   it("serves the service worker, told the editor's origin, with the headers a frame needs", async () => {
     const response = await serveWebnodeHost(
-      new Request("https://abc123-5173.preview.example.dev/__webnode__/sw.js"),
+      new Request("https://abc123defg-5173.preview.example.dev/__webnode__/sw.js"),
       env,
     );
     expect(response.status).toBe(200);
@@ -99,7 +88,7 @@ describe("serveWebnodeHost", () => {
   it("answers any other path with a page only the editor may frame", async () => {
     for (const path of ["/src/main.tsx", "/api/auth/me", "/__webnode__/runtime.html"]) {
       const response = await serveWebnodeHost(
-        new Request(`https://abc123-5173.preview.example.dev${path}`),
+        new Request(`https://abc123defg-5173.preview.example.dev${path}`),
         env,
       );
       expect(response.headers.get("content-type")).toContain("text/html");

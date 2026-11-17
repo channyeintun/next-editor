@@ -7,7 +7,7 @@ import type { LinkedChannel } from "./testChannels";
 import { encodeClientFrame, webSocketAccept } from "./websocket";
 
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-const PAGE_HOST = "k3j2h1-3000.localhost:5173";
+const PAGE_HOST = "k3j2h1x9ab-3000.localhost:5173";
 
 let harness: ReturnType<typeof createGatewayHarness>;
 
@@ -233,7 +233,7 @@ describe("PreviewGateway WebSocket", () => {
   it("handshakes and relays text and binary both ways with masked client frames", async () => {
     harness = createGatewayHarness();
     const serverReady = serveWebSocket(3000, (server) => server.accept());
-    const socket = openSocket("ws://k3j2h1-3000.localhost:5173/hmr?token=abc");
+    const socket = openSocket("ws://k3j2h1x9ab-3000.localhost:5173/hmr?token=abc");
     const server = await serverReady;
     expect(await socket.waitFor("open")).toEqual({ type: "open", protocol: "", extensions: "" });
 
@@ -277,7 +277,7 @@ describe("PreviewGateway WebSocket", () => {
   it("handles 16-bit and 64-bit lengths both ways, split a byte at a time", async () => {
     harness = createGatewayHarness();
     const serverReady = serveWebSocket(3000, (server) => server.accept());
-    const socket = openSocket("ws://k3j2h1-3000.localhost:5173/");
+    const socket = openSocket("ws://k3j2h1x9ab-3000.localhost:5173/");
     const server = await serverReady;
     await socket.waitFor("open");
 

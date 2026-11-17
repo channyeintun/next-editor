@@ -19,11 +19,11 @@ import type { Env } from "./env";
 // Plaintext is where rebinding lives: over https the browser refuses the local
 // listener's certificate for the attacker's name.
 //
-// Over https the same rule keeps the app to its own name. A deployment may
-// route more hostnames to this Worker than the PUBLIC_URL host (the wildcard
-// route of the webnode hosts, webnodePreviewHost.ts). The app, its API and its
-// cookies are served on the PUBLIC_URL host only: any other name would be a
-// second origin for the whole app, under a certificate that covers it.
+// Over https the same rule keeps the app to its own name. The wildcard route of
+// the webnode hosts (webnodePreviewHost.ts) sends every name under its domain
+// here, the deployment's other subdomains among them. The app, its API and its
+// cookies are served on the PUBLIC_URL host only; a request for any other name
+// goes on to that name's own origin, as if this Worker were not on the route.
 
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -46,8 +46,13 @@ export function isAllowedRequestHost(requestUrl: URL, publicUrl: string | undefi
   return requestUrl.protocol !== "http:" && publicHost === null;
 }
 
-/** Refuses a request whose Host is not the PUBLIC_URL host or a loopback name. */
+/**
+ * Keeps the app to the PUBLIC_URL host and loopback names: a plaintext request
+ * for another name is refused, an https one is passed to that name's origin.
+ */
 export const requestHostGuard: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
-  if (isAllowedRequestHost(new URL(c.req.url), c.env?.PUBLIC_URL)) return next();
-  return c.text("Blocked request. This host is not allowed.", 403);
+  const url = new URL(c.req.url);
+  if (isAllowedRequestHost(url, c.env?.PUBLIC_URL)) return next();
+  if (url.protocol === "http:") return c.text("Blocked request. This host is not allowed.", 403);
+  return fetch(c.req.raw);
 };

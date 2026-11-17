@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { createSessionId, isSeparateSite, parsePreviewOrigin, previewUrl } from "./origin";
+import { createSessionId, isSessionId, parsePreviewOrigin, previewUrl } from "./origin";
 import type { PreviewBase } from "./origin";
 
 const DEV: PreviewBase = { protocol: "http:", host: "localhost:5173" };
@@ -8,27 +8,32 @@ const PROD: PreviewBase = { protocol: "https:", host: "preview.example.dev" };
 
 describe("preview origins", () => {
   it("builds preview URLs", () => {
-    expect(previewUrl(DEV, "k3j2h1", 5173)).toBe("http://k3j2h1-5173.localhost:5173/");
-    expect(previewUrl(PROD, "abc123", 3000)).toBe("https://abc123-3000.preview.example.dev/");
-    expect(previewUrl({ protocol: "https:", host: "Preview.Example.dev:443" }, "a", 1)).toBe(
-      "https://a-1.preview.example.dev/",
+    expect(previewUrl(DEV, "k3j2h1x9ab", 5173)).toBe("http://k3j2h1x9ab-5173.localhost:5173/");
+    expect(previewUrl(PROD, "abc123defg", 3000)).toBe(
+      "https://abc123defg-3000.preview.example.dev/",
     );
+    expect(
+      previewUrl({ protocol: "https:", host: "Preview.Example.dev:443" }, "abc123defg", 1),
+    ).toBe("https://abc123defg-1.preview.example.dev/");
   });
 
   it("rejects bad session ids and ports", () => {
     expect(() => previewUrl(DEV, "Bad", 3000)).toThrow(TypeError);
     expect(() => previewUrl(DEV, "a-b", 3000)).toThrow(TypeError);
     expect(() => previewUrl(DEV, "", 3000)).toThrow(TypeError);
-    expect(() => previewUrl(DEV, "abc", 0)).toThrow(RangeError);
-    expect(() => previewUrl(DEV, "abc", 65536)).toThrow(RangeError);
-    expect(() => previewUrl(DEV, "abc", 1.5)).toThrow(RangeError);
+    // Not the length of a minted id.
+    expect(() => previewUrl(DEV, "k3j2h1", 3000)).toThrow(TypeError);
+    expect(() => previewUrl(DEV, "k3j2h1x9abc", 3000)).toThrow(TypeError);
+    expect(() => previewUrl(DEV, "abc123defg", 0)).toThrow(RangeError);
+    expect(() => previewUrl(DEV, "abc123defg", 65536)).toThrow(RangeError);
+    expect(() => previewUrl(DEV, "abc123defg", 1.5)).toThrow(RangeError);
   });
 
   it("round-trips through parsePreviewOrigin", () => {
     for (const [base, id, port] of [
-      [DEV, "k3j2h1", 5173],
-      [DEV, "z9", 1],
-      [PROD, "abc123", 65535],
+      [DEV, "k3j2h1x9ab", 5173],
+      [DEV, "z9z9z9z9z9", 1],
+      [PROD, "abc123defg", 65535],
     ] as const) {
       const origin = new URL(previewUrl(base, id, port)).origin;
       expect(parsePreviewOrigin(origin, base)).toEqual({ sessionId: id, port });
@@ -38,17 +43,22 @@ describe("preview origins", () => {
   it("rejects origins that are not preview origins", () => {
     for (const origin of [
       "http://localhost:5173",
-      "http://k3j2h1-5173.localhost:5174",
-      "https://k3j2h1-5173.localhost:5173",
-      "http://k3j2h1-5173.evil.localhost:5173",
-      "http://k3j2h1-5173.localhost:5173/path",
-      "http://k3j2h1.localhost:5173",
-      "http://k3j2h1-0.localhost:5173",
-      "http://k3j2h1-05173.localhost:5173",
-      "http://k3j2h1-70000.localhost:5173",
+      "http://k3j2h1x9ab-5173.localhost:5174",
+      "https://k3j2h1x9ab-5173.localhost:5173",
+      "http://k3j2h1x9ab-5173.evil.localhost:5173",
+      "http://k3j2h1x9ab-5173.localhost:5173/path",
+      "http://k3j2h1x9ab.localhost:5173",
+      "http://k3j2h1x9ab-0.localhost:5173",
+      "http://k3j2h1x9ab-05173.localhost:5173",
+      "http://k3j2h1x9ab-70000.localhost:5173",
       "http://-5173.localhost:5173",
       "http://a_b-5173.localhost:5173",
-      "http://evil.comk3j2h1-5173.localhost:5173",
+      "http://evil.comk3j2h1x9ab-5173.localhost:5173",
+      // Shaped like a preview host, but no session id is this short or this long:
+      // a deployment's own subdomains may look like this.
+      "http://status-2.localhost:5173",
+      "http://k3j2h1-5173.localhost:5173",
+      "http://k3j2h1x9abc-5173.localhost:5173",
       "null",
       "not a url",
     ]) {
@@ -68,29 +78,11 @@ describe("preview origins", () => {
       });
     }
   });
-});
 
-describe("isSeparateSite", () => {
-  it("is true for another registrable domain", () => {
-    expect(isSeparateSite("nexteditor.dev", "nexteditor-preview.dev")).toBe(true);
-    expect(isSeparateSite("app.example.com", "usercontent.example.net")).toBe(true);
-    expect(isSeparateSite("editor.example", "preview.example.dev")).toBe(true);
-  });
-
-  it("is false for the editor's own host, a subdomain of it, its parent and a sibling", () => {
-    expect(isSeparateSite("nexteditor.dev", "nexteditor.dev")).toBe(false);
-    expect(isSeparateSite("nexteditor.dev", "preview.nexteditor.dev")).toBe(false);
-    expect(isSeparateSite("nexteditor.dev", "a.b.NextEditor.dev")).toBe(false);
-    expect(isSeparateSite("app.example.com", "example.com")).toBe(false);
-    expect(isSeparateSite("app.example.com", "preview.example.com")).toBe(false);
-  });
-
-  it("refuses two domains under one two-label suffix, which it cannot tell apart", () => {
-    expect(isSeparateSite("editor.co.uk", "preview.co.uk")).toBe(false);
-  });
-
-  it("is true in development, where every *.localhost name is its own site", () => {
-    expect(isSeparateSite("localhost", "localhost")).toBe(true);
-    expect(isSeparateSite("localhost", "preview.localhost")).toBe(true);
+  it("knows the ids it mints from any other string", () => {
+    expect(isSessionId(createSessionId())).toBe(true);
+    for (const value of ["", "short", "k3j2h1x9abc", "K3J2H1X9AB", "k3j2h1x9a-", "k3j2h1x9a.b"]) {
+      expect(isSessionId(value)).toBe(false);
+    }
   });
 });

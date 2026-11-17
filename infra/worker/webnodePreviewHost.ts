@@ -3,7 +3,7 @@ import {
   webnodeHostAsset,
   webnodeHostResponse,
 } from "../../src/core/webnode/preview/hostResponses";
-import { isSeparateSite, isWebnodeHostname } from "../../src/core/webnode/preview/origin";
+import { isWebnodeHostname } from "../../src/core/webnode/preview/origin";
 import type { Env } from "./env";
 
 /** Where the build puts the runtime's scripts (build/webnodeBundlePlugin.ts). */
@@ -11,33 +11,14 @@ const ASSET_DIRECTORY = "/webnode/";
 /** The file there that names the build (WEBNODE_BUILD_MANIFEST in build/webnodeBundle.ts). */
 const BUILD_MANIFEST = "build.json";
 
-function hostnameOf(url: string | undefined): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Whether `hostname` is one of this deployment's webnode hosts: the runtime
  * host `runtime.<WEBNODE_PREVIEW_HOST>` or a preview host
- * `<session>-<port>.<WEBNODE_PREVIEW_HOST>`. Without the variable there are
- * none, and there are none either when the variable names a host on the
- * editor's own site: lesson code must run on another registrable domain
- * (isSeparateSite in src/core/webnode/preview/origin.ts says why).
+ * `<session>-<port>.<WEBNODE_PREVIEW_HOST>`. Without the variable there are none.
  */
-export function isWebnodeHost(
-  hostname: string,
-  env: Pick<Env, "WEBNODE_PREVIEW_HOST" | "PUBLIC_URL">,
-): boolean {
+export function isWebnodeHost(hostname: string, env: Pick<Env, "WEBNODE_PREVIEW_HOST">): boolean {
   const base = env.WEBNODE_PREVIEW_HOST?.trim();
-  const editor = hostnameOf(env.PUBLIC_URL);
-  if (!base || !editor || !isSeparateSite(editor, base)) {
-    return false;
-  }
-  return isWebnodeHostname(hostname, base);
+  return base ? isWebnodeHostname(hostname, base) : false;
 }
 
 /**

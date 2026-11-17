@@ -39,8 +39,8 @@ function createContext(forwardPreviewErrors: boolean | "exceptions-only" = false
     startMessages: vi.fn<() => void>(),
   });
   const location = {
-    href: "http://k3j2h1-5173.localhost:5173/app/?q=1#top",
-    host: "k3j2h1-5173.localhost:5173",
+    href: "http://k3j2h1x9ab-5173.localhost:5173/app/?q=1#top",
+    host: "k3j2h1x9ab-5173.localhost:5173",
     pathname: "/app/",
     search: "?q=1",
     hash: "#top",
@@ -158,7 +158,7 @@ describe("createPreviewClientScript", () => {
       url: string,
       protocols?: string | string[],
     ) => FakeSocket) & { CONNECTING: number; OPEN: number; CLOSING: number; CLOSED: number };
-    const socket = new WebSocket("ws://k3j2h1-5173.localhost:5173/?token=abc", "vite-hmr");
+    const socket = new WebSocket("ws://k3j2h1x9ab-5173.localhost:5173/?token=abc", "vite-hmr");
     expect(socket instanceof WebSocket).toBe(true);
     expect(socket).toBeInstanceOf(EventTarget);
     expect([WebSocket.CONNECTING, WebSocket.OPEN, WebSocket.CLOSING, WebSocket.CLOSED]).toEqual([
@@ -166,7 +166,7 @@ describe("createPreviewClientScript", () => {
     ]);
     expect(socket.OPEN).toBe(1);
     expect(socket.readyState).toBe(0);
-    expect(socket.url).toBe("ws://k3j2h1-5173.localhost:5173/?token=abc");
+    expect(socket.url).toBe("ws://k3j2h1x9ab-5173.localhost:5173/?token=abc");
     expect(socket.binaryType).toBe("blob");
     expect(() => socket.send("too early")).toThrow(
       expect.objectContaining({ name: "InvalidStateError" }),
@@ -175,7 +175,7 @@ describe("createPreviewClientScript", () => {
     const gateway = gatewayPort(context);
     expect(gateway.post.message).toMatchObject({
       type: "webnode:ws",
-      url: "ws://k3j2h1-5173.localhost:5173/?token=abc",
+      url: "ws://k3j2h1x9ab-5173.localhost:5173/?token=abc",
       protocols: ["vite-hmr"],
     });
     expect(gateway.post.transfer).toEqual([gateway.port]);
@@ -196,7 +196,7 @@ describe("createPreviewClientScript", () => {
     await tick(5);
     expect(messages[0]).toBeInstanceOf(MessageEvent);
     expect(messages[0].data).toBe("hi");
-    expect(messages[0].origin).toBe("ws://k3j2h1-5173.localhost:5173");
+    expect(messages[0].origin).toBe("ws://k3j2h1x9ab-5173.localhost:5173");
     expect(messages[1].data).toBeInstanceOf(Blob);
     socket.binaryType = "arraybuffer";
     socket.binaryType = "nonsense";
@@ -290,10 +290,10 @@ describe("createPreviewClientScript", () => {
 
   it("closes its open sockets with 1001 when the page is hidden for good", async () => {
     const context = createContext();
-    const open = new context.window.WebSocket("ws://k3j2h1-5173.localhost:5173/a");
+    const open = new context.window.WebSocket("ws://k3j2h1x9ab-5173.localhost:5173/a");
     const first = gatewayPort(context, 0);
     first.port.postMessage({ type: "open", protocol: "", extensions: "" });
-    const closed = new context.window.WebSocket("ws://k3j2h1-5173.localhost:5173/b");
+    const closed = new context.window.WebSocket("ws://k3j2h1x9ab-5173.localhost:5173/b");
     const second = gatewayPort(context, 1);
     second.port.postMessage({ type: "close", code: 1000, reason: "", wasClean: true });
     await tick(5);

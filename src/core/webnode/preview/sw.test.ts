@@ -9,7 +9,7 @@ import type { PreviewServiceWorkerScope } from "./sw";
 import { createChannelPair } from "./testChannels";
 import type { LinkedChannel } from "./testChannels";
 
-const ORIGIN = "http://k3j2h1-3000.localhost:5173";
+const ORIGIN = "http://k3j2h1x9ab-3000.localhost:5173";
 
 type Listener = (event: never) => void;
 

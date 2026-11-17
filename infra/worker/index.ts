@@ -26,6 +26,7 @@ import { LANDING_DOCUMENT_URLS, serveAppShell, serveLandingDocument } from "./ss
 import { serveLessonDetailDocument } from "./ssr/lessonDetailRoute";
 import { serveLearnGalleryDocument } from "./ssr/learnGalleryRoute";
 import { serveStaticFile } from "./staticAssets";
+import { frameAncestorsPolicy, sameSiteFramingGuard } from "./framing";
 import { requestHostGuard } from "./localDevHost";
 import { isWebnodeHost, serveWebnodeHost } from "./webnodePreviewHost";
 
@@ -39,6 +40,12 @@ app.use("*", async (c, next) => {
   }
   await next();
 });
+
+// The app answers on the PUBLIC_URL host and loopback names only: this refuses
+// a DNS-rebinding Host on the local wrangler dev listener, and hands any other
+// name a route sends here to that name's own origin, untouched, which is why
+// it comes before the middleware that adds headers (localDevHost.ts).
+app.use("*", requestHostGuard);
 
 // The app requires cross-origin isolation on every response (WebContainers
 // need SharedArrayBuffer). Static Assets/ASSETS.fetch don't add it, so it
@@ -56,13 +63,21 @@ app.use("*", async (c, next) => {
   const response = new Response(c.res.body, c.res);
   response.headers.set("Cross-Origin-Embedder-Policy", "require-corp");
   response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  // A page is kept out of other origins' frames, unless other sites embed it (framing.ts).
+  const framing = frameAncestorsPolicy(c.req.path);
+  if (
+    framing &&
+    response.headers.get("Content-Type")?.includes("text/html") &&
+    !response.headers.has("Content-Security-Policy")
+  ) {
+    response.headers.set("Content-Security-Policy", framing);
+  }
   c.res = response;
 });
 
-// The app answers on the PUBLIC_URL host and loopback names only: this refuses
-// a DNS-rebinding Host on the local wrangler dev listener, and any other name
-// a route sends here (localDevHost.ts).
-app.use("*", requestHostGuard);
+// A page on another origin of this site (a webnode host runs lesson code) may
+// not show the app in a frame: the frame would be signed in (framing.ts).
+app.use("*", sameSiteFramingGuard);
 
 // One structured, queryable log line per API/media request (Workers Logs
 // indexes the object's fields). The X-POSTHOG-* headers are stamped on

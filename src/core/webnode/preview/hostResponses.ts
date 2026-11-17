@@ -112,6 +112,10 @@ export function webnodeHostResponse(
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
     "content-security-policy": `frame-ancestors ${options.editorOrigin}`,
+    // These pages may share a site with the editor (a subdomain of it): ask
+    // the browser to keep this origin apart from every other, the editor's
+    // included, which it may honour with a process of its own.
+    "origin-agent-cluster": "?1",
     ...ISOLATION_HEADERS,
   };
   if (pathname === RUNTIME_FRAME_PATH) {

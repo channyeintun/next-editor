@@ -9,9 +9,8 @@ export interface Env {
   PUBLIC_URL: string;
   // The wildcard host the webnode runtime lives under (webnodePreviewHost.ts):
   // its kernel and processes run on `runtime.<WEBNODE_PREVIEW_HOST>` and each
-  // preview on `<session>-<port>.<WEBNODE_PREVIEW_HOST>`. Unset, or naming a
-  // host on PUBLIC_URL's own site, the Worker serves no such hosts and the
-  // client keeps WebContainer.
+  // preview on `<session>-<port>.<WEBNODE_PREVIEW_HOST>`. Unset, the Worker
+  // serves no such hosts and the client keeps WebContainer.
   WEBNODE_PREVIEW_HOST?: string;
   COLLABORATION_ROOMS?: DurableObjectNamespace;
   // Voice chat control plane. All four are required for voice to be enabled;

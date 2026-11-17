@@ -39,13 +39,23 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
 - **One owner for the filesystem.** Only the kernel holds file data. A process
   reaches it through `FsBackend` (process/runtime.ts): every call is a
   synchronous round trip. There are no per-process copies to drift.
-- **The runtime's hosts are another site than the editor's.** In a deployment
-  they live on a registrable domain of their own (`isSeparateSite` in
-  preview/origin.ts; the app and the Worker both refuse a host on the editor's
-  site). A subdomain of the editor would be another origin but the same site:
-  lesson code there could plant cookies for the editor's domain, which takes
-  over or locks a visitor's session, and could share a process with the
-  editor's page. In development every `*.localhost` name is its own site.
+- **The runtime's hosts.** In the deployment they are subdomains of the
+  editor's own domain (`runtime.nexteditor.dev`,
+  `<session>-<port>.nexteditor.dev`): other origins, but the same site. Lesson
+  code there cannot read the editor's cookies or storage, and cannot call its
+  API as the visitor (the API checks the request's origin, and a WebSocket's).
+  It can set cookies for the parent domain, so the editor's sign-in cookies
+  carry the `__Host-` prefix, which a subdomain cannot set
+  (infra/worker/auth/session.ts): it can neither replace a visitor's session
+  nor plant a sign-in. Two things remain that only a registrable domain of
+  their own would remove, as StackBlitz has with webcontainer-api.io: lesson
+  code can fill the parent domain's cookie jar until the editor's requests are
+  refused for their size (clearing the site's cookies undoes it), and a browser
+  may run a same-site frame in the editor's process (the hosts' own pages
+  send `Origin-Agent-Cluster`, and cross-origin isolation already keeps each
+  origin in its own agent cluster). A page there may not frame the editor
+  either: the frame would be signed in (infra/worker/framing.ts). In development every `*.localhost` name is
+  its own site.
 - **Cross-origin isolation is required** (SharedArrayBuffer). The editor serves
   COOP/COEP and delegates isolation to the runtime frame.
 - **One build's scripts never run against another's.** Every script carries its
@@ -149,20 +159,24 @@ are checked the same way:
 ```bash
 WEBNODE_HARNESS_MINIFY=1 bun scripts/webnode-harness.ts cases
 WEBNODE_HARNESS_TARGET=http://localhost:8787 bun scripts/webnode-harness.ts cases
-WEBNODE_HARNESS_TARGET=https://nexteditor.dev WEBNODE_HARNESS_PREVIEW_HOST=<domain> bun scripts/webnode-harness.ts cases
 ```
 
-The last two run the cases against hosts a server already serves: a
-`wrangler dev` listener started with `--var WEBNODE_PREVIEW_HOST:localhost`,
-and the deployment, whose runtime hosts live under `<domain>`.
+The second runs the cases against the hosts a `wrangler dev` listener serves,
+started with `--var WEBNODE_PREVIEW_HOST:localhost` and
+`--var PUBLIC_URL:http://localhost:8787`. "Deploying" has the same for the
+deployment.
 
 ## Deploying
 
-webnode is off in a deployment until it has a domain of its own:
-`infra/wrangler.toml` lists the steps (a Worker variable, a wildcard route, and
-`VITE_WEBNODE_PREVIEW_HOST` at build time). A visitor chooses it with
-`?runtime=webnode`, for that page load only; when it does not start, the app
-runs the lesson on WebContainer.
+`infra/wrangler.toml` names the host the runtime lives under
+(`WEBNODE_PREVIEW_HOST`) and routes its subdomains to the Worker; the build
+names the same host in `VITE_WEBNODE_PREVIEW_HOST`. A visitor chooses webnode
+with `?runtime=webnode`, for that page load only; when it does not start, the
+app runs the lesson on WebContainer. After a deploy:
+
+```bash
+WEBNODE_HARNESS_TARGET=https://nexteditor.dev WEBNODE_HARNESS_PREVIEW_HOST=nexteditor.dev bun scripts/webnode-harness.ts cases
+```
 
 ## What runs, and what does not yet
 

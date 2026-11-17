@@ -70,6 +70,13 @@ describe("webnodeHostResponse", () => {
     expect(response.headers["cross-origin-resource-policy"]).toBe("cross-origin");
   });
 
+  it("asks the browser to keep every page it serves apart from other origins of its site", () => {
+    for (const path of [RUNTIME_FRAME_PATH, "/", "/src/main.tsx"]) {
+      const response = webnodeHostResponse(path, { editorOrigin: EDITOR, assetSource: null });
+      expect(response.headers["origin-agent-cluster"]).toBe("?1");
+    }
+  });
+
   it("serves the connect page for every other path", () => {
     for (const path of ["/", "/index.html", "/src/main.ts", "/__webnode__/other"]) {
       const response = webnodeHostResponse(path, { editorOrigin: EDITOR, assetSource: null });
@@ -204,7 +211,7 @@ describe("createPreviewConnectHtml", () => {
         { getElementById: (id: string) => elements[id] },
         navigator,
         window,
-        { host: "abc123-5173.preview.example" },
+        { host: "abc123defg-5173.preview.example" },
         () => 0,
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -230,7 +237,7 @@ describe("createPreviewConnectHtml", () => {
       expect(posted[0].origin).toBe(EDITOR);
       expect(posted[0].message.payload.message).toContain("denied permission");
       expect(posted[0].message.payload.message).toContain(
-        "allow them for abc123-5173.preview.example",
+        "allow them for abc123defg-5173.preview.example",
       );
     });
 

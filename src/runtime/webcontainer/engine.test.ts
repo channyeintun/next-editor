@@ -64,44 +64,42 @@ describe("selectedRuntimeEngine", () => {
 
 describe("webnodePreviewBaseFor", () => {
   const editor = { protocol: "https:", hostname: "nexteditor.dev", host: "nexteditor.dev" };
+  const local = { protocol: "http:", hostname: "localhost", host: "localhost:5173" };
 
-  it("uses the configured host when it is another site than the editor", async () => {
+  it("uses the host the build names", async () => {
     const { webnodePreviewBaseFor } = await loadPage();
-    expect(webnodePreviewBaseFor(editor, "nexteditor-preview.dev")).toEqual({
+    expect(webnodePreviewBaseFor(editor, "nexteditor.dev")).toEqual({
+      protocol: "https:",
+      host: "nexteditor.dev",
+    });
+    expect(webnodePreviewBaseFor(editor, " nexteditor-preview.dev ")).toEqual({
       protocol: "https:",
       host: "nexteditor-preview.dev",
     });
   });
 
-  it("has no host for webnode on the editor's own site", async () => {
-    const { webnodePreviewBaseFor } = await loadPage();
-    expect(webnodePreviewBaseFor(editor, "nexteditor.dev")).toBeNull();
-    expect(webnodePreviewBaseFor(editor, "preview.nexteditor.dev")).toBeNull();
-    expect(webnodePreviewBaseFor(editor, " NextEditor.dev ")).toBeNull();
-  });
-
-  it("has none where the build names none, except in development", async () => {
+  it("has none where the build names none", async () => {
     const { webnodePreviewBaseFor } = await loadPage();
     expect(webnodePreviewBaseFor(editor, undefined)).toBeNull();
     expect(webnodePreviewBaseFor(editor, "  ")).toBeNull();
-    expect(
-      webnodePreviewBaseFor(
-        { protocol: "http:", hostname: "localhost", host: "localhost:5173" },
-        undefined,
-      ),
-    ).toEqual({ protocol: "http:", host: "localhost:5173" });
+  });
+
+  it("uses the local hosts in development, whatever the build names", async () => {
+    const { webnodePreviewBaseFor } = await loadPage();
+    const base = { protocol: "http:", host: "localhost:5173" };
+    expect(webnodePreviewBaseFor(local, undefined)).toEqual(base);
+    // A deployment's hosts would refuse a local editor.
+    expect(webnodePreviewBaseFor(local, "nexteditor.dev")).toEqual(base);
   });
 
   it("has none for a configured value that is not a host and nothing else", async () => {
     const { webnodePreviewBaseFor } = await loadPage();
     for (const value of [
       "not a host",
-      // With a scheme, the hostname would read as "https" and pass for another site.
-      "https://preview.nexteditor.dev",
-      "https://nexteditor-preview.dev",
-      "nexteditor-preview.dev/",
-      "nexteditor-preview.dev/path",
-      "user@nexteditor-preview.dev",
+      "https://nexteditor.dev",
+      "nexteditor.dev/",
+      "nexteditor.dev/path",
+      "user@nexteditor.dev",
     ]) {
       expect(webnodePreviewBaseFor(editor, value)).toBeNull();
     }
@@ -109,9 +107,9 @@ describe("webnodePreviewBaseFor", () => {
 
   it("normalises the case of a configured host and keeps its port", async () => {
     const { webnodePreviewBaseFor } = await loadPage();
-    expect(webnodePreviewBaseFor(editor, "NextEditor-Preview.dev:8443")).toEqual({
+    expect(webnodePreviewBaseFor(editor, "NextEditor.dev:8443")).toEqual({
       protocol: "https:",
-      host: "nexteditor-preview.dev:8443",
+      host: "nexteditor.dev:8443",
     });
   });
 });
