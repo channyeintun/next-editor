@@ -165,8 +165,20 @@ export class Reporter {
     this.sink.write(1, `${text}\n`);
   }
 
+  /**
+   * Ends a progress line that is being redrawn in place, so that what is
+   * printed next starts a line of its own instead of following it.
+   */
+  private endProgressLine(): void {
+    if (this.drewProgress) {
+      this.sink.write(1, "\n");
+      this.drewProgress = false;
+    }
+  }
+
   /** A warning on stderr, in the tool's voice. */
   warn(message: string): void {
+    this.endProgressLine();
     const prefix = { pnpm: " WARN  ", npm: "npm warn ", yarn: "warning ", bun: "warn: " }[
       this.tool
     ];
@@ -175,6 +187,7 @@ export class Reporter {
 
   /** An error on stderr, in the tool's voice. */
   error(error: PmError): void {
+    this.endProgressLine();
     const lines: string[] = [];
     if (this.tool === "pnpm") {
       lines.push(` ${PNPM_CODES[error.code]}  ${error.message}`);

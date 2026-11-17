@@ -79,7 +79,16 @@ export interface RegistryOptions {
   tarballConcurrency?: number;
   /** Extra attempts after a failed request (network error or 5xx). */
   retries?: number;
+  /** The wait before the first retry, in milliseconds; it doubles for each one after. */
+  retryDelayMs?: number;
 }
+
+/**
+ * Long enough for a dropped connection or a busy registry to pass, which an
+ * immediate retry mostly meets again; short enough not to be noticed in an
+ * install of hundreds of requests.
+ */
+const RETRY_DELAY_MS = 300;
 
 /** The registry used when the environment names none. */
 export const DEFAULT_REGISTRY = "https://registry.npmjs.org";
@@ -124,6 +133,7 @@ export function createLimiter(limit: number): <T>(task: () => Promise<T>) => Pro
 export function createRegistryClient(options: RegistryOptions): RegistryClient {
   const registry = options.registry.replace(/\/+$/, "");
   const retries = options.retries ?? 2;
+  const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS;
   const packumentLimit = createLimiter(options.packumentConcurrency ?? 16);
   const tarballLimit = createLimiter(options.tarballConcurrency ?? 8);
   const packuments = new Map<string, Promise<Packument>>();
@@ -133,6 +143,10 @@ export function createRegistryClient(options: RegistryOptions): RegistryClient {
   async function request(url: string, init: RequestInit, what: string): Promise<Response> {
     let lastError: unknown = null;
     for (let attempt = 0; attempt <= retries; attempt++) {
+      if (attempt > 0 && retryDelayMs > 0) {
+        const delay = retryDelayMs * 2 ** (attempt - 1);
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      }
       try {
         const response = await options.fetch(url, init);
         if (response.status === 404) {

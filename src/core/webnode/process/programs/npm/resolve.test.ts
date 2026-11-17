@@ -393,19 +393,40 @@ describe("resolveDependencies", () => {
 });
 
 describe("registry client", () => {
-  it("retries a failed request twice", async () => {
-    let calls = 0;
+  it("retries a failed request twice, waiting longer each time", async () => {
+    const at: number[] = [];
     const registry = createRegistryClient({
       registry: "https://r.test/",
+      retryDelayMs: 40,
       fetch: async () => {
-        calls++;
-        if (calls < 3) {
+        at.push(performance.now());
+        if (at.length < 3) {
           return new Response("busy", { status: 503 });
         }
         return new Response(JSON.stringify({ name: "a", "dist-tags": {}, versions: {} }));
       },
     });
     await expect(registry.packument("a")).resolves.toMatchObject({ name: "a" });
+    expect(at).toHaveLength(3);
+    // 40 ms, then 80 ms (a timer may fire a moment early).
+    expect(at[1] - at[0]).toBeGreaterThanOrEqual(35);
+    expect(at[2] - at[1]).toBeGreaterThanOrEqual(75);
+  });
+
+  it("gives up after its retries with the request's own failure", async () => {
+    let calls = 0;
+    const registry = createRegistryClient({
+      registry: "https://r.test/",
+      retryDelayMs: 0,
+      fetch: async () => {
+        calls++;
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    await expect(registry.packument("a")).rejects.toMatchObject({
+      code: "EFETCH",
+      message: "GET https://r.test/a: request failed (Failed to fetch)",
+    });
     expect(calls).toBe(3);
   });
 
