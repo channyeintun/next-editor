@@ -8,11 +8,52 @@ import "posthog-js/dist/exception-autocapture";
 import { isLandingDemoFrame } from "./demoEmbedControls";
 import { POSTHOG_REPLAY_PRIVACY_OPTIONS, sanitizePostHogEvent } from "./posthogExceptionFilter";
 
+/**
+ * The `document.cookie` writes that expire PostHog identity cookies (`ph_<token>_posthog`)
+ * an earlier version set on a parent domain of `hostname`: the runtime's hosts, its
+ * subdomains, could still read them. Host-only cookies of the same name are left alone.
+ */
+export function parentDomainCookieRemovals(
+  cookies: string,
+  hostname: string,
+  secure: boolean,
+): string[] {
+  const labels = hostname.split(".");
+  const domains: string[] = [];
+  for (let i = 0; i < labels.length - 1; i++) {
+    domains.push(labels.slice(i).join("."));
+  }
+  const names = new Set(
+    cookies
+      .split(";")
+      .map((entry) => entry.split("=")[0].trim())
+      .filter((name) => /^ph_.+_posthog$/.test(name)),
+  );
+  return [...names].flatMap((name) =>
+    domains.map(
+      (domain) =>
+        `${name}=; Domain=${domain}; Path=/; Max-Age=0; SameSite=Lax${secure ? "; Secure" : ""}`,
+    ),
+  );
+}
+
 /** Imported on demand by analytics.ts, which explains why; nothing else imports posthog-js. */
 export function initPostHog(): PostHog {
+  // A visitor from before host-only cookies gets a new anonymous id once.
+  for (const removal of parentDomainCookieRemovals(
+    document.cookie,
+    window.location.hostname,
+    window.location.protocol === "https:",
+  )) {
+    document.cookie = removal;
+  }
   posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_PROJECT_TOKEN, {
     api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
     defaults: "2026-01-30",
+    // Host-only cookies. By default posthog-js sets them on the parent domain,
+    // where the runtime's hosts (subdomains running lesson code) could read the
+    // visitor's analytics id and session, or flip their tracking consent.
+    cross_subdomain_cookie: false,
     __add_tracing_headers: [window.location.host, "localhost"],
     // Uncaught errors/rejections anywhere in the app — the route error boundary
     // only sees render-path failures.

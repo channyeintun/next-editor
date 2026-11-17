@@ -12,6 +12,9 @@ export const BUILD_ID: string =
 /** The query parameter a script's URL names its build with. */
 export const BUILD_PARAMETER = "v";
 
+/** What an editor of another build is told: its scripts are gone, and a reload brings the new ones. */
+export const STALE_BUILD_MESSAGE = "the editor was updated; reload the page to run code again";
+
 /** `path` as a script of build `buildId` asks for it; `path` itself when there is no id. */
 export function versionedPath(path: string, buildId: string = BUILD_ID): string {
   return buildId ? `${path}?${BUILD_PARAMETER}=${encodeURIComponent(buildId)}` : path;

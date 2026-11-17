@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { initPostHog } from "./posthogClient";
+import { initPostHog, parentDomainCookieRemovals } from "./posthogClient";
 import { POSTHOG_REPLAY_PRIVACY_OPTIONS } from "./posthogExceptionFilter";
 
 const mocks = vi.hoisted(() => ({
@@ -44,6 +44,10 @@ describe("initPostHog", () => {
     });
   });
 
+  it("keeps its cookies on the editor's own host, out of reach of the runtime's subdomains", () => {
+    expect(initConfig()).toMatchObject({ cross_subdomain_cookie: false });
+  });
+
   it("has exception autocapture in place before init, so PostHog never fetches it", () => {
     const extensions = () =>
       (window as { __PosthogExtensions__?: { errorWrappingFunctions?: Record<string, unknown> } })
@@ -69,5 +73,24 @@ describe("initPostHog", () => {
       capture_pageview: false,
       disable_session_recording: true,
     });
+  });
+});
+
+describe("parentDomainCookieRemovals", () => {
+  it("expires PostHog's identity cookie on every parent domain of the editor's host", () => {
+    expect(
+      parentDomainCookieRemovals("a=1; ph_phc_x_posthog=%7B%7D; other=2", "nexteditor.dev", true),
+    ).toEqual([
+      "ph_phc_x_posthog=; Domain=nexteditor.dev; Path=/; Max-Age=0; SameSite=Lax; Secure",
+    ]);
+    expect(parentDomainCookieRemovals("ph_t_posthog=1", "app.nexteditor.dev", false)).toEqual([
+      "ph_t_posthog=; Domain=app.nexteditor.dev; Path=/; Max-Age=0; SameSite=Lax",
+      "ph_t_posthog=; Domain=nexteditor.dev; Path=/; Max-Age=0; SameSite=Lax",
+    ]);
+  });
+
+  it("touches nothing on a host without a parent domain, or without such a cookie", () => {
+    expect(parentDomainCookieRemovals("ph_t_posthog=1", "localhost", false)).toEqual([]);
+    expect(parentDomainCookieRemovals("a=1", "nexteditor.dev", true)).toEqual([]);
   });
 });

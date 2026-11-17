@@ -99,6 +99,9 @@ export function webnodeBundlePlugin(): Plugin {
               // An edit rebuilds the scripts under the same id, so a dev server
               // never calls a build current: nothing is kept, nothing refused.
               currentBuild: null,
+              method: request.method,
+              requestOrigin: request.headers.origin ?? null,
+              destination: (request.headers["sec-fetch-dest"] as string | undefined) ?? null,
             });
             response.writeHead(answer.status, answer.headers);
             response.end(answer.body);

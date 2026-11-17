@@ -1,6 +1,8 @@
 // The page a preview origin shows before its service worker can reach the
-// runtime: it registers the worker, asks the editor (its parent window) for a
-// control port, hands that port to the worker, and reloads into the preview.
+// runtime: it asks the editor (its parent window) for a control port, registers
+// the service worker of the editor's build, hands the port to that worker, and
+// reloads into the preview.
+import { BUILD_PARAMETER, STALE_BUILD_MESSAGE } from "../buildId";
 import { PREVIEW_SERVICE_WORKER_PATH } from "./protocol";
 
 /**
@@ -15,10 +17,23 @@ export function servedEditorOrigin(): string {
   return typeof origin === "string" ? origin : "about:invalid";
 }
 
-/** The page's script, taking a connection only from a parent at `editorOrigin`. */
+/** What the page says when the host no longer serves the editor's build. */
+const STALE_TEXT = `${STALE_BUILD_MESSAGE[0].toUpperCase()}${STALE_BUILD_MESSAGE.slice(1)}.`;
+
+/**
+ * The page's script, taking a connection only from a parent at `editorOrigin`.
+ * The service worker it registers is the one of the editor's build (the editor
+ * names it with the port): a worker of another build could speak another
+ * protocol to the editor's gateway. The worker's URL names that build, so the
+ * browser's own update check never swaps in a newer build's worker either: the
+ * host of a newer build refuses an older one's URL with 409.
+ */
 const script = (editorOrigin: string) => `(function () {
   "use strict";
   var EDITOR = ${JSON.stringify(editorOrigin)};
+  var WORKER = ${JSON.stringify(PREVIEW_SERVICE_WORKER_PATH)};
+  var BUILD_PARAMETER = ${JSON.stringify(BUILD_PARAMETER)};
+  var STALE = ${JSON.stringify(STALE_TEXT)};
   var msg = document.getElementById("msg");
   var note = document.getElementById("note");
   var spin = document.getElementById("spin");
@@ -41,51 +56,84 @@ const script = (editorOrigin: string) => `(function () {
     fail("This browser cannot show the preview.", "Service workers are unavailable here (a private window can disable them).");
     return;
   }
-  navigator.serviceWorker
-    .register(${JSON.stringify(PREVIEW_SERVICE_WORKER_PATH)}, { scope: "/" })
-    .then(function () { return navigator.serviceWorker.ready; })
-    .then(function (registration) {
-      var worker = registration.active || navigator.serviceWorker.controller;
-      if (window.parent === window) {
-        show("Open this preview from the editor.");
+  if (window.parent === window) {
+    show("Open this preview from the editor.");
+    return;
+  }
+  // Resolves with the registration's worker once it is the worker at url.
+  function activeWorker(registration, url) {
+    return new Promise(function (resolve, reject) {
+      function check() {
+        var active = registration.active;
+        if (active && active.scriptURL === url) { resolve(active); return; }
+        var next = registration.installing || registration.waiting;
+        if (!next) { reject(new Error("The preview's service worker did not start.")); return; }
+        next.addEventListener("statechange", function onChange() {
+          if (next.state !== "activated" && next.state !== "redundant") return;
+          next.removeEventListener("statechange", onChange);
+          check();
+        });
+      }
+      check();
+    });
+  }
+  function startWorker(build) {
+    var path = build ? WORKER + "?" + BUILD_PARAMETER + "=" + encodeURIComponent(build) : WORKER;
+    return navigator.serviceWorker
+      .register(path, { scope: "/" })
+      .then(function (registration) { return activeWorker(registration, new URL(path, location.href).href); })
+      .catch(function (error) {
+        // The host serves a newer build than the editor's: say so, not a script error.
+        return fetch(path, { cache: "no-store" }).then(
+          function (response) { throw response.status === 409 ? { stale: true } : error; },
+          function () { throw error; }
+        );
+      });
+  }
+  var started = Date.now();
+  var waiting = false;
+  var stopped = false;
+  var waitTimer = 0;
+  var askTimer = 0;
+  window.addEventListener("message", function (event) {
+    if (stopped || waiting || event.source !== window.parent || event.origin !== EDITOR) return;
+    var data = event.data;
+    if (!data || data.type !== "webnode:preview-port") return;
+    var port = data.port || (event.ports && event.ports[0]);
+    if (!port) return;
+    waiting = true;
+    startWorker(typeof data.build === "string" ? data.build : "").then(function (worker) {
+      var reply = new MessageChannel();
+      reply.port1.onmessage = function (answer) {
+        if (answer.data && answer.data.type === "webnode:attached") location.reload();
+      };
+      worker.postMessage({ type: "webnode:attach", control: port, reply: reply.port2 }, [port, reply.port2]);
+      // No answer from the worker: go back to asking.
+      clearTimeout(waitTimer);
+      waitTimer = setTimeout(function () { waiting = false; }, 3000);
+    }, function (error) {
+      stopped = true;
+      clearInterval(askTimer);
+      if (error && error.stale) {
+        fail("The preview could not start.", STALE);
         return;
       }
-      var started = Date.now();
-      var waiting = false;
-      var waitTimer = 0;
-      window.addEventListener("message", function (event) {
-        if (waiting || event.source !== window.parent || event.origin !== EDITOR) return;
-        var data = event.data;
-        if (!data || data.type !== "webnode:preview-port") return;
-        var port = data.port || (event.ports && event.ports[0]);
-        if (!port || !worker) return;
-        waiting = true;
-        var reply = new MessageChannel();
-        reply.port1.onmessage = function (answer) {
-          if (answer.data && answer.data.type === "webnode:attached") location.reload();
-        };
-        worker.postMessage({ type: "webnode:attach", control: port, reply: reply.port2 }, [port, reply.port2]);
-        // No answer from the worker: go back to asking.
-        clearTimeout(waitTimer);
-        waitTimer = setTimeout(function () { waiting = false; }, 3000);
-      });
-      function ask() {
-        if (waiting) return;
-        window.parent.postMessage({ type: "webnode:preview-connect" }, EDITOR);
-        if (Date.now() - started > 15000) {
-          note.textContent = "The editor has not answered yet. Still trying…";
-        }
-      }
-      ask();
-      setInterval(ask, 1000);
-    })
-    .catch(function (error) {
       // A browser that blocks third-party cookies refuses a service worker in an embedded page.
       fail(
         "The preview could not start.",
         String((error && error.message) || error) + " If this browser blocks third-party cookies, allow them for " + location.host + "."
       );
     });
+  });
+  function ask() {
+    if (waiting || stopped) return;
+    window.parent.postMessage({ type: "webnode:preview-connect" }, EDITOR);
+    if (Date.now() - started > 15000) {
+      note.textContent = "The editor has not answered yet. Still trying…";
+    }
+  }
+  ask();
+  askTimer = setInterval(ask, 1000);
 })();`;
 
 /**

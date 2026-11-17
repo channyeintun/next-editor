@@ -2,7 +2,8 @@
 // (except the host's own `/__webnode__/` files) by asking the gateway in the
 // kernel worker over a control port that a window hands it, and forwards the
 // page's WebSockets to the gateway. It also keeps the preview's cookies
-// (cookieJar.ts), since a service worker's responses cannot set real ones.
+// (cookieJar.ts), since a service worker's responses cannot set real ones, and
+// a copy of them in its Cache Storage, since the browser stops idle workers.
 // Bundled on its own into `/__webnode__/sw.js`, so it imports nothing but
 // types, constants and the self-contained cookie jar.
 import { PREVIEW_CONNECT_HTML, servedEditorOrigin } from "./connectPage";
@@ -48,10 +49,20 @@ interface SwClients {
   claim(): Promise<void>;
 }
 
+/** The part of `CacheStorage` the cookie jar's copy uses. */
+interface SwCaches {
+  open(name: string): Promise<{
+    match(key: string): Promise<Response | undefined>;
+    put(key: string, response: Response): Promise<void>;
+  }>;
+}
+
 /** The parts of `ServiceWorkerGlobalScope` this worker uses. */
 export interface PreviewServiceWorkerScope {
   readonly location: { readonly origin: string; readonly host: string; readonly hostname: string };
   readonly clients: SwClients;
+  /** Absent where the browser gives the worker no Cache Storage: the jar is then memory only. */
+  readonly caches?: SwCaches;
   skipWaiting(): Promise<void>;
   addEventListener(
     type: "install" | "activate",
@@ -98,6 +109,107 @@ function textResponse(status: number, text: string): Response {
   });
 }
 
+/** Where the cookie jar's copy lives in Cache Storage. */
+const JAR_CACHE = "webnode-preview";
+const JAR_KEY = `${PREVIEW_RESERVED_PREFIX}cookie-jar`;
+
+/**
+ * The preview's cookie jar and its copy in Cache Storage. The copy is read
+ * once when the worker starts; every request waits for that, so a restarted
+ * worker sends the cookies the stopped one had.
+ */
+class PersistentJar {
+  readonly #jar: CookieJar;
+  readonly #caches: SwCaches | undefined;
+  readonly #key: string;
+  readonly ready: Promise<void>;
+  #saving: Promise<void> = Promise.resolve();
+
+  constructor(location: PreviewServiceWorkerScope["location"], caches: SwCaches | undefined) {
+    const jar = new CookieJar(location.hostname);
+    const key = new URL(JAR_KEY, location.origin).href;
+    this.#jar = jar;
+    this.#caches = caches;
+    this.#key = key;
+    this.ready = (async () => {
+      try {
+        const stored = await (await caches?.open(JAR_CACHE))?.match(key);
+        if (stored) {
+          jar.restore(await stored.json());
+        }
+      } catch {
+        // No copy, or one that does not read: the jar starts empty.
+      }
+    })();
+  }
+
+  /** The `Cookie` header for a request to `path`, once the stored copy is in. */
+  async header(path: string): Promise<string | null> {
+    await this.ready;
+    return this.#jar.header(path);
+  }
+
+  /** Stores a response's `Set-Cookie` lines and updates the copy. */
+  store(lines: string[], path: string): void {
+    if (lines.length === 0) {
+      return;
+    }
+    this.#jar.store(lines, path);
+    const caches = this.#caches;
+    if (!caches) {
+      return;
+    }
+    // One write at a time, so an older copy never lands after a newer one.
+    this.#saving = this.#saving.then(async () => {
+      try {
+        const cache = await caches.open(JAR_CACHE);
+        await cache.put(
+          this.#key,
+          new Response(JSON.stringify(this.#jar.entries()), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      } catch {
+        // Not kept: the cookies last as long as this worker does.
+      }
+    });
+  }
+}
+
+/**
+ * The `Referer` the browser would send with `request` (a request to `origin`),
+ * by its referrer policy, or null for none. The network adds it only after a
+ * service worker, so the request here does not carry it.
+ */
+export function refererFor(request: Request, origin: string): string | null {
+  const referrer = request.referrer;
+  if (!referrer || referrer === "about:client") {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(referrer);
+  } catch {
+    return null;
+  }
+  const sameOrigin = url.origin === origin;
+  switch (request.referrerPolicy) {
+    case "no-referrer":
+      return null;
+    case "same-origin":
+      return sameOrigin ? referrer : null;
+    case "origin":
+    case "strict-origin":
+      return `${url.origin}/`;
+    case "unsafe-url":
+    case "no-referrer-when-downgrade":
+      return referrer;
+    default:
+      // strict-origin-when-cross-origin (the default) and origin-when-cross-origin.
+      return sameOrigin ? referrer : `${url.origin}/`;
+  }
+}
+
 interface Pending {
   resolve(response: Response): void;
   controller: ReadableStreamDefaultController<Uint8Array> | null;
@@ -118,13 +230,20 @@ class ControlLink {
   /** Replaced by a newer port: closes once its last request is done. */
   #retired = false;
   readonly #timings: PreviewServiceWorkerTimings;
-  readonly #jar: CookieJar;
+  readonly #jar: PersistentJar;
+  readonly #location: PreviewServiceWorkerScope["location"];
   readonly #onPortClose = () => this.close();
 
-  constructor(port: MessagePort, timings: PreviewServiceWorkerTimings, jar: CookieJar) {
+  constructor(
+    port: MessagePort,
+    timings: PreviewServiceWorkerTimings,
+    jar: PersistentJar,
+    location: PreviewServiceWorkerScope["location"],
+  ) {
     this.port = port;
     this.#timings = timings;
     this.#jar = jar;
+    this.#location = location;
     port.onmessage = (event: MessageEvent<FromGatewayMessage>) => this.#onMessage(event.data);
     // Where MessagePort reports its peer closing (the kernel worker ended),
     // the link fails what it has in flight at once.
@@ -160,14 +279,18 @@ class ControlLink {
     return this.#ping;
   }
 
-  /** Sends a WebSocket's port on to the gateway. */
-  openSocket(url: string, protocols: string[], pageHost: string, port: MessagePort): void {
-    this.#post({ type: "ws-connect", url, protocols, pageHost, port }, [port]);
+  /** Sends a WebSocket's port on to the gateway, with the cookies the browser would send. */
+  openSocket(url: string, protocols: string[], cookie: string | null, port: MessagePort): void {
+    this.#post(
+      { type: "ws-connect", url, protocols, pageHost: this.#location.host, cookie, port },
+      [port],
+    );
   }
 
   /** Forwards `request`; resolves with the response once its head arrives. */
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const method = request.method.toUpperCase();
     const headers: HeaderList = [];
     request.headers.forEach((value, name) => {
       if (name.toLowerCase() !== "cookie") {
@@ -182,13 +305,23 @@ class ControlLink {
       ["Sec-Fetch-Mode", request.mode],
       ["Sec-Fetch-Site", "same-origin"],
     );
+    // Origin and Referer are added by the network after a service worker, and
+    // servers check them (CSRF): they are restated as the browser sends them
+    // on a same-origin request, and the gateway restates them on the server's
+    // own origin.
+    if (method !== "GET" && method !== "HEAD" && !request.headers.has("origin")) {
+      headers.push(["Origin", this.#location.origin]);
+    }
+    const referer = refererFor(request, this.#location.origin);
+    if (referer !== null && !request.headers.has("referer")) {
+      headers.push(["Referer", referer]);
+    }
     if (request.credentials !== "omit") {
-      const cookie = this.#jar.header(url.pathname);
+      const cookie = await this.#jar.header(url.pathname);
       if (cookie !== null) {
         headers.push(["Cookie", cookie]);
       }
     }
-    const method = request.method.toUpperCase();
     const body = method === "GET" || method === "HEAD" ? null : await request.arrayBuffer();
     const id = this.#nextId++;
     const message: GatewayRequestMessage = {
@@ -198,6 +331,7 @@ class ControlLink {
       url: url.pathname + url.search,
       headers,
       body,
+      pageHost: this.#location.host,
     };
     if (this.#closed) {
       return textResponse(502, "Bad Gateway: the preview lost its connection to the runtime");
@@ -374,12 +508,12 @@ export function installPreviewServiceWorker(
 ): void {
   let link: ControlLink | null = null;
   let attachWaiters: (() => void)[] = [];
-  const jar = new CookieJar(scope.location.hostname);
+  const jar = new PersistentJar(scope.location, scope.caches);
 
   function attach(port: MessagePort): void {
     // The old link keeps serving what it already has in flight, then closes.
     link?.retire();
-    link = new ControlLink(port, timings, jar);
+    link = new ControlLink(port, timings, jar, scope.location);
     const waiters = attachWaiters;
     attachWaiters = [];
     for (const wake of waiters) {
@@ -400,6 +534,16 @@ export function installPreviewServiceWorker(
       current.close();
     }
     return link;
+  }
+
+  /** The cookies a browser sends on a handshake to `url`: the jar's, for this origin's own host. */
+  async function socketCookie(url: string): Promise<string | null> {
+    try {
+      const parsed = new URL(url);
+      return parsed.host === scope.location.host ? await jar.header(parsed.pathname) : null;
+    } catch {
+      return null;
+    }
   }
 
   function waitForAttach(): Promise<void> {
@@ -494,7 +638,7 @@ export function installPreviewServiceWorker(
             current = await liveLink();
           }
           if (current) {
-            current.openSocket(data.url, data.protocols, scope.location.host, port);
+            current.openSocket(data.url, data.protocols, await socketCookie(data.url), port);
             return;
           }
           const error: SocketErrorEvent = { type: "error" };

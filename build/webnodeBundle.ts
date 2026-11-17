@@ -44,7 +44,10 @@ function nodeBuiltinAliases(): RolldownPlugin {
     events: engine("process/node/events.ts"),
     buffer: require.resolve("buffer/"),
     "buffer/": require.resolve("buffer/"),
-    string_decoder: require.resolve("string_decoder/"),
+    // The bare name is the engine's module (any view as input, base64url, a
+    // fresh state after end()); it wraps the package, which it imports by the
+    // name with a slash.
+    string_decoder: engine("process/node/string_decoder.ts"),
     "string_decoder/": require.resolve("string_decoder/"),
     "punycode/": require.resolve("punycode/"),
     process: engine("process/node/internal/processShim.ts"),

@@ -2,7 +2,7 @@
 // middleware and a Cloudflare Worker serve these). Those hosts carry nothing of
 // the app: a preview host gets the connect page and its service worker, the
 // runtime host gets the frame that runs the kernel and its worker scripts.
-import { versionedPath } from "../buildId";
+import { STALE_BUILD_MESSAGE, versionedPath } from "../buildId";
 import { createPreviewConnectHtml, EDITOR_ORIGIN_GLOBAL } from "./connectPage";
 import { PREVIEW_SERVICE_WORKER_PATH } from "./protocol";
 
@@ -50,13 +50,32 @@ export interface WebnodeHostOptions {
   requestedBuild?: string | null;
   /** The build this host serves, or null when it does not know. */
   currentBuild?: string | null;
+  /** The request's method; GET when not given. */
+  method?: string;
+  /** The request's `Origin` header, or null when it sent none. */
+  requestOrigin?: string | null;
+  /** The request's `Sec-Fetch-Dest`, or null when it sent none (then any path may be a page). */
+  destination?: string | null;
 }
 
 /** The scripts that are the same bytes for every request of one build, so a browser may keep them. */
 const IMMUTABLE_ASSETS = new Set<WebnodeHostAsset>(["kernel.js", "process.js"]);
 
-/** What an editor of another build is told: its scripts are gone, and a reload brings the new ones. */
-export const STALE_BUILD_MESSAGE = "the editor was updated; reload the page to run code again";
+export { STALE_BUILD_MESSAGE };
+
+/**
+ * Where the editor asks a preview origin it has given up to drop what its
+ * pages stored (api.ts): the answer carries `Clear-Site-Data: "storage"`.
+ */
+export const PREVIEW_CLEAR_PATH = "/__webnode__/clear";
+
+/**
+ * The request destinations that load a document. A page path asked for as
+ * anything else (a page's own service worker script, an `importScripts`) is
+ * not the connect page: it gets a 404, which a browser refuses plainly instead
+ * of failing on an HTML "script".
+ */
+const DOCUMENT_DESTINATIONS = new Set(["document", "iframe", "frame", "embed", "object"]);
 
 /**
  * The host's answer for a request to `pathname` on a preview or runtime host.
@@ -105,6 +124,32 @@ export function webnodeHostResponse(
       body: knowsEditor
         ? `self.${EDITOR_ORIGIN_GLOBAL} = ${JSON.stringify(options.editorOrigin)};\n${options.assetSource}`
         : options.assetSource,
+    };
+  }
+
+  if (pathname === PREVIEW_CLEAR_PATH) {
+    // Only the editor may clear a preview origin. "cookies" would clear the
+    // whole site's, the editor's sign-in included, so only storage is named.
+    const allowed =
+      (options.method ?? "GET").toUpperCase() === "POST" &&
+      options.requestOrigin === options.editorOrigin;
+    return {
+      status: allowed ? 200 : 403,
+      headers: {
+        "cache-control": "no-store",
+        ...(allowed ? { "clear-site-data": '"storage"' } : {}),
+        ...ISOLATION_HEADERS,
+      },
+      body: "",
+    };
+  }
+
+  const destination = options.destination?.trim().toLowerCase() ?? null;
+  if (destination !== null && destination !== "" && !DOCUMENT_DESTINATIONS.has(destination)) {
+    return {
+      status: 404,
+      headers: { "cache-control": "no-store", ...ISOLATION_HEADERS },
+      body: "",
     };
   }
 

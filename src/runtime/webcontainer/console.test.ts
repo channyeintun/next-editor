@@ -98,3 +98,30 @@ describe("previewUnavailableText", () => {
     );
   });
 });
+
+describe("formatPreviewMessage with what a preview page made up", () => {
+  it("does not throw on fields of the wrong type", () => {
+    for (const payload of [
+      { type: 1 },
+      { type: "error", message: 42 },
+      { type: "console-error", args: "x" },
+      { type: "console-error", args: [{ toString: 1 }] },
+    ]) {
+      expect(() => formatPreviewMessage(payload as never)).not.toThrow();
+    }
+  });
+
+  it("keeps only a string pathname and a numeric port", () => {
+    const message = formatPreviewMessage({
+      type: "console-error",
+      pathname: { evil: true },
+      port: "5173",
+    } as never);
+    expect(message.pathname).toBe("");
+    expect(message.port).toBeNull();
+    expect(formatPreviewMessage({ type: 1, message: 42 } as never)).toMatchObject({
+      kind: "uncaught-exception",
+      text: "Preview error",
+    });
+  });
+});

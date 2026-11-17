@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+import { BUILD_ID } from "../buildId";
 import { createPreviewPageBridge, reloadPreview } from "./pageBridge";
 
 const PREVIEW = "http://k3j2h1x9ab-5173.localhost:5173";
@@ -48,6 +49,8 @@ describe("createPreviewPageBridge", () => {
     expect(replies).toHaveLength(1);
     const { message, options } = replies[0];
     expect(message.type).toBe("webnode:preview-port");
+    // The preview registers the service worker of this editor's build ("" in tests).
+    expect((message as { build?: string }).build).toBe(BUILD_ID);
     expect(options).toEqual({ targetOrigin: PREVIEW, transfer: [message.port] });
 
     // The two ends are linked.

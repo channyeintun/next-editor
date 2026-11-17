@@ -190,6 +190,8 @@ export interface WebSocketBridgeOptions {
   url: string;
   protocols: string[];
   pageHost: string;
+  /** The `Cookie` header the browser would send on the handshake, or null for none. */
+  cookie?: string | null;
   serverPort: number;
   /** How long to wait for the server's close frame after sending ours. */
   closeTimeoutMs?: number;
@@ -525,6 +527,10 @@ export function openWebSocketBridge(options: WebSocketBridgeOptions): { dispose(
       `Origin: http://localhost:${port}\r\n`;
     if (options.protocols.length > 0) {
       request += `Sec-WebSocket-Protocol: ${options.protocols.join(", ")}\r\n`;
+    }
+    // A server that authenticates the upgrade reads the session cookie, as a browser sends it.
+    if (options.cookie && !/[\r\n]/.test(options.cookie)) {
+      request += `Cookie: ${options.cookie}\r\n`;
     }
     opened.write(encoder.encode(`${request}\r\n`));
   }

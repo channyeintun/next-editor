@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createPreviewConnectHtml } from "./connectPage";
 import {
+  PREVIEW_CLEAR_PATH,
   RUNTIME_FRAME_PATH,
   STALE_BUILD_MESSAGE,
   webnodeHostAsset,
@@ -85,6 +86,58 @@ describe("webnodeHostResponse", () => {
       expect(response.headers["content-type"]).toBe("text/html; charset=utf-8");
       expect(response.headers["cache-control"]).toBe("no-store");
       expect(response.headers["content-security-policy"]).toBe(`frame-ancestors ${EDITOR}`);
+    }
+  });
+});
+
+describe("webnodeHostResponse for what a preview page asks itself", () => {
+  it("answers a page's own service worker script with 404, not the connect page", () => {
+    for (const destination of ["serviceworker", "script", "worker", "empty"]) {
+      const response = webnodeHostResponse("/mockServiceWorker.js", {
+        editorOrigin: EDITOR,
+        assetSource: null,
+        destination,
+      });
+      expect(response.status).toBe(404);
+      expect(response.headers["content-type"]).toBeUndefined();
+    }
+  });
+
+  it("serves the connect page to a document or frame load", () => {
+    for (const destination of ["document", "iframe", null]) {
+      const response = webnodeHostResponse("/", {
+        editorOrigin: EDITOR,
+        assetSource: null,
+        destination,
+      });
+      expect(response.body).toBe(createPreviewConnectHtml(EDITOR));
+    }
+  });
+
+  it("clears the origin's storage, not the site's cookies, when the editor asks", () => {
+    const response = webnodeHostResponse(PREVIEW_CLEAR_PATH, {
+      editorOrigin: EDITOR,
+      assetSource: null,
+      method: "POST",
+      requestOrigin: EDITOR,
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers["clear-site-data"]).toBe('"storage"');
+  });
+
+  it("clears nothing for anyone else", () => {
+    for (const request of [
+      { method: "POST", requestOrigin: "https://abcdefghij-3000.preview.example" },
+      { method: "GET", requestOrigin: EDITOR },
+      { method: "POST", requestOrigin: null },
+    ]) {
+      const response = webnodeHostResponse(PREVIEW_CLEAR_PATH, {
+        editorOrigin: EDITOR,
+        assetSource: null,
+        ...request,
+      });
+      expect(response.status).toBe(403);
+      expect(response.headers["clear-site-data"]).toBeUndefined();
     }
   });
 });
@@ -190,7 +243,12 @@ describe("createPreviewConnectHtml", () => {
     }
 
     /** Runs the page's script with the browser objects it touches. */
-    async function run(navigator: object, embedded = true) {
+    async function run(
+      navigator: object,
+      embedded = true,
+      port: { build?: string } | null = null,
+      fetchStatus = 404,
+    ) {
       const script =
         /<script>([\s\S]*)<\/script>/.exec(createPreviewConnectHtml(EDITOR))?.[1] ?? "";
       const element = () => ({ textContent: "", style: {} as Record<string, string> });
@@ -200,22 +258,50 @@ describe("createPreviewConnectHtml", () => {
         spin: element(),
       };
       const posted: Posted[] = [];
-      const window: Record<string, unknown> = { addEventListener() {} };
+      const listeners: ((event: object) => void)[] = [];
+      const window: Record<string, unknown> = {
+        addEventListener: (_type: string, listener: (event: object) => void) =>
+          listeners.push(listener),
+      };
       window.parent = embedded
         ? {
             postMessage: (message: Posted["message"], origin: string) =>
               posted.push({ message, origin }),
           }
         : window;
-      new Function("document", "navigator", "window", "location", "setInterval", script)(
+      const location = {
+        host: "abc123defg-5173.preview.example",
+        href: "https://abc123defg-5173.preview.example/",
+      };
+      new Function(
+        "document",
+        "navigator",
+        "window",
+        "location",
+        "setInterval",
+        "clearInterval",
+        "fetch",
+        script,
+      )(
         { getElementById: (id: string) => elements[id] },
         navigator,
         window,
-        { host: "abc123defg-5173.preview.example" },
+        location,
         () => 0,
+        () => {},
+        async () => ({ status: fetchStatus }),
       );
+      if (port) {
+        for (const listener of listeners) {
+          listener({
+            source: window.parent,
+            origin: EDITOR,
+            data: { type: "webnode:preview-port", port: {}, ...port },
+          });
+        }
+      }
       await new Promise((resolve) => setTimeout(resolve, 0));
-      return { elements, posted };
+      return { elements, posted: posted.filter((post) => post.message.payload) };
     }
 
     it("tells the editor that the browser has no service workers", async () => {
@@ -230,15 +316,59 @@ describe("createPreviewConnectHtml", () => {
 
     it("tells the editor when the browser refuses the service worker, and what to allow", async () => {
       const refused = new Error("The user denied permission to use Service Worker.");
-      const { posted } = await run({
-        serviceWorker: { register: () => Promise.reject(refused), ready: new Promise(() => {}) },
-      });
+      const { posted } = await run(
+        { serviceWorker: { register: () => Promise.reject(refused) } },
+        true,
+        { build: "" },
+      );
       expect(posted).toHaveLength(1);
       expect(posted[0].origin).toBe(EDITOR);
       expect(posted[0].message.payload.message).toContain("denied permission");
       expect(posted[0].message.payload.message).toContain(
         "allow them for abc123defg-5173.preview.example",
       );
+    });
+
+    it("registers the service worker of the editor's build", async () => {
+      const registered: string[] = [];
+      await run(
+        {
+          serviceWorker: {
+            register: (path: string) => {
+              registered.push(path);
+              return new Promise(() => {});
+            },
+          },
+        },
+        true,
+        { build: "b7" },
+      );
+      expect(registered).toEqual(["/__webnode__/sw.js?v=b7"]);
+    });
+
+    it("registers nothing before the editor answers", async () => {
+      const registered: string[] = [];
+      await run({
+        serviceWorker: {
+          register: (path: string) => {
+            registered.push(path);
+            return new Promise(() => {});
+          },
+        },
+      });
+      expect(registered).toEqual([]);
+    });
+
+    it("tells the editor to reload when the host serves a newer build", async () => {
+      const { elements, posted } = await run(
+        { serviceWorker: { register: () => Promise.reject(new TypeError("bad status 409")) } },
+        true,
+        { build: "b1" },
+        409,
+      );
+      expect(posted).toHaveLength(1);
+      expect(posted[0].message.payload.message).toContain(STALE_BUILD_MESSAGE.slice(1));
+      expect(elements.note.textContent).toContain("reload the page");
     });
 
     it("has no editor to tell when it is opened on its own", async () => {

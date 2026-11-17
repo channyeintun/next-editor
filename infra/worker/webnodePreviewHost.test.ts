@@ -229,3 +229,36 @@ describe("serveWebnodeHost across a deploy", () => {
     expect(reads).toBe(1);
   });
 });
+
+describe("serveWebnodeHost for what a preview page asks itself", () => {
+  const host = "https://abc123defg-5173.preview.example.dev";
+
+  it("answers a page's own service worker script with 404", async () => {
+    const response = await serveWebnodeHost(
+      new Request(`${host}/mockServiceWorker.js`, {
+        headers: { "sec-fetch-dest": "serviceworker", "service-worker": "script" },
+      }),
+      env,
+    );
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).not.toMatch(/html/);
+  });
+
+  it("clears the origin's storage when the editor asks, and only then", async () => {
+    const asked = await serveWebnodeHost(
+      new Request(`${host}/__webnode__/clear`, {
+        method: "POST",
+        headers: { origin: "https://editor.example" },
+      }),
+      env,
+    );
+    expect(asked.status).toBe(200);
+    expect(asked.headers.get("clear-site-data")).toBe('"storage"');
+    const other = await serveWebnodeHost(
+      new Request(`${host}/__webnode__/clear`, { method: "POST", headers: { origin: host } }),
+      env,
+    );
+    expect(other.status).toBe(403);
+    expect(other.headers.get("clear-site-data")).toBeNull();
+  });
+});

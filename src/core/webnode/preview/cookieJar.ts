@@ -4,14 +4,14 @@
 // keeps its own jar: `Set-Cookie` from each response goes in, and the matching
 // cookies go out as `Cookie` on each forwarded request (RFC 6265 §5.3-5.4).
 //
-// The jar lives in the service worker's memory only. It does not survive the
-// worker being stopped (browsers stop idle service workers after about 30 s),
-// so a preview's session cookies last as long as the worker does. The page
-// never sees these cookies (`document.cookie` is the browser's own jar), which
-// keeps HttpOnly cookies out of the page's reach as they should be.
+// The service worker keeps a copy of the jar in its Cache Storage (sw.ts), so
+// a worker the browser stopped and started again (idle workers are stopped
+// after about 30 s) still has the preview's cookies. The page never sees these
+// cookies (`document.cookie` is the browser's own jar), which keeps HttpOnly
+// cookies out of its reach, but also hides the ones a page script could read.
 
 /** One stored cookie. */
-interface StoredCookie {
+export interface StoredCookie {
   name: string;
   value: string;
   path: string;
@@ -116,6 +116,40 @@ export class CookieJar {
   /** `host` is the origin's hostname, lower case, without a port. */
   constructor(host: string) {
     this.#host = host.toLowerCase();
+  }
+
+  /** Every cookie the jar holds, for a copy kept elsewhere (`restore` takes it back). */
+  entries(): StoredCookie[] {
+    return [...this.#cookies.values()].map((cookie) => ({ ...cookie }));
+  }
+
+  /** Adds the cookies `entries` (from `entries()`) holds; a cookie the jar has already wins. */
+  restore(entries: unknown, now = Date.now()): void {
+    if (!Array.isArray(entries)) {
+      return;
+    }
+    for (const entry of entries as Partial<StoredCookie>[]) {
+      if (
+        typeof entry?.name !== "string" ||
+        typeof entry.value !== "string" ||
+        typeof entry.path !== "string" ||
+        (entry.expires !== null && typeof entry.expires !== "number") ||
+        (entry.expires !== null && entry.expires <= now)
+      ) {
+        continue;
+      }
+      const key = `${entry.name}\0${entry.path}`;
+      if (!this.#cookies.has(key)) {
+        this.#cookies.set(key, {
+          name: entry.name,
+          value: entry.value,
+          path: entry.path,
+          expires: entry.expires,
+          httpOnly: entry.httpOnly === true,
+          created: this.#counter++,
+        });
+      }
+    }
   }
 
   /** Stores (or deletes, when expired) the cookies of `Set-Cookie` lines from a response to `requestPath`. */

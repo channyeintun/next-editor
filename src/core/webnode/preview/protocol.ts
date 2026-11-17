@@ -20,6 +20,8 @@ export interface PreviewConnectMessage {
 export interface PreviewPortMessage {
   type: "webnode:preview-port";
   port: MessagePort;
+  /** The editor's build (buildId.ts): the preview registers that build's service worker. */
+  build?: string;
 }
 
 /** Preview window → editor page: a forwarded error report. */
@@ -73,6 +75,8 @@ export interface GatewayRequestMessage {
   url: string;
   headers: HeaderList;
   body: ArrayBuffer | null;
+  /** The preview origin's host, so the gateway can restate the page's Origin and Referer as the server's. */
+  pageHost?: string;
 }
 
 export interface GatewayCancelMessage {
@@ -91,6 +95,8 @@ export interface GatewayWebSocketConnectMessage {
   protocols: string[];
   /** The preview origin's host, so the gateway knows which URLs mean "this server". */
   pageHost: string;
+  /** The preview's cookies for the socket's URL (`Cookie` on the handshake), when it has any. */
+  cookie?: string | null;
   port: MessagePort;
 }
 

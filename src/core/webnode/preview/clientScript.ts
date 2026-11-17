@@ -1,6 +1,6 @@
 // The script the gateway injects first into every HTML document of a preview:
 // a runtime-backed `WebSocket` (so Vite's HMR client reaches the dev server),
-// the hand-off of a fresh control port when the service worker lost its own,
+// a refusal of the page's own service worker registrations, the hand-off of a fresh control port when the service worker lost its own,
 // reload on request from the editor, and error forwarding to the editor. Every
 // message to the editor names the editor's origin as its target, and messages
 // from the parent are accepted only from that origin, so a page that frames
@@ -248,6 +248,23 @@ window.addEventListener("pagehide", function () {
     try { port.postMessage({ type: "close", code: 1001, reason: "" }); } catch (error) { /* already gone */ }
   });
 });
+
+/* ── a page's own service worker ────────────────────────────────────────── */
+
+/* The preview's own service worker serves this origin; a page's worker would
+   replace it (same scope) and the host does not serve the page's script. So a
+   registration fails at once, saying why, instead of with a MIME-type error. */
+if (serviceWorker && typeof serviceWorker.register === "function") {
+  try {
+    Object.defineProperty(serviceWorker, "register", {
+      configurable: true,
+      writable: true,
+      value: function register() {
+        return Promise.reject(new DOMException("Failed to register a ServiceWorker: previews do not support page service workers.", "NotSupportedError"));
+      },
+    });
+  } catch (error) { /* left as the browser has it */ }
+}
 
 /* ── control port hand-off ─────────────────────────────────────────────── */
 

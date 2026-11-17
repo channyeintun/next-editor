@@ -98,14 +98,19 @@ export function previewUnavailableText(message: {
     : "The preview could not start.";
 }
 
+/**
+ * A preview message as the editor shows it. The message comes from the
+ * preview page, which runs lesson code and can post anything: a field of the
+ * wrong type is treated as missing.
+ */
 export function formatPreviewMessage(message: {
-  args?: unknown[];
-  message?: string;
-  pathname?: string;
-  port?: number;
-  type?: string;
+  args?: unknown;
+  message?: unknown;
+  pathname?: unknown;
+  port?: unknown;
+  type?: unknown;
 }): Omit<RuntimePreviewMessage, "id"> {
-  const normalizedType = message.type?.toLowerCase();
+  const normalizedType = typeof message.type === "string" ? message.type.toLowerCase() : undefined;
   const kind =
     normalizedType === "console-error" || normalizedType === "preview_console_error"
       ? "console-error"
@@ -114,17 +119,17 @@ export function formatPreviewMessage(message: {
           normalizedType === "preview_unhandled_rejection"
         ? "unhandled-rejection"
         : "uncaught-exception";
+  const args = Array.isArray(message.args) ? message.args : [];
   const text =
     kind === "console-error"
-      ? (message.args ?? []).map(stringifyPreviewMessageArg).join(" ") ||
-        "console.error called inside preview"
-      : message.message?.trim() || "Preview error";
+      ? args.map(stringifyPreviewMessageArg).join(" ") || "console.error called inside preview"
+      : (typeof message.message === "string" ? message.message.trim() : "") || "Preview error";
 
   return {
     kind,
     text,
     port: typeof message.port === "number" ? message.port : null,
-    pathname: message.pathname ?? "",
+    pathname: typeof message.pathname === "string" ? message.pathname : "",
   };
 }
 

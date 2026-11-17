@@ -88,6 +88,9 @@ export async function serveWebnodeHost(
     assetSource,
     requestedBuild,
     currentBuild,
+    method: request.method,
+    requestOrigin: request.headers.get("origin"),
+    destination: request.headers.get("sec-fetch-dest"),
   });
   return new Response(answer.body, { status: answer.status, headers: answer.headers });
 }

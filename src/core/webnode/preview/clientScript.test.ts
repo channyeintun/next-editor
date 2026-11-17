@@ -37,6 +37,7 @@ function createContext(forwardPreviewErrors: boolean | "exceptions-only" = false
       },
     },
     startMessages: vi.fn<() => void>(),
+    register: vi.fn<(url: string) => Promise<unknown>>(async () => ({})),
   });
   const location = {
     href: "http://k3j2h1x9ab-5173.localhost:5173/app/?q=1#top",
@@ -371,5 +372,16 @@ describe("createPreviewClientScript", () => {
     off.console.error("x");
     off.window.dispatchEvent(new Event("error"));
     expect(off.parentPosts).toHaveLength(0);
+  });
+});
+
+describe("a page's own service worker", () => {
+  it("is refused with an error that says previews do not support it", async () => {
+    const context = createContext();
+    const register = context.serviceWorker.register as unknown as (url: string) => Promise<unknown>;
+    await expect(register("/mockServiceWorker.js")).rejects.toThrow(
+      "previews do not support page service workers",
+    );
+    await expect(register("/sw.js")).rejects.toMatchObject({ name: "NotSupportedError" });
   });
 });

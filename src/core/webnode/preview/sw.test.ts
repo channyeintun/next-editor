@@ -18,7 +18,30 @@ afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
-function createWorker(timings = { idleMs: 10_000, pingTimeoutMs: 50, attachTimeoutMs: 50 }) {
+/** A Cache Storage that lives as long as the test: what a restarted worker finds again. */
+function createCaches() {
+  const stores = new Map<string, Map<string, string>>();
+  return {
+    async open(name: string) {
+      const store = stores.get(name) ?? new Map<string, string>();
+      stores.set(name, store);
+      return {
+        async match(key: string) {
+          const text = store.get(key);
+          return text === undefined ? undefined : new Response(text);
+        },
+        async put(key: string, response: Response) {
+          store.set(key, await response.text());
+        },
+      };
+    },
+  };
+}
+
+function createWorker(
+  timings = { idleMs: 10_000, pingTimeoutMs: 50, attachTimeoutMs: 50 },
+  caches?: ReturnType<typeof createCaches>,
+) {
   const listeners = new Map<string, Listener>();
   const clientPosts: unknown[] = [];
   const clients = new Map<string, { id: string; postMessage(message: unknown): void }>();
@@ -29,6 +52,7 @@ function createWorker(timings = { idleMs: 10_000, pingTimeoutMs: 50, attachTimeo
       claim: vi.fn<() => Promise<void>>(async () => {}),
     },
     skipWaiting: vi.fn<() => Promise<void>>(async () => {}),
+    caches,
     addEventListener(type: string, listener: Listener) {
       listeners.set(type, listener);
     },
@@ -397,5 +421,76 @@ describe("preview service worker", () => {
     );
     expect(posts).toEqual([{ type: "webnode:need-port" }]);
     expect((await upgrade).startsWith("GET /hmr HTTP/1.1")).toBe(true);
+  });
+
+  it("sends Origin and Referer as the browser would for the page's own request", async () => {
+    const worker = createWorker();
+    await worker.attach();
+    const received = serveText(worker, "HTTP/1.1 204 No Content\r\n\r\n");
+    const post = new Request(`${ORIGIN}/echo`, { method: "POST", body: "x" });
+    Object.defineProperty(post, "referrer", { value: `${ORIGIN}/form?a=1` });
+    await worker.fetch(post);
+    const get = new Request(`${ORIGIN}/data`);
+    Object.defineProperty(get, "referrer", { value: `${ORIGIN}/form?a=1` });
+    await worker.fetch(get);
+    const value = (index: number, name: string) =>
+      received[index].headers.find(([key]) => key.toLowerCase() === name)?.[1] ?? null;
+    expect(value(0, "origin")).toBe("http://localhost:3000");
+    expect(value(0, "referer")).toBe("http://localhost:3000/form?a=1");
+    // A same-origin GET carries no Origin.
+    expect(value(1, "origin")).toBeNull();
+    expect(value(1, "referer")).toBe("http://localhost:3000/form?a=1");
+  });
+
+  it("sends no Referer under a no-referrer policy", async () => {
+    const worker = createWorker();
+    await worker.attach();
+    const received = serveText(worker, "HTTP/1.1 204 No Content\r\n\r\n");
+    const request = new Request(`${ORIGIN}/x`, { referrerPolicy: "no-referrer" });
+    Object.defineProperty(request, "referrer", { value: `${ORIGIN}/page` });
+    await worker.fetch(request);
+    expect(received[0].headers.some(([key]) => key.toLowerCase() === "referer")).toBe(false);
+  });
+
+  it("keeps its cookies across a restart of the worker", async () => {
+    const caches = createCaches();
+    const first = createWorker(undefined, caches);
+    await first.attach();
+    serveText(
+      first,
+      "HTTP/1.1 200 OK\r\nSet-Cookie: sid=abc; Path=/; HttpOnly\r\nContent-Length: 0\r\n\r\n",
+    );
+    await first.fetch(new Request(`${ORIGIN}/login`));
+    await tick(5);
+
+    const restarted = createWorker(undefined, caches);
+    await restarted.attach();
+    const received = serveText(restarted, "HTTP/1.1 204 No Content\r\n\r\n");
+    await restarted.fetch(new Request(`${ORIGIN}/me`));
+    expect(received[0].headers).toContainEqual(["Cookie", "sid=abc"]);
+  });
+
+  it("sends the preview's cookies on a WebSocket handshake", async () => {
+    const worker = createWorker();
+    await worker.attach();
+    serveText(
+      worker,
+      "HTTP/1.1 200 OK\r\nSet-Cookie: sid=abc; Path=/\r\nContent-Length: 0\r\n\r\n",
+    );
+    await worker.fetch(new Request(`${ORIGIN}/login`));
+    const upgrade = new Promise<string>((resolve) => {
+      worker.servers.set(3000, (channel) => {
+        channel.onData = (chunk) => resolve(latin1(chunk));
+      });
+    });
+    const socket = new MessageChannel();
+    cleanups.push(() => socket.port2.close());
+    await worker.message({
+      type: "webnode:ws",
+      url: `ws://${new URL(ORIGIN).host}/ws`,
+      protocols: [],
+      port: socket.port1,
+    });
+    expect(await upgrade).toContain("Cookie: sid=abc\r\n");
   });
 });

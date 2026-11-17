@@ -1,6 +1,7 @@
 // The editor-page end of the preview: answers a preview window's request for a
 // control port (handing the other end to the gateway), relays forwarded preview
 // errors, and reloads a preview iframe.
+import { BUILD_ID } from "../buildId";
 import { isMessageOfType } from "./protocol";
 import type {
   PreviewConnectMessage,
@@ -56,7 +57,11 @@ export function createPreviewPageBridge(
       }
       const channel = new MessageChannel();
       options.openControlPort(serverPort, channel.port1);
-      const reply: PreviewPortMessage = { type: "webnode:preview-port", port: channel.port2 };
+      const reply: PreviewPortMessage = {
+        type: "webnode:preview-port",
+        port: channel.port2,
+        build: BUILD_ID,
+      };
       source.postMessage(reply, { targetOrigin: event.origin, transfer: [channel.port2] });
       return;
     }

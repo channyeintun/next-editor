@@ -41,6 +41,11 @@ export class PreviewGateway {
   readonly #sockets = new Set<{ dispose(): void }>();
   #disposed = false;
 
+  /** How many WebSocket bridges are open. */
+  get openSockets(): number {
+    return this.#sockets.size;
+  }
+
   constructor(options: PreviewGatewayOptions) {
     this.#options = options;
     this.#clientScript = createPreviewClientScript({
@@ -134,6 +139,7 @@ export class PreviewGateway {
             url: message.url,
             headers: message.headers,
             body: message.body ? new Uint8Array(message.body) : null,
+            pageHost: message.pageHost ?? null,
           },
           {
             head: (status, statusText, headers) =>
@@ -160,16 +166,28 @@ export class PreviewGateway {
         return;
       }
       case "ws-connect": {
-        const bridge = openWebSocketBridge({
+        // A socket can fail before `openWebSocketBridge` returns (a bad URL or
+        // port): then it is finished already and must not be kept.
+        let bridge: { dispose(): void } | null = null;
+        let finished = false;
+        bridge = openWebSocketBridge({
           connect: (port) => this.#options.connect(port),
           page: message.port,
           url: message.url,
           protocols: message.protocols,
           pageHost: message.pageHost,
+          cookie: message.cookie ?? null,
           serverPort,
-          onFinished: () => this.#sockets.delete(bridge),
+          onFinished: () => {
+            finished = true;
+            if (bridge) {
+              this.#sockets.delete(bridge);
+            }
+          },
         });
-        this.#sockets.add(bridge);
+        if (!finished) {
+          this.#sockets.add(bridge);
+        }
         return;
       }
       default:

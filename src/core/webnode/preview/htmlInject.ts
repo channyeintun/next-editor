@@ -36,16 +36,63 @@ async function decompress(bytes: Uint8Array, format: CompressionFormat): Promise
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-function decoderFor(contentType: string | null): TextDecoder {
-  const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType ?? "")?.[1];
-  if (charset) {
-    try {
-      return new TextDecoder(charset);
-    } catch {
-      // An unknown label falls back to UTF-8, as a browser does.
-    }
+/** The encoding a byte order mark at the start of `bytes` names, or null. */
+function bomEncoding(bytes: Uint8Array): string | null {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return "utf-8";
   }
-  return new TextDecoder("utf-8");
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return "utf-16be";
+  }
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return "utf-16le";
+  }
+  return null;
+}
+
+/**
+ * The charset a `<meta charset>` or `<meta http-equiv="Content-Type">` in the
+ * first 1024 bytes names, as a browser's prescan finds it, or null. ASCII is
+ * enough to find it: every encoding a page may name there keeps ASCII as is.
+ */
+function metaCharset(bytes: Uint8Array): string | null {
+  let head = "";
+  for (const byte of bytes.subarray(0, 1024)) {
+    head += String.fromCharCode(byte);
+  }
+  const charset = /<meta\b[^>]*?\bcharset\s*=\s*["']?\s*([^"'\s;/>]+)/i.exec(head)?.[1];
+  if (!charset) {
+    return null;
+  }
+  // A page that says it is UTF-16 in ASCII bytes is not: browsers read it as UTF-8.
+  return /^utf-16/i.test(charset) ? "utf-8" : charset;
+}
+
+/** A decoder for `label`, or null when the label names no encoding. */
+function decoderNamed(label: string | null | undefined): TextDecoder | null {
+  if (!label) {
+    return null;
+  }
+  try {
+    return new TextDecoder(label);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The decoder a browser would use for an HTML body: a byte order mark first,
+ * then the Content-Type charset, then a `<meta>` in the document, else UTF-8.
+ * An unknown label is passed over, as a browser does.
+ */
+function decoderFor(bytes: Uint8Array, contentType: string | null): TextDecoder {
+  const headerCharset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType ?? "")?.[1];
+  return (
+    decoderNamed(bomEncoding(bytes)) ??
+    decoderNamed(headerCharset) ??
+    decoderNamed(metaCharset(bytes)) ??
+    new TextDecoder("utf-8")
+  );
 }
 
 /** Undoes the content codings of an injectable HTML body and decodes it to text. */
@@ -54,7 +101,7 @@ export async function decodeHtmlBody(body: Uint8Array, headers: HeaderList): Pro
   for (const coding of contentCodings(headers).reverse()) {
     bytes = await decompress(bytes, coding === "deflate" ? "deflate" : "gzip");
   }
-  return decoderFor(headerValue(headers, "content-type")).decode(bytes);
+  return decoderFor(bytes, headerValue(headers, "content-type")).decode(bytes);
 }
 
 /** Makes `source` safe inside a `<script>` element: no `</script` can end it early. */

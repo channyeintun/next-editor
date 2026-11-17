@@ -134,7 +134,13 @@ export function createGatewayHarness(overrides: Partial<PreviewGatewayOptions> =
 
   /** Sends a request and resolves with the whole response. */
   function request(
-    init: { method?: string; url?: string; headers?: HeaderList; body?: Uint8Array } = {},
+    init: {
+      method?: string;
+      url?: string;
+      headers?: HeaderList;
+      body?: Uint8Array;
+      pageHost?: string;
+    } = {},
   ): Promise<CollectedResponse> & { id: number } {
     const id = nextId++;
     const promise = new Promise<CollectedResponse>((resolve) => {
@@ -172,6 +178,7 @@ export function createGatewayHarness(overrides: Partial<PreviewGatewayOptions> =
         url: init.url ?? "/",
         headers: init.headers ?? [],
         body,
+        ...(init.pageHost ? { pageHost: init.pageHost } : {}),
       },
       body ? [body] : [],
     );

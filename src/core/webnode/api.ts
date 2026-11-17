@@ -5,7 +5,11 @@
 import { BUILD_ID, versionedPath } from "./buildId";
 import { systemErrorFromRecord } from "./errors";
 import type { DirEntry } from "./kernel/vfs/types";
-import { RUNTIME_FRAME_PATH, STALE_BUILD_MESSAGE } from "./preview/hostResponses";
+import {
+  PREVIEW_CLEAR_PATH,
+  RUNTIME_FRAME_PATH,
+  STALE_BUILD_MESSAGE,
+} from "./preview/hostResponses";
 import {
   createSessionId,
   isSessionId,
@@ -50,6 +54,13 @@ export interface WebNodeBootOptions {
    * to it, as a comparison for the shared one (sharedfs), which is the default.
    */
   sharedFilesystem?: boolean;
+  /**
+   * What the runtime is for (a project or lesson). A reload of the page keeps
+   * the preview origins of the same key; anything else gets new ones, so no
+   * project reads what another left in a preview's storage. Defaults to the
+   * page's path.
+   */
+  sessionKey?: string;
 }
 
 export interface SpawnOptions {
@@ -123,27 +134,81 @@ const SESSION_STORAGE_KEY = "webnode:session";
 const RUNTIME_START_TIMEOUT_MS = 30000;
 /** How long a frame that has loaded may take to say it is a runtime. */
 const RUNTIME_READY_GRACE_MS = 5000;
+/** What a process still running at teardown exits with: what a shell reports for SIGKILL. */
+const TORN_DOWN_EXIT_CODE = 137;
 
+/** A preview session: the id in its preview origins' hosts, and the ports it served. */
 interface Session {
   id: string;
+  key: string;
+  ports: Set<number>;
   /** Gives the id up for another tab to use. */
   release(): void;
 }
 
-function storedSessionId(): string | null {
+/** The session this tab last ran, as sessionStorage keeps it. */
+interface StoredSession {
+  id: string;
+  key: string;
+  ports: number[];
+}
+
+/**
+ * Whether this page load has booted a runtime. Only its first boot may take
+ * the stored session up again (a reload); a later one is for another project.
+ */
+let bootedInThisPage = false;
+
+function readStoredSession(): StoredSession | null {
   try {
-    const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    return stored && isSessionId(stored) ? stored : null;
+    const stored = JSON.parse(sessionStorage.getItem(SESSION_STORAGE_KEY) ?? "null") as unknown;
+    const { id, key, ports } = (stored ?? {}) as Partial<StoredSession>;
+    return typeof id === "string" &&
+      isSessionId(id) &&
+      typeof key === "string" &&
+      Array.isArray(ports) &&
+      ports.every((port) => Number.isInteger(port))
+      ? { id, key, ports }
+      : null;
   } catch {
     return null;
   }
 }
 
-function storeSessionId(id: string): void {
+function storeSession(session: Session): void {
   try {
-    sessionStorage.setItem(SESSION_STORAGE_KEY, id);
+    const stored: StoredSession = { id: session.id, key: session.key, ports: [...session.ports] };
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stored));
   } catch {
     // Not remembered: the next boot in this tab makes a new one.
+  }
+}
+
+function forgetSession(id: string): void {
+  try {
+    if (readStoredSession()?.id === id) {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // Nothing kept to forget.
+  }
+}
+
+/**
+ * Asks each preview origin of a session given up to drop what its pages
+ * stored (storage, caches, service workers): the host answers with
+ * Clear-Site-Data. Where the browser does not honour it, the origin is at
+ * least never used again.
+ */
+function clearPreviewOrigins(base: PreviewBase, id: string, ports: Iterable<number>): void {
+  for (const port of ports) {
+    let url: string;
+    try {
+      url = `${previewUrl(base, id, port).slice(0, -1)}${PREVIEW_CLEAR_PATH}`;
+    } catch {
+      continue;
+    }
+    void fetch(url, { method: "POST", mode: "no-cors", keepalive: true }).catch(() => {});
   }
 }
 
@@ -168,17 +233,32 @@ function lockSession(id: string): Promise<(() => void) | null> {
 }
 
 /**
- * The session id for this tab: stable across reloads, so its preview origins
- * (and their service workers) are reused. A duplicated tab starts with a copy
- * of the id; only one runtime may use it, so the other makes its own.
+ * The session for this boot. A reload of the page keeps the session it ran
+ * for the same `key`, so its preview origins (and their service workers) are
+ * reused; every other boot gets a new id, and a stored session no tab runs
+ * any more is cleared. A duplicated tab starts with a copy of the stored
+ * session; only one runtime may use it, so the other makes its own.
  */
-async function claimSession(): Promise<Session> {
-  let id = storedSessionId() ?? createSessionId();
+async function claimSession(key: string, base: PreviewBase): Promise<Session> {
+  const stored = readStoredSession();
+  const reuse = stored !== null && !bootedInThisPage && stored.key === key;
+  bootedInThisPage = true;
+  if (stored && !reuse) {
+    const release = await lockSession(stored.id);
+    if (release) {
+      clearPreviewOrigins(base, stored.id, stored.ports);
+      forgetSession(stored.id);
+      release();
+    }
+  }
+  let id = reuse ? stored.id : createSessionId();
   for (;;) {
     const release = await lockSession(id);
     if (release) {
-      storeSessionId(id);
-      return { id, release };
+      const ports = new Set(reuse && id === stored.id ? stored.ports : []);
+      const session: Session = { id, key, ports, release };
+      storeSession(session);
+      return session;
     }
     id = createSessionId();
   }
@@ -294,6 +374,8 @@ export class WebNode {
   >();
   private readonly watchers = new Map<number, WatchListener>();
   private readonly bridge: { dispose(): void };
+  /** Takes what the runtime frame reports after boot (a kernel worker that failed). */
+  private readonly onFrameMessage: (event: MessageEvent) => void;
   private nextRequestId = 1;
   private tornDown = false;
 
@@ -324,6 +406,20 @@ export class WebNode {
         }
       },
     });
+    const frameOrigin = runtimeOrigin(previewBase);
+    this.onFrameMessage = (event: MessageEvent<{ type?: unknown; message?: unknown }>) => {
+      if (event.origin !== frameOrigin || event.source !== this.frame.contentWindow) {
+        return;
+      }
+      if (event.data?.type === "webnode:runtime-error") {
+        const message =
+          typeof event.data.message === "string" ? event.data.message : "the runtime failed";
+        for (const listener of this.listeners.error) {
+          listener({ message: `webnode: ${message}` });
+        }
+      }
+    };
+    window.addEventListener("message", this.onFrameMessage);
   }
 
   /** Starts a runtime. The page must be cross-origin isolated. */
@@ -331,7 +427,10 @@ export class WebNode {
     if (typeof SharedArrayBuffer === "undefined" || !globalThis.crossOriginIsolated) {
       throw new Error("webnode needs a cross-origin isolated page (COOP and COEP headers)");
     }
-    const session = await claimSession();
+    const session = await claimSession(
+      options.sessionKey ?? window.location.pathname,
+      options.previewBase,
+    );
     let runtime: { frame: HTMLIFrameElement; port: MessagePort };
     try {
       runtime = await startRuntimeFrame(options.previewBase);
@@ -481,10 +580,15 @@ export class WebNode {
     }
     this.tornDown = true;
     this.bridge.dispose();
+    window.removeEventListener("message", this.onFrameMessage);
     this.kernel.postMessage({ id: -1, method: "teardown", args: [] } satisfies PageRequest);
     this.kernel.close();
     // Removing the frame ends the kernel worker and every process worker it started.
     this.frame.remove();
+    // The session is given up: its preview origins are never used again, and
+    // what their pages stored is cleared.
+    clearPreviewOrigins(this.previewBase, this.session.id, this.session.ports);
+    forgetSession(this.session.id);
     this.session.release();
     for (const { reject } of this.pending.values()) {
       reject(new Error("webnode: the runtime was torn down"));
@@ -496,6 +600,8 @@ export class WebNode {
       } catch {
         // Already closed or cancelled.
       }
+      // Whoever awaits the exit is told the process ended, as it did.
+      process.exit(TORN_DOWN_EXIT_CODE);
     }
     this.processes.clear();
   }
@@ -555,6 +661,10 @@ export class WebNode {
       }
       case "port": {
         const url = previewUrl(this.previewBase, this.session.id, message.port);
+        if (message.type === "open" && !this.session.ports.has(message.port)) {
+          this.session.ports.add(message.port);
+          storeSession(this.session);
+        }
         for (const listener of this.listeners.port) {
           listener(message.port, message.type, url);
         }

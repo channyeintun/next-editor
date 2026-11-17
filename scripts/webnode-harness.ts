@@ -91,9 +91,16 @@ export async function serve(): Promise<{ stop(): void; url: string }> {
     if (hostname !== "localhost" && hostname.endsWith(".localhost")) {
       // A preview or runtime host: nothing of the harness page is served there.
       const asset = webnodeHostAsset(url.pathname);
+      const header = (name: string) => {
+        const value = request.headers[name];
+        return typeof value === "string" ? value : null;
+      };
       const answer = webnodeHostResponse(url.pathname, {
         editorOrigin: `http://localhost:${PORT}`,
         assetSource: asset ? file(asset) : null,
+        method: request.method,
+        requestOrigin: header("origin"),
+        destination: header("sec-fetch-dest"),
       });
       send(answer.status, answer.headers, answer.body);
       return;

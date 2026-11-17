@@ -1,8 +1,9 @@
 // One HTTP request from the preview, carried to the server over a fresh
 // ByteChannel and its response streamed back: head as soon as it is parsed,
-// body chunks as they arrive, HTML buffered and given the preview scripts. Also
-// the response-header policy (isolation headers, hop-by-hop stripping) and the
-// 502 page shown when no server answers.
+// body chunks as they arrive, an HTML document buffered and given the preview
+// scripts. Also the header policy (isolation headers, hop-by-hop stripping, the
+// preview origin restated as the server's own and back) and the 502 page shown
+// when no server answers.
 import { toSystemErrorRecord } from "../errors";
 import type { ByteChannel } from "../process/runtime";
 import {
@@ -33,6 +34,8 @@ export interface HttpExchangeRequest {
   url: string;
   headers: HeaderList;
   body: Uint8Array | null;
+  /** The preview origin's host, when the service worker said it. */
+  pageHost?: string | null;
 }
 
 /** Where the response goes. Exactly one of `end`/`error` follows a `head`, or `error` alone. */
@@ -68,16 +71,121 @@ function isHopByHopResponseHeader(name: string): boolean {
   );
 }
 
-/** The headers handed back to the page: hop-by-hop ones removed, isolation ones set. */
-export function previewResponseHeaders(headers: HeaderList, coep: PreviewCoep): HeaderList {
-  const out: HeaderList = headers.filter(([name]) => {
+/**
+ * The request destinations that load a document. Only their responses get the
+ * client script: a `fetch()`, an XHR or an HTML fragment gets the server's
+ * bytes as they are.
+ */
+const DOCUMENT_DESTINATIONS = new Set(["document", "iframe", "frame", "embed", "object"]);
+
+function isDocumentRequest(headers: HeaderList): boolean {
+  const destination = headerValue(headers, "sec-fetch-dest");
+  // A service worker from before it restated Sec-Fetch-Dest sent page loads only that way.
+  return destination === null || DOCUMENT_DESTINATIONS.has(destination.trim().toLowerCase());
+}
+
+/** The names the server's own origin goes by. */
+const SERVER_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
+
+/**
+ * `value` as a path on the preview when it is an absolute URL on the server's
+ * own origin (`http://localhost:<serverPort>/x`, which is the Host the server
+ * sees), else `value` unchanged. Sent to the page as is, such a URL would take
+ * the preview to the visitor's own machine.
+ */
+export function previewLocation(value: string, serverPort: number): string {
+  const trimmed = value.trim();
+  if (!/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(trimmed)) {
+    return value;
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed, `http://localhost:${serverPort}/`);
+  } catch {
+    return value;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return value;
+  }
+  const port = url.port === "" ? (url.protocol === "https:" ? 443 : 80) : Number(url.port);
+  if (!SERVER_HOSTNAMES.has(url.hostname) || port !== serverPort) {
+    return value;
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** A `Refresh` value (`5; url=…`) with its URL mapped by `previewLocation`. */
+function previewRefresh(value: string, serverPort: number): string {
+  const match = /^(.*?\burl\s*=\s*)(["']?)(.*?)\2(\s*)$/i.exec(value);
+  return match
+    ? `${match[1]}${match[2]}${previewLocation(match[3], serverPort)}${match[2]}${match[4]}`
+    : value;
+}
+
+/**
+ * The page's headers as the server should see them. The server is reached as
+ * `localhost:<serverPort>` (its Host), so an Origin or Referer on the preview
+ * origin is restated on that origin: a CSRF check that compares Origin with
+ * Host then passes for the page's own requests, as it does on a dev machine.
+ */
+export function serverRequestHeaders(
+  headers: HeaderList,
+  pageHost: string | null,
+  serverPort: number,
+): HeaderList {
+  if (!pageHost) {
+    return headers;
+  }
+  const serverOrigin = `http://localhost:${serverPort}`;
+  return headers.map(([name, value]) => {
     const lower = name.toLowerCase();
-    return (
-      !isHopByHopResponseHeader(lower) &&
-      lower !== "cross-origin-resource-policy" &&
-      lower !== "cross-origin-embedder-policy"
-    );
+    if (lower !== "origin" && lower !== "referer") {
+      return [name, value];
+    }
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      return [name, value];
+    }
+    if (url.host !== pageHost || (url.protocol !== "http:" && url.protocol !== "https:")) {
+      return [name, value];
+    }
+    return [
+      name,
+      lower === "origin" ? serverOrigin : `${serverOrigin}${url.pathname}${url.search}`,
+    ];
   });
+}
+
+/**
+ * The headers handed back to the page: hop-by-hop ones removed, isolation ones
+ * set, and, with `serverPort`, redirects to the server's own origin made paths
+ * on the preview.
+ */
+export function previewResponseHeaders(
+  headers: HeaderList,
+  coep: PreviewCoep,
+  serverPort?: number,
+): HeaderList {
+  const out: HeaderList = [];
+  for (const [name, value] of headers) {
+    const lower = name.toLowerCase();
+    if (
+      isHopByHopResponseHeader(lower) ||
+      lower === "cross-origin-resource-policy" ||
+      lower === "cross-origin-embedder-policy"
+    ) {
+      continue;
+    }
+    if (serverPort !== undefined && (lower === "location" || lower === "content-location")) {
+      out.push([name, previewLocation(value, serverPort)]);
+    } else if (serverPort !== undefined && lower === "refresh") {
+      out.push([name, previewRefresh(value, serverPort)]);
+    } else {
+      out.push([name, value]);
+    }
+  }
   out.push(["Cross-Origin-Resource-Policy", "cross-origin"]);
   if (coep !== "none") {
     out.push(["Cross-Origin-Embedder-Policy", coep]);
@@ -118,6 +226,7 @@ export function startHttpExchange(
   let head: ResponseHead | null = null;
   let decoder: BodyDecoder | null = null;
   let htmlParts: Uint8Array[] | null = null;
+  const isDocument = isDocumentRequest(request.headers);
 
   function release(): void {
     if (channel) {
@@ -167,7 +276,11 @@ export function startHttpExchange(
 
   function sendHead(responseHead: ResponseHead, headers: HeaderList): void {
     headSent = true;
-    sink.head(responseHead.status, responseHead.statusText, previewResponseHeaders(headers, coep));
+    sink.head(
+      responseHead.status,
+      responseHead.statusText,
+      previewResponseHeaders(headers, coep, serverPort),
+    );
   }
 
   async function finishHtml(responseHead: ResponseHead, parts: Uint8Array[]): Promise<void> {
@@ -243,7 +356,7 @@ export function startHttpExchange(
       head = parsed.head;
       const framing = responseFraming(method, head);
       decoder = new BodyDecoder(framing);
-      if (framing.kind !== "none" && isInjectableHtml(head.headers)) {
+      if (isDocument && framing.kind !== "none" && isInjectableHtml(head.headers)) {
         htmlParts = [];
       } else {
         sendHead(head, head.headers);
@@ -309,7 +422,13 @@ export function startHttpExchange(
             ? 0
             : null;
       opened.write(
-        serializeRequestHead(method, request.url, serverPort, request.headers, bodyLength),
+        serializeRequestHead(
+          method,
+          request.url,
+          serverPort,
+          serverRequestHeaders(request.headers, request.pageHost ?? null, serverPort),
+          bodyLength,
+        ),
       );
       if (request.body !== null && request.body.length > 0) {
         opened.write(request.body);
