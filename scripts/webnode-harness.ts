@@ -7,7 +7,8 @@
 //   bun scripts/webnode-harness.ts script <file>    run a scenario script (default export: (api) => Promise)
 //
 // WEBNODE_HARNESS_MINIFY=1 builds the runtime's scripts minified, as a
-// deployment ships them.
+// deployment ships them. WEBNODE_HARNESS_FS=kernel runs on the filesystem
+// inside the kernel worker, to compare with the shared one.
 //
 // WEBNODE_HARNESS_TARGET=<editor origin> runs `run`, `cases` and `script`
 // against hosts something else serves: a `wrangler dev` listener
@@ -134,6 +135,19 @@ export interface HarnessApi {
   ): Promise<{ code: number | null; output: string; timedOut: boolean }>;
 }
 
+/** What the harness page reads from its address (test/harnessPage.ts). */
+function pageQuery(): string {
+  const query = new URLSearchParams();
+  if (TARGET_PREVIEW_HOST) {
+    query.set("previewHost", TARGET_PREVIEW_HOST);
+  }
+  if (process.env.WEBNODE_HARNESS_FS === "kernel") {
+    query.set("fs", "kernel");
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
 /** Puts the harness page on the target origin; every other request reaches the target. */
 async function interceptHarnessPage(page: Page, target: string): Promise<string> {
   const script = readFileSync(resolve(OUT_DIR, "harness.js"), "utf8");
@@ -148,11 +162,7 @@ async function interceptHarnessPage(page: Page, target: string): Promise<string>
       body: isScript ? script : harnessHtml(`${TARGET_PAGE_PATH}harness.js`),
     });
   });
-  // The page boots the runtime under this host (test/harnessPage.ts).
-  const query = TARGET_PREVIEW_HOST
-    ? `?previewHost=${encodeURIComponent(TARGET_PREVIEW_HOST)}`
-    : "";
-  return `${target}${TARGET_PAGE_PATH}${query}`;
+  return `${target}${TARGET_PAGE_PATH}${pageQuery()}`;
 }
 
 export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Promise<T> {
@@ -185,7 +195,9 @@ export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Prom
         console.error(`[browser requestfailed] ${request.url()} ${request.failure()?.errorText}`);
       }
     });
-    await page.goto(server ? server.url : await interceptHarnessPage(page, TARGET!));
+    await page.goto(
+      server ? `${server.url}${pageQuery()}` : await interceptHarnessPage(page, TARGET!),
+    );
     const call = <R>(method: string, ...args: unknown[]) =>
       page.evaluate(
         ([name, parameters]) =>

@@ -44,3 +44,4 @@ share/*.zip
 # Python bytecode (integrations/)
 __pycache__/
 *.pyc
+src/core/webnode/sharedfs/crate/target/

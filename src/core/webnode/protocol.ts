@@ -3,6 +3,7 @@
 // sides of a channel cannot drift.
 import type { SystemErrorRecord } from "./errors";
 import type { ExitStatus } from "./process/runtime";
+import type { SharedFsAdmission } from "./sharedfs/processBackend";
 
 // ---------------------------------------------------------------------------
 // Page ⇄ kernel
@@ -11,6 +12,12 @@ import type { ExitStatus } from "./process/runtime";
 export interface BootOptions {
   /** The directory name under /home/projects the project mounts at. */
   workdirName: string;
+  /**
+   * False keeps the filesystem inside the kernel worker (kernel/vfs), with
+   * every call a round trip to it. The shared one (sharedfs) is used otherwise,
+   * where a shared memory can be made.
+   */
+  sharedFilesystem?: boolean;
   coep: "require-corp" | "credentialless" | "none";
   forwardPreviewErrors: boolean | "exceptions-only";
   /** The origin of the page that booted the runtime: the only one a preview takes a connection from. */
@@ -89,6 +96,12 @@ export interface ProcessInit {
   cwd: string;
   /** The buffer the kernel answers this worker's blocking calls in. */
   syncBuffer: SharedArrayBuffer;
+  /**
+   * This worker's way into the shared filesystem, when the kernel admitted it:
+   * it then makes the path calls itself (sharedfs/README.md). Null where there
+   * is no shared filesystem, and every filesystem call goes to the kernel.
+   */
+  sharedFs: SharedFsAdmission | null;
   /** Which of fds 0-2 are terminals, and that terminal's size. */
   ttyFds: number[];
   terminal: TerminalSize;

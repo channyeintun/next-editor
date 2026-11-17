@@ -37,6 +37,7 @@ import type { EncodedPayload } from "./codec";
 import { installBuiltinCommands, resolveExec } from "./exec";
 import type { ByteSource } from "./streams";
 import { Pipe, Terminal } from "./streams";
+import type { SharedFilesystem } from "../sharedfs/boot";
 import type { OpenFile, StatData, VfsApi } from "./vfs/types";
 import { O_CREAT, O_TRUNC, O_WRONLY, S_IFCHR, S_IFIFO } from "./vfs/types";
 
@@ -53,6 +54,12 @@ export interface KernelHost {
   createWorker(name: string): KernelWorker;
   /** Tells the page something happened. */
   emit(event: KernelEvent): void;
+  /**
+   * The shared filesystem, when the kernel's `vfs` is one: each worker is
+   * admitted to it at its start and retired from it before it is terminated
+   * (sharedfs/README.md).
+   */
+  sharedFs?: SharedFilesystem | null;
 }
 
 type Description =
@@ -85,6 +92,8 @@ interface Proc {
   terminal: Terminal | null;
   pageOwned: boolean;
   handledSignals: Set<string>;
+  /** This worker's slot in the shared filesystem, while it holds one. */
+  fsEntry: { slot: number; token: number } | null;
   watches: Map<number, () => void>;
   pumps: Map<number, () => void>;
   /** Cancels each blocking read this worker is waiting in. */
@@ -374,7 +383,7 @@ export class Kernel {
   dispose(): void {
     this.disposed = true;
     for (const proc of Array.from(this.procs.values())) {
-      proc.worker.terminate();
+      this.stopWorker(proc);
     }
     this.procs.clear();
     for (const stop of this.pageWatches.values()) {
@@ -432,6 +441,7 @@ export class Kernel {
       terminal: spec.terminal,
       pageOwned: spec.pageOwned,
       handledSignals: new Set(),
+      fsEntry: this.host.sharedFs?.admit() ?? null,
       watches: new Map(),
       pumps: new Map(),
       pendingReads: new Set(),
@@ -463,6 +473,7 @@ export class Kernel {
         env: spec.env,
         cwd: spec.cwd,
         syncBuffer: proc.syncBuffer,
+        sharedFs: this.admission(proc),
         ttyFds: terminalFds,
         terminal: terminal ? { cols: terminal.cols, rows: terminal.rows } : DEFAULT_TERMINAL,
         ipc: spec.ipc,
@@ -684,13 +695,44 @@ export class Kernel {
     proc.handoffs.clear();
   }
 
+  /** What `proc`'s worker needs to call the shared filesystem itself, or null. */
+  private admission(proc: Proc): ProcessInit["sharedFs"] {
+    const shared = this.host.sharedFs;
+    return shared && proc.fsEntry
+      ? { module: shared.module, memory: shared.memory, ...proc.fsEntry }
+      : null;
+  }
+
+  /**
+   * Terminates `proc`'s worker. One that was admitted to the shared filesystem
+   * is retired from it first: terminated inside a call, it would die holding
+   * the lock every other worker waits for.
+   */
+  private stopWorker(proc: Proc): void {
+    const shared = this.host.sharedFs;
+    const entry = proc.fsEntry;
+    if (shared && entry) {
+      proc.fsEntry = null;
+      shared.retire(entry.slot, () => proc.worker.terminate());
+      // It may have left events it never told the kernel about; left there,
+      // they would also keep the next writer from announcing its own.
+      try {
+        shared.fs.drainEvents();
+      } catch {
+        // The filesystem is poisoned: there is nothing to deliver.
+      }
+    } else {
+      proc.worker.terminate();
+    }
+  }
+
   /** Ends `proc`: stops its worker, closes what it held, and tells who waits for it. */
   private finish(proc: Proc, status: ExitStatus): void {
     if (proc.exited) {
       return;
     }
     proc.exited = true;
-    proc.worker.terminate();
+    this.stopWorker(proc);
     proc.worker.onmessage = null;
     this.procs.delete(proc.id);
     this.releaseResources(proc);
@@ -710,7 +752,7 @@ export class Kernel {
 
     for (const thread of Array.from(proc.threads)) {
       thread.exited = true;
-      thread.worker.terminate();
+      this.stopWorker(thread);
       thread.worker.onmessage = null;
       this.procs.delete(thread.id);
       this.releaseResources(thread);
@@ -1087,6 +1129,7 @@ export class Kernel {
       terminal: process.terminal,
       pageOwned: false,
       handledSignals: new Set(),
+      fsEntry: this.host.sharedFs?.admit() ?? null,
       watches: new Map(),
       pumps: new Map(),
       pendingReads: new Set(),
@@ -1120,6 +1163,7 @@ export class Kernel {
         env: request.env,
         cwd: request.cwd,
         syncBuffer: thread.syncBuffer,
+        sharedFs: this.admission(thread),
         ttyFds: [0, 1, 2].filter((fd) => process.fds.get(fd)?.kind === "tty"),
         terminal: terminal ? { cols: terminal.cols, rows: terminal.rows } : DEFAULT_TERMINAL,
         ipc: null,
@@ -1320,6 +1364,10 @@ export class Kernel {
         });
         proc.watches.set(watchId, stop);
         return watchId;
+      },
+      // A process changed the tree itself and left events for the watchers.
+      "fs.changed": () => {
+        this.host.sharedFs?.fs.drainEvents();
       },
       "fs.unwatch": (proc: Proc, watchId: number) => {
         proc.watches.get(watchId)?.();

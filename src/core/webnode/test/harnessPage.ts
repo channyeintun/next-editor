@@ -63,8 +63,11 @@ function track(process: WebNodeProcess): number {
 const harness: Harness = {
   async boot() {
     // A deployment's hosts live under a domain of their own, named in the address.
-    const previewHost = new URLSearchParams(location.search).get("previewHost");
+    const query = new URLSearchParams(location.search);
+    const previewHost = query.get("previewHost");
     instance = await WebNode.boot({
+      // `?fs=kernel`: the filesystem inside the kernel worker, to compare with.
+      sharedFilesystem: query.get("fs") !== "kernel",
       previewBase: previewHost
         ? { protocol: "https:", host: previewHost }
         : { protocol: location.protocol as "http:" | "https:", host: location.host },

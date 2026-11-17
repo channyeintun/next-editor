@@ -45,6 +45,11 @@ export interface WebNodeBootOptions {
   workdirName?: string;
   coep?: "require-corp" | "credentialless" | "none";
   forwardPreviewErrors?: boolean | "exceptions-only";
+  /**
+   * False keeps the filesystem inside the kernel worker, each call a round trip
+   * to it, as a comparison for the shared one (sharedfs), which is the default.
+   */
+  sharedFilesystem?: boolean;
 }
 
 export interface SpawnOptions {
@@ -337,6 +342,7 @@ export class WebNode {
 
     const boot: BootOptions = {
       workdirName: options.workdirName ?? "project",
+      sharedFilesystem: options.sharedFilesystem,
       coep: options.coep ?? "require-corp",
       forwardPreviewErrors: options.forwardPreviewErrors ?? false,
       editorOrigin: window.location.origin,

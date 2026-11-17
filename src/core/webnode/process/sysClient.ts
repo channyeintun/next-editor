@@ -8,6 +8,7 @@ import { decodePayload, readSyncAnswer } from "../kernel/codec";
 import type { DirEntry, StatData } from "../kernel/vfs/types";
 import { runNextTicks } from "./node/process";
 import type { KernelMessage, ProcessInit, ProcessMessage, SerializedError } from "../protocol";
+import { withDirectPaths } from "../sharedfs/processBackend";
 import {
   SYNC_ERROR,
   SYNC_HEADER_BYTES,
@@ -21,6 +22,7 @@ import type {
   ChildHandle,
   ExitStatus,
   FdKind,
+  FsBackend,
   ProcessRuntime,
   SpawnRequest,
   SpawnSyncRequest,
@@ -136,6 +138,53 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
     return channel;
   };
 
+  // Every filesystem call as a call to the kernel. A worker admitted to the
+  // shared filesystem makes the path calls itself instead (withDirectPaths).
+  const kernelFs: FsBackend = {
+    stat: (path, follow) => callSync("fs.stat", path, follow) as StatData,
+    fstat: (fd) => callSync("fs.fstat", fd) as StatData,
+    exists: (path) => callSync("fs.exists", path) as boolean,
+    readdir: (path) => callSync("fs.readdir", path) as DirEntry[],
+    mkdir: (path, recursive, mode) =>
+      callSync("fs.mkdir", path, recursive, mode) as string | undefined,
+    rmdir: (path) => void callSync("fs.rmdir", path),
+    unlink: (path) => void callSync("fs.unlink", path),
+    rm: (path, recursive, force) => void callSync("fs.rm", path, recursive, force),
+    rename: (from, to) => void callSync("fs.rename", from, to),
+    link: (existing, path) => void callSync("fs.link", existing, path),
+    symlink: (target, path) => void callSync("fs.symlink", target, path),
+    readlink: (path) => callSync("fs.readlink", path) as string,
+    realpath: (path) => callSync("fs.realpath", path) as string,
+    chmod: (path, mode, follow) => void callSync("fs.chmod", path, mode, follow),
+    fchmod: (fd, mode) => void callSync("fs.fchmod", fd, mode),
+    utimes: (path, atime, mtime, follow) => void callSync("fs.utimes", path, atime, mtime, follow),
+    futimes: (fd, atime, mtime) => void callSync("fs.futimes", fd, atime, mtime),
+    truncate: (path, length) => void callSync("fs.truncate", path, length),
+    ftruncate: (fd, length) => void callSync("fs.ftruncate", fd, length),
+    copyFile: (source, destination, mode) =>
+      void callSync("fs.copyFile", source, destination, mode),
+    access: (path, mode) => void callSync("fs.access", path, mode),
+    mkdtemp: (prefix) => callSync("fs.mkdtemp", prefix) as string,
+    readFile: (path) => callSync("fs.readFile", path) as Uint8Array,
+    writeFile: (path, data, flags, mode) => void callSync("fs.writeFile", path, data, flags, mode),
+    open: (path, flags, mode) => callSync("fs.open", path, flags, mode) as number,
+    close: (fd) => void callSync("fs.close", fd),
+    read: (fd, length, position) => callSync("fs.read", fd, length, position) as Uint8Array,
+    readAsync: (fd, length, position) =>
+      call("fs.read", fd, length, position) as Promise<Uint8Array>,
+    write: (fd, data, position) => callSync("fs.write", fd, data, position) as number,
+    fsync: (fd) => void callSync("fs.fsync", fd),
+    watch(path, recursive, listener) {
+      const watchId = callSync("fs.watch", path, recursive) as number;
+      watchListeners.set(watchId, listener);
+      return () => {
+        if (watchListeners.delete(watchId)) {
+          post("fs.unwatch", [watchId]);
+        }
+      };
+    },
+  };
+
   const runtime: ProcessRuntime = {
     pid: init.pid,
     ppid: init.ppid,
@@ -144,52 +193,9 @@ export function createProcessClient(scope: WorkerScope, init: ProcessInit): Proc
     env: init.env,
     cwd: init.cwd,
 
-    fs: {
-      stat: (path, follow) => callSync("fs.stat", path, follow) as StatData,
-      fstat: (fd) => callSync("fs.fstat", fd) as StatData,
-      exists: (path) => callSync("fs.exists", path) as boolean,
-      readdir: (path) => callSync("fs.readdir", path) as DirEntry[],
-      mkdir: (path, recursive, mode) =>
-        callSync("fs.mkdir", path, recursive, mode) as string | undefined,
-      rmdir: (path) => void callSync("fs.rmdir", path),
-      unlink: (path) => void callSync("fs.unlink", path),
-      rm: (path, recursive, force) => void callSync("fs.rm", path, recursive, force),
-      rename: (from, to) => void callSync("fs.rename", from, to),
-      link: (existing, path) => void callSync("fs.link", existing, path),
-      symlink: (target, path) => void callSync("fs.symlink", target, path),
-      readlink: (path) => callSync("fs.readlink", path) as string,
-      realpath: (path) => callSync("fs.realpath", path) as string,
-      chmod: (path, mode, follow) => void callSync("fs.chmod", path, mode, follow),
-      fchmod: (fd, mode) => void callSync("fs.fchmod", fd, mode),
-      utimes: (path, atime, mtime, follow) =>
-        void callSync("fs.utimes", path, atime, mtime, follow),
-      futimes: (fd, atime, mtime) => void callSync("fs.futimes", fd, atime, mtime),
-      truncate: (path, length) => void callSync("fs.truncate", path, length),
-      ftruncate: (fd, length) => void callSync("fs.ftruncate", fd, length),
-      copyFile: (source, destination, mode) =>
-        void callSync("fs.copyFile", source, destination, mode),
-      access: (path, mode) => void callSync("fs.access", path, mode),
-      mkdtemp: (prefix) => callSync("fs.mkdtemp", prefix) as string,
-      readFile: (path) => callSync("fs.readFile", path) as Uint8Array,
-      writeFile: (path, data, flags, mode) =>
-        void callSync("fs.writeFile", path, data, flags, mode),
-      open: (path, flags, mode) => callSync("fs.open", path, flags, mode) as number,
-      close: (fd) => void callSync("fs.close", fd),
-      read: (fd, length, position) => callSync("fs.read", fd, length, position) as Uint8Array,
-      readAsync: (fd, length, position) =>
-        call("fs.read", fd, length, position) as Promise<Uint8Array>,
-      write: (fd, data, position) => callSync("fs.write", fd, data, position) as number,
-      fsync: (fd) => void callSync("fs.fsync", fd),
-      watch(path, recursive, listener) {
-        const watchId = callSync("fs.watch", path, recursive) as number;
-        watchListeners.set(watchId, listener);
-        return () => {
-          if (watchListeners.delete(watchId)) {
-            post("fs.unwatch", [watchId]);
-          }
-        };
-      },
-    },
+    fs: init.sharedFs
+      ? withDirectPaths(kernelFs, init.sharedFs, () => post("fs.changed", []))
+      : kernelFs,
 
     fdStream: {
       kind: (fd) => callSync("fd.kind", fd) as FdKind,

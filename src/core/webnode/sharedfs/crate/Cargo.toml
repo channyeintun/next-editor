@@ -1,0 +1,33 @@
+# webnode-sharedfs: webnode's filesystem, compiled to WebAssembly and run by
+# every worker of a runtime on ONE shared memory. See ../README.md.
+#
+# Standalone crate (empty [workspace] so it is not absorbed by any ancestor
+# workspace; this is a bun/TS repo with no root Cargo.toml). No dependencies:
+# the build needs no network.
+[package]
+name = "webnode-sharedfs"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# cdylib so wasm-ld emits a WebAssembly module; rlib so `cargo test` can link
+# the tests natively.
+crate-type = ["cdylib", "rlib"]
+name = "webnode_sharedfs"
+
+# The two halves build apart (`--no-default-features --features heap`), so each
+# can be worked on and tested without the other compiling.
+[features]
+default = ["heap", "fs"]
+heap = []
+fs = []
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[workspace]

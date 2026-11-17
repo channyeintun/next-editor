@@ -25,6 +25,7 @@ function makeClient() {
     env: {},
     cwd: "/",
     syncBuffer: new SharedArrayBuffer(INITIAL_SYNC_BUFFER_BYTES),
+    sharedFs: null,
     ttyFds: [],
     terminal: { cols: 80, rows: 24 },
     ipc: null,

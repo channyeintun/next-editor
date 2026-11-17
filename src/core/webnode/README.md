@@ -16,7 +16,7 @@ editor page (api.ts)          WebNode.boot() / mount / fs / spawn / on / teardow
    │  MessagePort
    ▼
 runtime frame                 a hidden iframe on the RUNTIME ORIGIN, runtime.<host>
-   └─ kernel worker (kernel/) owns everything shared: the filesystem (kernel/vfs),
+   └─ kernel worker (kernel/) owns everything shared: the filesystem (sharedfs/),
         │                     the process table, fds, pipes, ttys, listening ports
         │  per process: MessagePort (async) + SharedArrayBuffer (blocking calls)
         └─ process workers    one Web Worker per process (process/). JavaScript
@@ -36,9 +36,16 @@ preview iframe                on a PREVIEW ORIGIN, <session>-<port>.<host>. Its
   runtime's own scripts and pages (preview/hostResponses.ts), which only the
   editor may frame, so lesson code cannot reach the editor's cookies, storage
   or API. The editor holds one MessagePort to the kernel and nothing else.
-- **One owner for the filesystem.** Only the kernel holds file data. A process
-  reaches it through `FsBackend` (process/runtime.ts): every call is a
-  synchronous round trip. There are no per-process copies to drift.
+- **One filesystem, in one shared memory.** The filesystem is a Rust module
+  (`sharedfs/`) that the kernel and every process run on the same shared
+  WebAssembly memory, one call at a time. A process reaches it through
+  `FsBackend` (process/runtime.ts): a path operation (`stat`, `readFile`,
+  `readdir` …) is a function call in the process itself; open files and
+  `/dev` are a synchronous round trip to the kernel, which owns every file
+  descriptor. There are no per-process copies to drift. The TypeScript
+  filesystem (`kernel/vfs`) is the reference the tests compare it with, and
+  what the kernel uses where a shared memory cannot be made
+  (`sharedFilesystem: false` at boot forces it).
 - **The runtime's hosts.** In the deployment they are subdomains of the
   editor's own domain (`runtime.nexteditor.dev`,
   `<session>-<port>.nexteditor.dev`): other origins, but the same site. Lesson
@@ -88,7 +95,8 @@ directory; the files marked _hub_ only wire.
 | `buildId.ts`               | the id of the build a script belongs to                          |
 | `protocol.ts`              | every message that crosses a thread                              |
 | `api.ts`                   | the page-facing API (WebContainer-compatible)                    |
-| `kernel/vfs/`              | the in-memory filesystem                                         |
+| `sharedfs/`                | the filesystem: a Rust module on one shared memory (its README)  |
+| `kernel/vfs/`              | the filesystem in TypeScript: the reference and the fallback     |
 | `kernel/kernel.ts`         | processes, fds, pipes, ttys, ports, blocking-call answers        |
 | `kernel/exec.ts`           | what a command line runs (PATH, `#!`, built-in commands)         |
 | `kernel/kernelWorker.ts`   | the kernel worker's entry — _hub_                                |
@@ -161,7 +169,9 @@ WEBNODE_HARNESS_MINIFY=1 bun scripts/webnode-harness.ts cases
 WEBNODE_HARNESS_TARGET=http://localhost:8787 bun scripts/webnode-harness.ts cases
 ```
 
-The second runs the cases against the hosts a `wrangler dev` listener serves,
+`WEBNODE_HARNESS_FS=kernel` runs with the TypeScript filesystem instead of the
+shared one. The second command above runs the cases against the hosts a
+`wrangler dev` listener serves,
 started with `--var WEBNODE_PREVIEW_HOST:localhost` and
 `--var PUBLIC_URL:http://localhost:8787`. "Deploying" has the same for the
 deployment.

@@ -19,6 +19,7 @@ import { Kernel } from "./kernel";
 import type { KernelWorker } from "./kernel";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "./vfs/types";
 import { Vfs } from "./vfs/vfs";
+import { createSharedFilesystem } from "../sharedfs/boot";
 
 interface KernelScope {
   location: { href: string };
@@ -49,12 +50,16 @@ function booted(): Kernel {
 
 const methods: Record<string, (args: never, ports: readonly MessagePort[]) => unknown> = {
   boot([options]: [BootOptions]) {
-    const vfs = new Vfs();
+    // The filesystem every worker shares, where a shared memory can be made;
+    // else the one that lives here, which each process asks for every call.
+    const sharedFs = options.sharedFilesystem === false ? null : createSharedFilesystem();
+    const vfs = sharedFs ? sharedFs.fs : new Vfs();
     kernel = new Kernel(
       vfs,
       {
         createWorker: (name) => new Worker(PROCESS_SCRIPT_URL, { name }) as unknown as KernelWorker,
         emit: send,
+        sharedFs,
       },
       options.workdirName,
     );
