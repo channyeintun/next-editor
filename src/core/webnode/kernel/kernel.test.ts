@@ -3,7 +3,7 @@
 // worker's side (raw sync/call/post messages, or a real sysClient), and checks
 // spawn stdio, pipes and EOF, exit cleanup, signals, process groups, broken
 // pipes, spawnSync limits, worker threads and listen/connect.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProcessClient } from "../process/sysClient";
 import type { ProcessClient } from "../process/sysClient";
 import { setRuntime } from "../process/runtime";
@@ -236,6 +236,9 @@ afterEach(() => {
   }
 });
 
+/** Waits until the kernel has told the page of a port just listened on (it waits 50 ms). */
+const announced = () => new Promise<void>((resolve) => setTimeout(resolve, 70));
+
 describe("spawn, pipes and exit", () => {
   it("wires a child's piped stdio to the parent and ends its stdout at exit", async () => {
     const h = boot();
@@ -269,15 +272,45 @@ describe("spawn, pipes and exit", () => {
   });
 
   it("reports a page process's exit and closes its listeners", () => {
+    vi.useFakeTimers();
     const h = boot();
     const pid = h.kernel.spawnFromPage("node", ["server.js"], {});
     const proc = h.worker(pid);
     const listened = proc.sync("net.listen", 3000).value as { port: number; listenerId: number };
     expect(listened.port).toBe(3000);
+    // The page hears of the port once the listener has stayed a moment.
+    expect(h.events).not.toContainEqual({ event: "port", port: 3000, type: "open" });
+    vi.advanceTimersByTime(50);
     expect(h.events).toContainEqual({ event: "port", port: 3000, type: "open" });
     proc.post("proc.exit", 0);
     expect(h.events).toContainEqual({ event: "port", port: 3000, type: "close" });
     expect(h.events).toContainEqual({ event: "exit", pid, code: 0 });
+    vi.useRealTimers();
+  });
+
+  it("does not announce a port that was only tried, as Vite tries its port before listening", () => {
+    vi.useFakeTimers();
+    const h = boot();
+    const proc = h.worker(h.kernel.spawnFromPage("node", ["server.js"], {}));
+    const ports = () => h.events.filter((event) => event.event === "port");
+    for (let probe = 0; probe < 3; probe++) {
+      const tried = proc.sync("net.listen", 4173).value as { listenerId: number };
+      proc.post("net.close", tried.listenerId);
+    }
+    vi.advanceTimersByTime(200);
+    // Nothing was said of the probes: neither that they opened nor that they closed.
+    expect(ports()).toEqual([]);
+    const real = proc.sync("net.listen", 4173).value as { listenerId: number };
+    vi.advanceTimersByTime(49);
+    expect(ports()).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(ports()).toEqual([{ event: "port", port: 4173, type: "open" }]);
+    proc.post("net.close", real.listenerId);
+    expect(ports()).toEqual([
+      { event: "port", port: 4173, type: "open" },
+      { event: "port", port: 4173, type: "close" },
+    ]);
+    vi.useRealTimers();
   });
 
   it("connects the page to a listening process and refuses a closed port", async () => {
@@ -377,6 +410,8 @@ describe("worker threads", () => {
     const thread = spawnThread(h, main);
     const { port } = thread.sync("net.listen", 5000).value as { port: number };
     expect(port).toBe(5000);
+    // Long enough for the page to have been told of the port.
+    await announced();
     thread.post("fd.readStart", 0);
     main.post("proc.exit", 0);
     expect(thread.terminated).toBe(true);
@@ -781,13 +816,14 @@ describe("terminal size", () => {
 });
 
 describe("what an exited page process leaves behind", () => {
-  it("can still be ended through the page process's pid", () => {
+  it("can still be ended through the page process's pid", async () => {
     const h = boot();
     const pagePid = h.kernel.spawnFromPage("jsh", [], {});
     const shell = h.worker(pagePid);
     const server = spawnFrom(h, shell, [0, 1, 2], { newGroup: true });
     const grandchild = spawnFrom(h, server.worker, ["ignore", "ignore", "ignore"]);
     server.worker.sync("net.listen", 5173);
+    await announced();
     shell.post("proc.exit", 0);
     expect(server.worker.terminated).toBe(false);
     h.kernel.killTree(pagePid);

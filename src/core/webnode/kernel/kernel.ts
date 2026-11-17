@@ -133,7 +133,18 @@ interface Capture {
 interface Listener {
   proc: Proc;
   listenerId: number;
+  /** The timer that will tell the page the port is open; null once it has. */
+  announce: ReturnType<typeof setTimeout> | null;
 }
+
+/**
+ * How long a listener must stay before the page is told its port is open. A
+ * tool that only asks whether a port is free listens and closes at once (Vite
+ * does, three times, a fifth of a second before its server listens). Telling
+ * the page of that would send a preview to a port nothing listens on by the
+ * time its request arrives.
+ */
+const PORT_ANNOUNCE_DELAY_MS = 50;
 
 interface Channel {
   /** Worker ids at each end; 0 is the kernel itself. */
@@ -480,6 +491,11 @@ export class Kernel {
       stop();
     }
     this.pageWatches.clear();
+    for (const listener of this.listening.values()) {
+      if (listener.announce !== null) {
+        clearTimeout(listener.announce);
+      }
+    }
     if (this.watchFlush) {
       clearTimeout(this.watchFlush);
     }
@@ -1502,9 +1518,16 @@ export class Kernel {
       throw error;
     }
     const listenerId = this.nextListenerId++;
-    this.listening.set(chosen, { proc, listenerId });
+    const listener: Listener = { proc, listenerId, announce: null };
+    // Connections are accepted from now; the page hears of it once the listener has stayed.
+    listener.announce = setTimeout(() => {
+      listener.announce = null;
+      if (!this.disposed) {
+        this.host.emit({ event: "port", port: chosen, type: "open" });
+      }
+    }, PORT_ANNOUNCE_DELAY_MS);
+    this.listening.set(chosen, listener);
     proc.listeners.set(listenerId, chosen);
-    this.host.emit({ event: "port", port: chosen, type: "open" });
     return { port: chosen, listenerId };
   }
 
@@ -1532,9 +1555,13 @@ export class Kernel {
 
   private closeListener(proc: Proc, listenerId: number, port: number): void {
     proc.listeners.delete(listenerId);
-    if (this.listening.get(port)?.listenerId === listenerId) {
+    const listener = this.listening.get(port);
+    if (listener?.listenerId === listenerId) {
       this.listening.delete(port);
-      if (!this.disposed) {
+      if (listener.announce !== null) {
+        // Gone before the page was told it was there: nothing to take back.
+        clearTimeout(listener.announce);
+      } else if (!this.disposed) {
         this.host.emit({ event: "port", port, type: "close" });
       }
     }
