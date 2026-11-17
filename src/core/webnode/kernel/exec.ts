@@ -3,6 +3,7 @@
 // built-in programs with the argv it should see. The built-in commands exist as
 // small marker files in /bin so `which node` and PATH lookups find them.
 import { createSystemError } from "../errors";
+import { DEFAULT_PATH } from "../process/platform";
 import type { ProgramName } from "../protocol";
 import type { VfsApi } from "./vfs/types";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "./vfs/types";
@@ -154,7 +155,8 @@ function findCommand(
     return path;
   }
 
-  for (const directory of (env.PATH ?? "").split(":")) {
+  // No PATH at all: libuv searches its default path, so must we.
+  for (const directory of (env.PATH ?? DEFAULT_PATH).split(":")) {
     if (!directory) {
       continue;
     }
@@ -166,20 +168,45 @@ function findCommand(
   throw createSystemError("ENOENT", "spawn", command);
 }
 
-/** The arguments `tsx` passes its script, without its own flags and sub-command. */
+/** tsx's own options, and whether each takes a value; `watch` adds the second set. */
+const TSX_OPTIONS = new Map([
+  ["--tsconfig", true],
+  ["--no-cache", false],
+]);
+const TSX_WATCH_OPTIONS = new Map([
+  ["--clear-screen", false],
+  ["--no-clear-screen", false],
+  ["--ignore", true],
+  ["--include", true],
+  ["--exclude", true],
+]);
+
+/**
+ * The arguments `tsx` runs node with. As tsx does, it removes its own options
+ * up to the first argument that is not an option (the script, or an option's
+ * value) and passes everything else on: Node's options (`--env-file`,
+ * `--import`, `--conditions` …) and what follows the script. `watch` becomes
+ * node's `--watch`.
+ */
 function tsxArguments(args: string[]): string[] {
   const rest = [...args];
-  if (rest[0] === "watch" || rest[0] === "run") {
+  const watch = rest[0] === "watch";
+  if (watch || rest[0] === "run") {
     rest.shift();
   }
-  while (rest.length > 0 && rest[0].startsWith("--") && !rest[0].startsWith("--import")) {
-    // tsx's own options (--tsconfig, --clear-screen=false, --no-cache, …).
-    const [flag] = rest.splice(0, 1);
-    if (flag === "--tsconfig" && rest.length > 0) {
+  const kept: string[] = watch ? ["--watch"] : [];
+  while (rest.length > 0 && rest[0].startsWith("-") && rest[0] !== "--") {
+    const argument = rest.shift()!;
+    const equals = argument.indexOf("=");
+    const name = equals > 0 ? argument.slice(0, equals) : argument;
+    const takesValue = TSX_OPTIONS.get(name) ?? (watch ? TSX_WATCH_OPTIONS.get(name) : undefined);
+    if (takesValue === undefined) {
+      kept.push(argument);
+    } else if (takesValue && equals < 0) {
       rest.shift();
     }
   }
-  return rest;
+  return [...kept, ...rest];
 }
 
 function fromMarker(kind: string, name: string, args: string[]): ResolvedExec {

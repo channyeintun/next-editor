@@ -8,7 +8,10 @@ import { createProcessClient } from "../process/sysClient";
 import type { ProcessClient } from "../process/sysClient";
 import { setRuntime } from "../process/runtime";
 import type { SpawnSyncResult } from "../process/runtime";
+import childProcess from "../process/node/child_process";
 import { FdReadable } from "../process/node/internal/fdStreams";
+import * as net from "../process/node/net";
+import { createProcess } from "../process/node/process";
 import type { KernelEvent, KernelMessage, ProcessInit, ProcessMessage } from "../protocol";
 import { SYNC_HEADER_BYTES, SYNC_OK, SYNC_PENDING, SYNC_STATE } from "../protocol";
 import { decodePayload, readSyncAnswer } from "./codec";
@@ -603,5 +606,395 @@ describe("leaks", () => {
       closed,
       new Promise((_, reject) => setTimeout(() => reject(new Error("port left open")), 2000)),
     ]);
+  });
+});
+
+describe("SIGPIPE in a node process", () => {
+  it("fails the write with EPIPE on the stream and leaves the process alive, as Node does", async () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["parent.js"], {}));
+    setRuntime(parent.attachClient().runtime);
+    // What `node` does at boot.
+    createProcess({ loadBuiltin: () => ({}), ipc: null });
+    const child = childProcess.spawn("node", ["child.js"]);
+    const errors: string[] = [];
+    child.stdin!.on("error", (error: NodeJS.ErrnoException) => errors.push(error.code ?? ""));
+    // The child closes its input without reading it, and keeps running.
+    h.last().post("fd.close", 0);
+    child.stdin!.write("data nobody reads\n");
+    await settle(10);
+    expect(parent.terminated).toBe(false);
+    expect(errors).toEqual(["EPIPE"]);
+  });
+});
+
+describe("ephemeral ports", () => {
+  it("stay in 49152-65535 however many connections a session makes", async () => {
+    const h = boot();
+    const server = h.worker(h.kernel.spawnFromPage("node", ["server.js"], {}));
+    server.sync("net.listen", 3000);
+    const client = h.worker(h.kernel.spawnFromPage("node", ["client.js"], {}));
+    let refused = 0;
+    for (let index = 0; index < 16400; index += 1) {
+      (await h.kernel.connect(3000)).destroy();
+      refused += client.sync("net.connect", 3000).ok ? 0 : 1;
+    }
+    expect(refused).toBe(0);
+    for (const message of server.messages("connection")) {
+      expect(message.remotePort).toBeGreaterThanOrEqual(49152);
+      expect(message.remotePort).toBeLessThanOrEqual(65535);
+      message.port.close();
+    }
+    const { port } = server.sync("net.listen", 0).value as { port: number };
+    expect(port).toBeGreaterThanOrEqual(49152);
+    expect(port).toBeLessThanOrEqual(65535);
+  });
+
+  it("skip ports in use and do not spend listen ports on connections", () => {
+    const h = boot();
+    const server = h.worker(h.kernel.spawnFromPage("node", ["server.js"], {}));
+    server.sync("net.listen", 49152);
+    server.sync("net.listen", 3000);
+    const first = server.sync("net.listen", 0).value as { port: number };
+    expect(first.port).toBe(49153);
+    server.sync("net.connect", 3000);
+    const second = server.sync("net.listen", 0).value as { port: number };
+    expect(second.port).toBe(49154);
+    for (const message of server.messages("connection")) {
+      message.port.close();
+    }
+  });
+});
+
+describe("the terminal and background jobs", () => {
+  it("keeps the shell's input and Ctrl+C when a job starts in a group of its own", () => {
+    const h = boot();
+    const shellPid = h.kernel.spawnFromPage("jsh", [], {});
+    const shell = h.worker(shellPid);
+    shell.post("proc.signals", ["SIGINT"]);
+    const background = spawnFrom(h, shell, [0, 1, 2], { newGroup: true });
+    shell.sync("tty.setRawMode", 0, true);
+    shell.post("fd.readStart", 0);
+    h.kernel.writeInput(shellPid, "ls\r");
+    expect(shell.messages("fd-data")).toHaveLength(1);
+    expect(background.worker.messages("fd-data")).toEqual([]);
+    shell.post("fd.readStop", 0);
+    shell.sync("tty.setRawMode", 0, false);
+    h.kernel.writeInput(shellPid, "\x03");
+    expect(background.worker.terminated).toBe(false);
+    expect(shell.messages("signal")).toEqual([{ type: "signal", signal: "SIGINT" }]);
+  });
+
+  it("does not hand the terminal to what a background job starts", () => {
+    const h = boot();
+    const shellPid = h.kernel.spawnFromPage("jsh", [], {});
+    const shell = h.worker(shellPid);
+    const job = spawnFrom(h, shell, [0, 1, 2], { newGroup: true });
+    const grandchild = spawnFrom(h, job.worker, ["inherit", "inherit", "inherit"]);
+    shell.post("fd.readStart", 0);
+    h.kernel.writeInput(shellPid, "a\r");
+    expect(shell.messages("fd-data")).toHaveLength(1);
+    expect(grandchild.worker.messages("fd-data")).toEqual([]);
+  });
+
+  it("still hands the terminal to a foreground child", () => {
+    const h = boot();
+    const shellPid = h.kernel.spawnFromPage("jsh", [], {});
+    const shell = h.worker(shellPid);
+    const child = spawnFrom(h, shell, [0, 1, 2]);
+    child.worker.post("fd.readStart", 0);
+    h.kernel.writeInput(shellPid, "a\r");
+    expect(child.worker.messages("fd-data")).toHaveLength(1);
+  });
+});
+
+describe("process groups and default signal actions", () => {
+  it("signals a whole group with a negative pid", () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    const leader = spawnFrom(h, parent, ["ignore", "ignore", "ignore"], { newGroup: true });
+    const member = spawnFrom(h, leader.worker, ["ignore", "ignore", "ignore"]);
+    const answer = parent.sync("proc.kill", -leader.pid, "SIGTERM");
+    expect(answer.ok).toBe(true);
+    expect(leader.worker.terminated).toBe(true);
+    expect(member.worker.terminated).toBe(true);
+    expect(parent.terminated).toBe(false);
+    expect(parent.sync("proc.kill", -leader.pid, "SIGTERM")).toMatchObject({ ok: false });
+  });
+
+  it("signals the caller's own group with pid 0", () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    parent.post("proc.signals", ["SIGTERM"]);
+    const same = spawnFrom(h, parent, ["ignore", "ignore", "ignore"]);
+    const other = spawnFrom(h, parent, ["ignore", "ignore", "ignore"], { newGroup: true });
+    expect(parent.sync("proc.kill", 0, "SIGTERM").ok).toBe(true);
+    expect(same.worker.terminated).toBe(true);
+    expect(other.worker.terminated).toBe(false);
+    expect(parent.messages("signal")).toEqual([{ type: "signal", signal: "SIGTERM" }]);
+  });
+
+  it("ignores SIGCHLD, SIGURG, SIGWINCH and SIGCONT, and does not end a process on a stop signal", () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    const child = spawnFrom(h, parent, ["ignore", "ignore", "ignore"]);
+    for (const signal of [
+      "SIGCHLD",
+      "SIGURG",
+      "SIGWINCH",
+      "SIGCONT",
+      "SIGSTOP",
+      "SIGTSTP",
+      "SIGTTIN",
+      "SIGTTOU",
+    ]) {
+      expect(parent.sync("proc.kill", child.pid, signal).ok).toBe(true);
+    }
+    expect(child.worker.terminated).toBe(false);
+    expect(parent.messages("child-exit")).toEqual([]);
+  });
+
+  it("delivers an ignored-by-default signal the process listens for", () => {
+    const h = boot();
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    const child = spawnFrom(h, parent, ["ignore", "ignore", "ignore"]);
+    child.worker.post("proc.signals", ["SIGWINCH"]);
+    parent.sync("proc.kill", child.pid, "SIGWINCH");
+    expect(child.worker.messages("signal")).toEqual([{ type: "signal", signal: "SIGWINCH" }]);
+  });
+});
+
+describe("terminal size", () => {
+  it("tells a child whose stdout is the terminal about a resize", () => {
+    const h = boot();
+    const pid = h.kernel.spawnFromPage("node", ["a.js"], {});
+    const parent = h.worker(pid);
+    const child = spawnFrom(h, parent, ["pipe", "inherit", "inherit"]);
+    const piped = spawnFrom(h, parent, ["pipe", "pipe", "pipe"]);
+    h.kernel.resizeTerminal(pid, { cols: 120, rows: 40 });
+    expect(child.worker.messages("resize")).toEqual([
+      { type: "resize", terminal: { cols: 120, rows: 40 } },
+    ]);
+    expect(parent.messages("resize")).toHaveLength(1);
+    expect(piped.worker.messages("resize")).toEqual([]);
+  });
+});
+
+describe("what an exited page process leaves behind", () => {
+  it("can still be ended through the page process's pid", () => {
+    const h = boot();
+    const pagePid = h.kernel.spawnFromPage("jsh", [], {});
+    const shell = h.worker(pagePid);
+    const server = spawnFrom(h, shell, [0, 1, 2], { newGroup: true });
+    const grandchild = spawnFrom(h, server.worker, ["ignore", "ignore", "ignore"]);
+    server.worker.sync("net.listen", 5173);
+    shell.post("proc.exit", 0);
+    expect(server.worker.terminated).toBe(false);
+    h.kernel.killTree(pagePid);
+    expect(server.worker.terminated).toBe(true);
+    expect(grandchild.worker.terminated).toBe(true);
+    expect(h.events).toContainEqual({ event: "port", port: 5173, type: "close" });
+  });
+
+  it("reaches the children of a left-behind process that exits in turn", () => {
+    const h = boot();
+    const pagePid = h.kernel.spawnFromPage("jsh", [], {});
+    const shell = h.worker(pagePid);
+    const middle = spawnFrom(h, shell, ["ignore", "ignore", "ignore"]);
+    const leaf = spawnFrom(h, middle.worker, ["ignore", "ignore", "ignore"]);
+    shell.post("proc.exit", 0);
+    middle.worker.post("proc.exit", 0);
+    h.kernel.killTree(pagePid);
+    expect(leaf.worker.terminated).toBe(true);
+  });
+});
+
+describe("a client socket's own address", () => {
+  it("reports the port the kernel gave the connection", async () => {
+    const h = boot();
+    const server = h.worker(h.kernel.spawnFromPage("node", ["server.js"], {}));
+    server.sync("net.listen", 4000);
+    const client = h.worker(h.kernel.spawnFromPage("node", ["client.js"], {}));
+    setRuntime(client.attachClient().runtime);
+    const socket = net.connect(4000, "127.0.0.1");
+    await new Promise((resolve, reject) => {
+      socket.on("connect", resolve);
+      socket.on("error", reject);
+    });
+    const connection = server.messages("connection")[0];
+    openPorts.push(connection.port);
+    expect(socket.localPort).toBe(connection.remotePort);
+    expect(socket.localAddress).toBe("127.0.0.1");
+    expect(socket.address()).toEqual({
+      address: "127.0.0.1",
+      family: "IPv4",
+      port: connection.remotePort,
+    });
+    socket.destroy();
+  });
+});
+
+describe("fs.watch names", () => {
+  it("reports entry names when the watched path is not canonical or goes through a link", () => {
+    const h = boot();
+    const proc = h.worker(h.kernel.spawnFromPage("node", ["w.js"], {}));
+    h.kernel.vfs.mkdir("/p/real", true, 0o755);
+    h.kernel.vfs.symlink("/p/real", "/p/link");
+    const dot = proc.sync("fs.watch", "/p/.", false).value as number;
+    const link = proc.sync("fs.watch", "/p/link", false).value as number;
+    const slash = proc.sync("fs.watch", "/p/real/", false).value as number;
+    h.kernel.vfs.writeFile("/p/a.txt", encoder.encode("1"), 0o1101, 0o644);
+    h.kernel.vfs.writeFile("/p/real/b.txt", encoder.encode("1"), 0o1101, 0o644);
+    const names = (watchId: number) => [
+      ...new Set(
+        proc
+          .messages("watch")
+          .filter((message) => message.watchId === watchId)
+          .map((message) => message.filename),
+      ),
+    ];
+    expect(names(dot)).toEqual(["a.txt"]);
+    expect(names(link)).toEqual(["b.txt"]);
+    expect(names(slash)).toEqual(["b.txt"]);
+  });
+});
+
+describe("devices by path", () => {
+  /** A child whose stdin is a pipe from its parent, and the parent's fds for its stdio. */
+  function piped(h: Harness) {
+    const parent = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    const child = spawnFrom(h, parent);
+    const [stdin, stdout] = child.stdio as number[];
+    return { parent, child: child.worker, stdin, stdout };
+  }
+
+  const isRegularFileAt = (h: Harness, path: string) => {
+    try {
+      return (h.kernel.vfs.stat(path, false).mode & 0o170000) === 0o100000;
+    } catch {
+      return false;
+    }
+  };
+
+  it("reads /dev/stdin to its end, waiting for the writer", async () => {
+    const h = boot();
+    const { parent, child, stdin } = piped(h);
+    parent.sync("fs.write", stdin, encoder.encode("hello\n"), null);
+    expect(child.sync("fs.readFile", "/dev/stdin").pending).toBe(true);
+    parent.sync("fs.write", stdin, encoder.encode("world\n"), null);
+    parent.sync("fs.close", stdin);
+    const answer = await child.settled();
+    expect(answer.ok).toBe(true);
+    expect(decoder.decode(answer.value as Uint8Array)).toBe("hello\nworld\n");
+  });
+
+  it("writes /dev/stdout and /dev/stderr to the descriptors, never to a file", () => {
+    const h = boot();
+    const { parent, child, stdout } = piped(h);
+    expect(
+      child.sync("fs.writeFile", "/dev/stdout", encoder.encode("out\n"), 0o1101, 0o666).ok,
+    ).toBe(true);
+    expect(
+      child.sync("fs.writeFile", "//dev/stderr", encoder.encode("err\n"), 0o1101, 0o666).ok,
+    ).toBe(true);
+    const read = parent.sync("fs.read", stdout, 100, null);
+    expect(decoder.decode(read.value as Uint8Array)).toBe("out\n");
+    expect(isRegularFileAt(h, "/dev/stdout")).toBe(false);
+    expect(isRegularFileAt(h, "/dev/stderr")).toBe(false);
+  });
+
+  it("makes /dev/null exist, empty and a character device under every spelling", () => {
+    const h = boot();
+    const proc = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    h.kernel.vfs.mkdir("/p", true, 0o755);
+    h.kernel.vfs.symlink("/dev/null", "/p/null-link");
+    h.kernel.vfs.symlink("/dev", "/p/dev-link");
+    for (const spelling of [
+      "/dev/null",
+      "//dev/null",
+      "/dev/./null",
+      "/dev/../dev/null",
+      "/tmp/../dev/null",
+      "/p/null-link",
+      "/p/dev-link/null",
+    ]) {
+      expect(proc.sync("fs.writeFile", spelling, encoder.encode("junk"), 0o1101, 0o666).ok).toBe(
+        true,
+      );
+      expect(proc.sync("fs.exists", spelling).value).toBe(true);
+      const stat = proc.sync("fs.stat", spelling, true).value as { mode: number };
+      expect(stat.mode & 0o170000).toBe(0o020000);
+      expect((proc.sync("fs.readFile", spelling).value as Uint8Array).byteLength).toBe(0);
+      expect(proc.sync("fs.realpath", spelling).value).toBe("/dev/null");
+      expect(proc.sync("fs.access", spelling, 0).ok).toBe(true);
+    }
+    expect(isRegularFileAt(h, "/dev/null")).toBe(false);
+  });
+
+  it("reaches the descriptors through a link and through /dev/fd/N", () => {
+    const h = boot();
+    const { parent, child, stdin, stdout } = piped(h);
+    h.kernel.vfs.mkdir("/p", true, 0o755);
+    h.kernel.vfs.symlink("/dev", "/p/d");
+    child.sync("fs.writeFile", "/p/d/stdout", encoder.encode("a"), 0o1101, 0o666);
+    child.sync("fs.writeFile", "/dev/fd/1", encoder.encode("b"), 0o1101, 0o666);
+    const fd = child.sync("fs.open", "/p/d/fd/1", 1, 0o666).value as number;
+    child.sync("fs.write", fd, encoder.encode("c"), null);
+    expect(decoder.decode(parent.sync("fs.read", stdout, 100, null).value as Uint8Array)).toBe("a");
+    expect(decoder.decode(parent.sync("fs.read", stdout, 100, null).value as Uint8Array)).toBe("b");
+    expect(decoder.decode(parent.sync("fs.read", stdout, 100, null).value as Uint8Array)).toBe("c");
+    const names = (child.sync("fs.readdir", "/dev/fd").value as { name: string }[]).map(
+      (entry) => entry.name,
+    );
+    expect(names).toEqual(["0", "1", "2", String(fd)]);
+    expect(child.sync("fs.exists", "/dev/fd/99").value).toBe(false);
+    parent.sync("fs.close", stdin);
+    expect(child.sync("fs.readFile", "/dev/fd/0").ok).toBe(true);
+  });
+
+  it("refuses to remove, rename or replace a device, and keeps it a device", () => {
+    const h = boot();
+    const proc = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    const code = (answer: SyncAnswer) => (answer.value as { code?: string }).code;
+    expect(code(proc.sync("fs.unlink", "/dev/null"))).toBe("EACCES");
+    expect(code(proc.sync("fs.rm", "//dev/null", false, true))).toBe("EACCES");
+    expect(code(proc.sync("fs.rename", "/dev/null", "/tmp/x"))).toBe("EACCES");
+    expect(code(proc.sync("fs.rename", "/tmp", "/dev/stdout"))).toBe("EACCES");
+    expect(code(proc.sync("fs.mkdir", "/dev/tty", false, 0o755))).toBe("EEXIST");
+    expect(code(proc.sync("fs.symlink", "/tmp", "/dev/null"))).toBe("EEXIST");
+    expect(code(proc.sync("fs.readlink", "/dev/null"))).toBe("EINVAL");
+    expect(code(proc.sync("fs.open", "/dev/null", 0o301, 0o666))).toBe("EEXIST");
+    expect(proc.sync("fs.utimes", "/dev/null", 1, 1, true).ok).toBe(true);
+    expect(proc.sync("fs.exists", "/dev/null").value).toBe(true);
+    expect(isRegularFileAt(h, "/dev/null")).toBe(false);
+  });
+
+  it("copies from /dev/stdin into a file and from a file into /dev/null", async () => {
+    const h = boot();
+    const { parent, child, stdin } = piped(h);
+    parent.sync("fs.write", stdin, encoder.encode("piped"), null);
+    parent.sync("fs.close", stdin);
+    expect(
+      (
+        await (async () => {
+          child.sync("fs.copyFile", "/dev/stdin", "/tmp/copy.txt", 0);
+          return child.settled();
+        })()
+      ).ok,
+    ).toBe(true);
+    expect(decoder.decode(h.kernel.vfs.readFile("/tmp/copy.txt"))).toBe("piped");
+    expect(child.sync("fs.copyFile", "/tmp/copy.txt", "/dev/null", 0).ok).toBe(true);
+    expect(isRegularFileAt(h, "/dev/null")).toBe(false);
+  });
+
+  it("still opens an ordinary path and reports a real loop of links", () => {
+    const h = boot();
+    const proc = h.worker(h.kernel.spawnFromPage("node", ["a.js"], {}));
+    h.kernel.vfs.symlink("/tmp/loop", "/tmp/loop");
+    expect((proc.sync("fs.readFile", "/tmp/loop").value as { code?: string }).code).toBe("ELOOP");
+    expect(proc.sync("fs.exists", "/tmp/loop").value).toBe(false);
+    const fd = proc.sync("fs.open", "/tmp/f.txt", 0o101, 0o644).value as number;
+    proc.sync("fs.write", fd, encoder.encode("x"), null);
+    expect(decoder.decode(h.kernel.vfs.readFile("/tmp/f.txt"))).toBe("x");
   });
 });

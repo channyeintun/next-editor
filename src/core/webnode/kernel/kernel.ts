@@ -38,8 +38,20 @@ import { installBuiltinCommands, resolveExec } from "./exec";
 import type { ByteSource } from "./streams";
 import { Pipe, Terminal } from "./streams";
 import type { SharedFilesystem } from "../sharedfs/boot";
+import { kernelPathOf, normalizePath } from "../sharedfs/processBackend";
 import type { OpenFile, StatData, VfsApi } from "./vfs/types";
-import { O_CREAT, O_TRUNC, O_WRONLY, S_IFCHR, S_IFIFO } from "./vfs/types";
+import {
+  COPYFILE_EXCL,
+  O_CREAT,
+  O_EXCL,
+  O_TRUNC,
+  O_WRONLY,
+  S_IFCHR,
+  S_IFDIR,
+  S_IFIFO,
+  S_IFLNK,
+  S_IFMT,
+} from "./vfs/types";
 
 /** The part of a Worker the kernel uses. */
 export interface KernelWorker {
@@ -145,11 +157,51 @@ const SIGNAL_NUMBERS: Record<string, number> = {
   SIGWINCH: 28,
 };
 
+/** Signals whose default action is to do nothing. */
+const IGNORED_BY_DEFAULT = new Set(["SIGCHLD", "SIGCONT", "SIGURG", "SIGWINCH"]);
+/**
+ * Signals that stop a process. Stopping one is not supported here, so they do
+ * nothing unless the process handles them (SIGSTOP cannot be handled).
+ */
+const STOP_SIGNALS = new Set(["SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU"]);
+
 const DEFAULT_TERMINAL: TerminalSize = { cols: 80, rows: 24 };
+/** The ephemeral range Linux and Node use: listen(0) picks from it, and connections are labelled from it. */
 const EPHEMERAL_PORT_START = 49152;
+const EPHEMERAL_PORT_END = 65535;
 const WATCH_BATCH_MS = 16;
 
 type Handler = (proc: Proc, ...args: never[]) => unknown;
+
+/** The devices the kernel provides, as names under /dev; `/dev/fd/N` too. */
+const DEVICE_NAMES = ["fd", "null", "stderr", "stdin", "stdout", "tty"];
+const STDIO_DEVICES = ["/dev/stdin", "/dev/stdout", "/dev/stderr"];
+
+function isDevicePath(normalized: string): boolean {
+  return (
+    (normalized.startsWith("/dev/") && DEVICE_NAMES.includes(normalized.slice(5))) ||
+    /^\/dev\/fd\/\d+$/.test(normalized)
+  );
+}
+
+/** The device `path` names by its spelling (`//dev/null`, `/dev/../dev/null` …), or null. */
+function deviceOf(path: string): string | null {
+  const normalized = kernelPathOf(path);
+  return normalized !== null && isDevicePath(normalized) ? normalized : null;
+}
+
+/** The descriptor a device stands for: /dev/stdin, /dev/stdout, /dev/stderr and /dev/fd/N. */
+function deviceFd(device: string): number | null {
+  const stdio = STDIO_DEVICES.indexOf(device);
+  if (stdio >= 0) {
+    return stdio;
+  }
+  return device.startsWith("/dev/fd/") ? Number(device.slice(8)) : null;
+}
+
+function isLinkLoop(error: unknown): boolean {
+  return toSystemErrorRecord(error)?.code === "ELOOP";
+}
 
 /** The stat a pipe or terminal reports. */
 function streamStat(mode: number): StatData {
@@ -181,6 +233,11 @@ export class Kernel {
   private readonly listening = new Map<number, Listener>();
   private readonly channels = new Map<number, Channel>();
   private readonly pageWatches = new Map<number, () => void>();
+  /**
+   * The processes an exited page process left running, by its pid: the page
+   * can still end them with `killTree` of that pid, as it could before.
+   */
+  private readonly leftBehind = new Map<number, Set<number>>();
   private pendingWatchEvents = new Map<string, KernelEvent>();
   private watchFlush: ReturnType<typeof setTimeout> | null = null;
   private nextId = 1;
@@ -188,6 +245,12 @@ export class Kernel {
   private nextChannelId = 1;
   private nextWatchId = 1;
   private nextEphemeralPort = EPHEMERAL_PORT_START;
+  /**
+   * The port a connection's client end is labelled with. It is only a label
+   * (nothing listens there), so it has its own counter and never uses up the
+   * ports listen(0) picks from.
+   */
+  private nextConnectionPort = EPHEMERAL_PORT_START;
   private disposed = false;
   private readonly handlers: Record<string, Handler>;
 
@@ -198,6 +261,16 @@ export class Kernel {
     vfs.mkdir(this.workdir, true, 0o755);
     vfs.mkdir(TMP_DIR, true, 0o777);
     vfs.mkdir("/dev", true, 0o755);
+    // Each device is a link to itself in the tree, so the tree never holds a
+    // file there: any spelling or link that reaches one fails with ELOOP
+    // instead, and the kernel answers it (processBackend.ts routes it here).
+    for (const name of DEVICE_NAMES) {
+      try {
+        vfs.symlink(`/dev/${name}`, `/dev/${name}`);
+      } catch {
+        // Already there.
+      }
+    }
     installBuiltinCommands(vfs);
     this.handlers = this.createHandlers();
   }
@@ -264,6 +337,8 @@ export class Kernel {
       },
       (pid) => this.interruptGroup(pid),
     );
+    // The page's process leads the terminal's group; its foreground jobs join it.
+    terminal.foregroundGroup = id;
     const fds = new Map<number, Description>();
     const description: Description = { kind: "tty", refs: 3, terminal, output: true };
     fds.set(0, description);
@@ -299,8 +374,15 @@ export class Kernel {
     }
     terminal.cols = size.cols;
     terminal.rows = size.rows;
+    // Everything that has the terminal as stdin, stdout or stderr sees its size.
     for (const proc of this.procs.values()) {
-      if (proc.terminal === terminal) {
+      if (
+        proc.terminal === terminal ||
+        [0, 1, 2].some((fd) => {
+          const description = proc.fds.get(fd);
+          return description?.kind === "tty" && description.terminal === terminal;
+        })
+      ) {
         proc.worker.postMessage({ type: "resize", terminal: size });
       }
     }
@@ -310,6 +392,11 @@ export class Kernel {
   killTree(pid: number): void {
     const proc = this.procs.get(pid);
     if (!proc) {
+      const left = this.leftBehind.get(pid);
+      this.leftBehind.delete(pid);
+      for (const child of left ?? []) {
+        this.killTree(child);
+      }
       return;
     }
     for (const child of Array.from(proc.children)) {
@@ -322,8 +409,9 @@ export class Kernel {
   watchFromPage(path: string, recursive: boolean): number {
     const root = this.resolveWorkdirPath(path);
     const watchId = this.nextWatchId++;
+    let watched = root;
     const stop = this.vfs.watch(root, recursive, (event) => {
-      const filename = relativeName(root, event.path);
+      const filename = relativeName(watched, event.path, root);
       // One event per file and kind in each batch: an install touches
       // thousands of files, and the page only needs to know which.
       const key = `${watchId}\0${event.eventType}\0${filename}`;
@@ -337,6 +425,8 @@ export class Kernel {
       }
       this.watchFlush ??= setTimeout(() => this.flushWatchEvents(), WATCH_BATCH_MS);
     });
+    // Events carry where the watch really is: `.`, `//` and links resolved.
+    watched = this.vfs.realpath(root);
     this.pageWatches.set(watchId, stop);
     return watchId;
   }
@@ -372,7 +462,7 @@ export class Kernel {
         listenerId: listener.listenerId,
         channelId,
         port: port1,
-        remotePort: this.nextEphemeralPort++,
+        remotePort: this.connectionPort(),
       },
       [port1],
     );
@@ -454,7 +544,9 @@ export class Kernel {
     this.procs.set(proc.id, proc);
     spec.parent?.children.add(proc.id);
     const stdin = spec.fds.get(0);
-    if (stdin?.kind === "tty") {
+    // Only the terminal's own group reads it: a job started in a group of its
+    // own (`cmd &`) keeps the shell's terminal as its stdin but never takes it.
+    if (stdin?.kind === "tty" && stdin.terminal.foregroundGroup === proc.pgid) {
       stdin.terminal.attach(proc.pid);
     }
     this.wire(proc);
@@ -622,11 +714,44 @@ export class Kernel {
     if (!proc || proc.owner) {
       throw createSystemError("ESRCH", "kill");
     }
-    if (signal === "0" || signal === "SIGCONT" || signal === "SIGWINCH") {
+    this.deliver(proc, signal);
+  }
+
+  /**
+   * kill(2) from `caller`: a positive pid is that process, 0 the caller's
+   * process group, -1 every process but the caller, and any other negative
+   * pid the group -pid. Throws `ESRCH` when nothing matched.
+   */
+  private kill(caller: Proc, pid: number, signal: string): void {
+    if (pid > 0) {
+      this.signal(pid, signal);
+      return;
+    }
+    const self = caller.owner ?? caller;
+    const group = pid === 0 ? self.pgid : -pid;
+    const targets = [...this.procs.values()].filter(
+      (proc) => !proc.owner && !proc.exited && (pid === -1 ? proc !== self : proc.pgid === group),
+    );
+    if (targets.length === 0) {
+      throw createSystemError("ESRCH", "kill");
+    }
+    // The caller last: the signal may end it.
+    targets.sort((a, b) => Number(a === self) - Number(b === self));
+    for (const proc of targets) {
+      this.deliver(proc, signal);
+    }
+  }
+
+  /** Delivers `signal` to `proc`: to its handler, or as the signal's default action. */
+  private deliver(proc: Proc, signal: string): void {
+    if (signal === "0" || proc.exited) {
       return;
     }
     if (signal !== "SIGKILL" && signal !== "SIGSTOP" && proc.handledSignals.has(signal)) {
       proc.worker.postMessage({ type: "signal", signal });
+      return;
+    }
+    if (IGNORED_BY_DEFAULT.has(signal) || STOP_SIGNALS.has(signal)) {
       return;
     }
     // The default action: the signal ends the process, even one busy in a loop.
@@ -764,7 +889,14 @@ export class Kernel {
     proc.terminal?.detach(proc.pid);
 
     const parent = this.procs.get(proc.ppid);
-    // Children it leaves behind go to its parent, so `killTree` still reaches them.
+    // Children it leaves behind go to its parent, so `killTree` still reaches
+    // them. A page process has none: its pid keeps them for the page instead,
+    // as does the pid of the page process whose leftovers this one was among.
+    const keeper = parent
+      ? null
+      : proc.pageOwned
+        ? new Set<number>()
+        : (this.leftBehind.get(proc.ppid) ?? null);
     for (const childId of Array.from(proc.children)) {
       const child = this.procs.get(childId);
       if (!child) {
@@ -774,9 +906,19 @@ export class Kernel {
       if (parent) {
         child.ppid = parent.pid;
         parent.children.add(child.id);
+      } else if (keeper) {
+        child.ppid = proc.pageOwned ? proc.pid : proc.ppid;
+        keeper.add(child.id);
       }
     }
     proc.children.clear();
+    if (proc.pageOwned && keeper && keeper.size > 0 && !this.disposed) {
+      this.leftBehind.set(proc.pid, keeper);
+    }
+    const siblings = this.leftBehind.get(proc.ppid);
+    if (siblings?.delete(proc.id) && siblings.size === 0) {
+      this.leftBehind.delete(proc.ppid);
+    }
 
     parent?.children.delete(proc.id);
     const reportTo = proc.reportTo;
@@ -849,7 +991,10 @@ export class Kernel {
   }
 
   private writeToFd(proc: Proc, fd: number, data: Uint8Array): number {
-    const description = this.description(proc, fd, "write");
+    return this.writeTo(proc, this.description(proc, fd, "write"), data);
+  }
+
+  private writeTo(proc: Proc, description: Description, data: Uint8Array): number {
     switch (description.kind) {
       case "file":
         return description.file.write(data, null);
@@ -871,32 +1016,201 @@ export class Kernel {
     }
   }
 
-  /** Opens the device files the kernel provides, or null for an ordinary path. */
-  private openDevice(proc: Proc, path: string): Description | null {
-    switch (path) {
-      case "/dev/null":
-        return { kind: "null", refs: 1 };
-      case "/dev/stdin":
-      case "/dev/stdout":
-      case "/dev/stderr": {
-        const description = proc.fds.get(
-          ["/dev/stdin", "/dev/stdout", "/dev/stderr"].indexOf(path),
-        );
-        if (!description) {
-          throw createSystemError("ENOENT", "open", path);
-        }
-        description.refs += 1;
-        return description;
+  /** The stat of what a descriptor holds. */
+  private statOf(description: Description): StatData {
+    if (description.kind === "file") {
+      return description.file.stat();
+    }
+    return streamStat(
+      description.kind === "tty" || description.kind === "null" ? S_IFCHR | 0o620 : S_IFIFO | 0o600,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Devices
+  // -------------------------------------------------------------------------
+
+  /** Opens `device` (a path `isDevicePath` accepts) as a new reference. */
+  private openDevice(proc: Proc, device: string): Description {
+    if (device === "/dev/null") {
+      return { kind: "null", refs: 1 };
+    }
+    if (device === "/dev/tty") {
+      const terminal = proc.terminal ?? this.anyTerminal(proc.fds);
+      if (!terminal) {
+        throw createSystemError("ENXIO", "open", device);
       }
-      case "/dev/tty": {
-        const terminal = proc.terminal ?? this.anyTerminal(proc.fds);
-        if (!terminal) {
-          throw createSystemError("ENXIO", "open", path);
+      return { kind: "tty", refs: 1, terminal, output: true };
+    }
+    const fd = deviceFd(device);
+    const description = fd === null ? undefined : proc.fds.get(fd);
+    if (!description) {
+      throw createSystemError(fd === null ? "EISDIR" : "ENOENT", "open", device);
+    }
+    description.refs += 1;
+    return description;
+  }
+
+  /** Runs `use` on `device` opened for it, and closes it again once `use` is done. */
+  private useDevice<T>(
+    proc: Proc,
+    device: string,
+    use: (description: Description) => T | Promise<T>,
+  ): T | Promise<T> {
+    const description = this.openDevice(proc, device);
+    let result: T | Promise<T>;
+    try {
+      result = use(description);
+    } catch (error) {
+      this.release(description);
+      throw error;
+    }
+    if (result instanceof Promise) {
+      return result.finally(() => this.release(description));
+    }
+    this.release(description);
+    return result;
+  }
+
+  private deviceExists(proc: Proc, device: string): boolean {
+    const fd = deviceFd(device);
+    return fd === null || proc.fds.has(fd);
+  }
+
+  private deviceStat(proc: Proc, device: string, syscall: string): StatData {
+    if (device === "/dev/fd") {
+      return streamStat(S_IFDIR | 0o555);
+    }
+    const fd = deviceFd(device);
+    if (fd === null) {
+      return streamStat(S_IFCHR | 0o666);
+    }
+    const description = proc.fds.get(fd);
+    if (!description) {
+      throw createSystemError("ENOENT", syscall, device);
+    }
+    return this.statOf(description);
+  }
+
+  /** Everything `description` gives until its end, as reading a whole file does. */
+  private readAll(proc: Proc, description: Description): Uint8Array | Promise<Uint8Array> {
+    const chunks: Uint8Array[] = [];
+    if (description.kind === "file") {
+      // /dev/stdin on a file opens that file afresh: it reads from the start.
+      for (let position = 0; ;) {
+        const chunk = description.file.read(65536, position);
+        if (chunk.byteLength === 0) {
+          return concat(chunks);
         }
-        return { kind: "tty", refs: 1, terminal, output: true };
+        chunks.push(chunk);
+        position += chunk.byteLength;
       }
-      default:
+    }
+    if (description.kind === "pipe-write") {
+      throw createSystemError("EBADF", "read");
+    }
+    const source = this.source(description);
+    if (!source) {
+      return new Uint8Array(0);
+    }
+    const next = (): Uint8Array | Promise<Uint8Array> => {
+      for (;;) {
+        const chunk = this.readSource(proc, source, 65536);
+        if (chunk instanceof Promise) {
+          return chunk.then((bytes) => {
+            if (bytes.byteLength === 0) {
+              return concat(chunks);
+            }
+            chunks.push(bytes);
+            return next();
+          });
+        }
+        if (chunk.byteLength === 0) {
+          return concat(chunks);
+        }
+        chunks.push(chunk);
+      }
+    };
+    return next();
+  }
+
+  /**
+   * Where `path` leads when that is one of the kernel's devices, following
+   * links in the tree; null when it leads anywhere else. Only asked after the
+   * tree found a loop of links, which is what a device's own link gives.
+   */
+  private deviceBehind(path: string, hops = 0): string | null {
+    const normalized = normalizePath(path);
+    if (isDevicePath(normalized)) {
+      return normalized;
+    }
+    if (normalized === "/" || hops > 40) {
+      return null;
+    }
+    const slash = normalized.lastIndexOf("/");
+    const directory = normalized.slice(0, slash) || "/";
+    let real: string | null;
+    try {
+      real = this.vfs.realpath(directory);
+    } catch (error) {
+      real = isLinkLoop(error) ? this.deviceBehind(directory, hops + 1) : null;
+    }
+    if (real === null) {
+      return null;
+    }
+    const candidate = `${real === "/" ? "" : real}/${normalized.slice(slash + 1)}`;
+    if (isDevicePath(candidate)) {
+      return candidate;
+    }
+    try {
+      if ((this.vfs.stat(candidate, false).mode & S_IFMT) !== S_IFLNK) {
         return null;
+      }
+      const target = this.vfs.readlink(candidate);
+      return this.deviceBehind(
+        target.startsWith("/") ? target : `${real === "/" ? "" : real}/${target}`,
+        hops + 1,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * `onDevice` with the device when `path` is one of the kernel's devices,
+   * however it is spelled or linked to, else `onTree`.
+   */
+  private onPath<T>(path: string, onDevice: (device: string) => T, onTree: () => T): T {
+    const device = deviceOf(path);
+    if (device !== null) {
+      return onDevice(device);
+    }
+    try {
+      return onTree();
+    } catch (error) {
+      const behind = isLinkLoop(error) ? this.deviceBehind(path) : null;
+      if (behind === null) {
+        throw error;
+      }
+      return onDevice(behind);
+    }
+  }
+
+  /** `onPath` for a call on two paths: `onDevice` when either is a device. */
+  private onPaths<T>(first: string, second: string, onDevice: () => T, onTree: () => T): T {
+    if (deviceOf(first) !== null || deviceOf(second) !== null) {
+      return onDevice();
+    }
+    try {
+      return onTree();
+    } catch (error) {
+      if (
+        isLinkLoop(error) &&
+        (this.deviceBehind(first) !== null || this.deviceBehind(second) !== null)
+      ) {
+        return onDevice();
+      }
+      throw error;
     }
   }
 
@@ -1180,9 +1494,7 @@ export class Kernel {
   private listen(proc: Proc, port: number): { port: number; listenerId: number } {
     let chosen = port;
     if (chosen === 0) {
-      do {
-        chosen = this.nextEphemeralPort++;
-      } while (this.listening.has(chosen));
+      chosen = this.freeEphemeralPort();
     } else if (this.listening.has(chosen)) {
       const error = createSystemError("EADDRINUSE", "listen");
       error.port = chosen;
@@ -1194,6 +1506,28 @@ export class Kernel {
     proc.listeners.set(listenerId, chosen);
     this.host.emit({ event: "port", port: chosen, type: "open" });
     return { port: chosen, listenerId };
+  }
+
+  /** The next ephemeral port nothing listens on, wrapping round the range; EADDRINUSE when all are taken. */
+  private freeEphemeralPort(): number {
+    for (let tried = 0; tried <= EPHEMERAL_PORT_END - EPHEMERAL_PORT_START; tried += 1) {
+      const port = this.nextEphemeralPort;
+      this.nextEphemeralPort = port === EPHEMERAL_PORT_END ? EPHEMERAL_PORT_START : port + 1;
+      if (!this.listening.has(port)) {
+        return port;
+      }
+    }
+    const error = createSystemError("EADDRINUSE", "listen");
+    error.port = 0;
+    error.address = "0.0.0.0";
+    throw error;
+  }
+
+  /** The label for a new connection's client end, wrapping round the ephemeral range. */
+  private connectionPort(): number {
+    const port = this.nextConnectionPort;
+    this.nextConnectionPort = port === EPHEMERAL_PORT_END ? EPHEMERAL_PORT_START : port + 1;
+    return port;
   }
 
   private closeListener(proc: Proc, listenerId: number, port: number): void {
@@ -1219,7 +1553,7 @@ export class Kernel {
     }
     const { port1, port2 } = new MessageChannel();
     const channelId = this.nextChannelId++;
-    const localPort = this.nextEphemeralPort++;
+    const localPort = this.connectionPort();
     this.channels.set(channelId, { ends: [proc.id, listener.proc.id], kernelEnd: null });
     proc.channels.add(channelId);
     listener.proc.channels.add(channelId);
@@ -1264,52 +1598,230 @@ export class Kernel {
   private createHandlers(): Record<string, Handler> {
     const vfs = this.vfs;
     const handlers = {
-      // Paths
-      "fs.stat": (_proc: Proc, path: string, follow: boolean) => vfs.stat(path, follow),
-      "fs.exists": (_proc: Proc, path: string) => vfs.exists(path),
-      "fs.readdir": (_proc: Proc, path: string) => vfs.readdir(path),
-      "fs.mkdir": (_proc: Proc, path: string, recursive: boolean, mode: number) =>
-        vfs.mkdir(path, recursive, mode),
-      "fs.rmdir": (_proc: Proc, path: string) => vfs.rmdir(path),
-      "fs.unlink": (_proc: Proc, path: string) => vfs.unlink(path),
-      "fs.rm": (_proc: Proc, path: string, recursive: boolean, force: boolean) =>
-        vfs.rm(path, recursive, force),
-      "fs.rename": (_proc: Proc, from: string, to: string) => vfs.rename(from, to),
-      "fs.link": (_proc: Proc, existing: string, path: string) => vfs.link(existing, path),
-      "fs.symlink": (_proc: Proc, target: string, path: string) => vfs.symlink(target, path),
-      "fs.readlink": (_proc: Proc, path: string) => vfs.readlink(path),
-      "fs.realpath": (_proc: Proc, path: string) => vfs.realpath(path),
-      "fs.chmod": (_proc: Proc, path: string, mode: number, follow: boolean) =>
-        vfs.chmod(path, mode, follow),
-      "fs.utimes": (_proc: Proc, path: string, atime: number, mtime: number, follow: boolean) =>
-        vfs.utimes(path, atime, mtime, follow),
-      "fs.truncate": (_proc: Proc, path: string, length: number) => vfs.truncate(path, length),
-      "fs.copyFile": (_proc: Proc, source: string, destination: string, mode: number) =>
-        vfs.copyFile(source, destination, mode),
-      "fs.access": (_proc: Proc, path: string, mode: number) => vfs.access(path, mode),
-      "fs.mkdtemp": (_proc: Proc, prefix: string) => vfs.mkdtemp(prefix),
-      "fs.readFile": (_proc: Proc, path: string) => vfs.readFile(path),
-      "fs.writeFile": (
-        _proc: Proc,
-        path: string,
-        data: Uint8Array,
-        flags: number,
-        mode: number,
-      ) => {
-        if (path === "/dev/null") {
-          return;
+      // Paths. The kernel's devices (/dev/null, /dev/stdin … /dev/fd/N) are
+      // answered here under any spelling; nothing creates a file at one.
+      "fs.stat": (proc: Proc, path: string, follow: boolean) =>
+        this.onPath(
+          path,
+          (device) => this.deviceStat(proc, device, follow ? "stat" : "lstat"),
+          () => vfs.stat(path, follow),
+        ),
+      "fs.exists": (proc: Proc, path: string) => {
+        const device = deviceOf(path);
+        if (device !== null) {
+          return this.deviceExists(proc, device);
         }
-        vfs.writeFile(path, data, flags, mode);
+        if (vfs.exists(path)) {
+          return true;
+        }
+        // Missing, or a link that may lead to a device.
+        try {
+          vfs.stat(path, false);
+        } catch (error) {
+          if (!isLinkLoop(error)) {
+            return false;
+          }
+        }
+        const behind = this.deviceBehind(path);
+        return behind !== null && this.deviceExists(proc, behind);
       },
+      "fs.readdir": (proc: Proc, path: string) =>
+        this.onPath(
+          path,
+          (device) => {
+            if (device !== "/dev/fd") {
+              throw createSystemError("ENOTDIR", "scandir", path);
+            }
+            return [...proc.fds.keys()]
+              .sort((a, b) => a - b)
+              .map((fd) => ({ name: String(fd), type: "symlink" as const }));
+          },
+          () => vfs.readdir(path),
+        ),
+      "fs.mkdir": (_proc: Proc, path: string, recursive: boolean, mode: number) =>
+        this.onPath(
+          path,
+          (device) => {
+            if (recursive && device === "/dev/fd") {
+              return undefined;
+            }
+            throw createSystemError("EEXIST", "mkdir", path);
+          },
+          () => vfs.mkdir(path, recursive, mode),
+        ),
+      "fs.rmdir": (_proc: Proc, path: string) =>
+        this.onPath(
+          path,
+          (device) => {
+            throw createSystemError(device === "/dev/fd" ? "EACCES" : "ENOTDIR", "rmdir", path);
+          },
+          () => vfs.rmdir(path),
+        ),
+      "fs.unlink": (_proc: Proc, path: string) =>
+        this.onPath(
+          path,
+          () => {
+            throw createSystemError("EACCES", "unlink", path);
+          },
+          () => vfs.unlink(path),
+        ),
+      "fs.rm": (_proc: Proc, path: string, recursive: boolean, force: boolean) =>
+        this.onPath(
+          path,
+          () => {
+            throw createSystemError("EACCES", "rm", path);
+          },
+          () => vfs.rm(path, recursive, force),
+        ),
+      "fs.rename": (_proc: Proc, from: string, to: string) =>
+        this.onPaths(
+          from,
+          to,
+          () => {
+            throw createSystemError("EACCES", "rename", from, to);
+          },
+          () => vfs.rename(from, to),
+        ),
+      "fs.link": (_proc: Proc, existing: string, path: string) =>
+        this.onPaths(
+          existing,
+          path,
+          () => {
+            throw createSystemError("EACCES", "link", existing, path);
+          },
+          () => vfs.link(existing, path),
+        ),
+      "fs.symlink": (_proc: Proc, target: string, path: string) =>
+        this.onPath(
+          path,
+          () => {
+            throw createSystemError("EEXIST", "symlink", target, path);
+          },
+          () => vfs.symlink(target, path),
+        ),
+      "fs.readlink": (_proc: Proc, path: string) =>
+        this.onPath(
+          path,
+          () => {
+            throw createSystemError("EINVAL", "readlink", path);
+          },
+          () => vfs.readlink(path),
+        ),
+      "fs.realpath": (proc: Proc, path: string) =>
+        this.onPath(
+          path,
+          (device) => {
+            if (!this.deviceExists(proc, device)) {
+              throw createSystemError("ENOENT", "realpath", path);
+            }
+            return device;
+          },
+          () => vfs.realpath(path),
+        ),
+      "fs.chmod": (_proc: Proc, path: string, mode: number, follow: boolean) =>
+        this.onPath(
+          path,
+          () => {
+            throw createSystemError("EPERM", "chmod", path);
+          },
+          () => vfs.chmod(path, mode, follow),
+        ),
+      "fs.utimes": (_proc: Proc, path: string, atime: number, mtime: number, follow: boolean) =>
+        this.onPath(
+          path,
+          // A device keeps no times worth changing; `touch /dev/null` succeeds.
+          () => undefined,
+          () => vfs.utimes(path, atime, mtime, follow),
+        ),
+      "fs.truncate": (proc: Proc, path: string, length: number) =>
+        this.onPath(
+          path,
+          (device) =>
+            this.useDevice(proc, device, (description) => {
+              if (description.kind === "file") {
+                description.file.truncate(length);
+              }
+            }),
+          () => vfs.truncate(path, length),
+        ),
+      "fs.copyFile": (proc: Proc, source: string, destination: string, mode: number) => {
+        let from = deviceOf(source);
+        let to = deviceOf(destination);
+        if (from === null && to === null) {
+          try {
+            vfs.copyFile(source, destination, mode);
+            return undefined;
+          } catch (error) {
+            from = isLinkLoop(error) ? this.deviceBehind(source) : null;
+            to = isLinkLoop(error) ? this.deviceBehind(destination) : null;
+            if (from === null && to === null) {
+              throw error;
+            }
+          }
+        }
+        if (to !== null && (mode & COPYFILE_EXCL) !== 0) {
+          throw createSystemError("EEXIST", "copyfile", source, destination);
+        }
+        const target = to;
+        const write = (data: Uint8Array) => {
+          if (target !== null) {
+            this.useDevice(proc, target, (description) => this.writeTo(proc, description, data));
+          } else {
+            const exclusive = (mode & COPYFILE_EXCL) !== 0 ? O_EXCL : 0;
+            vfs.writeFile(destination, data, O_WRONLY | O_CREAT | O_TRUNC | exclusive, 0o644);
+          }
+        };
+        const data =
+          from !== null
+            ? this.useDevice(proc, from, (description) => this.readAll(proc, description))
+            : vfs.readFile(source);
+        return data instanceof Promise ? data.then(write) : write(data);
+      },
+      "fs.access": (proc: Proc, path: string, mode: number) =>
+        this.onPath(
+          path,
+          (device) => {
+            if (!this.deviceExists(proc, device)) {
+              throw createSystemError("ENOENT", "access", path);
+            }
+          },
+          () => vfs.access(path, mode),
+        ),
+      "fs.mkdtemp": (_proc: Proc, prefix: string) => vfs.mkdtemp(prefix),
+      "fs.readFile": (proc: Proc, path: string) =>
+        this.onPath(
+          path,
+          (device) =>
+            this.useDevice(proc, device, (description) => this.readAll(proc, description)),
+          () => vfs.readFile(path),
+        ),
+      "fs.writeFile": (proc: Proc, path: string, data: Uint8Array, flags: number, mode: number) =>
+        this.onPath(
+          path,
+          (device) => {
+            if ((flags & O_CREAT) !== 0 && (flags & O_EXCL) !== 0) {
+              throw createSystemError("EEXIST", "open", path);
+            }
+            this.useDevice(proc, device, (description) => this.writeTo(proc, description, data));
+          },
+          () => vfs.writeFile(path, data, flags, mode),
+        ),
 
       // Descriptors
-      "fs.open": (proc: Proc, path: string, flags: number, mode: number) => {
-        const device = this.openDevice(proc, path);
-        return this.allocateFd(
+      "fs.open": (proc: Proc, path: string, flags: number, mode: number) =>
+        this.allocateFd(
           proc,
-          device ?? { kind: "file", refs: 1, file: vfs.open(path, flags, mode) },
-        );
-      },
+          this.onPath<Description>(
+            path,
+            (device) => {
+              if ((flags & O_CREAT) !== 0 && (flags & O_EXCL) !== 0) {
+                throw createSystemError("EEXIST", "open", path);
+              }
+              return this.openDevice(proc, device);
+            },
+            () => ({ kind: "file", refs: 1, file: vfs.open(path, flags, mode) }),
+          ),
+        ),
       "fs.close": (proc: Proc, fd: number) => {
         this.description(proc, fd, "close");
         this.closeFd(proc, fd);
@@ -1332,17 +1844,7 @@ export class Kernel {
         }
         return this.writeToFd(proc, fd, data);
       },
-      "fs.fstat": (proc: Proc, fd: number) => {
-        const description = this.description(proc, fd, "fstat");
-        if (description.kind === "file") {
-          return description.file.stat();
-        }
-        return streamStat(
-          description.kind === "tty" || description.kind === "null"
-            ? S_IFCHR | 0o620
-            : S_IFIFO | 0o600,
-        );
-      },
+      "fs.fstat": (proc: Proc, fd: number) => this.statOf(this.description(proc, fd, "fstat")),
       "fs.ftruncate": (proc: Proc, fd: number, length: number) =>
         this.file(proc, fd, "ftruncate").truncate(length),
       "fs.fchmod": (proc: Proc, fd: number, mode: number) =>
@@ -1354,14 +1856,27 @@ export class Kernel {
       },
       "fs.watch": (proc: Proc, path: string, recursive: boolean) => {
         const watchId = this.nextWatchId++;
-        const stop = vfs.watch(path, recursive, (event) => {
-          proc.worker.postMessage({
-            type: "watch",
-            watchId,
-            eventType: event.eventType,
-            filename: relativeName(path, event.path),
-          });
-        });
+        let watched = path;
+        let device: string | null = null;
+        const stop = this.onPath(
+          path,
+          (found) => {
+            // A device has nothing to report.
+            device = found;
+            return () => {};
+          },
+          () =>
+            vfs.watch(path, recursive, (event) => {
+              proc.worker.postMessage({
+                type: "watch",
+                watchId,
+                eventType: event.eventType,
+                filename: relativeName(watched, event.path, path),
+              });
+            }),
+        );
+        // Events carry where the watch really is: `.`, `//` and links resolved.
+        watched = device ?? vfs.realpath(path);
         proc.watches.set(watchId, stop);
         return watchId;
       },
@@ -1440,7 +1955,7 @@ export class Kernel {
         return { pid: child.pid, stdio };
       },
       "proc.spawnSync": (proc: Proc, request: SpawnSyncRequest) => this.spawnSync(proc, request),
-      "proc.kill": (_proc: Proc, pid: number, signal: string) => this.signal(pid, signal),
+      "proc.kill": (proc: Proc, pid: number, signal: string) => this.kill(proc, pid, signal),
       "proc.exit": (proc: Proc, code: number) => {
         // From a thread this ends the thread; from a process, the process.
         this.finish(proc, { code, signal: null });
@@ -1448,6 +1963,10 @@ export class Kernel {
         return new Promise(() => {});
       },
       "proc.die": (proc: Proc, signal: string) => {
+        // A handled signal nobody took: its default action, which may be to do nothing.
+        if (IGNORED_BY_DEFAULT.has(signal) || STOP_SIGNALS.has(signal)) {
+          return;
+        }
         this.finish(proc.owner ?? proc, { code: null, signal });
         return new Promise(() => {});
       },
@@ -1461,6 +1980,10 @@ export class Kernel {
         // setpgid(0, pgid): 0 starts a group of its own, as a shell does for each job.
         const process = proc.owner ?? proc;
         process.pgid = pgid > 0 ? pgid : process.pid;
+        // Leaving the terminal's group puts the process in the background.
+        if (process.terminal && process.terminal.foregroundGroup !== process.pgid) {
+          process.terminal.detach(process.pid);
+        }
       },
       "proc.pipe": (proc: Proc) => {
         const pipe = new Pipe();
@@ -1546,10 +2069,17 @@ export class Kernel {
   }
 }
 
-/** `path` relative to the watched `root`; the root itself is its own last segment. */
-function relativeName(root: string, path: string): string {
+/**
+ * `path` relative to the watched `root` (its real path); the root itself is
+ * the last segment of the path the caller `asked` to watch.
+ */
+function relativeName(root: string, path: string, asked: string): string {
   if (path === root) {
-    return path.slice(path.lastIndexOf("/") + 1);
+    const trimmed = asked.replace(/\/+$/, "");
+    const name = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+    return name === "" || name === "." || name === ".."
+      ? root.slice(root.lastIndexOf("/") + 1)
+      : name;
   }
   const prefix = root.endsWith("/") ? root : `${root}/`;
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;

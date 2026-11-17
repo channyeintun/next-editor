@@ -96,14 +96,21 @@ const textEncoder = new TextEncoder();
 
 /**
  * A terminal: what the page types goes in, what processes print comes out.
- * Input goes to the foreground process — the most recently started one that has
- * this terminal as its stdin — as lines it can edit (cooked) or as raw keys.
+ * Input goes to the foreground process — the most recently started member of
+ * the terminal's process group that has it as stdin — as lines it can edit
+ * (cooked) or as raw keys.
  */
 export class Terminal implements ByteSource {
   cols: number;
   rows: number;
   /** Raw mode: keys reach the reader as typed, with no echo. */
   raw = false;
+  /**
+   * The process group the terminal belongs to (what `tcsetpgrp` sets): only
+   * its members attach as readers, so a background job never takes the input
+   * or the Ctrl+C. The kernel sets it; 0 is none yet.
+   */
+  foregroundGroup = 0;
 
   private pending: Uint8Array[] = [];
   private line: number[] = [];
