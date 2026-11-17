@@ -221,10 +221,12 @@ const exportBuiltin: Builtin = (shell, args, io) => {
     const variable = shell.vars.get(result.name);
     if (variable) {
       variable.exported = !unexport;
-    } else if (!unexport) {
-      shell.vars.set(result.name, { value: "", exported: true, readonly: false });
-      // An exported but unset name: bash keeps it unset; we drop it from the env.
-      shell.vars.delete(result.name);
+    } else if (unexport) {
+      shell.pendingExports.delete(result.name);
+    } else {
+      // An exported but unset name stays unset (and out of the environment)
+      // until it is assigned; then it is exported.
+      shell.pendingExports.add(result.name);
     }
   }
   return status;
@@ -426,6 +428,42 @@ export function applySetFlag(shell: Shell, arg: string): string | null {
   return null;
 }
 
+/** `set -o` / `set +o` with no name: lists the options. */
+function listOptions(shell: Shell, io: CommandIo, minus: boolean): void {
+  for (const option of OPTION_NAMES) {
+    const value = shell.options[option as keyof Shell["options"]];
+    io.out(
+      minus
+        ? `${option.padEnd(15)} ${value ? "on" : "off"}\n`
+        : `set ${value ? "-" : "+"}o ${option}\n`,
+    );
+  }
+}
+
+/** `set -o name` / `set +o name`. Returns the builtin's status. */
+function setLongOption(shell: Shell, io: CommandIo, name: string, on: boolean): number {
+  if (OPTION_NAMES.has(name)) {
+    shell.options[name as keyof Shell["options"]] = on;
+  } else if (
+    [
+      "emacs",
+      "vi",
+      "monitor",
+      "hashall",
+      "braceexpand",
+      "interactive-comments",
+      "posix",
+      "notify",
+      "history",
+    ].includes(name)
+  ) {
+    // Accepted with no effect.
+  } else {
+    return usage(io, "set", `${name}: invalid option name`);
+  }
+  return 0;
+}
+
 const set: Builtin = (shell, args, io) => {
   if (args.length === 0) {
     for (const name of [...shell.vars.keys()].sort()) {
@@ -439,45 +477,27 @@ const set: Builtin = (shell, args, io) => {
       shell.positional = args.slice(i + 1);
       return 0;
     }
-    if (arg === "-o" || arg === "+o") {
-      const name = args[i + 1];
-      if (name === undefined) {
-        for (const option of OPTION_NAMES) {
-          const value = shell.options[option as keyof Shell["options"]];
-          io.out(
-            arg === "-o"
-              ? `${option.padEnd(15)} ${value ? "on" : "off"}\n`
-              : `set ${value ? "-" : "+"}o ${option}\n`,
-          );
-        }
-        return 0;
-      }
-      i++;
-      if (OPTION_NAMES.has(name)) {
-        shell.options[name as keyof Shell["options"]] = arg === "-o";
-      } else if (
-        [
-          "emacs",
-          "vi",
-          "monitor",
-          "hashall",
-          "braceexpand",
-          "interactive-comments",
-          "posix",
-          "notify",
-          "history",
-        ].includes(name)
-      ) {
-        // Accepted with no effect.
-      } else {
-        return usage(io, "set", `${name}: invalid option name`);
-      }
-      continue;
-    }
     if ((arg.startsWith("-") || arg.startsWith("+")) && arg.length > 1) {
-      const error = applySetFlag(shell, arg);
-      if (error) {
-        return usage(io, "set", error);
+      // In a cluster such as `-euo pipefail`, each `o` takes the next argument
+      // as an option name, as a separate `-o` does.
+      const letters = arg.slice(1).replace(/o/g, "");
+      if (letters !== "") {
+        const error = applySetFlag(shell, `${arg[0]}${letters}`);
+        if (error) {
+          return usage(io, "set", error);
+        }
+      }
+      for (let o = arg.indexOf("o", 1); o > 0; o = arg.indexOf("o", o + 1)) {
+        const name = args[i + 1];
+        if (name === undefined) {
+          listOptions(shell, io, arg[0] === "-");
+          return 0;
+        }
+        i++;
+        const status = setLongOption(shell, io, name, arg[0] === "-");
+        if (status !== 0) {
+          return status;
+        }
       }
       continue;
     }
@@ -1005,6 +1025,13 @@ const kill: Builtin = (shell, args, io) => {
     } else {
       usage(io, "kill", `${target}: arguments must be process or job IDs`, 1);
       status = 1;
+      continue;
+    }
+    const inProcess = shell.process.jobs.find(
+      (job) => job.pid === pid && job.kill && job.status === null,
+    );
+    if (inProcess?.kill && signal !== "0") {
+      inProcess.kill(signal);
       continue;
     }
     try {

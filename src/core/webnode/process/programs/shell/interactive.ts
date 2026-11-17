@@ -7,7 +7,7 @@ import { runtime } from "../../runtime";
 import { BUILTINS } from "./builtins";
 import { COMMANDS } from "./commands/index";
 import { isDir, resolvePath, tryStat } from "./commands/util";
-import { ExitSignal } from "./context";
+import { ExitSignal, InterruptSignal } from "./context";
 import { decode, encode, takeBuffered, writeFd } from "./io";
 import type { Shell } from "./interpreter";
 import { ShellSyntaxError } from "./lexer";
@@ -32,6 +32,45 @@ export function isIncomplete(source: string): boolean {
     return false;
   } catch (error) {
     return error instanceof ShellSyntaxError && error.incomplete;
+  }
+}
+
+/** After these, a line break joins with a space: a `;` there would not parse. */
+const NO_SEMICOLON_AFTER =
+  /(^|[\s;&|(){}])(do|then|else|elif|if|while|until|in|!|\{|\(|\|\||&&|\||&|;;|;&|;;&|;)$/;
+
+function withoutLines(_key: string, value: unknown): unknown {
+  return _key === "line" ? undefined : value;
+}
+
+/**
+ * The one-line form of a command typed on several lines, for history:
+ * `for i in 1 2⏎do echo $i⏎done` becomes `for i in 1 2; do echo $i; done`,
+ * as bash's cmdhist does. Null when no one-line form means the same (a
+ * quoted newline, a here-document).
+ */
+export function historyLine(source: string): string | null {
+  if (!source.includes("\n")) {
+    return source;
+  }
+  let joined = "";
+  for (const line of source.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === "") {
+      continue;
+    }
+    if (joined === "") {
+      joined = trimmed;
+    } else {
+      joined += NO_SEMICOLON_AFTER.test(joined) ? ` ${trimmed}` : `; ${trimmed}`;
+    }
+  }
+  try {
+    const same =
+      JSON.stringify(parse(joined), withoutLines) === JSON.stringify(parse(source), withoutLines);
+    return same ? joined : null;
+  } catch {
+    return null;
   }
 }
 
@@ -215,7 +254,12 @@ export async function runInteractive(shell: Shell): Promise<number> {
         stopResize();
         return error.status;
       }
-      throw error;
+      if (!(error instanceof InterruptSignal)) {
+        throw error;
+      }
+      shell.status = 130;
+    } finally {
+      shell.process.pendingSignal = null;
     }
   }
   let status = 0;
@@ -271,8 +315,11 @@ export async function runInteractive(shell: Shell): Promise<number> {
       if (source.trim() === "") {
         continue;
       }
-      if (history.add(source.replace(/\n/g, " "))) {
-        appendHistory(shell, source.replace(/\n/g, " "));
+      // A command that has no one-line form stays in this session's history
+      // as typed; the history file holds one command per line.
+      const entry = historyLine(source);
+      if (history.add(entry ?? source) && entry !== null) {
+        appendHistory(shell, entry);
       }
       try {
         await shell.runSource(source);
@@ -281,7 +328,11 @@ export async function runInteractive(shell: Shell): Promise<number> {
           status = error.status;
           return status;
         }
-        throw error;
+        if (!(error instanceof InterruptSignal)) {
+          throw error;
+        }
+        // Ctrl+C stopped commands the shell ran itself: back to the prompt.
+        shell.status = 130;
       } finally {
         shell.process.pendingSignal = null;
       }

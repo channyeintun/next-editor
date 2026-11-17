@@ -348,6 +348,52 @@ async function wordToString(word: Word | undefined, ctx: ExpandContext): Promise
   return expandString(word, ctx);
 }
 
+/** `name` when `${name=word}` may assign to it; throws otherwise. */
+function assignableName(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new ExpansionError(`$${name}: cannot assign in this way`);
+  }
+  return name;
+}
+
+/** Whether the test of `${x-w}`, `${x:+w}`, `${x:=w}`, … picks the word. */
+function wordChosen(part: ParamPart, ctx: ExpandContext): boolean {
+  const set = isSet(ctx, part.name);
+  const nullOrUnset = !set || paramValue(ctx, part.name) === "";
+  switch (part.op) {
+    case ":-":
+    case ":=":
+      return nullOrUnset;
+    case "-":
+    case "=":
+      return !set;
+    case ":+":
+      return !nullOrUnset;
+    case "+":
+      return set;
+  }
+  return false;
+}
+
+/** The word of `${x-w}` / `${x+w}` (with or without `:`) when it is the result. */
+function chosenWord(part: ParamPart, ctx: ExpandContext): Word | null {
+  if (part.indirect || part.length || !part.word) {
+    return null;
+  }
+  const op = part.op;
+  if (op !== ":-" && op !== "-" && op !== ":+" && op !== "+") {
+    return null;
+  }
+  return wordChosen(part, ctx) ? part.word : null;
+}
+
+/** True when `${x=w}` / `${x:=w}` will assign its word. */
+function isAssignChosen(part: ParamPart, ctx: ExpandContext): boolean {
+  return (
+    !part.indirect && !part.length && (part.op === ":=" || part.op === "=") && wordChosen(part, ctx)
+  );
+}
+
 /** The value of a parameter expansion, or a list of values for `"$@"`-like forms. */
 async function expandParam(part: ParamPart, ctx: ExpandContext): Promise<string> {
   if (part.indirect) {
@@ -384,11 +430,9 @@ async function expandParam(part: ParamPart, ctx: ExpandContext): Promise<string>
     case ":=":
     case "=":
       if (op === ":=" ? nullOrUnset : !set) {
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-          throw new ExpansionError(`$${name}: cannot assign in this way`);
-        }
+        const target = assignableName(name);
         const assigned = await wordToString(part.word, ctx);
-        ctx.set(name, assigned);
+        ctx.set(target, assigned);
         return assigned;
       }
       return value ?? "";
@@ -522,6 +566,37 @@ async function expandInto(
               builder.addSplit(args[i]);
             } else {
               builder.add(args[i], false);
+            }
+          }
+          break;
+        }
+        const chosen = chosenWord(part, ctx);
+        if (chosen) {
+          // The chosen word keeps its own quoting: `${x:-"a b"}` is one field
+          // and `${1+"$@"}` one field per argument, as in bash.
+          builder.add("", quoted);
+          for (const inner of tildeExpand(chosen, ctx).parts) {
+            if (inner.type === "lit" && !quoted && split) {
+              // Unquoted text of the word is split too: `${x:-a b}` is two fields.
+              builder.addSplit(inner.value);
+            } else {
+              await expandInto([inner], ctx, builder, quoted, split);
+            }
+          }
+          break;
+        }
+        if (isAssignChosen(part, ctx)) {
+          const target = assignableName(part.name);
+          const segs = await expandPattern(part.word ?? { parts: [] }, ctx);
+          ctx.set(target, joinSegs(segs));
+          builder.add("", quoted);
+          for (const seg of segs) {
+            if (quoted || seg.quoted) {
+              builder.add(seg.text, true);
+            } else if (split) {
+              builder.addSplit(seg.text);
+            } else {
+              builder.add(seg.text, false);
             }
           }
           break;

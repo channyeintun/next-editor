@@ -311,7 +311,7 @@ describe("builtins", () => {
     const result = await sh(`
       cd /tmp; pwd; cd; pwd; cd /nope; echo $?
       export A=1; unset A; echo "[$A]"
-      readonly R=1; R=2; echo $?
+      readonly R=1; (R=2); echo $?
       set -- a b c; shift; echo "$@"; shift 2; echo $#
     `);
     expect(result.out).toBe("/tmp\n/home\n1\n[]\n1\nb c\n0\n");
@@ -452,5 +452,185 @@ describe("invocation", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     rt.signal("SIGTERM");
     expect(await done).toBe(143);
+  });
+});
+
+describe("review fixes", () => {
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("ends a loop of builtins on a SIGINT that arrives as a task (shell-1)", async () => {
+    const { setupRuntime } = await import("./testHelpers");
+    const { runShell } = await import("./index");
+    const { rt } = setupRuntime({});
+    rt.feedStdin(null);
+    setTimeout(() => rt.signal("SIGINT"), 50);
+    expect(await runShell(["sh", "-c", "i=0; while :; do i=$((i+1)); done"])).toBe(130);
+  }, 5000);
+
+  it("takes o's option name from the next argument in a flag cluster (shell-2)", async () => {
+    const r = await sh("set -euo pipefail; echo ok; false | true; echo no");
+    expect(r.out).toBe("ok\n");
+    expect(r.status).toBe(1);
+    expect(r.err).toBe("");
+    expect((await sh("set -eo pipefail +o pipefail; false | true; echo yes")).out).toBe("yes\n");
+  });
+
+  it("runs the stages of a pipeline at the same time (shell-3)", async () => {
+    const r = await Promise.race([
+      sh("while true; do echo y; sleep 0.05; done | head -n 1; echo end"),
+      wait(2000).then(() => "timeout" as const),
+    ]);
+    expect(r).not.toBe("timeout");
+    expect(r !== "timeout" && r.out).toBe("y\nend\n");
+  }, 5000);
+
+  it("ends a builtin producer whose reader has gone, without waiting on it (shell-3)", async () => {
+    const r = await Promise.race([
+      sh("while :; do echo y; done | head -n 2; echo $?"),
+      wait(3000).then(() => "timeout" as const),
+    ]);
+    expect(r !== "timeout" && r.out).toBe("y\ny\n0\n");
+    expect(r !== "timeout" && r.status).toBe(0);
+  }, 5000);
+
+  it("streams a builtin producer to its consumer (shell-3)", async () => {
+    // The consumer reads the first line while the producer is still running.
+    const r = await sh(
+      "{ echo a; sleep 0.2; : > /tmp/done; echo b; } | { read x; [ -e /tmp/done ] && echo late || echo early; cat; }",
+    );
+    expect(r.out).toBe("early\nb\n");
+  });
+
+  it("ends only the stage that runs exit (shell-4)", async () => {
+    let r = await sh("echo x | exit 3; echo after $?");
+    expect(r.out).toBe("after 3\n");
+    expect(r.status).toBe(0);
+    r = await sh("f(){ echo in; exit 2; }; echo x | f; echo after $?");
+    expect(r.out).toBe("in\nafter 2\n");
+    r = await sh('die(){ echo "$1" >&2; exit 1; }; echo x | die oops | cat; echo after $?');
+    expect(r.out).toBe("after 0\n");
+    expect(r.err).toBe("oops\n");
+  });
+
+  it("gives a command substitution the fds of the command it is in (shell-5)", async () => {
+    const files = { "/work/in.txt": "hello\n" };
+    expect(await out('{ x=$(cat); echo "[$x]"; } < in.txt', { files })).toBe("[hello]\n");
+    expect(await out('f(){ echo "$(cat)"; }; f < in.txt', { files })).toBe("hello\n");
+    expect(await out('echo hi | { v=$(cat); echo "[$v]"; }')).toBe("[hi]\n");
+    const r = await sh("{ y=$(err boom); echo got; } 2>/dev/null");
+    expect(r.out).toBe("got\n");
+    expect(r.err).toBe("");
+  });
+
+  it("keeps the quoting of the word in ${x:-word} and ${x+word} (shell-6)", async () => {
+    expect(await out('unset x; argv ${x:-"a b"}')).toBe("<a b>\n");
+    expect(await out(["sh", "-c", 'argv ${1+"$@"}', "n", "a b", "c"])).toBe("<a b><c>\n");
+    expect(await out("x=; echo \"${x:-'q'}\"")).toBe("'q'\n");
+    expect(await out('unset x; argv ${x:="a b"}; argv "$x"')).toBe("<a b>\n<a b>\n");
+    expect(await out('unset x; argv ${x:-a b} "${x:-}" ${x:+z}')).toBe("<a><b><>\n");
+    expect(await out("y=\"'a'b\"; echo \"${y#'a'}\"")).toBe("'a'b\n");
+    expect(await out("echo ${HOME:+~}/x ${nope:-~}")).toBe("/home/x /home\n");
+  });
+
+  it("exports a name exported before it was assigned (shell-7)", async () => {
+    expect(await out("export FOO; FOO=bar; printenv FOO")).toBe("bar\n");
+    expect(await out("export FOO; unset FOO; FOO=bar; printenv FOO")).toBe("\n");
+    expect(await out("export FOO; FOO=1 true; FOO=bar; printenv FOO")).toBe("bar\n");
+    expect(await out("export FOO; env | grep -c FOO")).toBe("0\n");
+  });
+
+  it("gives an in-process background job a pid for $!, kill and wait (shell-8)", async () => {
+    expect(await out('(sleep 0.1; echo bg) & p=$!; echo "pid:${p:+set}"; wait')).toBe(
+      "pid:set\nbg\n",
+    );
+    expect(await out('sleep 0.1 & p=$!; echo "pid:${p:+set}"; wait $p; echo $?')).toBe(
+      "pid:set\n0\n",
+    );
+    const r = await sh(
+      "(while :; do sleep 0.01; done) & p=$!; kill $p; wait $p; echo $?; kill %1 2>/dev/null; echo done",
+    );
+    expect(r.out).toBe("143\ndone\n");
+  }, 5000);
+
+  it("lives on through a SIGPIPE: only the stage that wrote ends", async () => {
+    const { setupRuntime } = await import("./testHelpers");
+    const { runShell } = await import("./index");
+    const { rt } = setupRuntime({});
+    rt.feedStdin(null);
+    // The kernel ends a process at once on a signal it did not declare.
+    let handled: string[] = [];
+    const listeners: ((signal: string) => boolean)[] = [];
+    const processes = rt.processes as typeof rt.processes & {
+      setHandledSignals?: (signals: string[]) => void;
+    };
+    processes.setHandledSignals = (signals) => {
+      handled = signals;
+    };
+    const onSignal = rt.processes.onSignal;
+    rt.processes.onSignal = (listener) => {
+      listeners.push(listener);
+      onSignal(listener);
+    };
+    const done = runShell(["sh", "-c", "sleep 0.1; echo alive"]);
+    await wait(20);
+    expect(handled).toContain("SIGPIPE");
+    expect(listeners.map((listener) => listener("SIGPIPE"))).toEqual([true]);
+    expect(await done).toBe(0);
+    expect(rt.stdout()).toBe("alive\n");
+  });
+
+  it("stops every builtin stage of a pipeline on SIGINT", async () => {
+    const { setupRuntime } = await import("./testHelpers");
+    const { runShell } = await import("./index");
+    const { rt } = setupRuntime({});
+    rt.feedStdin(null);
+    setTimeout(() => rt.signal("SIGINT"), 50);
+    const status = runShell([
+      "sh",
+      "-c",
+      "while :; do echo y; done | while read l; do :; done; echo not-reached",
+    ]);
+    expect(await status).toBe(130);
+    expect(rt.stdout()).toBe("");
+  }, 5000);
+
+  it("parses ( ( as nested subshells (shell-9)", async () => {
+    expect(await out("( (echo a); echo b )")).toBe("a\nb\n");
+    expect(await out("((echo a); echo b)")).toBe("a\nb\n");
+    expect(await out("(( 1 + 1 == 2 )) && echo yes")).toBe("yes\n");
+  });
+
+  it("does not run the rest of an and-or list after SIGINT (shell-12)", async () => {
+    const { setupRuntime } = await import("./testHelpers");
+    const { runShell } = await import("./index");
+    const { rt } = setupRuntime({});
+    rt.feedStdin(null);
+    setTimeout(() => rt.signal("SIGINT"), 50);
+    expect(await runShell(["sh", "-c", "hang || echo ran; echo next"])).toBe(130);
+    expect(rt.stdout()).toBe("");
+  }, 8000);
+
+  it("ends a non-interactive shell on an assignment to a readonly variable (shell-13)", async () => {
+    const r = await sh("x=1; readonly x; x=2; echo continued");
+    expect(r.out).toBe("");
+    expect(r.status).toBe(1);
+    expect(r.err).toBe("sh: x: readonly variable\n");
+    // A prefix assignment only fails its command, as in bash.
+    expect((await sh("x=1; readonly x; x=2 true; echo $?")).out).toBe("1\n");
+  });
+
+  it("reads a variable's leading-0 value as octal (shell-14)", async () => {
+    expect(await out("v=010; echo $((v+1)); v=-010; echo $((v+1)); v=0x10; echo $((v))")).toBe(
+      "9\n-7\n16\n",
+    );
+    const r = await sh("m=08; echo $((m+1))");
+    expect(r.status).toBe(1);
+    expect(r.err).toContain("value too great for base");
+  });
+
+  it("runs an EXIT trap set in a subshell (shell-15)", async () => {
+    expect(await out("(trap 'echo sub-exit' EXIT; true); echo after")).toBe("sub-exit\nafter\n");
+    expect(await out("(trap 'echo e' EXIT; exit 3); echo $?")).toBe("e\n3\n");
+    expect(await out("x=$(trap 'echo in-sub' EXIT; echo v); echo \"[$x]\"")).toBe("[v\nin-sub]\n");
   });
 });

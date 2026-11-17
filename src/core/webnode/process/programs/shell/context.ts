@@ -1,6 +1,6 @@
 // What a built-in file or text command (commands/*.ts) gets to work with, and
 // the control-flow signals the interpreter throws for `exit`, `return`,
-// `break` and `continue`.
+// `break` and `continue`, and Ctrl+C at an interactive shell.
 import type { CommandIo } from "./io";
 
 /** Everything an in-process command may use. */
@@ -52,3 +52,9 @@ export class LoopSignal {
     this.levels = levels;
   }
 }
+
+/**
+ * Ctrl+C in an interactive shell while it runs commands of its own (a loop of
+ * builtins): abandons the command line and returns to the prompt.
+ */
+export class InterruptSignal {}

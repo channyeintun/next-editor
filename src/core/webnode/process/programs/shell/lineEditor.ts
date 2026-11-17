@@ -65,17 +65,24 @@ export function charWidth(codePoint: number): number {
   ) {
     return 0;
   }
+  // The wide ranges of xterm's default (Unicode 6) widths, which the site's
+  // shell terminal keeps: the cursor moves by the cells xterm gives a
+  // character, so emoji such as 🚀 or 😀 are 1 column there however wide
+  // their glyph is drawn.
   if (
     (codePoint >= 0x1100 && codePoint <= 0x115f) ||
-    (codePoint >= 0x2e80 && codePoint <= 0xa4cf) ||
+    codePoint === 0x2329 ||
+    codePoint === 0x232a ||
+    (codePoint >= 0x2e80 && codePoint <= 0x303e) ||
+    (codePoint >= 0x3040 && codePoint <= 0xa4cf) ||
     (codePoint >= 0xac00 && codePoint <= 0xd7a3) ||
     (codePoint >= 0xf900 && codePoint <= 0xfaff) ||
-    (codePoint >= 0xfe30 && codePoint <= 0xfe4f) ||
+    (codePoint >= 0xfe10 && codePoint <= 0xfe19) ||
+    (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
     (codePoint >= 0xff00 && codePoint <= 0xff60) ||
     (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-    (codePoint >= 0x1f300 && codePoint <= 0x1f64f) ||
-    (codePoint >= 0x1f900 && codePoint <= 0x1f9ff) ||
-    (codePoint >= 0x20000 && codePoint <= 0x3fffd)
+    (codePoint >= 0x20000 && codePoint <= 0x2fffd) ||
+    (codePoint >= 0x30000 && codePoint <= 0x3fffd)
   ) {
     return 2;
   }

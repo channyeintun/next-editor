@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { History, LineEditor, displayWidth } from "./lineEditor";
+import { History, LineEditor, charWidth, displayWidth } from "./lineEditor";
 import type { EditResult } from "./lineEditor";
 
 function editor(options: { columns?: number; candidates?: string[]; history?: string[] } = {}) {
@@ -206,5 +206,18 @@ describe("LineEditor", () => {
     history.add("b");
     history.add("c");
     expect(history.entries).toEqual(["b", "c"]);
+  });
+});
+
+describe("charWidth (shell-11)", () => {
+  it("matches xterm's default (Unicode 6) widths, which the shell terminal keeps", () => {
+    // xterm gives emoji outside its wide ranges one cell, so the cursor does too.
+    for (const text of ["🚀", "😀", "🤖", "✅", "❌", "🪄", "a"]) {
+      expect(charWidth(text.codePointAt(0) as number)).toBe(1);
+    }
+    for (const text of ["中", "가", "〈", "Ａ", "𠀀"]) {
+      expect(charWidth(text.codePointAt(0) as number)).toBe(2);
+    }
+    expect(charWidth(0x303f)).toBe(1);
   });
 });

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setRuntime } from "../../runtime";
 import { runShell } from "./index";
-import { completeLine, isIncomplete, makePrompt } from "./interactive";
+import { completeLine, historyLine, isIncomplete, makePrompt } from "./interactive";
 import { Shell } from "./interpreter";
 import type { ProcessState } from "./interpreter";
 import { readText, setupRuntime } from "./testHelpers";
@@ -101,12 +101,12 @@ describe("interactive jsh", () => {
     const output = plain(rt.stdout());
     expect(output).toContain("/work ❯ echo hello\nhello\n");
     expect(output).toContain("> lines'\ntwo\nlines\n");
-    // Up twice reaches `fail 3` (the multi-line entry is stored joined).
+    // Up twice reaches `fail 3`: the multi-line entry is one entry.
     expect(output).toMatch(/fail 3\n.*fail 3\n/s);
     expect(rt.stdout()).toContain("\x1b[31m❯");
-    expect(readText(vfs, "/home/.jsh_history")).toBe(
-      "echo hello\nfail 3\necho 'two lines'\nfail 3\n",
-    );
+    // A quoted newline has no one-line form (joining it would change the
+    // string), so that entry stays out of the one-command-per-line file.
+    expect(readText(vfs, "/home/.jsh_history")).toBe("echo hello\nfail 3\nfail 3\n");
   });
 
   it("abandons the line on Ctrl+C and turns raw mode off while a command runs", async () => {
@@ -158,4 +158,54 @@ describe("interactive jsh", () => {
     await done;
     expect(plain(rt.stdout())).toContain("{}\n");
   });
+});
+
+describe("history of multi-line commands (shell-10)", () => {
+  it("joins lines the way bash's cmdhist does", () => {
+    expect(historyLine("for i in 1 2\ndo echo $i\ndone")).toBe("for i in 1 2; do echo $i; done");
+    expect(historyLine("if true\nthen\n  echo y\nfi")).toBe("if true; then echo y; fi");
+    expect(historyLine("f() {\n  echo a\n}")).toBe("f() { echo a; }");
+    expect(historyLine("echo a &&\necho b")).toBe("echo a && echo b");
+    expect(historyLine("echo one")).toBe("echo one");
+    // No one-line form keeps the meaning: a quoted newline.
+    expect(historyLine("echo 'a\nb'")).toBeNull();
+    expect(isIncomplete(historyLine("for i in 1 2\ndo echo $i\ndone") as string)).toBe(false);
+  });
+
+  it("runs a recalled multi-line loop again", async () => {
+    const { rt, vfs } = setupRuntime({ tty: true });
+    const done = runShell(["jsh"]);
+    await tick();
+    rt.feedStdin("for i in 1 2\r");
+    await tick();
+    rt.feedStdin("do echo $i\r");
+    await tick();
+    rt.feedStdin("done\r");
+    await tick();
+    rt.feedStdin("\x1b[A\r");
+    await tick();
+    rt.feedStdin("\x04");
+    expect(await done).toBe(0);
+    expect(plain(rt.stdout()).match(/^[12]$/gm)).toEqual(["1", "2", "1", "2"]);
+    expect(readText(vfs, "/home/.jsh_history")).toBe("for i in 1 2; do echo $i; done\n");
+  });
+});
+
+describe("Ctrl+C in jsh (shell-1)", () => {
+  it("stops a loop of builtins and returns to the prompt", async () => {
+    const { rt } = setupRuntime({ tty: true });
+    const done = runShell(["jsh"]);
+    await tick();
+    rt.feedStdin("while :; do :; done; echo NOT${x}REACHED\r");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    rt.signal("SIGINT");
+    await tick();
+    rt.feedStdin("echo $?\r");
+    await tick();
+    rt.feedStdin("exit 4\r");
+    expect(await done).toBe(4);
+    const output = plain(rt.stdout());
+    expect(output).not.toContain("NOTREACHED");
+    expect(output).toContain("130\n");
+  }, 5000);
 });

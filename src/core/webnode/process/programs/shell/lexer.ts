@@ -51,6 +51,11 @@ export class Lexer {
   private readonly pending: PendingHereDoc[] = [];
   private readonly parseSubstitution: SubstitutionParser;
   private readonly parseProgram: ProgramParser;
+  /**
+   * Reading the word of `${x:-w}` (or `+ = ?`) inside double quotes or a
+   * here-document, where bash keeps `'` as a literal character.
+   */
+  private literalSingleQuotes = false;
 
   constructor(
     source: string,
@@ -304,7 +309,7 @@ export class Lexer {
         this.pos++;
         continue;
       }
-      if (c === "'" && (mode === "unquoted" || mode === "brace")) {
+      if (c === "'" && (mode === "unquoted" || (mode === "brace" && !this.literalSingleQuotes))) {
         flush();
         const end = this.source.indexOf("'", this.pos + 1);
         if (end < 0) {
@@ -469,7 +474,6 @@ export class Lexer {
       this.pos++;
     };
     const innerMode: Mode = "brace";
-    void mode;
     let length = false;
     let indirect = false;
     if (this.peekChar() === "!" && NAME_START.test(this.peekChar(1))) {
@@ -553,7 +557,17 @@ export class Lexer {
       close();
       return { type: "param", name, op, word: { parts: offset }, word2: lengthWord };
     }
-    const word = this.readParts(innerMode, "");
+    const saved = this.literalSingleQuotes;
+    // Pattern operators (`#`, `%`) take quotes even inside "…"; these do not.
+    this.literalSingleQuotes =
+      "-=+?".includes(op[op.length - 1]) &&
+      (mode === "dq" || mode === "heredoc" || (mode === "brace" && saved));
+    let word: WordPart[];
+    try {
+      word = this.readParts(innerMode, "");
+    } finally {
+      this.literalSingleQuotes = saved;
+    }
     close();
     return { type: "param", name, op, word: { parts: word } };
   }

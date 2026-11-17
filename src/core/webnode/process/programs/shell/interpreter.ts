@@ -25,7 +25,7 @@ import { COMMANDS } from "./commands/index";
 import { binaryTest, unaryTest } from "./commands/test";
 import { resolvePath } from "./commands/util";
 import type { CommandContext } from "./context";
-import { ExitSignal, LoopSignal, ReturnSignal } from "./context";
+import { ExitSignal, InterruptSignal, LoopSignal, ReturnSignal } from "./context";
 import {
   ExpansionError,
   arithmetic,
@@ -41,6 +41,7 @@ import {
   closeFd,
   decode,
   encode,
+  isBrokenPipe,
   readAllAsync,
   trackFileOffset,
   writeFd,
@@ -73,10 +74,43 @@ export interface ShellOptions {
 /** A background job. */
 export interface Job {
   id: number;
+  /** A child's pid, or for a job run in this process a pid of its own (see `JobControl`). */
   pid: number | null;
   command: string;
   done: Promise<number>;
   status: number | null;
+  /** Ends a job that runs in this process; absent for a child process (use the kernel). */
+  kill?: (signal: string) => void;
+}
+
+/**
+ * First pid given to a job that runs in this shell's process (`f &`,
+ * `(cd api && node index.js) &`): above any pid the kernel hands out, so `$!`,
+ * `kill` and `wait` can name the job.
+ */
+const FIRST_JOB_PID = 1 << 22;
+let nextJobPid = FIRST_JOB_PID;
+
+/** How `kill` reaches a background job that runs in this process. */
+class JobControl {
+  /** The signal `kill` sent, acted on between the job's commands. */
+  signal: string | null = null;
+  /** Wakes the job's sleeping or waiting built-in commands. */
+  readonly abort = new AbortController();
+  /** Children the job is waiting for: `kill` passes the signal on to them. */
+  readonly children = new Set<number>();
+
+  kill(signal: string): void {
+    this.signal = signal;
+    this.abort.abort();
+    for (const pid of this.children) {
+      try {
+        runtime().processes.kill(pid, signal);
+      } catch {
+        // Already gone.
+      }
+    }
+  }
 }
 
 /** State shared by a shell and all its subshells (one process). */
@@ -97,6 +131,62 @@ export interface ProcessState {
 
 /** A shell builtin: runs in the shell itself and may change its state. */
 export type Builtin = (shell: Shell, args: string[], io: CommandIo) => number | Promise<number>;
+
+/** How long commands may run without the event loop turning before the shell lets it turn. */
+const STARVED_MS = 50;
+/** When the event loop was last seen to turn (-1: not watching yet). */
+let turnSeenAt = -1;
+/** A timer is waiting to report the next turn. */
+let turnTimerArmed = false;
+let checksSinceClock = 0;
+
+/**
+ * True when the event loop has not turned for `STARVED_MS`: the shell has run
+ * only commands that never wait. Cheap enough to call between every command:
+ * at most one timer is outstanding, and only while the loop is turning anyway.
+ */
+function eventLoopStarved(): boolean {
+  // Reading the clock between every command of a tight loop shows; every
+  // 32nd command is often enough.
+  if ((++checksSinceClock & 31) !== 0) {
+    return false;
+  }
+  const now = performance.now();
+  if (!turnTimerArmed) {
+    turnSeenAt = now;
+    turnTimerArmed = true;
+    setTimeout(() => {
+      turnTimerArmed = false;
+    }, 0);
+    return false;
+  }
+  return now - turnSeenAt > STARVED_MS;
+}
+
+let yieldChannel: MessageChannel | null = null;
+const yieldWaiters: (() => void)[] = [];
+
+/**
+ * Lets queued tasks run, the kernel's signal message among them. A message
+ * rather than a timer: a browser holds a chain of nested `setTimeout(0)`
+ * calls to 4 ms each, which a long loop would feel.
+ */
+function yieldToEventLoop(): Promise<void> {
+  if (typeof MessageChannel === "undefined") {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (!yieldChannel) {
+    yieldChannel = new MessageChannel();
+    yieldChannel.port1.onmessage = () => yieldWaiters.shift()?.();
+    // Node: the port must not keep the process alive.
+    (yieldChannel.port1 as { unref?: () => void }).unref?.();
+  }
+  const channel = yieldChannel;
+  return new Promise((resolve) => {
+    yieldWaiters.push(resolve);
+    channel.port2.postMessage(null);
+  });
+}
 
 /** Thrown when a redirection cannot be set up; the command fails with status 1. */
 class RedirectError extends Error {}
@@ -122,10 +212,16 @@ export class Shell {
   cwd: string;
   options: ShellOptions;
   traps: Map<string, string>;
+  /** Names given to `export` while unset: exported once they are assigned. */
+  pendingExports = new Set<string>();
   /** `$?`. */
   status = 0;
   /** `$!`. */
   lastBackground: number | undefined;
+  /** In a background job run in this process: how `kill` reaches it. */
+  private job: JobControl | null = null;
+  /** In a pipeline stage: the pipe it writes to; the stage ends once nobody reads it. */
+  stageOutput: number | null = null;
   /** This shell runs a background job: its commands start in a group of their own. */
   background = false;
   /** The shell's own fds; `exec 3>file` changes it. */
@@ -191,9 +287,12 @@ export class Shell {
       sub.vars.set(name, { ...variable });
     }
     sub.background = this.background;
+    sub.stageOutput = this.stageOutput;
+    sub.job = this.job;
     sub.functions = new Map(this.functions);
     sub.aliases = new Map(this.aliases);
     sub.traps = new Map();
+    sub.pendingExports = new Set(this.pendingExports);
     sub.options = { ...this.options };
     sub.status = this.status;
     sub.lastBackground = this.lastBackground;
@@ -278,7 +377,12 @@ export class Shell {
         existing.exported = true;
       }
     } else {
-      this.vars.set(name, { value, exported: exported ?? this.options.allexport, readonly: false });
+      const pending = this.pendingExports.delete(name);
+      this.vars.set(name, {
+        value,
+        exported: exported ?? (this.options.allexport || pending),
+        readonly: false,
+      });
     }
   }
 
@@ -288,6 +392,7 @@ export class Shell {
       return false;
     }
     this.vars.delete(name);
+    this.pendingExports.delete(name);
     return true;
   }
 
@@ -318,13 +423,16 @@ export class Shell {
     this.set("PWD", path);
   }
 
-  /** The context word expansion runs in. */
-  expandContext(): ExpandContext {
+  /**
+   * The context word expansion runs in. `fds` are the fds in effect where the
+   * word is expanded: a command substitution inherits them.
+   */
+  expandContext(fds: FdTable = this.fds): ExpandContext {
     return {
       get: (name) => this.get(name),
       set: (name, value) => this.set(name, value),
       positional: () => this.positional,
-      substitute: (program) => this.substitute(program),
+      substitute: (program) => this.substitute(program, fds),
       nounset: this.options.nounset,
       noglob: this.options.noglob,
       cwd: this.cwd,
@@ -398,24 +506,47 @@ export class Shell {
     return status;
   }
 
-  /** Acts on a SIGINT/SIGTERM that arrived: runs its trap, or ends a non-interactive shell. */
+  /**
+   * Called between commands. Ends a pipeline stage whose reader has gone, and
+   * acts on a SIGINT/SIGTERM that arrived: runs its trap, ends a
+   * non-interactive shell, or abandons the command line of an interactive one.
+   */
   async checkSignals(): Promise<void> {
+    if (this.stageOutput !== null && isBrokenPipe(this.stageOutput)) {
+      // As SIGPIPE ends a subshell stage in bash: `while :; do echo y; done | head -n 1`.
+      throw new ExitSignal(141);
+    }
+    if (this.job?.signal) {
+      throw new ExitSignal(128 + (signalNumber(this.job.signal) ?? 15));
+    }
+    if (this.process.pendingSignal === null) {
+      if (!eventLoopStarved()) {
+        return;
+      }
+      // Commands that never wait (`while :; do :; done`) would keep the worker
+      // from ever handling the kernel's signal message: let queued tasks run.
+      await yieldToEventLoop();
+    }
     const signal = this.process.pendingSignal;
-    if (!signal) {
+    // A background job ignores the terminal's signals, as in bash.
+    if (signal === null || this.background) {
       return;
     }
-    this.process.pendingSignal = null;
     const short = signal.replace(/^SIG/, "");
     const trap = this.traps.get(short);
     if (trap !== undefined) {
+      this.process.pendingSignal = null;
       if (trap !== "") {
         await this.runSource(trap);
       }
       return;
     }
+    // Left pending so that the other stages of a pipeline, and the shells
+    // around this subshell, stop too.
     if (!this.interactive) {
       throw new ExitSignal(128 + (signalNumber(signal) ?? 2));
     }
+    throw new InterruptSignal();
   }
 
   private async runAndOr(andOr: AndOr, fds: FdTable): Promise<number> {
@@ -423,6 +554,8 @@ export class Shell {
     let status = await this.runPipelineChecked(andOr.first, fds, last === 0);
     for (let i = 0; i < andOr.rest.length; i++) {
       const { op, pipeline } = andOr.rest[i];
+      // Ctrl+C during `a` must not go on to run `b` of `a || b`.
+      await this.checkSignals();
       if ((op === "&&" && status !== 0) || (op === "||" && status === 0)) {
         continue;
       }
@@ -489,23 +622,24 @@ export class Shell {
         }
       }
       const sub = this.subshell();
+      if (i < n - 1) {
+        sub.stageOutput = pipes[i].writeFd;
+      }
       const command = commands[i];
+      // Every stage runs as a subshell would: `exit` (in a builtin or a
+      // function too) ends only that stage.
       if (command.type === "simple") {
-        stages.push(await sub.prepareSimpleSafely(command, table));
+        const prepared = await sub.prepareSimpleSafely(command, table);
+        stages.push(
+          prepared.kind === "internal"
+            ? { ...prepared, run: () => sub.runAsSubshell(prepared.run, table) }
+            : prepared,
+        );
       } else {
         stages.push({
           kind: "internal",
           opened: [],
-          run: async () => {
-            try {
-              return await sub.runCommand(command, table);
-            } catch (error) {
-              if (error instanceof ExitSignal) {
-                return error.status;
-              }
-              throw error;
-            }
-          },
+          run: () => sub.runAsSubshell(() => sub.runCommand(command, table), table),
         });
       }
     }
@@ -534,21 +668,34 @@ export class Shell {
         closeFd(pipes[i].readFd);
       }
     }
+    // The stages in this process run at the same time, as processes would:
+    // a consumer sees output as it is written, and a stage that ends closes
+    // its pipe ends (end of input for the next one, EPIPE for the one before).
+    const running: Promise<void>[] = [];
     for (let i = 0; i < n; i++) {
       const stage = stages[i];
       if (stage.kind !== "internal") {
         continue;
       }
-      try {
-        statuses[i] = await stage.run();
-      } finally {
-        stage.opened.forEach(closeFd);
-        if (i < n - 1) {
-          closeFd(pipes[i].writeFd);
-        }
-        if (i > 0) {
-          closeFd(pipes[i - 1].readFd);
-        }
+      running.push(
+        (async () => {
+          try {
+            statuses[i] = await stage.run();
+          } finally {
+            stage.opened.forEach(closeFd);
+            if (i < n - 1) {
+              closeFd(pipes[i].writeFd);
+            }
+            if (i > 0) {
+              closeFd(pipes[i - 1].readFd);
+            }
+          }
+        })(),
+      );
+    }
+    for (const outcome of await Promise.allSettled(running)) {
+      if (outcome.status === "rejected") {
+        throw outcome.reason;
       }
     }
     for (let i = 0; i < n; i++) {
@@ -634,14 +781,7 @@ export class Shell {
         return this.runList(command.body, fds);
       case "subshell": {
         const sub = this.subshell();
-        try {
-          return await sub.runList(command.body, fds);
-        } catch (error) {
-          if (error instanceof ExitSignal) {
-            return error.status;
-          }
-          throw error;
-        }
+        return sub.runAsSubshell(() => sub.runList(command.body, fds), fds);
       }
       case "if": {
         for (const clause of command.clauses) {
@@ -678,7 +818,7 @@ export class Shell {
       }
       case "for": {
         const items = command.items
-          ? await expandWords(command.items, this.expandContext())
+          ? await expandWords(command.items, this.expandContext(fds))
           : [...this.positional];
         let status = 0;
         this.loopDepth++;
@@ -698,9 +838,9 @@ export class Shell {
         return status;
       }
       case "arithfor": {
-        const ctx = this.expandContext();
+        const ctx = this.expandContext(fds);
         const evaluate = async (text: string): Promise<number> =>
-          text.trim() === "" ? 1 : arithmetic(ctx, await this.expandArithText(text));
+          text.trim() === "" ? 1 : arithmetic(ctx, await this.expandArithText(text, fds));
         let status = 0;
         this.loopDepth++;
         try {
@@ -722,27 +862,29 @@ export class Shell {
       case "case":
         return this.runCase(command, fds);
       case "cond": {
-        const result = await this.evalCond(command.expr);
+        const result = await this.evalCond(command.expr, fds);
         this.status = result === null ? 2 : result ? 0 : 1;
         return this.status;
       }
       case "arithcmd": {
-        const text = await expandString(command.expr, this.expandContext());
-        const value = arithmetic(this.expandContext(), text);
+        const text = await expandString(command.expr, this.expandContext(fds));
+        const value = arithmetic(this.expandContext(fds), text);
         this.status = value !== 0 ? 0 : 1;
         return this.status;
       }
     }
   }
 
-  private async expandArithText(text: string): Promise<string> {
+  private async expandArithText(text: string, fds: FdTable): Promise<string> {
     if (!/[$`]/.test(text)) {
       return text;
     }
     const program = parse(`: $((${text}))`);
     const word = (program.items[0].andOr.first.commands[0] as SimpleCommand).words[1];
     const part = word.parts[0];
-    return part.type === "arith" ? expandString({ parts: part.parts }, this.expandContext()) : text;
+    return part.type === "arith"
+      ? expandString({ parts: part.parts }, this.expandContext(fds))
+      : text;
   }
 
   private async runCondition(list: List, fds: FdTable): Promise<number> {
@@ -770,7 +912,7 @@ export class Shell {
   }
 
   private async runCase(command: Case, fds: FdTable): Promise<number> {
-    const ctx = this.expandContext();
+    const ctx = this.expandContext(fds);
     const subject = await expandString(command.subject, ctx);
     let status = 0;
     let fallthrough = false;
@@ -799,19 +941,19 @@ export class Shell {
   }
 
   /** Evaluates `[[ … ]]`: true, false, or null for a usage error. */
-  async evalCond(expr: CondExpr): Promise<boolean | null> {
-    const ctx = this.expandContext();
+  async evalCond(expr: CondExpr, fds: FdTable = this.fds): Promise<boolean | null> {
+    const ctx = this.expandContext(fds);
     switch (expr.type) {
       case "and": {
-        const left = await this.evalCond(expr.left);
-        return left ? this.evalCond(expr.right) : left;
+        const left = await this.evalCond(expr.left, fds);
+        return left ? this.evalCond(expr.right, fds) : left;
       }
       case "or": {
-        const left = await this.evalCond(expr.left);
-        return left === false ? this.evalCond(expr.right) : left;
+        const left = await this.evalCond(expr.left, fds);
+        return left === false ? this.evalCond(expr.right, fds) : left;
       }
       case "not": {
-        const inner = await this.evalCond(expr.expr);
+        const inner = await this.evalCond(expr.expr, fds);
         return inner === null ? null : !inner;
       }
       case "word":
@@ -820,7 +962,7 @@ export class Shell {
         const arg = await expandString(expr.arg, ctx);
         const result = unaryTest(expr.op, arg, this.cwd, (name) => this.get(name));
         if (typeof result === "string") {
-          this.error(`[[: ${result}`);
+          this.error(`[[: ${result}`, fds);
           return null;
         }
         return result;
@@ -858,7 +1000,7 @@ export class Shell {
         }
         const result = binaryTest(expr.op, left, right, this.cwd);
         if (typeof result === "string") {
-          this.error(`[[: ${result}`);
+          this.error(`[[: ${result}`, fds);
           return null;
         }
         return result;
@@ -904,7 +1046,15 @@ export class Shell {
       if (error instanceof ExitSignal) {
         return { kind: "status", status: error.status };
       }
-      return { kind: "status", status: this.handleCommandError(error, fds) };
+      try {
+        return { kind: "status", status: this.handleCommandError(error, fds) };
+      } catch (fatal) {
+        // A fatal expansion error ends this subshell (a stage or a job), not its parent.
+        if (fatal instanceof ExitSignal) {
+          return { kind: "status", status: fatal.status };
+        }
+        throw fatal;
+      }
     }
   }
 
@@ -939,12 +1089,17 @@ export class Shell {
   private async prepareSimple(original: SimpleCommand, fds: FdTable): Promise<Prepared> {
     this.currentLine = original.line;
     const command = this.aliases.size > 0 ? this.expandAlias(original) : original;
-    const ctx = this.expandContext();
+    const ctx = this.expandContext(fds);
     this.lastSubstitutionStatus = null;
     const argv = await expandWords(command.words, ctx);
     if (argv.length === 0) {
       for (const assignment of command.assignments) {
         const value = await this.assignmentValue(assignment, ctx);
+        if (this.vars.get(assignment.name)?.readonly) {
+          // An assignment statement to a readonly variable ends a
+          // non-interactive shell, as in bash (unlike `export`/`read`).
+          throw new ExpansionError(`${assignment.name}: readonly variable`);
+        }
         this.set(assignment.name, value);
       }
       if (command.redirects.length > 0) {
@@ -1062,7 +1217,9 @@ export class Shell {
       cwd: this.cwd,
       env,
       io,
-      signal: this.process.abort.signal,
+      signal: this.job
+        ? AbortSignal.any([this.process.abort.signal, this.job.abort.signal])
+        : this.process.abort.signal,
       resolve: (path) => this.resolve(path),
       exec: (argv, extraEnv, replaceEnv) => {
         if (!replaceEnv) {
@@ -1104,6 +1261,7 @@ export class Shell {
       return body();
     }
     const saved = new Map<string, Variable | undefined>();
+    const pending = names.filter((name) => this.pendingExports.has(name));
     for (const name of names) {
       const existing = this.vars.get(name);
       saved.set(name, existing ? { ...existing } : undefined);
@@ -1118,6 +1276,9 @@ export class Shell {
         } else {
           this.vars.delete(name);
         }
+      }
+      for (const name of pending) {
+        this.pendingExports.add(name);
       }
     }
   }
@@ -1194,7 +1355,7 @@ export class Shell {
     opened: number[],
     rt: ReturnType<typeof runtime>,
   ): Promise<void> {
-    const ctx = this.expandContext();
+    const ctx = this.expandContext(table);
     const { op } = redirect;
     if (op === "<<" || op === "<<-" || op === "<<<") {
       let text: string;
@@ -1385,9 +1546,11 @@ export class Shell {
   /** Waits for a child in the foreground (signals are forwarded to it). */
   async waitForeground(pid: number): Promise<number> {
     this.process.foreground.add(pid);
+    this.job?.children.add(pid);
     try {
       return await this.trackExit(pid);
     } finally {
+      this.job?.children.delete(pid);
       this.process.foreground.delete(pid);
       this.process.exits.delete(pid);
     }
@@ -1400,6 +1563,17 @@ export class Shell {
       // A background job's commands do not take the terminal's Ctrl+C.
       sub.background = true;
       return sub;
+    };
+    // A job run in this process gets a pid of its own for `$!`, `kill` and `wait`.
+    const inProcess = (sub: Shell, run: () => Promise<number>, table: FdTable): void => {
+      const control = new JobControl();
+      sub.job = control;
+      job.pid = nextJobPid++;
+      job.kill = (signal) => control.kill(signal);
+      this.lastBackground = job.pid;
+      job.done = sub
+        .runAsSubshell(run, table)
+        .catch((error: unknown) => (error instanceof ExitSignal ? error.status : 1));
     };
     const id = this.process.nextJobId++;
     const first = andOr.first.commands[0];
@@ -1433,15 +1607,11 @@ export class Shell {
         }
       } else {
         job.command = "(in-process)";
-        job.done = sub
-          .runPrepared(prepared)
-          .catch((error: unknown) => (error instanceof ExitSignal ? error.status : 1));
+        inProcess(sub, () => sub.runPrepared(prepared), fds);
       }
     } else {
       const sub = subshell();
-      job.done = sub
-        .runList({ items: [{ andOr, background: false }] }, fds)
-        .catch((error: unknown) => (error instanceof ExitSignal ? error.status : 1));
+      inProcess(sub, () => sub.runList({ items: [{ andOr, background: false }] }, fds), fds);
     }
     job.done = job.done.then((status) => {
       job.status = status;
@@ -1455,24 +1625,23 @@ export class Shell {
 
   // ---- command substitution ----
 
-  /** Runs a program in a subshell and returns what it wrote to standard output. */
-  async substitute(program: Program): Promise<string> {
+  /**
+   * Runs a program in a subshell with the fds in effect where it is expanded
+   * (`fds`), and returns what it wrote to standard output.
+   */
+  async substitute(program: Program, fds: FdTable = this.fds): Promise<string> {
     const rt = runtime();
     const pipe = rt.processes.pipe();
-    const table = new Map(this.fds);
+    const table = new Map(fds);
     table.set(1, pipe.writeFd);
     const sub = this.subshell();
     let status = 0;
     try {
-      status = await sub.runList(program, table);
+      status = await sub.runAsSubshell(() => sub.runList(program, table), table);
     } catch (error) {
-      if (error instanceof ExitSignal) {
-        status = error.status;
-      } else {
-        closeFd(pipe.writeFd);
-        closeFd(pipe.readFd);
-        throw error;
-      }
+      closeFd(pipe.writeFd);
+      closeFd(pipe.readFd);
+      throw error;
     }
     closeFd(pipe.writeFd);
     const bytes = await readAllAsync(pipe.readFd);
@@ -1482,15 +1651,36 @@ export class Shell {
     return decode(bytes);
   }
 
-  /** Runs the EXIT trap, once. */
-  async runExitTrap(): Promise<void> {
+  /**
+   * Runs `body` as the whole life of this subshell: `exit` ends only the
+   * subshell, and an EXIT trap it set runs when it ends.
+   */
+  async runAsSubshell(body: () => Promise<number>, fds: FdTable): Promise<number> {
+    let status: number;
+    try {
+      status = await body();
+    } catch (error) {
+      if (!(error instanceof ExitSignal)) {
+        throw error;
+      }
+      status = error.status;
+    }
+    if (this.traps.has("EXIT")) {
+      this.status = status;
+      await this.runExitTrap(fds);
+    }
+    return status;
+  }
+
+  /** Runs the EXIT trap, once, with `fds` (those of the subshell that ends). */
+  async runExitTrap(fds: FdTable = this.fds): Promise<void> {
     const trap = this.traps.get("EXIT");
     if (trap === undefined) {
       return;
     }
     this.traps.delete("EXIT");
     try {
-      await this.runSource(trap);
+      await this.runSource(trap, fds);
     } catch (error) {
       if (!(error instanceof ExitSignal)) {
         throw error;

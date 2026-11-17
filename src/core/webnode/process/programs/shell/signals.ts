@@ -45,8 +45,12 @@ export function statusOf(status: ExitStatus): number {
   return 128 + (signalNumber(status.signal ?? "") ?? 1);
 }
 
-/** The signals the shell always handles itself (it forwards them to the foreground child). */
-const ALWAYS_HANDLED = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"];
+/**
+ * The signals the shell always handles itself: it forwards these to the
+ * foreground child, except SIGPIPE, which must not end the whole shell when
+ * one of its in-process pipeline stages writes to a pipe nobody reads.
+ */
+const ALWAYS_HANDLED = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT", "SIGPIPE"];
 
 /**
  * Tells the kernel which signals the shell handles: the forwarded ones plus

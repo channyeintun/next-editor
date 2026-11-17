@@ -394,8 +394,11 @@ class Evaluator {
     if (raw === undefined || raw.trim() === "") {
       return 0;
     }
-    if (/^\s*-?\d+\s*$/.test(raw)) {
-      return Number(raw.trim());
+    const plain = /^\s*(-?)(\d+)\s*$/.exec(raw);
+    if (plain) {
+      // A value is read like a literal: `010` is octal and `08` an error, as in bash.
+      const value = parseNumber(plain[2]);
+      return plain[1] ? -value : value;
     }
     if (this.depth > 32) {
       throw new ArithError("expression recursion level exceeded");

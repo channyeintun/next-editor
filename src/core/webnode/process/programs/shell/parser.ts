@@ -249,8 +249,13 @@ class Parser {
     }
     if (this.isOp(token, "(")) {
       this.take();
-      if (this.isOp(this.peek(), "(")) {
-        return this.parseArithCommand();
+      // `((` starts arithmetic only when the two parens touch; `( (` is a
+      // nested subshell.
+      if (this.isOp(this.peek(), "(") && this.lexer.source[this.lexer.pos - 2] === "(") {
+        const arith = this.parseArithCommand();
+        if (arith) {
+          return arith;
+        }
       }
       const body = this.parseCompoundList([")"]);
       const close = this.take();
@@ -299,9 +304,12 @@ class Parser {
     return this.parseSimpleOrFunction();
   }
 
-  private parseArithCommand(): Command {
+  /**
+   * `((…))`, or null when the text is not one (`((echo a); echo b)`), which
+   * bash then reads as nested subshells.
+   */
+  private parseArithCommand(): Command | null {
     // We have taken `(` and peeked `(`: read raw text up to `))`.
-    this.lookahead = null;
     const source = this.lexer.source;
     let pos = this.lexer.pos;
     let depth = 0;
@@ -316,9 +324,13 @@ class Parser {
         depth--;
       }
     }
-    if (pos >= source.length || source[pos + 1] !== ")") {
+    if (pos >= source.length) {
       throw new ShellSyntaxError("unexpected end of input while looking for `))'", true);
     }
+    if (source[pos + 1] !== ")") {
+      return null;
+    }
+    this.lookahead = null;
     const text = source.slice(this.lexer.pos, pos);
     this.lexer.pos = pos + 2;
     return {

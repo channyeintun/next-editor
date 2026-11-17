@@ -194,6 +194,14 @@ export async function runShell(argv: string[]): Promise<number> {
     if (trap === "") {
       return true;
     }
+    if (signal === "SIGPIPE") {
+      // The failed write also returns EPIPE, which ends only the pipeline
+      // stage that made it; the shell itself goes on.
+      if (trap !== undefined) {
+        process.pendingSignal = signal;
+      }
+      return true;
+    }
     const known =
       signal === "SIGINT" || signal === "SIGTERM" || signal === "SIGHUP" || signal === "SIGQUIT";
     if (!known && trap === undefined) {
@@ -214,7 +222,14 @@ export async function runShell(argv: string[]): Promise<number> {
     process.abort.abort();
     process.abort = new AbortController();
     process.pendingSignal = signal;
-    if (process.interactive && trap === undefined) {
+    // An interactive shell ignores these, except a Ctrl+C while it runs
+    // commands of its own (a loop of builtins): that abandons the command
+    // line. A Ctrl+C a foreground child got is that child's to act on.
+    if (
+      process.interactive &&
+      trap === undefined &&
+      (signal !== "SIGINT" || process.foreground.size > 0)
+    ) {
       process.pendingSignal = null;
     }
     return true;

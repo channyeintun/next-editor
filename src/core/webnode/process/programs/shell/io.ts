@@ -86,9 +86,28 @@ function streamReadersMap(): Map<number, StreamReader> {
   return map;
 }
 
+/** Real fds a write found without a reader (EPIPE), by runtime. */
+const brokenByRuntime = new WeakMap<object, Set<number>>();
+
+function brokenPipesSet(): Set<number> {
+  const rt = runtime();
+  let set = brokenByRuntime.get(rt);
+  if (!set) {
+    set = new Set();
+    brokenByRuntime.set(rt, set);
+  }
+  return set;
+}
+
+/** True once a write to real fd `fd` failed because nobody reads the pipe any more. */
+export function isBrokenPipe(fd: number): boolean {
+  return brokenByRuntime.get(runtime())?.has(fd) ?? false;
+}
+
 /** Closes a real fd the shell owns. */
 export function closeFd(fd: number): void {
   fileOffsetsMap().delete(fd);
+  brokenByRuntime.get(runtime())?.delete(fd);
   const readers = streamReadersMap();
   readers.get(fd)?.stop();
   readers.delete(fd);
@@ -324,6 +343,10 @@ export function writeFd(fd: number, data: string | Uint8Array): boolean {
   } catch (error) {
     const record = toSystemErrorRecord(error);
     if (record && (record.code === "EPIPE" || record.code === "EBADF")) {
+      if (record.code === "EPIPE") {
+        // Lets the pipeline stage writing here end (`Shell.checkSignals`).
+        brokenPipesSet().add(fd);
+      }
       return false;
     }
     throw error;
