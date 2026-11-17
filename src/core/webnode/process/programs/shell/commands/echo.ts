@@ -1,6 +1,6 @@
 // `echo` with `-n`, `-e` and `-E`.
 import type { Command } from "../context";
-import { decodeEscape } from "../lexer";
+import { byteChar, byteEscape, encodeText } from "./lines";
 
 /** Expands `echo -e` / `printf %b` escapes; `\c` stops output (reported as `stop`). */
 export function echoEscapes(text: string): { text: string; stop: boolean } {
@@ -21,10 +21,10 @@ export function echoEscapes(text: string): { text: string; stop: boolean } {
       while (digits.length < 3 && /[0-7]/.test(text[i + 1] ?? "")) {
         digits += text[++i];
       }
-      out += String.fromCharCode(parseInt(digits || "0", 8) & 0xff);
+      out += byteChar(parseInt(digits || "0", 8) & 0xff);
       continue;
     }
-    out += decodeEscape(
+    out += byteEscape(
       e,
       () => text[i + 1] ?? "",
       () => {
@@ -60,11 +60,11 @@ export const echo: Command = (ctx, args) => {
     const result = echoEscapes(text);
     text = result.text;
     if (result.stop) {
-      ctx.io.out(text);
+      ctx.io.out(encodeText(text));
       return 0;
     }
   }
-  if (!ctx.io.out(newline ? `${text}\n` : text)) {
+  if (!ctx.io.out(encodeText(newline ? `${text}\n` : text))) {
     if (ctx.io.fd(1) === null) {
       ctx.io.err("echo: write error: Bad file descriptor\n");
     }

@@ -1,7 +1,68 @@
-// `tail [-n [+]N] [-c [+]N] [files…]` (also `-N`). `-f` is not supported.
-import type { Command } from "../context";
-import { decode, encode } from "../io";
-import { inputs, options } from "./util";
+// `tail [-n [+]N] [-c [+]N] [-f] [files…]` (also `-N`). `-f` follows named
+// files by looking at them every 250 ms; it is ignored for standard input.
+import { runtime } from "../../../runtime";
+import type { Command, CommandContext } from "../context";
+import { inputs, options, tryStat } from "./util";
+
+/** How often `tail -f` looks at its files. */
+const FOLLOW_INTERVAL_MS = 250;
+
+/**
+ * `tail -f`: prints what is appended to the files until the shell is
+ * interrupted or nobody reads the output. A file that shrinks is read again
+ * from its start, as GNU tail does after "file truncated".
+ */
+async function followFiles(ctx: CommandContext, files: string[], headers: boolean): Promise<void> {
+  const fs = runtime().fs;
+  const sizes = new Map<string, number>();
+  for (const file of files) {
+    sizes.set(file, tryStat(ctx.resolve(file))?.size ?? 0);
+  }
+  let shown = files[files.length - 1];
+  const signal = ctx.signal;
+  while (!signal.aborted && !ctx.io.broken) {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(done, FOLLOW_INTERVAL_MS);
+      function done(): void {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", done);
+        resolve();
+      }
+      signal.addEventListener("abort", done);
+    });
+    if (signal.aborted) {
+      return;
+    }
+    for (const file of files) {
+      const path = ctx.resolve(file);
+      const stat = tryStat(path);
+      const before = sizes.get(file) ?? 0;
+      if (!stat || stat.size === before) {
+        continue;
+      }
+      let from = before;
+      if (stat.size < before) {
+        ctx.io.err(`tail: ${file}: file truncated\n`);
+        from = 0;
+      }
+      let data: Uint8Array;
+      try {
+        data = fs.readFile(path);
+      } catch {
+        continue;
+      }
+      sizes.set(file, data.length);
+      if (data.length <= from) {
+        continue;
+      }
+      if (headers && shown !== file) {
+        ctx.io.out(`\n==> ${file} <==\n`);
+        shown = file;
+      }
+      ctx.io.out(data.subarray(from));
+    }
+  }
+}
 
 /** `tail`. */
 export const tail: Command = async (ctx, args) => {
@@ -18,10 +79,6 @@ export const tail: Command = async (ctx, args) => {
     long: { "lines=": "n", "bytes=": "c", follow: "f" },
   });
   if (!parsed) {
-    return 1;
-  }
-  if (parsed.flags.has("f") || parsed.flags.has("F")) {
-    ctx.io.err("tail: -f: not supported\n");
     return 1;
   }
   const byBytes = parsed.flags.has("c");
@@ -62,22 +119,37 @@ export const tail: Command = async (ctx, args) => {
         );
         continue;
       }
-      const text = decode(data);
-      const endsWithNewline = text.endsWith("\n");
-      const lines = (endsWithNewline ? text.slice(0, -1) : text).split("\n");
-      if (text === "") {
+      // Cut at newlines in the bytes themselves, so bytes that are not
+      // UTF-8 pass through unchanged.
+      const starts = [0];
+      for (
+        let at = data.indexOf(10);
+        at >= 0 && at + 1 < data.length;
+        at = data.indexOf(10, at + 1)
+      ) {
+        starts.push(at + 1);
+      }
+      if (data.length === 0) {
         continue;
       }
-      const keep = fromStart
-        ? lines.slice(Math.max(0, count - 1))
+      const first = fromStart
+        ? Math.max(0, count - 1)
         : count === 0
-          ? []
-          : lines.slice(-count);
-      if (keep.length === 0) {
-        continue;
+          ? starts.length
+          : Math.max(0, starts.length - count);
+      if (first < starts.length) {
+        ctx.io.out(data.subarray(starts[first]));
       }
-      ctx.io.out(encode(keep.join("\n") + (endsWithNewline ? "\n" : "")));
     }
+  }
+  const follow = (parsed.flags.has("f") || parsed.flags.has("F")) && parsed.operands.length > 0;
+  if (follow) {
+    await followFiles(
+      ctx,
+      files.filter((file) => file !== "-"),
+      headers,
+    );
+    return ctx.signal.aborted ? 130 : status;
   }
   return status;
 };

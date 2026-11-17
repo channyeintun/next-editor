@@ -1,9 +1,9 @@
 // `printf FORMAT [args…]`: %s %b %c %d %i %u %o %x %X %e %f %g %q %%, flags,
 // width and precision (`*` too); the format is reused until the arguments run out.
 import type { Command } from "../context";
-import { decodeEscape } from "../lexer";
 import { shellQuote } from "../quote";
 import { echoEscapes } from "./echo";
+import { byteEscape, encodeText } from "./lines";
 
 function numberArg(value: string | undefined, onError: (message: string) => void): number {
   if (value === undefined || value === "") {
@@ -54,7 +54,7 @@ export function formatPrintf(format: string, args: string[]): { text: string; er
         if (e === "c") {
           return { text: out, errors };
         }
-        out += decodeEscape(
+        out += byteEscape(
           e,
           () => format[i + 1] ?? "",
           () => {
@@ -195,7 +195,7 @@ export const printf: Command = (ctx, args) => {
     return 2;
   }
   const { text, errors } = formatPrintf(args[0], args.slice(1));
-  ctx.io.out(text);
+  ctx.io.out(encodeText(text));
   for (const error of errors) {
     ctx.io.err(`printf: ${error}\n`);
   }

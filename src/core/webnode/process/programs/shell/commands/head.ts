@@ -1,7 +1,6 @@
 // `head [-n N] [-c N] [files…]` (also `-N`); standard input stops being read
 // once enough has arrived, so `long-running | head -1` finishes.
 import type { Command, CommandContext } from "../context";
-import { decode, encode } from "../io";
 import { inputs, options } from "./util";
 
 function parseCount(
@@ -25,6 +24,10 @@ async function headOfStdin(
   lines: number | null,
   bytes: number | null,
 ): Promise<void> {
+  // Nothing to print: read nothing, or the first line would slip through below.
+  if (lines === 0 || bytes === 0) {
+    return;
+  }
   const collected: number[] = [];
   let newlines = 0;
   for (;;) {
@@ -101,17 +104,18 @@ export const head: Command = async (ctx, args) => {
         );
         continue;
       }
-      const text = decode(data);
-      const lines = text.split("\n");
-      const complete = text.endsWith("\n") ? lines.slice(0, -1) : lines;
-      const keep = spec.allBut
-        ? complete.slice(0, Math.max(0, complete.length - spec.count))
-        : complete.slice(0, spec.count);
-      let out = keep.join("\n");
-      if (keep.length > 0 && (keep.length < complete.length || text.endsWith("\n"))) {
-        out += "\n";
+      // Cut at a newline in the bytes themselves, so bytes that are not
+      // UTF-8 pass through unchanged.
+      const ends: number[] = [];
+      for (let at = data.indexOf(10); at >= 0; at = data.indexOf(10, at + 1)) {
+        ends.push(at + 1);
       }
-      ctx.io.out(encode(out));
+      // A last line without a newline counts as a line too.
+      if (data.length > 0 && data[data.length - 1] !== 10) {
+        ends.push(data.length);
+      }
+      const keep = spec.allBut ? Math.max(0, ends.length - spec.count) : spec.count;
+      ctx.io.out(data.subarray(0, keep === 0 ? 0 : (ends[Math.min(keep, ends.length) - 1] ?? 0)));
     }
   }
   return status;

@@ -1,7 +1,6 @@
 // `tr [-d] [-s] [-c] set1 [set2]`: ranges, escapes and `[:class:]` sets.
 import type { Command } from "../context";
-import { decode, encode } from "../io";
-import { decodeEscape } from "../lexer";
+import { byteEscape, inputLines, writeText } from "./lines";
 
 const CLASSES: Record<string, () => string[]> = {
   upper: () => range("A", "Z"),
@@ -32,7 +31,7 @@ export function expandSet(spec: string): string[] {
     if (raw[i] === "\\" && i + 1 < raw.length) {
       const e = raw[++i];
       tokens.push(
-        decodeEscape(
+        byteEscape(
           e,
           () => raw[i + 1] ?? "",
           () => {
@@ -105,36 +104,48 @@ export const tr: Command = async (ctx, args) => {
   const list1 = expandSet(sets[0]);
   const list2 = sets[1] !== undefined ? expandSet(sets[1]) : [];
   const squeezeSet = new Set(del ? list2 : list2.length > 0 ? list2 : list1);
-  const text = decode(await ctx.io.readAll());
-  let out = "";
   let last = "";
-  for (const c of text) {
-    let mapped: string | null = c;
-    if (del) {
-      if (inSet1(c)) {
-        mapped = null;
+  const translate = (text: string): string => {
+    let out = "";
+    for (const c of text) {
+      let mapped: string | null = c;
+      if (del) {
+        if (inSet1(c)) {
+          mapped = null;
+        }
+      } else if (list2.length > 0 && inSet1(c)) {
+        if (complement) {
+          mapped = list2[list2.length - 1];
+        } else {
+          const index = list1.lastIndexOf(c);
+          mapped = list2[Math.min(index, list2.length - 1)];
+        }
       }
-    } else if (list2.length > 0 && inSet1(c)) {
-      if (complement) {
-        mapped = list2[list2.length - 1];
-      } else {
-        const index = list1.lastIndexOf(c);
-        mapped = list2[Math.min(index, list2.length - 1)];
+      if (mapped === null) {
+        continue;
       }
+      if (
+        squeeze &&
+        mapped === last &&
+        (squeezeSet.has(mapped) || (complement && !del && list2.length === 0 && inSet1(mapped)))
+      ) {
+        continue;
+      }
+      out += mapped;
+      last = mapped;
     }
-    if (mapped === null) {
+    return out;
+  };
+  // Translated as each line arrives; bytes that are not UTF-8 come back out
+  // unchanged unless a set names them.
+  for await (const batch of inputLines(ctx, [])) {
+    if ("error" in batch) {
       continue;
     }
-    if (
-      squeeze &&
-      mapped === last &&
-      (squeezeSet.has(mapped) || (complement && !del && list2.length === 0 && inSet1(mapped)))
-    ) {
-      continue;
+    const text = batch.lines.join("\n") + (batch.noNewline ? "" : "\n");
+    if (!writeText(ctx, translate(text))) {
+      break;
     }
-    out += mapped;
-    last = mapped;
   }
-  ctx.io.out(encode(out));
   return 0;
 };

@@ -1,6 +1,7 @@
 // `uniq [-c] [-d] [-u] [-i] [input [output]]`.
 import type { Command } from "../context";
-import { options, readTexts, splitLines } from "./util";
+import { inputLines, writeText } from "./lines";
+import { options } from "./util";
 
 /** `uniq`. */
 export const uniq: Command = async (ctx, args) => {
@@ -15,26 +16,41 @@ export const uniq: Command = async (ctx, args) => {
     ctx.io.err("uniq: an output file operand: not supported\n");
     return 1;
   }
-  const { texts, failed } = await readTexts(ctx, parsed.operands);
-  if (failed) {
-    return 1;
-  }
-  const lines = splitLines(texts[0]?.text ?? "");
   const same = (a: string, b: string): boolean =>
     parsed.flags.has("i") ? a.toLowerCase() === b.toLowerCase() : a === b;
-  let out = "";
-  for (let i = 0; i < lines.length;) {
-    let j = i + 1;
-    while (j < lines.length && same(lines[i], lines[j])) {
-      j++;
+  // A run of equal lines is written once a different line arrives (or the
+  // input ends), so `tail -f log | uniq` keeps up.
+  let current: string | null = null;
+  let count = 0;
+  const group = (): string => {
+    if (current === null) {
+      return "";
     }
-    const count = j - i;
     const show = parsed.flags.has("d") ? count > 1 : parsed.flags.has("u") ? count === 1 : true;
-    if (show) {
-      out += parsed.flags.has("c") ? `${String(count).padStart(7)} ${lines[i]}\n` : `${lines[i]}\n`;
+    if (!show) {
+      return "";
     }
-    i = j;
+    return parsed.flags.has("c") ? `${String(count).padStart(7)} ${current}\n` : `${current}\n`;
+  };
+  for await (const batch of inputLines(ctx, parsed.operands)) {
+    if ("error" in batch) {
+      ctx.io.err(`uniq: ${batch.error}\n`);
+      return 1;
+    }
+    let out = "";
+    for (const line of batch.lines) {
+      if (current !== null && same(current, line)) {
+        count++;
+        continue;
+      }
+      out += group();
+      current = line;
+      count = 1;
+    }
+    if (!writeText(ctx, out)) {
+      return 0;
+    }
   }
-  ctx.io.out(out);
+  writeText(ctx, group());
   return 0;
 };

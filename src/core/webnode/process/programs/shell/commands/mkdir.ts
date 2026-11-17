@@ -1,7 +1,7 @@
 // `mkdir [-p] [-m mode] dirs…`.
 import { runtime } from "../../../runtime";
 import type { Command } from "../context";
-import { errorCode, errorText, options } from "./util";
+import { errorCode, errorText, isDir, options, tryStat } from "./util";
 
 /** `mkdir`. */
 export const mkdir: Command = (ctx, args) => {
@@ -30,7 +30,9 @@ export const mkdir: Command = (ctx, args) => {
         ctx.io.out(`mkdir: created directory '${operand}'\n`);
       }
     } catch (error) {
-      if (parents && errorCode(error) === "EEXIST") {
+      // -p accepts a directory that exists, not a file in its place.
+      const existing = parents && errorCode(error) === "EEXIST" ? tryStat(path) : null;
+      if (existing && isDir(existing)) {
         continue;
       }
       ctx.io.err(`mkdir: cannot create directory '${operand}': ${errorText(error)}\n`);

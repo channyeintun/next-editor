@@ -13,6 +13,7 @@ export const mv: Command = (ctx, args) => {
     return 1;
   }
   const { operands } = parsed;
+  const interactive = parsed.flags.has("i") && !parsed.flags.has("f");
   if (operands.length < 2) {
     ctx.io.err(
       operands.length === 0
@@ -50,6 +51,15 @@ export const mv: Command = (ctx, args) => {
       continue;
     }
     if (parsed.flags.has("n") && tryStat(to, false)) {
+      continue;
+    }
+    // -i would ask before overwriting; a script here cannot answer, so refuse
+    // rather than overwrite. -f overrides it.
+    if (interactive && tryStat(to, false)) {
+      ctx.io.err(
+        `mv: not overwriting '${intoDir ? `${dest}/${baseName(source)}` : dest}': -i cannot ask for confirmation here\n`,
+      );
+      status = 1;
       continue;
     }
     try {

@@ -133,7 +133,6 @@ describe("text commands", () => {
     ).toBe("1\n2\n1\n2\n1\n2\n4\n5\n4\n5\n5\n");
     expect((await run("head -n 1 n n", files)).out).toBe("==> n <==\n1\n\n==> n <==\n1\n");
     expect((await run("seq 10 | head -n 3")).out).toBe("1\n2\n3\n");
-    expect((await run("tail -f n", files)).err).toBe("tail: -f: not supported\n");
   });
 
   it("wc", async () => {

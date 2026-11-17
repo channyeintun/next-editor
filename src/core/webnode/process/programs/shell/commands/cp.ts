@@ -1,9 +1,15 @@
 // `cp [-rRfnpav] source… dest`: files, and directory trees with -r.
 import { runtime } from "../../../runtime";
+import type { StatData } from "../../../../kernel/vfs/types";
 import type { Command } from "../context";
 import { baseName, errorText, isDir, isLink, options, tryStat } from "./util";
 
-function copyTree(from: string, to: string, noClobber: boolean): void {
+/** -p / -a: gives the copy its source's times (a directory's after its entries are written). */
+function keepTimes(stat: StatData, to: string): void {
+  runtime().fs.utimes(to, stat.atimeMs, stat.mtimeMs, false);
+}
+
+function copyTree(from: string, to: string, noClobber: boolean, preserve: boolean): void {
   const fs = runtime().fs;
   const stat = fs.stat(from, false);
   if (isLink(stat)) {
@@ -14,6 +20,9 @@ function copyTree(from: string, to: string, noClobber: boolean): void {
       fs.unlink(to);
     }
     fs.symlink(fs.readlink(from), to);
+    if (preserve) {
+      keepTimes(stat, to);
+    }
     return;
   }
   if (isDir(stat)) {
@@ -25,7 +34,10 @@ function copyTree(from: string, to: string, noClobber: boolean): void {
       fs.mkdir(to, false, stat.mode & 0o7777);
     }
     for (const entry of fs.readdir(from)) {
-      copyTree(`${from}/${entry.name}`, `${to}/${entry.name}`, noClobber);
+      copyTree(`${from}/${entry.name}`, `${to}/${entry.name}`, noClobber, preserve);
+    }
+    if (preserve) {
+      keepTimes(stat, to);
     }
     return;
   }
@@ -34,6 +46,9 @@ function copyTree(from: string, to: string, noClobber: boolean): void {
   }
   fs.copyFile(from, to, 0);
   fs.chmod(to, stat.mode & 0o7777, true);
+  if (preserve) {
+    keepTimes(stat, to);
+  }
 }
 
 /** `cp`. */
@@ -54,6 +69,7 @@ export const cp: Command = (ctx, args) => {
   }
   const recursive = parsed.flags.has("r") || parsed.flags.has("R") || parsed.flags.has("a");
   const noClobber = parsed.flags.has("n");
+  const preserve = parsed.flags.has("p") || parsed.flags.has("a");
   const { operands } = parsed;
   if (operands.length < 2) {
     ctx.io.err(
@@ -94,13 +110,16 @@ export const cp: Command = (ctx, args) => {
     }
     try {
       if (isDir(stat)) {
-        copyTree(from, to, noClobber);
+        copyTree(from, to, noClobber, preserve);
       } else {
         if (noClobber && tryStat(to)) {
           continue;
         }
         runtime().fs.copyFile(from, to, 0);
         runtime().fs.chmod(to, stat.mode & 0o7777, true);
+        if (preserve) {
+          keepTimes(stat, to);
+        }
       }
       if (parsed.flags.has("v")) {
         ctx.io.out(`'${source}' -> '${intoDir ? `${dest}/${baseName(source)}` : dest}'\n`);

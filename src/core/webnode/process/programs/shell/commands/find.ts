@@ -1,6 +1,6 @@
 // `find [paths…] [expression]`: -name -iname -path -type -maxdepth -mindepth
-// -empty -newer, -not/!, -a, -o, ( ), -prune, -print, -print0, -delete and
-// `-exec cmd {} ;` / `-exec cmd {} +`.
+// -empty -newer, -not/!, -a, -o, ( ), -prune, -depth, -print, -print0,
+// -delete and `-exec cmd {} ;` / `-exec cmd {} +`.
 import type { StatData } from "../../../../kernel/vfs/types";
 import { runtime } from "../../../runtime";
 import type { Command, CommandContext } from "../context";
@@ -26,6 +26,10 @@ class FindParser {
   hasAction = false;
   maxDepth = Infinity;
   minDepth = 0;
+  /** -depth, or -delete: a directory is evaluated after its entries. */
+  depthFirst = false;
+  /** An action failed in a way that makes find exit 1 (-delete). */
+  failed = false;
   readonly batches: { argv: string[]; paths: string[] }[] = [];
   private readonly args: string[];
   private readonly ctx: CommandContext;
@@ -172,6 +176,10 @@ class FindParser {
         }
         return { type: "test", run: (entry) => entry.stat.mtimeMs > stat.mtimeMs };
       }
+      case "-depth":
+        this.pos++;
+        this.depthFirst = true;
+        return { type: "test", run: () => true };
       case "-true":
         this.pos++;
         return { type: "test", run: () => true };
@@ -203,9 +211,16 @@ class FindParser {
       case "-delete":
         this.pos++;
         this.hasAction = true;
+        // As in GNU find: entries go before their directory, so a tree can be
+        // deleted at all.
+        this.depthFirst = true;
         return {
           type: "action",
           run: (entry) => {
+            // GNU find never deletes the starting point `.` itself.
+            if (baseName(entry.label) === ".") {
+              return true;
+            }
             try {
               if (isDir(entry.stat)) {
                 runtime().fs.rmdir(entry.path);
@@ -215,6 +230,7 @@ class FindParser {
               return true;
             } catch (error) {
               this.ctx.io.err(`find: cannot delete '${entry.label}': ${errorText(error)}\n`);
+              this.failed = true;
               return false;
             }
           },
@@ -315,22 +331,26 @@ export const find: Command = async (ctx, args) => {
       return;
     }
     const entry: FindEntry = { path, label, stat, depth, prune: false };
-    if (depth >= parser.minDepth) {
-      const matched = expr ? await evaluate(expr, entry) : true;
-      if (matched && !parser.hasAction) {
-        print(entry);
+    const check = async (): Promise<void> => {
+      if (depth >= parser.minDepth) {
+        const matched = expr ? await evaluate(expr, entry) : true;
+        if (matched && !parser.hasAction) {
+          print(entry);
+        }
       }
+    };
+    if (!parser.depthFirst) {
+      await check();
     }
     if (isDir(stat) && !entry.prune && depth < parser.maxDepth && !ctx.io.broken) {
-      let names: string[];
+      let names: string[] | null = null;
       try {
         names = fs.readdir(path).map((child) => child.name);
       } catch (error) {
         ctx.io.err(`find: '${label}': ${errorText(error)}\n`);
         status = 1;
-        return;
       }
-      for (const name of names) {
+      for (const name of names ?? []) {
         await visit(
           `${path === "/" ? "" : path}/${name}`,
           `${label.endsWith("/") ? label : `${label}/`}${name}`,
@@ -338,9 +358,15 @@ export const find: Command = async (ctx, args) => {
         );
       }
     }
+    if (parser.depthFirst) {
+      await check();
+    }
   };
   for (const path of paths) {
     await visit(ctx.resolve(path), path, 0);
+  }
+  if (parser.failed) {
+    status = 1;
   }
   for (const batch of parser.batches) {
     if (batch.paths.length === 0) {

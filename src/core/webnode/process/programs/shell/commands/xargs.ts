@@ -1,7 +1,8 @@
-// `xargs [-n max] [-I repl] [-0] [-d delim] [-r] [-t] [command [args…]]`.
+// `xargs [-n max] [-L lines] [-P procs] [-s size] [-I repl] [-0] [-d delim] [-r] [-t]
+// [command [args…]]`. -P is accepted but the commands run one at a time.
 import type { Command } from "../context";
-import { decode } from "../io";
 import { shellQuote } from "../quote";
+import { decodeText, inputLines } from "./lines";
 
 /** Splits xargs input on blanks and newlines, honouring quotes and backslashes. */
 export function splitXargs(text: string): string[] {
@@ -49,23 +50,65 @@ export function splitXargs(text: string): string[] {
 /** `xargs`. */
 export const xargs: Command = async (ctx, args) => {
   let max = Infinity;
+  let maxLines: number | null = null;
   let replace: string | null = null;
   let delimiter: string | null = null;
   let noEmpty = false;
   let trace = false;
+  /** The value of `-x N`, `-xN` or `--long=N`; null when `arg` is not that option. */
+  const valueOf = (arg: string, letter: string, long: string): string | null | undefined => {
+    if (arg === `-${letter}` || arg === `--${long}`) {
+      return undefined;
+    }
+    if (arg.startsWith(`-${letter}`) && !arg.startsWith("--")) {
+      return arg.slice(2);
+    }
+    if (arg.startsWith(`--${long}=`)) {
+      return arg.slice(long.length + 3);
+    }
+    return null;
+  };
   let i = 0;
   for (; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "-n") {
-      max = Number(args[++i]);
-    } else if (/^-n\d+$/.test(arg)) {
-      max = Number(arg.slice(2));
+    let numeric: { letter: string; value: string | undefined } | null = null;
+    for (const [letter, long] of [
+      ["n", "max-args"],
+      ["L", "max-lines"],
+      ["P", "max-procs"],
+      ["s", "max-chars"],
+    ]) {
+      const value = valueOf(arg, letter, long);
+      if (value !== null) {
+        numeric = { letter, value: value ?? args[++i] };
+        break;
+      }
+    }
+    if (numeric) {
+      const count = Number(numeric.value);
+      if (
+        numeric.value === undefined ||
+        !/^\d+$/.test(numeric.value) ||
+        (count < 1 && numeric.letter !== "P")
+      ) {
+        ctx.io.err(
+          `xargs: invalid number "${numeric.value ?? ""}" for -${numeric.letter} option\n`,
+        );
+        return 1;
+      }
+      if (numeric.letter === "n") {
+        max = count;
+        maxLines = null;
+      } else if (numeric.letter === "L") {
+        maxLines = count;
+        max = Infinity;
+      }
+      // -P runs the commands one after another all the same; -s has no
+      // limit to lower here.
     } else if (arg === "-I" || arg === "-i") {
       replace = arg === "-i" ? "{}" : (args[++i] ?? "{}");
-      max = 1;
     } else if (arg.startsWith("-I") && arg.length > 2) {
       replace = arg.slice(2);
-      max = 1;
     } else if (arg === "-0" || arg === "--null") {
       delimiter = "\0";
     } else if (arg === "-d") {
@@ -74,8 +117,6 @@ export const xargs: Command = async (ctx, args) => {
       noEmpty = true;
     } else if (arg === "-t" || arg === "--verbose") {
       trace = true;
-    } else if (arg === "-P" || arg === "-L" || arg === "-s") {
-      i++;
     } else if (arg.startsWith("-") && arg !== "-") {
       ctx.io.err(`xargs: ${arg}: not supported\n`);
       return 1;
@@ -83,41 +124,15 @@ export const xargs: Command = async (ctx, args) => {
       break;
     }
   }
-  if (!Number.isFinite(max) && max !== Infinity) {
-    ctx.io.err("xargs: invalid number for -n\n");
-    return 1;
-  }
   const command = args.slice(i);
   if (command.length === 0) {
     command.push("echo");
   }
-  const text = decode(await ctx.io.readAll());
-  let items: string[];
-  if (replace !== null && delimiter === null) {
-    items = text.split("\n").filter((line) => line.trim() !== "");
-  } else if (delimiter !== null) {
-    items = text.split(delimiter);
-    if (
-      items[items.length - 1] === "" ||
-      (delimiter === "\0" && items[items.length - 1] === "\n")
-    ) {
-      items.pop();
-    }
-  } else {
-    items = splitXargs(text);
-  }
-  if (items.length === 0 && (noEmpty || replace !== null)) {
-    return 0;
-  }
-  const batches: string[][] = [];
-  if (items.length === 0) {
-    batches.push([]);
-  }
-  for (let start = 0; start < items.length; start += max) {
-    batches.push(items.slice(start, start + max));
-  }
   let status = 0;
-  for (const batch of batches) {
+  let ran = false;
+  /** Runs the command on one batch; a status to exit with at once (126, 127), else null. */
+  const run = async (batch: string[]): Promise<number | null> => {
+    ran = true;
     const argv =
       replace !== null
         ? command.map((arg) => arg.split(replace as string).join(batch[0] ?? ""))
@@ -131,6 +146,78 @@ export const xargs: Command = async (ctx, args) => {
     }
     if (result !== 0) {
       status = 123;
+    }
+    return null;
+  };
+  const pending: string[] = [];
+  if (delimiter !== null) {
+    const items = decodeText(await ctx.io.readAll()).split(delimiter);
+    if (
+      items[items.length - 1] === "" ||
+      (delimiter === "\0" && items[items.length - 1] === "\n")
+    ) {
+      items.pop();
+    }
+    pending.push(...items);
+  } else {
+    // A command runs as soon as its batch is complete (one line for -I, N
+    // lines for -L, N items for -n), so `watch | xargs -n1 cmd` keeps up.
+    let lines = 0;
+    for await (const batch of inputLines(ctx, [])) {
+      if ("error" in batch) {
+        continue;
+      }
+      for (const line of batch.lines) {
+        if (replace !== null) {
+          if (line.trim() !== "") {
+            const early = await run([line]);
+            if (early !== null) {
+              return early;
+            }
+          }
+          continue;
+        }
+        const items = splitXargs(line);
+        if (items.length === 0) {
+          continue;
+        }
+        pending.push(...items);
+        lines++;
+        if (maxLines !== null && lines >= maxLines) {
+          const early = await run(pending.splice(0));
+          lines = 0;
+          if (early !== null) {
+            return early;
+          }
+        }
+        while (pending.length >= max) {
+          const early = await run(pending.splice(0, max));
+          if (early !== null) {
+            return early;
+          }
+        }
+      }
+    }
+  }
+  if (replace !== null) {
+    for (const item of pending.splice(0)) {
+      const early = await run([item]);
+      if (early !== null) {
+        return early;
+      }
+    }
+    return status;
+  }
+  while (pending.length > 0) {
+    const early = await run(pending.splice(0, Number.isFinite(max) ? max : pending.length));
+    if (early !== null) {
+      return early;
+    }
+  }
+  if (!ran && !noEmpty) {
+    const early = await run([]);
+    if (early !== null) {
+      return early;
     }
   }
   return status;

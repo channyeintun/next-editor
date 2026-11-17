@@ -21,9 +21,20 @@ export const rm: Command = (ctx, args) => {
     ctx.io.err("rm: missing operand\n");
     return 1;
   }
+  // -i would ask before each removal; a script here cannot answer, so refuse
+  // rather than remove what the user wanted to be asked about. -f overrides.
+  const confirm = parsed.flags.has("i") && !force;
   const fs = runtime().fs;
   let status = 0;
   for (const operand of parsed.operands) {
+    // POSIX: an operand whose last component is . or .. is skipped, even when
+    // its path names another directory (`rm -rf ..` would remove the parent).
+    const last = operand.replace(/\/+$/, "").split("/").pop();
+    if (last === "." || last === "..") {
+      ctx.io.err(`rm: refusing to remove '.' or '..' directory: skipping '${operand}'\n`);
+      status = 1;
+      continue;
+    }
     const path = ctx.resolve(operand);
     if (path === "/") {
       ctx.io.err("rm: it is dangerous to operate recursively on '/'\n");
@@ -38,6 +49,11 @@ export const rm: Command = (ctx, args) => {
         ctx.io.err(`rm: cannot remove '${operand}': ${errorText(error)}\n`);
         status = 1;
       }
+      continue;
+    }
+    if (confirm) {
+      ctx.io.err(`rm: not removing '${operand}': -i cannot ask for confirmation here\n`);
+      status = 1;
       continue;
     }
     try {

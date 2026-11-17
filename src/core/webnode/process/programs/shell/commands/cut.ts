@@ -1,6 +1,7 @@
 // `cut -f list [-d delim] [-s]` and `cut -c list` / `-b list`.
 import type { Command } from "../context";
-import { options, readTexts, splitLines } from "./util";
+import { inputLines, writeText } from "./lines";
+import { options } from "./util";
 
 /** Parses a cut list (`1,3-5,-2,4-`) into a membership test. */
 export function parseList(spec: string): ((n: number) => boolean) | null {
@@ -58,10 +59,16 @@ export const cut: Command = async (ctx, args) => {
   const outputDelimiterOption = parsed.flags.get("D");
   const outputDelimiter =
     typeof outputDelimiterOption === "string" ? outputDelimiterOption : delimiter;
-  const { texts, failed } = await readTexts(ctx, parsed.operands);
-  let out = "";
-  for (const input of texts) {
-    for (const line of splitLines(input.text)) {
+  // Each line is cut as it arrives.
+  let failed = false;
+  for await (const batch of inputLines(ctx, parsed.operands)) {
+    if ("error" in batch) {
+      ctx.io.err(`cut: ${batch.error}\n`);
+      failed = true;
+      continue;
+    }
+    let out = "";
+    for (const line of batch.lines) {
       if (typeof fields === "string") {
         if (!line.includes(delimiter)) {
           if (!parsed.flags.has("s")) {
@@ -79,7 +86,9 @@ export const cut: Command = async (ctx, args) => {
           .join("")}\n`;
       }
     }
+    if (!writeText(ctx, out)) {
+      break;
+    }
   }
-  ctx.io.out(out);
   return failed ? 1 : 0;
 };

@@ -6,7 +6,6 @@ import type { StatData } from "../../../../kernel/vfs/types";
 import { S_IFDIR, S_IFLNK, S_IFMT, S_IFREG } from "../../../../kernel/vfs/types";
 import { runtime } from "../../../runtime";
 import type { CommandContext } from "../context";
-import { decode } from "../io";
 
 /** Joins and normalizes `path` against `cwd` (`.`, `..`, `//`). */
 export function resolvePath(cwd: string, path: string): string {
@@ -225,34 +224,4 @@ export async function* inputs(
       yield { name: file, error: `${file}: ${errorText(error)}` };
     }
   }
-}
-
-/** Reads each input as text, reporting missing files; returns the texts and whether any failed. */
-export async function readTexts(
-  ctx: CommandContext,
-  files: string[],
-): Promise<{ texts: { name: string; text: string }[]; failed: boolean }> {
-  const texts: { name: string; text: string }[] = [];
-  let failed = false;
-  for await (const input of inputs(ctx, files)) {
-    if ("error" in input) {
-      ctx.io.err(`${ctx.name}: ${input.error}\n`);
-      failed = true;
-    } else {
-      texts.push({ name: input.name, text: decode(input.data) });
-    }
-  }
-  return { texts, failed };
-}
-
-/** Splits text into lines, dropping the empty string after a final newline. */
-export function splitLines(text: string): string[] {
-  if (text === "") {
-    return [];
-  }
-  const lines = text.split("\n");
-  if (lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-  return lines;
 }

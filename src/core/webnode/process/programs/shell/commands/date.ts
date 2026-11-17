@@ -1,5 +1,5 @@
-// `date [-u] [-d when] [-I] [+format]`: the default format and the common
-// `%` conversions.
+// `date [-u] [-d when] [-I[timespec]] [-R] [+format]`: the default format and
+// the common `%` conversions, with GNU's widths (`%3N`) and `%:z`.
 import type { Command } from "../context";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -74,10 +74,22 @@ const two = (n: number): string => String(n).padStart(2, "0");
 /** Formats a date with `date`'s `%` conversions. */
 export function formatDate(date: Date, format: string, utc: boolean): string {
   const p = partsOf(date, utc);
-  const offset = (): string => {
+  /** `%z`, and with colons `%:z` (+hh:mm), `%::z` (+hh:mm:ss), `%:::z` (+hh, or +hh:mm). */
+  const offset = (colons: number): string => {
     const sign = p.offsetMinutes < 0 ? "-" : "+";
     const abs = Math.abs(p.offsetMinutes);
-    return `${sign}${two(Math.floor(abs / 60))}${two(abs % 60)}`;
+    const hours = two(Math.floor(abs / 60));
+    const minutes = two(abs % 60);
+    if (colons === 0) {
+      return `${sign}${hours}${minutes}`;
+    }
+    if (colons === 1) {
+      return `${sign}${hours}:${minutes}`;
+    }
+    if (colons === 2) {
+      return `${sign}${hours}:${minutes}:00`;
+    }
+    return abs % 60 === 0 ? `${sign}${hours}` : `${sign}${hours}:${minutes}`;
   };
   const dayOfYear = (): number => {
     const start = utc ? Date.UTC(p.year, 0, 1) : new Date(p.year, 0, 1).getTime();
@@ -111,7 +123,7 @@ export function formatDate(date: Date, format: string, utc: boolean): string {
     w: () => String(p.weekday),
     s: () => String(Math.floor(date.getTime() / 1000)),
     Z: () => p.zone,
-    z: offset,
+    z: () => offset(0),
     T: () => `${two(p.hours)}:${two(p.minutes)}:${two(p.seconds)}`,
     R: () => `${two(p.hours)}:${two(p.minutes)}`,
     D: () => `${two(p.month + 1)}/${two(p.day)}/${two(p.year % 100)}`,
@@ -123,22 +135,48 @@ export function formatDate(date: Date, format: string, utc: boolean): string {
     t: () => "\t",
     "%": () => "%",
   };
-  return format.replace(/%([-_0^#]?)([a-zA-Z%])/g, (whole, flag: string, letter: string) => {
-    const conversion = conversions[letter];
-    if (!conversion) {
-      return whole;
-    }
-    let value = conversion();
-    if (flag === "-") {
-      value = value.replace(/^[0 ]+(?=.)/, "");
-    } else if (flag === "_") {
-      value = value.replace(/^0/, " ");
-    } else if (flag === "^") {
-      value = value.toUpperCase();
-    }
-    return value;
-  });
+  // %[flag][width][colons]letter, as in GNU date: `%3N` is milliseconds,
+  // `%:z` is +hh:mm.
+  return format.replace(
+    /%([-_0^#]?)(\d*)(:{0,3})([a-zA-Z%])/g,
+    (whole, flag: string, widthText: string, colons: string, letter: string) => {
+      if (colons !== "" && letter !== "z") {
+        return whole;
+      }
+      const conversion = conversions[letter];
+      if (!conversion) {
+        return whole;
+      }
+      let value = letter === "z" ? offset(colons.length) : conversion();
+      const width = widthText === "" ? null : Number(widthText);
+      if (letter === "N" && width !== null) {
+        // A width on %N keeps that many digits of the fraction.
+        return width <= 9 ? value.slice(0, width) : value.padEnd(width, "0");
+      }
+      if (flag === "-") {
+        value = value.replace(/^[0 ]+(?=.)/, "");
+      } else if (flag === "_") {
+        value = value.replace(/^0/, " ");
+      } else if (flag === "^") {
+        value = value.toUpperCase();
+      }
+      if (width !== null && value.length < width) {
+        const numeric = /^\d+$/.test(value.trim()) && flag !== "_";
+        value = numeric ? value.trim().padStart(width, "0") : value.padStart(width, " ");
+      }
+      return value;
+    },
+  );
 }
+
+/** The `-I` / `--iso-8601` formats by TIMESPEC (GNU date). */
+const ISO_FORMATS: Record<string, string> = {
+  date: "%F",
+  hours: "%FT%H%:z",
+  minutes: "%FT%H:%M%:z",
+  seconds: "%FT%T%:z",
+  ns: "%FT%T,%N%:z",
+};
 
 /** `date`. */
 export const date: Command = (ctx, args) => {
@@ -161,12 +199,18 @@ export const date: Command = (ctx, args) => {
         return 1;
       }
       when = new Date(parsed);
-    } else if (arg === "-I" || arg.startsWith("--iso-8601")) {
-      format = "%F";
+    } else if (arg === "-I" || arg === "--iso-8601") {
+      format = ISO_FORMATS.date;
+    } else if (arg.startsWith("-I") || arg.startsWith("--iso-8601=")) {
+      const spec = arg.startsWith("-I") ? arg.slice(2) : arg.slice(11);
+      const iso = Object.keys(ISO_FORMATS).find((name) => name.startsWith(spec) && spec !== "");
+      if (iso === undefined) {
+        ctx.io.err(`date: invalid argument '${spec}' for '--iso-8601'\n`);
+        return 1;
+      }
+      format = ISO_FORMATS[iso];
     } else if (arg === "-R" || arg === "--rfc-email") {
       format = "%a, %d %b %Y %H:%M:%S %z";
-    } else if (arg.startsWith("-I")) {
-      format = arg === "-Iseconds" ? "%FT%T%z" : "%F";
     } else if (arg.startsWith("+")) {
       format = arg.slice(1);
     } else {
