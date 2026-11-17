@@ -96,10 +96,14 @@ const RETRY_DELAY_MS = 300;
 
 /**
  * A stalled connection otherwise leaves an install waiting forever. The clock
- * restarts whenever bytes arrive, so a large tarball on a slow link is not cut off.
+ * restarts whenever bytes arrive, so a large tarball on a slow link is not cut
+ * off. The waits are long on purpose: an install opens two dozen requests at
+ * once, and on a slow link one of them can get nothing for a long while
+ * although the link is alive (30 s here failed installs that would have
+ * finished). pnpm waits 60 s for a request and npm 5 minutes.
  */
-const PACKUMENT_TIMEOUT_MS = 30_000;
-const TARBALL_TIMEOUT_MS = 120_000;
+const PACKUMENT_TIMEOUT_MS = 120_000;
+const TARBALL_TIMEOUT_MS = 300_000;
 
 /** The registry used when the environment names none. */
 export const DEFAULT_REGISTRY = "https://registry.npmjs.org";
