@@ -238,25 +238,6 @@ function minimalScriptShell(lessonType: StudioLessonType) {
           environment: {},
         },
       };
-    case "python":
-      // WebContainer WASI python3: no lockfile, no dev server, console output.
-      return {
-        ...base,
-        lesson: {
-          slug: "t-py",
-          title: "T",
-          locale: "en-US",
-          workspace: workspace({ "main.py": "print('hi')\n" }, "main.py"),
-        },
-        runtime: {
-          kind: "webcontainer",
-          adapterVersion: 1,
-          defaultMode: "live",
-          initCommand: "",
-          runCommand: "python3 main.py",
-          environment: {},
-        },
-      };
   }
 }
 
@@ -315,11 +296,9 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
       expected[lessonType] = kind;
     }
     expect(parseRuntimeMatrix(reference)).toEqual(expected);
-    // JS/TS/Python all run in the WebContainer (Python on WASI python3); the
-    // fork's regression was labelling JS/TS `none`.
+    // JS/TS run in the WebContainer; the fork's regression was labelling them `none`.
     expect(RUNTIME_KIND_FOR_LESSON.javascript).toBe("webcontainer");
     expect(RUNTIME_KIND_FOR_LESSON.typescript).toBe("webcontainer");
-    expect(RUNTIME_KIND_FOR_LESSON.python).toBe("webcontainer");
   });
 
   it("documents exactly the authored action types from the schema", () => {
@@ -342,12 +321,12 @@ describe("lesson-script skill bundle contract (SKILL-01)", () => {
     expect(canonicalReference).not.toMatch(/studio-director\.ts` verifies the page ids\s+early/);
   });
 
-  it("documents expect.output for both Playground and console-only Python lessons", () => {
+  it("documents expect.output as a Playground-only gate", () => {
     const expectOutputRow = reference
       .split("\n")
       .find((line) => line.startsWith("| `expect.output`"));
-    expect(expectOutputRow).toMatch(/Python/);
-    expect(expectOutputRow).not.toMatch(/Playground kinds only/);
+    expect(expectOutputRow).toMatch(/Playground runtimes/);
+    expect(expectOutputRow).not.toMatch(/Python/);
   });
 
   it("states the persona-guide and critic versions critic.ts carries", () => {

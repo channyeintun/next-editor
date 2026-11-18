@@ -484,41 +484,24 @@ const WEB_CONTAINER_RUNTIME = {
   lockfilePath: "package-lock.json",
   environment: {},
 };
-const PYTHON_WORKSPACE = {
-  lessonType: "python",
-  name: "Python",
-  entryFilePath: "main.py",
-  files: { "main.py": "print('ok')\n" },
-};
-const PYTHON_RUNTIME = {
-  kind: "webcontainer",
-  adapterVersion: 1,
-  defaultMode: "live",
-  initCommand: "",
-  runCommand: "python3 main.py",
-  environment: {},
-};
 const NO_RETRY = { maxAttempts: 1, delayMs: 0 };
 
 function makeRuntimePlan(
   actions: Record<string, unknown>[],
-  {
-    python = false,
-    dependencies,
-  }: { python?: boolean; dependencies?: Record<string, string> } = {},
+  { dependencies }: { dependencies?: Record<string, string> } = {},
 ): StudioPlan {
   return parseStudioPlan({
     schemaVersion: 1,
     lesson: { slug: "background-start", title: "Background start", locale: "en-US" },
     seed: 7,
-    workspace: python ? PYTHON_WORKSPACE : WEB_CONTAINER_WORKSPACE,
+    workspace: WEB_CONTAINER_WORKSPACE,
     narration: {
       audioPath: "/x.m4a",
       mimeType: "audio/mp4",
       expectedDurationMs: 5_000,
       captions: { id: "c", language: "en", cues: [{ start: 0, end: 1_000, text: "hi" }] },
     },
-    runtime: python ? PYTHON_RUNTIME : WEB_CONTAINER_RUNTIME,
+    runtime: WEB_CONTAINER_RUNTIME,
     ...(dependencies ? { dependencies } : {}),
     actions,
   });
@@ -775,38 +758,6 @@ describe("performPlan with a background runtime.start", () => {
     expect(result.receipts[1].error).toMatch(/pnpm install exploded/);
     expect(result.receipts[1].startedAtMs).not.toBeNull();
   });
-
-  it("keeps a Python start in the foreground: it is the run, so later edits wait for it", async () => {
-    const { calls, driver } = slowStartDriver(200);
-    const plan = makeRuntimePlan(
-      [
-        startAction(0),
-        {
-          id: "type",
-          type: "editor.type",
-          at: 10,
-          timeoutMs: 1_000,
-          path: "main.py",
-          anchor: { after: "", occurrence: 1 },
-          chunks: [{ delayMs: 5, text: "#" }],
-        },
-        { id: "out", type: "expect.output", at: 20, timeoutMs: 1_000, contains: "ok" },
-      ],
-      { python: true },
-    );
-    const controller = new AbortController();
-
-    const result = await performPlan({
-      plan,
-      driver,
-      clock: makeClock(),
-      signal: controller.signal,
-      abort: () => controller.abort(),
-    });
-
-    expect(result.status).toBe("completed");
-    expect(calls).toEqual(["runtime-start", "runtime-start-settled", "type:main.py", "wait:ok"]);
-  });
 });
 
 describe("actionAwaitsRuntimeStart", () => {
@@ -860,14 +811,10 @@ describe("actionAwaitsRuntimeStart", () => {
     expect(of({ type: "whiteboard.point", target: { assetId: "box" } })).toBe(false);
   });
 
-  it("runs only a server-style runtime.start in the background", () => {
-    expect(performsInBackground(base, plan)).toBe(true);
+  it("runs only runtime.start in the background", () => {
+    expect(performsInBackground(base)).toBe(true);
     expect(
-      performsInBackground({ ...base, type: "runtime.waitForReady" } as StudioPlanAction, plan),
+      performsInBackground({ ...base, type: "runtime.waitForReady" } as StudioPlanAction),
     ).toBe(false);
-    // A Python start is the one-shot program run itself.
-    expect(performsInBackground(base, makeRuntimePlan([startAction(0)], { python: true }))).toBe(
-      false,
-    );
   });
 });

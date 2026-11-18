@@ -23,14 +23,14 @@ which turns a written lesson script into a narrated, recorded lesson.
 Every lesson is a real multi-file workspace, edited in Monaco: files and folders in the sidebar,
 binary assets (images, video, audio, fonts, PDF, Wasm) by drag-and-drop or upload, and `.zip`
 import and export.
-There are 19 lesson types, chosen from the **Starter Template** menu (the gear in the editor
+There are 18 lesson types, chosen from the **Starter Template** menu (the gear in the editor
 header). Each runs in one of three places:
 
-| Runs on                                                            | Lesson types                                                                                                                                                                                                          |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| WebContainer — Node.js in the browser, with preview and a terminal | HTML / CSS, React (TanStack Start), Vue, Solid, Svelte, HTMX + Express, Alpine AJAX + Express, Express + TypeScript, JavaScript / Node.js, TypeScript, Kite + Vite (web), and Python (console only, WASI interpreter) |
-| The Worker's playground proxies, with no sign-in needed            | Go (play.golang.org), Kotlin (api.kotlinlang.org), Rust (play.rust-lang.org), Zig (zig-play.dev), and Haskell (play.haskell.org)                                                                                      |
-| The page itself, with no service                                   | Kite, on a Wasm build of `kitec`; x86-64 Assembly, on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`                                                                                  |
+| Runs on                                                            | Lesson types                                                                                                                                                                 |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| WebContainer — Node.js in the browser, with preview and a terminal | HTML / CSS, React (TanStack Start), Vue, Solid, Svelte, HTMX + Express, Alpine AJAX + Express, Express + TypeScript, JavaScript / Node.js, TypeScript, and Kite + Vite (web) |
+| The Worker's playground proxies, with no sign-in needed            | Go (play.golang.org), Kotlin (api.kotlinlang.org), Rust (play.rust-lang.org), Zig (zig-play.dev), and Haskell (play.haskell.org)                                             |
+| The page itself, with no service                                   | Kite, on a Wasm build of `kitec`; x86-64 Assembly, on a first-party NASM-syntax assembler and x86-64 Linux machine in `src/core/x86`                                         |
 
 - The runtime dock under the editor holds the runner, the preview's console, terminal tabs
   (xterm.js over the WebContainer shell), and the coding agent. Playground and in-page lessons get

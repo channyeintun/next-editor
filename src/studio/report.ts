@@ -79,7 +79,7 @@ export interface StudioBuildManifest {
     initCommand: string;
     runCommand: string;
     expectedPort: number | null;
-    /** Null for Python (WASI python3 installs nothing, so there is no lockfile). */
+    /** Null when the lesson pins no lockfile. */
     lockfilePath: string | null;
     /** Null when lockfilePath is null. */
     lockfileSha256: string | null;

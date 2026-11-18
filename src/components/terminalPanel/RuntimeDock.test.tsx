@@ -45,7 +45,6 @@ describe("RuntimeDock", () => {
 
   it.each([
     ["html-css", "Terminal"],
-    ["python", "Terminal"],
     ["kite-web", "Terminal"],
     ["go", "go-playground"],
     ["kite", "kite-playground"],

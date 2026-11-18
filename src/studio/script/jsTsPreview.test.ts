@@ -154,48 +154,6 @@ describe("JavaScript and TypeScript Studio fixtures", () => {
     expect(timingGateCheck(computeTimingStats(receipts), maxP95).ok).toBe(false);
   });
 
-  it("compiles a Python WebContainer lesson (WASI python3, console expect.output)", () => {
-    const script = loadFixture("python-console.yaml");
-    const { plan } = compileLessonScript(scheduledInputFor(script));
-
-    expect(plan.workspace.lessonType).toBe("python");
-    expect(plan.runtime).toMatchObject({ kind: "webcontainer", runCommand: "python3 main.py" });
-    // Python omits the lockfile (nothing is installed).
-    expect((plan.runtime as { lockfilePath?: string }).lockfilePath).toBeUndefined();
-    // Runs one-shot then gates the console — no waitForReady/preview.
-    expect(plan.actions.map((action) => action.type)).toEqual(["runtime.start", "expect.output"]);
-    expect(plan.dependencies).toEqual({ "expect-cube": "run" });
-  });
-
-  it("rejects a Python lesson that reaches for a preview server", () => {
-    const withPreview = YAML.parse(
-      readFileSync(resolve(FIXTURE_ROOT, "python-console.yaml"), "utf8"),
-    );
-    withPreview.scenes[0].actions.push({
-      id: "open",
-      type: "preview.open",
-      at: { afterAction: "run" },
-      timeoutMs: 5000,
-      mode: "docked",
-      retry: { maxAttempts: 2, delayMs: 100 },
-    });
-    expect(() => parseLessonScript(withPreview)).toThrow(/Python runs one-shot to the console/);
-  });
-
-  it("rejects Python runtime fields that contradict the console-only contract", () => {
-    const invalidRuntimeVariants: Array<[Record<string, unknown>, RegExp]> = [
-      [{ lockfilePath: "main.py" }, /must omit lockfilePath/],
-      [{ expectedPort: 5173 }, /must omit expectedPort/],
-      [{ initCommand: "npm install" }, /empty initCommand/],
-      [{ runCommand: "node main.py" }, /must invoke "python3"/],
-    ];
-    for (const [runtimePatch, message] of invalidRuntimeVariants) {
-      const raw = YAML.parse(readFileSync(resolve(FIXTURE_ROOT, "python-console.yaml"), "utf8"));
-      Object.assign(raw.runtime, runtimePatch);
-      expect(() => parseLessonScript(raw)).toThrow(message);
-    }
-  });
-
   it("accepts a JS/TS WebContainer lesson without a lockfile, but not a missing one", () => {
     const fixture = YAML.parse(
       readFileSync(resolve(FIXTURE_ROOT, "typescript-vite-preview.yaml"), "utf8"),

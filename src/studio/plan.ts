@@ -513,7 +513,7 @@ export function planActionBusyMs(action: StudioActionTiming): number {
  * Lesson types are the languages the platform teaches — not the starter
  * templates (react, vue, …), which are just seeded workspace conveniences.
  * javascript/typescript lessons pin arbitrary WebContainer (Node) workspaces;
- * python runs its WASI script model; go/kotlin/rust/zig/haskell use their
+ * go/kotlin/rust/zig/haskell use their
  * playgrounds; kite and asm need no service at all, compiling and running in
  * the page.
  * Each value is also a valid `WorkspaceLessonType` for the pinned project.
@@ -521,7 +521,6 @@ export function planActionBusyMs(action: StudioActionTiming): number {
 export const studioLessonTypeSchema = z.enum([
   "javascript",
   "typescript",
-  "python",
   "go",
   "kotlin",
   "rust",
@@ -976,10 +975,8 @@ export const studioRuntimeSchema = z.discriminatedUnion("kind", [
     expectedPort: z.number().int().min(1).max(65_535).optional(),
     /**
      * Exact contents are pinned in workspace.files and covered by the plan hash.
-     * Required for JavaScript/TypeScript (reproducible npm/pnpm install); omitted
-     * for Python, which runs one-shot on the WebContainer's built-in WASI
-     * `python3` with no package install (validated per lessonType in
-     * runtimeContract.ts).
+     * Optional: the WebContainer's built-in pnpm rejects a lockfile a newer pnpm
+     * wrote, so lessons may pin exact versions in package.json instead.
      */
     lockfilePath: z.string().min(1).optional(),
     environment: z.record(z.string().min(1), z.string()).default({}),

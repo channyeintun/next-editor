@@ -23,7 +23,6 @@ export const WORKSPACE_LESSON_TYPE_LABELS: Record<WorkspaceLessonType, string> =
   typescript: "TypeScript",
   go: "Go",
   kotlin: "Kotlin",
-  python: "Python",
   rust: "Rust",
   zig: "Zig",
   haskell: "Haskell",
@@ -69,11 +68,8 @@ export type WorkspaceExecutionKind =
  * WebContainer: the Vite-based SPAs (react, vue, solid, svelte) and html-css
  * run a Vite dev server, while htmx-express, alpine-express, and express-ts run
  * an Express server. The language-level javascript and typescript lessons run
- * their entry script with Node (exit-and-rerun, like python), but keep the
- * full Node runtime — they may install packages or start servers. Python also
- * runs in the WebContainer, but through its experimental WASI interpreter —
- * the runner executes the script and exits instead of keeping a server alive.
- * Go, Kotlin, Rust, Zig, and Haskell are deliberately excluded because they
+ * their entry script with Node (exit-and-rerun), but keep the full Node
+ * runtime — they may install packages or start servers. Go, Kotlin, Rust, Zig, and Haskell are deliberately excluded because they
  * use the selective Playground execution paths.
  *
  * A `Record` keyed by the union, like the labels above: a new lesson type that
@@ -93,7 +89,6 @@ const EXECUTION_KIND_BY_LESSON_TYPE: Record<WorkspaceLessonType, WorkspaceExecut
   typescript: "webcontainer",
   go: "go-playground",
   kotlin: "kotlin-playground",
-  python: "webcontainer",
   rust: "rust-playground",
   zig: "zig-playground",
   haskell: "haskell-playground",
@@ -122,7 +117,5 @@ export function lessonSupportsTerminal(lessonType: WorkspaceLessonType): boolean
 }
 
 export function lessonSupportsPreview(lessonType: WorkspaceLessonType): boolean {
-  // WebContainer's WASI Python cannot bind server sockets, so a python lesson
-  // never produces a previewable URL — its only output surface is the console.
-  return lessonRunsInWebContainer(lessonType) && lessonType !== "python";
+  return lessonRunsInWebContainer(lessonType);
 }

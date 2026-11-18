@@ -127,20 +127,6 @@ function buildSupportedStack(project: WorkspaceProject): string {
 
   // The table cannot catch a *lesson type* that runs a non-JS language inside
   // the WebContainer, so those get their own branch below.
-  if (project.lessonType === "python") {
-    return (
-      "Supported stack: Python 3 (standard library only). This lesson runs inside the " +
-      "in-browser WebContainer's experimental WASI Python interpreter: the workspace " +
-      "runner executes `python3 main.py` and streams stdout to the Runner console, and " +
-      "the shell provides the same `python3` command for short, bounded script runs. " +
-      "There is no pip and no way to install third-party packages, network sockets are " +
-      "unavailable (no http.server, Flask, or any listening server), and there is no " +
-      "preview surface — programs communicate through stdout. Keep every solution " +
-      "within the Python standard library and do not introduce other languages, " +
-      "package managers, or runtimes."
-    );
-  }
-
   if (project.lessonType === "kite-web") {
     return (
       "Supported stack: Kite for the application code, with HTML, CSS and the Vite " +

@@ -7,7 +7,6 @@ import {
   cancelledError,
 } from "./async";
 import { previewCommandTarget } from "./previewExpectation";
-import { runtimeStartIsOneShotRun } from "./runtimeContract";
 import type { ActionReceipt } from "./report";
 
 /**
@@ -220,15 +219,10 @@ type RuntimeStartAction = Extract<StudioPlanAction, { type: "runtime.start" }>;
  * Lessons start it early, during whiteboard and editor scenes, so the server
  * is up by the time the preview opens; performed in order it held every
  * action planned during the install, and the narration ran seconds ahead of
- * the board it was describing. A Python start stays in the foreground: it
- * installs nothing, and it is the program run itself, so an edit planned
- * after it must not reach main.py before python3 has read it.
+ * the board it was describing.
  */
-export function performsInBackground(
-  action: StudioPlanAction,
-  plan: Pick<StudioPlan, "workspace">,
-): action is RuntimeStartAction {
-  return action.type === "runtime.start" && !runtimeStartIsOneShotRun(plan.workspace.lessonType);
+export function performsInBackground(action: StudioPlanAction): action is RuntimeStartAction {
+  return action.type === "runtime.start";
 }
 
 /**
@@ -430,7 +424,7 @@ export async function performPlan({
       continue;
     }
 
-    if (performsInBackground(action, plan)) {
+    if (performsInBackground(action)) {
       startInBackground(index, action);
       continue;
     }

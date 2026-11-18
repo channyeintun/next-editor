@@ -139,7 +139,7 @@ function EditorHeader({ isAuthoring, breadcrumb }: EditorHeaderProps) {
         <div className="flex items-center gap-2">
           <WhiteboardHeaderButton />
           <SlidesButton presentationToggleOnly={!isAuthoring} />
-          {/* Go, Kotlin, Rust, and Python lessons have no preview surface — the
+          {/* Playground lessons (Go, Kotlin, Rust, …) have no preview surface — the
               control is absent, not disabled. */}
           {lessonSupportsPreview(lessonType) ? <PreviewHeaderButton /> : null}
         </div>

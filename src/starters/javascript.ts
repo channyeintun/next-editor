@@ -6,7 +6,7 @@ import { createWorkspaceFile } from "./shared";
  * JavaScript / Node.js lesson starter: a small multi-file ESM script executed
  * by the WebContainer's Node runtime. The runner's `pnpm dev` resolves to
  * `node main.js`, which prints to the Runner console and exits, then re-runs
- * on save. Unlike Python, the full Node.js runtime is available — lessons can
+ * on save. The full Node.js runtime is available — lessons can
  * `pnpm add` packages or start servers (the Preview panel appears when a
  * server begins listening).
  */

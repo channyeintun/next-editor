@@ -43,8 +43,6 @@ describe("starter registry", () => {
 
   it("gives every WebContainer starter a package.json to install", async () => {
     for (const lessonType of WORKSPACE_LESSON_TYPES.filter(lessonRunsInWebContainer)) {
-      // Python is the exception: WASI python3 is built in and installs nothing.
-      if (lessonType === "python") continue;
       const project = await createStarterWorkspaceForLessonType(lessonType);
       expect(project.files, `${lessonType} has no package.json`).toHaveProperty("package.json");
     }

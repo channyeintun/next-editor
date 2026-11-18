@@ -24,16 +24,13 @@ import { pinnedRunIdIssues } from "./fixtureRuns";
  * The one runtime kind each lesson type may declare. Go, Kotlin, Rust, Zig,
  * and Haskell execute through their selective proxies, Kite on its in-page
  * WebAssembly compiler, asm on its in-page TypeScript assembler and x86-64
- * machine; JavaScript, TypeScript, and
- * Python all run in the versioned WebContainer adapter. JS/TS drive a dev server
- * + preview; Python runs one-shot on the WebContainer's built-in WASI `python3`
- * (no server, no preview) and gates on console `expect.output` — the per-lesson
- * action rules are enforced in `runtimeContractIssues` below.
+ * machine; JavaScript and TypeScript run in the versioned WebContainer
+ * adapter, driving a dev server + preview — the per-lesson action rules are
+ * enforced in `runtimeContractIssues` below.
  */
 export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind> = {
   javascript: "webcontainer",
   typescript: "webcontainer",
-  python: "webcontainer",
   go: "go-playground",
   kotlin: "kotlin-playground",
   rust: "rust-playground",
@@ -42,19 +39,6 @@ export const RUNTIME_KIND_FOR_LESSON: Record<StudioLessonType, StudioRuntimeKind
   kite: "kite-playground",
   asm: "asm-playground",
 };
-
-/**
- * Whether a WebContainer lesson's runtime.start is the program run itself.
- * Python runs one-shot, so its start acknowledges only once the process has
- * exited (the driver waits for that) and the Performer keeps it in the
- * foreground, so edits planned after it go into the next run rather than
- * racing python3 for the file. JS/TS starts a dev server and acknowledges once
- * it has spawned. Takes the workspace's wider lesson-type string because the
- * driver reads it off the live project.
- */
-export function runtimeStartIsOneShotRun(lessonType: string): boolean {
-  return lessonType === "python";
-}
 
 type PreviewClickAction = Extract<StudioPlanAction, { type: "preview.click" }>;
 type ExpectPreviewAction = Extract<StudioPlanAction, { type: "expect.preview" }>;
@@ -121,31 +105,15 @@ export function runtimeContractIssues(
     }
   }
   if (runtime.kind === "webcontainer") {
-    // Python runs one-shot on the WebContainer's WASI `python3`: no package
-    // install (so no lockfile), no dev server, no preview. JS/TS drive a dev
-    // server + preview. A lockfile is optional for them: the WebContainer's
-    // built-in pnpm is older than current pnpm and rejects a lockfile a newer
-    // pnpm wrote, so lessons pin exact versions in package.json instead.
-    const isPython = workspace.lessonType === "python";
+    // JS/TS drive a dev server + preview. A lockfile is optional: the
+    // WebContainer's built-in pnpm is older than current pnpm and rejects a
+    // lockfile a newer pnpm wrote, so lessons pin exact versions in
+    // package.json instead.
     if (
       runtime.lockfilePath !== undefined &&
       !isPinnedFile(workspace.files, runtime.lockfilePath)
     ) {
       issues.push(`WebContainer lockfile "${runtime.lockfilePath}" is not in the pinned workspace`);
-    }
-    if (isPython) {
-      if (runtime.lockfilePath !== undefined) {
-        issues.push("A Python WebContainer lesson must omit lockfilePath (nothing is installed)");
-      }
-      if (runtime.expectedPort !== undefined) {
-        issues.push("A Python WebContainer lesson must omit expectedPort (it has no server)");
-      }
-      if (runtime.initCommand.trim() !== "") {
-        issues.push("A Python WebContainer lesson must use an empty initCommand");
-      }
-      if (!/^python3(?:\s|$)/.test(runtime.runCommand.trim())) {
-        issues.push('A Python WebContainer lesson runCommand must invoke "python3"');
-      }
     }
     for (const action of actions) {
       if (action.type === "runtime.run") {
@@ -153,19 +121,7 @@ export function runtimeContractIssues(
           `Action "${action.id}" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start`,
         );
       }
-      if (isPython) {
-        // WASI Python cannot bind a socket, so it has no server to wait for and
-        // no preview to interact with — it asserts through console expect.output.
-        if (
-          action.type === "runtime.waitForReady" ||
-          action.type.startsWith("preview.") ||
-          action.type === "expect.preview"
-        ) {
-          issues.push(
-            `Action "${action.id}" (${action.type}) needs a preview server; Python runs one-shot to the console — assert with expect.output`,
-          );
-        }
-      } else if (action.type === "expect.output") {
+      if (action.type === "expect.output") {
         issues.push(
           `Action "${action.id}" (expect.output) is for console runtimes; a ${workspace.lessonType} preview lesson asserts with expect.preview`,
         );

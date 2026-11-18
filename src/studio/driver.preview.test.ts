@@ -8,9 +8,7 @@ vi.mock("../monaco", () => ({
   workspacePathFromMonacoModelUri: vi.fn<() => string | null>(),
 }));
 
-function makeDriver(
-  options: { lessonType?: "python" | "typescript"; runtime?: StudioDriverDeps["runtime"] } = {},
-) {
+function makeDriver(options: { runtime?: StudioDriverDeps["runtime"] } = {}) {
   let previewState = { isOpen: false } as PreviewState;
   const previewEvents: PreviewEvent[] = [];
   const startRuntime = vi.fn<() => Promise<void>>(async () => {});
@@ -48,7 +46,7 @@ function makeDriver(
     getEditor: () => null,
     workspace: {
       getFile: () => null,
-      getProject: () => ({ lessonType: options.lessonType ?? "typescript" }) as never,
+      getProject: () => ({ lessonType: "typescript" }) as never,
       setActiveFilePath: () => {},
     },
     notifyWorkspaceEvent: () => {},
@@ -60,26 +58,16 @@ function makeDriver(
     notifyWhiteboardEvent: () => {},
     notifyPreviewEvent: (event: PreviewEvent) => previewEvents.push(event),
     runtimeMode: "live",
-    runtime: (options.runtime ??
-      (options.lessonType === "python"
-        ? {
-            kind: "webcontainer",
-            adapterVersion: 1,
-            defaultMode: "live",
-            initCommand: "",
-            runCommand: "python3 main.py",
-            environment: {},
-          }
-        : {
-            kind: "webcontainer",
-            adapterVersion: 1,
-            defaultMode: "live",
-            initCommand: "npm ci --no-audit --no-fund",
-            runCommand: "npm run dev",
-            expectedPort: 5173,
-            lockfilePath: "package-lock.json",
-            environment: {},
-          })) as StudioDriverDeps["runtime"],
+    runtime: (options.runtime ?? {
+      kind: "webcontainer",
+      adapterVersion: 1,
+      defaultMode: "live",
+      initCommand: "npm ci --no-audit --no-fund",
+      runCommand: "npm run dev",
+      expectedPort: 5173,
+      lockfilePath: "package-lock.json",
+      environment: {},
+    }) as StudioDriverDeps["runtime"],
     planSeed: 29,
     whiteboardAssets: [],
     webContainerRuntime: {
@@ -193,49 +181,6 @@ describe("StudioDriver WebContainer preview adapter", () => {
     // The Performer races this call against the same timeoutMs, so overrunning
     // it would replace this diagnostic with a bare "did not acknowledge".
     expect(performance.now() - startedAt).toBeLessThan(2_000);
-  });
-
-  it("does not acknowledge a Python runtime until its one-shot process exits cleanly", async () => {
-    const { driver, snapshot, startRuntime } = makeDriver({ lessonType: "python" });
-    Object.assign(snapshot, {
-      status: "starting",
-      previewUrl: null,
-      previewPort: null,
-    });
-    startRuntime.mockImplementationOnce(async () => {
-      window.setTimeout(() => {
-        Object.assign(snapshot, { status: "ready" });
-      }, 20);
-    });
-
-    let settled = false;
-    const result = driver.startRuntime(250).then((detail) => {
-      settled = true;
-      return detail;
-    });
-    await Promise.resolve();
-    expect(settled).toBe(false);
-    await expect(result).resolves.toMatchObject({ status: "ready" });
-  });
-
-  it("rejects a Python runtime whose one-shot process exits with an error", async () => {
-    const { driver, snapshot, startRuntime } = makeDriver({ lessonType: "python" });
-    Object.assign(snapshot, {
-      status: "starting",
-      errorMessage: null,
-      previewUrl: null,
-      previewPort: null,
-    });
-    startRuntime.mockImplementationOnce(async () => {
-      window.setTimeout(() => {
-        Object.assign(snapshot, {
-          status: "error",
-          errorMessage: 'Command "python3 main.py" exited with code 1',
-        });
-      }, 20);
-    });
-
-    await expect(driver.startRuntime(250)).rejects.toThrow("exited with code 1");
   });
 
   it("wraps a readiness timeout with the runtime's diagnostic", async () => {

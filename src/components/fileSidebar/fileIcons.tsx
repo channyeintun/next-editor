@@ -238,10 +238,6 @@ export function getFileIcon(file: WorkspaceTreeFile): ReactElement {
     return langBadge("#7F52FF", "#fff", "KT");
   }
 
-  if (file.language === "python") {
-    return langBadge("#3776AB", "#fff", "PY");
-  }
-
   if (file.language === "rust") {
     return langBadge("#B7410E", "#fff", "RS");
   }

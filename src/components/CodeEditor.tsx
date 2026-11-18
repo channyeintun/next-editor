@@ -709,7 +709,7 @@ const CodeEditorComponent: React.FC<CodeEditorProps> = ({ isAuthoring = false, b
             </div>
             {runtimeDock}
           </div>
-          {/* Go, Kotlin, and Python lessons have no preview surface at all —
+          {/* Playground lessons (Go, Kotlin, …) have no preview surface at all —
               the dock console is their only runtime output. */}
           {lessonSupportsPreview(lessonType) ? (
             <Suspense fallback={null}>

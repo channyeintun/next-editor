@@ -283,10 +283,10 @@ const clientItems: DiagramItem[] = [
   },
   {
     title: "WebContainer + xterm",
-    lines: ["Node.js in the browser: 12 lesson", "types, preview + terminal tabs"],
+    lines: ["Node.js in the browser: 11 lesson", "types, preview + terminal tabs"],
     noteTitle: "WebContainer + xterm.js",
     detail:
-      "Node.js in the browser for 12 lesson types (Vite apps, Express, JavaScript/TypeScript, Kite web, WASI Python), with a preview and terminal tabs.",
+      "Node.js in the browser for 11 lesson types (Vite apps, Express, JavaScript/TypeScript, Kite web), with a preview and terminal tabs.",
   },
   {
     title: "in-page runners",

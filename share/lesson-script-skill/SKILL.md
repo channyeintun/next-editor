@@ -1,6 +1,6 @@
 ---
 name: lesson-script
-description: Author a Next Editor studio lesson — a narrated, auto-performed coding lesson defined as one LessonScript YAML file, rendered in the browser at nexteditor.dev/studio. Use when asked to create, write, draft, or fix a narrated coding lesson (Rust, Go, Kotlin, Zig, Haskell, Kite, x86-64 assembly, Python, JavaScript, TypeScript) for Next Editor.
+description: Author a Next Editor studio lesson — a narrated, auto-performed coding lesson defined as one LessonScript YAML file, rendered in the browser at nexteditor.dev/studio. Use when asked to create, write, draft, or fix a narrated coding lesson (Rust, Go, Kotlin, Zig, Haskell, Kite, x86-64 assembly, JavaScript, TypeScript) for Next Editor.
 ---
 
 # Author a Next Editor LessonScript

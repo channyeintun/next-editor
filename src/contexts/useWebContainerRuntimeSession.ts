@@ -707,7 +707,7 @@ export function useWebContainerRuntimeSession({
           setStatus("error");
           setErrorMessage(formatCommandError(commandLine));
         } else {
-          // Script-style runners (e.g. python lessons) exit cleanly instead
+          // Script-style runners (e.g. javascript lessons) exit cleanly instead
           // of keeping a server alive, so no `server-ready` event will ever
           // move the status off "starting" — settle it here.
           setStatus("ready");

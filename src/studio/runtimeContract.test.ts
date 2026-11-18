@@ -28,12 +28,6 @@ const JS_WORKSPACE = {
   entryFilePath: "index.js",
   files: { "package.json": "{}\n", "package-lock.json": "{}\n", "index.js": "console.log(1);\n" },
 };
-const PYTHON_WORKSPACE = {
-  lessonType: "python",
-  name: "Python Lesson",
-  entryFilePath: "main.py",
-  files: { "main.py": "print(1)\n" },
-};
 const GO_WORKSPACE = {
   lessonType: "go",
   name: "Go Lesson",
@@ -49,14 +43,6 @@ const JS_RUNTIME = {
   runCommand: "npm run dev",
   expectedPort: 5173,
   lockfilePath: "package-lock.json",
-  environment: {},
-};
-const PYTHON_RUNTIME = {
-  kind: "webcontainer",
-  adapterVersion: 1,
-  defaultMode: "live",
-  initCommand: "",
-  runCommand: "python3 main.py",
   environment: {},
 };
 const GO_RUNTIME = {
@@ -109,13 +95,6 @@ const CASES: ContractCase[] = [
     workspace: JS_WORKSPACE,
     runtime: JS_RUNTIME,
     actions: [start, waitForReady, openPreview, input, click, scroll, route, expectPreview],
-    issues: [],
-  },
-  {
-    name: "accepts a Python console lesson",
-    workspace: PYTHON_WORKSPACE,
-    runtime: PYTHON_RUNTIME,
-    actions: [start, expectOutput],
     issues: [],
   },
   {
@@ -180,25 +159,6 @@ const CASES: ContractCase[] = [
     issues: ['WebContainer lockfile "constructor" is not in the pinned workspace'],
   },
   {
-    name: "rejects Python runtime fields that need a server or an install",
-    workspace: PYTHON_WORKSPACE,
-    runtime: {
-      ...PYTHON_RUNTIME,
-      lockfilePath: "requirements.lock",
-      expectedPort: 8000,
-      initCommand: "pip install flask",
-      runCommand: "node main.py",
-    },
-    actions: [start, expectOutput],
-    issues: [
-      'WebContainer lockfile "requirements.lock" is not in the pinned workspace',
-      "A Python WebContainer lesson must omit lockfilePath (nothing is installed)",
-      "A Python WebContainer lesson must omit expectedPort (it has no server)",
-      "A Python WebContainer lesson must use an empty initCommand",
-      'A Python WebContainer lesson runCommand must invoke "python3"',
-    ],
-  },
-  {
     name: "rejects Playground and console actions in a JavaScript lesson",
     workspace: JS_WORKSPACE,
     runtime: JS_RUNTIME,
@@ -206,22 +166,6 @@ const CASES: ContractCase[] = [
     issues: [
       'Action "run" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start',
       'Action "expect-output" (expect.output) is for console runtimes; a javascript preview lesson asserts with expect.preview',
-    ],
-  },
-  {
-    name: "rejects Playground and preview actions in a Python lesson",
-    workspace: PYTHON_WORKSPACE,
-    runtime: PYTHON_RUNTIME,
-    actions: [start, run, waitForReady, openPreview, click, input, scroll, route, expectPreview],
-    issues: [
-      'Action "run" (runtime.run) is a Playground command; a WebContainer lesson runs via runtime.start',
-      'Action "wait" (runtime.waitForReady) needs a preview server; Python runs one-shot to the console — assert with expect.output',
-      'Action "open-preview" (preview.open) needs a preview server; Python runs one-shot to the console — assert with expect.output',
-      'Action "click" (preview.click) needs a preview server; Python runs one-shot to the console — assert with expect.output',
-      'Action "input" (preview.input) needs a preview server; Python runs one-shot to the console — assert with expect.output',
-      'Action "scroll" (preview.scroll) needs a preview server; Python runs one-shot to the console — assert with expect.output',
-      'Action "route" (preview.route) needs a preview server; Python runs one-shot to the console — assert with expect.output',
-      'Action "expect-preview" (expect.preview) needs a preview server; Python runs one-shot to the console — assert with expect.output',
     ],
   },
   {
@@ -290,11 +234,11 @@ const CASES: ContractCase[] = [
   {
     // The runtime rules for every action come before the per-action checks.
     name: "reports the runtime rules before the per-action checks",
-    workspace: PYTHON_WORKSPACE,
-    runtime: PYTHON_RUNTIME,
-    actions: [start, { ...click, retry: RETRY }],
+    workspace: JS_WORKSPACE,
+    runtime: JS_RUNTIME,
+    actions: [start, { ...click, retry: RETRY }, expectOutput],
     issues: [
-      'Action "click" (preview.click) needs a preview server; Python runs one-shot to the console — assert with expect.output',
+      'Action "expect-output" (expect.output) is for console runtimes; a javascript preview lesson asserts with expect.preview',
       'Action "click" is non-idempotent and must use retry.maxAttempts: 1',
     ],
   },

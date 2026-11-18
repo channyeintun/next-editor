@@ -6,7 +6,6 @@ import type {
 import { StudioActionError, abortableSleep, throwIfAborted, waitUntil } from "../async";
 import type { StudioRuntime } from "../plan";
 import { previewCommandTarget, previewExpectationMismatches } from "../previewExpectation";
-import { runtimeStartIsOneShotRun } from "../runtimeContract";
 import { resolveStudioTarget } from "../targets";
 import type { StudioDriver, StudioDriverDeps } from "./index";
 import { isCoveredAt, pointAndRest, roundPoint, type StudioPointer } from "./pointer";
@@ -124,7 +123,7 @@ export function previewPointAim(box: StudioPreviewTargetBox): { x: number; y: nu
 export function webContainerCommands(
   deps: Pick<
     StudioDriverDeps,
-    "runtime" | "webContainerRuntime" | "workspace" | "preview" | "notifyPreviewEvent" | "signal"
+    "runtime" | "webContainerRuntime" | "preview" | "notifyPreviewEvent" | "signal"
   >,
   pointer: StudioPointer,
 ): Pick<
@@ -163,7 +162,7 @@ export function webContainerCommands(
         });
 
   return {
-    async startRuntime(timeoutMs) {
+    async startRuntime() {
       const runtime = requireWebContainerRuntime("runtime.start");
       try {
         await deps.webContainerRuntime.getActions().startRuntime();
@@ -173,31 +172,8 @@ export function webContainerCommands(
           { runtime: webContainerDiagnostic(deps.webContainerRuntime.getSnapshot()) },
         );
       }
-      // Server-style JS/TS runners acknowledge once the process has spawned;
-      // runtime.waitForReady owns their later server/port gate. Python is a
-      // console-only one-shot runner, so no later readiness action is legal:
-      // runtime.start itself must wait for a clean process exit (`ready`) or the
-      // lesson could pass after printing the expected line while still hung—or
-      // before a later non-zero exit is recorded.
-      if (runtimeStartIsOneShotRun(deps.workspace.getProject().lessonType)) {
-        try {
-          await waitUntil(
-            () => {
-              const snapshot = deps.webContainerRuntime.getSnapshot();
-              assertWebContainerHealthy(snapshot);
-              return snapshot.status === "ready";
-            },
-            {
-              timeoutMs,
-              signal,
-              description: "the Python runner to exit cleanly",
-              intervalMs: 50,
-            },
-          );
-        } catch (error) {
-          throw withRuntimeDiagnostic(error);
-        }
-      }
+      // JS/TS runners acknowledge once the process has spawned;
+      // runtime.waitForReady owns their later server/port gate.
       const snapshot = deps.webContainerRuntime.getSnapshot();
       assertWebContainerHealthy(snapshot);
       return {

@@ -668,9 +668,9 @@ async function baseManifest(
           initCommand: plan.runtime.initCommand,
           runCommand: plan.runtime.runCommand,
           expectedPort: plan.runtime.expectedPort ?? null,
-          // Python has no lockfile (WASI python3 installs nothing); the contract
-          // records null for both the path and hash instead of advertising the
-          // SHA-256 of an imaginary empty lockfile.
+          // A lesson may pin no lockfile; the contract then records null for
+          // both the path and hash instead of advertising the SHA-256 of an
+          // imaginary empty lockfile.
           lockfilePath: plan.runtime.lockfilePath ?? null,
           lockfileSha256: plan.runtime.lockfilePath
             ? await sha256Hex(

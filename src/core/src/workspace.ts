@@ -97,7 +97,6 @@ export type WorkspaceLessonType =
   | "typescript"
   | "go"
   | "kotlin"
-  | "python"
   | "rust"
   | "zig"
   | "haskell"
