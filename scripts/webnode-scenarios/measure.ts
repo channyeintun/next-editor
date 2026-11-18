@@ -200,7 +200,10 @@ async function lessonTarget(slug: string, setup: string, script: LessonScript): 
   const files = script.lesson.workspace.files;
   const atEnd = filesAtEnd(slug, script);
   const manifest = files["package.json"] ? JSON.parse(files["package.json"]) : {};
-  const hasPage = files["index.html"] !== undefined && script.runtime?.initCommand;
+  // The page's title: index.html's, or the one a component renders (a lesson
+  // whose server renders the whole document has no index.html).
+  const titled =
+    files["index.html"] ?? Object.values(files).find((contents) => /<title>/i.test(contents));
   return {
     name: slug,
     setup,
@@ -211,10 +214,10 @@ async function lessonTarget(slug: string, setup: string, script: LessonScript): 
     initCommand: script.runtime?.initCommand ?? "",
     runCommand: script.runtime?.runCommand ?? "pnpm dev",
     environment: script.runtime?.environment ?? {},
-    shows: hasPage
+    shows: script.runtime?.initCommand
       ? {
           port: script.runtime?.expectedPort ?? 5173,
-          title: titleOf(files["index.html"]),
+          title: titleOf(titled ?? ""),
           ...(manifest.devDependencies?.vitest || manifest.dependencies?.vitest
             ? { result: TEST_RESULT }
             : {}),
