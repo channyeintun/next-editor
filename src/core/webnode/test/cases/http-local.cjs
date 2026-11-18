@@ -40,7 +40,10 @@ server.listen(0, "127.0.0.1", () => {
               .then((response) => response.json())
               .then((json) => {
                 console.log("fetch", json.method);
-                server.close(() => console.log("closed"));
+                server.close(() => {
+                  console.log("closed");
+                  endCallbacks();
+                });
               });
           });
         });
@@ -49,3 +52,61 @@ server.listen(0, "127.0.0.1", () => {
   );
   request.end("payload");
 });
+
+// A callback given to end() is called with null before the 'finish'
+// listeners, or with the error the last write ended with; one given after
+// the end is queued with the first, and one given after 'finish' gets
+// ERR_STREAM_ALREADY_FINISHED.
+function endCallbacks() {
+  const out = [];
+  const show =
+    (label) =>
+    (...args) =>
+      out.push(
+        `${label}: ${args.length} ${args.map((a) => (a instanceof Error ? a.code : String(a)))}`,
+      );
+  const refused = http.request({ port: 1, host: "127.0.0.1", method: "POST" });
+  refused.on("error", (e) => out.push(`refused error ${e.code}`));
+  refused.on("finish", show("refused finish"));
+  refused.end("q", show("refused end"));
+  refused.on("close", () => {
+    refused.end(show("refused end after close"));
+    setTimeout(answered, 20);
+  });
+  function answered() {
+    const server2 = http.createServer((req, res) => {
+      req.resume();
+      if (req.url === "/plain") {
+        res.on("finish", () => out.push(`plain finish ${res.writableFinished}`));
+        res.end(show("plain res.end(cb)"));
+        out.push(`plain after end ${res.writableFinished} ${res.writableEnded}`);
+        return;
+      }
+      res.on("finish", show("res finish"));
+      res.end("body", show("res.end(chunk, cb)"));
+      res.end(show("res.end again"));
+      res.on("finish", () => setTimeout(() => res.end(show("res.end after finish")), 5));
+      res.on("error", (e) => out.push(`res error ${e.code}`));
+      res.end("more", show("res.end(chunk) after end"));
+    });
+    server2.listen(0, "127.0.0.1", () => {
+      const { port } = server2.address();
+      const req = http.request({ port, host: "127.0.0.1", method: "POST" }, (res) => {
+        res.resume();
+        res.on("end", () => {
+          const plain = http.get({ port, host: "127.0.0.1", path: "/plain" }, (res2) => {
+            res2.resume();
+            res2.on("end", () => {
+              server2.close();
+              setTimeout(() => console.log(out.join("\n")), 50);
+            });
+          });
+          plain.on("finish", () => out.push(`plain request finish ${plain.writableFinished}`));
+        });
+      });
+      req.on("finish", show("req finish"));
+      req.end("data", show("req.end(chunk, cb)"));
+      out.push(`req after end ${req.writableFinished}`);
+    });
+  }
+}

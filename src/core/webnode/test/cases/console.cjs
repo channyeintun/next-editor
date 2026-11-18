@@ -12,3 +12,23 @@ console.log(
 console.log(typeof process.stdout.write, typeof console.table);
 console.info("info");
 console.debug("debug");
+// A table's cells are as wide as they look: colour codes take no column, a
+// combining mark none, a wide character two.
+const coloured = new console.Console({ stdout: process.stdout, colorMode: true });
+coloured.table([
+  { a: 1, b: true, c: "str" },
+  { a: 22222, b: false, c: null },
+]);
+console.table([
+  { name: "မောင်မောင်", n: 1 },
+  { name: "日本語", n: 2 },
+  { name: "é ✅", n: 3 },
+]);
+// The members loggers reach for.
+console.log(
+  console._stdout === process.stdout,
+  console._stderr === process.stderr,
+  typeof console._stdoutErrorHandler,
+  console._ignoreErrors,
+  Object.keys(new console.Console(process.stdout)).length,
+);

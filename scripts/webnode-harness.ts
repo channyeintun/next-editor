@@ -6,6 +6,12 @@
 //   bun scripts/webnode-harness.ts cases [filter]   run each case under real node and under webnode
 //   bun scripts/webnode-harness.ts script <file>    run a scenario script (default export: (api) => Promise)
 //
+// A scenario passes by returning and fails by throwing: the steps it is given
+// (src/core/webnode/test/scenario.ts) throw when they do not hold. `run`,
+// `cases` and `script` exit with a status other than 0 when what they ran
+// failed, and so does every mode when the harness cannot take its port
+// (WEBNODE_HARNESS_PORT, 5199 unless set).
+//
 // WEBNODE_HARNESS_MINIFY=1 builds the runtime's scripts minified, as a
 // deployment ships them. WEBNODE_HARNESS_FS=kernel runs on the filesystem
 // inside the kernel worker, to compare with the shared one.
@@ -20,13 +26,15 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "rolldown";
 import { chromium } from "playwright-core";
 import type { Page } from "playwright-core";
 import { buildWebnodeBundles } from "../build/webnodeBundle";
 import { webnodeHostAsset, webnodeHostResponse } from "../src/core/webnode/preview/hostResponses";
+import { ScenarioFailure, failureMessage, scenarioTools } from "../src/core/webnode/test/scenario";
+import type { PreviewFrame, ScenarioTools } from "../src/core/webnode/test/scenario";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 // A second harness run at the same time needs its own port and build directory.
@@ -121,7 +129,18 @@ export async function serve(): Promise<{ stop(): void; url: string }> {
         send(404, ISOLATION_HEADERS, "not found");
     }
   });
-  await new Promise<void>((ready) => server.listen(PORT, "127.0.0.1", ready));
+  await new Promise<void>((ready, failed) => {
+    // A port another run holds: say so and fail, instead of waiting for ever.
+    server.once("error", (error: NodeJS.ErrnoException) =>
+      failed(
+        new Error(
+          `the harness cannot listen on port ${PORT} (${error.code ?? error.message}): ` +
+            "another run holds it, name a free one in WEBNODE_HARNESS_PORT",
+        ),
+      ),
+    );
+    server.listen(PORT, "127.0.0.1", ready);
+  });
   return {
     stop: () => {
       server.closeAllConnections();
@@ -131,7 +150,7 @@ export async function serve(): Promise<{ stop(): void; url: string }> {
   };
 }
 
-export interface HarnessApi {
+export interface HarnessApi extends ScenarioTools {
   page: Page;
   /** Calls a method of `window.webnodeHarness`. */
   call<T>(method: string, ...args: unknown[]): Promise<T>;
@@ -140,6 +159,8 @@ export interface HarnessApi {
     line: string,
     options?: { timeoutMs?: number; env?: Record<string, string> },
   ): Promise<{ code: number | null; output: string; timedOut: boolean }>;
+  /** What the scenario's sections reported as failed so far. */
+  readonly failures: readonly string[];
 }
 
 /** What the harness page reads from its address (test/harnessPage.ts). */
@@ -170,6 +191,46 @@ async function interceptHarnessPage(page: Page, target: string): Promise<string>
     });
   });
   return `${target}${TARGET_PAGE_PATH}${pageQuery()}`;
+}
+
+/** The title of the page a preview origin serves before a runtime is connected (preview/connectPage.ts). */
+const PREVIEW_CONNECT_TITLE = "Connecting to preview…";
+
+/** The page's preview frame (the `<iframe id="preview">` of `harnessHtml`), for a scenario's steps. */
+function previewFrame(page: Page): PreviewFrame {
+  const frameOf = (url: string) => page.frames().find((frame) => frame.url().startsWith(url));
+  return {
+    async show(url) {
+      await page.evaluate((address) => {
+        (document.getElementById("preview") as HTMLIFrameElement).src = address;
+      }, url);
+    },
+    async read(url) {
+      try {
+        const view = await frameOf(url)?.evaluate(() => ({
+          title: document.title,
+          text: (document.body?.innerText ?? "").replace(/\s+/g, " ").trim(),
+          overlay:
+            document
+              .querySelector("vite-error-overlay")
+              ?.shadowRoot?.textContent?.replace(/\s+/g, " ")
+              .trim() ?? null,
+        }));
+        // Until the editor connects it, a preview origin shows a page of its own.
+        return view && view.title !== PREVIEW_CONNECT_TITLE ? view : null;
+      } catch {
+        // The frame is navigating: it has no document to ask.
+        return null;
+      }
+    },
+    async click(url, selector) {
+      const frame = frameOf(url);
+      if (!frame) {
+        throw new ScenarioFailure(`no preview of ${url} to click ${selector} in`);
+      }
+      await frame.click(selector);
+    },
+  };
 }
 
 export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Promise<T> {
@@ -216,10 +277,13 @@ export async function withBrowser<T>(use: (api: HarnessApi) => Promise<T>): Prom
         [method, args] as const,
       ) as Promise<R>;
     await call("boot");
+    const { tools, failures } = scenarioTools(call, previewFrame(page));
     return await use({
+      ...tools,
       page,
       call,
       sh: (line, options) => call("run", "sh", ["-c", line], options ?? {}),
+      failures,
     });
   } finally {
     await browser.close();
@@ -266,6 +330,32 @@ async function runCases(filter: string | undefined): Promise<number> {
   return failures;
 }
 
+/** Runs a scenario script. Answers the exit status: 0 only when every step held. */
+async function runScenario(file: string): Promise<number> {
+  const scenario = (await import(file)) as { default: (api: HarnessApi) => Promise<void> };
+  const failures: string[] = [];
+  try {
+    await withBrowser(async (api) => {
+      try {
+        await scenario.default(api);
+      } finally {
+        failures.push(...api.failures);
+      }
+    });
+  } catch (error) {
+    failures.push(failureMessage(error));
+  }
+  if (failures.length === 0) {
+    console.log(`\nPASS ${basename(file)}`);
+    return 0;
+  }
+  console.log(`\nFAIL ${basename(file)}: ${failures.length} failed`);
+  for (const failure of failures) {
+    console.log(`- ${failure}`);
+  }
+  return 1;
+}
+
 if (import.meta.main) {
   const [mode, argument] = process.argv.slice(2);
   await buildAll();
@@ -280,11 +370,8 @@ if (import.meta.main) {
     process.exit(result.code === 0 ? 0 : 1);
   } else if (mode === "cases") {
     process.exit((await runCases(argument)) === 0 ? 0 : 1);
-  } else if (mode === "script") {
-    const scenario = (await import(resolve(argument))) as {
-      default: (api: HarnessApi) => Promise<void>;
-    };
-    await withBrowser(scenario.default);
+  } else if (mode === "script" && argument) {
+    process.exit(await runScenario(resolve(argument)));
   } else {
     console.error(
       "usage: bun scripts/webnode-harness.ts serve | run '<command>' | cases [filter] | script <file>",
