@@ -56,6 +56,10 @@ pub const OWNER_W: u32 = 0o200;
 pub const OWNER_X: u32 = 0o100;
 /// What adding, removing or renaming an entry needs on its directory.
 const OWNER_WX: u32 = OWNER_W | OWNER_X;
+/// Set-user-ID, and set-group-ID with the group's execute: what a hard link
+/// to another's file may not be.
+const S_ISUID: u32 = 0o4000;
+const SETGID_EXEC: u32 = 0o2010;
 
 pub const S_IFREG: u32 = 0o100000;
 pub const S_IFDIR: u32 = 0o040000;
@@ -890,7 +894,8 @@ impl<C: Clock, S: Space> Fs<C, S> {
         let Some(node) = source.node else {
             return fail(Errno::Enoent, LINK, PATH_BOTH);
         };
-        // Linux's order: the new name, its directory's permission, then the kind.
+        // Linux's order: the new name, the protected hard links, its
+        // directory's permission, then the kind.
         let target = self.lookup(new_path, Last::Entry, LINK, PATH_BOTH)?;
         let parent = match target.parent {
             Some(parent) if target.node.is_none() => parent,
@@ -899,6 +904,7 @@ impl<C: Clock, S: Space> Fs<C, S> {
         if target.dir_tail {
             return fail(Errno::Enoent, LINK, PATH_BOTH);
         }
+        self.may_link(node)?;
         self.permit(parent, OWNER_WX, LINK, PATH_BOTH)?;
         if self.node(node).is_dir() {
             return fail(Errno::Eperm, LINK, PATH_BOTH);
@@ -1508,6 +1514,25 @@ impl<C: Clock, S: Space> Fs<C, S> {
         self.permit(parent, OWNER_WX, syscall, path_mode)?;
         if self.checking && node.is_some_and(|node| self.node(node).root_owned) {
             return fail(Errno::Eacces, syscall, path_mode);
+        }
+        Ok(())
+    }
+
+    /// Fails with EPERM unless the user may make a hard link to `node`
+    /// (`mayLink` in vfs.ts), as Linux's protected hard links (`may_linkat`)
+    /// decide: the owner may; anyone else only to a plain file that is
+    /// neither set-user-ID nor set-group-ID and executable, and that they
+    /// may read and write. So no path, through a link to /dev or to / either,
+    /// hard-links /dev or a device of root's.
+    fn may_link(&self, node: Idx) -> Result<()> {
+        let inode = self.node(node);
+        if !self.checking || !inode.root_owned {
+            return Ok(());
+        }
+        let special = inode.perm & S_ISUID != 0 || inode.perm & SETGID_EXEC == SETGID_EXEC;
+        let read_write = OWNER_R | OWNER_W;
+        if !inode.is_file() || special || inode.bits() & read_write != read_write {
+            return fail(Errno::Eperm, Syscall::Link, PATH_BOTH);
         }
         Ok(())
     }

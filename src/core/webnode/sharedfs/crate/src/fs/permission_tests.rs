@@ -828,6 +828,59 @@ fn keeps_the_entry_of_a_node_root_owns_whatever_path_reaches_it() {
 }
 
 #[test]
+fn hard_links_a_node_root_owns_only_as_protected_hard_links_allow_by_any_path() {
+    let mut fs = setup();
+    privileged(&mut fs, |fs| {
+        mkdir(fs, "/dev");
+        // A device's entry, as the kernel makes it: a link of root's to itself.
+        fs.symlink(b"/dev/null", b"/dev/null").unwrap();
+        for (name, bits) in [
+            ("shared", 0o666),
+            ("readable", 0o644),
+            ("setuid", 0o4666),
+            ("setgid", 0o2676),
+        ] {
+            let path = format!("/dev/{name}");
+            put(fs, &path, name);
+            chmod(fs, &path, bits);
+            fs.give_to_root(path.as_bytes()).unwrap();
+        }
+        fs.give_to_root(b"/dev/null").unwrap();
+        fs.give_to_root(b"/dev").unwrap();
+    });
+    fs.symlink(b"/", b"/r").unwrap();
+    fs.symlink(b"/dev", b"/d").unwrap();
+    mkdir(&mut fs, "/h");
+    let eperm = (Eperm, Syscall::Link, PATH_BOTH);
+    for dir in ["/dev", "/r/dev", "/d", "/r/d"] {
+        for name in ["null", "readable", "setuid", "setgid"] {
+            let from = format!("{dir}/{name}");
+            assert_eq!(failure(fs.link(from.as_bytes(), b"/h/x")), eperm, "{from}");
+        }
+        let itself = if dir == "/dev" {
+            String::from("/dev")
+        } else {
+            format!("{dir}/.")
+        };
+        assert_eq!(
+            failure(fs.link(itself.as_bytes(), b"/h/x")),
+            eperm,
+            "{itself}"
+        );
+    }
+    assert_eq!(names(&mut fs, "/h"), Vec::<String>::new());
+    // A plain file the user may read and write is linked, by any path.
+    fs.link(b"/d/shared", b"/h/s").unwrap();
+    assert_eq!(read(&mut fs, "/h/s"), "shared");
+    // After the new name (EEXIST), before its directory's permission (EACCES).
+    assert_eq!(failure(fs.link(b"/d/null", b"/h/s")).0, Eexist);
+    assert_eq!(failure(fs.link(b"/d/null", b"/dev/y")), eperm);
+    // The unchecked calls are root's.
+    privileged(&mut fs, |fs| fs.link(b"/d/null", b"/h/n").unwrap());
+    assert_eq!(fs.stat(b"/h/n", false).unwrap()[4], ROOT_ID);
+}
+
+#[test]
 fn sets_the_times_of_a_node_root_owns_to_now_only_where_it_may_write() {
     let mut fs = setup();
     privileged(&mut fs, |fs| {

@@ -584,6 +584,54 @@ describe.each(IMPLEMENTATIONS)("%s", (_name, create) => {
     expect(fs.exists("/dev")).toBe(false);
   });
 
+  it("hard-links a node root owns only as Linux's protected hard links allow, by any path", () => {
+    const fs = create();
+    const root = fs.privileged;
+    root.mkdir("/dev", false, 0o755);
+    // A device's entry, as the kernel makes it: a link of root's to itself.
+    root.symlink("/dev/null", "/dev/null");
+    for (const [name, bits] of [
+      ["shared", 0o666],
+      ["readable", 0o644],
+      ["setuid", 0o4666],
+      ["setgid", 0o2676],
+    ] as const) {
+      put(root, `/dev/${name}`, name);
+      root.chmod(`/dev/${name}`, bits, true);
+      root.giveToRoot(`/dev/${name}`);
+    }
+    root.giveToRoot("/dev/null");
+    root.giveToRoot("/dev");
+    fs.symlink("/", "/r");
+    fs.symlink("/dev", "/d");
+    fs.mkdir("/h", false, 0o755);
+    const perm = (from: string, to: string) => ({
+      code: "EPERM",
+      syscall: "link",
+      path: from,
+      dest: to,
+    });
+    for (const dir of ["/dev", "/r/dev", "/d", "/r/d"]) {
+      for (const name of ["null", "readable", "setuid", "setgid"]) {
+        const from = `${dir}/${name}`;
+        expect(failure(() => fs.link(from, "/h/x"))).toMatchObject(perm(from, "/h/x"));
+      }
+      expect(failure(() => fs.link(dir === "/dev" ? "/dev" : `${dir}/.`, "/h/x"))).toMatchObject({
+        code: "EPERM",
+      });
+    }
+    expect(fs.readdir("/h")).toEqual([]);
+    // A plain file the user may read and write is linked, by any path.
+    fs.link("/d/shared", "/h/s");
+    expect(read(fs, "/h/s")).toBe("shared");
+    // After the new name (EEXIST), before its directory's permission (EACCES).
+    expect(failure(() => fs.link("/d/null", "/h/s"))).toMatchObject({ code: "EEXIST" });
+    expect(failure(() => fs.link("/d/null", "/dev/y"))).toMatchObject(perm("/d/null", "/dev/y"));
+    // The unchecked calls are root's.
+    root.link("/d/null", "/h/n");
+    expect(fs.stat("/h/n", false).uid).toBe(0);
+  });
+
   it("sets the times of a node root owns to now only where it may write", () => {
     const fs = create();
     fs.privileged.mkdir("/dev", false, 0o755);

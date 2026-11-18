@@ -75,6 +75,9 @@ const TEMP_DIR_MODE = 0o700;
 const DIR_CREATION_BITS = 0o1777;
 /** What adding, removing or renaming an entry needs on its directory. */
 const OWNER_WX = OWNER_W | OWNER_X;
+/** Set-user-ID, and set-group-ID with the group's execute: what a hard link to another's file may not be. */
+const S_ISUID = 0o4000;
+const SETGID_EXEC = 0o2010;
 const TEMP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 export interface VfsOptions {
@@ -219,6 +222,28 @@ export class Vfs implements PermissionedVfs {
     this.permit(parent, OWNER_WX, syscall, path, dest);
     if (this.checking && node?.rootOwned === true) {
       fail("EACCES", syscall, path, dest);
+    }
+  }
+
+  /**
+   * Fails with EPERM unless the user may make a hard link to `node`, as
+   * Linux's protected hard links (`may_linkat`) decide: the owner may; anyone
+   * else only to a plain file that is neither set-user-ID nor set-group-ID
+   * and executable, and that they may read and write. So no path, through
+   * a link to /dev or to / either, hard-links /dev or a device of root's.
+   */
+  private mayLink(node: Inode, existingPath: string, newPath: string): void {
+    if (!this.checking || !node.rootOwned) {
+      return;
+    }
+    const special = (node.perm & S_ISUID) !== 0 || (node.perm & SETGID_EXEC) === SETGID_EXEC;
+    const readWrite = OWNER_R | OWNER_W;
+    if (
+      node.kind !== "file" ||
+      special ||
+      (callerBits(node.perm, true) & readWrite) !== readWrite
+    ) {
+      fail("EPERM", "link", existingPath, newPath);
     }
   }
 
@@ -468,7 +493,8 @@ export class Vfs implements PermissionedVfs {
     if (node === undefined) {
       fail("ENOENT", "link", existingPath, newPath);
     }
-    // Linux's order: the new name, its directory's permission, then the kind.
+    // Linux's order: the new name, the protected hard links, its
+    // directory's permission, then the kind.
     const target = this.lookup(newPath, ENTRY, "link", existingPath, newPath);
     if (target.node !== undefined || target.parent === null) {
       fail("EEXIST", "link", existingPath, newPath);
@@ -476,6 +502,7 @@ export class Vfs implements PermissionedVfs {
     if (target.dirTail) {
       fail("ENOENT", "link", existingPath, newPath);
     }
+    this.mayLink(node, existingPath, newPath);
     this.permit(target.parent, OWNER_WX, "link", existingPath, newPath);
     if (node.kind === "dir") {
       fail("EPERM", "link", existingPath, newPath);
