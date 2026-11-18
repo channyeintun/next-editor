@@ -9,7 +9,7 @@ export { createWorkspaceFile } from "../types/workspaceFiles";
  * The Vite range every Vite-based starter installs, so a bump is one line
  * instead of one per starter (the last one missed a file).
  */
-export const STARTER_VITE_VERSION = "^8.1.3";
+export const STARTER_VITE_VERSION = "^8.3.7";
 
 /** The dev/build/preview scripts of a plain Vite lesson, served where the preview looks. */
 const VITE_LESSON_SCRIPTS = {
