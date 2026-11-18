@@ -267,24 +267,463 @@ describe("run", () => {
     }
   });
 
-  it("returns the script's exit status", async () => {
-    const { rt, pm } = await setup(manifest, (request) => (request.args[1] === "exit 3" ? 3 : 0));
-    expect(await pm("pnpm", "fail")).toBe(3);
-    expect(rt.stderr()).toContain("ELIFECYCLE  Command failed with exit code 3.");
+  it("returns the script's exit status with the tool's failure line", async () => {
+    // pnpm 9.12.1 and yarn 1.22.19; npm says nothing (below).
+    const exits = (request: SpawnRequest) =>
+      request.args[1] === "exit 3" ? 3 : request.args[1] === "jest" ? 2 : 0;
+    const pnpm = await setup({ ...manifest, scripts: { fail: "exit 3", test: "jest" } }, exits);
+    expect(await pnpm.pm("pnpm", "fail")).toBe(3);
+    expect(pnpm.rt.stderr()).toBe(" ELIFECYCLE  Command failed with exit code 3.\n");
+    expect(await pnpm.pm("pnpm", "test")).toBe(2);
+    expect(pnpm.rt.stderr()).toBe(
+      " ELIFECYCLE  Command failed with exit code 3.\n" +
+        " ELIFECYCLE  Test failed. See above for more details.\n",
+    );
+    const yarn = await setup(manifest, exits);
+    expect(await yarn.pm("yarn", "fail")).toBe(3);
+    expect(yarn.rt.stderr()).toBe("error Command failed with exit code 3.\n");
+    expect(yarn.rt.stdout()).not.toContain("Done in");
   });
 
-  it("forwards signals to the child and returns 128 + the signal number", async () => {
-    let finish: (() => void) | null = null;
-    const { rt, pm } = await setup(
-      manifest,
-      () => new Promise<number>((resolve) => (finish = () => resolve(0))),
+  it("says nothing when an npm script fails, and exits with its status", async () => {
+    // npm 10.9.2 and 11.20.0: `run` is a shell-out command, so a script's
+    // non-zero exit (3, or the 130 of a script that handled Ctrl+C) is
+    // passed on without a word.
+    const { rt, pm } = await setup(manifest, (request) =>
+      request.args[1] === "exit 3" ? 3 : request.args[1] === "vite" ? 130 : 0,
     );
-    const status = pm("pnpm", "dev");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    rt.signal("SIGINT");
-    expect(await status).toBe(130);
-    expect(finish).not.toBeNull();
+    expect(await pm("npm", "run", "fail")).toBe(3);
+    expect(await pm("npm", "run", "dev")).toBe(130);
+    expect(rt.stderr()).toBe("");
+    expect(rt.exitCode).toBeNull();
+    // The post script does not run after a failure.
+    expect(rt.stdout()).not.toContain("echo post");
   });
+});
+
+describe("a command that a signal ends", () => {
+  const manifest = {
+    name: "app",
+    version: "1.2.3",
+    scripts: { dev: "vite", predev: "echo pre", postdev: "echo post", test: "jest" },
+  };
+  /** A command that runs until a signal ends it; `echo …` hooks end at once. */
+  const untilSignalled = (request: SpawnRequest) =>
+    request.args[1]?.startsWith("echo ") ? 0 : new Promise<number>(() => {});
+  /** Lets the tool get as far as waiting for its command. */
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+  /** The pid the fake runtime gave the tool's `n`th child: it counts up from the tool's own. */
+  const child = (rt: FakeRuntime, n: number) => rt.pid + n;
+  const withBin = (rt: FakeRuntime) => {
+    rt.vfs.mkdir("/project/node_modules/.bin", true, 0o755);
+    rt.fs.writeFile(
+      "/project/node_modules/.bin/cowsay",
+      encoder.encode("#!/bin/sh\n"),
+      O_WRONLY | O_CREAT | O_TRUNC,
+      0o755,
+    );
+  };
+
+  it("npm passes SIGINT and SIGTERM on and dies of the signal its script died of, saying nothing", async () => {
+    // npm 10.9.2 and 11.20.0 under a pty: Ctrl+C on `npm run sleep` prints
+    // nothing and npm dies of SIGINT; `kill <npm>` ends it with SIGTERM; a
+    // script that kills itself (`kill -TERM $$`) does the same.
+    for (const [signal, status] of [
+      ["SIGINT", 130],
+      ["SIGTERM", 143],
+    ] as const) {
+      const { rt, pm, spawned } = await setup(manifest, untilSignalled);
+      const run = pm("npm", "run", "dev");
+      await settled();
+      rt.signal(signal);
+      // npm dies of it, as the kernel ends a process: nothing more is printed.
+      expect(await run).toBe(status);
+      expect(rt.exitCode).toBe(status);
+      expect(rt.stderr()).toBe("");
+      expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+    }
+    // A script that died of a signal npm was never sent.
+    const { rt, pm } = await setup({ scripts: { dev: "vite" } }, untilSignalled);
+    const run = pm("npm", "run", "dev");
+    await settled();
+    rt.processes.kill(child(rt, 1), "SIGQUIT");
+    expect(await run).toBe(131);
+    expect(rt.exitCode).toBe(131);
+    expect(rt.stderr()).toBe("");
+  });
+
+  it("npm dies at once of a signal it does not pass on, and of any signal while nothing runs", async () => {
+    // npm's run-script handles SIGINT and SIGTERM only, and only while a script runs.
+    const { rt, pm } = await setup(manifest, untilSignalled);
+    void pm("npm", "run", "dev");
+    await settled();
+    rt.signal("SIGHUP");
+    expect(rt.exitCode).toBe(129);
+    const idle = await setup(manifest, () => 0);
+    expect(await idle.pm("npm", "run", "dev")).toBe(0);
+    idle.rt.signal("SIGINT");
+    expect(idle.rt.exitCode).toBe(130);
+  });
+
+  it("npm exec, npx and a bin they run die of the command's signal too", async () => {
+    // npm 11.20.0: `npm exec -c 'kill -TERM $$'`, `npx -c …`, `npx <local bin>`
+    // and `npm exec <local bin>` all die of SIGTERM.
+    for (const argv of [
+      ["npm", "exec", "-c", "sleep 9"],
+      ["npx", "-c", "sleep 9"],
+      ["npx", "cowsay", "moo"],
+      ["npm", "exec", "--", "cowsay", "moo"],
+    ]) {
+      const { rt, pm, spawned } = await setup({ name: "app" }, untilSignalled);
+      withBin(rt);
+      const run = pm(...argv);
+      await settled();
+      expect(spawned).toHaveLength(1);
+      rt.signal("SIGTERM");
+      expect(await run).toBe(143);
+      expect(rt.exitCode).toBe(143);
+      expect(rt.stderr()).toBe("");
+    }
+  });
+
+  it("npm reports a signal a Node process survives, and exits 1", async () => {
+    // npm 10.9.2 and 11.20.0, `npm run usr1` (kill -USR1 $$), `npm run pipe`
+    // and `npm run yes | head -1`: npm sends itself the signal, which Node
+    // ignores (SIGPIPE) or starts its inspector on (SIGUSR1), and then says:
+    for (const signal of ["SIGUSR1", "SIGPIPE"]) {
+      const { rt, pm } = await setup({ scripts: { dev: "vite --port 1" } }, untilSignalled);
+      const run = pm("npm", "run", "dev");
+      await settled();
+      rt.processes.kill(child(rt, 1), signal);
+      expect(await run).toBe(1);
+      expect(rt.exitCode).toBeNull();
+      expect(rt.stderr()).toBe(
+        "npm error path /project\n" +
+          "npm error command failed\n" +
+          `npm error signal ${signal}\n` +
+          "npm error command sh -c vite --port 1\n",
+      );
+    }
+    // `npx -c 'kill -USR1 $$'` and `npx selfusr1 a 'b c'` name their command the same way.
+    const shell = await setup({ name: "app" }, untilSignalled);
+    const viaShell = shell.pm("npx", "-c", "kill -USR1 $$");
+    await settled();
+    shell.rt.processes.kill(child(shell.rt, 1), "SIGUSR1");
+    expect(await viaShell).toBe(1);
+    expect(shell.rt.stderr()).toContain("npm error command sh -c kill -USR1 $$\n");
+    const bin = await setup({ name: "app" }, untilSignalled);
+    withBin(bin.rt);
+    const viaBin = bin.pm("npx", "cowsay", "a", "b c");
+    await settled();
+    bin.rt.processes.kill(child(bin.rt, 1), "SIGUSR1");
+    expect(await viaBin).toBe(1);
+    expect(bin.rt.stderr()).toContain("npm error command sh -c 'cowsay' a 'b c'\n");
+  });
+
+  it("pnpm takes a script that SIGINT ended for one that ended well, and goes on", async () => {
+    // pnpm 9.12.1 under a pty: Ctrl+C on `pnpm run sleep` prints nothing and
+    // pnpm exits 0; `pnpm run int2` (kill -INT $$) runs its post script.
+    const { rt, pm, spawned } = await setup(manifest, untilSignalled);
+    const run = pm("pnpm", "dev");
+    await settled();
+    rt.signal("SIGINT");
+    expect(await run).toBe(0);
+    expect(rt.exitCode).toBeNull();
+    expect(rt.stderr()).toBe("");
+    expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite", "echo post"]);
+  });
+
+  it("pnpm reports a script any other signal ended, and dies of that signal", async () => {
+    // pnpm 9.12.1: `kill <pnpm>` and `pnpm run sig` (kill -TERM $$) print
+    // " ELIFECYCLE  Command failed." and pnpm dies of SIGTERM.
+    const { rt, pm, spawned } = await setup(manifest, untilSignalled);
+    const run = pm("pnpm", "run", "dev");
+    await settled();
+    rt.signal("SIGTERM");
+    expect(await run).toBe(143);
+    expect(rt.exitCode).toBe(143);
+    expect(rt.stderr()).toBe(" ELIFECYCLE  Command failed.\n");
+    expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+    // `pnpm run sigkill`: SIGKILL ends pnpm before it has said anything.
+    const killed = await setup({ scripts: { dev: "vite" } }, untilSignalled);
+    const first = killed.pm("pnpm", "dev");
+    await settled();
+    killed.rt.processes.kill(child(killed.rt, 1), "SIGKILL");
+    expect(await first).toBe(137);
+    expect(killed.rt.exitCode).toBe(137);
+    expect(killed.rt.stderr()).toBe("");
+    // `pnpm run usr1`: Node survives the signal, so pnpm exits 1 after the line.
+    const survived = await setup({ scripts: { dev: "vite" } }, untilSignalled);
+    const second = survived.pm("pnpm", "dev");
+    await settled();
+    survived.rt.processes.kill(child(survived.rt, 1), "SIGUSR1");
+    expect(await second).toBe(1);
+    expect(survived.rt.exitCode).toBeNull();
+    expect(survived.rt.stderr()).toBe(" ELIFECYCLE  Command failed.\n");
+  });
+
+  it("yarn dies of SIGINT at once, and reports a script a signal ended", async () => {
+    // yarn 1.22.19 handles SIGTERM only: Ctrl+C on `yarn run sleep` ends
+    // yarn itself; `yarn run sig` prints the line below and exits 1.
+    const interrupted = await setup(manifest, untilSignalled);
+    void interrupted.pm("yarn", "dev");
+    await settled();
+    interrupted.rt.signal("SIGINT");
+    expect(interrupted.rt.exitCode).toBe(130);
+    expect(interrupted.rt.stderr()).toBe("");
+
+    const { rt, pm } = await setup(manifest, untilSignalled);
+    const run = pm("yarn", "dev");
+    await settled();
+    rt.signal("SIGTERM");
+    expect(await run).toBe(1);
+    expect(rt.exitCode).toBeNull();
+    expect(rt.stderr()).toBe('error Command failed with signal "SIGTERM".\n');
+    expect(rt.stdout()).not.toContain("Done in");
+  });
+
+  it("a bin run by its name gets the signals its tool passes on", async () => {
+    const pnpm = await setup({ name: "app" }, untilSignalled);
+    withBin(pnpm.rt);
+    const run = pnpm.pm("pnpm", "cowsay");
+    await settled();
+    pnpm.rt.signal("SIGINT");
+    // The command's status, as a shell reports it; pnpm itself lives on.
+    expect(await run).toBe(130);
+    expect(pnpm.rt.exitCode).toBeNull();
+
+    const yarn = await setup({ name: "app" }, untilSignalled);
+    withBin(yarn.rt);
+    void yarn.pm("yarn", "cowsay");
+    await settled();
+    yarn.rt.signal("SIGINT");
+    expect(yarn.rt.exitCode).toBe(130);
+  });
+});
+
+describe("output whose reader has gone", () => {
+  const manifest = { name: "app", version: "1.2.3", scripts: { dev: "vite" } };
+  /** Lets the tool get as far as waiting for its command. */
+  const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("is no SIGPIPE to npm, pnpm or yarn: Node ignores it from their start", async () => {
+    for (const tool of ["npm", "pnpm", "yarn"]) {
+      const { rt, pm } = await setup(manifest, () => new Promise<number>(() => {}));
+      const declared = vi.spyOn(rt.processes, "setHandledSignals");
+      void pm(tool, "run", "dev");
+      expect(declared.mock.calls[0]?.[0]).toContain("SIGPIPE");
+      await settled();
+      rt.signal("SIGPIPE");
+      expect(rt.exitCode).toBe(null);
+      // Before it runs anything, too.
+      const idle = await setup(manifest);
+      void idle.pm(tool, "ls");
+      idle.rt.signal("SIGPIPE");
+      expect(idle.rt.exitCode).toBe(null);
+    }
+  });
+
+  it("ends npm with 1 at once, and leaves the script it started to run on to its end", async () => {
+    // npm 11.20 on macOS and 10.9.8 on Linux: `set -o pipefail; npm run x |
+    // true` with x `sleep 1; echo ran >> ran.log` gives 1 in about 0.1 s,
+    // with ran.log not there yet; ran.log holds `ran` a second later.
+    let finish = (_code: number) => {};
+    const npm = await setup(
+      manifest,
+      () =>
+        new Promise<number>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    npm.rt.closeReader(1);
+    let child = "running";
+    const run = npm.pm("npm", "run", "dev").then((status) => ({ status, child }));
+    expect(await run).toEqual({ status: 1, child: "running" });
+    expect(npm.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    expect(npm.rt.stderr()).toBe("");
+    child = "ended";
+    finish(0);
+    // A script that fails, or that a signal ends, changes nothing: npm has ended.
+    const failing = await setup(manifest, () => 3);
+    failing.rt.closeReader(1);
+    expect(await failing.pm("npm", "run", "dev")).toBe(1);
+    expect(failing.spawned).toHaveLength(1);
+    expect(failing.rt.stderr()).toBe("");
+    // npm 11.20, 5 of 5: with a pre script, the pre script runs and nothing after it.
+    const hooked = await setup({ ...manifest, scripts: { predev: "echo pre", dev: "vite" } });
+    hooked.rt.closeReader(1);
+    expect(await hooked.pm("npm", "run", "dev")).toBe(1);
+    expect(hooked.spawned.map((request) => request.args[1])).toEqual(["echo pre"]);
+    const yarn = await setup(manifest);
+    yarn.rt.closeReader(1);
+    expect(await yarn.pm("yarn", "run", "dev")).toBe(0);
+    expect(yarn.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+  });
+
+  it("lets pnpm survive its first lost write and die of the next", async () => {
+    // pnpm 9.12.1, 5 runs each: `pnpm run x | true` with x alone runs x and
+    // exits 0; with a pre script it runs the pre script, then dies of the
+    // EPIPE of the next header (exit code 1, Node's report on stderr), and
+    // neither the script nor its post script runs. Under `| head -1`, which
+    // takes the first header, the script runs and its post script does not.
+    const lone = await setup(manifest);
+    lone.rt.closeReader(1);
+    expect(await lone.pm("pnpm", "run", "dev")).toBe(0);
+    expect(lone.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+    expect(lone.rt.stderr()).toBe("");
+    const scripts = { predev: "echo pre", dev: "vite", postdev: "echo post" };
+    const hooked = await setup({ ...manifest, scripts });
+    hooked.rt.closeReader(1);
+    expect(await hooked.pm("pnpm", "run", "dev")).toBe(1);
+    expect(hooked.spawned.map((request) => request.args[1])).toEqual(["echo pre"]);
+    expect(hooked.rt.stderr()).toBe(
+      [
+        "node:events:496",
+        "      throw er; // Unhandled 'error' event",
+        "      ^",
+        "",
+        "Error: write EPIPE",
+        "Emitted 'error' event on Socket instance at:",
+        "    at emitErrorNT (node:internal/streams/destroy:170:8)",
+        "    at emitErrorCloseNT (node:internal/streams/destroy:129:3)",
+        "    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {",
+        "  errno: -32,",
+        "  code: 'EPIPE',",
+        "  syscall: 'write'",
+        "}",
+        "",
+        "Node.js v22.14.0",
+        "",
+      ].join("\n"),
+    );
+    let reader: FakeRuntime | null = null;
+    const firstHeader = await setup({ ...manifest, scripts }, (request) => {
+      if (request.args[1] === "echo pre") {
+        reader?.closeReader(1);
+      }
+      return 0;
+    });
+    reader = firstHeader.rt;
+    expect(await firstHeader.pm("pnpm", "run", "dev")).toBe(1);
+    expect(firstHeader.spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+    // A post script alone: the script runs, and pnpm dies before its post script.
+    const post = await setup({ ...manifest, scripts: { dev: "vite", postdev: "echo post" } });
+    post.rt.closeReader(1);
+    expect(await post.pm("pnpm", "run", "dev")).toBe(1);
+    expect(post.spawned.map((request) => request.args[1])).toEqual(["vite"]);
+  });
+
+  it("has had all of a script's header once it has its first line", async () => {
+    // npm 11.20: `npm run hello | head -1` exits 0: the header is one write.
+    const { rt, pm } = await setup(manifest);
+    const writes = vi.spyOn(rt.fdStream, "write");
+    expect(await pm("npm", "run", "dev")).toBe(0);
+    const tried = writes.mock.calls
+      .filter(([fd]) => fd === 1)
+      .map(([, chunk]) => decoder.decode(chunk));
+    expect(tried).toEqual(["\n> app@1.2.3 dev\n> vite\n\n"]);
+  });
+
+  it("leaves the status of a listing, its last act: npm ls exits 0", async () => {
+    const { rt, pm } = await setup(manifest);
+    rt.closeReader(1);
+    expect(await pm("npm", "ls")).toBe(0);
+    expect(rt.stdout()).toBe("");
+  });
+
+  it("gets nothing more once a write to it has failed", async () => {
+    // yarn writes `yarn run v…` and the script's line before the first
+    // write's EPIPE comes back, as Node's async stream does; `Done in …`,
+    // written after it, is not tried.
+    const { rt, pm } = await setup(manifest);
+    rt.closeReader(1);
+    const writes = vi.spyOn(rt.fdStream, "write");
+    expect(await pm("yarn", "run", "dev")).toBe(0);
+    const tried = writes.mock.calls
+      .filter(([fd]) => fd === 1)
+      .map(([, chunk]) => decoder.decode(chunk));
+    expect(tried).toEqual([`yarn run v1.22.22\n`, "$ vite\n"]);
+  });
+});
+
+describe("npm at log level silent", () => {
+  const manifest = {
+    name: "app",
+    version: "1.2.3",
+    scripts: { predev: "echo pre", dev: "vite", fail: "exit 4" },
+  };
+  /** Each way npm 11.20 takes the silent level: flags before or after the command, or the environment. */
+  const silentRuns: { argv: string[]; env?: Record<string, string> }[] = [
+    { argv: ["npm", "run", "-s", "dev"] },
+    { argv: ["npm", "run", "--silent", "dev"] },
+    { argv: ["npm", "-s", "run", "dev"] },
+    { argv: ["npm", "run", "dev", "-s"] },
+    { argv: ["npm", "run", "--loglevel", "silent", "dev"] },
+    { argv: ["npm", "run", "--loglevel=silent", "dev"] },
+    { argv: ["npm", "run", "dev"], env: { npm_config_loglevel: "silent" } },
+    { argv: ["npm", "run", "dev"], env: { NPM_CONFIG_LOGLEVEL: "silent" } },
+  ];
+
+  it("prints no script header, and its children see the level", async () => {
+    for (const { argv, env } of silentRuns) {
+      const { rt, pm, spawned } = await setup(manifest);
+      Object.assign(rt.env, env);
+      expect(await pm(...argv)).toBe(0);
+      expect(rt.stdout()).toBe("");
+      expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "vite"]);
+      expect(spawned[1].env.npm_config_loglevel).toBe("silent");
+    }
+    // npm 11.20: `npm run --loglevel warn env` prints the header and the
+    // script sees `warn`; with no level set it sees none.
+    const warn = await setup(manifest);
+    expect(await warn.pm("npm", "run", "-q", "dev")).toBe(0);
+    expect(warn.rt.stdout()).toContain("> app@1.2.3 dev\n");
+    expect(warn.spawned[1].env.npm_config_loglevel).toBe("warn");
+    const plain = await setup(manifest);
+    expect(await plain.pm("npm", "run", "dev")).toBe(0);
+    expect(plain.spawned[1].env.npm_config_loglevel).toBeUndefined();
+  });
+
+  it("gives the script's status under a closed pipe: nothing it printed lost its reader", async () => {
+    // npm 11.20, 5 of 5: `npm run -s quiet | true` (quiet exits 4) gives 4,
+    // `npm run --silent append | true` gives 0.
+    for (const { argv, env } of silentRuns) {
+      const { rt, pm } = await setup(manifest, (request) => (request.args[1] === "vite" ? 4 : 0));
+      Object.assign(rt.env, env);
+      rt.closeReader(1);
+      expect(await pm(...argv)).toBe(4);
+      expect(rt.stderr()).toBe("");
+    }
+  });
+
+  it("prints no npm error lines, and no list of scripts", async () => {
+    // npm 11.20: `npm run -s loud | true` (the script dies of SIGPIPE) gives 1
+    // and prints nothing; `npm run -s nosuch` gives 1 and prints nothing;
+    // `npm -s run` prints nothing; `npm -s ls` prints the tree.
+    const signalled = await setup(manifest, () => new Promise<number>(() => {}));
+    const run = signalled.pm("npm", "run", "-s", "dev");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    signalled.rt.processes.kill(signalled.rt.pid + 1, "SIGPIPE");
+    expect(await run).toBe(1);
+    expect(signalled.rt.stderr()).toBe("");
+    const missing = await setup(manifest);
+    expect(await missing.pm("npm", "run", "-s", "nosuch")).toBe(1);
+    expect(missing.rt.stderr()).toBe("");
+    const listing = await setup(manifest);
+    expect(await listing.pm("npm", "-s", "run")).toBe(0);
+    expect(listing.rt.stdout()).toBe("");
+    const tree = await setup(manifest);
+    expect(await tree.pm("npm", "-s", "ls")).toBe(0);
+    expect(tree.rt.stdout()).toContain("app@1.2.3 /project");
+  });
+});
+
+describe("scripts by name", () => {
+  const manifest = {
+    name: "app",
+    version: "1.2.3",
+    scripts: { dev: "vite", predev: "echo pre", postdev: "echo post", fail: "exit 3" },
+  };
 
   it("reports a missing script in each tool's voice", async () => {
     const pnpm = await setup(manifest);

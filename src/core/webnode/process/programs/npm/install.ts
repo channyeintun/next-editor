@@ -200,8 +200,12 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
   const directs = rootDependencies(manifest);
 
   const runScripts = options.runScripts ?? true;
-  const scriptContext = { tool: reporter.tool, reporter, projectDir, manifest };
-  /** Runs the root project's lifecycle `events` in order; the first failure's status. */
+  const scriptContext = { tool: reporter.tool, reporter, projectDir, manifest, install: true };
+  /**
+   * Runs the root project's lifecycle `events` in order. The first failure's
+   * status, the tool's report of it printed (scripts.ts): the install ends
+   * there, without its summary.
+   */
   const runRootScripts = async (events: string[]): Promise<number> => {
     if (!runScripts) {
       return 0;
@@ -209,7 +213,6 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     for (const event of events) {
       const status = await runLifecycle(scriptContext, event, []);
       if (status !== 0) {
-        reporter.sink.write(2, `${event} script failed with exit code ${status}\n`);
         return status;
       }
     }
@@ -226,10 +229,13 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     // Staging left by an install that failed (or was killed) holds no package.
     fs.rm(staging, true, true);
     if (!quiet) {
-      reporter.upToDate(Date.now() - started, Object.keys(oldLock!.packages).length);
+      reporter.upToDate();
     }
     // npm runs the project's own install scripts on every install.
     const status = await runRootScripts(ROOT_SCRIPTS);
+    if (status === 0 && !quiet) {
+      reporter.checked(Date.now() - started, Object.keys(oldLock!.packages).length);
+    }
     return { status, installed, upToDate: true };
   }
 
@@ -264,6 +270,8 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     }
   };
   const downloads = new Map<string, Promise<Manifest>>();
+  /** Tarballs on their way into the cache; the install ends once they are stored. */
+  const remembering: Promise<void>[] = [];
   const failures: unknown[] = [];
   /** Set when resolving fails: a download still in flight then extracts nothing. */
   let abandoned = false;
@@ -297,7 +305,7 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     } else {
       counts.downloaded++;
       if (verifiable) {
-        void registry.remember(tarball, fetched.bytes);
+        remembering.push(registry.remember(tarball, fetched.bytes));
       }
     }
     progress();
@@ -534,9 +542,13 @@ export async function install(options: InstallOptions): Promise<InstallResult> {
     }
   }
 
+  // The process may end as soon as the install returns, and a store still
+  // under way would be lost with it.
+  await Promise.all(remembering);
+
   const status = await runRootScripts(ROOT_SCRIPTS.slice(1));
 
-  if (!quiet) {
+  if (status === 0 && !quiet) {
     const direct: DirectDependency[] = directs
       .filter((dependency) => installed.has(dependency.name))
       .map((dependency) => ({

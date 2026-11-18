@@ -82,6 +82,8 @@ describe("output", () => {
       columns: 80,
       write: (fd, text) => (fd === 1 ? out : err).push(text),
       flush: async () => {},
+      lostReader: false,
+      lostWrites: 0,
     };
     return { sink, out: () => out.join(""), err: () => err.join("") };
   }

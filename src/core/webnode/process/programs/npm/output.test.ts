@@ -13,6 +13,8 @@ function terminal(): Sink & { screen(): string } {
       written += text;
     },
     flush: () => Promise.resolve(),
+    lostReader: false,
+    lostWrites: 0,
     screen: () => written,
   };
 }

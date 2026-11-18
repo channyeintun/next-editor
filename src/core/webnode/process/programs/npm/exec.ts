@@ -13,10 +13,10 @@ import { install } from "./install";
 import { readManifest, writeManifest } from "./manifest";
 import type { Manifest } from "./manifest";
 import type { Reporter } from "./output";
-import { join } from "./paths";
+import { basename, join } from "./paths";
 import type { RegistryClient } from "./registry";
 import { parseSpec, pickVersion } from "./resolve";
-import { binDirs, pathWithBins, shellQuote, spawnAndWait } from "./scripts";
+import { binDirs, pathWithBins, runForeground, shellQuote } from "./scripts";
 
 export interface ExecRequest {
   mode: ExecMode;
@@ -179,18 +179,28 @@ export async function runExec(context: ExecContext, request: ExecRequest): Promi
       const { dir } = await installTemporary(context, request.packages);
       env = { ...withLocal, PATH: `${join(dir, "node_modules/.bin")}:${withLocal.PATH}` };
     }
-    await context.reporter.sink.flush();
-    return spawnAndWait("sh", ["-c", request.shell], cwd, env);
+    return runForeground(context.reporter, "sh", ["-c", request.shell], env, {
+      cwd,
+      line: request.shell,
+      event: null,
+      install: false,
+    });
   }
 
   if (request.command === null && request.packages.length === 0) {
     throw notFound(context, "");
   }
 
-  const run = async (command: string, env: Record<string, string>) => {
-    await context.reporter.sink.flush();
-    return spawnAndWait(command, request.args, cwd, env);
-  };
+  const run = (command: string, env: Record<string, string>) =>
+    runForeground(context.reporter, command, request.args, env, {
+      cwd,
+      // As npm shows a command it ran by name: the name quoted, then its arguments.
+      line: [`'${request.command ?? basename(command)}'`, ...request.args.map(shellQuote)].join(
+        " ",
+      ),
+      event: null,
+      install: false,
+    });
 
   if (request.command !== null && request.mode !== "dlx" && request.packages.length === 0) {
     const local = findLocalBin(cwd, request.command);

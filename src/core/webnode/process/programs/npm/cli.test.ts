@@ -253,6 +253,30 @@ describe("parseArgs", () => {
       registry: "https://r.test",
     });
   });
+
+  it("reads npm's log level from --loglevel and its shorthands, the last one winning", () => {
+    const level = (...argv: string[]) => parseArgs(argv).loglevel;
+    expect(level("npm", "run", "dev")).toBeNull();
+    expect(level("npm", "-s", "run", "dev")).toBe("silent");
+    expect(level("npm", "run", "--silent", "dev")).toBe("silent");
+    expect(level("npm", "test", "-s")).toBe("silent");
+    expect(level("npm", "run", "--loglevel", "silent", "dev")).toBe("silent");
+    expect(level("npm", "run", "--loglevel=warn", "dev")).toBe("warn");
+    expect(level("npm", "run", "-q", "dev")).toBe("warn");
+    expect(level("npm", "run", "-d", "dev")).toBe("info");
+    // npm 11.20: `-s --loglevel warn` is warn, `--loglevel warn -s` silent.
+    expect(level("npm", "run", "-s", "--loglevel", "warn", "dev")).toBe("warn");
+    expect(level("npm", "run", "--loglevel", "warn", "-s", "dev")).toBe("silent");
+    // The script's own arguments, and a program's, are not npm's.
+    expect(level("npm", "run", "dev", "--", "-s")).toBeNull();
+    expect(level("npx", "cowsay", "-s")).toBeNull();
+    expect(parseArgs(["npm", "run", "-s", "dev"]).command).toEqual({
+      kind: "run",
+      script: "dev",
+      args: [],
+      ifPresent: false,
+    });
+  });
 });
 
 describe("spec helpers", () => {

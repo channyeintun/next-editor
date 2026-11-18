@@ -3,11 +3,13 @@
 // alive for as long as something is pending, as Node's event loop does.
 import { NODE_VERSION } from "../platform";
 import { runtime } from "../runtime";
+import type { ExitStatus } from "../runtime";
 import {
   configureLoader,
   importModule,
   Module,
   onMainModule,
+  reportUnresolved,
   runEntry,
   runSource,
 } from "../loader/modules";
@@ -18,15 +20,33 @@ import {
   sourceUrlComment,
   transformReady,
 } from "../loader/transform";
+import {
+  afterTurn,
+  eventLoopHolds,
+  gateNextMacrotask,
+  runMacrotask,
+  runNextTicks,
+} from "../node/eventLoop";
 import { installGlobals } from "../node/globals";
+import { writeFd } from "../node/internal/fdWrite";
 import { loadBuiltin, setProcessBuiltins } from "../node/index";
+import { BUILTIN_MODULE_NAMES } from "../node/names";
 import path from "../node/path";
-import { createProcess, runNextTicks, unhandledRejectionError } from "../node/process";
+import { createProcess } from "../node/process";
 import type { NodeProcess } from "../node/process";
 import util from "../node/util";
-import { THREAD_ERROR_MESSAGE, THREAD_ONLINE_MESSAGE } from "../node/worker_threads";
+import {
+  postThreadMessage,
+  THREAD_ONLINE_MESSAGE,
+  threadErrorMessage,
+} from "../node/worker_threads";
 import type { ProcessClient } from "../sysClient";
-import { pathWithBins, shellQuote, spawnAndWait } from "./npm/scripts";
+import { pathWithBins, shellQuote } from "./npm/scripts";
+import { createRejectionReporter, isRejectionMode } from "./rejections";
+import type { RejectionMode } from "./rejections";
+import { processWatchHost, runWatchSupervisor, watchReporter } from "./watch";
+import { TSX_CHILD_OPTION, TSX_WATCH_OPTION } from "./watchOptions";
+import type { TsxWatchSettings } from "./watchOptions";
 import type { ProcessInit } from "../../protocol";
 
 interface NodeOptions {
@@ -39,7 +59,17 @@ interface NodeOptions {
   envFiles: { path: string; ifExists: boolean }[];
   /** `--run <script>`: the package.json script to run instead of a file. */
   run: string | null;
+  /** `--unhandled-rejections=<mode>`, as given. */
+  unhandledRejections: string | null;
+  /** `--watch` or `--watch-path`: supervise the program (watch.ts). */
   watch: boolean;
+  watchPaths: string[];
+  watchPreserveOutput: boolean;
+  watchKillSignal: string | null;
+  /** Supervise as `tsx watch` does, with these settings (TSX_WATCH_OPTION). */
+  tsxWatch: TsxWatchSettings | null;
+  /** Started by a tsx watch supervisor (TSX_CHILD_OPTION): "ipc" when the program keeps its channel. */
+  tsxChild: "hidden" | "ipc" | null;
   readStdin: boolean;
   script: string | null;
   scriptArgs: string[];
@@ -144,7 +174,13 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
     inputType: null,
     envFiles: [],
     run: null,
+    unhandledRejections: null,
     watch: false,
+    watchPaths: [],
+    watchPreserveOutput: false,
+    watchKillSignal: null,
+    tsxWatch: null,
+    tsxChild: null,
     readStdin: false,
     script: null,
     scriptArgs: [],
@@ -185,8 +221,29 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
       case "--run":
         options.run = value ?? "";
         break;
+      case "--unhandled-rejections":
+        options.unhandledRejections = value ?? "";
+        break;
       case "--watch":
         options.watch = true;
+        break;
+      case "--watch-path":
+        // As in Node, a path to watch starts watch mode by itself.
+        options.watch = true;
+        options.watchPaths.push(value ?? "");
+        break;
+      case "--watch-preserve-output":
+        options.watchPreserveOutput = true;
+        break;
+      case "--watch-kill-signal":
+        options.watchKillSignal = value ?? "";
+        break;
+      case TSX_WATCH_OPTION:
+        options.watch = true;
+        options.tsxWatch = JSON.parse(value ?? "") as TsxWatchSettings;
+        break;
+      case TSX_CHILD_OPTION:
+        options.tsxChild = value === "ipc" ? "ipc" : "hidden";
         break;
       case "--stack-trace-limit":
         Error.stackTraceLimit = Number(value);
@@ -225,21 +282,23 @@ function parseOptions(args: string[], environment: Record<string, string>): Node
       }
       const equals = argument.startsWith("--") ? argument.indexOf("=") : -1;
       const name = equals > 0 ? argument.slice(0, equals) : argument;
+      // webnode's own options for tsx watch never show in process.execArgv.
+      const listed = allowScript && name !== TSX_WATCH_OPTION && name !== TSX_CHILD_OPTION;
       if (equals > 0) {
         apply(name, argument.slice(equals + 1));
-        if (allowScript) {
+        if (listed) {
           options.execArgv.push(argument);
         }
         index += 1;
       } else if (VALUE_OPTIONS.has(name)) {
         apply(name, list[index + 1]);
-        if (allowScript) {
+        if (listed) {
           options.execArgv.push(argument, list[index + 1] ?? "");
         }
         index += 2;
       } else {
         apply(name, undefined);
-        if (allowScript) {
+        if (listed) {
           options.execArgv.push(argument);
         }
         index += 1;
@@ -284,6 +343,22 @@ function readAllStdin(): string {
   return new TextDecoder().decode(bytes);
 }
 
+/**
+ * Writes `text` to fd 2 with a blocking write, as Node writes its fatal
+ * report: past `process.stderr`, so a program that ended, destroyed or corked
+ * that stream still has the report reach its reader. Every write the stream
+ * made before has been handed to the kernel already (its writes to a pipe,
+ * a terminal or a file are blocking or in order with this one), so the report
+ * comes after them; what a corked stream holds stays there, as in Node.
+ */
+function writeFatalReport(text: string): void {
+  try {
+    writeFd(2, new TextEncoder().encode(text));
+  } catch {
+    // fd 2 is closed, or its reader has gone: nothing is left to report through.
+  }
+}
+
 function describeError(error: unknown): string {
   if (error instanceof Error) {
     return util.inspect(error, { colors: false });
@@ -301,9 +376,24 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
   rt.execArgv = thread ? [...init.execArgv] : [...init.execArgv, ...options.execArgv];
 
   await transformReady;
-  configureLoader({ loadBuiltin, conditions: options.conditions });
 
-  const process: NodeProcess = createProcess({ loadBuiltin, ipc: client.ipc });
+  // A program under tsx watch is not given the channel its reports use,
+  // unless tsx would give it one (TSX_CHILD_OPTION).
+  const process: NodeProcess = createProcess({
+    loadBuiltin,
+    ipc: options.tsxChild === "hidden" ? null : client.ipc,
+  });
+  configureLoader({
+    loadBuiltin,
+    conditions: options.conditions,
+    report: watchReporter({
+      env: process.env,
+      process,
+      ipc: client.ipc,
+      tsxChild: options.tsxChild !== null,
+      parentPort: thread ? thread.port : null,
+    }),
+  });
   setProcessBuiltins({
     get process() {
       return process;
@@ -317,34 +407,55 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
     process.mainModule = module;
   });
 
+  const printFatal = (error: unknown) => {
+    writeFatalReport(`\n${describeError(error)}\n\nNode.js v${NODE_VERSION}\n`);
+  };
+
   const fatal = (error: unknown): never => {
-    try {
-      process.stderr.write(`\n${describeError(error)}\n\nNode.js v${NODE_VERSION}\n`);
-    } catch {
-      // Nothing left to report through.
+    // As Node: the program's 'exit' listeners run first, and the error is
+    // printed after them.
+    if ((process as { _exiting?: boolean })._exiting) {
+      printFatal(error);
+    } else {
+      process.on("exit", () => printFatal(error));
     }
     process.exitCode = process.exitCode || 1;
     return process.exit(1);
+  };
+
+  // A thread's uncaught error goes to its parent's `error` event and the
+  // thread ends with 1. Node posts it with the port's own `postMessage`, so
+  // what a program made of that method takes it.
+  const handToParent = (target: NonNullable<typeof thread>, error: unknown): never => {
+    target.port.postMessage(threadErrorMessage(error));
+    return rt.processes.exit(1);
   };
 
   const reportUncaught = (
     error: unknown,
     origin: "uncaughtException" | "unhandledRejection" = "uncaughtException",
   ) => {
-    const handled = (
-      process as unknown as { _handleUncaught(error: unknown, origin: string): boolean }
-    )._handleUncaught(error, origin);
+    let handled: boolean;
+    try {
+      handled = (
+        process as unknown as { _handleUncaught(error: unknown, origin: string): boolean }
+      )._handleUncaught(error, origin);
+    } catch (thrown) {
+      // An 'uncaughtException' listener (or the capture callback) threw. In a
+      // thread, Node hands that error to the parent as any other; on the main
+      // thread it prints it and ends with code 7. Neither runs the 'exit'
+      // listeners.
+      if (thread) {
+        return handToParent(thread, thrown);
+      }
+      printFatal(thrown);
+      return rt.processes.exit(7);
+    }
     if (handled) {
       return;
     }
     if (thread) {
-      // A thread's error goes to its parent's `error` event.
-      const serialized =
-        error instanceof Error
-          ? { name: error.name, message: error.message, stack: error.stack }
-          : error;
-      thread.port.postMessage({ type: THREAD_ERROR_MESSAGE, error: serialized });
-      rt.processes.exit(1);
+      handToParent(thread, error);
     }
     fatal(error);
   };
@@ -353,17 +464,26 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
     event.preventDefault();
     reportUncaught((event as ErrorEvent).error ?? new Error((event as ErrorEvent).message));
   });
+  const rejectionMode: RejectionMode | null =
+    options.unhandledRejections === null
+      ? "throw"
+      : isRejectionMode(options.unhandledRejections)
+        ? options.unhandledRejections
+        : null;
+  if (rejectionMode === null) {
+    process.stderr.write("node: invalid value for --unhandled-rejections\n");
+    process.exit(9);
+  }
+  const rejections = createRejectionReporter(process, rejectionMode, (error) =>
+    reportUncaught(error, "unhandledRejection"),
+  );
   globalThis.addEventListener("unhandledrejection", (event) => {
     const { reason, promise } = event as PromiseRejectionEvent;
     event.preventDefault();
-    if (process.listenerCount("unhandledRejection") > 0) {
-      process.emit("unhandledRejection", reason, promise);
-      return;
-    }
-    reportUncaught(unhandledRejectionError(reason), "unhandledRejection");
+    rejections.unhandled(reason, promise);
   });
   globalThis.addEventListener("rejectionhandled", (event) => {
-    process.emit("rejectionHandled", (event as PromiseRejectionEvent).promise);
+    rejections.handled((event as PromiseRejectionEvent).promise);
   });
 
   // A thread only takes the options that change how modules load.
@@ -378,9 +498,18 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
     process.exit(0);
   }
 
+  // Watch mode's supervisor: `--run` still runs the script once, as in Node.
+  const supervising = options.watch && !thread && options.run === null;
+
   for (const file of thread ? [] : options.envFiles) {
     try {
-      (process as unknown as { loadEnvFile(file: string): void }).loadEnvFile(file.path);
+      if (supervising) {
+        // The supervisor reads the file but leaves its variables to the
+        // program, so a changed file restarts it with the new values.
+        rt.fs.readFile(path.resolve(file.path));
+      } else {
+        (process as unknown as { loadEnvFile(file: string): void }).loadEnvFile(file.path);
+      }
     } catch (error) {
       void error;
       if (file.ifExists) {
@@ -395,15 +524,9 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
   if (options.run !== null && !thread) {
     process.exit(await runPackageScript(options.run, options.scriptArgs, process));
   }
-  if (options.watch && !thread) {
-    if (options.evalSource !== null) {
-      process.stderr.write("node: either --watch or --eval can be used, not both\n");
-      process.exit(9);
-    }
-    // Restarting on changes is not implemented: say so rather than pretend.
-    process.stderr.write(
-      "node: --watch is not supported in webnode; the program runs once and is not restarted when files change\n",
-    );
+  if (supervising && options.evalSource !== null) {
+    process.stderr.write("node: either --watch or --eval can be used, not both\n");
+    process.exit(9);
   }
 
   // Exit once nothing is pending: no timer, server, socket, child or request.
@@ -422,23 +545,91 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
     // decides it has nothing left to do.
     nativeSetTimeout(() => {
       nativeSetTimeout(() => {
-        checkScheduled = false;
         if (client.refCount() > 0) {
+          checkScheduled = false;
           return;
         }
-        process.emit("beforeExit", process.exitCode ?? 0);
-        if (client.refCount() > 0) {
-          return;
-        }
-        if (entryPending) {
-          process.stderr.write("Warning: Detected unsettled top-level await\n");
-          process.exit(13);
-        }
-        process.exit(process.exitCode ?? 0);
+        // A macrotask: the ticks its listeners queue run as it returns.
+        runMacrotask(() => {
+          process.emit("beforeExit", process.exitCode ?? 0);
+        });
+        // As Node, look for pending work once those ticks and the promise jobs
+        // after them have all run: as the next macrotask is about to start.
+        // With none pending, Node runs nothing more (an unref'd immediate, a
+        // message on an unref'd port), so the macrotasks wait for the decision.
+        let pending = false;
+        const letMacrotasksRun = gateNextMacrotask(() => {
+          pending = client.refCount() > eventLoopHolds();
+          return pending;
+        });
+        // The decision comes two tasks later: the browser reports a rejection
+        // the listeners left unhandled in a task of its own, and its report is
+        // part of what 'beforeExit' started.
+        const decide = () => {
+          const own = eventLoopHolds();
+          if (own > 0 && client.refCount() <= own) {
+            // Ticks or a report of rejections are still on their way.
+            afterTurn(() => nativeSetTimeout(decide, 0));
+            return;
+          }
+          checkScheduled = false;
+          if (pending || client.refCount() > 0) {
+            // Work was pending, so the loop goes on. Where it has finished
+            // already, Node emits 'beforeExit' again; where it has not, the
+            // check comes back once the process is idle.
+            letMacrotasksRun();
+            if (client.refCount() <= 0) {
+              scheduleExitCheck();
+            }
+            return;
+          }
+          try {
+            if (entryPending) {
+              process.stderr.write("Warning: Detected unsettled top-level await\n");
+              process.exit(13);
+            }
+            process.exit(process.exitCode ?? 0);
+          } finally {
+            // Reached only when the exit did not happen (an 'exit' listener
+            // threw): the process lives on, with its macrotasks.
+            letMacrotasksRun();
+          }
+        };
+        afterTurn(() => nativeSetTimeout(decide, 0));
       }, 0);
     }, 0);
   };
   client.onIdle(scheduleExitCheck);
+
+  if (supervising) {
+    // Runs none of the program's code (no preloads either): the child does.
+    // It lives on in its child, its watchers and its signal handlers.
+    try {
+      runWatchSupervisor(
+        {
+          execArgv: options.execArgv,
+          command: options.readStdin
+            ? ["-", ...options.scriptArgs]
+            : options.script === null
+              ? options.scriptArgs
+              : [options.script, ...options.scriptArgs],
+          script: options.script,
+          watchPaths: options.watchPaths,
+          preserveOutput: options.watchPreserveOutput,
+          killSignal: options.watchKillSignal,
+          envFiles: options.envFiles,
+          nodeOptions:
+            init.env.NODE_OPTIONS === undefined ? null : splitWords(init.env.NODE_OPTIONS),
+          tsx: options.tsxWatch,
+        },
+        processWatchHost(process),
+      );
+    } catch (error) {
+      reportUncaught(error);
+    }
+    scheduleExitCheck();
+    return;
+  }
 
   // While the entry is still in a top-level await it holds no ref: if nothing
   // else keeps the process alive, the exit check finds it pending and exits
@@ -450,36 +641,52 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
     if (options.requires.length > 0) {
       Module._preloadModules(options.requires);
     }
+    if (options.imports.length > 0) {
+      // Start-up ends here, before the `--import` preloads load in promise
+      // jobs: what the `-r` preloads queued with nextTick runs first, as in Node.
+      runNextTicks();
+    }
     for (const specifier of options.imports) {
       scheduleExitCheck();
       await importModule(specifier, `${rt.cwd}/[import]`);
     }
 
-    let result: void | Promise<unknown>;
-    if (thread) {
-      process.argv = ["/bin/node", thread.eval ? "[worker eval]" : thread.filename, ...init.argv];
-      thread.port.postMessage({ type: THREAD_ONLINE_MESSAGE });
-      result = thread.eval
-        ? runSource(thread.filename, `${rt.cwd}/[worker eval]`)
-        : runEntry(resolveMain(thread.filename));
-    } else if (options.evalSource !== null || options.readStdin || options.script === null) {
-      const stdinIsTerminal = rt.tty.isatty(0);
-      if (options.evalSource === null && !options.readStdin && stdinIsTerminal) {
-        process.stderr.write("node: the interactive REPL is not available in webnode\n");
-        process.exit(1);
+    let result: void | Promise<unknown> = undefined;
+    try {
+      if (thread) {
+        process.argv = ["/bin/node", thread.eval ? "[worker eval]" : thread.filename, ...init.argv];
+        postThreadMessage(thread.port, { type: THREAD_ONLINE_MESSAGE });
+        result = thread.eval
+          ? runSource(thread.filename, `${rt.cwd}/[worker eval]`)
+          : runEntry(resolveMain(thread.filename));
+      } else if (options.evalSource !== null || options.readStdin || options.script === null) {
+        const stdinIsTerminal = rt.tty.isatty(0);
+        if (options.evalSource === null && !options.readStdin && stdinIsTerminal) {
+          process.stderr.write("node: the interactive REPL is not available in webnode\n");
+          process.exit(1);
+        }
+        const source = options.evalSource ?? readAllStdin();
+        const filename = `${rt.cwd}/${options.evalSource === null ? "[stdin]" : "[eval]"}`;
+        process.argv = ["/bin/node", ...options.scriptArgs];
+        result = runEval(source, filename, options, process);
+      } else {
+        const main = resolveMain(path.resolve(options.script));
+        process.argv = ["/bin/node", main, ...options.scriptArgs];
+        result = runEntry(main);
       }
-      const source = options.evalSource ?? readAllStdin();
-      const filename = `${rt.cwd}/${options.evalSource === null ? "[stdin]" : "[eval]"}`;
-      process.argv = ["/bin/node", ...options.scriptArgs];
-      result = runEval(source, filename, options, process);
-    } else {
-      const main = resolveMain(path.resolve(options.script));
-      process.argv = ["/bin/node", main, ...options.scriptArgs];
-      result = runEntry(main);
+    } catch (error) {
+      // 'uncaughtException' first; the ticks follow, as after any macrotask.
+      reportUncaught(error);
     }
 
-    // What the entry queued with nextTick runs before any promise job it started.
-    runNextTicks();
+    // What the entry (and an 'uncaughtException' listener) queued with
+    // nextTick runs before any promise job it started. An ES module entry has
+    // not run yet: its ticks, queued from a promise job, wait for those, as in
+    // Node, and so do a CommonJS entry's after an `--import`, which leaves it
+    // in a promise job too.
+    if (options.imports.length === 0) {
+      runNextTicks();
+    }
     if (result instanceof Promise) {
       entryPending = true;
       scheduleExitCheck();
@@ -493,7 +700,10 @@ export async function runNode(init: ProcessInit, client: ProcessClient): Promise
   scheduleExitCheck();
 }
 
-/** `node --run <name>`: runs the nearest package.json's script through the shell, as Node does. */
+/**
+ * `node --run <name>`: runs the nearest package.json's script through the
+ * shell, as Node's task runner does. Resolves with the exit code for `node`.
+ */
 async function runPackageScript(
   name: string,
   args: string[],
@@ -521,15 +731,78 @@ async function runPackageScript(
   env.NODE_RUN_SCRIPT_NAME = name;
   env.NODE_RUN_PACKAGE_JSON_PATH = manifest;
   const command = [script, ...args.map(shellQuote)].join(" ");
-  return spawnAndWait("sh", ["-c", command], scope.directory, env);
+  const child = rt.processes.spawn({
+    command: "sh",
+    args: ["-c", command],
+    cwd: scope.directory,
+    env,
+    stdio: ["inherit", "inherit", "inherit"],
+  });
+  rt.ref();
+  const status = await new Promise<ExitStatus>((resolve) => {
+    rt.processes.onExit(child.pid, resolve);
+  });
+  rt.unref();
+  // Node's task runner: 1 for any exit code but 0, and 0 when a signal ended
+  // the script. It sends the script no signal of its own.
+  return status.code !== null && status.code !== 0 ? 1 : 0;
 }
 
 function resolveMain(script: string): string {
-  const resolved = resolveSpecifier(script, `${runtime().cwd}/[main]`, "require", []);
+  const from = `${runtime().cwd}/[main]`;
+  let resolved: ReturnType<typeof resolveSpecifier>;
+  try {
+    resolved = resolveSpecifier(script, from, "require", []);
+  } catch (error) {
+    // Under watch mode, creating the missing script restarts the program.
+    reportUnresolved(script, from, error);
+    throw error;
+  }
   if ("builtin" in resolved) {
     throw new Error(`Cannot run builtin module ${resolved.builtin} as a script`);
   }
   return resolved.filename;
+}
+
+/**
+ * Makes every builtin module a global that loads when it is first read, as
+ * Node does for `-e` and `-p` code (`node -p "os.cpus().length"`), though not
+ * for a file or for stdin. A name the global object has already is left
+ * alone, and so is `crypto`, which stays Web Crypto as a property (`runEval`
+ * binds the name for a script). Assigning to one replaces it.
+ */
+function defineBuiltinGlobals(require: (name: string) => unknown): void {
+  const global = globalThis as unknown as Record<string, unknown>;
+  for (const name of BUILTIN_MODULE_NAMES) {
+    if (
+      name.startsWith("_") ||
+      name.includes("/") ||
+      name === "crypto" ||
+      Object.hasOwn(global, name)
+    ) {
+      continue;
+    }
+    const replace = (value: unknown) => {
+      // Deleting first turns the accessor back into a plain property.
+      delete global[name];
+      global[name] = value;
+    };
+    Object.defineProperty(global, name, {
+      configurable: true,
+      enumerable: false,
+      get: () => {
+        const builtin = require(name);
+        Object.defineProperty(global, name, {
+          configurable: true,
+          enumerable: false,
+          get: () => builtin,
+          set: replace,
+        });
+        return builtin;
+      },
+      set: replace,
+    });
+  }
 }
 
 /** Runs `-e` / `-p` / stdin code: a script with `require` in scope, or an ES module. */
@@ -539,13 +812,29 @@ function runEval(
   options: NodeOptions,
   process: NodeProcess,
 ): void | Promise<unknown> {
-  const prepared = prepareSource(
-    source,
-    filename,
-    options.inputType === "module" ? "esm" : options.inputType === "commonjs" ? "cjs" : null,
-  );
+  const format =
+    options.inputType === "module" ? "esm" : options.inputType === "commonjs" ? "cjs" : null;
+  const require = Module.createRequire(filename);
+  const fromOption = options.evalSource !== null;
+  if (fromOption) {
+    defineBuiltinGlobals(require);
+  }
+  let prepared = prepareSource(source, filename, format);
   if (prepared.format === "esm") {
+    // runSource evaluates it in a promise job, as Node evaluates a module:
+    // its ticks run after the promise jobs it queues.
     return runSource(source, filename, "esm");
+  }
+  if (fromOption && /\bcrypto\b/.test(source)) {
+    // In a script given with `-e` or `-p`, Node makes the name `crypto` the
+    // `node:crypto` module, not Web Crypto, by wrapping the code like this.
+    prepared = prepareSource(
+      options.print
+        ? `let crypto=require("node:crypto");{${source}}`
+        : `(crypto=>{{${source}}})(require('node:crypto'))`,
+      filename,
+      "cjs",
+    );
   }
 
   // A script sees these as globals, and `-p` prints its completion value.
@@ -553,7 +842,7 @@ function runEval(
   const module = new Module(filename, null);
   module.filename = filename;
   module.paths = Module._nodeModulePaths(runtime().cwd);
-  global.require = Module.createRequire(filename);
+  global.require = require;
   global.module = module;
   global.exports = module.exports;
   global.__filename = filename;
@@ -563,7 +852,16 @@ function runEval(
   // eslint-disable-next-line no-eval -- `node -e`/`-p` evaluates the given script
   const value = (0, eval)(`${prepared.code}${sourceUrlComment(filename)}`) as unknown;
   if (options.print) {
-    process.stdout.write(`${typeof value === "string" ? value : util.inspect(value)}\n`);
+    // Node prints the value once the script's work is done: at the first
+    // 'beforeExit', or at 'exit' when the process ends without one.
+    const print = () => {
+      process.stdout.write(`${typeof value === "string" ? value : util.inspect(value)}\n`);
+    };
+    process.on("exit", print);
+    process.once("beforeExit", () => {
+      print();
+      process.off("exit", print);
+    });
   }
   return undefined;
 }

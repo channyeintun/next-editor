@@ -2,6 +2,8 @@
 // pnpm's progress line and `Packages: +N` summary, npm's `added N packages`,
 // yarn's `[1/4]` steps, bun's `N packages installed`. Text goes to fd 1, and
 // warnings and errors to fd 2, through the process runtime.
+import { errnoCodeOf } from "../../../errors";
+import { writeFd } from "../../node/internal/fdWrite";
 import { runtime } from "../../runtime";
 import type { PmError, PmErrorCode } from "./errors";
 
@@ -31,6 +33,16 @@ export interface Sink {
   readonly columns: number;
   /** Resolves once everything written has reached the kernel. */
   flush(): Promise<void>;
+  /**
+   * A write failed because its pipe's reader had gone (EPIPE): the tool,
+   * a Node program, ignores SIGPIPE, and nothing more goes to that fd.
+   */
+  readonly lostReader: boolean;
+  /**
+   * How many writes found their reader gone: the one that failed with EPIPE,
+   * and each one after it, which is not tried.
+   */
+  readonly lostWrites: number;
 }
 
 /** A sink over this process's stdout and stderr. */
@@ -38,6 +50,9 @@ export function createRuntimeSink(): Sink {
   const rt = runtime();
   const encoder = new TextEncoder();
   const pending = new Set<Promise<void>>();
+  /** The fds whose reader has gone: what is written to them is dropped. */
+  const lost = new Set<1 | 2>();
+  let lostWrites = 0;
   let isTTY = false;
   let columns = 80;
   try {
@@ -51,29 +66,34 @@ export function createRuntimeSink(): Sink {
   return {
     isTTY,
     columns,
+    get lostReader() {
+      return lost.size > 0;
+    },
+    get lostWrites() {
+      return lostWrites;
+    },
     write(fd, text) {
       if (text === "") {
         return;
       }
-      const bytes = encoder.encode(text);
-      let kind: string;
-      try {
-        kind = rt.fdStream.kind(fd);
-      } catch {
-        kind = "file";
-      }
-      if (kind === "pipe" || kind === "tty") {
-        const done = new Promise<void>((resolve) => {
-          rt.fdStream.write(fd, bytes, () => resolve());
-        });
-        pending.add(done);
-        void done.then(() => pending.delete(done));
+      if (lost.has(fd)) {
+        lostWrites += 1;
         return;
       }
-      if (kind === "null") {
-        return;
-      }
-      rt.fs.write(fd, bytes, null);
+      let written = () => {};
+      const done = new Promise<void>((resolve) => {
+        written = resolve;
+      });
+      // A file's write error is thrown here, to the writer.
+      writeFd(fd, encoder.encode(text), (error) => {
+        if (errnoCodeOf(error) === "EPIPE") {
+          lost.add(fd);
+          lostWrites += 1;
+        }
+        written();
+      });
+      pending.add(done);
+      void done.then(() => pending.delete(done));
     },
     async flush() {
       await Promise.all(pending);
@@ -152,12 +172,32 @@ function plural(count: number, word: string): string {
 export class Reporter {
   readonly tool: Tool;
   readonly sink: Sink;
+  /** npm's log level, when the command line or the environment set one. */
+  readonly loglevel: string | null;
   private lastProgress = 0;
   private drewProgress = false;
 
-  constructor(tool: Tool, sink: Sink) {
+  constructor(tool: Tool, sink: Sink, loglevel: string | null = null) {
     this.tool = tool;
     this.sink = sink;
+    this.loglevel = loglevel;
+  }
+
+  /**
+   * npm at log level silent (`-s`, `--silent`, `--loglevel silent`): no
+   * warning or error lines, no script header, no list of scripts and no
+   * install summary. What a command is for (`ls`, `--version`, `init`'s
+   * file) is still printed.
+   */
+  get silent(): boolean {
+    return this.tool === "npm" && this.loglevel === "silent";
+  }
+
+  /** npm's own log lines on stderr (`npm error …`), which silent drops. */
+  npmLog(text: string): void {
+    if (!this.silent) {
+      this.sink.write(2, text);
+    }
   }
 
   /** A plain line on stdout. */
@@ -178,6 +218,9 @@ export class Reporter {
 
   /** A warning on stderr, in the tool's voice. */
   warn(message: string): void {
+    if (this.silent) {
+      return;
+    }
     this.endProgressLine();
     const prefix = { pnpm: " WARN  ", npm: "npm warn ", yarn: "warning ", bun: "warn: " }[
       this.tool
@@ -187,6 +230,9 @@ export class Reporter {
 
   /** An error on stderr, in the tool's voice. */
   error(error: PmError): void {
+    if (this.silent) {
+      return;
+    }
     this.endProgressLine();
     const lines: string[] = [];
     if (this.tool === "pnpm") {
@@ -269,6 +315,9 @@ export class Reporter {
 
   /** The end of an install that changed node_modules. */
   summary(summary: InstallSummary): void {
+    if (this.silent) {
+      return;
+    }
     const elapsed = formatDuration(this.tool, summary.elapsedMs);
     if (this.tool === "pnpm") {
       const changes = [`+${summary.added}`];
@@ -325,18 +374,31 @@ export class Reporter {
     }
   }
 
-  /** The end of an install that found nothing to do. */
-  upToDate(elapsedMs: number, packages: number): void {
-    const elapsed = formatDuration(this.tool, elapsedMs);
+  /**
+   * An install found nothing to do: what pnpm and yarn say at once, before
+   * the project's own install scripts run (`checked` ends the install).
+   */
+  upToDate(): void {
     if (this.tool === "pnpm") {
       this.line("Already up to date");
+    } else if (this.tool === "yarn") {
+      this.line("success Already up-to-date.");
+    }
+  }
+
+  /** The end of an install that found nothing to do, after the project's scripts. */
+  checked(elapsedMs: number, packages: number): void {
+    if (this.silent) {
+      return;
+    }
+    const elapsed = formatDuration(this.tool, elapsedMs);
+    if (this.tool === "pnpm") {
       this.line();
       this.line(`Done in ${elapsed}`);
     } else if (this.tool === "npm") {
       this.line();
       this.line(`up to date in ${elapsed}`);
     } else if (this.tool === "yarn") {
-      this.line("success Already up-to-date.");
       this.line(`Done in ${elapsed}.`);
     } else {
       this.line();

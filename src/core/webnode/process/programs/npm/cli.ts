@@ -50,7 +50,24 @@ export interface Invocation {
   dir: string | null;
   /** `--registry`. */
   registry: string | null;
+  /**
+   * npm's log level as the command line sets it (`--loglevel <level>`, or a
+   * shorthand: `-s`, `-q`, `-d` …; the last one wins); null when it sets none.
+   */
+  loglevel: string | null;
 }
+
+/** npm's shorthands for a log level (npm 11's config definitions). */
+const NPM_LOGLEVEL_SHORTHANDS: ReadonlyMap<string, string> = new Map([
+  ["-s", "silent"],
+  ["--silent", "silent"],
+  ["-q", "warn"],
+  ["--quiet", "warn"],
+  ["-d", "info"],
+  ["--verbose", "verbose"],
+  ["-dd", "verbose"],
+  ["-ddd", "silly"],
+]);
 
 /** Global flags that take a value (as the next argument unless written `--flag=value`). */
 const VALUE_FLAGS = new Set([
@@ -162,7 +179,14 @@ export function parseArgs(argv: string[]): Invocation {
   const { tool, invokedAs, prefix } = toolOf(argv[0] ?? "npm");
   const rest = [...prefix, ...argv.slice(1)];
   if (prefix.length > 0 && (argv[1] === "-v" || argv[1] === "--version")) {
-    return { tool, invokedAs, command: { kind: "version" }, dir: null, registry: null };
+    return {
+      tool,
+      invokedAs,
+      command: { kind: "version" },
+      dir: null,
+      registry: null,
+      loglevel: null,
+    };
   }
   const invocation: Invocation = {
     tool,
@@ -170,8 +194,17 @@ export function parseArgs(argv: string[]): Invocation {
     command: { kind: "help" },
     dir: null,
     registry: null,
+    loglevel: null,
   };
   let global = false;
+  /** Takes a flag npm reads for its log level; `value` is the flag's value, when it has one. */
+  const readLoglevel = (name: string, value: string | null) => {
+    const level =
+      name === "--loglevel" ? value : tool === "npm" ? NPM_LOGLEVEL_SHORTHANDS.get(name) : null;
+    if (level !== null && level !== undefined) {
+      invocation.loglevel = level;
+    }
+  };
 
   // Global options before the command.
   let index = 0;
@@ -200,6 +233,9 @@ export function parseArgs(argv: string[]): Invocation {
       } else if (name === "--registry") {
         invocation.registry = value;
       }
+      readLoglevel(name, value);
+    } else {
+      readLoglevel(name, null);
     }
     index++;
   }
@@ -244,8 +280,10 @@ export function parseArgs(argv: string[]): Invocation {
       } else if (name === "--registry") {
         invocation.registry = value;
       }
+      readLoglevel(name, value);
       continue;
     }
+    readLoglevel(name, null);
     own.push(arg);
   }
 

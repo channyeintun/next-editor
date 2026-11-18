@@ -117,9 +117,13 @@ export function writeTar(entries: TarInput[]): Uint8Array {
   return out;
 }
 
-/** Gzips bytes. */
+/**
+ * Gzips bytes, with no time in the header: the same package packs to the
+ * same bytes whenever it is packed, so its integrity is the same in every
+ * fake registry (a cached tarball stays valid for the next one).
+ */
 export function gzip(data: Uint8Array): Uint8Array {
-  return gzipSync(data);
+  return gzipSync(data, { mtime: 0 });
 }
 
 /** A package version served by the fake registry. */
@@ -134,7 +138,10 @@ export interface FakePackage {
   os?: string[];
   cpu?: string[];
   scripts?: Record<string, string>;
-  /** Extra files (path → contents); package.json is generated. */
+  /**
+   * Extra files (path → contents); package.json is generated. A path ending
+   * in `/` is a directory entry, with the mode given.
+   */
   files?: Record<string, string | { data: string; mode: number }>;
   /** Serve a tarball whose bytes do not match the recorded integrity. */
   corrupt?: boolean;
@@ -173,7 +180,9 @@ export function packTarball(pkg: FakePackage): Uint8Array {
     entries.push(
       typeof file === "string"
         ? { path: `package/${path}`, data: file }
-        : { path: `package/${path}`, data: file.data, mode: file.mode },
+        : path.endsWith("/")
+          ? { path: `package/${path}`, type: "5", mode: file.mode }
+          : { path: `package/${path}`, data: file.data, mode: file.mode },
     );
   }
   return gzip(writeTar(entries));

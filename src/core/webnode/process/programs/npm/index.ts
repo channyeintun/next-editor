@@ -27,7 +27,14 @@ import { basename, join, resolvePath } from "./paths";
 import { DEFAULT_REGISTRY, createRegistryClient, openTarballCache } from "./registry";
 import type { RegistryClient } from "./registry";
 import { parseSpec, pickVersion } from "./resolve";
-import { listScripts, pathWithBins, runScript, spawnAndWait } from "./scripts";
+import {
+  handleSignals,
+  listScripts,
+  pathWithBins,
+  runForeground,
+  runScript,
+  shellQuote,
+} from "./scripts";
 import type { ScriptContext } from "./scripts";
 
 export { parseArgs } from "./cli";
@@ -50,15 +57,25 @@ export function registryUrl(invocation: Invocation, env: Record<string, string>)
 }
 
 /**
+ * npm's log level: the command line's, else `npm_config_loglevel` /
+ * `NPM_CONFIG_LOGLEVEL`, as npm reads its configuration from the environment;
+ * null when neither sets one.
+ */
+export function loglevel(invocation: Invocation, env: Record<string, string>): string | null {
+  return invocation.loglevel ?? (env.npm_config_loglevel || env.NPM_CONFIG_LOGLEVEL || null);
+}
+
+/**
  * Runs the package manager with `argv` (`argv[0]` is the invoked name, e.g.
  * `pnpm`) and resolves with its exit status.
  */
 export async function runPackageManager(argv: string[]): Promise<number> {
   const rt = runtime();
+  handleSignals();
   rt.ref();
   const sink = createRuntimeSink();
   const invocation = parseArgs(argv);
-  const reporter = new Reporter(invocation.tool, sink);
+  const reporter = new Reporter(invocation.tool, sink, loglevel(invocation, rt.env));
   let client: RegistryClient | null = null;
   const session: Session = {
     invocation,
@@ -108,6 +125,7 @@ function scriptContext(session: Session, dir: string): ScriptContext {
     reporter: session.reporter,
     projectDir: dir,
     manifest: readManifest(runtime().fs, dir),
+    install: false,
   };
 }
 
@@ -234,8 +252,12 @@ async function implicit(session: Session, name: string, args: string[]): Promise
   }
   const bin = findLocalBin(session.cwd, name);
   if (bin) {
-    await session.reporter.sink.flush();
-    return spawnAndWait(bin, args, session.cwd, pathWithBins(runtime().env, session.cwd));
+    return runForeground(session.reporter, bin, args, pathWithBins(runtime().env, session.cwd), {
+      cwd: session.cwd,
+      line: [name, ...args.map(shellQuote)].join(" "),
+      event: null,
+      install: false,
+    });
   }
   const tool = session.invocation.tool;
   if (tool === "yarn") {

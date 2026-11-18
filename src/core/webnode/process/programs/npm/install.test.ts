@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../kernel/vfs/types";
 import { setRuntime } from "../../runtime";
 import type { SpawnRequest } from "../../runtime";
@@ -256,15 +256,27 @@ describe("install", () => {
         const bytes = store.get(url);
         return bytes ? new Response(bytes.slice().buffer) : undefined;
       },
+      // A store that takes its time, as Cache Storage does: the install
+      // waits for it, so a process that exits right after has cached them.
       put: async (url, response) => {
-        store.set(url, new Uint8Array(await response.arrayBuffer()));
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        store.set(url, bytes);
       },
       delete: async (url) => store.delete(url),
     };
     const first = await setup({ dependencies: { react: "19.0.0" } });
     await first.run({ cache });
-    await Promise.resolve();
-    const second = await setup({ dependencies: { react: "19.0.0" } });
+    expect(store.size).toBe(1);
+    // The next registry packs the same package seconds later: the same bytes.
+    const realNow = Date.now.bind(Date);
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => realNow() + 5000);
+    let second: Setup;
+    try {
+      second = await setup({ dependencies: { react: "19.0.0" } });
+    } finally {
+      clock.mockRestore();
+    }
     await second.run({ cache });
     expect(second.fake.requests.some((url) => url.endsWith(".tgz"))).toBe(false);
     expect(second.rt.stdout()).toMatch(/reused 1, downloaded 0, added 1/);
@@ -312,6 +324,60 @@ describe("install", () => {
     const result = await run();
     expect(result.upToDate).toBe(true);
     expect(spawned.map((request) => request.args[1])).toEqual(["echo pre", "echo post"]);
+  });
+
+  it("reports a failed root script as the tool does, and ends without its summary", async () => {
+    // npm 10.9.2 and 11.20.0, `npm install` with postinstall "exit 7": the
+    // block below on standard error, no "up to date" line, status 7, both
+    // when it installs and when nothing changed. pnpm 9.12.1 prints
+    // " ELIFECYCLE  Command failed with exit code 7." and no "Done in".
+    const scripts = { preinstall: "echo PRE", postinstall: "exit 7", prepare: "echo PREPARE" };
+    const status = (request: SpawnRequest) => (request.args[1] === "exit 7" ? 7 : 0);
+    const npm = await setup({ name: "inst", version: "1.0.0", scripts }, { status });
+    for (const upToDate of [false, true]) {
+      const printed = { out: npm.rt.stdout().length, err: npm.rt.stderr().length };
+      const result = await npm.run({ tool: "npm" });
+      expect(result).toMatchObject({ status: 7, upToDate });
+      expect(npm.spawned.map((request) => request.args[1])).toEqual(["echo PRE", "exit 7"]);
+      expect(npm.rt.stdout().slice(printed.out)).toBe(
+        "\n> inst@1.0.0 preinstall\n> echo PRE\n\n\n> inst@1.0.0 postinstall\n> exit 7\n\n",
+      );
+      expect(npm.rt.stderr().slice(printed.err)).toBe(
+        "npm error code 7\n" +
+          "npm error path /project\n" +
+          "npm error command failed\n" +
+          "npm error command sh -c exit 7\n",
+      );
+      npm.spawned.length = 0;
+    }
+
+    const pnpm = await setup({ name: "inst", version: "1.0.0", scripts }, { status });
+    expect((await pnpm.run()).status).toBe(7);
+    expect((await pnpm.run()).status).toBe(7);
+    expect(pnpm.rt.stderr()).toBe(" ELIFECYCLE  Command failed with exit code 7.\n".repeat(2));
+    expect(pnpm.rt.stdout()).toContain("Already up to date\n\n> inst@1.0.0 preinstall /project\n");
+    expect(pnpm.rt.stdout()).not.toContain("Done in");
+  });
+
+  it("prints the summary after the root scripts have run", async () => {
+    // npm 11.20.0: "up to date in 151ms" follows the prepare script's output.
+    // pnpm 9.12.1: "Already up to date", the scripts, then "Done in 173ms".
+    const scripts = { preinstall: "echo PRE", prepare: "echo PREPARE" };
+    const npm = await setup({ name: "inst", version: "1.0.0", scripts });
+    for (const upToDate of [false, true]) {
+      const printed = npm.rt.stdout().length;
+      expect(await npm.run({ tool: "npm" })).toMatchObject({ status: 0, upToDate });
+      expect(npm.rt.stdout().slice(printed)).toMatch(
+        /^\n> inst@1\.0\.0 preinstall\n> echo PRE\n\n\n> inst@1\.0\.0 prepare\n> echo PREPARE\n\n\nup to date in \d+ms\n$/,
+      );
+    }
+    const pnpm = await setup({ name: "inst", version: "1.0.0", scripts });
+    await pnpm.run();
+    const printed = pnpm.rt.stdout().length;
+    expect((await pnpm.run()).upToDate).toBe(true);
+    expect(pnpm.rt.stdout().slice(printed)).toMatch(
+      /^Already up to date\n\n> inst@1\.0\.0 preinstall \/project\n> echo PRE\n\n\n> inst@1\.0\.0 prepare \/project\n> echo PREPARE\n\n\nDone in \d+ms\n$/,
+    );
   });
 
   it("runs preinstall before resolving, and stops when it fails", async () => {
@@ -457,5 +523,44 @@ describe("install: peers and failed resolves", () => {
     writeManifest({ name: "app", dependencies: { a: "1.0.0" } });
     expect((await run()).upToDate).toBe(true);
     expect(rt.fs.exists(`/project/node_modules/${STAGING_NAME}`)).toBe(false);
+  });
+});
+
+describe("install: modes", () => {
+  const locked = (version: string): FakePackage => ({
+    name: "locked",
+    version,
+    bin: { locked: "bin/cli.js" },
+    files: {
+      "lib/": { data: "", mode: 0o555 },
+      "lib/index.js": { data: `module.exports = "${version}";`, mode: 0o444 },
+      "lib/run.sh": { data: "#!/bin/sh\n", mode: 0o511 },
+      "bin/cli.js": { data: "#!/usr/bin/env node\n", mode: 0o444 },
+    },
+  });
+
+  it("installs whatever modes a tarball has, installs over it and removes it", async () => {
+    const { rt, run, fake, writeManifest, read } = await setup({
+      dependencies: { locked: "1.0.0" },
+    });
+    await fake.add(locked("1.0.0"));
+    await fake.add(locked("2.0.0"));
+    expect((await run()).status).toBe(0);
+    const mode = (path: string) =>
+      rt.fs.stat(`/project/node_modules/locked/${path}`, true).mode & 0o777;
+    // Directories 0755, files 0644 or 0755, and what a bin names executable, as npm does.
+    expect([mode("lib"), mode("lib/index.js"), mode("lib/run.sh"), mode("bin/cli.js")]).toEqual([
+      0o755, 0o644, 0o755, 0o755,
+    ]);
+    rt.fs.access("/project/node_modules/.bin/locked", 1);
+    writeManifest({ dependencies: { locked: "2.0.0" } });
+    expect((await run()).status).toBe(0);
+    expect(read("/project/node_modules/locked/lib/index.js")).toBe('module.exports = "2.0.0";');
+    writeManifest({ dependencies: {} });
+    expect((await run()).status).toBe(0);
+    expect(rt.fs.exists("/project/node_modules/locked")).toBe(false);
+    // `rm -rf node_modules` as the user runs it.
+    rt.fs.rm("/project/node_modules", true, false);
+    expect(rt.fs.exists("/project/node_modules")).toBe(false);
   });
 });
