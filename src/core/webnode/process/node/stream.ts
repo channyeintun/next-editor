@@ -1,13 +1,13 @@
 // The `stream` builtin: readable-stream@4.8.0 (Node's own stream code,
 // extracted) with the gaps against Node 22 filled: the web stream adapters
-// (stream/web_adapters.ts), `duplexPair`, `_isArrayBufferView`, and Uint8Array
-// chunks turned into webnode's Buffer, other views too (stream/view_chunks.ts). A paused stream is read as Node 26 reads
-// it (stream/paused_read.ts), the callbacks of `write` and `end` get `null`
-// for no error (stream/write_callbacks.ts), and its coded errors have Node's
-// shape (stream/node_errors.ts). The default export is the legacy
+// (stream/web_adapters.ts), `duplexPair`, `_isArrayBufferView`, and byte
+// chunks of any view turned into webnode's Buffer (stream/view_chunks.ts). A
+// paused stream is read as Node 26 reads it (stream/paused_read.ts), the
+// callbacks of `write` and `end` get `null` for no error
+// (stream/write_callbacks.ts), and its coded errors have Node's shape
+// (stream/node_errors.ts). The default export is the legacy
 // `Stream` constructor carrying everything, exactly as `require("stream")`.
 import Stream from "readable-stream/lib/stream.js";
-import { Buffer } from "./buffer";
 import { createDuplexPair } from "./stream/duplex_pair";
 import { installNodeErrors } from "./stream/node_errors";
 import { installPausedRead } from "./stream/paused_read";
@@ -50,6 +50,11 @@ installWebAdapters(stream);
 installPausedRead(stream);
 installWriteCallbacks(stream);
 installViewChunks(stream);
+// Node's Readable `push` and `unshift` are unnamed functions; the library
+// names them.
+for (const name of ["push", "unshift"] as const) {
+  Object.defineProperty(stream.Readable.prototype[name], "name", { value: "" });
+}
 // Node 22 raised the default byte high water mark from 16 KiB to 64 KiB.
 stream.setDefaultHighWaterMark(false, 64 * 1024);
 
@@ -63,10 +68,7 @@ function define(name: string, value: unknown): void {
 }
 
 define("duplexPair", createDuplexPair(stream.Duplex));
-define("_isArrayBufferView", (value: unknown) => ArrayBuffer.isView(value));
-define("_uint8ArrayToBuffer", (chunk: Uint8Array) =>
-  Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength),
-);
+define("_isArrayBufferView", ArrayBuffer.isView);
 
 /** `stream.Readable`. */
 export const Readable = stream.Readable;

@@ -20,15 +20,22 @@ type ErrorClass = new (...args: unknown[]) => Error;
 /**
  * The message as Node words it. A stream's byte chunk may be any view
  * (stream/view_chunks.ts), which Node's refusal names; the library names the
- * two it takes itself.
+ * two it takes itself. The library raises ERR_MISSING_ARGS only for the
+ * "streams" of `pipeline` and `compose`, and its wording function loses the
+ * argument's name, so the message is Node's for that one argument.
  */
 function nodeMessage(code: string, message: string): string {
-  return code === "ERR_INVALID_ARG_TYPE"
-    ? message.replace(
+  switch (code) {
+    case "ERR_INVALID_ARG_TYPE":
+      return message.replace(
         "an instance of Buffer or Uint8Array.",
         "an instance of Buffer, TypedArray, or DataView.",
-      )
-    : message;
+      );
+    case "ERR_MISSING_ARGS":
+      return 'The "streams" argument must be specified';
+    default:
+      return message;
+  }
 }
 
 /** Gives every class in readable-stream's `codes` Node's error shape. Runs once. */

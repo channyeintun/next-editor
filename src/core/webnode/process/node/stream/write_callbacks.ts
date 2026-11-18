@@ -33,13 +33,16 @@ function withNodeCallback(method: Method): Method {
 
 /**
  * Gives `write` and `end` of every Writable Node's callback arguments. A
- * Duplex has its own copies of the two methods, which Transform and
- * PassThrough inherit.
+ * Duplex holds the Writable's own two functions, which Transform and
+ * PassThrough inherit, so both prototypes get the same new function, as in
+ * Node, where `Duplex.prototype.write === Writable.prototype.write`.
  */
 export function installWriteCallbacks(stream: StreamModule): void {
-  for (const prototype of [stream.Writable.prototype, stream.Duplex.prototype]) {
-    const methods = prototype as unknown as { write: Method; end: Method };
-    methods.write = withNodeCallback(methods.write);
-    methods.end = withNodeCallback(methods.end);
+  const writable = stream.Writable.prototype as unknown as { write: Method; end: Method };
+  const duplex = stream.Duplex.prototype as unknown as { write: Method; end: Method };
+  for (const name of ["write", "end"] as const) {
+    const method = withNodeCallback(writable[name]);
+    writable[name] = method;
+    duplex[name] = method;
   }
 }

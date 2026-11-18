@@ -1189,6 +1189,33 @@ describe("the callbacks of write() and end()", () => {
     expect([Writable.prototype.write.length, Writable.prototype.end.length]).toEqual([3, 3]);
     expect([Duplex.prototype.write.length, Duplex.prototype.end.length]).toEqual([3, 3]);
   });
+
+  // Real Node v26: a Duplex holds the Writable's own `write` and `end`, and
+  // the four chunk methods are unnamed functions of Node's arity.
+  it("are the same functions on a Writable and a Duplex, named and sized as Node's", () => {
+    expect(Duplex.prototype.write).toBe(Writable.prototype.write);
+    expect(Duplex.prototype.end).toBe(Writable.prototype.end);
+    const methods = [
+      Writable.prototype.write,
+      Writable.prototype.end,
+      Readable.prototype.push,
+      Readable.prototype.unshift,
+    ];
+    expect(methods.map((method) => `${method.name}/${method.length}`)).toEqual([
+      "/3",
+      "/3",
+      "/2",
+      "/2",
+    ]);
+    let stack = "";
+    try {
+      new Writable({ write: (_chunk, _encoding, done) => done() }).write(1 as never);
+    } catch (error) {
+      stack = String((error as Error).stack);
+    }
+    expect(stack).toMatch(/\n\s+at /);
+    expect(stack).not.toMatch(/wrapped|takingViews/);
+  });
 });
 
 // Real Node v26 and v22 (errs.cjs): each is a plain Error (TypeError for an
@@ -1273,6 +1300,21 @@ describe("the coded errors streams raise", () => {
         stack: `Error [${code}]: ${message}`,
       });
     }
+  });
+
+  // Real Node v26 (c4.cjs): both raise the same TypeError.
+  it("name the missing streams of pipeline and compose", () => {
+    const raised = (start: () => void) => {
+      try {
+        start();
+      } catch (error) {
+        return String(error);
+      }
+      return "nothing";
+    };
+    const missing = 'TypeError [ERR_MISSING_ARGS]: The "streams" argument must be specified';
+    expect(raised(() => stream.pipeline(new PassThrough(), () => {}))).toBe(missing);
+    expect(raised(() => stream.compose())).toBe(missing);
   });
 
   it("start their stack at the stream call that raised them", () => {
