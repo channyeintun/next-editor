@@ -25,6 +25,7 @@ import {
 import EventEmitter from "./events";
 import type { EventEmitter as EventEmitterInstance } from "./events";
 import { processBroadcast, type BroadcastHub } from "./internal/broadcastHub";
+import { cloningAsNode } from "./internal/dataCloneError";
 import { invalidArgType, missingArgs } from "./internalErrors";
 import path from "./path";
 import type { NodeProcess } from "./process";
@@ -410,7 +411,9 @@ export function cloneWithPorts(
   refuseClosedPortsToClone(options);
   let result: unknown;
   sendCarrying(value, options, (message, transfer) => {
-    result = clone(message, transfer as StructuredSerializeOptions | undefined);
+    result = cloningAsNode(() =>
+      clone(message, transfer as StructuredSerializeOptions | undefined),
+    );
   });
   if (isCarrying(result)) {
     adoptBacklogs(result.backlogs);
@@ -646,12 +649,12 @@ export function addNodePortInterface(prototype: object, kind: PortKind = "paired
     Object.assign(prototype, {
       postMessage(this: NodePort, message: unknown, transfer?: unknown) {
         if (arguments.length < 2) {
-          nativePostMessage.call(this, message);
+          cloningAsNode(() => nativePostMessage.call(this, message));
           return;
         }
         refuseClosedPorts(transfer);
         sendCarrying(message, transfer, (carried, list) =>
-          nativePostMessage.call(this, carried, list),
+          cloningAsNode(() => nativePostMessage.call(this, carried, list)),
         );
       },
     });
@@ -1000,14 +1003,18 @@ export function addNodePortInterface(prototype: object, kind: PortKind = "paired
     Object.assign(prototype, emitterMethods);
   }
 
+  // As in Node, a MessagePort's ref() and unref() answer undefined, a
+  // BroadcastChannel's the channel.
   Object.assign(prototype, {
     ref(this: NodePort) {
       stateOf(this).wantsRef = true;
       updateRef(this);
+      return paired ? undefined : this;
     },
     unref(this: NodePort) {
       stateOf(this).wantsRef = false;
       updateRef(this);
+      return paired ? undefined : this;
     },
     /**
      * Closes this end. As in Node the caller goes on first: 'close' is

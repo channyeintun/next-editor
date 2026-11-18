@@ -9,6 +9,8 @@
 // this worker and along every link, and each worker passes it on along its
 // other links, so it crosses the process's tree of threads once.
 
+import { cloningAsNode } from "./dataCloneError";
+
 /** A channel as the hub sees it: the object its messages are dispatched to. */
 export type BroadcastTarget = EventTarget;
 
@@ -141,12 +143,14 @@ export function createBroadcastHub(): BroadcastHub {
       }
     },
     post(sender, name, data) {
-      const here = deliverHere(name, data, sender);
-      const along = relay({ name, data }, null);
-      if (!here && !along) {
-        // Nobody to send it to: it is still cloned, as Node serializes it.
-        platformStructuredClone(data);
-      }
+      cloningAsNode(() => {
+        const here = deliverHere(name, data, sender);
+        const along = relay({ name, data }, null);
+        if (!here && !along) {
+          // Nobody to send it to: it is still cloned, as Node serializes it.
+          platformStructuredClone(data);
+        }
+      });
     },
     linkChild() {
       const pair = new PlatformMessageChannel();

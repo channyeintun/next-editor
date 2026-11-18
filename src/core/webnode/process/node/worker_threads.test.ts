@@ -1066,6 +1066,23 @@ describe("BroadcastChannel", () => {
     ]);
   });
 
+  it("answers itself from ref() and unref(), where a MessagePort answers undefined, as in Node", () => {
+    const broadcast = new FakeBroadcast("x") as FakeBroadcast & {
+      ref(): unknown;
+      unref(): unknown;
+    };
+    expect(broadcast.ref()).toBe(broadcast);
+    expect(broadcast.unref()).toBe(broadcast);
+    broadcast.close();
+    const [port1, port2] = channel();
+    expect([(port1.ref as () => unknown)(), (port1.unref as () => unknown)()]).toEqual([
+      undefined,
+      undefined,
+    ]);
+    port1.close();
+    port2.close();
+  });
+
   it("takes a message shaped like a port's close message as data", async () => {
     const a = new FakeBroadcast("x");
     const b = new FakeBroadcast("x");
