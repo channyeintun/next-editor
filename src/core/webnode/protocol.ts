@@ -4,6 +4,7 @@
 import type { SystemErrorRecord } from "./errors";
 import type { ExitStatus } from "./process/runtime";
 import type { SharedFsAdmission } from "./sharedfs/processBackend";
+import type { UmaskCell } from "./umask";
 
 // ---------------------------------------------------------------------------
 // Page ⇄ kernel
@@ -94,6 +95,12 @@ export interface ProcessInit {
   execArgv: string[];
   env: Record<string, string>;
   cwd: string;
+  /**
+   * The process's file mode creation mask, in memory it shares with its
+   * threads and the kernel (umask.ts): the process sets it there, and
+   * whoever creates a file for it reads it there.
+   */
+  umask: UmaskCell;
   /** The buffer the kernel answers this worker's blocking calls in. */
   syncBuffer: SharedArrayBuffer;
   /**
@@ -104,6 +111,12 @@ export interface ProcessInit {
   sharedFs: SharedFsAdmission | null;
   /** Which of fds 0-2 are terminals, and that terminal's size. */
   ttyFds: number[];
+  /**
+   * The descriptors above 2 the process starts with, lowest first (what a
+   * parent shell's `exec 3>&1` left open): a shell takes them into its own
+   * table without asking the kernel about each.
+   */
+  inheritedFds: number[];
   terminal: TerminalSize;
   /** The channel for an `"ipc"` stdio entry. */
   ipc: MessagePort | null;
@@ -125,10 +138,21 @@ export type KernelMessage =
   | ProcessInit
   | { type: "reply"; id: number; ok: true; value: unknown }
   | { type: "reply"; id: number; ok: false; error: SerializedError }
-  | { type: "fd-data"; fd: number; chunk: Uint8Array | null }
+  /**
+   * What arrived on an fd being read; a null `chunk` is the end. The process
+   * says so (an `fd.ack` post) as it hands a chunk to its reader. `counted`
+   * bytes come from a pipe and take up its room until then; what reaches the
+   * process with its reader stopped it gives back (an `fd.unread` call), and
+   * the kernel puts back in the pipe whatever it sent and was not
+   * acknowledged. `typed` bytes come from a terminal: what the process never
+   * hands over goes back to the terminal when the process ends or closes the
+   * fd.
+   */
+  | { type: "fd-data"; fd: number; chunk: Uint8Array | null; counted?: boolean; typed?: boolean }
   | { type: "child-exit"; pid: number; status: ExitStatus }
   | { type: "thread-exit"; threadId: number; code: number }
-  | { type: "signal"; signal: string }
+  /** `fromTerminal`: the terminal sent it (a Ctrl+C), to every process of its foreground group. */
+  | { type: "signal"; signal: string; fromTerminal?: boolean }
   | { type: "watch"; watchId: number; eventType: "rename" | "change"; filename: string }
   | {
       type: "connection";
@@ -145,6 +169,13 @@ export type KernelMessage =
 export const SYNC_STATE = 0;
 export const SYNC_LENGTH = 1;
 export const SYNC_KIND = 2;
+/**
+ * A count the kernel raises whenever a pipe the worker writes to loses its
+ * last reader. The worker reads it before writes it hands over without
+ * waiting, so it learns of a broken pipe at once, even in a loop that never
+ * yields to its messages.
+ */
+export const SYNC_BROKEN = 3;
 export const SYNC_HEADER_BYTES = 16;
 
 export const SYNC_PENDING = 0;

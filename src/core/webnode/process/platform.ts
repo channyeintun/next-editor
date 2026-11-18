@@ -38,3 +38,11 @@ export const SHELL_PATH = "/bin/jsh";
 export const DEFAULT_PATH = "/bin:/usr/bin:/usr/local/bin";
 export const HOSTNAME = "localhost";
 export const USERNAME = "user";
+/**
+ * The one user every process runs as, who owns every file, and that user's
+ * group: what `process.getuid()`, `os.userInfo()` and every `stat` report.
+ * The shared filesystem's crate writes the same numbers itself
+ * (sharedfs/crate/src/fs.rs `UID`, `GID`).
+ */
+export const UID = 1;
+export const GID = 1;

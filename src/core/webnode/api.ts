@@ -5,6 +5,7 @@
 import { BUILD_ID, versionedPath } from "./buildId";
 import { systemErrorFromRecord } from "./errors";
 import type { DirEntry } from "./kernel/vfs/types";
+import { signalExitStatus } from "./signals";
 import {
   PREVIEW_CLEAR_PATH,
   RUNTIME_FRAME_PATH,
@@ -135,7 +136,7 @@ const RUNTIME_START_TIMEOUT_MS = 30000;
 /** How long a frame that has loaded may take to say it is a runtime. */
 const RUNTIME_READY_GRACE_MS = 5000;
 /** What a process still running at teardown exits with: what a shell reports for SIGKILL. */
-const TORN_DOWN_EXIT_CODE = 137;
+const TORN_DOWN_EXIT_CODE = signalExitStatus("SIGKILL");
 
 /** A preview session: the id in its preview origins' hosts, and the ports it served. */
 interface Session {
@@ -197,8 +198,10 @@ function forgetSession(id: string): void {
 /**
  * Asks each preview origin of a session given up to drop what its pages
  * stored (storage, caches, service workers): the host answers with
- * Clear-Site-Data. Where the browser does not honour it, the origin is at
- * least never used again.
+ * Clear-Site-Data. The request carries credentials: a browser ignores
+ * Clear-Site-Data on the answer to a request made without them, which is
+ * what a cross-origin fetch is by default. Where the browser does not honour
+ * the header, the origin is at least never used again.
  */
 function clearPreviewOrigins(base: PreviewBase, id: string, ports: Iterable<number>): void {
   for (const port of ports) {
@@ -208,7 +211,12 @@ function clearPreviewOrigins(base: PreviewBase, id: string, ports: Iterable<numb
     } catch {
       continue;
     }
-    void fetch(url, { method: "POST", mode: "no-cors", keepalive: true }).catch(() => {});
+    void fetch(url, {
+      method: "POST",
+      mode: "no-cors",
+      credentials: "include",
+      keepalive: true,
+    }).catch(() => {});
   }
 }
 

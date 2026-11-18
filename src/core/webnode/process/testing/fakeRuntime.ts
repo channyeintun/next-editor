@@ -10,6 +10,9 @@ import {
 } from "../../errors";
 import { S_IFCHR, S_IFIFO, type OpenFile, type StatData } from "../../kernel/vfs/types";
 import { Vfs } from "../../kernel/vfs/vfs";
+import { endsByDefault, signalExitStatus } from "../../signals";
+import { DEFAULT_UMASK, umaskBits } from "../../umask";
+import { GID, UID } from "../platform";
 import type {
   ByteChannel,
   ChildHandle,
@@ -59,11 +62,24 @@ export interface FakeRuntime extends ProcessRuntime {
   readonly refCount: number;
   /** Set once processes.exit(code) was called (exit throws a `FakeExit` error carrying the code). */
   readonly exitCode: number | null;
+  /**
+   * The status `processes.forkAndExit` reported the process ended with, once
+   * it was called; the runtime goes on as the new process (`pid`).
+   */
+  readonly forkedExit: ExitStatus | null;
   rawMode: boolean;
   /** Fires the tty resize listeners. */
   resize(columns: number, rows: number): void;
-  /** Delivers a signal to the onSignal listeners. */
-  signal(name: string): void;
+  /**
+   * Delivers a signal to the onSignal listeners: one sent with kill, or with
+   * `fromTerminal` the terminal's own (a Ctrl+C).
+   */
+  signal(name: string, fromTerminal?: boolean): void;
+  /**
+   * The reader of fd 1 or fd 2 goes away, as when a pipe's reader exits:
+   * from now on a write to it fails with EPIPE.
+   */
+  closeReader(fd: 1 | 2): void;
 }
 
 /** Thrown by the fake `processes.exit(code)`, which must not return. */
@@ -80,16 +96,6 @@ export class FakeExit extends Error {
 const encoder = new TextEncoder();
 const FIRST_DYNAMIC_PORT = 49152;
 const FIRST_CLIENT_PORT = 60000;
-const SIGNAL_NUMBERS: Readonly<Record<string, number>> = {
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGKILL: 9,
-  SIGUSR1: 10,
-  SIGUSR2: 12,
-  SIGPIPE: 13,
-  SIGTERM: 15,
-};
 
 function toBytes(data: Uint8Array | string): Uint8Array {
   return typeof data === "string" ? encoder.encode(data) : data;
@@ -134,6 +140,19 @@ class Pipe {
       return;
     }
     this.chunks.push(data.slice());
+    this.schedule();
+  }
+
+  /**
+   * Puts a copy of `data` back in front of what is queued, for the next read.
+   * A reader that saw the end gets these, then the end again.
+   */
+  unshift(data: Uint8Array): void {
+    if (data.length === 0) {
+      return;
+    }
+    this.chunks.unshift(data.slice());
+    this.endDelivered = false;
     this.schedule();
   }
 
@@ -205,6 +224,8 @@ class Pipe {
 /** Where fd 1 or fd 2 writes end up. */
 interface Capture {
   chunks: Uint8Array[];
+  /** Its reader has gone (`closeReader`): writes fail with EPIPE. */
+  readerGone?: boolean;
 }
 
 type FdEntry =
@@ -224,6 +245,8 @@ interface ChildStream {
 
 interface FakeChild {
   pid: number;
+  /** Its process group: its own pid when started with `newGroup`, else this process's. */
+  group: number;
   status: ExitStatus | null;
   listeners: ((status: ExitStatus) => void)[];
   streams: ChildStream[];
@@ -239,7 +262,12 @@ const DISCARD: ChildStream = {
 export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime {
   const vfs = options.vfs ?? new Vfs();
   const tty = options.tty ?? false;
+  /** The pid the process started with, which also numbers its process group. */
   const pid = options.pid ?? 1;
+  /** Its pid now: a new one after `forkAndExit`. */
+  let currentPid = pid;
+  let currentPpid = 0;
+  let forkedExit: ExitStatus | null = null;
   const stdoutCapture: Capture = { chunks: [] };
   const stderrCapture: Capture = { chunks: [] };
   const stdinPipe = new Pipe();
@@ -254,7 +282,7 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
   ]);
   const children = new Map<number, FakeChild>();
   const resizeListeners = new Set<() => void>();
-  const signalListeners: ((signal: string) => boolean)[] = [];
+  const signalListeners: ((signal: string, fromTerminal: boolean) => boolean)[] = [];
   const servers = new Map<
     number,
     (channel: ByteChannel, remote: { address: string; port: number }) => void
@@ -264,6 +292,16 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
   let nextClientPort = FIRST_CLIENT_PORT;
   let refCount = 0;
   let exitCode: number | null = null;
+
+  /**
+   * As the kernel's `proc.die`: the signal's default action, which ends the
+   * process as 128 + its number unless it is to do nothing.
+   */
+  function die(signal: string): void {
+    if (endsByDefault(signal)) {
+      exitCode = signalExitStatus(signal);
+    }
+  }
 
   function allocate(entry: FdEntry): number {
     let fd = 0;
@@ -308,6 +346,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
       case "file":
         return entry.file.write(data, position);
       case "capture":
+        if (entry.capture.readerGone) {
+          fail("EPIPE", "write");
+        }
         entry.capture.chunks.push(data.slice());
         return data.length;
       case "pipe":
@@ -361,8 +402,8 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
       ino: 0,
       mode,
       nlink: 1,
-      uid: 1,
-      gid: 1,
+      uid: UID,
+      gid: GID,
       rdev: 0,
       size: 0,
       blksize: 4096,
@@ -394,6 +435,11 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
     return (entry?.type === "capture" || entry?.type === "stdin") && entry.tty;
   }
 
+  /** The process's file mode creation mask (`runtime.umask`). */
+  let umask = DEFAULT_UMASK;
+  /** Runs `create`, a call that may make a file or a directory, under the mask. */
+  const creating = <T>(create: () => T): T => vfs.withUmask(umask, create);
+
   const fs: FsBackend = {
     stat: (path, followSymlinks) => vfs.stat(path, followSymlinks),
     fstat: (fd) => {
@@ -402,7 +448,8 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
     },
     exists: (path) => vfs.exists(path),
     readdir: (path) => vfs.readdir(path),
-    mkdir: (path, recursive, mode) => vfs.mkdir(path, recursive, mode),
+    mkdir: (path, recursive, mode, floor) =>
+      creating(() => vfs.mkdir(path, recursive, mode, floor)),
     rmdir: (path) => vfs.rmdir(path),
     unlink: (path) => vfs.unlink(path),
     rm: (path, recursive, force) => vfs.rm(path, recursive, force),
@@ -420,14 +467,17 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
     ftruncate: (fd, length) => fileOf(fd, "ftruncate").truncate(length),
     copyFile: (source, destination, mode) => vfs.copyFile(source, destination, mode),
     access: (path, mode) => vfs.access(path, mode),
-    mkdtemp: (prefix) => vfs.mkdtemp(prefix),
+    mkdtemp: (prefix) => creating(() => vfs.mkdtemp(prefix)),
     readFile: (path) => vfs.readFile(path),
-    writeFile: (path, data, flags, mode) => vfs.writeFile(path, data, flags, mode),
-    open: (path, flags, mode) => allocate({ type: "file", file: vfs.open(path, flags, mode) }),
+    writeFile: (path, data, flags, mode) => creating(() => vfs.writeFile(path, data, flags, mode)),
+    open: (path, flags, mode) =>
+      allocate({ type: "file", file: creating(() => vfs.open(path, flags, mode)) }),
     close: closeFd,
     read: readFd,
-    readAsync: async (fd, length, position) => {
-      // A pipe with nothing buffered yet is retried until bytes or its end arrive.
+    readAsync: async (fd, length, position, signal) => {
+      // A pipe with nothing buffered yet is retried until bytes or its end
+      // arrive, or until the caller gives the wait up (`signal`): the read
+      // then takes nothing and fails with EINTR, as the kernel's does.
       for (;;) {
         try {
           return readFd(fd, length, position);
@@ -435,8 +485,19 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
           if ((error as { code?: string }).code !== "EAGAIN") {
             throw error;
           }
-          await new Promise((resolve) => setTimeout(resolve, 1));
         }
+        if (signal?.aborted) {
+          fail("EINTR", "read");
+        }
+        await new Promise<void>((resolve) => {
+          const retry = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", retry);
+            resolve();
+          };
+          const timer = setTimeout(retry, 1);
+          signal?.addEventListener("abort", retry, { once: true });
+        });
       }
     },
     write: writeFd,
@@ -471,15 +532,47 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
       }
     },
     write: (fd, chunk, done) => {
+      if (done === undefined) {
+        // A blocking write, as write(2) is: its error is thrown, as sysClient's is.
+        writeFd(fd, chunk, null);
+        return;
+      }
       let error: Error | null = null;
       try {
         writeFd(fd, chunk, null);
       } catch (caught) {
         error = caught as Error;
       }
-      queueMicrotask(() => done?.(error));
+      queueMicrotask(() => done(error));
+    },
+    // As the kernel's answer to a call: in a task, after the tasks queued
+    // before. The report holds the process until it has run, as sysClient's does.
+    reportWriteError: (_fd, error, done) => {
+      runtime.ref();
+      setTimeout(() => {
+        try {
+          done(error);
+        } finally {
+          runtime.unref();
+        }
+      }, 0);
     },
     close: closeFd,
+    // As the kernel's fd.unread: reading stops, and the bytes go back in
+    // front of what the pipe still holds, for its next reader. An fd that is
+    // not a pipe's read end fails here, where the kernel's refusal reaches
+    // nobody, so a test sees the misuse.
+    unread: (fd, bytes) => {
+      const entry = entryOf(fd, "read");
+      if (
+        !(entry.type === "pipe" && entry.side === "read") &&
+        !(entry.type === "stdin" && !entry.tty)
+      ) {
+        fail("EINVAL", "read");
+      }
+      entry.pipe.listen(null);
+      entry.pipe.unshift(bytes);
+    },
   };
 
   const ttyBackend: TtyBackend = {
@@ -501,6 +594,22 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
       return () => {
         resizeListeners.delete(listener);
       };
+    },
+    // The fake has no process groups: a terminal has nothing else to take back from.
+    reclaim: (fd) => {
+      if (!isTty(fd)) {
+        fail("ENOTTY", "ioctl");
+      }
+    },
+    unread: (fd, bytes) => {
+      const entry = fds.get(fd);
+      if (!isTty(fd)) {
+        fail("ENOTTY", "ioctl");
+      }
+      // The fake's only readable terminal is its stdin.
+      if (entry?.type === "stdin") {
+        entry.pipe.unshift(bytes);
+      }
     },
   };
 
@@ -616,7 +725,14 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
 
   function startChild(request: SpawnRequest): { child: FakeChild; stdio: (number | null)[] } {
     const stdio: (number | null)[] = request.stdio.map(() => null);
-    const child: FakeChild = { pid: nextPid++, status: null, listeners: [], streams: [] };
+    const childPid = nextPid++;
+    const child: FakeChild = {
+      pid: childPid,
+      group: request.newGroup ? childPid : pid,
+      status: null,
+      listeners: [],
+      streams: [],
+    };
     child.streams = request.stdio.map((spec, index) =>
       childStream(spec, index, stdio, request.command),
     );
@@ -679,25 +795,52 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
       const writeFd = allocate({ type: "pipe", pipe, side: "write" });
       return { readFd, writeFd };
     },
+    // As the kernel's kill(2): a positive pid is that process, 0 this
+    // process's group, -1 every process but this one, and any other negative
+    // pid the group -pid. This process is the leader of its own group.
+    // Signal "0" only checks that there is someone to signal.
     kill: (target, signal) => {
-      if (target === pid) {
-        runtime.signal(signal);
-        return;
-      }
-      const child = children.get(target);
-      if (child === undefined || child.status !== null) {
+      const members =
+        target > 0
+          ? [...children.values()].filter((child) => child.pid === target)
+          : [...children.values()].filter(
+              (child) => target === -1 || child.group === (target === 0 ? pid : -target),
+            );
+      const alive = members.filter((child) => child.status === null);
+      const self = target === currentPid || target === 0 || target === -pid;
+      if (alive.length === 0 && !self) {
         fail("ESRCH", "kill");
       }
-      settle(child, { code: null, signal });
+      if (signal === "0") {
+        return;
+      }
+      for (const child of alive) {
+        settle(child, { code: null, signal });
+      }
+      // The caller last: the signal may end it.
+      if (self) {
+        runtime.signal(signal);
+      }
     },
     exit: (code) => {
       exitCode = code;
       throw new FakeExit(code);
     },
+    // The process ends for whoever waits; the runtime goes on as a new
+    // process in the same group, its fds and children its own still. Its
+    // parent is the pid that ended, as the kernel gives what a page process
+    // leaves behind.
+    forkAndExit: (status) => {
+      forkedExit = { ...status };
+      currentPpid = currentPid;
+      currentPid = nextPid++;
+      return currentPid;
+    },
     onSignal: (listener) => {
       signalListeners.push(listener);
     },
     setHandledSignals: () => {},
+    die: (signal) => die(signal),
   };
 
   function spawnSync(request: SpawnSyncRequest): SpawnSyncResult {
@@ -818,12 +961,27 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
   };
 
   const runtime: FakeRuntime = {
-    pid,
-    ppid: 0,
+    get pid() {
+      return currentPid;
+    },
+    get ppid() {
+      return currentPpid;
+    },
     argv: options.argv ?? ["/bin/node"],
     execArgv: [],
     env: options.env ?? {},
     cwd: options.cwd ?? "/",
+    get umask() {
+      return umask;
+    },
+    set umask(mask: number) {
+      umask = umaskBits(mask);
+    },
+    // A test opens what the program it plays starts with before starting
+    // it: the descriptors above 2 open when the program asks.
+    get inheritedFds() {
+      return [...fds.keys()].filter((fd) => fd > 2).sort((a, b) => a - b);
+    },
     fs,
     fdStream,
     tty: ttyBackend,
@@ -859,6 +1017,9 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
     get exitCode() {
       return exitCode;
     },
+    get forkedExit() {
+      return forkedExit;
+    },
     rawMode: false,
     resize: (columns, rows) => {
       windowSize = { columns, rows };
@@ -866,14 +1027,19 @@ export function createFakeRuntime(options: FakeRuntimeOptions = {}): FakeRuntime
         listener();
       }
     },
-    signal: (name) => {
+    signal: (name, fromTerminal = false) => {
+      let handled = false;
       for (const listener of signalListeners) {
-        listener(name);
+        handled = listener(name, fromTerminal) || handled;
       }
-      if (signalListeners.length === 0) {
-        // With no handler a signal ends the process, as 128 + its number.
-        exitCode = 128 + (SIGNAL_NUMBERS[name] ?? 0);
+      // A signal no listener took (or with no listener at all) has its
+      // default action, as the kernel's `proc.die` gives it.
+      if (!handled) {
+        die(name);
       }
+    },
+    closeReader: (fd) => {
+      (fd === 1 ? stdoutCapture : stderrCapture).readerGone = true;
     },
   };
   return runtime;

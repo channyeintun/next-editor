@@ -7,10 +7,12 @@ import { createPortChannel } from "../byteChannel";
 import { createSystemError, toSystemErrorRecord } from "../errors";
 import {
   DEFAULT_PATH,
+  GID,
   HOME_DIR,
   HOSTNAME,
   SHELL_PATH,
   TMP_DIR,
+  UID,
   USERNAME,
 } from "../process/platform";
 import type {
@@ -31,21 +33,35 @@ import type {
   ProcessMessage,
   TerminalSize,
 } from "../protocol";
-import { INITIAL_SYNC_BUFFER_BYTES, serializeError } from "../protocol";
+import {
+  INITIAL_SYNC_BUFFER_BYTES,
+  SYNC_BROKEN,
+  SYNC_HEADER_BYTES,
+  serializeError,
+} from "../protocol";
 import { encodePayload, writeSyncAnswer } from "./codec";
 import type { EncodedPayload } from "./codec";
 import { installBuiltinCommands, resolveExec } from "./exec";
+import { createPageFiles } from "./pageFiles";
+import type { PageFiles } from "./pageFiles";
 import type { ByteSource } from "./streams";
-import { Pipe, Terminal } from "./streams";
+import { Delivery, Pipe, PIPE_CAPACITY, Terminal, TerminalDelivery } from "./streams";
 import type { SharedFilesystem } from "../sharedfs/boot";
-import { kernelPathOf, normalizePath } from "../sharedfs/processBackend";
-import type { OpenFile, StatData, VfsApi } from "./vfs/types";
+import { isDeviceEntry, kernelPathOf, normalizePath } from "../sharedfs/processBackend";
+import { endsByDefault, exitStatusNumber } from "../signals";
+import { createUmaskCell, DEFAULT_UMASK, readUmask, type UmaskCell } from "../umask";
+import type { OpenFile, PermissionedVfs, StatData } from "./vfs/types";
 import {
+  accessBits,
+  callerBits,
   COPYFILE_EXCL,
   O_CREAT,
+  O_DIRECTORY,
   O_EXCL,
   O_TRUNC,
   O_WRONLY,
+  OWNER_W,
+  ROOT_ID,
   S_IFCHR,
   S_IFDIR,
   S_IFIFO,
@@ -74,6 +90,58 @@ export interface KernelHost {
   sharedFs?: SharedFilesystem | null;
 }
 
+/**
+ * How a write to a full pipe waits. "wait" is a blocking write(2): answered
+ * once every byte is in, and withdrawn if its process dies first. "queue" is
+ * a write with a completion (or none): answered the same way, but the bytes
+ * were handed over, so they still go in after their process has gone.
+ */
+type WriteMode = "wait" | "queue";
+
+/** Bytes a pump sends a reading process in one message at most: a pipeful. */
+const DELIVERY_BYTES = PIPE_CAPACITY;
+
+/** What a wait the kernel gives up on (its process ended) settles with; nobody hears it. */
+function processGone(): Error {
+  return new Error("webnode kernel: the process ended");
+}
+
+/** A pump: a stream of `fd-data` messages for one fd (`fd.readStart`). */
+interface Pump {
+  stop(): void;
+  /**
+   * Stops for as long as its worker waits in a blocking call (see
+   * `Kernel.holdDeliveries`): it withdraws its wait to read and sends
+   * nothing until `resume`. The worker cannot receive, so it must not count
+   * as a reader waiting for a terminal's input, nor be sent a pipe's bytes.
+   */
+  pause(): void;
+  /** Delivers again after a pause. */
+  resume(): void;
+  /** The worker received all the pump had sent: the next delivery may go, unless paused. */
+  next(): void;
+}
+
+/** A read waiting for bytes from a pipe or a terminal. */
+interface PendingRead {
+  /** The name the worker gave the read, when it may give it up itself (`fs.readCancel`). */
+  token: number | undefined;
+  /** Withdraws the wait, so the read takes nothing, and fails the read with `error`. */
+  giveUp(error: Error): void;
+}
+
+/** The descriptors above 2 of a process's table, lowest first: what a new process inherits beyond its stdio. */
+function descriptorsAbove2(fds: Map<number, unknown>): number[] {
+  return [...fds.keys()].filter((fd) => fd > 2).sort((a, b) => a - b);
+}
+
+/** Swallows the failure of a result nobody waits for (a post's). */
+function settleQuietly(result: unknown): void {
+  if (result instanceof Promise) {
+    result.catch(() => {});
+  }
+}
+
 type Description =
   | { kind: "file"; refs: number; file: OpenFile }
   | { kind: "pipe-read"; refs: number; pipe: Pipe }
@@ -88,6 +156,18 @@ interface Proc {
   ppid: number;
   /** The process group: what a Ctrl+C on the terminal reaches together. */
   pgid: number;
+  /**
+   * The pids of the processes that started this one, the first one first
+   * (its parent's last): who it descends from once a parent has ended and
+   * left it to another (`tty.reclaim`).
+   */
+  lineage: number[];
+  /**
+   * The first process this one started in its own group since it last took
+   * the terminal back (`tty.reclaim`), or null when it started none: the
+   * process group a shell with job control gives its foreground job.
+   */
+  foregroundJob: number | null;
   /** For a thread: the process it belongs to. */
   owner: Proc | null;
   /** The process or thread that started this process and hears its `child-exit`; null for none. */
@@ -97,25 +177,57 @@ interface Proc {
   argv: string[];
   /** Shared by a process and its threads. */
   fds: Map<number, Description>;
+  /**
+   * The file mode creation mask, shared by a process and its threads. The
+   * process sets it there itself; what the kernel creates for it is masked
+   * by what it holds at that moment (`creating`).
+   */
+  umask: UmaskCell;
   syncBuffer: SharedArrayBuffer;
   pendingAnswer: { ok: boolean; payload: EncodedPayload } | null;
   children: Set<number>;
   threads: Set<Proc>;
+  /**
+   * The controlling terminal: the one of the page process this one descends
+   * from, whatever its own stdio is. /dev/tty opens it.
+   */
   terminal: Terminal | null;
   pageOwned: boolean;
   handledSignals: Set<string>;
   /** This worker's slot in the shared filesystem, while it holds one. */
   fsEntry: { slot: number; token: number } | null;
   watches: Map<number, () => void>;
-  pumps: Map<number, () => void>;
-  /** Cancels each blocking read this worker is waiting in. */
-  pendingReads: Set<() => void>;
+  pumps: Map<number, Pump>;
+  /**
+   * The reads of a pipe or terminal this worker is waiting in. Each is given
+   * up when the worker ends, and settles then, so whatever the read holds (a
+   * device's reference) is let go.
+   */
+  pendingReads: Set<PendingRead>;
+  /** Withdraws and settles each blocking write this worker is waiting in, for when it dies first. */
+  pendingWrites: Set<() => void>;
+  /** Per fd this worker reads from a pipe with `fd.readStart`: what is on its way (`fd.ack`). */
+  deliveries: Map<number, Delivery>;
+  /** The same per fd it reads from a terminal: what it has not said it handed to its reader. */
+  typed: Map<number, TerminalDelivery>;
+  /**
+   * How often a pipe this worker writes to lost its readers. Mirrored in its
+   * sync buffer (`SYNC_BROKEN`), where the worker sees it without asking.
+   */
+  broken: number;
   /** Listener id → port. */
   listeners: Map<number, number>;
   channels: Set<number>;
   /** Ports posted ahead of a blocking spawn, by token. */
-  handoffs: Map<string, { port: MessagePort; data: unknown }>;
+  /**
+   * What a process handed over for a spawn: the new worker's port, `data`,
+   * and the other ports that came with it, which are inside `data`.
+   */
+  handoffs: Map<string, { port: MessagePort; data: unknown; carried: MessagePort[] }>;
+  /** Who waits for this process's exit: told at its end, or when it goes on as a new process. */
   exitWaiters: ((status: ExitStatus) => void)[];
+  /** What to do when the worker ends: not when it goes on as a new process (`forkAndExit`). */
+  endWaiters: (() => void)[];
   exited: boolean;
 }
 
@@ -128,6 +240,15 @@ interface Capture {
   maxBuffer?: number;
   /** Runs when stdout or stderr went over `maxBuffer`. */
   onOverflow?: () => void;
+  /**
+   * The kernel's read ends of the stdout and stderr pipes still open, each
+   * as the function that drops it without waiting for the pipe's end.
+   */
+  readEnds: Set<() => void>;
+  /** Runs when a read end has been dropped: its pipe ended, or the kernel let go of it. */
+  onReadEnd?: () => void;
+  /** The child's stdin closed before it took all of `input`. */
+  inputBroken?: boolean;
 }
 
 interface Listener {
@@ -153,30 +274,9 @@ interface Channel {
   kernelEnd: { kill(): void } | null;
 }
 
-const SIGNAL_NUMBERS: Record<string, number> = {
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGKILL: 9,
-  SIGUSR1: 10,
-  SIGUSR2: 12,
-  SIGPIPE: 13,
-  SIGALRM: 14,
-  SIGTERM: 15,
-  SIGCONT: 18,
-  SIGSTOP: 19,
-  SIGWINCH: 28,
-};
-
-/** Signals whose default action is to do nothing. */
-const IGNORED_BY_DEFAULT = new Set(["SIGCHLD", "SIGCONT", "SIGURG", "SIGWINCH"]);
-/**
- * Signals that stop a process. Stopping one is not supported here, so they do
- * nothing unless the process handles them (SIGSTOP cannot be handled).
- */
-const STOP_SIGNALS = new Set(["SIGSTOP", "SIGTSTP", "SIGTTIN", "SIGTTOU"]);
-
 const DEFAULT_TERMINAL: TerminalSize = { cols: 80, rows: 24 };
+/** The most a spawnSync capture takes from its pipe in one read: Node's read buffer. */
+const SPAWN_SYNC_READ_BYTES = 65536;
 /** The ephemeral range Linux and Node use: listen(0) picks from it, and connections are labelled from it. */
 const EPHEMERAL_PORT_START = 49152;
 const EPHEMERAL_PORT_END = 65535;
@@ -214,16 +314,16 @@ function isLinkLoop(error: unknown): boolean {
   return toSystemErrorRecord(error)?.code === "ELOOP";
 }
 
-/** The stat a pipe or terminal reports. */
-function streamStat(mode: number): StatData {
+/** The stat a pipe, terminal or device reports: the user's, or root's (`ROOT_ID`). */
+function streamStat(mode: number, owner = UID): StatData {
   const now = Date.now();
   return {
     dev: 2,
     ino: 0,
     mode,
     nlink: 1,
-    uid: 1,
-    gid: 1,
+    uid: owner,
+    gid: owner === UID ? GID : owner,
     rdev: 0,
     size: 0,
     blksize: 4096,
@@ -236,8 +336,15 @@ function streamStat(mode: number): StatData {
 }
 
 export class Kernel {
-  readonly vfs: VfsApi;
+  /**
+   * The filesystem, checked as the user every process runs as. Its
+   * `privileged` view is the page's (mount, `fs.*`, watch) and the kernel's
+   * own setup: those are not checked.
+   */
+  readonly vfs: PermissionedVfs;
   readonly workdir: string;
+  /** The page's file requests (`fs.*`): unchecked, and relative to `workdir`. */
+  readonly pageFiles: PageFiles;
 
   private readonly host: KernelHost;
   private readonly procs = new Map<number, Proc>();
@@ -265,24 +372,40 @@ export class Kernel {
   private disposed = false;
   private readonly handlers: Record<string, Handler>;
 
-  constructor(vfs: VfsApi, host: KernelHost, workdirName: string) {
+  constructor(vfs: PermissionedVfs, host: KernelHost, workdirName: string) {
     this.vfs = vfs;
     this.host = host;
     this.workdir = `${HOME_DIR}/projects/${workdirName}`;
-    vfs.mkdir(this.workdir, true, 0o755);
-    vfs.mkdir(TMP_DIR, true, 0o777);
-    vfs.mkdir("/dev", true, 0o755);
+    this.pageFiles = createPageFiles(vfs.privileged, (path) => this.resolveWorkdirPath(path));
+    const setup = vfs.privileged;
+    setup.mkdir(this.workdir, true, 0o755);
+    setup.mkdir(TMP_DIR, true, 0o777);
+    // As on Linux: anyone may make files there (the sticky bit changes
+    // nothing for a user who owns every file, but stat reports it).
+    setup.chmod(TMP_DIR, 0o1777, true);
+    setup.mkdir("/dev", true, 0o755);
     // Each device is a link to itself in the tree, so the tree never holds a
     // file there: any spelling or link that reaches one fails with ELOOP
     // instead, and the kernel answers it (processBackend.ts routes it here).
+    // Each is root's too, as on Linux, and the only link root owns: a path
+    // that names the entry itself, its last link not followed (lstat,
+    // readlink), is known for the device by that (`isDeviceEntry`).
     for (const name of DEVICE_NAMES) {
       try {
-        vfs.symlink(`/dev/${name}`, `/dev/${name}`);
+        setup.symlink(`/dev/${name}`, `/dev/${name}`);
       } catch {
         // Already there.
       }
+      setup.giveToRoot(`/dev/${name}`);
     }
-    installBuiltinCommands(vfs);
+    // /dev is root's, 0755, as on Linux: the user makes, renames and removes
+    // nothing there and changes neither its mode nor its times (its devices
+    // are the kernel's and open as they did). Nor can /dev itself be removed
+    // or renamed, by whatever path: the filesystems keep the entry of a node
+    // root owns.
+    setup.chmod("/dev", 0o755, true);
+    setup.giveToRoot("/dev");
+    installBuiltinCommands(setup);
     this.handlers = this.createHandlers();
   }
 
@@ -308,12 +431,13 @@ export class Kernel {
     };
   }
 
-  /** Writes a tree into the filesystem. */
+  /** Writes a tree into the filesystem, whatever the modes in it (the page's request). */
   mount(entries: MountEntry[]): void {
+    const fs = this.vfs.privileged;
     const made = new Set<string>();
     const ensureDirectory = (path: string) => {
       if (!made.has(path)) {
-        this.vfs.mkdir(path, true, 0o755);
+        fs.mkdir(path, true, 0o755);
         made.add(path);
       }
     };
@@ -322,7 +446,7 @@ export class Kernel {
         ensureDirectory(entry.path);
       } else {
         ensureDirectory(entry.path.slice(0, entry.path.lastIndexOf("/")) || "/");
-        this.vfs.writeFile(entry.path, entry.data, O_WRONLY | O_CREAT | O_TRUNC, 0o644);
+        fs.writeFile(entry.path, entry.data, O_WRONLY | O_CREAT | O_TRUNC, 0o644);
       }
     }
   }
@@ -333,9 +457,15 @@ export class Kernel {
     for (const [name, value] of Object.entries(options.env ?? {})) {
       env[name] = String(value);
     }
-    const cwd = options.cwd ? this.resolveWorkdirPath(options.cwd) : this.workdir;
+    // A directory the page chose is one its process changes into, so the
+    // user must be able to enter it. With none the process starts where the
+    // project is, unchecked like the page's other requests: the editor still
+    // runs a command and opens a terminal after a learner's `chmod 000 .`,
+    // and the learner undoes it there.
+    const chosen = options.cwd ? this.resolveWorkdirPath(options.cwd) : null;
+    const cwd = chosen ?? this.workdir;
     env.PWD = cwd;
-    const resolved = resolveExec(this.vfs, command, args, env, cwd);
+    const resolved = resolveExec(this.vfs, command, args, env, cwd, chosen !== null);
 
     const id = this.nextId++;
     const showOutput = options.output !== false;
@@ -360,6 +490,7 @@ export class Kernel {
       id,
       ppid: 0,
       pgid: id,
+      lineage: [],
       parent: null,
       reportTo: null,
       fds,
@@ -368,6 +499,7 @@ export class Kernel {
       resolved,
       env,
       cwd,
+      umask: DEFAULT_UMASK,
       ipc: null,
     });
     return id;
@@ -383,18 +515,26 @@ export class Kernel {
     if (!terminal) {
       return;
     }
+    const changed = terminal.cols !== size.cols || terminal.rows !== size.rows;
     terminal.cols = size.cols;
     terminal.rows = size.rows;
     // Everything that has the terminal as stdin, stdout or stderr sees its size.
     for (const proc of this.procs.values()) {
       if (
-        proc.terminal === terminal ||
         [0, 1, 2].some((fd) => {
           const description = proc.fds.get(fd);
           return description?.kind === "tty" && description.terminal === terminal;
         })
       ) {
         proc.worker.postMessage({ type: "resize", terminal: size });
+      }
+    }
+    // A change of size signals the terminal's foreground group, as a tty does.
+    if (changed) {
+      for (const proc of Array.from(this.procs.values())) {
+        if (!proc.owner && !proc.exited && this.inForeground(proc, terminal)) {
+          this.deliver(proc, "SIGWINCH");
+        }
       }
     }
   }
@@ -421,7 +561,9 @@ export class Kernel {
     const root = this.resolveWorkdirPath(path);
     const watchId = this.nextWatchId++;
     let watched = root;
-    const stop = this.vfs.watch(root, recursive, (event) => {
+    // The page watches whatever the modes.
+    const fs = this.vfs.privileged;
+    const stop = fs.watch(root, recursive, (event) => {
       const filename = relativeName(watched, event.path, root);
       // One event per file and kind in each batch: an install touches
       // thousands of files, and the page only needs to know which.
@@ -437,7 +579,7 @@ export class Kernel {
       this.watchFlush ??= setTimeout(() => this.flushWatchEvents(), WATCH_BATCH_MS);
     });
     // Events carry where the watch really is: `.`, `//` and links resolved.
-    watched = this.vfs.realpath(root);
+    watched = fs.realpath(root);
     this.pageWatches.set(watchId, stop);
     return watchId;
   }
@@ -518,6 +660,7 @@ export class Kernel {
     id: number;
     ppid: number;
     pgid: number;
+    lineage: number[];
     parent: Proc | null;
     reportTo: Proc | null;
     fds: Map<number, Description>;
@@ -526,6 +669,8 @@ export class Kernel {
     resolved: { program: ProcessInit["program"]; argv: string[]; execArgv: string[] };
     env: Record<string, string>;
     cwd: string;
+    /** The mask the process starts with. */
+    umask: number;
     ipc: MessagePort | null;
   }): Proc {
     const worker = this.host.createWorker(`webnode ${spec.id} ${spec.resolved.argv.join(" ")}`);
@@ -534,12 +679,15 @@ export class Kernel {
       pid: spec.id,
       ppid: spec.ppid,
       pgid: spec.pgid,
+      lineage: spec.lineage,
+      foregroundJob: null,
       owner: null,
       reportTo: spec.reportTo,
       threadId: 0,
       worker,
       argv: spec.resolved.argv,
       fds: spec.fds,
+      umask: createUmaskCell(spec.umask),
       syncBuffer: new SharedArrayBuffer(INITIAL_SYNC_BUFFER_BYTES),
       pendingAnswer: null,
       children: new Set(),
@@ -551,18 +699,24 @@ export class Kernel {
       watches: new Map(),
       pumps: new Map(),
       pendingReads: new Set(),
+      pendingWrites: new Set(),
+      deliveries: new Map(),
+      typed: new Map(),
+      broken: 0,
       listeners: new Map(),
       channels: new Set(),
       handoffs: new Map(),
       exitWaiters: [],
+      endWaiters: [],
       exited: false,
     };
     this.procs.set(proc.id, proc);
     spec.parent?.children.add(proc.id);
     const stdin = spec.fds.get(0);
-    // Only the terminal's own group reads it: a job started in a group of its
-    // own (`cmd &`) keeps the shell's terminal as its stdin but never takes it.
-    if (stdin?.kind === "tty" && stdin.terminal.foregroundGroup === proc.pgid) {
+    // Only the terminal's foreground reads it: a job started in a group of
+    // its own (`cmd &`) keeps the shell's terminal as its stdin but never
+    // takes it. One with another stdin joins when it reads (`joinReaders`).
+    if (stdin?.kind === "tty" && this.inForeground(proc, stdin.terminal)) {
       stdin.terminal.attach(proc.pid);
     }
     this.wire(proc);
@@ -580,9 +734,11 @@ export class Kernel {
         execArgv: spec.resolved.execArgv,
         env: spec.env,
         cwd: spec.cwd,
+        umask: proc.umask,
         syncBuffer: proc.syncBuffer,
         sharedFs: this.admission(proc),
         ttyFds: terminalFds,
+        inheritedFds: descriptorsAbove2(spec.fds),
         terminal: terminal ? { cols: terminal.cols, rows: terminal.rows } : DEFAULT_TERMINAL,
         ipc: spec.ipc,
       },
@@ -612,10 +768,24 @@ export class Kernel {
       if (proc.exited) {
         return;
       }
-      try {
-        this.writeToFd(proc, 2, new TextEncoder().encode(`${event.message ?? "worker error"}\n`));
-      } catch {
-        // Nowhere to report it (stderr closed or a broken pipe).
+      const stderr = proc.fds.get(2);
+      // The kernel writes this for the process, which made no write of its
+      // own: to a pipe nobody reads it goes nowhere, without the SIGPIPE
+      // that would end the process before its exit code is set.
+      if (stderr && !(stderr.kind === "pipe-write" && !stderr.pipe.hasReaders)) {
+        try {
+          // Written for the dying process, so it is not withdrawn when the process ends.
+          settleQuietly(
+            this.writeTo(
+              proc,
+              stderr,
+              new TextEncoder().encode(`${event.message ?? "worker error"}\n`),
+              "queue",
+            ),
+          );
+        } catch {
+          // Nowhere to report it.
+        }
       }
       this.finish(proc.owner ?? proc, { code: 1, signal: null });
     };
@@ -628,6 +798,7 @@ export class Kernel {
         return;
       case "sync-buffer":
         proc.syncBuffer = message.buffer;
+        this.publishBroken(proc);
         if (proc.pendingAnswer) {
           const { ok, payload } = proc.pendingAnswer;
           proc.pendingAnswer = null;
@@ -640,11 +811,11 @@ export class Kernel {
       case "post":
         if (message.op === "handoff") {
           const [token, data] = message.args as [string, unknown];
-          proc.handoffs.set(token, { port: ports[0], data });
+          proc.handoffs.set(token, { port: ports[0], data, carried: ports.slice(1) });
           return;
         }
         try {
-          this.dispatch(proc, message.op, message.args);
+          settleQuietly(this.dispatch(proc, message.op, message.args));
         } catch {
           // A post has nobody to report to.
         }
@@ -681,10 +852,117 @@ export class Kernel {
       return;
     }
     if (result instanceof Promise) {
-      result.then((value) => answer(true, value), fail);
+      // The worker waits, and cannot take what its pumps send until it is answered.
+      this.holdDeliveries(proc);
+      result.then((value) => answer(true, value), fail).finally(() => this.resumeDeliveries(proc));
     } else {
       answer(true, result);
     }
+  }
+
+  /**
+   * A worker waits in a blocking call, and can take nothing until it is
+   * answered. Its pumps stop: each withdraws its wait to read, so the worker
+   * is not a reader waiting for a terminal's input, and what arrives
+   * meanwhile is for a reader that can take it (the child it waits for, or
+   * its own blocking read). What its pumps had sent from pipes and it has
+   * not received becomes its own (it gets it once it is answered), so it no
+   * longer takes up room another reader or the call itself may need: a
+   * `spawnSync` child reading the same pipe, or a blocking read of a pipe
+   * the worker also streams.
+   */
+  private holdDeliveries(proc: Proc): void {
+    if (proc.exited) {
+      return;
+    }
+    // The pumps first: freeing a pipe's room lets its writers in, which
+    // would wake a pump still waiting to read.
+    for (const pump of Array.from(proc.pumps.values())) {
+      pump.pause();
+    }
+    for (const delivery of proc.deliveries.values()) {
+      delivery.hold();
+    }
+  }
+
+  /**
+   * The worker was answered: its pumps go on. One whose pipe sent bytes that
+   * became the worker's own (`holdDeliveries`) waits until the worker has
+   * received them (`delivered`), which keeps what it is owed bounded.
+   */
+  private resumeDeliveries(proc: Proc): void {
+    for (const pump of Array.from(proc.pumps.values())) {
+      pump.resume();
+    }
+  }
+
+  /** `proc` received `bytes` of what its pump on `fd` sent (`fd.ack`). */
+  private delivered(proc: Proc, fd: number, bytes: number): void {
+    const typed = proc.typed.get(fd);
+    if (typed) {
+      typed.received(bytes);
+      if (typed.empty) {
+        proc.typed.delete(fd);
+      }
+      return;
+    }
+    const delivery = proc.deliveries.get(fd);
+    if (!delivery) {
+      return;
+    }
+    delivery.received(bytes);
+    if (delivery.empty) {
+      proc.deliveries.delete(fd);
+      // The pump sends its next delivery once the last one arrived.
+      proc.pumps.get(fd)?.next();
+    }
+  }
+
+  /**
+   * Puts what `proc`'s pump on `fd` sent and `proc` never received back into
+   * the pipe or the terminal, for the next reader, as read(2) would have
+   * left it there.
+   */
+  private undeliver(proc: Proc, fd: number): void {
+    const delivery = proc.deliveries.get(fd);
+    if (delivery) {
+      proc.deliveries.delete(fd);
+      delivery.putBack();
+    }
+    const typed = proc.typed.get(fd);
+    if (typed) {
+      proc.typed.delete(fd);
+      typed.putBack();
+    }
+  }
+
+  /**
+   * Tells each worker that writes to `pipe`, which has just lost its last
+   * reader, through its sync buffer: it may have handed over writes that
+   * will fail, and its next write asks the kernel (sysClient.ts).
+   */
+  private pipeBroken(pipe: Pipe): void {
+    for (const proc of this.procs.values()) {
+      for (const description of proc.fds.values()) {
+        if (description.kind === "pipe-write" && description.pipe === pipe) {
+          this.markBroken(proc);
+          break;
+        }
+      }
+    }
+  }
+
+  private markBroken(proc: Proc): void {
+    proc.broken += 1;
+    this.publishBroken(proc);
+  }
+
+  private publishBroken(proc: Proc): void {
+    Atomics.store(
+      new Int32Array(proc.syncBuffer, 0, SYNC_HEADER_BYTES / 4),
+      SYNC_BROKEN,
+      proc.broken,
+    );
   }
 
   private runCall(proc: Proc, id: number, op: string, args: unknown[]): void {
@@ -758,16 +1036,23 @@ export class Kernel {
     }
   }
 
-  /** Delivers `signal` to `proc`: to its handler, or as the signal's default action. */
-  private deliver(proc: Proc, signal: string): void {
+  /**
+   * Delivers `signal` to `proc`: to its handler, or as the signal's default
+   * action. `fromTerminal`: the terminal sends it, to its whole foreground
+   * group; the handler is told, so that a process which passes signals on to
+   * its children (a shell) knows they have this one already.
+   */
+  private deliver(proc: Proc, signal: string, fromTerminal = false): void {
     if (signal === "0" || proc.exited) {
       return;
     }
     if (signal !== "SIGKILL" && signal !== "SIGSTOP" && proc.handledSignals.has(signal)) {
-      proc.worker.postMessage({ type: "signal", signal });
+      proc.worker.postMessage(
+        fromTerminal ? { type: "signal", signal, fromTerminal } : { type: "signal", signal },
+      );
       return;
     }
-    if (IGNORED_BY_DEFAULT.has(signal) || STOP_SIGNALS.has(signal)) {
+    if (!endsByDefault(signal)) {
       return;
     }
     // The default action: the signal ends the process, even one busy in a loop.
@@ -788,11 +1073,74 @@ export class Kernel {
       if (proc.owner || proc.exited || proc.pgid !== pgid) {
         continue;
       }
-      try {
-        this.signal(proc.pid, "SIGINT");
-      } catch {
-        // Gone in the meantime.
+      this.deliver(proc, "SIGINT", true);
+    }
+  }
+
+  /**
+   * Whether `process` is in `terminal`'s foreground: a member of the
+   * terminal's process group none of whose ancestors has ended. What an
+   * ended process left running stays in its group, so the terminal's Ctrl+C
+   * still reaches it, but a shell with job control would have taken the
+   * terminal back from it: it reads the terminal like a background process
+   * (its read waits) and has no say over the terminal's mode.
+   */
+  private inForeground(process: Proc, terminal: Terminal): boolean {
+    return (
+      process.pgid === terminal.foregroundGroup &&
+      process.lineage.every((pid) => this.procs.has(pid))
+    );
+  }
+
+  /**
+   * `proc` is about to read `terminal`. A process in the terminal's
+   * foreground that is not one of its readers yet becomes one: its stdin is
+   * something else and it opened /dev/tty, as a program that prompts inside
+   * a pipeline does. On Linux every member of the foreground group may read
+   * the terminal, whatever its stdin is.
+   */
+  private joinReaders(proc: Proc, terminal: Terminal): void {
+    const process = proc.owner ?? proc;
+    if (this.inForeground(process, terminal)) {
+      terminal.attach(process.pid);
+    }
+  }
+
+  /**
+   * `shell` makes its group the terminal's foreground again once a job it
+   * ran there has ended, as a job-control shell does with tcsetpgrp. On
+   * Linux each job has a group of its own, numbered by its first process,
+   * and the processes a job leaves running (an orphan whose parent was
+   * killed) stay in it, out of the foreground. Here the shell's foreground
+   * jobs run in its own group, so those processes move now, together, to the
+   * group their job would have had: the terminal's Ctrl+C and input no
+   * longer reach them, and `kill -- -<job>` reaches them all, whichever
+   * program of a pipeline started them. Only the shell's own descendants
+   * move, never a shell it runs in; and nothing does for a shell outside the
+   * terminal's foreground group (on Linux tcsetpgrp would stop it).
+   */
+  private reclaimTerminal(shell: Proc, terminal: Terminal): void {
+    const job = shell.foregroundJob;
+    shell.foregroundJob = null;
+    if (shell.pgid !== terminal.foregroundGroup) {
+      return;
+    }
+    // The newest first: each puts back the terminal mode it found.
+    for (const proc of Array.from(this.procs.values()).reverse()) {
+      if (proc.owner || proc.exited || proc === shell || proc.pgid !== shell.pgid) {
+        continue;
       }
+      const at = proc.lineage.indexOf(shell.pid);
+      if (at < 0) {
+        continue;
+      }
+      // The job's group; for a process that joined the shell's group by
+      // itself, the shell's child it descends from (itself, for a child).
+      proc.pgid = job ?? proc.lineage[at + 1] ?? proc.pid;
+      for (const thread of proc.threads) {
+        thread.pgid = proc.pgid;
+      }
+      proc.terminal?.detach(proc.pid);
     }
   }
 
@@ -802,6 +1150,8 @@ export class Kernel {
     if (process.exited) {
       return;
     }
+    // Its writes handed over without waiting may fail the same way: the next one asks.
+    this.markBroken(proc);
     try {
       this.signal(process.pid, "SIGPIPE");
     } catch {
@@ -815,14 +1165,23 @@ export class Kernel {
       stop();
     }
     proc.watches.clear();
-    for (const stop of proc.pumps.values()) {
-      stop();
+    for (const pump of proc.pumps.values()) {
+      pump.stop();
     }
     proc.pumps.clear();
-    for (const cancel of Array.from(proc.pendingReads)) {
-      cancel();
+    for (const read of Array.from(proc.pendingReads)) {
+      read.giveUp(processGone());
     }
-    proc.pendingReads.clear();
+    // A write(2) its process dies in leaves the bytes already in the pipe, and no more.
+    for (const withdraw of Array.from(proc.pendingWrites)) {
+      withdraw();
+    }
+    proc.pendingWrites.clear();
+    // Before its fds close, so another reader of the pipe gets them, and
+    // before its terminal changes mode, so keys go back as they were typed.
+    for (const fd of [...proc.deliveries.keys(), ...proc.typed.keys()]) {
+      this.undeliver(proc, fd);
+    }
     for (const channelId of Array.from(proc.channels)) {
       this.dropChannel(channelId, proc.id);
     }
@@ -832,8 +1191,19 @@ export class Kernel {
     }
     for (const handoff of proc.handoffs.values()) {
       handoff.port?.close();
+      for (const port of handoff.carried) {
+        port.close();
+      }
     }
     proc.handoffs.clear();
+  }
+
+  /**
+   * Runs `create`, a call that may make a file or a directory for `proc`, as
+   * a caller with the process's file mode creation mask.
+   */
+  private creating<T>(proc: Proc, create: () => T): T {
+    return this.vfs.withUmask(readUmask(proc.umask), create);
   }
 
   /** What `proc`'s worker needs to call the shared filesystem itself, or null. */
@@ -899,63 +1269,171 @@ export class Kernel {
       this.releaseResources(thread);
     }
     proc.threads.clear();
+    this.leaveForeground(proc, proc.pid);
     for (const fd of Array.from(proc.fds.keys())) {
       this.closeFd(proc, fd);
     }
-    proc.terminal?.detach(proc.pid);
 
-    const parent = this.procs.get(proc.ppid);
-    // Children it leaves behind go to its parent, so `killTree` still reaches
-    // them. A page process has none: its pid keeps them for the page instead,
-    // as does the pid of the page process whose leftovers this one was among.
-    const keeper = parent
-      ? null
-      : proc.pageOwned
-        ? new Set<number>()
-        : (this.leftBehind.get(proc.ppid) ?? null);
-    for (const childId of Array.from(proc.children)) {
+    const orphans: Proc[] = [];
+    for (const childId of proc.children) {
       const child = this.procs.get(childId);
-      if (!child) {
-        continue;
-      }
-      child.reportTo = null;
-      if (parent) {
-        child.ppid = parent.pid;
-        parent.children.add(child.id);
-      } else if (keeper) {
-        child.ppid = proc.pageOwned ? proc.pid : proc.ppid;
-        keeper.add(child.id);
+      if (child) {
+        orphans.push(child);
       }
     }
     proc.children.clear();
-    if (proc.pageOwned && keeper && keeper.size > 0 && !this.disposed) {
-      this.leftBehind.set(proc.pid, keeper);
+    this.adoptOrphans(proc.pid, proc.ppid, proc.pageOwned, orphans);
+    for (const ended of proc.endWaiters.splice(0)) {
+      ended();
     }
-    const siblings = this.leftBehind.get(proc.ppid);
-    if (siblings?.delete(proc.id) && siblings.size === 0) {
-      this.leftBehind.delete(proc.ppid);
-    }
+    this.reportExit(proc, proc.pid, status, proc.reportTo);
+  }
 
-    parent?.children.delete(proc.id);
-    const reportTo = proc.reportTo;
-    if (reportTo && !reportTo.exited) {
-      reportTo.worker.postMessage({ type: "child-exit", pid: proc.pid, status });
+  /**
+   * Process `pid`, which `proc` was, ends (or goes on as a new process): what
+   * it started leaves the terminal's foreground with it (see `inForeground`).
+   * Reading on, it would keep every key from the shell that goes on after
+   * it. A process it did not start, one its parent started beside it, keeps
+   * the terminal. The newest goes first, and `proc` last, so each puts back
+   * the terminal mode it found: however the process ends, and even once it
+   * has closed the fd, the terminal is as it was before it started (as libuv
+   * resets the mode at exit).
+   */
+  private leaveForeground(proc: Proc, pid: number): void {
+    const started = Array.from(this.procs.values()).filter(
+      (other) => !other.owner && other.lineage.includes(pid),
+    );
+    for (const other of started.reverse()) {
+      other.terminal?.detach(other.pid);
     }
-    for (const waiter of proc.exitWaiters) {
+    proc.terminal?.detach(pid);
+  }
+
+  /**
+   * Process `pid`, whose parent was `ppid` (and which the page started when
+   * `pageOwned`), has ended, and `orphans` are what it leaves running: they
+   * go to its parent, so `killTree` still reaches them. A page process has
+   * none: its pid keeps them for the page instead, as does the pid of the
+   * page process whose leftovers the ended one was among. Nobody hears an
+   * orphan's exit any more.
+   */
+  private adoptOrphans(pid: number, ppid: number, pageOwned: boolean, orphans: Proc[]): void {
+    const parent = this.procs.get(ppid);
+    const keeper = parent
+      ? null
+      : pageOwned
+        ? new Set<number>()
+        : (this.leftBehind.get(ppid) ?? null);
+    for (const orphan of orphans) {
+      orphan.reportTo = null;
+      if (parent) {
+        orphan.ppid = parent.pid;
+        parent.children.add(orphan.id);
+      } else if (keeper) {
+        orphan.ppid = pageOwned ? pid : ppid;
+        keeper.add(orphan.id);
+      }
+    }
+    if (pageOwned && keeper && keeper.size > 0 && !this.disposed) {
+      this.leftBehind.set(pid, keeper);
+    }
+    const siblings = this.leftBehind.get(ppid);
+    if (siblings?.delete(pid) && siblings.size === 0) {
+      this.leftBehind.delete(ppid);
+    }
+    parent?.children.delete(pid);
+  }
+
+  /**
+   * Tells whoever waits for process `pid`, which `proc` was, that it ended
+   * with `status`: the process that started it (`reportTo`), its other
+   * waiters, and the page for a page process.
+   */
+  private reportExit(proc: Proc, pid: number, status: ExitStatus, reportTo: Proc | null): void {
+    if (reportTo) {
+      // After the answers its exit settled: a write to its stdin still
+      // waiting for room fails (EPIPE) as its fds close, and the writer
+      // hears that before the exit, as in Node.
+      queueMicrotask(() => {
+        if (!reportTo.exited) {
+          reportTo.worker.postMessage({ type: "child-exit", pid, status });
+        }
+      });
+    }
+    for (const waiter of proc.exitWaiters.splice(0)) {
       waiter(status);
     }
     if (proc.pageOwned && !this.disposed) {
-      const signalNumber = status.signal ? (SIGNAL_NUMBERS[status.signal] ?? 0) : 0;
-      this.host.emit({ event: "exit", pid: proc.pid, code: status.code ?? 128 + signalNumber });
+      this.host.emit({ event: "exit", pid, code: exitStatusNumber(status) });
     }
+  }
+
+  /**
+   * fork(2) and the parent's exit at once (`ProcessBackend.forkAndExit`):
+   * `proc` is reported ended with `status`, as `finish` reports it, and its
+   * worker goes on, with everything it holds, as a new process: the orphan
+   * the forked child would be once its parent had ended. Returns the new
+   * process's pid and ppid.
+   */
+  private forkAndExit(proc: Proc, status: ExitStatus): { pid: number; ppid: number } {
+    if (proc.owner) {
+      throw createSystemError("EINVAL", "fork");
+    }
+    const oldPid = proc.pid;
+    const oldPpid = proc.ppid;
+    const pageOwned = proc.pageOwned;
+    const reportTo = proc.reportTo;
+    const newPid = this.nextId++;
+    // The old process and what it started leave the terminal's foreground as
+    // at its end (`finish`): the new process is not in it either, its
+    // lineage naming a process that has ended.
+    this.leaveForeground(proc, oldPid);
+
+    this.procs.delete(oldPid);
+    proc.id = newPid;
+    proc.pid = newPid;
+    proc.lineage = [...proc.lineage, oldPid];
+    this.procs.set(newPid, proc);
+    // The new process is the orphan the old one leaves (`finish`).
+    this.adoptOrphans(oldPid, oldPpid, pageOwned, [proc]);
+    for (const thread of proc.threads) {
+      thread.pid = newPid;
+      thread.ppid = proc.ppid;
+      thread.lineage = proc.lineage;
+    }
+    for (const childId of proc.children) {
+      const child = this.procs.get(childId);
+      if (child) {
+        child.ppid = newPid;
+      }
+    }
+    for (const channelId of proc.channels) {
+      const channel = this.channels.get(channelId);
+      if (channel) {
+        channel.ends = channel.ends.map((end) => (end === oldPid ? newPid : end)) as [
+          number,
+          number,
+        ];
+      }
+    }
+
+    // The old process's exit, for whoever waits for it; nobody waits for the new one.
+    this.reportExit(proc, oldPid, status, reportTo);
+    proc.pageOwned = false;
+    return { pid: newPid, ppid: proc.ppid };
   }
 
   // -------------------------------------------------------------------------
   // File descriptors
   // -------------------------------------------------------------------------
 
+  /**
+   * Gives `description` the lowest number `proc` has free, as POSIX says of
+   * every call that makes a descriptor (open, pipe, dup): 0, 1 or 2 too, once
+   * the process has closed it.
+   */
   private allocateFd(proc: Proc, description: Description): number {
-    let fd = 3;
+    let fd = 0;
     while (proc.fds.has(fd)) {
       fd += 1;
     }
@@ -977,8 +1455,16 @@ export class Kernel {
       return;
     }
     proc.fds.delete(fd);
-    proc.pumps.get(fd)?.();
-    proc.pumps.delete(fd);
+    // The descriptors are the process's, shared by its threads: whichever of
+    // them streams this one stops. Each drops what arrives for a closed fd:
+    // what is still on its way goes back to the pipe or the terminal, for
+    // any other reader.
+    const process = proc.owner ?? proc;
+    for (const worker of [process, ...process.threads]) {
+      worker.pumps.get(fd)?.stop();
+      worker.pumps.delete(fd);
+      this.undeliver(worker, fd);
+    }
     this.release(description);
   }
 
@@ -991,6 +1477,9 @@ export class Kernel {
       description.file.close();
     } else if (description.kind === "pipe-read") {
       description.pipe.removeReader();
+      if (!description.pipe.hasReaders) {
+        this.pipeBroken(description.pipe);
+      }
     } else if (description.kind === "pipe-write") {
       description.pipe.removeWriter();
     }
@@ -1006,22 +1495,30 @@ export class Kernel {
     return null;
   }
 
-  private writeToFd(proc: Proc, fd: number, data: Uint8Array): number {
-    return this.writeTo(proc, this.description(proc, fd, "write"), data);
+  private writeToFd(
+    proc: Proc,
+    fd: number,
+    data: Uint8Array,
+    how: WriteMode,
+  ): number | Promise<number> {
+    return this.writeTo(proc, this.description(proc, fd, "write"), data, how);
   }
 
-  private writeTo(proc: Proc, description: Description, data: Uint8Array): number {
+  /**
+   * Writes `data`; only a pipe can make a write wait (see `WriteMode`). The
+   * answer is the bytes written, once they are written.
+   */
+  private writeTo(
+    proc: Proc,
+    description: Description,
+    data: Uint8Array,
+    how: WriteMode,
+  ): number | Promise<number> {
     switch (description.kind) {
       case "file":
         return description.file.write(data, null);
       case "pipe-write":
-        if (!description.pipe.hasReaders) {
-          // As write(2): SIGPIPE first (ending a writer that does not handle it), then EPIPE.
-          this.brokenPipe(proc);
-          throw createSystemError("EPIPE", "write");
-        }
-        description.pipe.write(data.slice());
-        return data.byteLength;
+        return this.writeToPipe(proc, description.pipe, data, how);
       case "tty":
         description.terminal.write(data);
         return data.byteLength;
@@ -1032,14 +1529,83 @@ export class Kernel {
     }
   }
 
+  /**
+   * A write to a pipe, as write(2) on a blocking pipe: what fits goes in at
+   * once and the rest as the reader makes room (`WriteMode` says who waits).
+   * With no reader left, before or during the wait, the writer gets SIGPIPE
+   * (which ends one that does not handle it) and EPIPE; a waiting "wait"
+   * write that got some bytes in answers with that count instead, as write(2)
+   * does, and the next write fails.
+   */
+  private writeToPipe(
+    proc: Proc,
+    pipe: Pipe,
+    data: Uint8Array,
+    how: WriteMode,
+  ): number | Promise<number> {
+    if (data.byteLength === 0) {
+      // As Linux's pipe_write: a write of no bytes returns before it looks for a reader.
+      return 0;
+    }
+    if (!pipe.hasReaders) {
+      this.brokenPipe(proc);
+      throw createSystemError("EPIPE", "write");
+    }
+    const taken = pipe.tryWrite(data);
+    if (taken === data.byteLength) {
+      return taken;
+    }
+    return new Promise((resolve, reject) => {
+      let done = false;
+      let gone: (() => void) | null = null;
+      const withdraw = pipe.write(data.subarray(taken), (written, broken) => {
+        done = true;
+        if (gone) {
+          proc.pendingWrites.delete(gone);
+        }
+        if (!broken) {
+          resolve(data.byteLength);
+          return;
+        }
+        if (how === "wait") {
+          this.brokenPipe(proc);
+        } else if (!proc.exited) {
+          // Handed over, it was as good as in the pipe, and bytes a reader
+          // leaves there go without a signal: only a write after that gets
+          // SIGPIPE. (A writer of many small writes would get one each.)
+          this.markBroken(proc);
+        }
+        if (how === "wait" && taken + written > 0) {
+          resolve(taken + written);
+        } else {
+          reject(createSystemError("EPIPE", "write"));
+        }
+      });
+      // A blocked write(2) ends with its process: the rest is withdrawn, and
+      // the write settles so that what it holds (a device's reference) is let
+      // go. A queued write was handed over (the process does not wait for
+      // it) and still goes in.
+      if (how === "wait" && !done) {
+        gone = () => {
+          withdraw();
+          reject(processGone());
+        };
+        proc.pendingWrites.add(gone);
+      }
+    });
+  }
+
   /** The stat of what a descriptor holds. */
   private statOf(description: Description): StatData {
     if (description.kind === "file") {
       return description.file.stat();
     }
-    return streamStat(
-      description.kind === "tty" || description.kind === "null" ? S_IFCHR | 0o620 : S_IFIFO | 0o600,
-    );
+    if (description.kind === "null") {
+      // The device itself, as `deviceStat` reports it: root's crw-rw-rw-.
+      return streamStat(S_IFCHR | 0o666, ROOT_ID);
+    }
+    // A terminal is the user's crw--w----, a pipe the user's prw-------.
+    return streamStat(description.kind === "tty" ? S_IFCHR | 0o620 : S_IFIFO | 0o600);
   }
 
   // -------------------------------------------------------------------------
@@ -1088,6 +1654,28 @@ export class Kernel {
     return result;
   }
 
+  /**
+   * Writes all of `data` to `device`, as writeFile does with write(2) in a
+   * loop: a pipe whose reader goes away part of the way through makes the
+   * write that comes next fail, so the whole call fails with EPIPE.
+   */
+  private writeAllToDevice(
+    proc: Proc,
+    device: string,
+    data: Uint8Array,
+  ): undefined | Promise<undefined> {
+    const whole = (written: number): undefined => {
+      if (written < data.byteLength) {
+        throw createSystemError("EPIPE", "write");
+      }
+      return undefined;
+    };
+    const written = this.useDevice(proc, device, (description) =>
+      this.writeTo(proc, description, data, "wait"),
+    );
+    return written instanceof Promise ? written.then(whole) : whole(written);
+  }
+
   private deviceExists(proc: Proc, device: string): boolean {
     const fd = deviceFd(device);
     return fd === null || proc.fds.has(fd);
@@ -1095,11 +1683,13 @@ export class Kernel {
 
   private deviceStat(proc: Proc, device: string, syscall: string): StatData {
     if (device === "/dev/fd") {
-      return streamStat(S_IFDIR | 0o555);
+      // A directory, root's, as on macOS (on Linux a link to /proc/self/fd).
+      return streamStat(S_IFDIR | 0o555, ROOT_ID);
     }
     const fd = deviceFd(device);
     if (fd === null) {
-      return streamStat(S_IFCHR | 0o666);
+      // /dev/null and /dev/tty are root's, as on Linux.
+      return streamStat(S_IFCHR | 0o666, ROOT_ID);
     }
     const description = proc.fds.get(fd);
     if (!description) {
@@ -1114,7 +1704,7 @@ export class Kernel {
     if (description.kind === "file") {
       // /dev/stdin on a file opens that file afresh: it reads from the start.
       for (let position = 0; ;) {
-        const chunk = description.file.read(65536, position);
+        const chunk = description.file.read(PIPE_CAPACITY, position);
         if (chunk.byteLength === 0) {
           return concat(chunks);
         }
@@ -1131,7 +1721,7 @@ export class Kernel {
     }
     const next = (): Uint8Array | Promise<Uint8Array> => {
       for (;;) {
-        const chunk = this.readSource(proc, source, 65536);
+        const chunk = this.readSource(proc, source, PIPE_CAPACITY);
         if (chunk instanceof Promise) {
           return chunk.then((bytes) => {
             if (bytes.byteLength === 0) {
@@ -1163,8 +1753,15 @@ export class Kernel {
     if (normalized === "/" || hops > 40) {
       return null;
     }
-    const slash = normalized.lastIndexOf("/");
-    const directory = normalized.slice(0, slash) || "/";
+    // The directory as the path names it, so the tree resolves a `..` after
+    // a link (`devlink/../dev/fd`) where the link leads, as Linux does; by
+    // the normalized spelling when the last part is itself `.` or `..`.
+    const trimmed = path.replace(/\/+$/, "");
+    const last = trimmed.slice(trimmed.lastIndexOf("/") + 1);
+    const named = last === "." || last === ".." || !trimmed.startsWith("/") ? normalized : trimmed;
+    const slash = named.lastIndexOf("/");
+    const directory = named.slice(0, slash) || "/";
+    const name = named.slice(slash + 1);
     let real: string | null;
     try {
       real = this.vfs.realpath(directory);
@@ -1174,7 +1771,7 @@ export class Kernel {
     if (real === null) {
       return null;
     }
-    const candidate = `${real === "/" ? "" : real}/${normalized.slice(slash + 1)}`;
+    const candidate = `${real === "/" ? "" : real}/${name}`;
     if (isDevicePath(candidate)) {
       return candidate;
     }
@@ -1251,7 +1848,17 @@ export class Kernel {
     }
     let resolved: ReturnType<typeof resolveExec>;
     try {
-      resolved = resolveExec(this.vfs, request.command, request.args, request.env, request.cwd);
+      // `inheritCwd`: the child stays in its parent's directory, as after a
+      // fork (a shell's command, a spawn with no `cwd` option), so nothing
+      // checks it; else it changes into `cwd`, as libuv's child does.
+      resolved = resolveExec(
+        this.vfs,
+        request.command,
+        request.args,
+        request.env,
+        request.cwd,
+        request.inheritCwd !== true,
+      );
     } catch (error) {
       handoff?.port?.close();
       throw error;
@@ -1301,7 +1908,12 @@ export class Kernel {
         parentFds[fd] = this.allocateFd(process, parentEnd);
       } else if (fd === 0) {
         if (capture.input) {
-          pipe.write(capture.input);
+          // The kernel writes the input as the child reads it, the way the
+          // parent's event loop does in Node; the end follows the last byte.
+          // A child that ends before taking it all is an EPIPE, as in Node.
+          pipe.write(capture.input, (_written, broken) => {
+            capture.inputBroken = broken;
+          });
         }
         this.release(parentEnd);
       } else if (fd === 1 || fd === 2) {
@@ -1311,53 +1923,75 @@ export class Kernel {
       }
     });
 
-    const stdin = fds.get(0);
     const id = this.nextId++;
     const proc = this.startProcess({
       id,
       ppid: process.pid,
       pgid: request.newGroup ? id : process.pgid,
+      lineage: [...process.lineage, process.pid],
       parent: process,
       // spawnSync collects the exit itself; a spawn reports it to the worker that asked.
       reportTo: capture ? null : parent,
       fds,
-      terminal: stdin?.kind === "tty" ? stdin.terminal : null,
+      terminal: process.terminal,
       pageOwned: false,
       resolved,
       env: request.env,
       cwd: request.cwd,
+      // A copy of the parent's as it is now, as fork(2) gives a child.
+      umask: request.umask ?? readUmask(process.umask),
       ipc: handoff?.port ?? null,
     });
+    if (!request.newGroup) {
+      process.foregroundJob ??= id;
+    }
     return { proc, stdio: parentFds };
   }
 
   /**
-   * Collects everything written to `pipe` into `chunks` until it ends, or
-   * until `capture.maxBuffer` bytes, when it keeps that much and reports the overflow.
+   * Collects everything written to `pipe` into `chunks` until it ends (every
+   * write end closed, the child's and any a descendant still holds), reading
+   * at most SPAWN_SYNC_READ_BYTES at a time as Node's spawnSync does. The read
+   * that takes the total over `capture.maxBuffer` is kept whole, as in Node;
+   * then the read end is dropped and the overflow reported.
    */
   private drain(pipe: Pipe, chunks: Uint8Array[], capture: Capture): void {
     const limit = capture.maxBuffer ?? Infinity;
     let total = 0;
+    let waiting: (() => void) | null = null;
+    const drop = () => {
+      if (!capture.readEnds.delete(drop)) {
+        return;
+      }
+      waiting?.();
+      waiting = null;
+      pipe.removeReader();
+      if (!pipe.hasReaders) {
+        // Every writer's next write asks, and fails, as after a reader's close.
+        this.pipeBroken(pipe);
+      }
+      capture.onReadEnd?.();
+    };
+    capture.readEnds.add(drop);
     const pump = () => {
+      waiting = null;
       for (;;) {
-        const chunk = pipe.take(Number.MAX_SAFE_INTEGER);
+        const chunk = pipe.take(SPAWN_SYNC_READ_BYTES);
         if (chunk === null) {
-          pipe.removeReader();
+          drop();
           return;
         }
         if (chunk === undefined) {
-          pipe.whenReadable(0, pump);
-          return;
-        }
-        if (total + chunk.byteLength > limit) {
-          chunks.push(chunk.subarray(0, limit - total));
-          total = limit;
-          pipe.removeReader();
-          capture.onOverflow?.();
+          waiting = pipe.whenReadable(0, pump);
           return;
         }
         total += chunk.byteLength;
         chunks.push(chunk);
+        if (total > limit) {
+          drop();
+          capture.onOverflow?.();
+          return;
+        }
       }
     };
     pump();
@@ -1372,6 +2006,7 @@ export class Kernel {
         typeof request.maxBuffer === "number" && request.maxBuffer >= 0
           ? request.maxBuffer
           : undefined,
+      readEnds: new Set(),
     };
     let child: Proc;
     try {
@@ -1390,42 +2025,92 @@ export class Kernel {
       });
     }
 
+    // The child's pid as it started: a child that goes on as a new process
+    // (`forkAndExit`) is the one that was started all the same.
+    const childPid = child.pid;
     return new Promise((resolve) => {
       let timedOut = false;
       let overflowed = false;
-      capture.onOverflow = () => {
-        if (!overflowed && !timedOut) {
-          overflowed = true;
-          this.killTree(child.pid);
+      let exitStatus: ExitStatus | null = null;
+      let settled = false;
+      const dropReadEnds = () => {
+        for (const drop of Array.from(capture.readEnds)) {
+          drop();
         }
+      };
+      // A caller that ends while it waits closes its read ends with it: what
+      // the child or a descendant still writes there is a broken pipe.
+      const caller = parent.owner ?? parent;
+      const callerEnded = () => dropReadEnds();
+      // As Node's spawnSync (SyncProcessRunner::Kill): a timeout or an
+      // overflow sends the kill signal to the child alone, if it still runs,
+      // and lets go of the pipes, without waiting for what a descendant that
+      // holds them would still write. The call then waits for the child to
+      // end: a child that handles the signal (a shell's trap) or ignores it
+      // ends when it will, and what it started runs on.
+      const stop = () => {
+        if (exitStatus === null) {
+          try {
+            this.signal(childPid, request.killSignal ?? "SIGTERM");
+          } catch {
+            // Gone already (ESRCH): nothing to signal, as in Node.
+          }
+        }
+        dropReadEnds();
       };
       const timer =
         request.timeoutMs && request.timeoutMs > 0
           ? setTimeout(() => {
-              timedOut = true;
-              this.killTree(child.pid);
+              if (!overflowed) {
+                timedOut = true;
+                stop();
+              }
             }, request.timeoutMs)
           : null;
-      child.exitWaiters.push((status) => {
+      capture.onOverflow = () => {
+        if (!overflowed && !timedOut) {
+          overflowed = true;
+          stop();
+        }
+      };
+      // The call returns once the child has exited and the pipes it captured
+      // have ended, as Node's does: a descendant that still holds one keeps
+      // it waiting, up to the timeout.
+      const settle = () => {
+        if (settled || exitStatus === null || capture.readEnds.size > 0) {
+          return;
+        }
+        settled = true;
         if (timer) {
           clearTimeout(timer);
         }
+        const waiting = caller.endWaiters.indexOf(callerEnded);
+        if (waiting >= 0) {
+          caller.endWaiters.splice(waiting, 1);
+        }
+        // The status the child really ended with, as Node reports it: the
+        // kill signal's, or whatever the child made of it.
+        const result: SpawnSyncResult = {
+          pid: childPid,
+          status: exitStatus,
+          stdout: concat(capture.stdout),
+          stderr: concat(capture.stderr),
+        };
+        if (timedOut) {
+          result.error = "ETIMEDOUT";
+        } else if (overflowed) {
+          result.error = "ENOBUFS";
+        } else if (capture.inputBroken) {
+          result.error = toSystemErrorRecord(createSystemError("EPIPE", "write")) ?? undefined;
+        }
+        resolve(result);
+      };
+      capture.onReadEnd = () => queueMicrotask(settle);
+      caller.endWaiters.push(callerEnded);
+      child.exitWaiters.push((status) => {
+        exitStatus = status;
         // The pipes drain in the same turn the child's descriptors close.
-        queueMicrotask(() => {
-          const killed = timedOut || overflowed;
-          const result: SpawnSyncResult = {
-            pid: child.pid,
-            status: killed ? { code: null, signal: request.killSignal ?? "SIGTERM" } : status,
-            stdout: concat(capture.stdout),
-            stderr: concat(capture.stderr),
-          };
-          if (timedOut) {
-            result.error = "ETIMEDOUT";
-          } else if (overflowed) {
-            result.error = "ENOBUFS";
-          }
-          resolve(result);
-        });
+        queueMicrotask(settle);
       });
     });
   }
@@ -1446,12 +2131,15 @@ export class Kernel {
       pid: process.pid,
       ppid: process.ppid,
       pgid: process.pgid,
+      lineage: process.lineage,
+      foregroundJob: null,
       owner: process,
       reportTo: null,
       threadId: id,
       worker,
       argv: request.argv,
       fds: process.fds,
+      umask: process.umask,
       syncBuffer: new SharedArrayBuffer(INITIAL_SYNC_BUFFER_BYTES),
       pendingAnswer: null,
       children: process.children,
@@ -1463,10 +2151,15 @@ export class Kernel {
       watches: new Map(),
       pumps: new Map(),
       pendingReads: new Set(),
+      pendingWrites: new Set(),
+      deliveries: new Map(),
+      typed: new Map(),
+      broken: 0,
       listeners: new Map(),
       channels: new Set(),
       handoffs: new Map(),
       exitWaiters: [],
+      endWaiters: [],
       exited: false,
     };
     this.procs.set(id, thread);
@@ -1492,13 +2185,16 @@ export class Kernel {
         execArgv: request.execArgv,
         env: request.env,
         cwd: request.cwd,
+        umask: thread.umask,
         syncBuffer: thread.syncBuffer,
         sharedFs: this.admission(thread),
         ttyFds: [0, 1, 2].filter((fd) => process.fds.get(fd)?.kind === "tty"),
+        inheritedFds: descriptorsAbove2(process.fds),
         terminal: terminal ? { cols: terminal.cols, rows: terminal.rows } : DEFAULT_TERMINAL,
         ipc: null,
       },
-      [handoff.port],
+      // The ports in the thread's workerData go on to the thread with it.
+      [handoff.port, ...handoff.carried],
     );
     return id;
   }
@@ -1631,7 +2327,11 @@ export class Kernel {
         this.onPath(
           path,
           (device) => this.deviceStat(proc, device, follow ? "stat" : "lstat"),
-          () => vfs.stat(path, follow),
+          () => {
+            const stat = vfs.stat(path, follow);
+            const device = follow || !isDeviceEntry(stat) ? null : this.deviceBehind(path);
+            return device === null ? stat : this.deviceStat(proc, device, "lstat");
+          },
         ),
       "fs.exists": (proc: Proc, path: string) => {
         const device = deviceOf(path);
@@ -1665,7 +2365,7 @@ export class Kernel {
           },
           () => vfs.readdir(path),
         ),
-      "fs.mkdir": (_proc: Proc, path: string, recursive: boolean, mode: number) =>
+      "fs.mkdir": (proc: Proc, path: string, recursive: boolean, mode: number, floor?: string) =>
         this.onPath(
           path,
           (device) => {
@@ -1674,7 +2374,7 @@ export class Kernel {
             }
             throw createSystemError("EEXIST", "mkdir", path);
           },
-          () => vfs.mkdir(path, recursive, mode),
+          () => this.creating(proc, () => vfs.mkdir(path, recursive, mode, floor)),
         ),
       "fs.rmdir": (_proc: Proc, path: string) =>
         this.onPath(
@@ -1714,7 +2414,11 @@ export class Kernel {
           existing,
           path,
           () => {
-            throw createSystemError("EACCES", "link", existing, path);
+            // Linux's linkat: the new name first (a device is there), then
+            // the protected hard links, which refuse a device the user does
+            // not own (`may_linkat`), before the directory's permission.
+            const taken = deviceOf(path) ?? this.deviceBehind(path);
+            throw createSystemError(taken !== null ? "EEXIST" : "EPERM", "link", existing, path);
           },
           () => vfs.link(existing, path),
         ),
@@ -1732,7 +2436,14 @@ export class Kernel {
           () => {
             throw createSystemError("EINVAL", "readlink", path);
           },
-          () => vfs.readlink(path),
+          () => {
+            const target = vfs.readlink(path);
+            // A device's own entry (`isDeviceEntry`) is no link to read.
+            if (kernelPathOf(target) !== null && isDeviceEntry(vfs.stat(path, false))) {
+              throw createSystemError("EINVAL", "readlink", path);
+            }
+            return target;
+          },
         ),
       "fs.realpath": (proc: Proc, path: string) =>
         this.onPath(
@@ -1753,11 +2464,29 @@ export class Kernel {
           },
           () => vfs.chmod(path, mode, follow),
         ),
-      "fs.utimes": (_proc: Proc, path: string, atime: number, mtime: number, follow: boolean) =>
+      "fs.utimes": (
+        proc: Proc,
+        path: string,
+        atime: number | null,
+        mtime: number | null,
+        follow: boolean,
+      ) =>
         this.onPath(
           path,
-          // A device keeps no times worth changing; `touch /dev/null` succeeds.
-          () => undefined,
+          // A device keeps no times to change, but answers as utimensat(2)
+          // does: both set to now (`touch /dev/null`) need write permission,
+          // explicit times the owner, which root's devices refuse.
+          (device) => {
+            const stat = this.deviceStat(proc, device, "utime");
+            const rootOwned = stat.uid === ROOT_ID;
+            if (atime === null && mtime === null) {
+              if ((callerBits(stat.mode, rootOwned) & OWNER_W) === 0) {
+                throw createSystemError("EACCES", "utime", path);
+              }
+            } else if (rootOwned) {
+              throw createSystemError("EPERM", "utime", path);
+            }
+          },
           () => vfs.utimes(path, atime, mtime, follow),
         ),
       "fs.truncate": (proc: Proc, path: string, length: number) =>
@@ -1790,18 +2519,48 @@ export class Kernel {
           throw createSystemError("EEXIST", "copyfile", source, destination);
         }
         const target = to;
-        const write = (data: Uint8Array) => {
-          if (target !== null) {
-            this.useDevice(proc, target, (description) => this.writeTo(proc, description, data));
-          } else {
-            const exclusive = (mode & COPYFILE_EXCL) !== 0 ? O_EXCL : 0;
-            vfs.writeFile(destination, data, O_WRONLY | O_CREAT | O_TRUNC | exclusive, 0o644);
+        /** The file end of the copy: what fails there is the copy's failure, named as Node names it. */
+        const onFile = <T>(act: () => T): T => {
+          try {
+            return act();
+          } catch (error) {
+            const record = toSystemErrorRecord(error);
+            throw record ? createSystemError(record.code, "copyfile", source, destination) : error;
           }
         };
+        const write = (data: Uint8Array): undefined | Promise<undefined> => {
+          if (target !== null) {
+            // A pipe may make the copy wait for its reader, as write(2) does.
+            return this.writeAllToDevice(proc, target, data);
+          }
+          const exclusive = (mode & COPYFILE_EXCL) !== 0 ? O_EXCL : 0;
+          // The copy gets the device's own mode, whatever the mask and also
+          // over a file that was there, as libuv's fchmod gives it.
+          const sourceMode =
+            from === null ? 0o644 : this.deviceStat(proc, from, "copyfile").mode & 0o7777;
+          onFile(() =>
+            this.vfs.withUmask(0, () =>
+              vfs.writeFile(
+                destination,
+                data,
+                O_WRONLY | O_CREAT | O_TRUNC | exclusive,
+                sourceMode,
+              ),
+            ),
+          );
+          onFile(() => vfs.chmod(destination, sourceMode, true));
+          return undefined;
+        };
+        // libuv copies as many bytes as fstat reports for the source: a pipe,
+        // a terminal or a device reports none, so the copy is made (or
+        // emptied) and given nothing; a file behind /dev/stdin or /dev/fd/N
+        // is copied whole.
         const data =
           from !== null
-            ? this.useDevice(proc, from, (description) => this.readAll(proc, description))
-            : vfs.readFile(source);
+            ? this.useDevice(proc, from, (description) =>
+                description.kind === "file" ? this.readAll(proc, description) : new Uint8Array(0),
+              )
+            : onFile(() => vfs.readFile(source));
         return data instanceof Promise ? data.then(write) : write(data);
       },
       "fs.access": (proc: Proc, path: string, mode: number) =>
@@ -1811,10 +2570,17 @@ export class Kernel {
             if (!this.deviceExists(proc, device)) {
               throw createSystemError("ENOENT", "access", path);
             }
+            // As for a file: the bits of what its stat reports that decide
+            // for the user (the others', on a device root owns).
+            const bits = accessBits(mode);
+            const stat = this.deviceStat(proc, device, "access");
+            if ((callerBits(stat.mode, stat.uid === ROOT_ID) & bits) !== bits) {
+              throw createSystemError("EACCES", "access", path);
+            }
           },
           () => vfs.access(path, mode),
         ),
-      "fs.mkdtemp": (_proc: Proc, prefix: string) => vfs.mkdtemp(prefix),
+      "fs.mkdtemp": (proc: Proc, prefix: string) => this.creating(proc, () => vfs.mkdtemp(prefix)),
       "fs.readFile": (proc: Proc, path: string) =>
         this.onPath(
           path,
@@ -1823,15 +2589,18 @@ export class Kernel {
           () => vfs.readFile(path),
         ),
       "fs.writeFile": (proc: Proc, path: string, data: Uint8Array, flags: number, mode: number) =>
-        this.onPath(
+        this.onPath<undefined | Promise<undefined>>(
           path,
           (device) => {
             if ((flags & O_CREAT) !== 0 && (flags & O_EXCL) !== 0) {
               throw createSystemError("EEXIST", "open", path);
             }
-            this.useDevice(proc, device, (description) => this.writeTo(proc, description, data));
+            return this.writeAllToDevice(proc, device, data);
           },
-          () => vfs.writeFile(path, data, flags, mode),
+          () => {
+            this.creating(proc, () => vfs.writeFile(path, data, flags, mode));
+            return undefined;
+          },
         ),
 
       // Descriptors
@@ -1844,16 +2613,32 @@ export class Kernel {
               if ((flags & O_CREAT) !== 0 && (flags & O_EXCL) !== 0) {
                 throw createSystemError("EEXIST", "open", path);
               }
+              // Only /dev/fd is a directory.
+              if ((flags & O_DIRECTORY) !== 0 && device !== "/dev/fd") {
+                throw createSystemError("ENOTDIR", "open", path);
+              }
               return this.openDevice(proc, device);
             },
-            () => ({ kind: "file", refs: 1, file: vfs.open(path, flags, mode) }),
+            () => ({
+              kind: "file",
+              refs: 1,
+              file: this.creating(proc, () => vfs.open(path, flags, mode)),
+            }),
           ),
         ),
       "fs.close": (proc: Proc, fd: number) => {
         this.description(proc, fd, "close");
         this.closeFd(proc, fd);
       },
-      "fs.read": (proc: Proc, fd: number, length: number, position: number | null) => {
+      // With a `token` (a number the worker chose), a read that waits for a
+      // pipe or a terminal can be given up with `fs.readCancel`.
+      "fs.read": (
+        proc: Proc,
+        fd: number,
+        length: number,
+        position: number | null,
+        token?: number,
+      ) => {
         const description = this.description(proc, fd, "read");
         if (description.kind === "file") {
           return description.file.read(length, position);
@@ -1862,22 +2647,35 @@ export class Kernel {
         if (!source) {
           return new Uint8Array(0);
         }
-        return this.readSource(proc, source, length);
+        return this.readSource(proc, source, length, token);
       },
+      // The worker gives up the read it started with `token`: one still
+      // waiting is withdrawn and answered with EINTR, and takes nothing. A
+      // read answered already is left alone. A post, so it is handled after
+      // the read it names.
+      "fs.readCancel": (proc: Proc, token: number) => {
+        for (const read of proc.pendingReads) {
+          if (read.token === token) {
+            read.giveUp(createSystemError("EINTR", "read"));
+            return;
+          }
+        }
+      },
+      // A blocking write: on a full pipe it is answered once its bytes are in.
       "fs.write": (proc: Proc, fd: number, data: Uint8Array, position: number | null) => {
         const description = this.description(proc, fd, "write");
         if (description.kind === "file") {
           return description.file.write(data, position);
         }
-        return this.writeToFd(proc, fd, data);
+        return this.writeTo(proc, description, data, "wait");
       },
       "fs.fstat": (proc: Proc, fd: number) => this.statOf(this.description(proc, fd, "fstat")),
       "fs.ftruncate": (proc: Proc, fd: number, length: number) =>
         this.file(proc, fd, "ftruncate").truncate(length),
       "fs.fchmod": (proc: Proc, fd: number, mode: number) =>
-        this.file(proc, fd, "fchmod").chmod(mode),
+        this.ownersFile(proc, fd, "fchmod").chmod(mode),
       "fs.futimes": (proc: Proc, fd: number, atime: number, mtime: number) =>
-        this.file(proc, fd, "futime").utimes(atime, mtime),
+        this.ownersFile(proc, fd, "futime").utimes(atime, mtime),
       "fs.fsync": (proc: Proc, fd: number) => {
         this.description(proc, fd, "fsync");
       },
@@ -1937,13 +2735,56 @@ export class Kernel {
         }
         let cancelWait: (() => void) | null = null;
         let stopped = false;
+        let paused = false;
+        // From a pipe, what is sent stays in the pipe's count until the
+        // process says it received it (`fd.ack`), so a reader that falls
+        // behind holds its writer back instead of piling up messages. From a
+        // terminal, what is sent is remembered until the process says it
+        // handed it to its reader: what it never hands over goes back.
+        const pipe = source instanceof Pipe ? source : null;
+        const terminal = source instanceof Terminal ? source : null;
+        if (terminal) {
+          this.joinReaders(proc, terminal);
+        }
         const pump = () => {
           cancelWait = null;
           while (!stopped) {
-            const chunk = source.take(65536, proc.pid);
+            const onItsWay = pipe ? proc.deliveries.get(fd) : undefined;
+            if (onItsWay && onItsWay.pipe === pipe && !onItsWay.empty) {
+              // One delivery at a time: the next goes once the worker says
+              // it received this one (`delivered` calls `next`), and takes
+              // whatever was written meanwhile as one message. That also
+              // covers bytes that became the worker's own while it waited
+              // in a blocking call.
+              return;
+            }
+            const chunk = pipe
+              ? pipe.deliver(DELIVERY_BYTES)
+              : source.take(DELIVERY_BYTES, proc.pid);
             if (chunk === undefined) {
               cancelWait = source.whenReadable(proc.pid, pump);
               return;
+            }
+            if (pipe && chunk) {
+              let delivery = proc.deliveries.get(fd);
+              if (!delivery || delivery.pipe !== pipe) {
+                this.undeliver(proc, fd);
+                delivery = new Delivery(pipe);
+                proc.deliveries.set(fd, delivery);
+              }
+              delivery.sent(chunk);
+              proc.worker.postMessage({ type: "fd-data", fd, chunk, counted: true });
+              continue;
+            }
+            if (terminal && chunk) {
+              let typed = proc.typed.get(fd);
+              if (!typed) {
+                typed = new TerminalDelivery(terminal);
+                proc.typed.set(fd, typed);
+              }
+              typed.sent(chunk);
+              proc.worker.postMessage({ type: "fd-data", fd, chunk, typed: true });
+              continue;
             }
             proc.worker.postMessage({ type: "fd-data", fd, chunk });
             if (chunk === null) {
@@ -1952,20 +2793,62 @@ export class Kernel {
             }
           }
         };
-        proc.pumps.set(fd, () => {
-          stopped = true;
-          cancelWait?.();
+        proc.pumps.set(fd, {
+          stop: () => {
+            stopped = true;
+            cancelWait?.();
+          },
+          pause: () => {
+            paused = true;
+            cancelWait?.();
+            cancelWait = null;
+          },
+          resume: () => {
+            paused = false;
+            if (!stopped && cancelWait === null) {
+              pump();
+            }
+          },
+          next: () => {
+            if (!stopped && !paused && cancelWait === null) {
+              pump();
+            }
+          },
         });
         pump();
       },
       "fd.readStop": (proc: Proc, fd: number) => {
-        proc.pumps.get(fd)?.();
+        proc.pumps.get(fd)?.stop();
         proc.pumps.delete(fd);
       },
-      "fd.write": (proc: Proc, fd: number, chunk: Uint8Array) => {
-        this.writeToFd(proc, fd, chunk);
+      // A process gives back what it read from a pipe and did not use (a
+      // shell's `read` takes a whole chunk), for the next reader: read(2)
+      // would have left those bytes there. Whatever was sent to the process
+      // and it has not acknowledged goes back after them: what is still on
+      // its way, and what reached it with its reader stopped, which it
+      // drops (it asks with no `chunks` for that alone). A call: answered
+      // after everything sent for the fd before it.
+      "fd.unread": (proc: Proc, fd: number, chunks: Uint8Array[]) => {
+        const description = this.description(proc, fd, "read");
+        if (description.kind !== "pipe-read") {
+          throw createSystemError("EINVAL", "read");
+        }
+        proc.pumps.get(fd)?.stop();
+        proc.pumps.delete(fd);
+        this.undeliver(proc, fd);
+        // In front of what went back: the process had them first.
+        description.pipe.unread(chunks, 0);
       },
+      // A write with a completion (a call) or none (a post): answered once
+      // its bytes are in, and kept when its process ends first.
+      "fd.write": (proc: Proc, fd: number, chunk: Uint8Array) =>
+        this.writeToFd(proc, fd, chunk, "queue"),
+      // The process received `bytes` of what was sent to it on `fd`.
+      "fd.ack": (proc: Proc, fd: number, bytes: number) => this.delivered(proc, fd, bytes),
       "fd.close": (proc: Proc, fd: number) => this.closeFd(proc, fd),
+      // Nothing: a worker asks so that the answer marks, among the messages
+      // it is sent, the point where the kernel had handled all it sent before.
+      mark: () => undefined,
 
       // Terminals
       "tty.setRawMode": (proc: Proc, fd: number, enabled: boolean) => {
@@ -1973,7 +2856,31 @@ export class Kernel {
         if (description.kind !== "tty") {
           throw createSystemError("ENOTTY", "ioctl");
         }
-        description.terminal.raw = enabled;
+        // Only the terminal's foreground changes its mode. Linux stops a
+        // background process that tries (SIGTTOU); here its request does
+        // nothing, as its read of the terminal waits.
+        const process = proc.owner ?? proc;
+        if (this.inForeground(process, description.terminal)) {
+          description.terminal.setRaw(enabled, process.pid);
+        }
+      },
+      // A job-control shell takes the terminal back once a foreground job
+      // has ended (tcsetpgrp).
+      "tty.reclaim": (proc: Proc, fd: number) => {
+        const description = this.description(proc, fd, "ioctl");
+        if (description.kind !== "tty") {
+          throw createSystemError("ENOTTY", "ioctl");
+        }
+        this.reclaimTerminal(proc.owner ?? proc, description.terminal);
+      },
+      // Keys a process read from its terminal but did not use, for the next
+      // reader (a shell gives back what was typed after the line it runs).
+      "tty.unread": (proc: Proc, fd: number, bytes: Uint8Array) => {
+        const description = this.description(proc, fd, "ioctl");
+        if (description.kind !== "tty") {
+          throw createSystemError("ENOTTY", "ioctl");
+        }
+        description.terminal.unread(bytes);
       },
 
       // Processes
@@ -1989,9 +2896,10 @@ export class Kernel {
         // No answer: the worker is gone.
         return new Promise(() => {});
       },
+      "proc.forkAndExit": (proc: Proc, status: ExitStatus) => this.forkAndExit(proc, status),
       "proc.die": (proc: Proc, signal: string) => {
         // A handled signal nobody took: its default action, which may be to do nothing.
-        if (IGNORED_BY_DEFAULT.has(signal) || STOP_SIGNALS.has(signal)) {
+        if (!endsByDefault(signal)) {
           return;
         }
         this.finish(proc.owner ?? proc, { code: null, signal });
@@ -2056,6 +2964,19 @@ export class Kernel {
     return handlers as unknown as Record<string, Handler>;
   }
 
+  /**
+   * `file` for what only the owner may do (fchmod, futimes): on a device root
+   * owns (/dev/null) that is EPERM, as fchmod(2) answers a user who is not
+   * root, before the kernel's own EINVAL for what is no file.
+   */
+  private ownersFile(proc: Proc, fd: number, syscall: string): OpenFile {
+    const description = this.description(proc, fd, syscall);
+    if (description.kind !== "file" && this.statOf(description).uid === ROOT_ID) {
+      throw createSystemError("EPERM", syscall);
+    }
+    return this.file(proc, fd, syscall);
+  }
+
   private file(proc: Proc, fd: number, syscall: string): OpenFile {
     const description = this.description(proc, fd, syscall);
     if (description.kind !== "file") {
@@ -2066,32 +2987,47 @@ export class Kernel {
 
   /**
    * Takes bytes from `source` for `proc`, waiting for them when none are
-   * buffered. The wait is cancelled if `proc` ends first, so a dead reader never takes bytes.
+   * buffered. The wait is cancelled if `proc` ends first, so a dead reader
+   * never takes bytes, and settles, so what it holds is let go. With a
+   * `token` the worker can also give the wait up (`fs.readCancel`): the read
+   * then takes nothing and fails with EINTR, as read(2) does when a signal
+   * handler interrupts it.
    */
   private readSource(
     proc: Proc,
     source: ByteSource,
     length: number,
+    token?: number,
   ): Uint8Array | Promise<Uint8Array> {
+    if (source instanceof Terminal) {
+      this.joinReaders(proc, source);
+    }
     const reader = proc.pid;
     const chunk = source.take(length, reader);
     if (chunk !== undefined) {
       return chunk ?? new Uint8Array(0);
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let cancelWait = () => {};
-      const cancel = () => cancelWait();
+      const pending: PendingRead = {
+        token,
+        giveUp: (error) => {
+          proc.pendingReads.delete(pending);
+          cancelWait();
+          reject(error);
+        },
+      };
       const retry = () => {
         const next = source.take(length, reader);
         if (next === undefined) {
           cancelWait = source.whenReadable(reader, retry);
         } else {
-          proc.pendingReads.delete(cancel);
+          proc.pendingReads.delete(pending);
           resolve(next ?? new Uint8Array(0));
         }
       };
       cancelWait = source.whenReadable(reader, retry);
-      proc.pendingReads.add(cancel);
+      proc.pendingReads.add(pending);
     });
   }
 }

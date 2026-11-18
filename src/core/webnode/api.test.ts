@@ -300,6 +300,12 @@ describe("a running runtime", () => {
     instance.teardown();
     expect(fetches).toHaveLength(1);
     expect(fetches[0].url).toBe(`${url}__webnode__/clear`);
-    expect(fetches[0].init).toMatchObject({ method: "POST", mode: "no-cors" });
+    // With credentials: a browser ignores Clear-Site-Data on the answer to a
+    // request made without them, as a cross-origin fetch is by default.
+    expect(fetches[0].init).toMatchObject({
+      method: "POST",
+      mode: "no-cors",
+      credentials: "include",
+    });
   });
 });

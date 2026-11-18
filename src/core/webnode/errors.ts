@@ -47,6 +47,7 @@ const ERRNO = {
   ENETUNREACH: [101, "network is unreachable"],
   ECONNABORTED: [103, "software caused connection abort"],
   ECONNRESET: [104, "connection reset by peer"],
+  EISCONN: [106, "socket is already connected"],
   ENOTCONN: [107, "socket is not connected"],
   ETIMEDOUT: [110, "connection timed out"],
   ECONNREFUSED: [111, "connection refused"],
@@ -60,6 +61,11 @@ export type ErrnoCode = keyof typeof ERRNO;
 /** The errno number for `code`, as a positive integer. */
 export function errnoOf(code: ErrnoCode): number {
   return ERRNO[code][0];
+}
+
+/** libuv's text for `code` (`uv_strerror`): `permission denied` for EACCES. */
+export function errnoDescription(code: ErrnoCode): string {
+  return ERRNO[code][1];
 }
 
 /** `{ EPERM: 1, ... }`, for `os.constants.errno`. */
@@ -127,8 +133,9 @@ export function createSystemError(
 /** Rebuilds a system error from the record that crossed a thread. */
 export function systemErrorFromRecord(record: SystemErrorRecord): SystemError {
   const error = new Error(systemErrorMessage(record)) as SystemError;
-  error.code = record.code;
+  // In Node's order, which is what a program that prints the error sees.
   error.errno = -ERRNO[record.code][0];
+  error.code = record.code;
   error.syscall = record.syscall;
   if (record.path !== undefined) {
     error.path = record.path;
@@ -145,6 +152,11 @@ export function systemErrorFromRecord(record: SystemErrorRecord): SystemError {
   return error;
 }
 
+/** The errno code of `error` (`"ENOENT"`) when it is a system error, else undefined. */
+export function errnoCodeOf(error: unknown): ErrnoCode | undefined {
+  return toSystemErrorRecord(error)?.code;
+}
+
 /** The record for `error` when it is a system error, else null. */
 export function toSystemErrorRecord(error: unknown): SystemErrorRecord | null {
   if (!(error instanceof Error)) {
@@ -153,7 +165,7 @@ export function toSystemErrorRecord(error: unknown): SystemErrorRecord | null {
   const candidate = error as Partial<SystemError>;
   if (
     typeof candidate.code !== "string" ||
-    !(candidate.code in ERRNO) ||
+    !Object.hasOwn(ERRNO, candidate.code) ||
     typeof candidate.syscall !== "string"
   ) {
     return null;

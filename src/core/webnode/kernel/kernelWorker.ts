@@ -17,7 +17,6 @@ import type {
 import { serializeError } from "../protocol";
 import { Kernel } from "./kernel";
 import type { KernelWorker } from "./kernel";
-import { O_CREAT, O_TRUNC, O_WRONLY } from "./vfs/types";
 import { Vfs } from "./vfs/vfs";
 import { createSharedFilesystem } from "../sharedfs/boot";
 
@@ -76,23 +75,17 @@ const methods: Record<string, (args: never, ports: readonly MessagePort[]) => un
   mount([entries]: [MountEntry[]]) {
     booted().mount(entries);
   },
-  "fs.readFile": ([path]: [string]) => booted().vfs.readFile(booted().resolveWorkdirPath(path)),
+  "fs.readFile": ([path]: [string]) => booted().pageFiles.readFile(path),
   "fs.writeFile"([path, data]: [string, Uint8Array]) {
-    booted().vfs.writeFile(
-      booted().resolveWorkdirPath(path),
-      data,
-      O_WRONLY | O_CREAT | O_TRUNC,
-      0o644,
-    );
+    booted().pageFiles.writeFile(path, data);
   },
-  "fs.readdir": ([path]: [string]) => booted().vfs.readdir(booted().resolveWorkdirPath(path)),
-  "fs.mkdir": ([path, recursive]: [string, boolean]) =>
-    booted().vfs.mkdir(booted().resolveWorkdirPath(path), recursive, 0o755),
+  "fs.readdir": ([path]: [string]) => booted().pageFiles.readdir(path),
+  "fs.mkdir": ([path, recursive]: [string, boolean]) => booted().pageFiles.mkdir(path, recursive),
   "fs.rm"([path, recursive, force]: [string, boolean, boolean]) {
-    booted().vfs.rm(booted().resolveWorkdirPath(path), recursive, force);
+    booted().pageFiles.rm(path, recursive, force);
   },
   "fs.rename"([from, to]: [string, string]) {
-    booted().vfs.rename(booted().resolveWorkdirPath(from), booted().resolveWorkdirPath(to));
+    booted().pageFiles.rename(from, to);
   },
   watch: ([path, recursive]: [string, boolean]) => booted().watchFromPage(path, recursive),
   unwatch([watchId]: [number]) {

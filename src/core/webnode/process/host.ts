@@ -2,6 +2,8 @@
 // this worker to the kernel, and runs the program it was started for. This hub
 // only wires; each program lives under programs/.
 import type { KernelMessage, ProcessInit, ProcessMessage } from "../protocol";
+import { addMacrotaskListener } from "./node/eventLoop";
+import { writeFd } from "./node/internal/fdWrite";
 import { runNode } from "./programs/node";
 import { runPackageManager } from "./programs/npm/index";
 import { runShell } from "./programs/shell/index";
@@ -9,24 +11,33 @@ import { setRuntime } from "./runtime";
 import { createProcessClient } from "./sysClient";
 import type { ProcessClient } from "./sysClient";
 
-interface WorkerGlobal {
+interface WorkerGlobal extends EventTarget {
   postMessage(message: ProcessMessage, transfer?: Transferable[]): void;
-  addEventListener(type: "message", listener: (event: MessageEvent<KernelMessage>) => void): void;
 }
 
 // Captured before the `node` program hides the worker's own globals.
 const scope = globalThis as unknown as WorkerGlobal;
 const post = scope.postMessage.bind(scope);
-(
-  globalThis as unknown as { __webnodeNativeSetTimeout: typeof setTimeout }
-).__webnodeNativeSetTimeout = globalThis.setTimeout.bind(globalThis);
+// Not enumerable: a program that lists the global object's keys sees Node's.
+Object.defineProperty(globalThis, "__webnodeNativeSetTimeout", {
+  value: globalThis.setTimeout.bind(globalThis),
+  configurable: true,
+});
 
 let client: ProcessClient | null = null;
 
+/**
+ * Ends a program that failed with an error instead of a status (one that
+ * could not start, or that threw): the error on fd 2, whatever fd 2 is, and
+ * status 1.
+ */
 function reportAndExit(error: unknown): void {
   const text = error instanceof Error ? (error.stack ?? error.message) : String(error);
   try {
-    client?.runtime.fs.write(2, new TextEncoder().encode(`${text}\n`), null);
+    // Whole, in one blocking write: a pipe takes a long report in several parts.
+    writeFd(2, new TextEncoder().encode(`${text}\n`));
+  } catch {
+    // fd 2 is closed, or its reader has gone: nothing is left to report through.
   } finally {
     client?.runtime.processes.exit(1);
   }
@@ -45,8 +56,11 @@ async function run(init: ProcessInit): Promise<void> {
   client.runtime.processes.exit(status);
 }
 
-scope.addEventListener("message", (event) => {
-  const message = event.data;
+// Each kernel message is a macrotask of the event loop's own kind, the worker's
+// only listener of its messages: the ticks its promise jobs queue run in its
+// own task, with no task of their own.
+addMacrotaskListener(scope, "message", (event) => {
+  const message = (event as MessageEvent<KernelMessage>).data;
   if (message.type === "init") {
     run(message).catch(reportAndExit);
     return;

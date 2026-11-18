@@ -98,6 +98,32 @@ describe("process fields", () => {
     expect(runtime.exitCode).toBe(3);
   });
 
+  it("creates under its file mode creation mask: 022 at first, then what is assigned", () => {
+    const runtime = createFakeRuntime();
+    const perm = (path: string) => runtime.vfs.stat(path, false).mode & 0o7777;
+    const flags = O_WRONLY | O_CREAT | O_TRUNC;
+    expect(runtime.umask).toBe(0o022);
+    runtime.fs.writeFile("/a", bytes(""), flags, 0o666);
+    runtime.umask = 0o077;
+    runtime.fs.writeFile("/b", bytes(""), flags, 0o666);
+    runtime.fs.mkdir("/d/e", true, 0o777);
+    runtime.fs.close(runtime.fs.open("/o", O_WRONLY | O_CREAT, 0o666));
+    const temp = runtime.fs.mkdtemp("/t-");
+    expect(["/a", "/b", "/d", "/d/e", "/o", temp].map(perm)).toEqual([
+      0o644, 0o600, 0o700, 0o700, 0o600, 0o700,
+    ]);
+    runtime.umask = 0o277;
+    expect(perm(runtime.fs.mkdtemp("/u-"))).toBe(0o500);
+    // Only the permission bits of what is assigned are the mask.
+    runtime.umask = 0o7002;
+    expect(runtime.umask).toBe(0o002);
+    runtime.fs.writeFile("/c", bytes(""), flags, 0o666);
+    expect(perm("/c")).toBe(0o664);
+    // The tests' own writes to `vfs` are not the process's.
+    runtime.vfs.writeFile("/direct", bytes(""), flags, 0o666);
+    expect(perm("/direct")).toBe(0o644);
+  });
+
   it("refuses to start worker threads", () => {
     const runtime = createFakeRuntime();
     expect(() =>
@@ -213,6 +239,25 @@ describe("stdio", () => {
     expect(runtime.fs.read(0, 10, null).length).toBe(0);
   });
 
+  it("waits in readAsync for stdin, and gives the wait up with EINTR when its signal aborts", async () => {
+    const runtime = createFakeRuntime({ tty: true });
+    const withdrawn = new AbortController();
+    const read = runtime.fs.readAsync(0, 10, null, withdrawn.signal);
+    const outcome = read.then(text, (error: SystemError) => `${error.code} ${error.syscall}`);
+    await settle();
+    withdrawn.abort();
+    expect(await outcome).toBe("EINTR read");
+    // The withdrawn read took nothing: what arrives is the next read's.
+    runtime.feedStdin("ls\n");
+    expect(text(await runtime.fs.readAsync(0, 10, null))).toBe("ls\n");
+    // With the signal aborted already, a read still takes what is there.
+    runtime.feedStdin("x");
+    expect(text(await runtime.fs.readAsync(0, 10, null, withdrawn.signal))).toBe("x");
+    await expect(runtime.fs.readAsync(0, 10, null, withdrawn.signal)).rejects.toMatchObject({
+      code: "EINTR",
+    });
+  });
+
   it("delivers stdin to readStart asynchronously and then null", async () => {
     const runtime = createFakeRuntime();
     const result = collect(runtime, 0);
@@ -253,6 +298,15 @@ describe("tty", () => {
     const runtime = createFakeRuntime();
     expect(failure(() => runtime.tty.windowSize(1))).toMatchObject({ code: "ENOTTY" });
   });
+
+  it("takes a terminal back with reclaim, and refuses anything else, as the kernel does", () => {
+    // The fake has no other process groups, so there is nothing to move.
+    expect(() => createFakeRuntime({ tty: true }).tty.reclaim(0)).not.toThrow();
+    expect(failure(() => createFakeRuntime().tty.reclaim(0))).toMatchObject({
+      code: "ENOTTY",
+      syscall: "ioctl",
+    });
+  });
 });
 
 describe("pipes", () => {
@@ -267,6 +321,61 @@ describe("pipes", () => {
     runtime.fdStream.write(writeFd, bytes("def"));
     runtime.fs.close(writeFd);
     expect(await rest).toBe("def");
+  });
+
+  it("gives back unread bytes in front of the pipe, for its next reader, as the kernel's fd.unread does", async () => {
+    const runtime = createFakeRuntime();
+    const { readFd, writeFd } = runtime.processes.pipe();
+    const first: string[] = [];
+    runtime.fdStream.readStart(readFd, (chunk) => first.push(chunk === null ? "EOF" : text(chunk)));
+    runtime.fdStream.write(writeFd, bytes("line 1\nline 2\n"));
+    await settle();
+    expect(first).toEqual(["line 1\nline 2\n"]);
+    // The reader used "line 1\n" only; reading stops, and the rest goes back.
+    runtime.fdStream.unread(readFd, bytes("line 2\n"));
+    runtime.fdStream.write(writeFd, bytes("line 3\n"));
+    runtime.fs.close(writeFd);
+    await settle();
+    expect(first).toEqual(["line 1\nline 2\n"]);
+    expect(await collect(runtime, readFd)).toBe("line 2\nline 3\n");
+    // Once ended, bytes given back are read again, then the end again.
+    runtime.fdStream.unread(readFd, bytes("again"));
+    expect(await collect(runtime, readFd)).toBe("again");
+    // Only a pipe's read end takes bytes back.
+    const other = runtime.processes.pipe();
+    expect(failure(() => runtime.fdStream.unread(other.writeFd, bytes("x")))).toMatchObject({
+      code: "EINVAL",
+    });
+    expect(failure(() => runtime.fdStream.unread(1, bytes("x")))).toMatchObject({
+      code: "EINVAL",
+    });
+    expect(failure(() => runtime.fdStream.unread(42, bytes("x")))).toMatchObject({
+      code: "EBADF",
+    });
+  });
+
+  it("reports a blocking write's error in a task, after the tasks queued before", async () => {
+    const runtime = createFakeRuntime();
+    const order: string[] = [];
+    setTimeout(() => order.push("queued before"), 0);
+    runtime.fdStream.reportWriteError(1, new Error("EPIPE"), (error) =>
+      order.push(`reported ${error.message}`),
+    );
+    await settle();
+    expect(order).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(order).toEqual(["queued before", "reported EPIPE"]);
+  });
+
+  it("holds the process until a blocking write's error is reported, as the kernel link does", async () => {
+    const runtime = createFakeRuntime();
+    const held: number[] = [];
+    runtime.fdStream.reportWriteError(1, new Error("EPIPE"), () => held.push(runtime.refCount));
+    expect(runtime.refCount).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // Held while the error is handled, and let go after.
+    expect(held).toEqual([1]);
+    expect(runtime.refCount).toBe(0);
   });
 
   it("raises EPIPE writing a pipe with no reader", () => {
@@ -454,6 +563,37 @@ describe("spawn", () => {
     });
   });
 
+  it("signals a process group by a negative pid, as the kernel's kill does", async () => {
+    const runtime = createFakeRuntime({ spawn: () => new Promise<number>(() => {}) });
+    const exitOf = (pid: number) =>
+      new Promise<ExitStatus>((resolve) => runtime.processes.onExit(pid, resolve));
+    const detached = runtime.processes.spawn({ ...request(["ignore"]), newGroup: true });
+    const beside = runtime.processes.spawn(request(["ignore"]));
+    await settle();
+    // Signal "0" only asks whether anyone is there.
+    runtime.processes.kill(-detached.pid, "0");
+    runtime.processes.kill(detached.pid, "0");
+    expect(failure(() => runtime.processes.kill(-beside.pid, "0"))).toMatchObject({
+      code: "ESRCH",
+      syscall: "kill",
+    });
+    // The group of a child started with newGroup is numbered by its pid.
+    runtime.processes.kill(-detached.pid, "SIGTERM");
+    expect(await exitOf(detached.pid)).toEqual({ code: null, signal: "SIGTERM" });
+    expect(failure(() => runtime.processes.kill(-detached.pid, "SIGTERM"))).toMatchObject({
+      code: "ESRCH",
+    });
+    // The other child stayed in this process's group: 0 names it, and the caller.
+    const seen: string[] = [];
+    runtime.processes.onSignal((signal) => {
+      seen.push(signal);
+      return true;
+    });
+    runtime.processes.kill(0, "SIGHUP");
+    expect(await exitOf(beside.pid)).toEqual({ code: null, signal: "SIGHUP" });
+    expect(seen).toEqual(["SIGHUP"]);
+  });
+
   it("delivers signals to onSignal listeners, ending the process without one", () => {
     const quiet = createFakeRuntime();
     quiet.signal("SIGINT");
@@ -468,6 +608,67 @@ describe("spawn", () => {
     runtime.processes.kill(runtime.pid, "SIGTERM");
     expect(seen).toEqual(["SIGINT", "SIGTERM"]);
     expect(runtime.exitCode).toBeNull();
+  });
+
+  it("dies of a signal as the kernel's proc.die does: unless its default action does nothing", () => {
+    const runtime = createFakeRuntime();
+    runtime.processes.onSignal(() => true);
+    runtime.processes.die("SIGWINCH");
+    expect(runtime.exitCode).toBeNull();
+    // It returns; the process should do nothing more.
+    runtime.processes.die("SIGTERM");
+    expect(runtime.exitCode).toBe(143);
+  });
+
+  it("ends the process when every listener declines, as the kernel's proc.die does", () => {
+    const runtime = createFakeRuntime();
+    const seen: string[] = [];
+    runtime.processes.onSignal((signal) => {
+      seen.push(`a ${signal}`);
+      return false;
+    });
+    runtime.processes.onSignal((signal) => {
+      seen.push(`b ${signal}`);
+      return signal === "SIGUSR1";
+    });
+    // One listener taking it is enough.
+    runtime.signal("SIGUSR1");
+    expect(runtime.exitCode).toBeNull();
+    // A signal whose default action does nothing ends nothing when declined.
+    runtime.signal("SIGWINCH");
+    expect(runtime.exitCode).toBeNull();
+    runtime.processes.kill(runtime.pid, "SIGTERM");
+    expect(seen).toEqual([
+      "a SIGUSR1",
+      "b SIGUSR1",
+      "a SIGWINCH",
+      "b SIGWINCH",
+      "a SIGTERM",
+      "b SIGTERM",
+    ]);
+    expect(runtime.exitCode).toBe(143);
+    const quiet = createFakeRuntime();
+    quiet.signal("SIGCHLD");
+    expect(quiet.exitCode).toBeNull();
+  });
+});
+
+describe("forkAndExit", () => {
+  it("reports the status and goes on with a new pid in the same group, keeping its fds", () => {
+    const rt = createFakeRuntime({ pid: 7 });
+    expect(rt.forkedExit).toBeNull();
+    const next = rt.processes.forkAndExit({ code: 3, signal: null });
+    expect(rt.forkedExit).toEqual({ code: 3, signal: null });
+    expect(next).not.toBe(7);
+    expect(rt.pid).toBe(next);
+    expect(rt.ppid).toBe(7);
+    expect(rt.exitCode).toBeNull();
+    // The old pid names no process; the new one and the old group are this one.
+    expect(() => rt.processes.kill(7, "0")).toThrow(expect.objectContaining({ code: "ESRCH" }));
+    expect(() => rt.processes.kill(next, "0")).not.toThrow();
+    expect(() => rt.processes.kill(-7, "0")).not.toThrow();
+    rt.fs.write(1, bytes("still\n"), null);
+    expect(rt.stdout()).toBe("still\n");
   });
 });
 
