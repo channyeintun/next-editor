@@ -15,7 +15,7 @@ function run(label, source, workerData, transferList, use) {
         resolve();
       }, 30);
     });
-    use?.(lines);
+    use?.(lines, worker);
   });
 }
 
@@ -38,16 +38,27 @@ function run(label, source, workerData, transferList, use) {
   {
     const first = new MessageChannel();
     const second = new MessageChannel();
+    // Two ports deliver in no fixed order against each other or against the
+    // thread's exit: the thread waits until both messages have arrived.
     await run(
       "two ports inside workerData",
-      `const { workerData } = require("worker_threads");
+      `const { workerData, parentPort } = require("worker_threads");
        workerData.ports[0].postMessage(workerData.label + " one"); workerData.ports[1].postMessage(workerData.label + " two");
-       workerData.ports[0].close(); workerData.ports[1].close();`,
+       workerData.ports[0].close(); workerData.ports[1].close();
+       parentPort.once("message", () => process.exit(0));`,
       { label: "from", ports: [first.port2, second.port2] },
       [first.port2, second.port2],
-      (lines) => {
-        first.port1.on("message", (message) => lines.push(message));
-        second.port1.on("message", (message) => lines.push(message));
+      (lines, worker) => {
+        const got = [];
+        const arrived = (message) => {
+          got.push(message);
+          if (got.length === 2) {
+            lines.push(...got.sort());
+            worker.postMessage("done");
+          }
+        };
+        first.port1.on("message", arrived);
+        second.port1.on("message", arrived);
       },
     );
   }

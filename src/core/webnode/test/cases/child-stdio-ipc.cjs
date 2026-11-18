@@ -127,17 +127,28 @@ function limits() {
         Object.keys(error).join(","),
         stdout.length,
       );
-      exec(writer("stderr", 10), { timeout: 300 }, (failure, out, err) => {
-        console.log(
-          "exec past its timeout:",
-          Object.keys(failure).join(","),
-          failure.code,
-          failure.killed,
-          failure.signal,
-          JSON.stringify(err),
-        );
-        resolve();
-      });
+      // exec destroys the child's pipes when the time-out ends it, so what it
+      // passes on is what this process read before then. A child that had
+      // not even started writing in time is tried again with a longer
+      // time-out: the run checks what exec passes on, not how fast a child
+      // starts.
+      const pastItsTimeout = (timeout) =>
+        exec(writer("stderr", 10), { timeout }, (failure, out, err) => {
+          if (err === "" && timeout < 10000) {
+            pastItsTimeout(timeout * 2);
+            return;
+          }
+          console.log(
+            "exec past its timeout:",
+            Object.keys(failure).join(","),
+            failure.code,
+            failure.killed,
+            failure.signal,
+            JSON.stringify(err),
+          );
+          resolve();
+        });
+      pastItsTimeout(300);
     });
   });
 }

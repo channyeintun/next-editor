@@ -4,6 +4,11 @@
 // nothing loses its reader and its status is the script's. pnpm survives its
 // first lost write and dies (1, Node's report of the unhandled EPIPE) at the
 // next one, the header of the script after a pre script.
+//
+// The reference run takes the `pnpm` that is first on PATH. webnode's pnpm
+// answers as pnpm 9.12.1 does, and other pnpm versions print the script's
+// command and run the post script here: run the cases with pnpm 9 first on
+// PATH.
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 

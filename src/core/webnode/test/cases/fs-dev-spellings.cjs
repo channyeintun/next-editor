@@ -4,8 +4,12 @@
 // also to lstat and readlink, which do not follow the last link. On a
 // descriptor of /dev/null, root's, the calls only its owner may make are
 // refused; `touch`, which sets the times to now, needs only write access.
-// Only what macOS answers as Linux does is here (Linux's EPERM for utimes
-// and futimes, where macOS says EACCES, is in the unit tests).
+// /dev/fd/.. is /dev, by every path; a name after /dev/null goes through
+// what is no directory (ENOTDIR). No device and no /dev can be hard-linked
+// (EPERM), whatever path reaches it. Only what macOS answers as Linux does
+// is here (Linux's EPERM for utimes and futimes, where macOS says EACCES,
+// and its ENOTDIR for /dev/fd/0/.., where macOS says ENOENT, are in the
+// unit tests).
 const { execSync } = require("child_process");
 const fs = require("fs");
 
@@ -43,6 +47,57 @@ for (const path of ["/dev/null", `${links.root}/dev/null`, `${links.dev}/null`])
   answer(`lstat ${path}`, () => [kind(fs.lstatSync(path)), fs.lstatSync(path).uid]);
   answer(`readlink ${path}`, () => fs.readlinkSync(path));
 }
+
+// macOS's /dev/fd now and then answers a lookup of its `..` with ENOENT;
+// a second try gives /dev.
+const steady = (run) => {
+  for (let tries = 1; ; tries++) {
+    try {
+      return run();
+    } catch (error) {
+      if (error.code !== "ENOENT" || tries === 3) {
+        throw error;
+      }
+    }
+  }
+};
+for (const path of [
+  "/dev/fd/..",
+  "/dev/fd/./..",
+  `${links.root}/dev/fd/..`,
+  `${links.dev}/fd/..`,
+]) {
+  answer(`lstat ${path}`, () => steady(() => [kind(fs.lstatSync(path)), fs.lstatSync(path).uid]));
+  answer(`stat ${path}`, () => steady(() => [kind(fs.statSync(path)), fs.statSync(path).uid]));
+  answer(`access ${path}`, () => steady(() => fs.accessSync(path)));
+  answer(`realpath.native ${path}`, () => steady(() => fs.realpathSync.native(path)));
+  answer(`readdir ${path} has fd and null`, () =>
+    steady(() => ["fd", "null"].every((name) => fs.readdirSync(path).includes(name))),
+  );
+}
+for (const path of ["/dev/null/..", `${links.dev}/null/..`, `${links.root}/dev/null/../null`]) {
+  answer(`stat ${path}`, () => kind(fs.statSync(path)));
+  answer(`lstat ${path}`, () => kind(fs.lstatSync(path)));
+  answer(`readdir ${path}`, () => fs.readdirSync(path).length);
+}
+
+fs.rmSync("spellings-links", { recursive: true, force: true });
+fs.mkdirSync("spellings-links");
+for (const path of [
+  "/dev/null",
+  `${links.dev}/null`,
+  `${links.root}/dev/tty`,
+  `${links.dev}/fd`,
+  "/dev",
+  `${links.root}/dev`,
+]) {
+  answer(`link ${path}`, () => fs.linkSync(path, "spellings-links/x"));
+}
+answer("spellings-links after the links", () => fs.readdirSync("spellings-links"));
+const linked = (line) =>
+  execSync(`${line} 2>&1; echo $?`, { encoding: "utf8" }).trim().split("\n").pop();
+console.log(`ln ${links.dev}/null:`, linked(`ln ${links.dev}/null spellings-links/y`));
+fs.rmSync("spellings-links", { recursive: true });
 
 const { O_DIRECTORY, O_RDONLY } = fs.constants;
 for (const path of ["/dev/null", `${links.dev}/null`]) {
