@@ -2,13 +2,22 @@
 // TypeScript, decides whether the file is an ES module, and rewrites ES module
 // syntax (`import`, `export`, `import()`, `import.meta`) into calls on the
 // loader's own bindings. es-module-lexer finds the syntax; sucrase rewrites it.
+// Code a program evaluates itself (`new Function`, `eval`) is rewritten here
+// too, so that its `import()` is the loader's as well.
 import { init as initLexer, parse as lex } from "es-module-lexer";
 import { transform } from "sucrase";
 import type { Transform } from "sucrase";
 import { parse as parseTokens } from "sucrase/dist/esm/parser/index.js";
 import type { SucraseToken } from "sucrase/dist/esm/parser/index.js";
+import { IdentifierRole } from "sucrase/dist/esm/parser/tokenizer/index.js";
 import { ContextualKeyword } from "sucrase/dist/esm/parser/tokenizer/keywords.js";
 import { TokenType } from "sucrase/dist/esm/parser/tokenizer/types.js";
+
+// The engine's own constructors, taken before the loader puts its own in
+// their place (evaluated.ts): the checks below only compile code.
+const NativeFunction = Function;
+const NativeAsyncFunction = Object.getPrototypeOf(async () => {})
+  .constructor as FunctionConstructor;
 
 export interface PreparedSource {
   format: "esm" | "cjs";
@@ -45,6 +54,26 @@ export const DYNAMIC_IMPORT_BINDING = "__webnode_import";
 export const STATIC_IMPORT_BINDING = "__webnode_require";
 /** The object the rewritten `export` statements write to, renamed the same way. */
 export const EXPORTS_BINDING = "__webnode_exports";
+/**
+ * The loader's function for code a program evaluates itself (evaluated.ts).
+ * Called with the file the code belongs to, it gives that code's `import()`,
+ * the function a direct `eval` passes its source through, and an indirect
+ * `eval`. Such code has no wrapper function to bind a name for it, so this
+ * one is a property of the global object, not enumerable. It is called by
+ * name alone: the code around a rewritten call may have a `globalThis` or a
+ * `Symbol` of its own.
+ */
+export const EVALUATED_BINDING = "__webnode_evaluated";
+
+/**
+ * The expression that gives rewritten code the loader's functions for code of
+ * the file `parent`. `importer` names the `import()` that code gets when it is
+ * not the loader's (evaluated.ts, `defineEvaluatedImporter`).
+ */
+function evaluatedHost(parent: string, importer?: string): string {
+  const named = importer === undefined ? "" : `, ${JSON.stringify(importer)}`;
+  return `${EVALUATED_BINDING}(${JSON.stringify(parent)}${named})`;
+}
 
 /** A name that can be written as an identifier in an import or export clause. */
 const IDENTIFIER_NAME = /^[\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*$/u;
@@ -108,7 +137,18 @@ export function sourceUrlComment(filename: string): string {
   const url = filename.replace(/[\s"']/g, (character) =>
     character === "'" ? "%27" : encodeURIComponent(character),
   );
+  if (filename.startsWith("/")) {
+    namedSources.set(url, filename);
+  }
   return `\n//# sourceURL=${url}`;
+}
+
+/** The names `sourceUrlComment` gave the code of files (absolute paths), and the file each stands for. */
+const namedSources = new Map<string, string>();
+
+/** The file whose code a stack frame's script name stands for, when the name is one `sourceUrlComment` gave. */
+export function fileOfSourceName(name: string): string | undefined {
+  return namedSources.get(name);
 }
 
 function syntaxError(error: unknown, filename: string): SyntaxError {
@@ -271,6 +311,478 @@ export function stripTypes(source: string, filename: string): string {
   }
 }
 
+/** A replacement of `text.slice(start, end)`. */
+interface Edit {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** `text` with `edits`, which do not overlap, applied. An insertion goes before a replacement that starts where it does. */
+function applyEdits(text: string, edits: Edit[]): string {
+  if (edits.length === 0) {
+    return text;
+  }
+  const parts: string[] = [];
+  let from = 0;
+  const ordered = [...edits].sort(
+    (left, right) => left.start - right.start || left.end - right.end,
+  );
+  for (const edit of ordered) {
+    parts.push(text.slice(from, edit.start), edit.text);
+    from = edit.end;
+  }
+  parts.push(text.slice(from));
+  return parts.join("");
+}
+
+const LINE_BREAK = /[\n\r\u2028\u2029]/;
+
+/**
+ * An import declaration on one line, without its comments. A declaration holds
+ * only names, punctuation and string literals, so a quote always opens a
+ * string and a slash always opens a comment.
+ */
+function onOneLine(declaration: string): string {
+  if (!LINE_BREAK.test(declaration) && !declaration.includes("/*") && !declaration.includes("//")) {
+    return declaration;
+  }
+  let line = "";
+  for (let index = 0; index < declaration.length; index += 1) {
+    const character = declaration[index];
+    if (character === '"' || character === "'") {
+      let end = index + 1;
+      while (end < declaration.length && declaration[end] !== character) {
+        if (declaration[end] === "\\" && LINE_BREAK.test(declaration[end + 1] ?? "")) {
+          // A line continuation adds nothing to the string's value.
+          line += declaration.slice(index, end);
+          index = end + (declaration[end + 1] === "\r" && declaration[end + 2] === "\n" ? 3 : 2);
+          end = index;
+        } else {
+          end += declaration[end] === "\\" ? 2 : 1;
+        }
+      }
+      line += declaration.slice(index, end + 1);
+      index = end;
+    } else if (character === "/" && declaration[index + 1] === "*") {
+      const end = declaration.indexOf("*/", index + 2);
+      index = end < 0 ? declaration.length : end + 1;
+      line += " ";
+    } else if (character === "/" && declaration[index + 1] === "/") {
+      const end = declaration.slice(index).search(LINE_BREAK);
+      index = end < 0 ? declaration.length : index + end;
+      line += " ";
+    } else {
+      line += LINE_BREAK.test(character) ? " " : character;
+    }
+  }
+  return line;
+}
+
+/** TypeScript's `import name = require(…)`: an assignment, which runs where it stands. */
+const IMPORT_EQUALS = /^import\s+(?:type\s+)?[\p{ID_Start}_$][\p{ID_Continue}$\u200c\u200d]*\s*=/u;
+
+/**
+ * Lifts the `import` declarations out of a module's text, as the language
+ * hoists them: an imported binding is usable on every line, also above its
+ * declaration. Each declaration is replaced where it stands by `;` and its
+ * line breaks (a statement boundary, so the lines around it end where they
+ * did and keep their numbers) and is returned, on one line, to go before the
+ * module's first line. The `edits` inside a declaration move with it; the
+ * blanks are added to `edits`.
+ */
+function liftImports(text: string, imports: ReturnType<typeof lex>[0], edits: Edit[]): string {
+  let lifted = "";
+  for (const entry of imports) {
+    if (
+      entry.type !== "static" ||
+      entry.phase !== null ||
+      !text.startsWith("import", entry.importStart)
+    ) {
+      continue;
+    }
+    const start = entry.importStart;
+    const end = entry.importEnd;
+    const declaration = text.slice(start, end);
+    let line = onOneLine(declaration);
+    if (line.includes("=") && IMPORT_EQUALS.test(line)) {
+      continue;
+    }
+    const inside: Edit[] = [];
+    for (let index = edits.length - 1; index >= 0; index -= 1) {
+      const edit = edits[index];
+      if (edit.start >= start && edit.end <= end) {
+        inside.push({ start: edit.start - start, end: edit.end - start, text: edit.text });
+        edits.splice(index, 1);
+      }
+    }
+    if (inside.length > 0) {
+      line = onOneLine(applyEdits(declaration, inside));
+    }
+    lifted += `${line};`;
+    edits.push({ start, end, text: `;${declaration.replace(/[^\n\r\u2028\u2029]+/g, "")}` });
+  }
+  return lifted;
+}
+
+/** `source` with its import declarations first (`liftImports`); as it is when the lexer cannot read it. */
+function withImportsFirst(source: string, filename: string): string {
+  let imports: ReturnType<typeof lex>[0];
+  try {
+    [imports] = lex(source, filename);
+  } catch {
+    return source;
+  }
+  const edits: Edit[] = [];
+  const lifted = liftImports(source, imports, edits);
+  return lifted + applyEdits(source, edits);
+}
+
+/** A letter, digit, `_` or `$`, or any character outside ASCII: what may be part of a name. */
+function isNameCode(code: number): boolean {
+  return (
+    (code >= 97 && code <= 122) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 48 && code <= 57) ||
+    code === 95 ||
+    code === 36 ||
+    code > 127
+  );
+}
+
+/** The index of the first character at or after `from` that is not white space. */
+function skipSpace(text: string, from: number): number {
+  let index = from;
+  while (index < text.length && /\s/.test(text[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+/** The text before `at` without the white space at its end. */
+function textBefore(text: string, at: number): string {
+  // A keyword and the space after it: no more is looked at.
+  return text.slice(Math.max(0, at - 32), at).trimEnd();
+}
+
+/** The names of the global object whose `eval` property `aliasEdits` reads as the global `eval`. */
+const GLOBAL_OBJECTS = new Set(["globalThis", "global", "self", "window"]);
+
+/** Whether the `.` at `dot` follows one of `GLOBAL_OBJECTS`, itself no property: `globalThis.eval`. */
+function followsGlobalObject(text: string, dot: number): boolean {
+  let end = dot;
+  while (end > 0 && /\s/.test(text[end - 1])) {
+    end -= 1;
+  }
+  let start = end;
+  while (start > 0 && isNameCode(text.charCodeAt(start - 1))) {
+    start -= 1;
+  }
+  if (start === end || !GLOBAL_OBJECTS.has(text.slice(start, end))) {
+    return false;
+  }
+  let previous = start;
+  while (previous > 0 && /\s/.test(text[previous - 1])) {
+    previous -= 1;
+  }
+  return previous === 0 || text.charCodeAt(previous - 1) !== 46;
+}
+
+/** What `aliasEdits` answers for code that has an `eval` of its own. */
+const DECLARES_EVAL = "declares eval";
+
+/**
+ * The edits that make each use of the global `eval` as a value the loader's
+ * indirect eval, `host.eval` (`const run = eval`, `eval.call(null, code)`,
+ * `eval?.(code)`, `[eval][0](code)`, `(0, eval)(code)`, `{ eval }`), and the
+ * same of a read of `eval` on the global object (`globalThis.eval`, and
+ * `global`, `self` or `window` when the code has no binding of that name).
+ * They are told from everything else by sucrase's parser: a plain call
+ * `eval(…)` (also parenthesized, `(eval)(…)`) is a direct eval and is left
+ * for `evalEdits`; a property, a key, a label, an assignment to `eval` or a
+ * `delete` of it stays as written. `DECLARES_EVAL` when the code binds a name
+ * `eval` of its own; null when the parser cannot read the code.
+ */
+function aliasEdits(text: string, host: () => string): Edit[] | typeof DECLARES_EVAL | null {
+  let tokens: SucraseToken[];
+  try {
+    tokens = parseTokens(text, false, false, false).tokens;
+  } catch {
+    return null;
+  }
+  const nameOf = (token: SucraseToken | undefined): string | null =>
+    token !== undefined && token.type === TokenType.name
+      ? text.slice(token.start, token.end)
+      : null;
+  const isReference = (role: number | null): boolean =>
+    role === IdentifierRole.Access ||
+    role === IdentifierRole.ExportAccess ||
+    role === IdentifierRole.ImportAccess;
+  const bound = new Set<string>();
+  for (const token of tokens) {
+    const name = nameOf(token);
+    if (
+      name !== null &&
+      token.identifierRole !== null &&
+      !isReference(token.identifierRole) &&
+      token.identifierRole !== IdentifierRole.ObjectShorthand &&
+      token.identifierRole !== IdentifierRole.ObjectKey &&
+      (name === "eval" || GLOBAL_OBJECTS.has(name))
+    ) {
+      if (name === "eval") {
+        return DECLARES_EVAL;
+      }
+      bound.add(name);
+    }
+  }
+  const typeAt = (index: number): number | undefined => tokens[index]?.type;
+  const edits: Edit[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (nameOf(token) !== "eval") {
+      continue;
+    }
+    // The expression that reads the global `eval`: the name, or `object.eval`.
+    let first = index;
+    if (typeAt(index - 1) === TokenType.dot) {
+      const object = nameOf(tokens[index - 2]);
+      if (
+        object === null ||
+        !GLOBAL_OBJECTS.has(object) ||
+        bound.has(object) ||
+        !isReference(tokens[index - 2].identifierRole) ||
+        typeAt(index - 3) === TokenType.dot ||
+        typeAt(index - 3) === TokenType.questionDot
+      ) {
+        continue;
+      }
+      first = index - 2;
+    } else if (token.identifierRole === IdentifierRole.ObjectShorthand) {
+      edits.push({ start: token.start, end: token.end, text: `eval: ${host()}.eval` });
+      continue;
+    } else if (!isReference(token.identifierRole)) {
+      continue;
+    }
+    const next = typeAt(index + 1);
+    const previous = typeAt(first - 1);
+    if (
+      next === TokenType.eq ||
+      next === TokenType.assign ||
+      next === TokenType.preIncDec ||
+      next === TokenType.postIncDec ||
+      next === TokenType._in ||
+      previous === TokenType.preIncDec ||
+      previous === TokenType.postIncDec ||
+      previous === TokenType._delete ||
+      // A label: `eval: for (;;)`.
+      (next === TokenType.colon &&
+        previous !== TokenType.question &&
+        previous !== TokenType._case &&
+        first === index)
+    ) {
+      continue;
+    }
+    if (first === index) {
+      // `eval(…)` and `(eval)(…)` are direct evals.
+      let before = index - 1;
+      let after = index + 1;
+      while (typeAt(before) === TokenType.parenL && typeAt(after) === TokenType.parenR) {
+        before -= 1;
+        after += 1;
+      }
+      if (typeAt(after) === TokenType.parenL) {
+        continue;
+      }
+    }
+    edits.push({ start: tokens[first].start, end: token.end, text: `${host()}.eval` });
+  }
+  return edits;
+}
+
+/**
+ * Adds to `edits` the rewrites that send the code `text` evaluates with `eval`
+ * through the loader (`host` is `evaluatedHost` of its file):
+ *
+ * - a direct `eval(code)` becomes `eval(host.source(code))`. It is still a
+ *   direct eval, with the scope it is written in, of code that was rewritten
+ *   first (`rewriteEvaluated`);
+ * - each other use of the global `eval` as a value, `globalThis.eval` among
+ *   them, becomes `host.eval`, the loader's indirect eval (`aliasEdits`), so
+ *   `(0, eval)(code)` becomes `(0, host.eval)(code)`.
+ *
+ * The global `eval` itself stays the engine's: replacing it would make each
+ * direct eval indirect. Nothing is rewritten in code that declares a name
+ * `eval` of its own.
+ *
+ * Most files that say `eval` say it in a string or a comment, and the lexer
+ * can tell: it reads a copy in which each `eval(` is spelled `import(` and
+ * any other `eval` is spelled `import.meta`. It reports those only where
+ * they are code, and for a call it reports where the call ends.
+ */
+function evalEdits(text: string, host: () => string, edits: Edit[]): void {
+  // Each `eval` that is a word of its own and not a property (`a.eval`, `#eval`).
+  const words: { at: number; called: boolean; probe: number }[] = [];
+  // The probe's offset where each replacement ends, and how much longer the probe is by then.
+  const ends: number[] = [];
+  const growth: number[] = [];
+  const parts: string[] = [];
+  let from = 0;
+  let grown = 0;
+  // Whether the code may read `eval` on the global object (`globalThis.eval`).
+  let globalProperty = false;
+  // Looked for by its last three letters: the engine finds a word by its
+  // first letter, and no letter is commoner in source than `e`.
+  for (let val = text.indexOf("val"); val >= 0; val = text.indexOf("val", val + 3)) {
+    const at = val - 1;
+    if (at < 0 || text.charCodeAt(at) !== 101) {
+      continue;
+    }
+    const before = at === 0 ? 0 : text.charCodeAt(at - 1);
+    if (isNameCode(before) || before === 35 || isNameCode(text.charCodeAt(at + 4))) {
+      continue;
+    }
+    if (before === 46) {
+      globalProperty ||= followsGlobalObject(text, at - 1);
+      continue;
+    }
+    const called = text[skipSpace(text, at + 4)] === "(";
+    const spelled = called ? "import" : "import.meta";
+    parts.push(text.slice(from, at), spelled);
+    words.push({ at, called, probe: at + grown });
+    grown += spelled.length - 4;
+    ends.push(at + 4 + grown);
+    growth.push(grown);
+    from = at + 4;
+  }
+  if (words.length === 0) {
+    if (globalProperty) {
+      const aliases = aliasEdits(text, host);
+      if (aliases !== DECLARES_EVAL && aliases !== null) {
+        edits.push(...aliases);
+      }
+    }
+    return;
+  }
+  parts.push(text.slice(from));
+
+  const calls = new Map<number, { open: number; end: number }>();
+  const inCode = new Set<number>();
+  try {
+    for (const entry of lex(parts.join(""))[0]) {
+      if (entry.type === "dynamic") {
+        calls.set(entry.importStart, { open: entry.dynamicStart, end: entry.importEnd });
+      } else if (entry.type === "import-meta") {
+        inCode.add(entry.start);
+      }
+    }
+  } catch {
+    // Not a spelling the lexer reads; the evals stay the engine's.
+    return;
+  }
+  /** The offset in `text` of an offset in the probe that is not inside a replacement. */
+  const original = (offset: number): number => {
+    let low = 0;
+    let high = ends.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (ends[middle] <= offset) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low === 0 ? offset : offset - growth[low - 1];
+  };
+
+  const found: Edit[] = [];
+  // The indirect evals spelled `(…, eval)(`, for code the parser cannot read.
+  const sequences: Edit[] = [];
+  // Whether a use of `eval` needs the parser to be told apart (`aliasEdits`).
+  let parse = globalProperty;
+  for (const word of words) {
+    if (word.called) {
+      const call = calls.get(word.probe);
+      if (!call) {
+        // Not a call in code. `function eval(` gives the code an eval of its own.
+        if (/\bfunction\s*\*?$/.test(textBefore(text, word.at))) {
+          return;
+        }
+        continue;
+      }
+      const open = original(call.open);
+      const close = original(call.end) - 1;
+      if (text[open] !== "(" || text[close] !== ")") {
+        continue;
+      }
+      found.push(
+        { start: open + 1, end: open + 1, text: `${host()}.source(` },
+        { start: close, end: close, text: ")" },
+      );
+    } else if (inCode.has(word.probe)) {
+      const before = textBefore(text, word.at);
+      if (/\b(?:var|let|const)$/.test(before)) {
+        return;
+      }
+      // `(…, eval)(`: the value of a sequence, called at once.
+      const after = skipSpace(text, word.at + 4);
+      if (before.endsWith(",") && text[after] === ")" && text[skipSpace(text, after + 1)] === "(") {
+        sequences.push({ start: word.at, end: word.at + 4, text: `${host()}.eval` });
+      } else if (!(text[after] === ":" && (before.endsWith("{") || before.endsWith(",")))) {
+        // Any other value but a key (`{ eval: … }`).
+        parse = true;
+      }
+    }
+  }
+  const aliases = parse ? aliasEdits(text, host) : null;
+  if (aliases === DECLARES_EVAL) {
+    return;
+  }
+  edits.push(...found, ...(aliases ?? sequences));
+}
+
+/**
+ * Code that a program evaluates itself (the body given to `new Function`, the
+ * text given to `eval`), rewritten so that what it loads comes from the
+ * loader: the engine's own `import()` knows no file of the program's and
+ * fetches from the page's host instead. Its `import(` becomes a call of the
+ * loader's import and its evals are rewritten in turn (`evalEdits`), all as
+ * code of the file `parent()` names, which is asked only when something is
+ * rewritten. With `importer`, its `import()` is the one defined under that
+ * name instead of the loader's, and so is the `import()` of the code its own
+ * evals run. Null when the code needs no rewriting, or does not lex: the
+ * engine then reports it.
+ */
+export function rewriteEvaluated(
+  code: string,
+  parent: () => string,
+  importer?: string,
+): string | null {
+  const imports = code.includes("import");
+  if (!imports && !code.includes("eval")) {
+    return null;
+  }
+  let named: string | null = null;
+  const host = () => (named ??= evaluatedHost(parent(), importer));
+  const edits: Edit[] = [];
+  if (imports) {
+    try {
+      for (const entry of lex(code)[0]) {
+        if (entry.type === "dynamic") {
+          edits.push({
+            start: entry.importStart,
+            end: entry.dynamicStart,
+            text: `${host()}.import`,
+          });
+        }
+      }
+    } catch {
+      return null;
+    }
+  }
+  evalEdits(code, host, edits);
+  return edits.length === 0 ? null : applyEdits(code, edits);
+}
+
 /**
  * A TypeScript or JSX file that runs as CommonJS, with its `import`/`export`
  * statements compiled to `require` and `exports`, as tsx does. The wrapper
@@ -281,7 +793,7 @@ export function stripTypes(source: string, filename: string): string {
 function commonJsFromModule(source: string, filename: string, strict: boolean): PreparedSource {
   let code: string;
   try {
-    code = transform(source, {
+    code = transform(withImportsFirst(source, filename), {
       transforms: [...sucraseTransforms(filename), "imports"],
       preserveDynamicImport: true,
       disableESTransforms: true,
@@ -301,16 +813,22 @@ function commonJsFromModule(source: string, filename: string, strict: boolean): 
   } catch {
     // Left for the engine to report.
   }
-  for (const entry of [...imports].reverse()) {
+  const edits: Edit[] = [];
+  for (const entry of imports) {
     if (entry.type === "dynamic") {
-      code = `${code.slice(0, entry.importStart)}${DYNAMIC_IMPORT_BINDING}${code.slice(entry.dynamicStart)}`;
+      edits.push({
+        start: entry.importStart,
+        end: entry.dynamicStart,
+        text: DYNAMIC_IMPORT_BINDING,
+      });
     } else if (entry.type === "import-meta") {
-      code = `${code.slice(0, entry.start)}${IMPORT_META_BINDING}${code.slice(entry.end)}`;
+      edits.push({ start: entry.start, end: entry.end, text: IMPORT_META_BINDING });
     }
   }
+  evalEdits(code, () => evaluatedHost(filename), edits);
   return {
     format: "cjs",
-    code,
+    code: applyEdits(code, edits),
     specifiers: [],
     prologue: "",
     exportNames: null,
@@ -331,14 +849,13 @@ function needsTopLevelAwait(code: string): boolean {
   }
   try {
     // Only compiled, never called.
-    new Function(code);
+    new NativeFunction(code);
     return false;
   } catch {
     // Not a script; see whether it is one only because of `await`.
   }
   try {
-    const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as FunctionConstructor;
-    new AsyncFunction(code);
+    new NativeAsyncFunction(code);
     return true;
   } catch {
     return false;
@@ -466,9 +983,8 @@ export function prepareSource(
   const isModule =
     hasModuleSyntax || format === "esm" || (format === null && needsTopLevelAwait(text));
 
-  // Rewrites of `import(`, `import.meta` and string export names, applied last
-  // first so earlier offsets stay valid.
-  const edits: { start: number; end: number; text: string }[] = [];
+  // Rewrites of `import(`, `import.meta` and string export names.
+  const edits: Edit[] = [];
   const specifiers: string[] = [];
   const seen = new Set<string>();
   for (const entry of imports) {
@@ -567,10 +1083,9 @@ export function prepareSource(
     }
   }
 
-  edits.sort((left, right) => right.start - left.start);
-  for (const edit of edits) {
-    text = `${text.slice(0, edit.start)}${edit.text}${text.slice(edit.end)}`;
-  }
+  evalEdits(text, () => evaluatedHost(filename), edits);
+  const lifted = isModule ? liftImports(text, imports, edits) : "";
+  text = lifted + applyEdits(text, edits);
   for (const entry of imports) {
     if (entry.type === "dynamic" || entry.type === "import-meta") {
       continue;
@@ -632,7 +1147,7 @@ export function hasTopLevelAwait(code: string): boolean {
   }
   try {
     // Only compiled, never called.
-    new Function(`class __webnode_probe { static {\n${code}\n} }`);
+    new NativeFunction(`class __webnode_probe { static {\n${code}\n} }`);
     return false;
   } catch {
     return true;

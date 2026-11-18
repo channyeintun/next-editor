@@ -6,12 +6,14 @@
 // views of their exports.
 import { BUILTIN_MODULE_NAMES, builtinName } from "../node/names";
 import { runtime } from "../runtime";
+import { installEvaluatedCode } from "./evaluated";
 import {
   clearPackageCache,
   findPackageScope,
   formatByName,
   nodeModulePaths,
   resolveSpecifier,
+  unresolvedCandidates,
 } from "./resolve";
 import type { ResolveMode } from "./resolve";
 import {
@@ -32,11 +34,23 @@ import type { PreparedSource } from "./transform";
 
 type Namespace = Record<string | symbol, unknown>;
 
+/**
+ * What watch mode is told of a file: it was loaded by `require` or by
+ * `import`, or it is "missing": a failed `require()` looked for it.
+ */
+export type LoadKind = "require" | "import" | "missing";
+
 interface LoaderHost {
   /** The exports of builtin module `name`. */
   loadBuiltin(name: string): unknown;
   /** `--conditions` the process was started with. */
   conditions: readonly string[];
+  /**
+   * Watch mode's child only: told of each file the program loads, and of the
+   * files a failed `require()` looked for, as Node tells its watch mode
+   * (process/programs/watch.ts). Null otherwise, which costs one check a module.
+   */
+  report?: ((kind: LoadKind, filename: string) => void) | null;
 }
 
 let host: LoaderHost = {
@@ -46,9 +60,13 @@ let host: LoaderHost = {
   conditions: [],
 };
 
-/** Connects the loader to the builtin registry and the process's options. */
+/**
+ * Connects the loader to the builtin registry and the process's options, and
+ * makes the code the program evaluates itself load through it (evaluated.ts).
+ */
 export function configureLoader(next: LoaderHost): void {
   host = next;
+  installEvaluatedCode(importModule);
 }
 
 const decoder = new TextDecoder();
@@ -379,6 +397,7 @@ export class Module {
         return "builtin" in resolved ? resolved.builtin : resolved.filename;
       } catch (error) {
         failure = error;
+        reportUnresolved(request, from, error);
       }
     }
     throw failure;
@@ -405,6 +424,8 @@ export class Module {
       Module.main = module;
       mainModuleListener?.(module);
     }
+    // Before it runs, as Node does: a file that throws is watched too.
+    host.report?.("require", filename);
     Module._cache[filename] = module;
     let threw = true;
     try {
@@ -548,6 +569,21 @@ export function onMainModule(listener: (module: Module) => void): void {
   mainModuleListener = listener;
 }
 
+/**
+ * Watch mode: a `require()` of `request` from the file `from` found nothing.
+ * Reports the files it looked for, as Node's `_findPath` does, so that
+ * creating one of them restarts the program.
+ */
+export function reportUnresolved(request: string, from: string, error: unknown): void {
+  const report = host.report;
+  if (!report || (error as { code?: unknown } | null)?.code !== "MODULE_NOT_FOUND") {
+    return;
+  }
+  for (const filename of unresolvedCandidates(request, from)) {
+    report("missing", filename);
+  }
+}
+
 const warned = new Set<string>();
 
 function warnOnce(key: string, message: string): void {
@@ -612,8 +648,10 @@ Module._extensions[".mts"] = loadScript;
 Module._extensions[".tsx"] = loadScript;
 Module._extensions[".jsx"] = loadScript;
 Module._extensions[".json"] = (module, filename) => {
+  // A file that cannot be read fails with the read's own message; only a parse error names the file.
+  const text = readText(filename);
   try {
-    module.exports = JSON.parse(readText(filename).replace(/^﻿/, ""));
+    module.exports = JSON.parse(text.replace(/^﻿/, ""));
   } catch (error) {
     if (error instanceof Error) {
       error.message = `${filename}: ${error.message}`;
@@ -705,6 +743,7 @@ function dependencyFor(specifier: string, parent: string, mode: ResolveMode): De
     return { kind: "other", load: () => namespaceOfBuiltin(name), loaded: null };
   }
   const { filename, query } = resolved;
+  host.report?.("import", filename);
   // A module already known by this URL is that module, whatever is on disk now.
   const known = esmRecords.get(filename + query);
   if (known) {
@@ -1057,6 +1096,8 @@ export async function importModule(specifier: string, parent: string): Promise<N
 
 /** Runs the program's entry file as an ES module or as the main CommonJS module. */
 export function runEntry(filename: string): void | Promise<unknown> {
+  // Before its source is read: an entry that does not parse is watched too.
+  host.report?.(formatByName(filename) === "esm" ? "import" : "require", filename);
   const { format, prepared } = classify(filename);
   if (format === "esm") {
     return evaluateEntry(esmRecord(filename, "", prepared ?? undefined));
@@ -1083,10 +1124,9 @@ export function runSource(
 ): void | Promise<unknown> {
   const prepared = prepareSource(source, filename, format);
   if (prepared.format === "esm") {
-    const record = esmRecord(filename, "", prepared);
-    link(record);
-    const ready = instantiated();
-    return ready ? ready.then(() => evaluate(record, new Set())) : evaluate(record, new Set());
+    // Always in a promise job, as Node evaluates a module, entry or eval
+    // code alike: the ticks it queues run after the promise jobs it queues.
+    return evaluateEntry(esmRecord(filename, "", prepared));
   }
   const module = new Module(filename, null);
   module.filename = filename;

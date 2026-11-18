@@ -8,6 +8,8 @@ declare module "sucrase/dist/esm/parser/index.js" {
     start: number;
     end: number;
     isType: boolean;
+    /** What a name token is to the scope it is in; null for a token that is not an identifier (a property, a label in `break`). */
+    identifierRole: number | null;
   }
   export function parse(
     input: string,
@@ -22,11 +24,33 @@ declare module "sucrase/dist/esm/parser/tokenizer/types.js" {
     at: number;
     name: number;
     dot: number;
+    questionDot: number;
     braceL: number;
     braceR: number;
+    parenL: number;
+    parenR: number;
+    colon: number;
+    question: number;
+    eq: number;
+    assign: number;
+    preIncDec: number;
+    postIncDec: number;
     dollarBraceL: number;
     string: number;
+    _case: number;
+    _delete: number;
+    _in: number;
     _declare: number;
+  };
+}
+
+declare module "sucrase/dist/esm/parser/tokenizer/index.js" {
+  export const IdentifierRole: {
+    Access: number;
+    ExportAccess: number;
+    ObjectShorthand: number;
+    ObjectKey: number;
+    ImportAccess: number;
   };
 }
 

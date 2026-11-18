@@ -8,7 +8,9 @@ import { O_CREAT, O_TRUNC, O_WRONLY } from "../../kernel/vfs/types";
 import { loadBuiltin } from "../node/index";
 import { setRuntime } from "../runtime";
 import { createFakeRuntime, type FakeRuntime } from "../testing/fakeRuntime";
-import { configureLoader, importModule, runEntry } from "./modules";
+import { runMacrotask } from "../node/eventLoop";
+import { createProcess } from "../node/process";
+import { configureLoader, importModule, runEntry, runSource } from "./modules";
 import { prepareSource, transformReady } from "./transform";
 
 // What build/webnodeBundle.ts does to sucrase's code templates in the bundle:
@@ -227,6 +229,118 @@ describe("ES modules", () => {
     expect(seen).toEqual(["a start", "b", "c", "a end", "main"]);
   });
 
+  it("binds an import on every line, also above its declaration", async () => {
+    files("/p/hoist", {
+      "main.mjs": [
+        "__log.push([typeof basename, v, typeof ns.join, def.kind, typeof other].join());",
+        'import { basename } from "node:path";',
+        "import {",
+        "  v, // the value",
+        "  other /* a function */,",
+        '} from "./dep.mjs";',
+        'import * as ns from "path"',
+        'import def from "./data.cjs"',
+        "const list = [1]",
+        "import { \"string name\" as named } from './dep.mjs'",
+        "(function () { __log.push(`iife ${named} ${list.length}`) })()",
+        '__log.push(new Error("here").stack.split("\\n")[1].replace(/^.*main\\.mjs/, "main.mjs").replace(/\\)$/, ""));',
+        'import "./side.mjs";',
+      ].join("\n"),
+      "dep.mjs": [
+        '__log.push("dep runs");',
+        "export const v = 5;",
+        "export function other() {}",
+        'const s = "named!";',
+        'export { s as "string name" };',
+      ].join("\n"),
+      "data.cjs": '__log.push("data runs"); module.exports = { kind: "cjs" };',
+      "side.mjs": '__log.push("side runs");',
+    });
+    await runEntry("/p/hoist/main.mjs");
+    // Real node v26 prints the same six lines.
+    expect(log).toEqual([
+      "dep runs",
+      "data runs",
+      "side runs",
+      "function,5,function,cjs,function",
+      "iife named! 1",
+      "main.mjs:12:12",
+    ]);
+  });
+
+  it("keeps every line where it was when it lifts an import declaration", () => {
+    const source = [
+      "first();",
+      "import {",
+      "  a, // one",
+      "  b /* two",
+      "  lines */,",
+      "} from './de\\",
+      "p.mjs'",
+      "last(a, b);",
+    ].join("\n");
+    const prepared = prepareSource(source, "/p/lines/main.mjs", "esm");
+    expect(prepared.specifiers).toEqual(["./dep.mjs"]);
+    const lines = prepared.code.split("\n");
+    expect(lines).toHaveLength(source.split("\n").length);
+    // The declaration, on the first line, before the code that was there.
+    expect(lines[0]).toMatch(/__webnode_require\('\.\/dep\.mjs'\);.*first\(\);$/);
+    // Where it stood: a statement boundary and its line breaks.
+    expect(lines.slice(1, 7)).toEqual([";", "", "", "", "", ""]);
+    expect(lines[7]).toMatch(/^last\(.*\.a, .*\.b\);$/);
+  });
+
+  it("puts the imports of a TypeScript file first whichever format it runs as", async () => {
+    files("/p/hoistts", {
+      "package.json": '{"type":"commonjs"}',
+      "cjs.ts": [
+        "__log.push(typeof helper, typeof join, typeof fs.readFileSync);",
+        "import { helper } from './helper';",
+        "import type { Shape } from './helper';",
+        "import { join } from 'node:path'",
+        "import fs = require('node:fs');",
+        "const shape: Shape = { n: 1 };",
+        "__log.push(shape.n, typeof module);",
+      ].join("\n"),
+      "esm.mts": [
+        "__log.push(typeof helper);",
+        "import { helper } from './helper';",
+        "const n: number = 2;",
+        "__log.push(n, typeof module);",
+      ].join("\n"),
+      "helper.ts": "export interface Shape { n: number }\nexport function helper(): void {}",
+    });
+    // `import fs = require()` is a `const`, declared where it stands: it is not lifted.
+    await expect(Promise.resolve().then(() => runEntry("/p/hoistts/cjs.ts"))).rejects.toThrow(
+      "Cannot access 'fs' before initialization",
+    );
+    expect(log).toEqual([]);
+    write(
+      "/p/hoistts/cjs.ts",
+      [
+        "__log.push(typeof helper, typeof join);",
+        "import { helper } from './helper';",
+        "import type { Shape } from './helper';",
+        "import { join } from 'node:path'",
+        "import fs = require('node:fs');",
+        "const shape: Shape = { n: 1 };",
+        "__log.push(shape.n, typeof module, typeof fs.readFileSync);",
+      ].join("\n"),
+    );
+    await runEntry("/p/hoistts/cjs.ts");
+    await runEntry("/p/hoistts/esm.mts");
+    expect(log).toEqual([
+      "function",
+      "function",
+      1,
+      "object",
+      "function",
+      "function",
+      2,
+      "undefined",
+    ]);
+  });
+
   it("resolves import.meta.resolve of a path whether or not the file exists", async () => {
     files("/p/imr", {
       "main.mjs": [
@@ -260,6 +374,24 @@ describe("CommonJS", () => {
     files("/p/my app", { "a.js": "__log.push(new Error('x').stack.split('\\n')[1]);" });
     await runEntry("/p/my app/a.js");
     expect(log[0]).toContain("/p/my%20app/a.js:1:");
+  });
+
+  it("names the file in a JSON parse error only, not in a read error", async () => {
+    files("/p/json", {
+      "bad.json": "{ nope",
+      "locked.json": "{}",
+      "main.cjs": [
+        "for (const name of ['./bad.json', './locked.json']) {",
+        "  try { require(name) } catch (error) { __log.push([error.name, error.code, error.message]) }",
+        "}",
+      ].join("\n"),
+    });
+    fake.fs.chmod("/p/json/locked.json", 0, true);
+    await runEntry("/p/json/main.cjs");
+    expect(log).toEqual([
+      ["SyntaxError", undefined, expect.stringMatching(/^\/p\/json\/bad\.json: .*JSON/)],
+      ["Error", "EACCES", "EACCES: permission denied, open '/p/json/locked.json'"],
+    ]);
   });
 });
 
@@ -349,5 +481,110 @@ describe("TypeScript and JSX", () => {
     });
     await runEntry("/p/types/main.ts");
     expect(log).toEqual([1, "user@example.com"]);
+  });
+});
+
+describe("watch mode reports", () => {
+  const reported: string[] = [];
+  beforeEach(() => {
+    reported.length = 0;
+    configureLoader({
+      loadBuiltin,
+      conditions: [],
+      report: (kind, filename) => reported.push(`${kind} ${filename}`),
+    });
+  });
+
+  it("reports each file the program loads, before it runs, and no builtin", async () => {
+    files("/p/rep", {
+      "main.js": "require('./dep'); require('fs'); require('./data.json'); require('./dep');",
+      "dep.js": "__log.push('dep');",
+      "data.json": "{}",
+      "esm.mjs": "import './leaf.mjs'; import 'node:path'; await import('./late.mjs');",
+      "leaf.mjs": "",
+      "late.mjs": "",
+      "broken.js": "require('./throws');",
+      "throws.js": "throw new Error('boom');",
+    });
+    runEntry("/p/rep/main.js");
+    await runEntry("/p/rep/esm.mjs");
+    expect(() => runEntry("/p/rep/broken.js")).toThrow("boom");
+    expect(reported).toEqual([
+      "require /p/rep/main.js",
+      "require /p/rep/main.js",
+      "require /p/rep/dep.js",
+      "require /p/rep/data.json",
+      "import /p/rep/esm.mjs",
+      "import /p/rep/leaf.mjs",
+      "import /p/rep/late.mjs",
+      "require /p/rep/broken.js",
+      "require /p/rep/broken.js",
+      "require /p/rep/throws.js",
+    ]);
+  });
+
+  it("reports what a failed require() looked for, and nothing for an import", async () => {
+    files("/p/miss-rep", {
+      "main.js": "try { require('./later') } catch {} try { require('pkg') } catch {}",
+      "node_modules/other/index.js": "",
+      "esm.mjs": "import './nope.mjs';",
+    });
+    runEntry("/p/miss-rep/main.js");
+    const looked = (base: string) =>
+      ["", ".js", ".json", ".node", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".jsx"].map(
+        (extension) => `missing ${base}${extension}`,
+      );
+    // Only node_modules folders that exist are searched for a package.
+    expect(reported).toEqual([
+      "require /p/miss-rep/main.js",
+      "require /p/miss-rep/main.js",
+      ...looked("/p/miss-rep/later"),
+      ...looked("/p/miss-rep/node_modules/pkg"),
+    ]);
+    reported.length = 0;
+    await expect(runEntry("/p/miss-rep/esm.mjs")).rejects.toThrow(/Cannot find module/);
+    expect(reported).toEqual(["import /p/miss-rep/esm.mjs"]);
+  });
+});
+
+describe("source run as code (node -e, a worker's eval)", () => {
+  it("evaluates an ES module in a promise job, so its ticks run after its promise jobs", async () => {
+    // Real Node v26: `new Worker("import 'node:fs'; nextTick(t); then(p)", { eval: true })`
+    // logs p before t; the same code as CommonJS logs t before p.
+    const proc = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    (globalThis as { __tick?: unknown }).__tick = proc.nextTick;
+    const body = "__tick(() => __log.push('t')); Promise.resolve().then(() => __log.push('p'));";
+    let result: unknown;
+    runMacrotask(() => {
+      result = runSource(`export {}; ${body}`, "/p/[worker eval]", "esm");
+      log.push("returned");
+    });
+    await result;
+    for (let i = 0; i < 20 && log.length < 3; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(log).toEqual(["returned", "p", "t"]);
+    log.length = 0;
+    runMacrotask(() => {
+      runSource(body, "/p/[eval]", "cjs");
+      log.push("returned");
+    });
+    for (let i = 0; i < 20 && log.length < 3; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(log).toEqual(["returned", "t", "p"]);
+    delete (globalThis as { __tick?: unknown }).__tick;
+  });
+
+  it("rejects, rather than throws, when the module cannot be linked", async () => {
+    files("/p/eval", { "dep.mjs": "export const a = 1;" });
+    const result = runSource(
+      "import { b } from '/p/eval/dep.mjs'; __log.push(b);",
+      "/p/eval/[worker eval]",
+      "esm",
+    );
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).rejects.toThrow(/does not provide an export named 'b'/);
+    expect(log).toEqual([]);
   });
 });

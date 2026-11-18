@@ -5,6 +5,7 @@ import {
   exports as resolvePackageExports,
   imports as resolvePackageImports,
 } from "resolve.exports";
+import { errnoDescription, toSystemErrorRecord } from "../../errors";
 import { builtinName } from "../node/names";
 import { runtime } from "../runtime";
 
@@ -53,6 +54,10 @@ const resolutionCache = new Map<string, Resolved>();
 // a line after a failed require() is found by the next one.
 let kindCache: Map<string, number> | null = null;
 
+// The platform's own, taken before a program can replace the global: the
+// cache must end with the turn whatever a fake clock does with microtasks.
+const platformQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
+
 const NOTHING = 0;
 const FILE = 1;
 const DIRECTORY = 2;
@@ -60,7 +65,7 @@ const DIRECTORY = 2;
 function kindOf(path: string): number {
   if (!kindCache) {
     kindCache = new Map();
-    queueMicrotask(() => {
+    platformQueueMicrotask(() => {
       kindCache = null;
     });
   }
@@ -108,26 +113,44 @@ function join(directory: string, relative: string): string {
   return joined === "" ? "/" : joined;
 }
 
+/** The read errors Node's GetPackageJSON takes for "there is no package.json". */
+const NO_PACKAGE_JSON = new Set(["ENOENT", "ENOTDIR", "EISDIR"]);
+
 /** The parsed package.json in `directory`, or null when there is none. */
 export function readPackageJson(directory: string): PackageJson | null {
   let json = packageCache.get(directory);
   if (json === undefined) {
-    const path = directory === "/" ? "/package.json" : `${directory}/package.json`;
-    json = null;
-    if (kindOf(path) === FILE) {
-      try {
-        json = JSON.parse(decoder.decode(runtime().fs.readFile(path))) as PackageJson;
-      } catch (error) {
-        const invalid = new Error(
-          `Invalid package config ${path}. ${error instanceof Error ? error.message : ""}`,
-        ) as Error & { code: string };
-        invalid.code = "ERR_INVALID_PACKAGE_CONFIG";
-        throw invalid;
-      }
-    }
+    json = parsePackageJson(directory === "/" ? "/package.json" : `${directory}/package.json`);
     packageCache.set(directory, json);
   }
   return json;
+}
+
+/**
+ * Reads the package.json at `path` as Node's GetPackageJSON does: null when
+ * there is none (ENOENT, ENOTDIR, EISDIR); any other read error, such as
+ * EACCES from the file or a directory that cannot be searched, and JSON that
+ * does not parse, are ERR_INVALID_PACKAGE_CONFIG in Node's words.
+ */
+function parsePackageJson(path: string): PackageJson | null {
+  let bytes: Uint8Array;
+  try {
+    bytes = runtime().fs.readFile(path);
+  } catch (error) {
+    const code = toSystemErrorRecord(error)?.code;
+    if (code === undefined || NO_PACKAGE_JSON.has(code)) {
+      return null;
+    }
+    throw codedError(
+      `Cannot read package config ${path}: ${errnoDescription(code)}.`,
+      "ERR_INVALID_PACKAGE_CONFIG",
+    );
+  }
+  try {
+    return JSON.parse(decoder.decode(bytes)) as PackageJson;
+  } catch {
+    throw codedError(`Invalid package config ${path}.`, "ERR_INVALID_PACKAGE_CONFIG");
+  }
 }
 
 /** The nearest package.json at or above `directory`. */
@@ -244,7 +267,17 @@ function codedError(message: string, code: string): Error {
   return error;
 }
 
-function notFound(specifier: string, parent: string, mode: ResolveMode): Error {
+/**
+ * The error for a request that matched nothing. `path` is the file an
+ * `import` of a path looked for, which is what Node's message names; null for
+ * a package.
+ */
+function notFound(
+  specifier: string,
+  parent: string,
+  mode: ResolveMode,
+  path: string | null,
+): Error {
   if (mode === "require") {
     const error = codedError(
       `Cannot find module '${specifier}'\nRequire stack:\n- ${parent}`,
@@ -253,9 +286,10 @@ function notFound(specifier: string, parent: string, mode: ResolveMode): Error {
     error.requireStack = [parent];
     return error;
   }
-  const what = specifier.startsWith(".") || specifier.startsWith("/") ? "module" : "package";
   return codedError(
-    `Cannot find ${what} '${specifier}' imported from ${parent}`,
+    path === null
+      ? `Cannot find package '${specifier}' imported from ${parent}`
+      : `Cannot find module '${path}' imported from ${parent}`,
     "ERR_MODULE_NOT_FOUND",
   );
 }
@@ -382,9 +416,45 @@ function resolveImportsField(
   );
 }
 
-function fileUrlToPath(url: string): string {
-  const parsed = new URL(url);
-  return decodeURIComponent(parsed.pathname);
+/** A path separator written as a percent escape: `%2F`, `%5C`. */
+const ENCODED_SEPARATOR = /%2f|%5c/i;
+
+/**
+ * The path that the path part of an `import` specifier names. An import
+ * specifier is a URL reference, so its percent escapes are decoded:
+ * `./sp%20ace.mjs` is the file `sp ace.mjs`, and `%2e%2e` is `..`. An encoded
+ * path separator is refused and an escape that does not decode throws
+ * URIError, both as in Node; `named` is the path Node's message gives. A
+ * `require()` request is a plain path and never comes here.
+ */
+function decodeImportPath(path: string, named: string, parent: string): string {
+  if (!path.includes("%")) {
+    return path;
+  }
+  if (ENCODED_SEPARATOR.test(path)) {
+    const error = new TypeError(
+      `Invalid module "${named}" must not include encoded "/" or "\\" characters imported from ${parent}`,
+    ) as TypeError & { code: string };
+    error.code = "ERR_INVALID_MODULE_SPECIFIER";
+    throw error;
+  }
+  return decodeURIComponent(path);
+}
+
+function fileUrlToPath(url: string, parent: string): string {
+  const { pathname } = new URL(url);
+  return decodeImportPath(pathname, pathname, parent);
+}
+
+/** Whether a request names a path (`/a`, `./a`, `../a`, `.`, `..`) rather than a package. */
+function isPathRequest(request: string): boolean {
+  return (
+    request.startsWith("/") ||
+    request.startsWith("./") ||
+    request.startsWith("../") ||
+    request === "." ||
+    request === ".."
+  );
 }
 
 /**
@@ -431,12 +501,26 @@ export function resolveSpecifier(
       request = request.slice(0, mark);
     }
     if (request.startsWith("file:")) {
-      request = fileUrlToPath(request);
+      request = fileUrlToPath(request, parent);
+    } else if (isPathRequest(request)) {
+      request = decodeImportPath(
+        request,
+        join(request.startsWith("/") ? "/" : parentDirectory, request),
+        parent,
+      );
+    } else if (!request.startsWith("#")) {
+      // A package's name is taken as written; the path inside it is a URL path.
+      const split = splitBareSpecifier(request);
+      if (split && split.subpath !== ".") {
+        request = split.name + decodeImportPath(split.subpath.slice(1), request, parent);
+      }
     }
   }
 
   const conditions = conditionsFor(mode, extraConditions);
   let found: string | null = null;
+  // The file a path request names; null for a package.
+  let path: string | null = null;
 
   if (request.startsWith("#")) {
     const viaImports = resolveImportsField(
@@ -450,24 +534,85 @@ export function resolveSpecifier(
       resolutionCache.set(cacheKey, viaImports);
       return viaImports;
     }
-  } else if (
-    request.startsWith("/") ||
-    request.startsWith("./") ||
-    request.startsWith("../") ||
-    request === "." ||
-    request === ".."
-  ) {
-    found = tryRequest(join(request.startsWith("/") ? "/" : parentDirectory, request), request);
+  } else if (isPathRequest(request)) {
+    path = join(request.startsWith("/") ? "/" : parentDirectory, request);
+    found = tryRequest(path, request);
   } else {
     found = resolveBare(request, parentDirectory, conditions);
   }
 
   if (!found) {
-    throw notFound(specifier, parent, mode);
+    throw notFound(specifier, parent, mode, path);
   }
   const resolved: Resolved = { filename: runtime().fs.realpath(found), query };
   resolutionCache.set(cacheKey, resolved);
   return resolved;
+}
+
+/**
+ * The files a `require()` of `request` from `parent` that found nothing
+ * looked for: the path it names (in each existing `node_modules` directory,
+ * for a package name) with nothing and with each extension added, as Node's
+ * `_findPath` reports them to watch mode. A request for a directory (`dir/`)
+ * adds no extension. Only called when the require already failed.
+ */
+export function unresolvedCandidates(request: string, parent: string): string[] {
+  if (request === "" || request.startsWith("#") || request.startsWith("node:")) {
+    return [];
+  }
+  const suffixes = namesDirectory(request) ? [""] : ["", ...EXTENSIONS];
+  const candidates = (base: string) => {
+    const files = suffixes.map((suffix) => base + suffix);
+    // `./a.js` is also looked for as its TypeScript source, `./a.ts`.
+    const dot = base.lastIndexOf(".");
+    const sources =
+      suffixes.length > 1 && dot > base.lastIndexOf("/")
+        ? TYPESCRIPT_SOURCE_FOR[base.slice(dot)]
+        : undefined;
+    for (const extension of sources ?? []) {
+      files.push(base.slice(0, dot) + extension);
+    }
+    return files;
+  };
+  const parentDirectory = dirname(parent);
+  if (request.startsWith("/")) {
+    return candidates(join("/", request));
+  }
+  if (
+    request.startsWith("./") ||
+    request.startsWith("../") ||
+    request === "." ||
+    request === ".."
+  ) {
+    // Node skips a directory that does not exist, unless the request leaves it.
+    if (!leavesDirectory(request) && kindOf(parentDirectory) !== DIRECTORY) {
+      return [];
+    }
+    return candidates(join(parentDirectory, request));
+  }
+  const files: string[] = [];
+  for (const directory of nodeModulePaths(parentDirectory)) {
+    if (kindOf(directory) === DIRECTORY) {
+      files.push(...candidates(join(directory, request)));
+    }
+  }
+  return files;
+}
+
+/** Whether a relative request, normalized, starts with `..`. */
+function leavesDirectory(request: string): boolean {
+  let depth = 0;
+  for (const segment of request.split("/")) {
+    if (segment === "..") {
+      depth -= 1;
+      if (depth < 0) {
+        return true;
+      }
+    } else if (segment !== "" && segment !== ".") {
+      depth += 1;
+    }
+  }
+  return false;
 }
 
 /** The `node_modules` directories searched from `directory`, nearest first. */
