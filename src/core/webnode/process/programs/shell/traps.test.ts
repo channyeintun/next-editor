@@ -191,3 +191,20 @@ describe("`exit` in an EXIT trap", () => {
     expect(shell.output()).toBe("bye\n");
   });
 });
+
+describe("a trap on a signal that does nothing by default", () => {
+  it("runs for WINCH and URG the shell sends itself, and none runs for CHLD, as in bash 3.2", async () => {
+    // bash: got / after / exit-trap; for CHLD only after.
+    for (const signal of ["WINCH", "URG"]) {
+      const r = await sh(
+        `trap "echo got" ${signal}; trap "echo exit-trap" EXIT; kill -s ${signal} $$; echo after`,
+      );
+      expect({ signal, out: r.out }).toEqual({ signal, out: "got\nafter\nexit-trap\n" });
+    }
+    expect((await sh('trap "echo got" WINCH; kill -WINCH $$; kill -28 $$; echo after')).out).toBe(
+      "got\ngot\nafter\n",
+    );
+    expect((await sh('trap "echo got" CHLD; kill -s CHLD $$; echo after')).out).toBe("after\n");
+    expect((await sh("kill -s WINCH $$; echo after")).out).toBe("after\n");
+  });
+});

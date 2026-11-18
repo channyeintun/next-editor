@@ -281,3 +281,75 @@ describe("curl", () => {
     expect(rt.stdout()).toBe("you sent GET /hello?x=1 HTTP/1.1\nHTTP/1.1 200 OK\r\n7\n");
   });
 });
+
+describe("a standard input that is closed", () => {
+  it("is reported by each command as its GNU namesake reports it", async () => {
+    // GNU coreutils 9.5 under bash 3.2: `seq 1 3 | <command> <&-; echo st=$?`.
+    // grep is GNU grep's (standard input) line, which BSD grep prints too.
+    const lines: [string, string, string][] = [
+      [
+        "cat",
+        "st=1\n",
+        "cat: -: Bad file descriptor\ncat: closing standard input: Bad file descriptor\n",
+      ],
+      [
+        "cat a.txt - b.txt",
+        "alpha\nbeta\ngamma\none\ntwo\nst=1\n",
+        "cat: -: Bad file descriptor\ncat: closing standard input: Bad file descriptor\n",
+      ],
+      [
+        "head",
+        "st=1\n",
+        "head: error reading 'standard input': Bad file descriptor\nhead: -: Bad file descriptor\n",
+      ],
+      [
+        "head -n -1",
+        "st=1\n",
+        "head: cannot fstat 'standard input': Bad file descriptor\nhead: -: Bad file descriptor\n",
+      ],
+      [
+        "wc",
+        "0 0 0\nst=1\n",
+        "wc: 'standard input': Bad file descriptor\nwc: -: Bad file descriptor\n",
+      ],
+      [
+        "wc -l - a.txt",
+        "0 -\n3 a.txt\n3 total\nst=1\n",
+        "wc: -: Bad file descriptor\nwc: -: Bad file descriptor\n",
+      ],
+      ["sort", "st=2\n", "sort: stat failed: -: Bad file descriptor\n"],
+      [
+        "tee",
+        "st=1\n",
+        "tee: read error: Bad file descriptor\ntee: standard input: Bad file descriptor\n",
+      ],
+      ["uniq", "st=1\n", "uniq: error reading '-': Bad file descriptor\n"],
+      ["cut -c1", "st=1\n", "cut: -: Bad file descriptor\ncut: -: Bad file descriptor\n"],
+      [
+        "tail",
+        "st=1\n",
+        "tail: cannot fstat 'standard input': Bad file descriptor\ntail: -: Bad file descriptor\n",
+      ],
+      [
+        "tail -n 1 - a.txt",
+        "==> standard input <==\n\n==> a.txt <==\ngamma\nst=1\n",
+        "tail: cannot fstat 'standard input': Bad file descriptor\ntail: -: Bad file descriptor\n",
+      ],
+      ["grep x", "st=2\n", "grep: (standard input): Bad file descriptor\n"],
+      ["tr a b", "st=1\n", "tr: read error: Bad file descriptor\n"],
+    ];
+    for (const [command, out, err] of lines) {
+      const r = await run(`seq 1 3 | ${command} <&-; echo st=$?`);
+      expect({ command, out: r.out, err: r.err }).toEqual({ command, out, err });
+    }
+  });
+
+  it("makes `read` fail as bash's does, and `/dev/stdin` name nothing, as on Linux", async () => {
+    // bash 3.2: `read x <&-` says `read: read error: 0: Bad file descriptor`, 1.
+    const r = await run("read x <&-; echo st=$?; cat /dev/stdin <&-; echo st=$?");
+    expect(r.out).toBe("st=1\nst=1\n");
+    expect(r.err).toBe(
+      "sh: read: read error: 0: Bad file descriptor\ncat: /dev/stdin: No such file or directory\n",
+    );
+  });
+});

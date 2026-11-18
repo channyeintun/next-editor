@@ -14,7 +14,7 @@
 // most what the command asked for, so the rest stays there for the next
 // reader, and the signal that stops the command withdraws it
 // (`ReadInterrupted`).
-import { toSystemErrorRecord } from "../../../errors";
+import { createSystemError, toSystemErrorRecord } from "../../../errors";
 import type { SystemErrorRecord } from "../../../errors";
 import { O_RDWR, O_WRONLY } from "../../../kernel/vfs/types";
 import { runtime } from "../../runtime";
@@ -908,11 +908,20 @@ export class CommandIo {
    * reader. Empty at end of input.
    */
   async readChunk(length = CHUNK_READ): Promise<Uint8Array> {
+    return this.readFrom(this.standardInput(), length);
+  }
+
+  /**
+   * The real fd behind standard input. Throws EBADF, as read(2) answers,
+   * when it is closed (`<&-`): each command reports that as its GNU
+   * namesake does (`cat: -: Bad file descriptor`).
+   */
+  private standardInput(): number {
     const real = this.fd(0);
     if (real === null) {
-      return new Uint8Array(0);
+      throw createSystemError("EBADF", "read");
     }
-    return this.readFrom(real, length);
+    return real;
   }
 
   /** True once a write to standard output failed, or its queued writes found the reader gone. */
@@ -940,10 +949,7 @@ export class CommandIo {
 
   /** Reads standard input to end of input. */
   async readAll(): Promise<Uint8Array> {
-    const real = this.fd(0);
-    if (real === null) {
-      return new Uint8Array(0);
-    }
+    const real = this.standardInput();
     await this.outputTaken();
     return readAllAsync(real, this.wait);
   }
@@ -965,10 +971,7 @@ export class CommandIo {
 
   /** Reads one line from standard input, as bytes: a line need not be UTF-8. */
   async readLine(delimiter = 10): Promise<Line | null> {
-    const real = this.fd(0);
-    if (real === null) {
-      return null;
-    }
+    const real = this.standardInput();
     await this.outputTaken();
     return readLineAsync(real, delimiter, this.wait);
   }

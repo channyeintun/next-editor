@@ -1,6 +1,7 @@
 // Shell builtins: the commands that read or change the shell's own state
 // (`cd`, `export`, `set`, `read`, `source`, `trap`, …). The stateless file
 // and text commands live in commands/.
+import { errnoCodeOf } from "../../../errors";
 import { X_OK } from "../../../kernel/vfs/types";
 import { signalExitStatus, signalName } from "../../../signals";
 import { checkChdir } from "../../node/fs/chdir";
@@ -15,7 +16,7 @@ import { arithmetic } from "./expand";
 import type { CommandIo, Line } from "./io";
 import { ReadInterrupted, decode, giveBackAllInput } from "./io";
 import type { Builtin, Shell } from "./interpreter";
-import { disownJob, forgetEndedJobs, forgetJob, jobLine } from "./jobs";
+import { disownJob, forgetJob, jobLine, jobOfSpec } from "./jobs";
 import type { Job } from "./jobs";
 import { declareHandledSignals, signalListing, spelledSignalNumber } from "./signals";
 import { shellQuote } from "./quote";
@@ -621,10 +622,9 @@ const read: Builtin = async (shell, args, io) => {
   if (prompt !== null && io.isTty(0)) {
     io.err(prompt);
   }
-  const real = io.fd(0);
-  if (real === null) {
-    return 1;
-  }
+  /** The read failed (standard input is closed, `<&-`): bash's `read` says so and fails. */
+  const closedInput = (error: unknown): number =>
+    usage(io, "read", `read error: 0: ${errorText(error)}`, 1);
   /**
    * What follows a read that failed: after a signal that interrupted it, the
    * shell acts on the signal (it ends, or abandons the command line, from
@@ -649,6 +649,9 @@ const read: Builtin = async (shell, args, io) => {
       try {
         result = await io.readLine(delimiter.charCodeAt(0));
       } catch (error) {
+        if (errnoCodeOf(error) === "EBADF") {
+          return closedInput(error);
+        }
         await afterInterrupt(error);
         continue;
       }
@@ -674,6 +677,9 @@ const read: Builtin = async (shell, args, io) => {
       try {
         chunk = await io.readChunk(1);
       } catch (error) {
+        if (errnoCodeOf(error) === "EBADF") {
+          return closedInput(error);
+        }
         await afterInterrupt(error);
         continue;
       }
@@ -1010,9 +1016,31 @@ function collectJob(shell: Shell, io: CommandIo, job: Job): void {
   forgetJob(shell.jobList, job);
 }
 
-/** The job `%N` names, or undefined. */
-function jobOfSpec(shell: Shell, spec: string): Job | undefined {
-  return shell.jobList.jobs.find((job) => job.id === Number(spec.slice(1)));
+/**
+ * The job that job spec `spec` names (`jobOfSpec`), or undefined once
+ * `builtin` has said why there is none, as bash does: `%3: no such job`, or
+ * for a name that fits more than one job `sleep: ambiguous job spec`, which
+ * `disown` and `jobs` follow with `no such job` (`thenNoSuchJob`).
+ */
+function namedJob(
+  shell: Shell,
+  io: CommandIo,
+  builtin: string,
+  spec: string,
+  thenNoSuchJob = false,
+): Job | undefined {
+  const found = jobOfSpec(shell.jobList, spec);
+  if (found !== undefined && !("ambiguous" in found)) {
+    return found;
+  }
+  if (found !== undefined) {
+    usage(io, builtin, `${found.ambiguous}: ambiguous job spec`);
+    if (!thenNoSuchJob) {
+      return undefined;
+    }
+  }
+  usage(io, builtin, `${spec}: no such job`);
+  return undefined;
 }
 
 const wait: Builtin = async (shell, args, io) => {
@@ -1032,9 +1060,19 @@ const wait: Builtin = async (shell, args, io) => {
   let status = 0;
   for (const arg of args) {
     const isSpec = arg.startsWith("%");
-    const job = isSpec
-      ? jobOfSpec(shell, arg)
-      : list.jobs.find((candidate) => candidate.pid === Number(arg));
+    let job: Job | undefined;
+    if (isSpec) {
+      job = namedJob(shell, io, "wait", arg);
+      if (job === undefined) {
+        status = 127;
+        continue;
+      }
+    } else if (/^\d+$/.test(arg)) {
+      job = list.jobs.find((candidate) => candidate.pid === Number(arg));
+    } else {
+      status = usage(io, "wait", `\`${arg}': not a pid or valid job spec`, 1);
+      continue;
+    }
     if (job && list.inherited.has(job) && job.status === null) {
       // Its shell's job, still running: this shell cannot wait for it.
       status = usage(io, "wait", `pid ${job.pid ?? arg} is not a child of this shell`, 127);
@@ -1049,19 +1087,13 @@ const wait: Builtin = async (shell, args, io) => {
       collectJob(shell, io, job);
       continue;
     }
-    // A job that ended and was reported since: its status is still known.
-    const known = isSpec ? undefined : list.endedJobs.get(Number(arg));
+    // A job that ended and was reported since, or was disowned: its status is still known.
+    const known = list.endedJobs.get(Number(arg));
     if (known !== undefined) {
       status = known;
       continue;
     }
-    usage(
-      io,
-      "wait",
-      isSpec ? `${arg}: no such job` : `pid ${arg} is not a child of this shell`,
-      127,
-    );
-    status = 127;
+    status = usage(io, "wait", `pid ${arg} is not a child of this shell`, 127);
   }
   return status;
 };
@@ -1193,40 +1225,119 @@ const kill: Builtin = (shell, args, io) => {
       2,
     );
   }
-  let status = 0;
+  // As bash: 0 when the signal reached any of the targets, each that it
+  // could not reach named on standard error.
+  let reached = false;
   for (const target of targets) {
     let pid: number;
     let job: Job | undefined;
     if (target.startsWith("%")) {
-      job = jobOfSpec(shell, target);
+      job = namedJob(shell, io, "kill", target);
+      if (job?.pid === null) {
+        usage(io, "kill", `${target}: no such job`);
+      }
       if (job === undefined || job.pid === null) {
-        status = usage(io, "kill", `${target}: no such job`, 1);
         continue;
       }
       pid = job.pid;
     } else if (/^-?\d+$/.test(target)) {
       pid = Number(target);
     } else {
-      status = usage(io, "kill", `${target}: arguments must be process or job IDs`, 1);
+      usage(io, "kill", `${target}: arguments must be process or job IDs`);
       continue;
     }
     try {
       sendSignal(shell, pid, job, signal);
+      reached = true;
     } catch (error) {
       const reason = errorText(error) === "ESRCH" ? "No such process" : errorText(error);
-      status = usage(io, "kill", `(${pid}) - ${reason}`, 1);
+      usage(io, "kill", `(${pid}) - ${reason}`);
+    }
+  }
+  return reached ? 0 : 1;
+};
+
+/**
+ * `jobs [-lnprs] [jobspec ...]`, as bash 3.2's: the jobs named, or every
+ * job. `-l` adds the pid, `-p` gives only the pid, `-n` only the jobs that
+ * have ended or that `jobs` has not shown running yet (of these the last
+ * given wins); without operands `-r` lists only the running jobs and `-s`
+ * only the stopped ones, which a job here never is. A job that has ended
+ * leaves the list once its line has been shown; its pid alone (`-p`) does
+ * not count.
+ */
+const jobs: Builtin = (shell, args, io) => {
+  let form: "standard" | "long" | "pid" | "changed" = "standard";
+  let only: "running" | "stopped" | null = null;
+  let at = 0;
+  for (; at < args.length; at++) {
+    const arg = args[at];
+    if (arg === "--") {
+      at++;
+      break;
+    }
+    if (arg.length < 2 || !arg.startsWith("-")) {
+      break;
+    }
+    for (const flag of arg.slice(1)) {
+      if (flag === "l") {
+        form = "long";
+      } else if (flag === "p") {
+        form = "pid";
+      } else if (flag === "n") {
+        form = "changed";
+      } else if (flag === "r") {
+        only = "running";
+      } else if (flag === "s") {
+        only = "stopped";
+      } else if (flag === "x") {
+        return usage(io, "jobs", "-x: not supported", 1);
+      } else {
+        usage(io, "jobs", `-${flag}: invalid option`);
+        io.err("jobs: usage: jobs [-lnprs] [jobspec ...] or jobs -x command [args]\n");
+        return 2;
+      }
+    }
+  }
+  const list = shell.jobList;
+  const reported: Job[] = [];
+  const report = (job: Job): void => {
+    if (form === "pid") {
+      io.out(`${job.pid ?? ""}\n`);
+    } else if (form !== "changed" || job.status !== null || !job.shownRunning) {
+      io.out(jobLine(list.jobs, job, form === "long"));
+      reported.push(job);
+    }
+  };
+  const operands = args.slice(at);
+  let status = 0;
+  if (operands.length === 0) {
+    for (const job of list.jobs) {
+      if (only === null || (only === "running" && job.status === null)) {
+        report(job);
+      }
+    }
+  }
+  // Each in turn, as bash says what it finds for each.
+  for (const operand of operands) {
+    const job = namedJob(shell, io, "jobs", operand, true);
+    if (job === undefined) {
+      status = 1;
+    } else {
+      report(job);
+    }
+  }
+  // What was reported is known: an ended job leaves the list, and a running
+  // one is not news to `jobs -n` until it ends. The shell a command
+  // substitution or a pipeline stage copied the list from learns nothing.
+  for (const job of reported) {
+    if (job.status !== null) {
+      forgetJob(list, job);
+    } else if (!list.inherited.has(job)) {
+      job.shownRunning = true;
     }
   }
   return status;
-};
-
-const jobs: Builtin = (shell, _args, io) => {
-  for (const job of shell.jobList.jobs) {
-    io.out(jobLine(shell.jobList.jobs, job));
-  }
-  // The ended ones have been reported.
-  forgetEndedJobs(shell.jobList);
-  return 0;
 };
 
 const history: Builtin = (shell, args, io) => {
@@ -1501,11 +1612,15 @@ const disown: Builtin = (shell, args, io) => {
     }
   }
   for (const operand of operands) {
-    const job = operand.startsWith("%")
-      ? jobOfSpec(shell, operand)
-      : /^\d+$/.test(operand)
-        ? list.jobs.find((candidate) => candidate.pid === Number(operand))
-        : undefined;
+    // A number is a pid; any other word a job spec, with or without its `%`.
+    const byPid = /^\d+$/.test(operand);
+    const job = byPid
+      ? list.jobs.find((candidate) => candidate.pid === Number(operand))
+      : namedJob(shell, io, "disown", operand, true);
+    if (job === undefined && !byPid) {
+      status = 1;
+      continue;
+    }
     if (job === undefined || job.status !== null) {
       status = usage(io, "disown", `${operand}: no such job`, 1);
       continue;
@@ -1522,6 +1637,30 @@ const notSupported =
   (name: string): Builtin =>
   (_shell, _args, io) =>
     usage(io, name, "not supported", 1);
+
+/**
+ * `fg` and `bg`: a shell without job control (a script, `sh -c`, a
+ * subshell) says `no job control`, as bash does. An interactive one finds
+ * the job named (`%N`, …), or the current one, and says why when there is
+ * none (`current: no such job`); it cannot move a job between the
+ * foreground and the background, and says so.
+ */
+const foregroundOrBackground =
+  (name: string): Builtin =>
+  (shell, args, io) => {
+    if (!shell.interactive || !shell.root) {
+      return usage(io, name, "no job control", 1);
+    }
+    const spec = args[0] === "--" ? args[1] : args[0];
+    if (spec === undefined) {
+      if (shell.jobList.jobs.length === 0) {
+        return usage(io, name, "current: no such job", 1);
+      }
+    } else if (namedJob(shell, io, name, spec) === undefined) {
+      return 1;
+    }
+    return usage(io, name, "not supported", 1);
+  };
 
 /** The shell builtins by name. */
 export const BUILTINS: Record<string, Builtin> = {
@@ -1569,8 +1708,8 @@ export const BUILTINS: Record<string, Builtin> = {
   hash,
   times,
   disown,
-  fg: notSupported("fg"),
-  bg: notSupported("bg"),
+  fg: foregroundOrBackground("fg"),
+  bg: foregroundOrBackground("bg"),
   suspend: notSupported("suspend"),
   ps: (_shell, _args, io) => usage(io, "ps", "not available: webnode has no process listing", 1),
 };

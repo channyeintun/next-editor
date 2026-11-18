@@ -553,6 +553,53 @@ describe("touch", () => {
   });
 });
 
+describe("touch -a and -m", () => {
+  it("change only the access or only the modification time, as GNU touch 9.5", async () => {
+    const d2001 = Date.parse("2001-01-01 00:00:00");
+    const d2002 = Date.parse("2002-02-02 00:00:00");
+    const d2004 = Date.parse("2004-01-01 00:00:00");
+    const D = (date: string) => `-d '${date}'`;
+    const result = await sh(
+      [
+        `touch ${D("2001-01-01 00:00:00")} a m am; touch -a a; touch -m m; touch -am am`,
+        `touch ${D("2001-01-01 00:00:00")} da dm; touch -a ${D("2002-02-02 00:00:00")} da; touch -m ${D("2002-02-02 00:00:00")} dm`,
+        `touch ${D("2001-01-01 00:00:00")} ref; touch -m ${D("2002-02-02 00:00:00")} ref`,
+        `touch ${D("2004-01-01 00:00:00")} r ra rm; touch -r ref r; touch -a -r ref ra; touch -m -r ref rm`,
+        "touch -a -c missing; echo c=$?; touch -m new; echo new=$?",
+      ].join("; "),
+      { files },
+    );
+    expect({ out: result.out, err: result.err }).toEqual({ out: "c=0\nnew=0\n", err: "" });
+    const times = (name: string) => {
+      const stat = result.vfs.stat(`/work/${name}`, true);
+      const shown = (ms: number) => (Math.abs(ms - Date.now()) < 60000 ? "now" : ms);
+      return [shown(stat.atimeMs), shown(stat.mtimeMs)];
+    };
+    expect({
+      a: times("a"),
+      m: times("m"),
+      am: times("am"),
+      da: times("da"),
+      dm: times("dm"),
+      r: times("r"),
+      ra: times("ra"),
+      rm: times("rm"),
+      new: times("new"),
+    }).toEqual({
+      a: ["now", d2001],
+      m: [d2001, "now"],
+      am: ["now", "now"],
+      da: [d2002, d2001],
+      dm: [d2001, d2002],
+      r: [d2001, d2002],
+      ra: [d2001, d2004],
+      rm: [d2004, d2002],
+      new: ["now", "now"],
+    });
+    expect(result.vfs.exists("/work/missing")).toBe(false);
+  });
+});
+
 describe("touch on /dev", () => {
   it("sets a device's times to now, which needs only write access, and not /dev's", async () => {
     // Linux: `touch /dev/null` is 0 for a user; /dev is root's and not theirs to write.
@@ -560,6 +607,26 @@ describe("touch on /dev", () => {
     await shell.done;
     expect(shell.output()).toBe(
       ["0", "touch: setting times of '/dev': Permission denied", "1", ""].join("\n"),
+    );
+  });
+
+  it("refuses -a and -m on a device root owns: one time left alone needs the owner", async () => {
+    // Linux: utimensat(2) with UTIME_NOW and UTIME_OMIT is EPERM for a user on /dev/null.
+    const shell = kernelShell([
+      "sh",
+      "-c",
+      "touch -a /dev/null; echo $?; touch -m -c /dev/null; echo $?; touch -am /dev/null; echo $?",
+    ]);
+    await shell.done;
+    expect(shell.output()).toBe(
+      [
+        "touch: setting times of '/dev/null': Operation not permitted",
+        "1",
+        "touch: setting times of '/dev/null': Operation not permitted",
+        "1",
+        "0",
+        "",
+      ].join("\n"),
     );
   });
 });

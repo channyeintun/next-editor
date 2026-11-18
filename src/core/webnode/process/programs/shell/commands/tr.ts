@@ -140,7 +140,9 @@ export const tr: Command = async (ctx, args) => {
   // unchanged unless a set names them.
   for await (const batch of inputLines(ctx, [])) {
     if ("error" in batch) {
-      continue;
+      // Standard input could not be read (it is closed, `<&-`).
+      ctx.io.err(`tr: read error: ${batch.error}\n`);
+      return 1;
     }
     const text = batch.lines.join("\n") + (batch.noNewline ? "" : "\n");
     if (!writeText(ctx, translate(text))) {

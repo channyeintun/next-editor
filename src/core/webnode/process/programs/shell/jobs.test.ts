@@ -97,6 +97,133 @@ describe("`disown`", () => {
   });
 });
 
+describe("job specs", () => {
+  it("name a job in every form bash 3.2 takes, for kill, wait, disown, jobs, fg and bg", async () => {
+    // Each line's output under /bin/bash 3.2 (its `line 0: ` prefix aside,
+    // and without the `Terminated` line a non-interactive bash prints).
+    const lines: [string, string, string][] = [
+      [
+        "sleep 3 & sleep 4 & sleep 5 & kill %-; wait %2; echo $?; kill %%; wait %3; echo $?; kill %+x; wait %1; echo $?",
+        "143\n143\n143\n",
+        "",
+      ],
+      [
+        "sleep 3 & sleep 4 & kill %?4; wait %2; echo $?; kill '%sleep 3'; wait %1; echo $?",
+        "143\n143\n",
+        "",
+      ],
+      ["sleep 3 & kill %; wait %1; echo $?", "143\n", ""],
+      ["sleep 3 & kill %-1; wait %1; echo $?", "143\n", ""],
+      [
+        "sleep 3 & kill sleep; echo $?; kill %1",
+        "1\n",
+        "sh: kill: sleep: arguments must be process or job IDs\n",
+      ],
+      [
+        "sleep 1 & sleep 2 & kill %sl; echo $?; kill %?; echo $?; kill %nope %?zz %0; echo $?; kill %1 %2",
+        "1\n1\n1\n",
+        "sh: kill: sl: ambiguous job spec\nsh: kill: : ambiguous job spec\nsh: kill: %nope: no such job\nsh: kill: %?zz: no such job\nsh: kill: %0: no such job\n",
+      ],
+      [
+        "sleep 1 & kill %nope %1; echo $?; kill 99999 abc; echo $?",
+        "0\n1\n",
+        "sh: kill: %nope: no such job\nsh: kill: (99999) - No such process\nsh: kill: abc: arguments must be process or job IDs\n",
+      ],
+      [
+        "kill %+; echo $?; kill %-; echo $?",
+        "1\n1\n",
+        "sh: kill: %+: no such job\nsh: kill: %-: no such job\n",
+      ],
+      ["sleep 0.2 & disown %+; jobs; echo $?", "0\n", ""],
+      ["sleep 0.2 & disown %sle; jobs; echo $?", "0\n", ""],
+      ["sleep 0.2 & disown sleep; echo $?; jobs", "0\n", ""],
+      [
+        "sleep 1 & sleep 0.2 & disown %sleep; echo $?; disown %?0.2; echo $?; jobs; kill %1",
+        "1\n0\n[1]+  Running                 sleep 1 &\n",
+        "sh: disown: sleep: ambiguous job spec\nsh: disown: %sleep: no such job\n",
+      ],
+      [
+        "sleep 1 & sleep 1 & wait %sl; echo $?; wait sleep; echo $?; kill %1 %2",
+        "127\n1\n",
+        "sh: wait: sl: ambiguous job spec\nsh: wait: `sleep': not a pid or valid job spec\n",
+      ],
+      [
+        "sleep 0.05 & wait %?0.05; echo $?; wait %-; echo $?",
+        "0\n127\n",
+        "sh: wait: %-: no such job\n",
+      ],
+      [
+        "sleep 1 & sleep 2 & jobs %sl; echo $?; jobs %- %nope; echo $?; jobs 2; kill %1 %2",
+        "1\n[1]-  Running                 sleep 1 &\n1\n[2]+  Running                 sleep 2 &\n",
+        "sh: jobs: sl: ambiguous job spec\nsh: jobs: %sl: no such job\nsh: jobs: %nope: no such job\n",
+      ],
+      [
+        "fg; echo $?; fg %1; echo $?; bg %nope; echo $?",
+        "1\n1\n1\n",
+        "sh: fg: no job control\nsh: fg: no job control\nsh: bg: no job control\n",
+      ],
+    ];
+    for (const [line, out, err] of lines) {
+      const r = await sh(line);
+      expect({ line, out: r.out, err: r.err }).toEqual({ line, out, err });
+    }
+  });
+
+  it("leave a disowned job's pid to `wait`, which answers 0 at once, as bash does", async () => {
+    const started = Date.now();
+    const r = await sh(
+      "sleep 2 & p=$!; disown; wait $p; echo w=$?; (sleep 2; exit 3) & q=$!; disown %1; wait $q; echo w=$?; wait %1; echo w2=$?; kill $p $q",
+    );
+    expect(r.out).toBe("w=0\nw=0\nw2=127\n");
+    expect(r.err).toBe("sh: wait: %1: no such job\n");
+    // Neither `wait` waited for its job.
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+});
+
+describe("the options of `jobs`", () => {
+  it("print what bash 3.2's print", async () => {
+    const lines: [string, string, string][] = [
+      [
+        'sleep 1 & a=$!; sleep 2 & b=$!; [ "$(jobs -p)" = "$a\n$b" ] && echo pids; [ "$(jobs -l %1)" = "$(printf "[1]- %5d Running                 sleep 1 &" $a)" ] && echo long; [ "$(jobs -rp %2)" = "$b" ] && echo last; [ "$(jobs -pl)" = "$(jobs -l)" ] && echo l-wins; kill %1 %2',
+        "pids\nlong\nlast\nl-wins\n",
+        "",
+      ],
+      [
+        "sleep 1 & (exit 3) & sleep 0.1; jobs -s; echo s=$?; jobs -r; echo r=$?; jobs -s %1; jobs -p %2 >/dev/null; jobs; kill %1",
+        "s=0\n[1]-  Running                 sleep 1 &\nr=0\n[1]-  Running                 sleep 1 &\n[1]-  Running                 sleep 1 &\n[2]+  Exit 3                  (exit 3)\n",
+        "",
+      ],
+      [
+        "sleep 1 & jobs -n; echo a; jobs -n; echo b; jobs; kill %1; sleep 0.05; jobs -n; echo c; jobs -n; echo d",
+        "[1]+  Running                 sleep 1 &\na\nb\n[1]+  Running                 sleep 1 &\n[1]+  Terminated              sleep 1\nc\nd\n",
+        "",
+      ],
+      [
+        "jobs -z; echo $?; jobs -- %1; echo $?",
+        "2\n1\n",
+        "sh: jobs: -z: invalid option\njobs: usage: jobs [-lnprs] [jobspec ...] or jobs -x command [args]\nsh: jobs: %1: no such job\n",
+      ],
+      [
+        'sleep 1 & a=$!; jobs -p %2 %1 2>&1 | { read e; read p; [ "$e/$p" = "sh: jobs: %2: no such job/$a" ] && echo in-turn; }; kill %1',
+        "in-turn\n",
+        "",
+      ],
+    ];
+    for (const [line, out, err] of lines) {
+      const r = await sh(line);
+      expect({ line, out: r.out, err: r.err }).toEqual({ line, out, err });
+    }
+  });
+
+  it("give `jobs -p | xargs kill` the pids, which ends the jobs at once", async () => {
+    const started = Date.now();
+    const r = await sh("sleep 2 & sleep 2 & jobs -p | xargs kill; wait; echo st=$?; jobs");
+    expect({ out: r.out, err: r.err }).toEqual({ out: "st=0\n", err: "" });
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+});
+
 describe("the jobs a subshell knows", () => {
   it("are only those it starts itself, as in bash's forked subshell", async () => {
     // Each line's standard output under /bin/bash 3.2.
@@ -228,6 +355,37 @@ describe("the notice of a jsh job that has ended", () => {
     expect(both).toContain(
       "[1]-  Terminated              sleep 30\n[2]+  Terminated              sleep 31\nst 0",
     );
+    shell.type("exit 0\r");
+    expect(await shell.done).toBe(0);
+  });
+
+  it("is given at the next prompt after an empty line too", async () => {
+    // bash -i: `sleep 0.2 &`, then Enter on an empty line once it has ended:
+    // `[1]+  Done                    sleep 0.2` before that prompt, once.
+    const shell = await jsh();
+    await typed(shell, "sleep 0.2 &", "\\[1\\] \\d+");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const from = shell.output().length;
+    shell.type("\r");
+    const notice = "[1]+  Done                    sleep 0.2\n";
+    expect(await until(() => shell.output().slice(from).includes(notice))).toBe(true);
+    // Reported, it has left the list.
+    shell.type("\r");
+    expect(count(await typed(shell, "jobs; echo J", "J"), "Done")).toBe(0);
+    expect(count(shell.output().slice(from), "Done")).toBe(1);
+    shell.type("exit 0\r");
+    expect(await shell.done).toBe(0);
+  });
+
+  it("and the `[N] pid` line come from the shell itself, not from a subshell or a stage", async () => {
+    // bash -i prints nothing for a job a subshell or a pipeline stage starts.
+    const shell = await jsh();
+    const sub = await typed(shell, "(sleep 0.05 & wait; echo sub)", "sub");
+    expect(sub).not.toMatch(/\[\d+\] \d+/);
+    const stage = await typed(shell, "echo hi | { cat <&0 & wait; echo E1; }", "E1");
+    expect(stage).not.toMatch(/\[\d+\] \d+/);
+    const background = await typed(shell, "(sleep 0.05 & wait; echo in) & wait; echo W", "W");
+    expect(count(background, "[1] ")).toBe(1);
     shell.type("exit 0\r");
     expect(await shell.done).toBe(0);
   });

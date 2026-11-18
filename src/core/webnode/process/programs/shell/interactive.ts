@@ -290,6 +290,9 @@ export async function runInteractive(shell: Shell): Promise<number> {
     for (;;) {
       // A job a Ctrl+C cut short has ended too.
       shell.takeTerminalBack();
+      // Before each prompt, also after an empty line or a Ctrl+C: the
+      // background jobs that finished, as bash reports them.
+      announceEndedJobs(shell.jobList, host.write);
       let source = "";
       let prompt = makePrompt(shell.cwd, shell.get("HOME"), shell.status);
       let interrupted = false;
@@ -384,8 +387,6 @@ export async function runInteractive(shell: Shell): Promise<number> {
       } finally {
         settleSignal(shell.process);
       }
-      // Report background jobs that finished.
-      announceEndedJobs(shell.jobList, host.write);
     }
     status = shell.status;
     return status;

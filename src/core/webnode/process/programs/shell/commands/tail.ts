@@ -3,7 +3,7 @@
 import { runtime } from "../../../runtime";
 import { signalExitStatus } from "../../../../signals";
 import type { Command, CommandContext } from "../context";
-import { absolutePath, inputs, options, tryStat } from "./util";
+import { absolutePath, closedStandardInput, errnoText, inputs, options, tryStat } from "./util";
 
 /** How often `tail -f` looks at its files. */
 const FOLLOW_INTERVAL_MS = 250;
@@ -98,9 +98,20 @@ export const tail: Command = async (ctx, args) => {
   const files = parsed.operands.length > 0 ? parsed.operands : ["-"];
   const headers = (files.length > 1 && !parsed.flags.has("q")) || parsed.flags.has("v");
   let status = 0;
+  let inputClosed = false;
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     for await (const input of inputs(ctx, [file])) {
+      if ("error" in input && closedStandardInput(input)) {
+        // GNU tail looks at what standard input is first, below its header.
+        if (headers) {
+          ctx.io.out(`${index > 0 ? "\n" : ""}==> standard input <==\n`);
+        }
+        ctx.io.err(`tail: cannot fstat 'standard input': ${input.error}\n`);
+        inputClosed = true;
+        status = 1;
+        continue;
+      }
       if ("error" in input) {
         ctx.io.err(`tail: cannot open '${file}' for reading: ${input.error}\n`);
         status = 1;
@@ -149,6 +160,10 @@ export const tail: Command = async (ctx, args) => {
       headers,
     );
     return ctx.signal.aborted ? signalExitStatus("SIGINT") : status;
+  }
+  if (inputClosed) {
+    // GNU tail closes standard input at its end, which fails again.
+    ctx.io.err(`tail: -: ${errnoText("EBADF")}\n`);
   }
   return status;
 };

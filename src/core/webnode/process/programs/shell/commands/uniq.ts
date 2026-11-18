@@ -1,7 +1,7 @@
 // `uniq [-c] [-d] [-u] [-i] [input [output]]`.
 import type { Command } from "../context";
 import { inputLines, writeText } from "./lines";
-import { options, quoteName } from "./util";
+import { closedStandardInput, options, quoteName } from "./util";
 
 /** `uniq`. */
 export const uniq: Command = async (ctx, args) => {
@@ -34,7 +34,11 @@ export const uniq: Command = async (ctx, args) => {
   };
   for await (const batch of inputLines(ctx, parsed.operands)) {
     if ("error" in batch) {
-      ctx.io.err(`uniq: ${quoteName(batch.name)}: ${batch.error}\n`);
+      ctx.io.err(
+        closedStandardInput(batch)
+          ? `uniq: error reading '-': ${batch.error}\n`
+          : `uniq: ${quoteName(batch.name)}: ${batch.error}\n`,
+      );
       return 1;
     }
     let out = "";

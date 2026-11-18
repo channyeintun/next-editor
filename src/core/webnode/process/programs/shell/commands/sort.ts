@@ -3,7 +3,7 @@ import { O_CREAT, O_TRUNC, O_WRONLY, R_OK } from "../../../../kernel/vfs/types";
 import type { Command } from "../context";
 import { descriptorOf } from "../io";
 import { encodeText, inputLines, writeText } from "./lines";
-import { absolutePath, errorText, options, quoteName } from "./util";
+import { absolutePath, closedStandardInput, errorText, options, quoteName } from "./util";
 
 /** One `-k` key: fields `start` to `end` and its ordering letters (n r f b V h g). */
 interface SortKey {
@@ -167,7 +167,9 @@ export const sort: Command = async (ctx, args) => {
   const lines: string[] = [];
   for await (const batch of inputLines(ctx, parsed.operands)) {
     if ("error" in batch) {
-      ctx.io.err(`sort: read failed: ${quoteName(batch.name)}: ${batch.error}\n`);
+      // GNU sort looks at standard input before it reads it.
+      const failed = closedStandardInput(batch) ? "stat failed" : "read failed";
+      ctx.io.err(`sort: ${failed}: ${quoteName(batch.name)}: ${batch.error}\n`);
       return 2;
     }
     // One at a time: a file is one batch of all its lines, more than a call

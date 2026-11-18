@@ -309,7 +309,8 @@ export function receiveSignal(main: Shell, signal: string, fromTerminal: boolean
 /** `receiveSignal`, for a signal that is known not to be one the shell sent itself. */
 function actOnSignal(main: Shell, signal: string, fromTerminal: boolean): boolean {
   const process = main.process;
-  if (signal === "SIGWINCH" || signal === "SIGCHLD") {
+  // bash runs a CHLD trap when a child ends, never for a CHLD sent to it.
+  if (signal === "SIGCHLD") {
     return true;
   }
   if (process.handedOver !== null) {
@@ -2667,8 +2668,9 @@ export class Shell {
     if (job.kill) {
       addOwnJob(this.process, job);
     }
-    if (this.interactive) {
-      // `[1] 4194304`, on standard error as bash prints it.
+    if (this.jobControl) {
+      // `[1] 4194304`, on standard error as bash prints it; a subshell or a
+      // pipeline stage of an interactive shell has no job control, and says nothing.
       const stderr = this.fds.get(2);
       if (stderr !== null && stderr !== undefined) {
         writeFd(stderr, `[${id}] ${job.pid ?? ""}`.trimEnd() + "\n");

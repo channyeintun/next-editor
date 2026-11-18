@@ -1,7 +1,7 @@
 // `cut -f list [-d delim] [-s]` and `cut -c list` / `-b list`.
 import type { Command } from "../context";
 import { inputLines, writeText } from "./lines";
-import { options, quoteName } from "./util";
+import { closedStandardInput, errnoText, options, quoteName } from "./util";
 
 /** Parses a cut list (`1,3-5,-2,4-`) into a membership test. */
 export function parseList(spec: string): ((n: number) => boolean) | null {
@@ -61,9 +61,11 @@ export const cut: Command = async (ctx, args) => {
     typeof outputDelimiterOption === "string" ? outputDelimiterOption : delimiter;
   // Each line is cut as it arrives.
   let failed = false;
+  let inputClosed = false;
   for await (const batch of inputLines(ctx, parsed.operands)) {
     if ("error" in batch) {
       ctx.io.err(`cut: ${quoteName(batch.name)}: ${batch.error}\n`);
+      inputClosed ||= closedStandardInput(batch);
       failed = true;
       continue;
     }
@@ -89,6 +91,10 @@ export const cut: Command = async (ctx, args) => {
     if (!writeText(ctx, out)) {
       break;
     }
+  }
+  if (inputClosed) {
+    // GNU cut closes standard input at its end, which fails again.
+    ctx.io.err(`cut: -: ${errnoText("EBADF")}\n`);
   }
   return failed ? 1 : 0;
 };

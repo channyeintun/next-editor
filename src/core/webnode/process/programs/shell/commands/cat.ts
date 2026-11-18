@@ -2,7 +2,7 @@
 // through chunk by chunk.
 import type { Command } from "../context";
 import { encode } from "../io";
-import { inputChunks, options, quoteName } from "./util";
+import { closedStandardInput, errnoText, inputChunks, options, quoteName } from "./util";
 
 /** `cat`. */
 export const cat: Command = async (ctx, args) => {
@@ -34,10 +34,12 @@ export const cat: Command = async (ctx, args) => {
     ctx.io.out(encode(out));
   };
   const files = parsed.operands.length > 0 ? parsed.operands : ["-"];
+  let inputClosed = false;
   for (const file of files) {
     for await (const chunk of inputChunks(ctx, file)) {
       if (!(chunk instanceof Uint8Array)) {
         ctx.io.err(`cat: ${quoteName(chunk.name)}: ${chunk.error}\n`);
+        inputClosed ||= closedStandardInput(chunk);
         status = 1;
       } else if (!ctx.io.broken) {
         emit(chunk);
@@ -50,6 +52,10 @@ export const cat: Command = async (ctx, args) => {
     if (ctx.io.broken) {
       break;
     }
+  }
+  if (inputClosed) {
+    // GNU cat closes standard input at its end, which fails again.
+    ctx.io.err(`cat: closing standard input: ${errnoText("EBADF")}\n`);
   }
   return status;
 };

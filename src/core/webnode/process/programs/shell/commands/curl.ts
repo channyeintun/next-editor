@@ -5,6 +5,7 @@
 // on (HTTP/1.1 over the kernel's network); other hosts go through the
 // browser's `fetch`, which hides Set-Cookie, so the cookie jar holds only
 // local cookies.
+import { errnoCodeOf } from "../../../../errors";
 import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../../kernel/vfs/types";
 import { runtime } from "../../../runtime";
 import type { ByteChannel } from "../../../runtime";
@@ -751,8 +752,16 @@ export const curl: Command = async (ctx, args) => {
         "You can only select one HTTP request method! You asked for both POST (-d / -F) and another.",
       );
     }
+    // A standard input that is closed (`<&-`) gives no data.
     const readInput = async (file: string): Promise<Uint8Array> =>
-      file === "-" ? ctx.io.readAll() : ctx.fs.readFile(absolutePath(ctx.cwd, file));
+      file === "-"
+        ? ctx.io.readAll().catch((error: unknown) => {
+            if (errnoCodeOf(error) !== "EBADF") {
+              throw error;
+            }
+            return new Uint8Array(0);
+          })
+        : ctx.fs.readFile(absolutePath(ctx.cwd, file));
     let query: string | null = null;
     let body: Uint8Array | null = null;
     if (data.length > 0) {

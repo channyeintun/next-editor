@@ -1,7 +1,9 @@
 // `head [-n N] [-c N] [files…]` (also `-N`); standard input stops being read
 // once enough has arrived, so `long-running | head -1` finishes.
 import type { Command, CommandContext } from "../context";
-import { inputs, options } from "./util";
+import { ReadInterrupted } from "../io";
+import { closedStandardInput, errnoText, inputError, inputs, options } from "./util";
+import type { InputError } from "./util";
 
 function parseCount(
   value: string | true | undefined,
@@ -27,21 +29,33 @@ const READ_SIZE = 8192;
  * the next reader of the input gets: `-c N` reads no more than N bytes;
  * `-n N` reads 8 KiB at a time and gives back what it read past the last
  * line on a file (GNU seeks back) but not on a pipe, where it is lost.
+ * A failed read ends it: what it read before is printed, and the failure
+ * returned.
  */
 async function headOfStdin(
   ctx: CommandContext,
   lines: number | null,
   bytes: number | null,
-): Promise<void> {
+): Promise<InputError | null> {
   // Nothing to print: read nothing, or the first line would slip through below.
   if (lines === 0 || bytes === 0) {
-    return;
+    return null;
   }
+  let failure: InputError | null = null;
   const collected: number[] = [];
   let newlines = 0;
   for (;;) {
     const size = bytes === null ? READ_SIZE : Math.min(READ_SIZE, bytes - collected.length);
-    const chunk = await ctx.io.readChunk(size);
+    let chunk: Uint8Array;
+    try {
+      chunk = await ctx.io.readChunk(size);
+    } catch (error) {
+      if (error instanceof ReadInterrupted) {
+        throw error;
+      }
+      failure = inputError("-", error);
+      break;
+    }
     if (chunk.length === 0) {
       break;
     }
@@ -65,6 +79,7 @@ async function headOfStdin(
     }
   }
   ctx.io.out(Uint8Array.from(collected));
+  return failure;
 }
 
 /** `head`. */
@@ -91,16 +106,33 @@ export const head: Command = async (ctx, args) => {
   const files = parsed.operands.length > 0 ? parsed.operands : ["-"];
   const headers = (files.length > 1 && !parsed.flags.has("q")) || parsed.flags.has("v");
   let status = 0;
+  let inputClosed = false;
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     if (headers) {
       ctx.io.out(`${index > 0 ? "\n" : ""}==> ${file === "-" ? "standard input" : file} <==\n`);
     }
     if (file === "-" && !spec.allBut) {
-      await headOfStdin(ctx, byBytes ? null : spec.count, byBytes ? spec.count : null);
+      const failure = await headOfStdin(
+        ctx,
+        byBytes ? null : spec.count,
+        byBytes ? spec.count : null,
+      );
+      if (failure !== null) {
+        ctx.io.err(`head: error reading 'standard input': ${failure.error}\n`);
+        inputClosed ||= closedStandardInput(failure);
+        status = 1;
+      }
       continue;
     }
     for await (const input of inputs(ctx, [file])) {
+      if ("error" in input && closedStandardInput(input)) {
+        // To leave off its last part, GNU head first looks at what the input is.
+        ctx.io.err(`head: cannot fstat 'standard input': ${input.error}\n`);
+        inputClosed = true;
+        status = 1;
+        continue;
+      }
       if ("error" in input) {
         ctx.io.err(`head: cannot open '${file}' for reading: ${input.error}\n`);
         status = 1;
@@ -128,6 +160,10 @@ export const head: Command = async (ctx, args) => {
       const keep = spec.allBut ? Math.max(0, ends.length - spec.count) : spec.count;
       ctx.io.out(data.subarray(0, keep === 0 ? 0 : (ends[Math.min(keep, ends.length) - 1] ?? 0)));
     }
+  }
+  if (inputClosed) {
+    // GNU head closes standard input at its end, which fails again.
+    ctx.io.err(`head: -: ${errnoText("EBADF")}\n`);
   }
   return status;
 };

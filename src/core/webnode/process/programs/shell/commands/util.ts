@@ -313,6 +313,15 @@ export function inputError(file: string, error: unknown): InputError {
   return { name: file, error: errorText(error) };
 }
 
+/**
+ * True when `input` is standard input (`-`) that could not be read because
+ * it is closed (`<&-`). Each GNU tool reports that in words of its own, and
+ * most report it again when they close standard input at their end.
+ */
+export function closedStandardInput(input: InputError): boolean {
+  return input.name === "-" && input.error === errnoText("EBADF");
+}
+
 /** `file` is a directory, which no command here reads as text. */
 export function directoryInput(file: string): InputError {
   return { name: file, error: errnoText("EISDIR") };
@@ -330,16 +339,27 @@ export async function* inputChunks(
   file: string,
 ): AsyncGenerator<Uint8Array | InputError> {
   // `/dev/stdin` and `/dev/fd/N` are the command's own fds, which the shell
-  // knows and the kernel does not (it would open the shell's).
+  // knows and the kernel does not (it would open the shell's). Such a name
+  // for a closed fd (`/dev/stdin` with `<&-`) is not there, as on Linux;
+  // `-` reads standard input, closed or not.
   const named = file === "-" ? 0 : descriptorOf(file);
-  const real = named === null || named === 0 ? null : ctx.io.fd(named);
-  if (named !== null && named !== 0 && real === null) {
+  const real = named === null || file === "-" ? null : ctx.io.fd(named);
+  if (named !== null && file !== "-" && real === null) {
     yield { name: file, error: errnoText("ENOENT") };
     return;
   }
   if (named !== null) {
     for (;;) {
-      const chunk = await (real === null ? ctx.io.readChunk() : ctx.io.readFrom(real));
+      let chunk: Uint8Array;
+      try {
+        chunk = await (real === null ? ctx.io.readChunk() : ctx.io.readFrom(real));
+      } catch (error) {
+        if (error instanceof ReadInterrupted) {
+          throw error;
+        }
+        yield inputError(file, error);
+        return;
+      }
       if (chunk.length === 0) {
         return;
       }
@@ -391,7 +411,17 @@ export async function* inputs(
   }
   for (const file of files) {
     if (file === "-") {
-      yield { name: "-", data: await ctx.io.readAll() };
+      let data: Uint8Array;
+      try {
+        data = await ctx.io.readAll();
+      } catch (error) {
+        if (error instanceof ReadInterrupted) {
+          throw error;
+        }
+        yield inputError(file, error);
+        continue;
+      }
+      yield { name: "-", data };
       continue;
     }
     const chunks: Uint8Array[] = [];

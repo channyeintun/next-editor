@@ -1,7 +1,8 @@
 // `tee [-a] files…`: copies standard input to standard output and each file as it arrives.
+import { errnoCodeOf } from "../../../../errors";
 import { O_APPEND, O_CREAT, O_TRUNC, O_WRONLY } from "../../../../kernel/vfs/types";
 import type { Command } from "../context";
-import { closeFd, descriptorOf, writeFd } from "../io";
+import { ReadInterrupted, closeFd, descriptorOf, writeFd } from "../io";
 import { absolutePath, errorText, quoteName } from "./util";
 
 /** `tee`. */
@@ -44,7 +45,21 @@ export const tee: Command = async (ctx, args) => {
   }
   try {
     for (;;) {
-      const chunk = await ctx.io.readChunk();
+      let chunk: Uint8Array;
+      try {
+        chunk = await ctx.io.readChunk();
+      } catch (error) {
+        if (error instanceof ReadInterrupted) {
+          throw error;
+        }
+        ctx.io.err(`tee: read error: ${errorText(error)}\n`);
+        if (errnoCodeOf(error) === "EBADF") {
+          // GNU tee closes standard input at its end, which fails again.
+          ctx.io.err(`tee: standard input: ${errorText(error)}\n`);
+        }
+        status = 1;
+        break;
+      }
       if (chunk.length === 0) {
         break;
       }

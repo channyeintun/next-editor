@@ -1,5 +1,6 @@
 // `xargs [-n max] [-L lines] [-P procs] [-s size] [-I repl] [-0] [-d delim] [-r] [-t]
 // [command [args…]]`. -P is accepted but the commands run one at a time.
+import { errnoCodeOf } from "../../../../errors";
 import type { Command } from "../context";
 import { shellQuote } from "../quote";
 import { decodeText, inputLines } from "./lines";
@@ -151,7 +152,15 @@ export const xargs: Command = async (ctx, args) => {
   };
   const pending: string[] = [];
   if (delimiter !== null) {
-    const items = decodeText(await ctx.io.readAll()).split(delimiter);
+    // A standard input that is closed (`<&-`) gives no items, as it gives
+    // no lines below.
+    const input = await ctx.io.readAll().catch((error: unknown) => {
+      if (errnoCodeOf(error) !== "EBADF") {
+        throw error;
+      }
+      return new Uint8Array(0);
+    });
+    const items = decodeText(input).split(delimiter);
     if (
       items[items.length - 1] === "" ||
       (delimiter === "\0" && items[items.length - 1] === "\n")

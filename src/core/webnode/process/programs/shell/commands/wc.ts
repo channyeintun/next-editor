@@ -1,7 +1,7 @@
 // `wc [-lwcm] [files…]`.
 import type { Command } from "../context";
 import { decode } from "../io";
-import { inputs, options, quoteName } from "./util";
+import { closedStandardInput, errnoText, inputs, options, quoteName } from "./util";
 
 /** `wc`. */
 export const wc: Command = async (ctx, args) => {
@@ -16,11 +16,23 @@ export const wc: Command = async (ctx, args) => {
   if (columns.length === 0) {
     columns = ["l", "w", "c"];
   }
-  const rows: { name: string | null; counts: number[] }[] = [];
+  // `failure`: what is said on standard error after the row is printed.
+  const rows: { name: string | null; counts: number[]; failure?: string }[] = [];
   const totals = columns.map(() => 0);
   let status = 0;
+  let inputClosed = false;
   const files = parsed.operands;
   for await (const input of inputs(ctx, files)) {
+    if ("error" in input && closedStandardInput(input)) {
+      // GNU wc counts nothing of a standard input that is closed, prints
+      // its row of zeros, then says why.
+      const name = files.length === 0 ? null : input.name;
+      const shown = name === null ? "'standard input'" : quoteName(name);
+      rows.push({ name, counts: columns.map(() => 0), failure: `wc: ${shown}: ${input.error}\n` });
+      inputClosed = true;
+      status = 1;
+      continue;
+    }
     if ("error" in input) {
       // GNU wc refuses an empty name before it looks for the file.
       ctx.io.err(
@@ -62,7 +74,16 @@ export const wc: Command = async (ctx, args) => {
   for (const row of rows) {
     const cells = row.counts.map((count) => String(count).padStart(width));
     out += `${cells.join(" ")}${row.name === null ? "" : ` ${row.name}`}\n`;
+    if (row.failure !== undefined) {
+      ctx.io.out(out);
+      ctx.io.err(row.failure);
+      out = "";
+    }
   }
   ctx.io.out(out);
+  if (inputClosed) {
+    // GNU wc closes standard input at its end, which fails again.
+    ctx.io.err(`wc: -: ${errnoText("EBADF")}\n`);
+  }
   return status;
 };

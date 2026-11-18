@@ -32,6 +32,11 @@ export interface Job {
   kill?: (signal: string, wholeJob: boolean) => void;
   /** Set by `disown -h`: the shell's hangup does not reach it. */
   keptFromHangup?: boolean;
+  /**
+   * `jobs` has shown it running: `jobs -n` lists it again only once it has
+   * ended, as bash marks a job notified until its state changes.
+   */
+  shownRunning?: boolean;
 }
 
 /**
@@ -148,13 +153,20 @@ export function forgetJob(table: JobList, job: Job): void {
     return;
   }
   table.jobs.splice(index, 1);
-  if (job.pid === null || job.status === null) {
+  if (job.status !== null) {
+    rememberStatus(table, job, job.status);
+  }
+}
+
+/** Keeps `status` as what `wait` answers for the pid of `job`, which has left the list. */
+function rememberStatus(table: JobList, job: Job, status: number): void {
+  if (job.pid === null) {
     return;
   }
   const { endedJobs } = table;
   // The newest last, whatever was known of this pid before.
   endedJobs.delete(job.pid);
-  endedJobs.set(job.pid, job.status);
+  endedJobs.set(job.pid, status);
   if (endedJobs.size > REMEMBERED_JOBS) {
     const [oldest] = endedJobs.keys();
     endedJobs.delete(oldest);
@@ -163,8 +175,11 @@ export function forgetJob(table: JobList, job: Job): void {
 
 /**
  * Takes `job` off the list (`disown`): the shell no longer reports it,
- * waits for it or hangs it up when it ends; the job runs on. With
- * `keepListed` (`disown -h`) it stays listed and is only spared the hangup.
+ * waits for it or hangs it up when it ends; the job runs on. Its pid keeps
+ * the status the job has now, 0 while it runs, which `wait pid` answers at
+ * once, as bash keeps a disowned job's pid among those of the jobs it has
+ * let go. With `keepListed` (`disown -h`) it stays listed and is only
+ * spared the hangup.
  */
 export function disownJob(table: JobList, job: Job, keepListed: boolean): void {
   if (keepListed) {
@@ -174,7 +189,55 @@ export function disownJob(table: JobList, job: Job, keepListed: boolean): void {
   const index = table.jobs.indexOf(job);
   if (index >= 0) {
     table.jobs.splice(index, 1);
+    rememberStatus(table, job, job.status ?? 0);
   }
+}
+
+/** The current job (`%+`, `%%`, the `+` of `jobs`): the newest listed. */
+function currentJob(jobs: Job[]): Job | undefined {
+  return jobs[jobs.length - 1];
+}
+
+/** The previous job (the `-` of `jobs`): the one listed before the current one. */
+function previousJob(jobs: Job[]): Job | undefined {
+  return jobs.length > 1 ? jobs[jobs.length - 2] : undefined;
+}
+
+/** A job spec that fits more than one job; `ambiguous` is its name or text, as bash's message gives it. */
+export interface AmbiguousJobSpec {
+  ambiguous: string;
+}
+
+/**
+ * The job a job spec names, as bash 3.2's get_job_spec reads one; the
+ * leading `%` may be left out. `%N` is job N; `%%`, `%+` and a lone `%`
+ * the current job; `%-` the previous one, or the current one when it is
+ * the only job (whatever follows the `+` or `-`); `%?text` the job whose
+ * command contains `text`, and `%name` the one whose command starts with
+ * `name`. Undefined when none is; an `AmbiguousJobSpec` when the name or
+ * text fits more than one.
+ */
+export function jobOfSpec(table: JobList, spec: string): Job | AmbiguousJobSpec | undefined {
+  const word = spec.startsWith("%") ? spec.slice(1) : spec;
+  const { jobs } = table;
+  if (/^\d+$/.test(word)) {
+    return jobs.find((job) => job.id === Number(word));
+  }
+  if (word === "" || word[0] === "%" || word[0] === "+") {
+    return currentJob(jobs);
+  }
+  if (word[0] === "-") {
+    return previousJob(jobs) ?? currentJob(jobs);
+  }
+  const substring = word[0] === "?";
+  const name = substring ? word.slice(1) : word;
+  const matches = jobs.filter((job) =>
+    substring ? job.command.includes(name) : job.command.startsWith(name),
+  );
+  if (matches.length > 1) {
+    return { ambiguous: name };
+  }
+  return matches[0];
 }
 
 /**
@@ -182,9 +245,8 @@ export function disownJob(table: JobList, job: Job, keepListed: boolean): void {
  * sleep 30 &`, `[2]-  Exit 3  …`, `[3]   Terminated  …`. `+` is the newest
  * job, `-` the one before.
  */
-export function jobLine(jobs: Job[], job: Job): string {
-  const index = jobs.indexOf(job);
-  const mark = index === jobs.length - 1 ? "+" : index === jobs.length - 2 ? "-" : " ";
+export function jobLine(jobs: Job[], job: Job, long = false): string {
+  const mark = job === currentJob(jobs) ? "+" : job === previousJob(jobs) ? "-" : " ";
   let state: string;
   if (job.status === null) {
     state = "Running";
@@ -194,8 +256,10 @@ export function jobLine(jobs: Job[], job: Job): string {
     state = job.status === 0 ? "Done" : `Exit ${job.status}`;
   }
   const command = job.status === null ? `${job.command} &` : job.command;
-  // bash pads the state to 24 columns ("%*s" with 24 minus its length).
-  return `[${job.id}]${mark}  ${state}${" ".repeat(Math.abs(24 - state.length))}${command}\n`;
+  // bash pads the state to 24 columns ("%*s" with 24 minus its length);
+  // `jobs -l` puts the pid, five columns wide, between the mark and the state.
+  const pid = long ? ` ${String(job.pid ?? "").padStart(5)} ` : "  ";
+  return `[${job.id}]${mark}${pid}${state}${" ".repeat(Math.abs(24 - state.length))}${command}\n`;
 }
 
 /**
