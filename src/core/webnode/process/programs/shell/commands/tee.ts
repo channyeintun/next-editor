@@ -1,9 +1,8 @@
 // `tee [-a] files…`: copies standard input to standard output and each file as it arrives.
 import { O_APPEND, O_CREAT, O_TRUNC, O_WRONLY } from "../../../../kernel/vfs/types";
-import { runtime } from "../../../runtime";
 import type { Command } from "../context";
-import { closeFd, writeFd } from "../io";
-import { errorText } from "./util";
+import { closeFd, descriptorOf, writeFd } from "../io";
+import { absolutePath, errorText, quoteName } from "./util";
 
 /** `tee`. */
 export const tee: Command = async (ctx, args) => {
@@ -18,16 +17,28 @@ export const tee: Command = async (ctx, args) => {
       files.push(arg);
     }
   }
-  const fs = runtime().fs;
+  const fs = ctx.fs;
+  /** The files it opened, and the fds of its own that operands name (/dev/stderr). */
+  const opened: number[] = [];
   const fds: number[] = [];
   let status = 0;
   for (const file of files) {
+    const named = descriptorOf(file);
+    const own = named === null ? null : ctx.io.fd(named);
+    if (own !== null) {
+      fds.push(own);
+      continue;
+    }
     try {
-      fds.push(
-        fs.open(ctx.resolve(file), O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC), 0o666),
+      const fd = fs.open(
+        absolutePath(ctx.cwd, file),
+        O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC),
+        0o666,
       );
+      opened.push(fd);
+      fds.push(fd);
     } catch (error) {
-      ctx.io.err(`tee: ${file}: ${errorText(error)}\n`);
+      ctx.io.err(`tee: ${quoteName(file)}: ${errorText(error)}\n`);
       status = 1;
     }
   }
@@ -43,7 +54,7 @@ export const tee: Command = async (ctx, args) => {
       }
     }
   } finally {
-    fds.forEach(closeFd);
+    opened.forEach(closeFd);
   }
   return status;
 };

@@ -4,6 +4,7 @@ import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../../kernel/vfs/types";
 import { setRuntime } from "../../../runtime";
 import { runShell } from "../index";
 import { setupRuntime, sh } from "../testHelpers";
+import { cat } from "./cat";
 import { cut } from "./cut";
 import { runFilter, settle } from "./filterTesting";
 import { grep } from "./grep";
@@ -45,6 +46,7 @@ describe("filters write as their input arrives", () => {
       [tr, ["y", "n"]],
       [cut, ["-c1"]],
       [uniq, ["-c"]],
+      [cat, []],
     ] as const) {
       const run = runFilter(command, [...args]);
       run.feed("y\n");
@@ -121,4 +123,27 @@ describe("bytes that are not UTF-8", () => {
     expect(Array.from(vfs.readFile("/work/c"))).toEqual([0x61, 0xff, 0x62, 0x0a]);
     expect(Array.from(vfs.readFile("/work/s"))).toEqual([0x61, 0xff, 0x62, 0x0a]);
   });
+});
+
+describe("input of more items than a call takes arguments", () => {
+  // 200,000 of anything overflows the stack when spread into one call.
+  const count = 200000;
+
+  it("xargs -0 and xargs take them all", async () => {
+    const names = Array.from({ length: count }, (_, index) => `n${index}`);
+    const nul = await sh("xargs -0 -n 50000 echo | wc -l; echo $?", {
+      stdin: `${names.join("\0")}\0`,
+    });
+    expect(nul.err).toBe("");
+    expect(nul.out.replace(/ +/g, "")).toBe("4\n0\n");
+    const line = await sh("xargs -n 100000 echo | wc -w", { stdin: `${names.join(" ")}\n` });
+    expect(line.err).toBe("");
+    expect(line.out.trim()).toBe(String(count));
+  }, 60000);
+
+  it("seq -w pads them all", async () => {
+    const result = await sh(`seq -w 1 ${count} | tail -n 1; seq -w 1 ${count} | head -n 1`);
+    expect(result.err).toBe("");
+    expect(result.out).toBe(`${count}\n000001\n`);
+  }, 60000);
 });

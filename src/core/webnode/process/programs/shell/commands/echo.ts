@@ -64,11 +64,6 @@ export const echo: Command = (ctx, args) => {
       return 0;
     }
   }
-  if (!ctx.io.out(encodeText(newline ? `${text}\n` : text))) {
-    if (ctx.io.fd(1) === null) {
-      ctx.io.err("echo: write error: Bad file descriptor\n");
-    }
-    return 1;
-  }
-  return 0;
+  // The shell says why a write failed, as it does for every command.
+  return ctx.io.out(encodeText(newline ? `${text}\n` : text)) ? 0 : 1;
 };

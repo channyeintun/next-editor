@@ -158,7 +158,10 @@ export const xargs: Command = async (ctx, args) => {
     ) {
       items.pop();
     }
-    pending.push(...items);
+    // One at a time: the input may hold more items than a call takes arguments.
+    for (const item of items) {
+      pending.push(item);
+    }
   } else {
     // A command runs as soon as its batch is complete (one line for -I, N
     // lines for -L, N items for -n), so `watch | xargs -n1 cmd` keeps up.
@@ -181,7 +184,9 @@ export const xargs: Command = async (ctx, args) => {
         if (items.length === 0) {
           continue;
         }
-        pending.push(...items);
+        for (const item of items) {
+          pending.push(item);
+        }
         lines++;
         if (maxLines !== null && lines >= maxLines) {
           const early = await run(pending.splice(0));

@@ -1,7 +1,7 @@
 // `wc [-lwcm] [files…]`.
 import type { Command } from "../context";
 import { decode } from "../io";
-import { inputs, options } from "./util";
+import { inputs, options, quoteName } from "./util";
 
 /** `wc`. */
 export const wc: Command = async (ctx, args) => {
@@ -22,7 +22,12 @@ export const wc: Command = async (ctx, args) => {
   const files = parsed.operands;
   for await (const input of inputs(ctx, files)) {
     if ("error" in input) {
-      ctx.io.err(`wc: ${input.error}\n`);
+      // GNU wc refuses an empty name before it looks for the file.
+      ctx.io.err(
+        input.name === ""
+          ? "wc: invalid zero-length file name\n"
+          : `wc: ${quoteName(input.name)}: ${input.error}\n`,
+      );
       status = 1;
       continue;
     }

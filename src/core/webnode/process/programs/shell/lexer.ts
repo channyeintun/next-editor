@@ -48,6 +48,8 @@ export class Lexer {
   readonly source: string;
   pos: number;
   line: number;
+  /** Where the token `next` returned last starts in `source`. */
+  tokenStart = 0;
   private readonly pending: PendingHereDoc[] = [];
   private readonly parseSubstitution: SubstitutionParser;
   private readonly parseProgram: ProgramParser;
@@ -104,6 +106,7 @@ export class Lexer {
   /** The next token. */
   next(): Token {
     this.skipBlanks();
+    this.tokenStart = this.pos;
     const line = this.line;
     const c = this.peekChar();
     if (c === "") {

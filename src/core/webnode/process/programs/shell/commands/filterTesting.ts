@@ -2,9 +2,9 @@
 // standard input the test feeds piece by piece and a standard output the test
 // can close, to check that a filter writes as its input arrives and stops
 // reading once nobody reads its output.
+import { runtime } from "../../../runtime";
 import type { Command, CommandContext } from "../context";
 import type { CommandIo } from "../io";
-import { resolvePath } from "./util";
 
 export interface FilterRun {
   /** Adds input; null ends it. */
@@ -69,10 +69,13 @@ export function runFilter(
   const ctx: CommandContext = {
     name: "filter",
     cwd: "/work",
+    // Read when a command asks: a filter that opens no file needs no runtime.
+    get fs() {
+      return runtime().fs;
+    },
     env: {},
     io: io as unknown as CommandIo,
     signal: new AbortController().signal,
-    resolve: (path) => resolvePath("/work", path),
     exec,
   };
   const done = Promise.resolve(command(ctx, args)).then((status) => {

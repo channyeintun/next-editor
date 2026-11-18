@@ -10,7 +10,7 @@ import { runtime } from "../../../runtime";
 import type { ByteChannel } from "../../../runtime";
 import type { Command, CommandContext } from "../context";
 import { decode, encode } from "../io";
-import { errorText } from "./util";
+import { absolutePath, errorText } from "./util";
 
 interface Request {
   method: string;
@@ -316,7 +316,7 @@ function readCookies(ctx: CommandContext, spec: string, host: string): Cookie[] 
   }
   let text: string;
   try {
-    text = decode(runtime().fs.readFile(ctx.resolve(spec)));
+    text = decode(ctx.fs.readFile(absolutePath(ctx.cwd, spec)));
   } catch {
     // curl goes on without cookies when the file cannot be read.
     return [];
@@ -477,7 +477,7 @@ function writeOutput(ctx: CommandContext, path: string | null, data: Uint8Array)
     ctx.io.out(data);
     return;
   }
-  runtime().fs.writeFile(ctx.resolve(path), data, O_WRONLY | O_CREAT | O_TRUNC, 0o666);
+  ctx.fs.writeFile(absolutePath(ctx.cwd, path), data, O_WRONLY | O_CREAT | O_TRUNC, 0o666);
 }
 
 /** Sleeps `ms`, ending early when the shell is interrupted. */
@@ -752,7 +752,7 @@ export const curl: Command = async (ctx, args) => {
       );
     }
     const readInput = async (file: string): Promise<Uint8Array> =>
-      file === "-" ? ctx.io.readAll() : runtime().fs.readFile(ctx.resolve(file));
+      file === "-" ? ctx.io.readAll() : ctx.fs.readFile(absolutePath(ctx.cwd, file));
     let query: string | null = null;
     let body: Uint8Array | null = null;
     if (data.length > 0) {
@@ -1038,7 +1038,7 @@ export const curl: Command = async (ctx, args) => {
         }
         if (!headOnly) {
           if (include && target !== null && target !== "-") {
-            const existing = runtime().fs.readFile(ctx.resolve(target));
+            const existing = ctx.fs.readFile(absolutePath(ctx.cwd, target));
             writeOutput(ctx, target, concat([existing, response.body]));
           } else {
             writeOutput(ctx, target, response.body);

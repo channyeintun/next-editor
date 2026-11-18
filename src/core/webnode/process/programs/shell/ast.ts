@@ -196,6 +196,8 @@ export interface AndOr {
 export interface ListItem {
   andOr: AndOr;
   background: boolean;
+  /** For a background item: its text as written, which `jobs` shows. */
+  source?: string;
 }
 
 export interface List {

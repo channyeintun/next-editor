@@ -2,16 +2,25 @@
 // program. Parses the command line (`-c`, `-s`, `-i`, `-l`, `-e`, `-x`, …),
 // sets up the environment and signal handling, then runs a command string, a
 // script file, standard input or the interactive loop.
+import { errnoCodeOf } from "../../../errors";
+import { signalExitStatus } from "../../../signals";
 import { DEFAULT_PATH, HOME_DIR, SHELL_PATH, USERNAME } from "../../platform";
 import { runtime } from "../../runtime";
 import { applySetFlag } from "./builtins";
 import { baseName, errorText } from "./commands/util";
 import { ExitSignal } from "./context";
 import { runInteractive } from "./interactive";
-import { Shell } from "./interpreter";
-import type { ProcessState } from "./interpreter";
-import { decode, readAllAsync, writeFd } from "./io";
-import { declareHandledSignals } from "./signals";
+import { newProcessState, receiveSignal, settleSignal, Shell } from "./interpreter";
+import { outliveShell } from "./jobs";
+import {
+  ReadInterrupted,
+  decode,
+  giveBackAllInput,
+  inheritedFdTable,
+  readAllAsync,
+  writeFd,
+} from "./io";
+import { declareHandledSignals, runsExitTrap } from "./signals";
 
 const OPTION_NAMES = new Set([
   "errexit",
@@ -157,24 +166,17 @@ export async function runShell(argv: string[]): Promise<number> {
     (invocation.command === null &&
       invocation.script === null &&
       (stdinIsTty || baseName(argv[0] ?? "") === "jsh"));
-  const process: ProcessState = {
-    foreground: new Set(),
-    exits: new Map(),
-    pendingSignal: null,
-    abort: new AbortController(),
-    jobs: [],
-    nextJobId: 1,
-    interactive: interactive && stdinIsTty,
-    history: [],
-  };
+  const process = newProcessState(interactive && stdinIsTty);
   const cwd = rt.cwd || "/";
   const shell = new Shell({
     arg0: invocation.arg0,
     positional: invocation.positional,
     env: initialEnvironment(rt.env, cwd),
     cwd,
+    umask: rt.umask,
     process,
   });
+  shell.fds = inheritedFdTable();
   for (const flag of invocation.flags) {
     const error = applySetFlag(shell, flag);
     if (error) {
@@ -185,60 +187,14 @@ export async function runShell(argv: string[]): Promise<number> {
   for (const option of invocation.options) {
     shell.options[option.slice(1) as keyof Shell["options"]] = option[0] === "-";
   }
-  rt.processes.onSignal((signal) => {
-    if (signal === "SIGWINCH" || signal === "SIGCHLD") {
-      return true;
-    }
-    const short = signal.replace(/^SIG/, "");
-    const trap = shell.traps.get(short);
-    if (trap === "") {
-      return true;
-    }
-    if (signal === "SIGPIPE") {
-      // The failed write also returns EPIPE, which ends only the pipeline
-      // stage that made it; the shell itself goes on.
-      if (trap !== undefined) {
-        process.pendingSignal = signal;
-      }
-      return true;
-    }
-    const known =
-      signal === "SIGINT" || signal === "SIGTERM" || signal === "SIGHUP" || signal === "SIGQUIT";
-    if (!known && trap === undefined) {
-      return false;
-    }
-    // A Ctrl+C typed in a terminal reaches the whole foreground group from
-    // the kernel, the children included; forwarding it would deliver it twice.
-    const fromTerminal = signal === "SIGINT" && rt.tty.isatty(0);
-    if (!fromTerminal) {
-      for (const pid of process.foreground) {
-        try {
-          rt.processes.kill(pid, signal);
-        } catch {
-          // Already gone.
-        }
-      }
-    }
-    process.abort.abort();
-    process.abort = new AbortController();
-    process.pendingSignal = signal;
-    // An interactive shell ignores these, except a Ctrl+C while it runs
-    // commands of its own (a loop of builtins): that abandons the command
-    // line. A Ctrl+C a foreground child got is that child's to act on.
-    if (
-      process.interactive &&
-      trap === undefined &&
-      (signal !== "SIGINT" || process.foreground.size > 0)
-    ) {
-      process.pendingSignal = null;
-    }
-    return true;
-  });
+  rt.processes.onSignal((signal, fromTerminal) => receiveSignal(shell, signal, fromTerminal));
   declareHandledSignals(shell.traps.keys());
   let status = 0;
+  /** The signal the shell ends of, as a process a signal ends (see `ExitSignal`). */
+  let signal: string | null = null;
   try {
     if (invocation.command !== null) {
-      status = await shell.runSource(invocation.command);
+      status = await shell.runCommandString(invocation.command);
     } else if (invocation.script !== null) {
       const path = shell.resolve(invocation.script);
       let text: string;
@@ -246,30 +202,63 @@ export async function runShell(argv: string[]): Promise<number> {
         text = decode(rt.fs.readFile(path));
       } catch (error) {
         writeFd(2, `sh: ${invocation.script}: ${errorText(error)}\n`);
-        return 127;
+        // As bash: 127 for a script that is not there, 126 for one it may not
+        // read (or a directory).
+        const code = errnoCodeOf(error);
+        return code === "ENOENT" || code === "ENOTDIR" ? 127 : 126;
       }
       status = await shell.runSource(text.replace(/^#![^\n]*/, ""));
     } else if (process.interactive) {
       status = await runInteractive(shell);
     } else {
-      const text = decode(await readAllAsync(0));
-      status = await shell.runSource(text);
+      let script: Uint8Array | null = null;
+      try {
+        script = await readAllAsync(0, { signal: shell.stopSignal() });
+      } catch (error) {
+        if (!(error instanceof ReadInterrupted)) {
+          throw error;
+        }
+        // The signal ends the shell, unless it is trapped: either way the
+        // script was not read whole, and none of it runs.
+        await shell.checkSignals();
+        status = signalExitStatus("SIGINT");
+      }
+      if (script !== null) {
+        status = await shell.runSource(decode(script));
+      }
     }
   } catch (error) {
     if (error instanceof ExitSignal) {
       status = error.status;
+      signal = error.signal;
     } else {
       writeFd(2, `sh: internal error: ${error instanceof Error ? error.message : String(error)}\n`);
       status = 70;
     }
   }
-  try {
-    shell.status = status;
-    await shell.runExitTrap();
-  } catch (error) {
-    if (!(error instanceof ExitSignal)) {
-      throw error;
-    }
+  // The signal that ends the shell has been acted on: the commands of its
+  // EXIT trap run to their end, as any others. Some signals end bash
+  // without running it (SIGQUIT).
+  settleSignal(process);
+  const exited = signal === null || runsExitTrap(signal) ? await shell.runExitTrap(status) : null;
+  if (exited !== null) {
+    // An `exit` in the trap names the status. A shell that a signal was
+    // ending still dies of that signal, as bash does once the trap has run.
+    status = exited.status;
+    signal = exited.signal ?? signal;
+  }
+  // What the shell read and did not use is the next reader's, as bash,
+  // which reads a pipe a byte at a time, leaves it.
+  giveBackAllInput();
+  // The jobs it runs in its own process go on without it, as forked
+  // subshells do: the shell has ended for its parent all the same.
+  if (await outliveShell(process, { code: signal === null ? status : null, signal })) {
+    return 0;
+  }
+  if (signal !== null) {
+    // bash re-raises a signal that ended it once its EXIT trap has run, so
+    // its parent sees the signal (npm, a node parent's `signal`).
+    rt.processes.die(signal);
   }
   return status;
 }

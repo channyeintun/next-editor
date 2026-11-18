@@ -3,12 +3,14 @@
 // when standard output is a terminal. Each file is matched as it is read and
 // standard input line by line as it arrives, so `server | grep ready` prints
 // at once and a tree is never held in memory whole.
+import { errnoCodeOf } from "../../../../errors";
 import { runtime } from "../../../runtime";
 import type { Command } from "../context";
+import { descriptorOf } from "../io";
 import { matchPattern } from "../pattern";
 import { posixToJs } from "./regex";
 import { decodeText, inputLines, writeText } from "./lines";
-import { errorText, isDir, options, tryStat } from "./util";
+import { absolutePath, errorText, isDir, isFile, options, statOrError } from "./util";
 
 /** Options that may be given more than once; the option parser keeps only the last. */
 interface Lists {
@@ -122,7 +124,7 @@ export const grep: Command = async (ctx, args) => {
   if (typeof patternFile === "string") {
     try {
       patterns.push(
-        ...decodeText(runtime().fs.readFile(ctx.resolve(patternFile)))
+        ...decodeText(runtime().fs.readFile(absolutePath(ctx.cwd, patternFile)))
           .split("\n")
           .filter((line) => line !== ""),
       );
@@ -306,14 +308,19 @@ export const grep: Command = async (ctx, args) => {
     return search(label, data.length === 0 ? [] : [{ lines: text.split("\n") }]);
   };
 
-  /** Walks a directory, matching each file as it is reached; false to stop. */
+  /**
+   * Walks a directory, matching each file as it is reached; false to stop.
+   * An empty `label` is the working directory searched because -r had no
+   * file operand: its entries are named without a prefix (GNU grep), where
+   * an operand `.` gives `./name`.
+   */
   const walk = async (path: string, label: string): Promise<boolean> => {
     let entries;
     try {
       entries = runtime().fs.readdir(path);
     } catch (error) {
       if (!f("s")) {
-        ctx.io.err(`grep: ${label}: ${errorText(error)}\n`);
+        ctx.io.err(`grep: ${label === "" ? "." : label}: ${errorText(error)}\n`);
       }
       hadError = true;
       return true;
@@ -323,9 +330,16 @@ export const grep: Command = async (ctx, args) => {
         continue;
       }
       const childPath = `${path === "/" ? "" : path}/${entry.name}`;
-      const childLabel = label === "." ? entry.name : `${label.replace(/\/$/, "")}/${entry.name}`;
-      const stat = tryStat(childPath);
-      if (!stat) {
+      const childLabel = label === "" ? entry.name : `${label.replace(/\/$/, "")}/${entry.name}`;
+      const stat = statOrError(childPath);
+      if ("error" in stat) {
+        // An entry it may not look at is reported; one that went away is not.
+        if (errnoCodeOf(stat.error) !== "ENOENT") {
+          if (!f("s")) {
+            ctx.io.err(`grep: ${childLabel}: ${errorText(stat.error)}\n`);
+          }
+          hadError = true;
+        }
         continue;
       }
       if (isDir(stat)) {
@@ -341,32 +355,44 @@ export const grep: Command = async (ctx, args) => {
     return true;
   };
 
+  /** Searches an input whose lines come as they arrive (standard input, a device); false to stop. */
+  const searchStream = (file: string, label: string): Promise<boolean> =>
+    search(
+      label,
+      (async function* () {
+        for await (const batch of inputLines(ctx, [file])) {
+          if ("lines" in batch) {
+            yield batch;
+          } else {
+            if (!f("s")) {
+              ctx.io.err(`grep: ${label}: ${batch.error}\n`);
+            }
+            hadError = true;
+          }
+        }
+      })(),
+    );
+
   for (const file of files) {
     let going: boolean;
     if (file === "-") {
-      going = await search(
-        "(standard input)",
-        (async function* () {
-          for await (const batch of inputLines(ctx, ["-"])) {
-            if ("lines" in batch) {
-              yield batch;
-            }
-          }
-        })(),
-      );
+      going = await searchStream("-", "(standard input)");
+    } else if (descriptorOf(file) !== null) {
+      // One of grep's own fds (/dev/stdin), which the shell knows.
+      going = await searchStream(file, file);
     } else {
-      const path = ctx.resolve(file);
-      const stat = tryStat(path);
-      if (!stat) {
+      const path = absolutePath(ctx.cwd, file);
+      const stat = statOrError(path);
+      if ("error" in stat) {
         if (!f("s")) {
-          ctx.io.err(`grep: ${file}: No such file or directory\n`);
+          ctx.io.err(`grep: ${file}: ${errorText(stat.error)}\n`);
         }
         hadError = true;
         continue;
       }
       if (isDir(stat)) {
         if (recursive) {
-          going = await walk(path, file);
+          going = await walk(path, operands.length === 0 ? "" : file);
         } else {
           if (!f("s")) {
             ctx.io.err(`grep: ${file}: Is a directory\n`);
@@ -376,8 +402,11 @@ export const grep: Command = async (ctx, args) => {
         }
       } else if (skipFile(file)) {
         continue;
-      } else {
+      } else if (isFile(stat)) {
         going = await searchFile(path, file, false);
+      } else {
+        // A device (/dev/tty): its lines come when they are typed.
+        going = await searchStream(file, file);
       }
     }
     if (!going) {

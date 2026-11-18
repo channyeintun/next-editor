@@ -218,6 +218,20 @@ export class LineEditor {
     return promise;
   }
 
+  /**
+   * Takes the keys that arrived after the line that ended (typed ahead), for
+   * the host to hand to whoever reads next; the next line starts without them.
+   */
+  takeTypeAhead(): string {
+    const text = this.queued + this.pending;
+    this.queued = "";
+    this.pending = "";
+    // They go back as the keys they were: a paste still open is over for the
+    // editor, and its end marker, when it comes, is a key to ignore.
+    this.pasting = false;
+    return text;
+  }
+
   /** Feeds raw terminal bytes. */
   feed(bytes: Uint8Array): void {
     this.process(this.decoder.decode(bytes, { stream: true }));
@@ -226,6 +240,17 @@ export class LineEditor {
   /** Feeds already-decoded input. */
   feedText(text: string): void {
     this.process(text);
+  }
+
+  /**
+   * The input has ended: the line being read is given up, whatever is on
+   * it, and its read ends as an end of file ends one.
+   */
+  endInput(): void {
+    if (this.resolve) {
+      this.host.write("\n");
+      this.finish({ type: "eof" });
+    }
   }
 
   /** Redraws after the terminal changed size. */
@@ -316,10 +341,9 @@ export class LineEditor {
       if (index > 0) {
         this.key("enter");
         if (!this.resolve) {
-          // The rest of the paste is type-ahead for the next line.
-          const rest = lines.slice(index).join("\n");
-          this.queued += this.pasting ? `\x1b[200~${rest}` : rest;
-          this.pasting = false;
+          // The rest of the paste is type-ahead for the next line, which
+          // goes on pasting when the paste's end has not come yet.
+          this.queued += lines.slice(index).join("\n");
           return;
         }
       }

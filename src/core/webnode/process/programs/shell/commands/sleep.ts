@@ -1,4 +1,5 @@
 // `sleep seconds[smhd]…`; SIGINT/SIGTERM cut it short.
+import { signalExitStatus } from "../../../../signals";
 import type { Command } from "../context";
 
 /** `sleep`. */
@@ -23,7 +24,7 @@ export const sleep: Command = async (ctx, args) => {
   }
   const signal = ctx.signal;
   if (signal.aborted) {
-    return 130;
+    return signalExitStatus("SIGINT");
   }
   await new Promise<void>((resolve) => {
     const timer = Number.isFinite(total) ? setTimeout(done, total * 1000) : undefined;
@@ -36,5 +37,5 @@ export const sleep: Command = async (ctx, args) => {
     }
     signal.addEventListener("abort", done);
   });
-  return signal.aborted ? 130 : 0;
+  return signal.aborted ? signalExitStatus("SIGINT") : 0;
 };

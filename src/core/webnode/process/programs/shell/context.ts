@@ -1,6 +1,7 @@
 // What a built-in file or text command (commands/*.ts) gets to work with, and
 // the control-flow signals the interpreter throws for `exit`, `return`,
 // `break` and `continue`, and Ctrl+C at an interactive shell.
+import type { FsBackend } from "../../runtime";
 import type { CommandIo } from "./io";
 
 /** Everything an in-process command may use. */
@@ -9,13 +10,18 @@ export interface CommandContext {
   name: string;
   /** The shell's working directory. */
   cwd: string;
+  /**
+   * The filesystem as the command's shell has it: what the command creates
+   * through it gets the shell's file mode creation mask, which in a subshell
+   * is not the process's (umask.ts). A command makes its files and
+   * directories through this one.
+   */
+  fs: FsBackend;
   /** The environment the command sees (exported variables plus prefix assignments). */
   env: Record<string, string>;
   io: CommandIo;
   /** Aborted when the shell receives SIGINT or SIGTERM. */
   signal: AbortSignal;
-  /** Resolves `path` against `cwd`. */
-  resolve(path: string): string;
   /**
    * Runs another command (builtin, built-in command or external) with this
    * command's I/O. `env` adds variables, or with `replaceEnv` is the whole
@@ -30,8 +36,16 @@ export type Command = (ctx: CommandContext, args: string[]) => number | Promise<
 /** `exit` (or a fatal error): unwinds to the shell (or subshell) top. */
 export class ExitSignal {
   readonly status: number;
-  constructor(status: number) {
+  /**
+   * The signal the shell ends of, as a process ends of a signal it does not
+   * handle: one that reached the shell (bash re-raises it), or the one that
+   * ended a program it ran as its last act (`exec`, a lone `sh -c` command).
+   * A subshell takes only `status`.
+   */
+  readonly signal: string | null;
+  constructor(status: number, signal: string | null = null) {
     this.status = status;
+    this.signal = signal;
   }
 }
 

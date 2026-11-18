@@ -1,7 +1,7 @@
 // `rmdir [-p] dirs…`.
 import { runtime } from "../../../runtime";
 import type { Command } from "../context";
-import { dirName, errorText, options } from "./util";
+import { absolutePath, dirName, errorText, options } from "./util";
 
 /** `rmdir`. */
 export const rmdir: Command = (ctx, args) => {
@@ -18,7 +18,7 @@ export const rmdir: Command = (ctx, args) => {
     let current = operand;
     for (;;) {
       try {
-        runtime().fs.rmdir(ctx.resolve(current));
+        runtime().fs.rmdir(absolutePath(ctx.cwd, current));
       } catch (error) {
         ctx.io.err(`rmdir: failed to remove '${current}': ${errorText(error)}\n`);
         status = 1;

@@ -1,8 +1,9 @@
 // `tail [-n [+]N] [-c [+]N] [-f] [files…]` (also `-N`). `-f` follows named
 // files by looking at them every 250 ms; it is ignored for standard input.
 import { runtime } from "../../../runtime";
+import { signalExitStatus } from "../../../../signals";
 import type { Command, CommandContext } from "../context";
-import { inputs, options, tryStat } from "./util";
+import { absolutePath, inputs, options, tryStat } from "./util";
 
 /** How often `tail -f` looks at its files. */
 const FOLLOW_INTERVAL_MS = 250;
@@ -16,7 +17,7 @@ async function followFiles(ctx: CommandContext, files: string[], headers: boolea
   const fs = runtime().fs;
   const sizes = new Map<string, number>();
   for (const file of files) {
-    sizes.set(file, tryStat(ctx.resolve(file))?.size ?? 0);
+    sizes.set(file, tryStat(absolutePath(ctx.cwd, file))?.size ?? 0);
   }
   let shown = files[files.length - 1];
   const signal = ctx.signal;
@@ -34,7 +35,7 @@ async function followFiles(ctx: CommandContext, files: string[], headers: boolea
       return;
     }
     for (const file of files) {
-      const path = ctx.resolve(file);
+      const path = absolutePath(ctx.cwd, file);
       const stat = tryStat(path);
       const before = sizes.get(file) ?? 0;
       if (!stat || stat.size === before) {
@@ -101,9 +102,7 @@ export const tail: Command = async (ctx, args) => {
     const file = files[index];
     for await (const input of inputs(ctx, [file])) {
       if ("error" in input) {
-        ctx.io.err(
-          `tail: cannot open '${file}' for reading: ${input.error.replace(`${file}: `, "")}\n`,
-        );
+        ctx.io.err(`tail: cannot open '${file}' for reading: ${input.error}\n`);
         status = 1;
         continue;
       }
@@ -149,7 +148,7 @@ export const tail: Command = async (ctx, args) => {
       files.filter((file) => file !== "-"),
       headers,
     );
-    return ctx.signal.aborted ? 130 : status;
+    return ctx.signal.aborted ? signalExitStatus("SIGINT") : status;
   }
   return status;
 };

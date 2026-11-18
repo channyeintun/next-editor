@@ -40,3 +40,24 @@ describe("sort keys", () => {
     expect(result.status).toBe(2);
   });
 });
+
+describe("sort of named files", () => {
+  it("takes a file of more lines than a call takes arguments", async () => {
+    const count = 200000;
+    const lines = Array.from({ length: count }, (_, index) => `${index + 1} line`);
+    const result = await sh(
+      "sort -rn big.txt | head -n 2; sort -n big.txt -o out.txt; echo $?; tail -n 1 out.txt; " +
+        "cat big.txt | sort -n | tail -n 1",
+      { files: { "/work/big.txt": `${lines.join("\n")}\n` } },
+    );
+    expect(result.err).toBe("");
+    expect(result.out).toBe(`${count} line\n${count - 1} line\n0\n${count} line\n${count} line\n`);
+  }, 60000);
+
+  it("says which input it cannot read and sorts nothing", async () => {
+    // GNU sort 9.5: `sort: cannot read: nope: No such file or directory`, exit 2, no output.
+    const result = await sh("sort a.txt nope; echo $?", { files: { "/work/a.txt": "b\na\n" } });
+    expect(result.err).toBe("sort: cannot read: nope: No such file or directory\n");
+    expect(result.out).toBe("2\n");
+  });
+});

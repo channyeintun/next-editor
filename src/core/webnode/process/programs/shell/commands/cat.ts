@@ -1,7 +1,8 @@
-// `cat [-n] [files…]`: standard input streams through chunk by chunk.
+// `cat [-n] [files…]`: standard input, and a device named as a file, stream
+// through chunk by chunk.
 import type { Command } from "../context";
 import { encode } from "../io";
-import { inputs, options } from "./util";
+import { inputChunks, options, quoteName } from "./util";
 
 /** `cat`. */
 export const cat: Command = async (ctx, args) => {
@@ -34,22 +35,16 @@ export const cat: Command = async (ctx, args) => {
   };
   const files = parsed.operands.length > 0 ? parsed.operands : ["-"];
   for (const file of files) {
-    if (file === "-") {
-      for (;;) {
-        const chunk = await ctx.io.readChunk();
-        if (chunk.length === 0 || ctx.io.broken) {
-          break;
-        }
+    for await (const chunk of inputChunks(ctx, file)) {
+      if (!(chunk instanceof Uint8Array)) {
+        ctx.io.err(`cat: ${quoteName(chunk.name)}: ${chunk.error}\n`);
+        status = 1;
+      } else if (!ctx.io.broken) {
         emit(chunk);
       }
-      continue;
-    }
-    for await (const input of inputs(ctx, [file])) {
-      if ("error" in input) {
-        ctx.io.err(`cat: ${input.error}\n`);
-        status = 1;
-      } else {
-        emit(input.data);
+      // Nobody reads the output any more: no more input is taken.
+      if (ctx.io.broken) {
+        break;
       }
     }
     if (ctx.io.broken) {

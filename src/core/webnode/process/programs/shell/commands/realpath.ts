@@ -1,7 +1,7 @@
 // `realpath [-m] [-s] [--relative-to=dir] paths…`.
 import { runtime } from "../../../runtime";
 import type { Command } from "../context";
-import { errorText, options } from "./util";
+import { absolutePath, errorText, options, quoteName, resolvePath } from "./util";
 
 function relative(from: string, to: string): string {
   const a = from.split("/").filter(Boolean);
@@ -29,12 +29,17 @@ export const realpath: Command = (ctx, args) => {
   }
   const fs = runtime().fs;
   const resolveOne = (path: string): string => {
-    const absolute = ctx.resolve(path);
-    if (parsed.flags.has("s") || parsed.flags.has("m")) {
+    const absolute = absolutePath(ctx.cwd, path);
+    // -s resolves by the text alone, and -m falls back to that for what is
+    // not there; an empty name is no file either way.
+    if (path !== "" && parsed.flags.has("s")) {
+      return resolvePath(ctx.cwd, path);
+    }
+    if (path !== "" && parsed.flags.has("m")) {
       try {
-        return parsed.flags.has("s") ? absolute : fs.realpath(absolute);
+        return fs.realpath(absolute);
       } catch {
-        return absolute;
+        return resolvePath(ctx.cwd, path);
       }
     }
     return fs.realpath(absolute);
@@ -47,7 +52,7 @@ export const realpath: Command = (ctx, args) => {
       ctx.io.out(`${typeof base === "string" ? relative(resolveOne(base), resolved) : resolved}\n`);
     } catch (error) {
       if (!parsed.flags.has("q")) {
-        ctx.io.err(`realpath: ${operand}: ${errorText(error)}\n`);
+        ctx.io.err(`realpath: ${quoteName(operand)}: ${errorText(error)}\n`);
       }
       status = 1;
     }

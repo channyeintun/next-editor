@@ -63,6 +63,25 @@ async function run(script: string, setup: (rt: ReturnType<typeof setupRuntime>["
   return { status, out: rt.stdout(), err: rt.stderr(), vfs };
 }
 
+describe("curl -o", () => {
+  // curl opens its output with mode 0666, which the mask of its shell cuts.
+  it("makes its output file under the mask of the shell that runs it", async () => {
+    let server: { close(): void } | undefined;
+    const result = await run(
+      "(umask 077; curl -s -o strict localhost:3000); curl -s -o usual localhost:3000; cat strict usual",
+      (rt) => {
+        server = serve(rt, 3000, () => ok("body\n"));
+      },
+    );
+    server?.close();
+    expect(result.err).toBe("");
+    expect(result.out).toBe("body\nbody\n");
+    expect(
+      ["strict", "usual"].map((name) => result.vfs.stat(`/work/${name}`, true).mode & 0o7777),
+    ).toEqual([0o600, 0o644]);
+  });
+});
+
 describe("curl options", () => {
   it("-m / --max-time ends a request that never answers with exit 28", async () => {
     let server: { close(): void } | undefined;

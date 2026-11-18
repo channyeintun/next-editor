@@ -5,9 +5,10 @@
 // prints as soon as the line is written.
 import { runtime } from "../../../runtime";
 import type { CommandContext } from "../context";
-import { concatBytes } from "../io";
+import { concatBytes, descriptorOf } from "../io";
 import { decodeEscape } from "../lexer";
-import { errorText, isDir } from "./util";
+import { absolutePath, directoryInput, inputChunks, inputError, isDir, isFile } from "./util";
+import type { InputError } from "./util";
 
 const strict = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const encoder = new TextEncoder();
@@ -136,53 +137,60 @@ function splitBlock(bytes: Uint8Array, complete: boolean): string[] {
  * input when there are none). Standard input yields the complete lines of
  * each chunk as it is read, so a command that writes after each batch writes
  * as its input arrives; a consumer that stops iterating stops the reading.
- * A file that cannot be read yields `{ name, error }` (`name: reason`).
+ * A file that cannot be read yields an `InputError`.
  */
 export async function* inputLines(
   ctx: CommandContext,
   files: string[],
-): AsyncGenerator<LineBatch | { name: string; error: string }> {
+): AsyncGenerator<LineBatch | InputError> {
   if (files.length === 0) {
     files = ["-"];
   }
   for (const file of files) {
-    if (file === "-") {
-      // The start of a line whose newline has not arrived yet.
-      let carry: Uint8Array[] = [];
-      for (;;) {
-        const chunk = await ctx.io.readChunk();
-        if (chunk.length === 0) {
-          break;
-        }
-        const end = chunk.lastIndexOf(10);
-        if (end < 0) {
-          carry.push(chunk);
+    // A regular file is read whole; standard input and a device (/dev/tty)
+    // give their lines as they arrive.
+    let data: Uint8Array | null = null;
+    if (file !== "-" && descriptorOf(file) === null) {
+      try {
+        const path = absolutePath(ctx.cwd, file);
+        const stat = runtime().fs.stat(path, true);
+        if (isDir(stat)) {
+          yield directoryInput(file);
           continue;
         }
-        const block = concatBytes([...carry, chunk.subarray(0, end + 1)]);
-        carry = end + 1 < chunk.length ? [chunk.slice(end + 1)] : [];
-        yield { name: file, lines: splitBlock(block, true), noNewline: false };
-      }
-      if (carry.length > 0) {
-        yield { name: file, lines: splitBlock(concatBytes(carry), false), noNewline: true };
-      }
-      continue;
-    }
-    let data: Uint8Array;
-    try {
-      const path = ctx.resolve(file);
-      if (isDir(runtime().fs.stat(path, true))) {
-        yield { name: file, error: `${file}: Is a directory` };
+        if (isFile(stat)) {
+          data = runtime().fs.readFile(path);
+        }
+      } catch (error) {
+        yield inputError(file, error);
         continue;
       }
-      data = runtime().fs.readFile(path);
-    } catch (error) {
-      yield { name: file, error: `${file}: ${errorText(error)}` };
+    }
+    if (data !== null) {
+      if (data.length > 0) {
+        const complete = data[data.length - 1] === 10;
+        yield { name: file, lines: splitBlock(data, complete), noNewline: !complete };
+      }
       continue;
     }
-    if (data.length > 0) {
-      const complete = data[data.length - 1] === 10;
-      yield { name: file, lines: splitBlock(data, complete), noNewline: !complete };
+    // The start of a line whose newline has not arrived yet.
+    let carry: Uint8Array[] = [];
+    for await (const chunk of inputChunks(ctx, file)) {
+      if (!(chunk instanceof Uint8Array)) {
+        yield chunk;
+        break;
+      }
+      const end = chunk.lastIndexOf(10);
+      if (end < 0) {
+        carry.push(chunk);
+        continue;
+      }
+      const block = concatBytes([...carry, chunk.subarray(0, end + 1)]);
+      carry = end + 1 < chunk.length ? [chunk.slice(end + 1)] : [];
+      yield { name: file, lines: splitBlock(block, true), noNewline: false };
+    }
+    if (carry.length > 0) {
+      yield { name: file, lines: splitBlock(concatBytes(carry), false), noNewline: true };
     }
   }
 }

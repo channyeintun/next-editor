@@ -22,6 +22,13 @@ export interface ExpandContext {
   cwd: string;
   /** Directory entries for globbing; null when `path` is not a readable directory. */
   readdir(path: string): { name: string; isDir: boolean }[] | null;
+  /**
+   * True when `path` names something, a symbolic link itself included
+   * (lstat): the directories it goes through need only be searchable.
+   */
+  exists(path: string): boolean;
+  /** True when `path` is a directory, or a link to one (stat). */
+  isDirectory(path: string): boolean;
 }
 
 /** A failed expansion (`${x:?}`, `set -u`, bad arithmetic). The shell prints `message` and fails the command. */
@@ -673,7 +680,11 @@ export async function expandWords(words: Word[], ctx: ExpandContext): Promise<st
         if (!ctx.noglob && hasGlobChars(field.segs)) {
           const matches = glob(field.segs, ctx);
           if (matches.length > 0) {
-            out.push(...matches);
+            // One at a time: a directory may hold more names than a call
+            // may take as arguments.
+            for (const match of matches) {
+              out.push(match);
+            }
             continue;
           }
         }
@@ -717,7 +728,13 @@ function resolveFrom(cwd: string, path: string): string {
   return path === "" ? cwd : joinPath(cwd, path);
 }
 
-/** Pathname expansion of one field; sorted matches, or none. */
+/**
+ * Pathname expansion of one field; sorted matches, or none. Only a
+ * component that holds a pattern lists its directory, which must be
+ * readable. A component without one, and a trailing slash, are tested with
+ * a stat of the path, as bash does: the directories on the way need only be
+ * searchable.
+ */
 export function glob(segs: Seg[], ctx: ExpandContext): string[] {
   const components = splitComponents(segs);
   const absolute = components[0].length === 0 && components.length > 1;
@@ -730,10 +747,7 @@ export function glob(segs: Seg[], ctx: ExpandContext): string[] {
       // A trailing slash (`*/`) keeps directories only.
       if (last) {
         candidates = candidates
-          .filter((candidate) => {
-            const entries = ctx.readdir(resolveFrom(ctx.cwd, candidate));
-            return entries !== null;
-          })
+          .filter((candidate) => ctx.isDirectory(resolveFrom(ctx.cwd, candidate)))
           .map((candidate) => `${candidate}/`);
       }
       continue;
@@ -743,12 +757,8 @@ export function glob(segs: Seg[], ctx: ExpandContext): string[] {
       const name = joinSegs(component);
       for (const candidate of candidates) {
         const path = candidate === "/" ? `/${name}` : joinPath(candidate, name);
-        if (last) {
-          const parent = ctx.readdir(resolveFrom(ctx.cwd, candidate));
-          if (parent?.some((entry) => entry.name === name)) {
-            next.push(path);
-          }
-        } else {
+        // In the middle of a pattern the components after it decide.
+        if (!last || ctx.exists(resolveFrom(ctx.cwd, path))) {
           next.push(path);
         }
       }

@@ -64,6 +64,21 @@ describe("sed keeps bytes", () => {
   });
 });
 
+describe("sed -i", () => {
+  it("edits only a regular file, and stops at what is not one", async () => {
+    // GNU sed: `couldn't edit d: not a regular file`, exit 4, nothing after it edited.
+    const result = await sh(
+      "mkdir d; echo x > f; sed -i s/x/y/ nope d f; echo $?; cat f; ls d; sed -i s/x/y/ f; cat f",
+      {},
+    );
+    expect(result.err).toBe(
+      "sed: can't read nope: No such file or directory\n" +
+        "sed: couldn't edit d: not a regular file\n",
+    );
+    expect(result.out).toBe("4\nx\ny\n");
+  });
+});
+
 describe("sed streams", () => {
   it("writes each line as it arrives", async () => {
     const run = runFilter(sed, ["s/ready/READY/"]);

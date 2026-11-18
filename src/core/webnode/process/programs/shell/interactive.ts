@@ -3,16 +3,27 @@
 // `~/.jsh_history`, and Tab completion of commands and paths.
 import { O_APPEND, O_CREAT, O_WRONLY, X_OK } from "../../../kernel/vfs/types";
 import { HOME_DIR } from "../../platform";
+import { signalExitStatus } from "../../../signals";
 import { runtime } from "../../runtime";
 import { BUILTINS } from "./builtins";
 import { COMMANDS } from "./commands/index";
 import { isDir, resolvePath, tryStat } from "./commands/util";
-import { ExitSignal, InterruptSignal } from "./context";
-import { decode, encode, takeBuffered, writeFd } from "./io";
+import { InterruptSignal } from "./context";
+import {
+  CHUNK_READ,
+  ReadInterrupted,
+  decode,
+  encode,
+  readAsync,
+  unreadTerminal,
+  writeFd,
+} from "./io";
+import { fatalExit, settleSignal } from "./interpreter";
 import type { Shell } from "./interpreter";
+import { announceEndedJobs } from "./jobs";
 import { ShellSyntaxError } from "./lexer";
 import { History, LineEditor } from "./lineEditor";
-import type { EditorHost } from "./lineEditor";
+import type { EditResult, EditorHost } from "./lineEditor";
 import { parse } from "./parser";
 
 /** The prompt: the working directory (home as `~`) in bold blue, then a green or red `❯`. */
@@ -39,8 +50,9 @@ export function isIncomplete(source: string): boolean {
 const NO_SEMICOLON_AFTER =
   /(^|[\s;&|(){}])(do|then|else|elif|if|while|until|in|!|\{|\(|\|\||&&|\||&|;;|;&|;;&|;)$/;
 
+/** Leaves out what records how the command was laid out, not what it means. */
 function withoutLines(_key: string, value: unknown): unknown {
-  return _key === "line" ? undefined : value;
+  return _key === "line" || _key === "source" ? undefined : value;
 }
 
 /**
@@ -233,16 +245,29 @@ export async function runInteractive(shell: Shell): Promise<number> {
   shell.process.history = history.entries;
   const editor = new LineEditor(host, history);
   const stopResize = rt.tty.onResize(() => editor.resize());
-  let endOfInput = false;
-  const onChunk = (chunk: Uint8Array | null): void => {
-    if (chunk === null) {
-      endOfInput = true;
-      if (editor.active) {
+  // One read of the terminal at a time, and only while the line is
+  // unfinished, as bash reads: what is typed after it stays in the terminal.
+  // A read that returns no bytes is an end of file typed at the terminal:
+  // it ended that one read, and is the Ctrl+D key it was typed as (on an
+  // empty line it ends the shell; with text on the line the reading goes
+  // on). A second one in a row is the end of the terminal's input, after
+  // which every read returns at once: the line is given up, as readline
+  // gives one up at its second end of file in a row.
+  const readUntilLineEnds = async (): Promise<void> => {
+    let ended = false;
+    while (editor.active) {
+      // A signal that ends the shell (a hangup) ends its wait for a key.
+      const chunk = await readAsync(0, CHUNK_READ, { signal: shell.process.ending.signal });
+      if (chunk.length > 0) {
+        ended = false;
+        editor.feed(chunk);
+      } else if (ended) {
+        editor.endInput();
+      } else {
+        ended = true;
         editor.feedText("\x04");
       }
-      return;
     }
-    editor.feed(chunk);
   };
   const isTty = rt.tty.isatty(0);
   const rc = `${(shell.get("HOME") ?? HOME_DIR).replace(/\/$/, "")}/.jshrc`;
@@ -250,21 +275,21 @@ export async function runInteractive(shell: Shell): Promise<number> {
     try {
       await shell.runSource(decode(rt.fs.readFile(rc)));
     } catch (error) {
-      if (error instanceof ExitSignal) {
-        stopResize();
-        return error.status;
-      }
+      // `exit`, or a signal that ends the shell: the caller ends it.
       if (!(error instanceof InterruptSignal)) {
+        stopResize();
         throw error;
       }
-      shell.status = 130;
+      shell.status = signalExitStatus("SIGINT");
     } finally {
-      shell.process.pendingSignal = null;
+      settleSignal(shell.process);
     }
   }
   let status = 0;
   try {
     for (;;) {
+      // A job a Ctrl+C cut short has ended too.
+      shell.takeTerminalBack();
       let source = "";
       let prompt = makePrompt(shell.cwd, shell.get("HOME"), shell.status);
       let interrupted = false;
@@ -273,20 +298,21 @@ export async function runInteractive(shell: Shell): Promise<number> {
         if (isTty) {
           rt.tty.setRawMode(0, true);
         }
-        const typeAhead = takeBuffered(0);
         const reading = editor.readLine(prompt);
-        if (typeAhead.length > 0) {
-          editor.feed(typeAhead);
-        }
-        if (endOfInput) {
-          editor.feedText("\x04");
-        } else {
-          rt.fdStream.readStart(0, onChunk);
-        }
-        const result = await reading;
-        rt.fdStream.readStop(0);
-        if (isTty) {
-          rt.tty.setRawMode(0, false);
+        let result: EditResult;
+        try {
+          await readUntilLineEnds();
+          result = await reading;
+        } catch (error) {
+          if (!(error instanceof ReadInterrupted)) {
+            throw error;
+          }
+          // The line is given up with the shell, which ends of the signal.
+          throw fatalExit(shell.process);
+        } finally {
+          if (isTty) {
+            rt.tty.setRawMode(0, false);
+          }
         }
         if (result.type === "eof") {
           eof = true;
@@ -298,6 +324,22 @@ export async function runInteractive(shell: Shell): Promise<number> {
         }
         source = source === "" ? result.text : `${source}\n${result.text}`;
         if (!isIncomplete(source)) {
+          const typedAhead = editor.takeTypeAhead();
+          const interrupt = typedAhead.lastIndexOf("\x03");
+          if (interrupt >= 0) {
+            // A Ctrl+C that came with the line, before its command could
+            // start: the terminal's interrupt key discards what was typed
+            // before it, so the line does not run (bash's prompt shows ^C
+            // and starts over). What was typed after it is kept.
+            host.write("^C\n");
+            unreadTerminal(0, encode(typedAhead.slice(interrupt + 1)));
+            interrupted = true;
+          } else {
+            // Keys typed after the command line are the command's to read,
+            // as bash leaves them in the terminal; the next prompt reads
+            // back whatever it leaves.
+            unreadTerminal(0, encode(typedAhead));
+          }
           break;
         }
         prompt = "> ";
@@ -309,7 +351,7 @@ export async function runInteractive(shell: Shell): Promise<number> {
         continue;
       }
       if (interrupted) {
-        shell.status = 130;
+        shell.status = signalExitStatus("SIGINT");
         continue;
       }
       if (source.trim() === "") {
@@ -322,38 +364,32 @@ export async function runInteractive(shell: Shell): Promise<number> {
         appendHistory(shell, entry);
       }
       try {
+        // A signal that came while no command ran (a Ctrl+C in the moment
+        // before the prompt took the keys) has none to stop: its trap runs,
+        // and nothing of the line typed since is abandoned for it.
+        await shell.checkSignals().catch((error: unknown) => {
+          if (!(error instanceof InterruptSignal)) {
+            throw error;
+          }
+        });
+        settleSignal(shell.process);
         await shell.runSource(source);
       } catch (error) {
-        if (error instanceof ExitSignal) {
-          status = error.status;
-          return status;
-        }
+        // `exit`, or a signal that ends the shell: the caller ends it.
         if (!(error instanceof InterruptSignal)) {
           throw error;
         }
         // Ctrl+C stopped commands the shell ran itself: back to the prompt.
-        shell.status = 130;
+        shell.status = signalExitStatus("SIGINT");
       } finally {
-        shell.process.pendingSignal = null;
+        settleSignal(shell.process);
       }
       // Report background jobs that finished.
-      for (const job of shell.process.jobs) {
-        if (job.status !== null) {
-          host.write(
-            `[${job.id}]+  Done${job.status === 0 ? "" : `(${job.status})`}  ${job.command}\n`,
-          );
-        }
-      }
-      shell.process.jobs = shell.process.jobs.filter((job) => job.status === null);
+      announceEndedJobs(shell.jobList, host.write);
     }
     status = shell.status;
     return status;
   } finally {
     stopResize();
-    try {
-      rt.fdStream.readStop(0);
-    } catch {
-      // Already closed.
-    }
   }
 }

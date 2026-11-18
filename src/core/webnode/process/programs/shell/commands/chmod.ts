@@ -1,7 +1,7 @@
 // `chmod [-R] mode files…`: octal modes and symbolic ones (`u+x`, `go-w`, `a=r`, `+x`).
 import { runtime } from "../../../runtime";
 import type { Command } from "../context";
-import { errorText, isDir, tryStat } from "./util";
+import { absolutePath, errorText, isDir, statOrError } from "./util";
 
 /** Applies an octal or symbolic mode to `current`; null when the mode is invalid. */
 export function applyMode(spec: string, current: number, directory: boolean): number | null {
@@ -73,9 +73,9 @@ export const chmod: Command = (ctx, args) => {
   const fs = runtime().fs;
   let status = 0;
   const visit = (path: string, label: string): void => {
-    const stat = tryStat(path);
-    if (!stat) {
-      ctx.io.err(`chmod: cannot access '${label}': No such file or directory\n`);
+    const stat = statOrError(path);
+    if ("error" in stat) {
+      ctx.io.err(`chmod: cannot access '${label}': ${errorText(stat.error)}\n`);
       status = 1;
       return;
     }
@@ -92,7 +92,15 @@ export const chmod: Command = (ctx, args) => {
       status = 1;
     }
     if (recursive && isDir(stat)) {
-      for (const entry of fs.readdir(path)) {
+      let entries;
+      try {
+        entries = fs.readdir(path);
+      } catch (error) {
+        ctx.io.err(`chmod: cannot read directory '${label}': ${errorText(error)}\n`);
+        status = 1;
+        return;
+      }
+      for (const entry of entries) {
         if (entry.type !== "symlink") {
           visit(`${path}/${entry.name}`, `${label}/${entry.name}`);
         }
@@ -100,7 +108,7 @@ export const chmod: Command = (ctx, args) => {
     }
   };
   for (const file of files) {
-    visit(ctx.resolve(file), file);
+    visit(absolutePath(ctx.cwd, file), file);
   }
   return status;
 };

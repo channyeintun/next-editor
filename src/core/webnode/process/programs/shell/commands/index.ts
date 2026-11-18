@@ -35,6 +35,15 @@ import { tr } from "./tr";
 import { uniq } from "./uniq";
 import { wc } from "./wc";
 import { xargs } from "./xargs";
+import { yes } from "./yes";
+
+/**
+ * The commands here that a shell runs itself, as its builtins, where the
+ * others are programs with a process of their own: what a signal does to
+ * one of these it does to the shell that runs it (SIGPIPE at a write of
+ * `echo` ends the shell, as in bash).
+ */
+export const SHELL_BUILTIN_COMMANDS: ReadonlySet<string> = new Set(["echo", "printf"]);
 
 /** Built-in commands by name. They run inside the shell process. */
 export const COMMANDS: Record<string, Command> = {
@@ -76,4 +85,5 @@ export const COMMANDS: Record<string, Command> = {
   wc,
   whoami,
   xargs,
+  yes,
 };

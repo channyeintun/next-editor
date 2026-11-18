@@ -2,19 +2,25 @@
 // (`cd`, `export`, `set`, `read`, `source`, `trap`, …). The stateless file
 // and text commands live in commands/.
 import { X_OK } from "../../../kernel/vfs/types";
+import { signalExitStatus, signalName } from "../../../signals";
+import { checkChdir } from "../../node/fs/chdir";
 import { runtime } from "../../runtime";
 import { HOME_DIR } from "../../platform";
 import { COMMANDS } from "./commands/index";
+import { decodeText } from "./commands/lines";
 import { evaluateTest } from "./commands/test";
-import { errorText, isDir, tryStat } from "./commands/util";
+import { errorText, isDir, resolvePath, tryStat } from "./commands/util";
 import { ExitSignal, LoopSignal, ReturnSignal } from "./context";
 import { arithmetic } from "./expand";
-import type { CommandIo } from "./io";
-import { decode } from "./io";
+import type { CommandIo, Line } from "./io";
+import { ReadInterrupted, decode, giveBackAllInput } from "./io";
 import type { Builtin, Shell } from "./interpreter";
-import { declareHandledSignals, signalName, signalNumber } from "./signals";
+import { disownJob, forgetEndedJobs, forgetJob, jobLine } from "./jobs";
+import type { Job } from "./jobs";
+import { declareHandledSignals, signalListing, spelledSignalNumber } from "./signals";
 import { shellQuote } from "./quote";
 import { isReservedWord } from "./parser";
+import { formatSymbolicUmask, formatUmask, parseUmask } from "./umask";
 
 function usage(io: CommandIo, name: string, message: string, status = 2): number {
   io.err(`sh: ${name}: ${message}\n`);
@@ -94,13 +100,15 @@ const cd: Builtin = (shell, args, io) => {
   if (args.length > 1) {
     return usage(io, "cd", "too many arguments", 1);
   }
-  const path = shell.resolve(target);
-  const stat = tryStat(path);
-  if (!stat) {
-    return usage(io, "cd", `${target}: No such file or directory`, 1);
-  }
-  if (!isDir(stat)) {
-    return usage(io, "cd", `${target}: Not a directory`, 1);
+  // The logical path, as bash's `cd` takes it: `..` leaves a linked
+  // directory by the way it was entered, and an empty operand is where the
+  // shell is.
+  const path = resolvePath(shell.cwd, target);
+  try {
+    checkChdir(target, path);
+  } catch (error) {
+    // bash prints what chdir(2) said.
+    return usage(io, "cd", `${target}: ${errorText(error)}`, 1);
   }
   shell.chdir(path);
   if (print) {
@@ -139,6 +147,10 @@ function exitStatusArg(
 }
 
 const exit: Builtin = (shell, args, io) => {
+  if (args[0] === undefined && shell.exitTrapStatus !== null) {
+    // In the EXIT trap: the status the shell was ending with.
+    throw new ExitSignal(shell.exitTrapStatus);
+  }
   const status = exitStatusArg(shell, io, "exit", args[0]);
   throw new ExitSignal(status ?? 2);
 };
@@ -613,16 +625,38 @@ const read: Builtin = async (shell, args, io) => {
   if (real === null) {
     return 1;
   }
+  /**
+   * What follows a read that failed: after a signal that interrupted it, the
+   * shell acts on the signal (it ends, or abandons the command line, from
+   * here), and when it goes on (its trap ran) the read is made again, as
+   * bash's `read` goes on waiting.
+   */
+  const afterInterrupt = async (error: unknown): Promise<void> => {
+    if (!(error instanceof ReadInterrupted)) {
+      throw error;
+    }
+    await shell.checkSignals();
+    io.resume(shell.stopSignal());
+  };
+  // What is read stays the bytes it was: a variable holds the stand-ins
+  // decodeText gives for the ones that are not UTF-8, and the commands that
+  // print it write the same bytes back.
   let text = "";
   let eof = false;
   if (nchars === null) {
     for (;;) {
-      const result = await io.readLine(delimiter.charCodeAt(0));
+      let result: Line | null;
+      try {
+        result = await io.readLine(delimiter.charCodeAt(0));
+      } catch (error) {
+        await afterInterrupt(error);
+        continue;
+      }
       if (!result) {
         eof = true;
         break;
       }
-      text += result.line;
+      text += decodeText(result.line);
       if (result.eof) {
         eof = true;
         break;
@@ -636,17 +670,23 @@ const read: Builtin = async (shell, args, io) => {
   } else {
     const bytes: number[] = [];
     for (;;) {
-      const chunk = await io.readChunk(1);
+      let chunk: Uint8Array;
+      try {
+        chunk = await io.readChunk(1);
+      } catch (error) {
+        await afterInterrupt(error);
+        continue;
+      }
       if (chunk.length === 0) {
         eof = true;
         break;
       }
       bytes.push(chunk[0]);
-      if (nchars !== null && decode(Uint8Array.from(bytes)).length >= nchars) {
+      if (nchars !== null && decodeText(Uint8Array.from(bytes)).length >= nchars) {
         break;
       }
     }
-    text = decode(Uint8Array.from(bytes));
+    text = decodeText(Uint8Array.from(bytes));
   }
   if (!raw) {
     text = text.replace(/\\(.)/g, "$1");
@@ -721,8 +761,18 @@ const execBuiltin: Builtin = async (shell, args, io) => {
   if (args[0] === "-a" || args[0] === "-c" || args[0] === "-l") {
     return usage(io, "exec", `${args[0]}: not supported`);
   }
-  const status = await shell.execArgv(args, io.fds, true);
-  throw new ExitSignal(status);
+  const status = await shell.execArgv(args, io.fds, true, {}, true);
+  // As if the program had replaced the shell: the shell ends as it did, of
+  // the signal that ended it too. A built-in program ran in the shell's own
+  // process: the signal that stopped it is the one still pending.
+  const exit = shell.lastExit;
+  const own = BUILTINS[args[0]] !== undefined || COMMANDS[args[0]] !== undefined;
+  if (own || exit !== null) {
+    // The program ran: there is no shell left to run an EXIT trap. One that
+    // could not start leaves the shell to end as a shell does.
+    shell.traps.delete("EXIT");
+  }
+  throw new ExitSignal(status, exit === null ? shell.process.pendingSignal : exit.signal);
 };
 
 const alias: Builtin = (shell, args, io) => {
@@ -895,16 +945,19 @@ const trap: Builtin = (shell, args, io) => {
     return 0;
   }
   if (args[0] === "-l") {
-    io.out(
-      "1) SIGHUP 2) SIGINT 3) SIGQUIT 9) SIGKILL 10) SIGUSR1 12) SIGUSR2 13) SIGPIPE 14) SIGALRM 15) SIGTERM\n",
-    );
+    io.out(signalListing());
     return 0;
   }
-  let action: string | null = args[0];
-  let signals = args.slice(1);
-  if (/^\d+$/.test(action) || (args.length === 1 && action !== "-")) {
+  // `--` ends the options, as in what `trap -p` prints.
+  const operands = args[0] === "--" ? args.slice(1) : args;
+  if (operands.length === 0) {
+    return 0;
+  }
+  let action: string | null = operands[0];
+  let signals = operands.slice(1);
+  if (/^\d+$/.test(action) || (operands.length === 1 && action !== "-")) {
     // `trap SIG…` alone resets.
-    signals = args;
+    signals = operands;
     action = null;
   } else if (action === "-") {
     action = null;
@@ -920,7 +973,7 @@ const trap: Builtin = (shell, args, io) => {
       status = 1;
       continue;
     }
-    if (name !== "EXIT" && signalNumber(name) === undefined) {
+    if (name !== "EXIT" && spelledSignalNumber(name) === undefined) {
       io.err(`sh: trap: ${raw}: invalid signal specification\n`);
       status = 1;
       continue;
@@ -931,75 +984,205 @@ const trap: Builtin = (shell, args, io) => {
       shell.traps.set(name, action);
     }
   }
-  declareHandledSignals(shell.traps.keys());
+  // A signal reaches the process, whose main shell answers it: a trap set in
+  // a subshell does not change what the process handles.
+  declareHandledSignals(shell.main.traps.keys());
   return status;
 };
 
+/**
+ * When a signal reaches the shell while `wait` waits, bash's `wait` returns
+ * 128 + its number and the shell acts on the signal, leaving the job running.
+ */
+function interruptedWait(shell: Shell): number {
+  return signalExitStatus(shell.process.pendingSignal ?? "SIGINT");
+}
+
+/**
+ * `wait` has collected `job`, which has ended: an interactive shell says how
+ * it ended on `wait`'s standard error, as bash's notice (`jobLine`), and it
+ * leaves the list.
+ */
+function collectJob(shell: Shell, io: CommandIo, job: Job): void {
+  if (shell.interactive && shell.root) {
+    io.err(jobLine(shell.jobList.jobs, job));
+  }
+  forgetJob(shell.jobList, job);
+}
+
+/** The job `%N` names, or undefined. */
+function jobOfSpec(shell: Shell, spec: string): Job | undefined {
+  return shell.jobList.jobs.find((job) => job.id === Number(spec.slice(1)));
+}
+
 const wait: Builtin = async (shell, args, io) => {
-  const jobs = shell.process.jobs;
+  const list = shell.jobList;
   if (args.length === 0) {
-    let status = 0;
-    for (const job of jobs) {
-      status = await job.done;
+    // A copy: each job is forgotten as soon as it is waited for. The jobs
+    // a command substitution lists of its shell are not its children.
+    for (const job of list.jobs.filter((listed) => !list.inherited.has(listed))) {
+      if ((await shell.untilStopped(job.done, shell.wakeSignal())) === null) {
+        return interruptedWait(shell);
+      }
+      collectJob(shell, io, job);
     }
-    jobs.length = 0;
-    return status;
+    // Every child has ended: 0, whatever each of them ended with.
+    return 0;
   }
   let status = 0;
   for (const arg of args) {
-    let job = undefined;
-    if (arg.startsWith("%")) {
-      job = jobs.find((candidate) => candidate.id === Number(arg.slice(1)));
-    } else {
-      job = jobs.find((candidate) => candidate.pid === Number(arg));
-    }
-    if (!job) {
-      usage(io, "wait", `pid ${arg} is not a child of this shell`, 127);
-      status = 127;
+    const isSpec = arg.startsWith("%");
+    const job = isSpec
+      ? jobOfSpec(shell, arg)
+      : list.jobs.find((candidate) => candidate.pid === Number(arg));
+    if (job && list.inherited.has(job) && job.status === null) {
+      // Its shell's job, still running: this shell cannot wait for it.
+      status = usage(io, "wait", `pid ${job.pid ?? arg} is not a child of this shell`, 127);
       continue;
     }
-    status = await job.done;
-    jobs.splice(jobs.indexOf(job), 1);
+    if (job) {
+      const ended = await shell.untilStopped(job.done, shell.wakeSignal());
+      if (ended === null) {
+        return interruptedWait(shell);
+      }
+      status = ended;
+      collectJob(shell, io, job);
+      continue;
+    }
+    // A job that ended and was reported since: its status is still known.
+    const known = isSpec ? undefined : list.endedJobs.get(Number(arg));
+    if (known !== undefined) {
+      status = known;
+      continue;
+    }
+    usage(
+      io,
+      "wait",
+      isSpec ? `${arg}: no such job` : `pid ${arg} is not a child of this shell`,
+      127,
+    );
+    status = 127;
   }
   return status;
 };
 
-const kill: Builtin = (shell, args, io) => {
-  let signal = "SIGTERM";
-  let i = 0;
-  if (args[0] === "-l" || args[0] === "-L") {
-    if (args[1] !== undefined) {
-      const n = Number(args[1]);
-      const name = signalName(n > 128 ? n - 128 : n);
-      if (!name) {
-        return usage(io, "kill", `${args[1]}: invalid signal specification`, 1);
-      }
-      io.out(`${name.replace(/^SIG/, "")}\n`);
-      return 0;
-    }
-    io.out(
-      "HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2 PIPE ALRM TERM CHLD CONT STOP TSTP WINCH\n",
-    );
+/**
+ * What `kill` sends for a signal given as a number or a name: the signal's
+ * name, `"0"` for signal 0, which only asks whether the target is there, or
+ * undefined for one there is not.
+ */
+function signalOfSpec(spec: string): string | undefined {
+  const number = /^\d+$/.test(spec) ? Number(spec) : spelledSignalNumber(spec);
+  if (number === undefined) {
+    return undefined;
+  }
+  return number === 0 ? "0" : signalName(number);
+}
+
+/**
+ * `kill -l [sigspec …]`: every signal, or for each operand the name of a
+ * number (or of the exit status of a process that signal ended) and the
+ * number of a name.
+ */
+function listSignals(io: CommandIo, operands: string[]): number {
+  if (operands.length === 0) {
+    io.out(signalListing());
     return 0;
   }
-  if (args[0] === "-s" || args[0] === "-n") {
-    const value = args[1] ?? "";
-    const number = /^\d+$/.test(value) ? Number(value) : signalNumber(value);
-    if (number === undefined) {
-      return usage(io, "kill", `${value}: invalid signal specification`, 1);
+  let status = 0;
+  for (const operand of operands) {
+    let answer: string | undefined;
+    if (/^\d+$/.test(operand)) {
+      const number = Number(operand);
+      answer = signalName(number > 128 ? number - 128 : number)?.replace(/^SIG/, "");
+    } else {
+      answer = spelledSignalNumber(operand)?.toString();
     }
-    signal = number === 0 ? "0" : (signalName(number) ?? "SIGTERM");
-    i = 2;
-  } else if (args[0]?.startsWith("-") && args[0] !== "--") {
-    const value = args[0].slice(1);
-    const number = /^\d+$/.test(value) ? Number(value) : signalNumber(value);
-    if (number === undefined) {
-      return usage(io, "kill", `${value}: invalid signal specification`, 1);
+    if (answer === undefined) {
+      status = usage(io, "kill", `${operand}: invalid signal specification`, 1);
+    } else {
+      io.out(`${answer}\n`);
     }
-    signal = number === 0 ? "0" : (signalName(number) ?? "SIGTERM");
-    i = 1;
-  } else if (args[0] === "--") {
-    i = 1;
+  }
+  return status;
+}
+
+/**
+ * Sends `signal` (`"0"` only asks whether the target is there) to what one
+ * operand of `kill` names: a job (`%N`), a pid, the shell's own process
+ * group (0) or a process group (a negative number). Throws what kill(2)
+ * fails with.
+ */
+function sendSignal(shell: Shell, target: number, job: Job | undefined, signal: string): void {
+  const probe = signal === "0";
+  const named = job !== undefined;
+  // A job that runs in this process, named as a job or by the pid it was
+  // given, whichever shell of the process started it (`(kill $!)`).
+  const inProcess =
+    job ??
+    shell.jobList.jobs.find((listed) => listed.pid === target) ??
+    Array.from(shell.process.ownJobs).find((own) => own.pid === target);
+  if (inProcess?.kill) {
+    if (inProcess.status !== null) {
+      throw new Error("No such process");
+    }
+    if (!probe) {
+      inProcess.kill(signal, named);
+    }
+    return;
+  }
+  // A job named as one is its whole process group, where it leads one.
+  const pid = job?.ownGroup ? -target : target;
+  if (probe) {
+    runtime().processes.kill(pid, signal);
+    return;
+  }
+  // The signal may end this shell at once (`kill -9 $$`): what it read and
+  // did not use goes back first, for the next reader.
+  giveBackAllInput();
+  // A signal the shell sends itself, alone or with its group, is delivered
+  // here and now, as kill(2) delivers one to its caller before it returns:
+  // the trap runs, or the shell ends, before the next command. The kernel
+  // sends the others of the group theirs.
+  const self = runtime().pid;
+  const own = (pid === self || pid === 0) && shell.raise(signal, pid === 0);
+  if (pid !== self || !own) {
+    runtime().processes.kill(pid, signal);
+  }
+}
+
+const kill: Builtin = (shell, args, io) => {
+  if (args[0] === "-l" || args[0] === "-L") {
+    return listSignals(io, args.slice(1));
+  }
+  let signal = "SIGTERM";
+  let sawSignal = false;
+  let i = 0;
+  // Options, as bash reads them: `-s sigspec`, `-n signum`, one `-sigspec`,
+  // and `--`, after which every word is a pid or a job, a negative pid too.
+  for (; i < args.length; i++) {
+    const arg = args[i];
+    let spec: string;
+    if (arg === "--") {
+      i++;
+      break;
+    }
+    if (arg === "-s" || arg === "-n") {
+      if (args[i + 1] === undefined) {
+        return usage(io, "kill", `${arg}: option requires an argument`, 1);
+      }
+      spec = args[++i];
+    } else if (arg.startsWith("-") && !sawSignal) {
+      spec = arg.slice(1);
+    } else {
+      break;
+    }
+    const named = signalOfSpec(spec);
+    if (named === undefined) {
+      return usage(io, "kill", `${spec}: invalid signal specification`, 1);
+    }
+    signal = named;
+    sawSignal = true;
   }
   const targets = args.slice(i);
   if (targets.length === 0) {
@@ -1012,54 +1195,37 @@ const kill: Builtin = (shell, args, io) => {
   }
   let status = 0;
   for (const target of targets) {
-    let pid: number | null = null;
+    let pid: number;
+    let job: Job | undefined;
     if (target.startsWith("%")) {
-      pid = shell.process.jobs.find((job) => job.id === Number(target.slice(1)))?.pid ?? null;
-      if (pid === null) {
-        usage(io, "kill", `${target}: no such job`, 1);
-        status = 1;
+      job = jobOfSpec(shell, target);
+      if (job === undefined || job.pid === null) {
+        status = usage(io, "kill", `${target}: no such job`, 1);
         continue;
       }
+      pid = job.pid;
     } else if (/^-?\d+$/.test(target)) {
       pid = Number(target);
     } else {
-      usage(io, "kill", `${target}: arguments must be process or job IDs`, 1);
-      status = 1;
-      continue;
-    }
-    const inProcess = shell.process.jobs.find(
-      (job) => job.pid === pid && job.kill && job.status === null,
-    );
-    if (inProcess?.kill && signal !== "0") {
-      inProcess.kill(signal);
+      status = usage(io, "kill", `${target}: arguments must be process or job IDs`, 1);
       continue;
     }
     try {
-      if (signal !== "0") {
-        runtime().processes.kill(pid, signal);
-      } else if (!shell.process.jobs.some((job) => job.pid === pid && job.status === null)) {
-        throw new Error("No such process");
-      }
+      sendSignal(shell, pid, job, signal);
     } catch (error) {
-      usage(
-        io,
-        "kill",
-        `(${pid}) - ${errorText(error) === "ESRCH" ? "No such process" : errorText(error)}`,
-        1,
-      );
-      status = 1;
+      const reason = errorText(error) === "ESRCH" ? "No such process" : errorText(error);
+      status = usage(io, "kill", `(${pid}) - ${reason}`, 1);
     }
   }
   return status;
 };
 
 const jobs: Builtin = (shell, _args, io) => {
-  for (const job of shell.process.jobs) {
-    const state =
-      job.status === null ? "Running" : `Done${job.status === 0 ? "" : `(${job.status})`}`;
-    io.out(`[${job.id}]  ${state.padEnd(22)} ${job.command}\n`);
+  for (const job of shell.jobList.jobs) {
+    io.out(jobLine(shell.jobList.jobs, job));
   }
-  shell.process.jobs = shell.process.jobs.filter((job) => job.status === null);
+  // The ended ones have been reported.
+  forgetEndedJobs(shell.jobList);
   return 0;
 };
 
@@ -1188,11 +1354,50 @@ const bracket: Builtin = (shell, args, io) => {
   }
 };
 
-const umask: Builtin = (_shell, args, io) => {
-  if (args.length === 0) {
-    io.out("0022\n");
-  } else if (args[0] === "-S") {
-    io.out("u=rwx,g=rx,o=rx\n");
+/**
+ * `umask [-p] [-S] [mode]`, as bash: with no mode it prints the shell's mask
+ * (`-S` as the permissions it allows, `-p` as a command that sets it); with
+ * one it sets the mask, from an octal number or a symbolic mode.
+ */
+const umask: Builtin = (shell, args, io) => {
+  let symbolic = false;
+  let reusable = false;
+  let at = 0;
+  for (; at < args.length; at++) {
+    const arg = args[at];
+    if (arg === "--") {
+      at++;
+      break;
+    }
+    if (arg.length < 2 || !arg.startsWith("-")) {
+      break;
+    }
+    for (const flag of arg.slice(1)) {
+      if (flag === "S") {
+        symbolic = true;
+      } else if (flag === "p") {
+        reusable = true;
+      } else {
+        usage(io, "umask", `-${flag}: invalid option`);
+        io.err("umask: usage: umask [-p] [-S] [mode]\n");
+        return 2;
+      }
+    }
+  }
+  const operand = args[at];
+  if (operand === undefined) {
+    const prefix = reusable ? (symbolic ? "umask -S " : "umask ") : "";
+    const shown = symbolic ? formatSymbolicUmask(shell.umask) : formatUmask(shell.umask);
+    io.out(`${prefix}${shown}\n`);
+    return 0;
+  }
+  const parsed = parseUmask(operand, shell.umask);
+  if ("error" in parsed) {
+    return usage(io, "umask", parsed.error, 1);
+  }
+  shell.setUmask(parsed.mask);
+  if (symbolic) {
+    io.out(`${formatSymbolicUmask(parsed.mask)}\n`);
   }
   return 0;
 };
@@ -1246,9 +1451,71 @@ const times: Builtin = (_shell, _args, io) => {
   return 0;
 };
 
-const disown: Builtin = (shell) => {
-  shell.process.jobs = [];
-  return 0;
+/**
+ * `disown [-h] [-ar] [jobspec ... | pid ...]`, as bash's: takes the jobs
+ * named, or the current job, off the list (`-h` keeps them listed and only
+ * spares them the shell's hangup). With no operand, `-a` names every job and
+ * `-r` every running one. A job that has ended is no longer there to name,
+ * as a non-interactive bash has already cleaned it up.
+ */
+const disown: Builtin = (shell, args, io) => {
+  let all = false;
+  let runningOnly = false;
+  let keepListed = false;
+  let at = 0;
+  for (; at < args.length; at++) {
+    const arg = args[at];
+    if (arg === "--") {
+      at++;
+      break;
+    }
+    if (arg.length < 2 || !arg.startsWith("-")) {
+      break;
+    }
+    for (const flag of arg.slice(1)) {
+      if (flag === "a") {
+        all = true;
+      } else if (flag === "r") {
+        runningOnly = true;
+      } else if (flag === "h") {
+        keepListed = true;
+      } else {
+        usage(io, "disown", `-${flag}: invalid option`);
+        io.err("disown: usage: disown [-h] [-ar] [jobspec ...]\n");
+        return 2;
+      }
+    }
+  }
+  const list = shell.jobList;
+  const running = list.jobs.filter((job) => job.status === null);
+  const operands = args.slice(at);
+  const named: Job[] = [];
+  let status = 0;
+  if (operands.length === 0) {
+    if (all || runningOnly) {
+      named.push(...(runningOnly ? running : list.jobs));
+    } else if (running.length > 0) {
+      named.push(running[running.length - 1]);
+    } else {
+      return usage(io, "disown", "current: no such job", 1);
+    }
+  }
+  for (const operand of operands) {
+    const job = operand.startsWith("%")
+      ? jobOfSpec(shell, operand)
+      : /^\d+$/.test(operand)
+        ? list.jobs.find((candidate) => candidate.pid === Number(operand))
+        : undefined;
+    if (job === undefined || job.status !== null) {
+      status = usage(io, "disown", `${operand}: no such job`, 1);
+      continue;
+    }
+    named.push(job);
+  }
+  for (const job of named) {
+    disownJob(list, job, keepListed);
+  }
+  return status;
 };
 
 const notSupported =

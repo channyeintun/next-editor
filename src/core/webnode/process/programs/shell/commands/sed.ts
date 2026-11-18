@@ -1,12 +1,12 @@
 // `sed [-n] [-E|-r] [-u] [-i[suffix]] [-e script]… [-f file] [script] [files…]`.
 // Commands: s y p d q Q = a i c n, with line, `$` and /regex/ addresses,
 // ranges and `!`. Blocks (`{…}`) and hold space are not supported.
-import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../../kernel/vfs/types";
-import { runtime } from "../../../runtime";
+import { errnoCodeOf } from "../../../../errors";
+import { O_CREAT, O_EXCL, O_WRONLY, R_OK } from "../../../../kernel/vfs/types";
 import type { Command } from "../context";
 import { decodeText, encodeText, inputLines, writeText } from "./lines";
 import { posixToJs } from "./regex";
-import { errorText } from "./util";
+import { absolutePath, errorText, isFile } from "./util";
 
 type Address = { type: "line"; n: number } | { type: "last" } | { type: "regex"; re: RegExp };
 
@@ -537,6 +537,16 @@ export function runSed(commands: SedCommand[], text: string, quiet: boolean): st
   return out + feeder.end();
 }
 
+/** What mkstemp puts in place of `XXXXXX`, as in GNU sed's `sedXXXXXX`. */
+function tempLetters(): string {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let text = "";
+  for (let i = 0; i < 6; i++) {
+    text += letters[Math.floor(Math.random() * letters.length)];
+  }
+  return text;
+}
+
 /** `sed`. */
 export const sed: Command = async (ctx, args) => {
   let quiet = false;
@@ -546,7 +556,7 @@ export const sed: Command = async (ctx, args) => {
   const operands: string[] = [];
   const readScriptFile = (file: string): boolean => {
     try {
-      scripts.push(decodeText(runtime().fs.readFile(ctx.resolve(file))));
+      scripts.push(decodeText(ctx.fs.readFile(absolutePath(ctx.cwd, file))));
       return true;
     } catch (error) {
       ctx.io.err(`sed: couldn't open file ${file}: ${errorText(error)}\n`);
@@ -638,25 +648,78 @@ export const sed: Command = async (ctx, args) => {
     return 1;
   }
   if (inPlace !== null) {
-    const fs = runtime().fs;
+    const fs = ctx.fs;
     if (operands.length === 0) {
       ctx.io.err("sed: no input files\n");
       return 1;
     }
     let status = 0;
     for (const file of operands) {
-      const path = ctx.resolve(file);
+      const path = absolutePath(ctx.cwd, file);
+      let data: Uint8Array;
+      let mode: number;
+      let regular = true;
       try {
-        const data = fs.readFile(path);
-        if (inPlace !== "") {
-          // The backup is the file's own bytes, untouched.
-          fs.copyFile(path, `${path}${inPlace}`, 0);
+        const stat = fs.stat(path, true);
+        mode = stat.mode & 0o7777;
+        regular = isFile(stat);
+        if (regular) {
+          data = fs.readFile(path);
+        } else {
+          // GNU sed opens the file before it looks at what it is.
+          fs.access(path, R_OK);
+          data = new Uint8Array(0);
         }
-        const output = runSed(parse(), decodeText(data), quiet);
-        fs.writeFile(path, encodeText(output), O_WRONLY | O_CREAT | O_TRUNC, 0o666);
       } catch (error) {
         ctx.io.err(`sed: can't read ${file}: ${errorText(error)}\n`);
         status = 2;
+        continue;
+      }
+      if (!regular) {
+        // Only a regular file can be replaced by a new one; GNU sed stops here.
+        ctx.io.err(`sed: couldn't edit ${file}: not a regular file\n`);
+        return 4;
+      }
+      const output = encodeText(runSed(parse(), decodeText(data), quiet));
+      // As GNU sed: the result goes to a new file beside the original, which
+      // takes the original's mode and is renamed over it (the original is
+      // renamed to the backup first). So it is the directory that must be
+      // writable, not the file. A failure here stops sed (exit 4).
+      const slash = file.lastIndexOf("/");
+      const shownDir = slash < 0 ? "." : file.slice(0, slash);
+      const dir = path.slice(0, path.lastIndexOf("/"));
+      let name = "";
+      for (let attempt = 0; ; attempt++) {
+        name = `sed${tempLetters()}`;
+        try {
+          fs.writeFile(`${dir}/${name}`, output, O_WRONLY | O_CREAT | O_EXCL, 0o600);
+          break;
+        } catch (error) {
+          if (errnoCodeOf(error) !== "EEXIST" || attempt === 99) {
+            ctx.io.err(
+              `sed: couldn't open temporary file ${shownDir}/${name}: ${errorText(error)}\n`,
+            );
+            return 4;
+          }
+        }
+      }
+      const temp = `${dir}/${name}`;
+      let renaming = inPlace === "" ? `${shownDir}/${name}` : file;
+      try {
+        fs.chmod(temp, mode, true);
+        if (inPlace !== "") {
+          fs.rename(path, `${path}${inPlace}`);
+          renaming = `${shownDir}/${name}`;
+        }
+        fs.rename(temp, path);
+      } catch (error) {
+        try {
+          fs.unlink(temp);
+        } catch {
+          // Already gone.
+        }
+        ctx.io.err(`sed: cannot rename ${renaming}: ${errorText(error)}\n`);
+        return 4;
       }
     }
     return status;
@@ -667,7 +730,7 @@ export const sed: Command = async (ctx, args) => {
   const feeder = new SedFeeder(commands, quiet);
   for await (const batch of inputLines(ctx, operands)) {
     if ("error" in batch) {
-      ctx.io.err(`sed: can't read ${batch.error}\n`);
+      ctx.io.err(`sed: can't read ${batch.name}: ${batch.error}\n`);
       status = 2;
       continue;
     }

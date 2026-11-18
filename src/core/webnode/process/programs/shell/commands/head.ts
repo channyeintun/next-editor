@@ -19,6 +19,15 @@ function parseCount(
   return { count: Number(match[2]) * scale, allBut: match[1] === "-" };
 }
 
+/** What GNU head reads at a time (BUFSIZ). */
+const READ_SIZE = 8192;
+
+/**
+ * The head of standard input, read as GNU head reads it, which decides what
+ * the next reader of the input gets: `-c N` reads no more than N bytes;
+ * `-n N` reads 8 KiB at a time and gives back what it read past the last
+ * line on a file (GNU seeks back) but not on a pipe, where it is lost.
+ */
 async function headOfStdin(
   ctx: CommandContext,
   lines: number | null,
@@ -31,15 +40,18 @@ async function headOfStdin(
   const collected: number[] = [];
   let newlines = 0;
   for (;;) {
-    const chunk = await ctx.io.readChunk();
+    const size = bytes === null ? READ_SIZE : Math.min(READ_SIZE, bytes - collected.length);
+    const chunk = await ctx.io.readChunk(size);
     if (chunk.length === 0) {
       break;
     }
+    let used = 0;
     for (const byte of chunk) {
       if (bytes !== null && collected.length >= bytes) {
         break;
       }
       collected.push(byte);
+      used++;
       if (byte === 10) {
         newlines++;
         if (lines !== null && newlines >= lines) {
@@ -48,6 +60,7 @@ async function headOfStdin(
       }
     }
     if ((bytes !== null && collected.length >= bytes) || (lines !== null && newlines >= lines)) {
+      ctx.io.unreadInput(chunk.subarray(used));
       break;
     }
   }
@@ -89,9 +102,7 @@ export const head: Command = async (ctx, args) => {
     }
     for await (const input of inputs(ctx, [file])) {
       if ("error" in input) {
-        ctx.io.err(
-          `head: cannot open '${file}' for reading: ${input.error.replace(`${file}: `, "")}\n`,
-        );
+        ctx.io.err(`head: cannot open '${file}' for reading: ${input.error}\n`);
         status = 1;
         continue;
       }

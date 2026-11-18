@@ -99,6 +99,8 @@ function describe(token: Token): string {
 class Parser {
   readonly lexer: Lexer;
   private lookahead: Token | null = null;
+  /** Where `lookahead` starts in the source. */
+  private lookaheadStart = 0;
 
   constructor(lexer: Lexer) {
     this.lexer = lexer;
@@ -107,6 +109,7 @@ class Parser {
   peek(): Token {
     if (!this.lookahead) {
       this.lookahead = this.lexer.next();
+      this.lookaheadStart = this.lexer.tokenStart;
     }
     return this.lookahead;
   }
@@ -180,18 +183,22 @@ class Parser {
     const items: ListItem[] = [];
     this.skipNewlines();
     while (!this.atListEnd(this.peek(), stops)) {
+      const start = this.lookaheadStart;
       const andOr = this.parseAndOr();
-      let background = false;
       const sep = this.peek();
       if (this.isOp(sep, "&")) {
-        background = true;
+        // A job is shown (`jobs`) as it was written, as bash does.
+        const source = this.lexer.source.slice(start, this.lookaheadStart).trim();
         this.take();
-      } else if (this.isOp(sep, ";") || this.isOp(sep, "\n")) {
-        this.take();
-      } else if (!this.atListEnd(sep, stops)) {
-        this.fail(sep);
+        items.push({ andOr, background: true, source });
+      } else {
+        if (this.isOp(sep, ";") || this.isOp(sep, "\n")) {
+          this.take();
+        } else if (!this.atListEnd(sep, stops)) {
+          this.fail(sep);
+        }
+        items.push({ andOr, background: false });
       }
-      items.push({ andOr, background });
       this.skipNewlines();
     }
     return { items };

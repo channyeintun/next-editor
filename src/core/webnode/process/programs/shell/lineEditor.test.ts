@@ -112,6 +112,23 @@ describe("LineEditor", () => {
     expect((await type("ab\x01\x04\r")).result).toEqual({ type: "line", text: "b" });
   });
 
+  it("gives up a line with text on it when its input ends", async () => {
+    const { instance, output } = editor();
+    const promise = instance.readLine("$ ");
+    instance.feedText("half a line");
+    // Ctrl+D at the end of a line with text does nothing.
+    instance.feedText("\x04");
+    expect(instance.active).toBe(true);
+    instance.endInput();
+    expect(await promise).toEqual({ type: "eof" });
+    expect(output().endsWith("\n")).toBe(true);
+    // The next line starts empty, and ending no read does nothing.
+    instance.endInput();
+    const next = instance.readLine("$ ");
+    instance.feedText("\r");
+    expect(await next).toEqual({ type: "line", text: "" });
+  });
+
   it("walks history with up and down, keeping the draft", async () => {
     const history = ["first", "second"];
     expect((await type("\x1b[A\r", { history })).result).toEqual({ type: "line", text: "second" });
@@ -157,10 +174,51 @@ describe("LineEditor", () => {
     expect(await second).toEqual({ type: "line", text: "echo c" });
   });
 
+  it("goes on pasting on the next line when the paste's end comes in a later chunk", async () => {
+    const { instance } = editor();
+    const first = instance.readLine("$ ");
+    instance.feedText("\x1b[200~echo a\necho\tb");
+    expect(await first).toEqual({ type: "line", text: "echo a" });
+    const second = instance.readLine("$ ");
+    // Still a paste: the tab is text, not a request to complete.
+    expect(instance.line).toBe("echo\tb");
+    instance.feedText("\x03c\x1b[201~\r");
+    expect(await second).toEqual({ type: "line", text: "echo\tbc" });
+  });
+
+  it("hands over the rest of an unfinished paste as the keys it was, without a paste marker", async () => {
+    const { instance } = editor();
+    const first = instance.readLine("$ ");
+    instance.feedText("\x1b[200~cat\nline one\n");
+    expect(await first).toEqual({ type: "line", text: "cat" });
+    // For whoever reads the terminal next: a command would print a marker.
+    expect(instance.takeTypeAhead()).toBe("line one\n");
+    // The paste is over for the editor: the keys that follow are keys again,
+    // and the paste's end, when it comes, is ignored.
+    const second = instance.readLine("$ ");
+    instance.feedText("ls\x03");
+    expect(await second).toEqual({ type: "interrupt" });
+    const third = instance.readLine("$ ");
+    instance.feedText("\x1b[201~ok\r");
+    expect(await third).toEqual({ type: "line", text: "ok" });
+  });
+
   it("queues keys typed while no line is being read", async () => {
     const { instance } = editor();
     instance.feedText("early\r");
     expect(await instance.readLine("$ ")).toEqual({ type: "line", text: "early" });
+  });
+
+  it("hands over the keys typed after a line, which the next line then starts without", async () => {
+    const { instance } = editor();
+    const first = instance.readLine("$ ");
+    instance.feedText("cat\rline one\rmo");
+    expect(await first).toEqual({ type: "line", text: "cat" });
+    expect(instance.takeTypeAhead()).toBe("line one\rmo");
+    expect(instance.takeTypeAhead()).toBe("");
+    const second = instance.readLine("$ ");
+    instance.feedText("ls\r");
+    expect(await second).toEqual({ type: "line", text: "ls" });
   });
 
   it("redraws simple edits in place", async () => {
@@ -209,7 +267,7 @@ describe("LineEditor", () => {
   });
 });
 
-describe("charWidth (shell-11)", () => {
+describe("charWidth", () => {
   it("matches xterm's default (Unicode 6) widths, which the shell terminal keeps", () => {
     // xterm gives emoji outside its wide ranges one cell, so the cursor does too.
     for (const text of ["🚀", "😀", "🤖", "✅", "❌", "🪄", "a"]) {

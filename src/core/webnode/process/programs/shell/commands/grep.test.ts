@@ -58,7 +58,11 @@ describe("grep", () => {
     };
     const excluded = await sh("grep -r alpha . --exclude-dir=dist --exclude-dir=s", { files });
     expect(excluded.status).toBe(0);
-    expect(excluded.out).toBe("a.txt:alpha\n");
+    // An operand `.` is part of each name (BSD and GNU grep); with no
+    // operand GNU grep names the entries of the working directory bare.
+    expect(excluded.out).toBe("./a.txt:alpha\n");
+    const bare = await sh("grep -r alpha --exclude-dir=dist --exclude-dir=s", { files });
+    expect(bare.out).toBe("a.txt:alpha\n");
     expect(
       (
         await sh("grep -rl hit s --include='*.js' --include='*.ts' --exclude-dir node_modules", {

@@ -5,7 +5,7 @@ import type { StatData } from "../../../../kernel/vfs/types";
 import { runtime } from "../../../runtime";
 import type { Command, CommandContext } from "../context";
 import { matchPattern } from "../pattern";
-import { baseName, errorText, isDir, isFile, isLink, tryStat } from "./util";
+import { absolutePath, baseName, errorText, isDir, isFile, isLink, tryStat } from "./util";
 
 type Expr =
   | { type: "and" | "or"; left: Expr; right: Expr }
@@ -170,7 +170,7 @@ class FindParser {
         };
       case "-newer": {
         const reference = this.value(token);
-        const stat = tryStat(this.ctx.resolve(reference));
+        const stat = tryStat(absolutePath(this.ctx.cwd, reference));
         if (!stat) {
           throw new Error(`'${reference}': No such file or directory`);
         }
@@ -363,7 +363,7 @@ export const find: Command = async (ctx, args) => {
     }
   };
   for (const path of paths) {
-    await visit(ctx.resolve(path), path, 0);
+    await visit(absolutePath(ctx.cwd, path), path, 0);
   }
   if (parser.failed) {
     status = 1;

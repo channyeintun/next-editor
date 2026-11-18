@@ -1,9 +1,9 @@
 // `sort [-rnufVbhgs] [-t sep] [-k N[,M][opts]]… [-o file] [files…]`.
-import { O_CREAT, O_TRUNC, O_WRONLY } from "../../../../kernel/vfs/types";
-import { runtime } from "../../../runtime";
+import { O_CREAT, O_TRUNC, O_WRONLY, R_OK } from "../../../../kernel/vfs/types";
 import type { Command } from "../context";
+import { descriptorOf } from "../io";
 import { encodeText, inputLines, writeText } from "./lines";
-import { options } from "./util";
+import { absolutePath, errorText, options, quoteName } from "./util";
 
 /** One `-k` key: fields `start` to `end` and its ordering letters (n r f b V h g). */
 interface SortKey {
@@ -137,15 +137,44 @@ export const sort: Command = async (ctx, args) => {
   }
   const whole =
     keys.length === 1 && keys[0].start === 1 && keys[0].end === null && separator === null;
-  let failed = false;
+  // As GNU sort: every input must be readable and the output file must open
+  // before anything is read, and any failure ends it (exit 2) with no output.
+  const fs = ctx.fs;
+  for (const file of parsed.operands) {
+    // Standard input, or another of sort's own fds (/dev/stdin), is read when its turn comes.
+    if (file === "-" || descriptorOf(file) !== null) {
+      continue;
+    }
+    try {
+      fs.access(absolutePath(ctx.cwd, file), R_OK);
+    } catch (error) {
+      ctx.io.err(`sort: cannot read: ${quoteName(file)}: ${errorText(error)}\n`);
+      return 2;
+    }
+  }
+  const outputFile = parsed.flags.get("o");
+  let outputPath: string | null = null;
+  if (typeof outputFile === "string") {
+    outputPath = absolutePath(ctx.cwd, outputFile);
+    try {
+      // Not truncated yet: the output file may be one of the inputs.
+      fs.close(fs.open(outputPath, O_WRONLY | O_CREAT, 0o666));
+    } catch (error) {
+      ctx.io.err(`sort: open failed: ${quoteName(outputFile)}: ${errorText(error)}\n`);
+      return 2;
+    }
+  }
   const lines: string[] = [];
   for await (const batch of inputLines(ctx, parsed.operands)) {
     if ("error" in batch) {
-      ctx.io.err(`sort: ${batch.error}\n`);
-      failed = true;
-      continue;
+      ctx.io.err(`sort: read failed: ${quoteName(batch.name)}: ${batch.error}\n`);
+      return 2;
     }
-    lines.push(...batch.lines);
+    // One at a time: a file is one batch of all its lines, more than a call
+    // can take as arguments.
+    for (const line of batch.lines) {
+      lines.push(line);
+    }
   }
   const compareKeys = (a: string, b: string): number => {
     for (const key of keys) {
@@ -174,16 +203,10 @@ export const sort: Command = async (ctx, args) => {
     out = lines.filter((line, index) => index === 0 || compareKeys(lines[index - 1], line) !== 0);
   }
   const text = out.map((line) => `${line}\n`).join("");
-  const outputFile = parsed.flags.get("o");
-  if (typeof outputFile === "string") {
-    runtime().fs.writeFile(
-      ctx.resolve(outputFile),
-      encodeText(text),
-      O_WRONLY | O_CREAT | O_TRUNC,
-      0o666,
-    );
-    return failed ? 2 : 0;
+  if (outputPath !== null) {
+    fs.writeFile(outputPath, encodeText(text), O_WRONLY | O_CREAT | O_TRUNC, 0o666);
+    return 0;
   }
   writeText(ctx, text);
-  return failed ? 2 : 0;
+  return 0;
 };

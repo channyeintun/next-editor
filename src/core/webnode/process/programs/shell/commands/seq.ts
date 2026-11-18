@@ -42,7 +42,7 @@ export const seq: Command = (ctx, args) => {
     }
   }
   if (equalWidth) {
-    const width = Math.max(...values.map((v) => v.length));
+    const width = values.reduce((most, value) => Math.max(most, value.length), 0);
     for (let i = 0; i < values.length; i++) {
       const negative = values[i].startsWith("-");
       values[i] =

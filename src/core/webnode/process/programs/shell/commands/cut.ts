@@ -1,7 +1,7 @@
 // `cut -f list [-d delim] [-s]` and `cut -c list` / `-b list`.
 import type { Command } from "../context";
 import { inputLines, writeText } from "./lines";
-import { options } from "./util";
+import { options, quoteName } from "./util";
 
 /** Parses a cut list (`1,3-5,-2,4-`) into a membership test. */
 export function parseList(spec: string): ((n: number) => boolean) | null {
@@ -63,7 +63,7 @@ export const cut: Command = async (ctx, args) => {
   let failed = false;
   for await (const batch of inputLines(ctx, parsed.operands)) {
     if ("error" in batch) {
-      ctx.io.err(`cut: ${batch.error}\n`);
+      ctx.io.err(`cut: ${quoteName(batch.name)}: ${batch.error}\n`);
       failed = true;
       continue;
     }

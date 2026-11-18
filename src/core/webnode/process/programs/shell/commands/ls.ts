@@ -1,11 +1,21 @@
 // `ls` with -l -a -A -1 -R -h -d -r -t -S -F; columns and colours only when
 // standard output is a terminal.
-import type { StatData } from "../../../../kernel/vfs/types";
-import { S_IFMT } from "../../../../kernel/vfs/types";
+import { errnoCodeOf } from "../../../../errors";
+import type { DirEntryType, StatData } from "../../../../kernel/vfs/types";
+import { ROOT_ID, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG } from "../../../../kernel/vfs/types";
 import { USERNAME } from "../../../platform";
 import { runtime } from "../../../runtime";
 import type { Command, CommandContext } from "../context";
-import { errorText, isDir, isLink, options, resolvePath } from "./util";
+import { absolutePath, errorText, isDir, isLink, options } from "./util";
+
+/**
+ * The name `ls -l` prints for a user or a group: root's for what the kernel
+ * gave to root (`/dev` and its devices), the one user's for everything else.
+ * Both names are four letters long, so the columns need no padding.
+ */
+function ownerName(id: number): string {
+  return id === ROOT_ID ? "root" : USERNAME;
+}
 
 interface Entry {
   name: string;
@@ -13,11 +23,48 @@ interface Entry {
   stat: StatData;
   /** The target's stat for a symlink (null when dangling). */
   target: StatData | null;
+  /**
+   * Set when the entry could be listed but not looked at (its directory
+   * cannot be searched): `stat` then holds only the kind the listing gave,
+   * as GNU ls has from `d_type`, and `-l` prints `?` for the rest.
+   */
+  denied?: true;
+}
+
+/** The stat record of an entry known only by the kind its directory listed. */
+function listedOnly(type: DirEntryType): StatData {
+  const kind = type === "dir" ? S_IFDIR : type === "symlink" ? S_IFLNK : S_IFREG;
+  return {
+    dev: 0,
+    ino: 0,
+    mode: kind,
+    nlink: 0,
+    uid: 0,
+    gid: 0,
+    rdev: 0,
+    size: 0,
+    blksize: 0,
+    blocks: 0,
+    atimeMs: 0,
+    mtimeMs: 0,
+    ctimeMs: 0,
+    birthtimeMs: 0,
+  };
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** `drwxr-xr-x` for a mode. */
+/**
+ * The special bit shown over each class's `x` (setuid, setgid, sticky), and
+ * its letter: lower case over `x`, upper case where `x` is not set.
+ */
+const SPECIAL_BITS: [bit: number, letter: string][] = [
+  [0o4000, "s"],
+  [0o2000, "s"],
+  [0o1000, "t"],
+];
+
+/** `drwxr-xr-x` for a mode, with GNU's s/S over x for setuid and setgid, and t/T for sticky. */
 export function modeString(mode: number): string {
   const type = mode & S_IFMT;
   const letter =
@@ -35,9 +82,12 @@ export function modeString(mode: number): string {
                 ? "s"
                 : "-";
   let out = letter;
-  const chars = "rwxrwxrwx";
-  for (let i = 0; i < 9; i++) {
-    out += mode & (1 << (8 - i)) ? chars[i] : "-";
+  for (let shift = 6, index = 0; shift >= 0; shift -= 3, index++) {
+    const bits = mode >> shift;
+    const [special, mark] = SPECIAL_BITS[index];
+    const x = bits & 1 ? "x" : "-";
+    out += (bits & 4 ? "r" : "-") + (bits & 2 ? "w" : "-");
+    out += mode & special ? (x === "x" ? mark : mark.toUpperCase()) : x;
   }
   return out;
 }
@@ -96,6 +146,11 @@ function classify(entry: Entry): string {
     return "/";
   }
   return isExecutable(entry.stat) ? "*" : "";
+}
+
+/** The length of the longest of `texts` (a directory may hold more entries than a call takes arguments). */
+function longest(texts: string[]): number {
+  return texts.reduce((most, text) => Math.max(most, text.length), 0);
 }
 
 function displayWidth(text: string): number {
@@ -157,7 +212,7 @@ export const ls: Command = (ctx, args) => {
   const files: Entry[] = [];
   const dirs: Entry[] = [];
   for (const operand of operands) {
-    const path = resolvePath(ctx.cwd, operand);
+    const path = absolutePath(ctx.cwd, operand);
     let entry: Entry;
     try {
       entry = load(path, operand);
@@ -189,39 +244,61 @@ export const ls: Command = (ctx, args) => {
     });
     return opts.reverse ? sorted.reverse() : sorted;
   };
-  let printed = false;
   if (files.length > 0) {
     print(ctx, sortEntries(files), opts);
-    printed = true;
+    // As GNU ls: a blank line ends the files when directories follow,
+    // whether or not it can open them.
+    if (dirs.length > 0) {
+      ctx.io.out("\n");
+    }
   }
-  const queue = sortEntries(dirs);
+  // A blank line goes between two directories it listed.
+  let listedOne = false;
+  let queue = sortEntries(dirs);
   const showHeaders = operands.length > 1 || opts.recursive;
   while (queue.length > 0) {
     const dir = queue.shift() as Entry;
-    let names: string[];
+    let listed: { name: string; type: DirEntryType | null }[];
     try {
-      names = runtime()
-        .fs.readdir(dir.path)
-        .map((entry) => entry.name);
+      listed = runtime().fs.readdir(dir.path);
     } catch (error) {
       ctx.io.err(`ls: cannot open directory '${dir.name}': ${errorText(error)}\n`);
       status = 2;
       continue;
     }
     if (opts.all) {
-      names = [".", "..", ...names];
+      listed = [{ name: ".", type: null }, { name: "..", type: null }, ...listed];
     } else if (!opts.almostAll) {
-      names = names.filter((name) => !name.startsWith("."));
+      listed = listed.filter((entry) => !entry.name.startsWith("."));
     }
     const entries: Entry[] = [];
-    for (const name of names) {
+    // Looking at an entry needs it only for -l, -F and colours, as in GNU ls.
+    const looks = opts.long || opts.classify || opts.color;
+    for (const { name, type } of listed) {
+      // `.` and `..` are looked up in the directory like any other name.
+      const path = `${dir.path}/${name}`;
       try {
-        entries.push(load(resolvePath(dir.path, name), name));
-      } catch {
-        // Vanished while listing.
+        entries.push(load(path, name));
+      } catch (error) {
+        if (errnoCodeOf(error) !== "EACCES") {
+          continue; // Vanished while listing.
+        }
+        if (looks && !(opts.classify && !opts.long && !opts.color && type !== "file")) {
+          ctx.io.err(
+            `ls: cannot access '${dir.name.replace(/\/+$/, "")}/${name}': ${errorText(error)}\n`,
+          );
+          status = Math.max(status, 1);
+        }
+        entries.push({
+          name,
+          path,
+          stat: listedOnly(type ?? "dir"),
+          target: null,
+          denied: true,
+        });
       }
     }
-    if (printed) {
+    if (listedOne) {
       ctx.io.out("\n");
     }
     if (showHeaders) {
@@ -236,12 +313,12 @@ export const ls: Command = (ctx, args) => {
       ctx.io.out(`total ${blocks}\n`);
     }
     print(ctx, sorted, opts);
-    printed = true;
+    listedOne = true;
     if (opts.recursive) {
       const children = sorted
         .filter((entry) => entry.name !== "." && entry.name !== ".." && isDir(entry.stat))
         .map((entry) => ({ ...entry, name: `${dir.name.replace(/\/$/, "")}/${entry.name}` }));
-      queue.unshift(...children);
+      queue = children.concat(queue);
     }
     if (ctx.io.broken) {
       break;
@@ -266,11 +343,15 @@ function print(
       opts.human ? humanSize(entry.stat.size) : String(entry.stat.size),
     );
     const links = entries.map((entry) => String(entry.stat.nlink));
-    const sizeWidth = Math.max(...sizes.map((s) => s.length));
-    const linkWidth = Math.max(...links.map((s) => s.length));
+    const sizeWidth = longest(sizes);
+    const linkWidth = longest(links);
     let out = "";
     entries.forEach((entry, index) => {
-      let line = `${modeString(entry.stat.mode)} ${links[index].padStart(linkWidth)} ${USERNAME} ${USERNAME} ${sizes[index].padStart(sizeWidth)} ${dateString(entry.stat.mtimeMs)} ${label(entry)}`;
+      if (entry.denied) {
+        out += `${modeString(entry.stat.mode).slice(0, 1)}????????? ${"?".padStart(linkWidth)} ? ? ${"?".padStart(sizeWidth)} ${"?".padStart(12)} ${entry.name}\n`;
+        return;
+      }
+      let line = `${modeString(entry.stat.mode)} ${links[index].padStart(linkWidth)} ${ownerName(entry.stat.uid)} ${ownerName(entry.stat.gid)} ${sizes[index].padStart(sizeWidth)} ${dateString(entry.stat.mtimeMs)} ${label(entry)}`;
       if (isLink(entry.stat)) {
         try {
           line += ` -> ${runtime().fs.readlink(entry.path)}`;
@@ -296,7 +377,11 @@ function print(
   }
   const widths = entries.map((entry) => displayWidth(plainLabel(entry)));
   // Find the most columns that fit, filling down columns first.
-  let best = { cols: 1, rows: entries.length, colWidths: [Math.max(...widths)] };
+  let best = {
+    cols: 1,
+    rows: entries.length,
+    colWidths: [widths.reduce((most, width) => Math.max(most, width), 0)],
+  };
   for (let cols = entries.length; cols >= 1; cols--) {
     const rows = Math.ceil(entries.length / cols);
     const colWidths: number[] = [];

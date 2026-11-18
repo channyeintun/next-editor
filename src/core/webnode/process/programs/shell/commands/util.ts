@@ -1,13 +1,39 @@
 // Helpers shared by the built-in file and text commands: option parsing,
-// path normalization, error messages in coreutils wording, and reading the
-// named files or standard input.
+// the path an operand names, error messages in coreutils wording, and reading
+// the named files or standard input.
 import { toSystemErrorRecord } from "../../../../errors";
 import type { StatData } from "../../../../kernel/vfs/types";
-import { S_IFDIR, S_IFLNK, S_IFMT, S_IFREG } from "../../../../kernel/vfs/types";
+import { O_RDONLY, S_IFDIR, S_IFLNK, S_IFMT, S_IFREG } from "../../../../kernel/vfs/types";
 import { runtime } from "../../../runtime";
 import type { CommandContext } from "../context";
+import { ReadInterrupted, closeFd, concatBytes, descriptorOf } from "../io";
 
-/** Joins and normalizes `path` against `cwd` (`.`, `..`, `//`). */
+/**
+ * The path the filesystem gets for a command's operand. An absolute path
+ * passes as it is written and a relative one is joined to `cwd`, nothing in
+ * it resolved here: the filesystem resolves `..` after the symbolic links
+ * before it, checks search permission on every directory the path names, and
+ * gives a trailing `/` its meaning. An empty operand stays empty, which names
+ * no file (ENOENT) and never `cwd`.
+ */
+export function absolutePath(cwd: string, path: string): string {
+  if (path === "" || path.startsWith("/")) {
+    return path;
+  }
+  return cwd.endsWith("/") ? `${cwd}${path}` : `${cwd}/${path}`;
+}
+
+/** True when two stat records are of one file (GNU's `SAME_INODE`). */
+export function sameFile(a: StatData, b: StatData): boolean {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+
+/**
+ * `path` against `cwd` with `.`, `..` and `//` resolved in the text alone:
+ * the logical name bash's `cd` gives the working directory, where `..` leaves
+ * a linked directory by the way it was entered and an empty path is `cwd`.
+ * It is not what a file operand names (see `absolutePath`).
+ */
 export function resolvePath(cwd: string, path: string): string {
   const absolute = path.startsWith("/") ? path : `${cwd}/${path}`;
   const out: string[] = [];
@@ -31,6 +57,18 @@ export function baseName(path: string): string {
     return path.startsWith("/") ? "/" : "";
   }
   return trimmed.slice(trimmed.lastIndexOf("/") + 1);
+}
+
+/**
+ * The target GNU cp and mv name for `source` copied or moved into the
+ * directory `dest`, as gnulib's file_name_concat builds it: `dest` without its
+ * trailing slashes, a slash, and the source's last component (`ro/` + `out` is
+ * `ro/out`, `.` + `ro/in` is `./in`).
+ */
+export function targetInDirectory(dest: string, source: string): string {
+  const directory = dest.replace(/(?<=[^/])\/+$/, "");
+  const separator = directory.endsWith("/") ? "" : "/";
+  return `${directory}${separator}${baseName(source)}`;
 }
 
 /** The directory part of a path, as `dirname` prints it. */
@@ -63,20 +101,78 @@ const MESSAGES: Record<string, string> = {
   ENOSPC: "No space left on device",
   ENAMETOOLONG: "File name too long",
   EROFS: "Read-only file system",
+  EPIPE: "Broken pipe",
 };
+
+/** The coreutils description of an errno code (`ENOTDIR`: `Not a directory`). */
+export function errnoText(code: string): string {
+  return MESSAGES[code] ?? code;
+}
 
 /** The coreutils description of a failed system call (`No such file or directory`). */
 export function errorText(error: unknown): string {
   const record = toSystemErrorRecord(error);
   if (record) {
-    return MESSAGES[record.code] ?? record.code;
+    return errnoText(record.code);
   }
   return error instanceof Error ? error.message : String(error);
 }
 
-/** The errno code of a system error, else undefined. */
-export function errorCode(error: unknown): string | undefined {
-  return toSystemErrorRecord(error)?.code;
+/** What a shell reads as more than itself, and the colon that ends a name in a message. */
+const SHELL_SPECIAL = /[ !"$&'()*;<=>?[\\^`|:]/;
+/** What keeps a name with a `'` in it out of double quotes. */
+const NOT_IN_DOUBLE_QUOTES = /[!"$&()*;<=>?[\\^`|]/;
+
+/** True for a control character's code (tab and newline among them). */
+function isControl(code: number): boolean {
+  return code < 0x20 || code === 0x7f;
+}
+
+/** A control character as bash's `$'…'` writes it. */
+function controlEscape(code: number): string {
+  const named: Record<number, string> = {
+    7: "a",
+    8: "b",
+    9: "t",
+    10: "n",
+    11: "v",
+    12: "f",
+    13: "r",
+  };
+  return `\\${named[code] ?? code.toString(8).padStart(3, "0")}`;
+}
+
+/**
+ * A file name as GNU's `quotef` puts it before a colon (`cat: 'a b': …`): as
+ * it is, or quoted the way a shell would take it back when it is empty or has
+ * a character a shell reads specially.
+ */
+export function quoteName(name: string): string {
+  const control = Array.from(name).some((ch) => isControl(ch.charCodeAt(0)));
+  const plain =
+    name !== "" &&
+    !control &&
+    !SHELL_SPECIAL.test(name) &&
+    !/^[#~]/.test(name) &&
+    name !== "{" &&
+    name !== "}";
+  if (plain) {
+    return name;
+  }
+  if (name.includes("'") && !control && !NOT_IN_DOUBLE_QUOTES.test(name)) {
+    return `"${name}"`;
+  }
+  let out = "'";
+  let escaping = false;
+  for (const ch of name) {
+    const code = ch.charCodeAt(0);
+    if (isControl(code) !== escaping) {
+      out += escaping ? "''" : "'$'";
+      escaping = !escaping;
+    }
+    out += escaping ? controlEscape(code) : ch === "'" ? "'\\''" : ch;
+  }
+  return `${out}'`;
 }
 
 /** Prints `name: message` to standard error and returns 1. */
@@ -187,6 +283,15 @@ export function isLink(stat: StatData): boolean {
   return (stat.mode & S_IFMT) === S_IFLNK;
 }
 
+/** stat that returns the error it failed with instead of throwing. */
+export function statOrError(path: string, follow = true): StatData | { error: unknown } {
+  try {
+    return runtime().fs.stat(path, follow);
+  } catch (error) {
+    return { error };
+  }
+}
+
 /** stat that returns null instead of throwing. */
 export function tryStat(path: string, follow = true): StatData | null {
   try {
@@ -196,14 +301,91 @@ export function tryStat(path: string, follow = true): StatData | null {
   }
 }
 
+/** An input a command could not read. */
+export interface InputError {
+  name: string;
+  /** Why, in coreutils' words (`No such file or directory`). */
+  error: string;
+}
+
+/** `file` could not be read because of `error`. */
+export function inputError(file: string, error: unknown): InputError {
+  return { name: file, error: errorText(error) };
+}
+
+/** `file` is a directory, which no command here reads as text. */
+export function directoryInput(file: string): InputError {
+  return { name: file, error: errnoText("EISDIR") };
+}
+
+/**
+ * The bytes of one input as they arrive: standard input (`-`) chunk by
+ * chunk, a file whole, and an operand that is not a regular file (a device
+ * such as /dev/tty, whose bytes come when they are typed and may never end)
+ * chunk by chunk too, read as standard input is, so that the shell goes on
+ * running meanwhile. An input that cannot be read yields an `InputError`.
+ */
+export async function* inputChunks(
+  ctx: CommandContext,
+  file: string,
+): AsyncGenerator<Uint8Array | InputError> {
+  // `/dev/stdin` and `/dev/fd/N` are the command's own fds, which the shell
+  // knows and the kernel does not (it would open the shell's).
+  const named = file === "-" ? 0 : descriptorOf(file);
+  const real = named === null || named === 0 ? null : ctx.io.fd(named);
+  if (named !== null && named !== 0 && real === null) {
+    yield { name: file, error: errnoText("ENOENT") };
+    return;
+  }
+  if (named !== null) {
+    for (;;) {
+      const chunk = await (real === null ? ctx.io.readChunk() : ctx.io.readFrom(real));
+      if (chunk.length === 0) {
+        return;
+      }
+      yield chunk;
+    }
+  }
+  try {
+    const path = absolutePath(ctx.cwd, file);
+    const stat = runtime().fs.stat(path, true);
+    if (isDir(stat)) {
+      yield directoryInput(file);
+      return;
+    }
+    if (isFile(stat)) {
+      yield runtime().fs.readFile(path);
+      return;
+    }
+    const fd = runtime().fs.open(path, O_RDONLY, 0);
+    try {
+      for (;;) {
+        const chunk = await ctx.io.readFrom(fd);
+        if (chunk.length === 0) {
+          return;
+        }
+        yield chunk;
+      }
+    } finally {
+      closeFd(fd);
+    }
+  } catch (error) {
+    if (error instanceof ReadInterrupted) {
+      throw error;
+    }
+    yield inputError(file, error);
+  }
+}
+
 /**
  * The bytes of each input: every named file (`-` is standard input) or
- * standard input when there are none. A missing file is reported and skipped.
+ * standard input when there are none. A file that cannot be read is yielded
+ * as an `InputError` and skipped.
  */
 export async function* inputs(
   ctx: CommandContext,
   files: string[],
-): AsyncGenerator<{ name: string; data: Uint8Array } | { name: string; error: string }> {
+): AsyncGenerator<{ name: string; data: Uint8Array } | InputError> {
   if (files.length === 0) {
     files = ["-"];
   }
@@ -212,16 +394,15 @@ export async function* inputs(
       yield { name: "-", data: await ctx.io.readAll() };
       continue;
     }
-    const path = ctx.resolve(file);
-    try {
-      const stat = runtime().fs.stat(path, true);
-      if (isDir(stat)) {
-        yield { name: file, error: `${file}: Is a directory` };
-        continue;
+    const chunks: Uint8Array[] = [];
+    let failure: InputError | null = null;
+    for await (const chunk of inputChunks(ctx, file)) {
+      if (chunk instanceof Uint8Array) {
+        chunks.push(chunk);
+      } else {
+        failure = chunk;
       }
-      yield { name: file, data: runtime().fs.readFile(path) };
-    } catch (error) {
-      yield { name: file, error: `${file}: ${errorText(error)}` };
     }
+    yield failure ?? { name: file, data: chunks.length === 1 ? chunks[0] : concatBytes(chunks) };
   }
 }

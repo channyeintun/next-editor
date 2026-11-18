@@ -1,7 +1,7 @@
 // `readlink [-f|-e|-m] [-n] paths…`.
 import { runtime } from "../../../runtime";
 import type { Command } from "../context";
-import { options } from "./util";
+import { absolutePath, options, resolvePath } from "./util";
 
 /** `readlink`. */
 export const readlink: Command = (ctx, args) => {
@@ -26,12 +26,13 @@ export const readlink: Command = (ctx, args) => {
   const end = parsed.flags.has("n") ? "" : "\n";
   let status = 0;
   for (const operand of parsed.operands) {
-    const path = ctx.resolve(operand);
+    const path = absolutePath(ctx.cwd, operand);
     try {
       ctx.io.out(`${canonical ? fs.realpath(path) : fs.readlink(path)}${end}`);
     } catch {
-      if (parsed.flags.has("m")) {
-        ctx.io.out(`${path}${end}`);
+      if (parsed.flags.has("m") && operand !== "") {
+        // -m: what is not there is resolved by the text alone.
+        ctx.io.out(`${resolvePath(ctx.cwd, operand)}${end}`);
       } else {
         status = 1;
       }

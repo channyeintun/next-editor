@@ -11,7 +11,7 @@ import {
   X_OK,
 } from "../../../../kernel/vfs/types";
 import { runtime } from "../../../runtime";
-import { isDir, isFile, resolvePath, tryStat } from "./util";
+import { absolutePath, isDir, isFile, sameFile, tryStat } from "./util";
 
 const UNARY = new Set([
   "-e",
@@ -96,7 +96,7 @@ export function unaryTest(
   if (arg === "") {
     return false;
   }
-  const path = resolvePath(cwd, arg);
+  const path = absolutePath(cwd, arg);
   if (op === "-L" || op === "-h") {
     const stat = tryStat(path, false);
     return stat !== null && (stat.mode & S_IFMT) === 0o120000;
@@ -183,17 +183,17 @@ export function binaryTest(op: string, left: string, right: string, cwd: string)
     }
     case "-nt":
     case "-ot": {
-      const a = tryStat(resolvePath(cwd, left));
-      const b = tryStat(resolvePath(cwd, right));
+      const a = tryStat(absolutePath(cwd, left));
+      const b = tryStat(absolutePath(cwd, right));
       if (op === "-nt") {
         return a !== null && (b === null || a.mtimeMs > b.mtimeMs);
       }
       return b !== null && (a === null || a.mtimeMs < b.mtimeMs);
     }
     case "-ef": {
-      const a = tryStat(resolvePath(cwd, left));
-      const b = tryStat(resolvePath(cwd, right));
-      return a !== null && b !== null && a.ino === b.ino && a.dev === b.dev;
+      const a = tryStat(absolutePath(cwd, left));
+      const b = tryStat(absolutePath(cwd, right));
+      return a !== null && b !== null && sameFile(a, b);
     }
   }
   return `${op}: binary operator expected`;
