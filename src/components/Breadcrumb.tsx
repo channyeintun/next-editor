@@ -1,13 +1,22 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ChevronRight } from "lucide-react";
 import LangText from "./LangText";
+import BreadcrumbMenu from "./BreadcrumbMenu";
 
 export interface BreadcrumbParent {
   to: string;
   label: string;
+  /**
+   * A panel the parent crumb opens on hover, or from its toggle: e.g. the
+   * lessons of the playlist a lesson was opened from. `label` names it.
+   */
+  menu?: { label: string; content: ReactNode };
 }
 
 const GALLERY: BreadcrumbParent = { to: "/learn", label: "Lessons" };
+
+const crumbText = "font-bold capitalize tracking-wider";
 
 // Shared "Lessons > X" trail back to the gallery — used inside the editor's
 // header (the /learn/:slug detail view and the /code editor) and standalone
@@ -20,16 +29,28 @@ export default function Breadcrumb({
   title: string;
   parent?: BreadcrumbParent;
 }) {
+  const link = (
+    <Link
+      to={parent.to}
+      className={`min-w-0 truncate ${crumbText} text-slate-300 transition-colors hover:text-white ${
+        parent.menu ? "" : "max-w-[45%] shrink-0"
+      }`}
+    >
+      <LangText text={parent.label} />
+    </Link>
+  );
+
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs">
-      <Link
-        to={parent.to}
-        className="max-w-[45%] shrink-0 truncate font-bold capitalize tracking-wider text-slate-300 transition-colors hover:text-white"
-      >
-        <LangText text={parent.label} />
-      </Link>
-      <ChevronRight className="size-3.5 shrink-0 text-slate-600" />
-      <span className="truncate font-bold capitalize tracking-wider text-slate-200">
+      {parent.menu ? (
+        <BreadcrumbMenu crumb={link} label={parent.menu.label}>
+          {parent.menu.content}
+        </BreadcrumbMenu>
+      ) : (
+        link
+      )}
+      <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-slate-600" />
+      <span aria-current="page" className={`truncate ${crumbText} text-slate-200`}>
         <LangText text={title} />
       </span>
     </nav>

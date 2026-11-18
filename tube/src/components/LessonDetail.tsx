@@ -6,6 +6,8 @@ import type { Lesson } from "../types";
 import { usePlaylist } from "../hooks/usePlaylists";
 import Breadcrumb from "@app/components/Breadcrumb";
 import { useEmbedded } from "@app/utils/embed";
+import { lessonHref, playlistHref } from "../lib/links";
+import PlaylistLessonsMenu from "./PlaylistLessonsMenu";
 
 interface LessonDetailLocationState {
   /** Set by the "Continue to Next" auto-advance navigation so the next lesson
@@ -31,7 +33,7 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
     if (!nextLesson || !listSlug) return;
     const { continueToNext } = playbackSettingsStore.getSnapshot().context;
     if (!continueToNext) return;
-    navigate(`/learn/${nextLesson.slug}?list=${listSlug}`, {
+    navigate(lessonHref(nextLesson.slug, listSlug), {
       state: { autoplay: true } satisfies LessonDetailLocationState,
     });
   };
@@ -63,10 +65,20 @@ export default function LessonDetail({ lesson }: { lesson: Lesson }) {
         embedded ? undefined : (
           <Breadcrumb
             title={lesson.title}
-            // Opened from a playlist: the trail leads back to that playlist.
+            // Opened from a playlist: the trail leads back to that playlist,
+            // and its crumb opens the playlist's lessons, in order.
             parent={
               playlistMode && playlist
-                ? { to: `/learn/playlist/${playlist.slug}`, label: playlist.title }
+                ? {
+                    to: playlistHref(playlist.slug),
+                    label: playlist.title,
+                    menu: {
+                      label: `Lessons in ${playlist.title}`,
+                      content: (
+                        <PlaylistLessonsMenu playlist={playlist} currentSlug={lesson.slug} />
+                      ),
+                    },
+                  }
                 : undefined
             }
           />

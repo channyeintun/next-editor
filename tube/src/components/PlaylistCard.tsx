@@ -10,7 +10,7 @@ import {
 import LangText from "@app/components/LangText";
 import PopoverMenu from "@app/components/PopoverMenu";
 import HoverRing from "@app/components/hoverRing/HoverRing";
-import { resolveThumb } from "../lib/links";
+import { playlistHref, resolveThumb } from "../lib/links";
 import ThumbnailTile from "./ThumbnailTile";
 
 const ghostButton =
@@ -48,7 +48,7 @@ export default function PlaylistCard({
   const update = useUpdatePlaylist();
   const del = useDeletePlaylist();
 
-  const href = `/learn/playlist/${playlist.slug}`;
+  const href = playlistHref(playlist.slug);
 
   const closeRename = () => {
     setRenaming(false);

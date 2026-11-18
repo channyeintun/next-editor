@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { Play } from "lucide-react";
 import LangText from "@app/components/LangText";
 import type { Lesson } from "../types";
-import { resolveThumb } from "../lib/links";
+import { lessonHref, resolveThumb } from "../lib/links";
 import ThumbnailTile from "./ThumbnailTile";
 
 // "2026-06-28" → "Jun 28, 2026". Parsed as a local date (not UTC) to avoid an
@@ -28,7 +28,7 @@ export default function LessonCard({
    *  loads at once and at high priority instead of lazily. */
   priority?: boolean;
 }) {
-  const href = listSlug ? `/learn/${lesson.slug}?list=${listSlug}` : `/learn/${lesson.slug}`;
+  const href = lessonHref(lesson.slug, listSlug);
   const published = formatPublished(lesson.publishedAt);
 
   return (
