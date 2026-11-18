@@ -23,7 +23,15 @@
 //   directive; `timeout`, `breakOnSigint` and `microtaskMode` have no effect
 //   (nothing can interrupt synchronous code in a worker): the first `timeout`
 //   or `breakOnSigint` a program passes gets a warning saying so.
-import { sourceUrlComment } from "../loader/transform";
+//
+// `import()` in the code is the one its `importModuleDynamically` option asks
+// for, as in Node: the code is rewritten (loader/transform.ts) to call it.
+// Without the option it rejects; `USE_MAIN_CONTEXT_DEFAULT_LOADER` loads
+// through the loader; a function is called only behind
+// `--experimental-vm-modules`, which webnode does not have, so it rejects too.
+import { defineEvaluatedImporter, importThroughLoader } from "../loader/evaluated";
+import { EVALUATED_BINDING, rewriteEvaluated, sourceUrlComment } from "../loader/transform";
+import { runtime } from "../runtime";
 import { Buffer } from "./buffer";
 import {
   invalidArgType,
@@ -50,6 +58,71 @@ export const constants = Object.freeze({
   USE_MAIN_CONTEXT_DEFAULT_LOADER: Symbol("vm_dynamic_import_main_context_default"),
   DONT_CONTEXTIFY: Symbol("vm_context_no_contextify"),
 });
+
+/** The names under which the `import()`s of compiled code are defined (`defineEvaluatedImporter`). */
+const IMPORT_WITHOUT_CALLBACK = "vm:no-callback";
+const IMPORT_THROUGH_CALLBACK = "vm:callback";
+const IMPORT_THROUGH_MAIN_LOADER = "vm:main-context-loader";
+
+defineEvaluatedImporter(IMPORT_WITHOUT_CALLBACK, () =>
+  Promise.reject(
+    makeNodeError(
+      "ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING",
+      "A dynamic import callback was not specified.",
+      TypeError,
+    ),
+  ),
+);
+defineEvaluatedImporter(IMPORT_THROUGH_CALLBACK, () =>
+  Promise.reject(
+    makeNodeError(
+      "ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG",
+      "A dynamic import callback was invoked without --experimental-vm-modules",
+      TypeError,
+    ),
+  ),
+);
+let warnedMainLoader = false;
+defineEvaluatedImporter(IMPORT_THROUGH_MAIN_LOADER, (specifier, parent) => {
+  if (!warnedMainLoader) {
+    warnedMainLoader = true;
+    const process = (
+      globalThis as { process?: { emitWarning?: (message: string, type: string) => void } }
+    ).process;
+    process?.emitWarning?.(
+      "vm.USE_MAIN_CONTEXT_DEFAULT_LOADER is an experimental feature and might change at any time",
+      "ExperimentalWarning",
+    );
+  }
+  return importThroughLoader(specifier, parent);
+});
+
+/** The `import()` that code compiled with this `importModuleDynamically` option gets. */
+function importerFor(option: unknown): string {
+  if (option === undefined) {
+    return IMPORT_WITHOUT_CALLBACK;
+  }
+  if (option === constants.USE_MAIN_CONTEXT_DEFAULT_LOADER) {
+    return IMPORT_THROUGH_MAIN_LOADER;
+  }
+  if (typeof option !== "function") {
+    throw invalidArgType("options.importModuleDynamically", "function", option);
+  }
+  return IMPORT_THROUGH_CALLBACK;
+}
+
+/**
+ * The file compiled code imports from: its `filename` when that is an
+ * absolute path, the working directory otherwise, as in Node.
+ */
+function importingFile(filename: string | undefined): string {
+  return filename !== undefined && filename.startsWith("/") ? filename : `${runtime().cwd}/[eval]`;
+}
+
+/** `code` with its `import()` and its evals rewritten for the `importModuleDynamically` option (`importerFor`). */
+function withImporter(code: string, filename: string | undefined, importer: string): string {
+  return rewriteEvaluated(code, () => importingFile(filename), importer) ?? code;
+}
 
 /** The options `Script` and the `run*` functions take. */
 export interface ScriptOptions {
@@ -83,6 +156,7 @@ function readOptions(options: unknown): ScriptOptions {
     }
   }
   warnIfInterruptible(read);
+  importerFor(read.importModuleDynamically);
   if (read.cachedData !== undefined && !ArrayBuffer.isView(read.cachedData)) {
     throw invalidArgType(
       "options.cachedData",
@@ -122,11 +196,15 @@ function sourceUrlSuffix(filename: string): string {
   return sourceUrlComment(filename);
 }
 
-/** The code as the engine sees it: `lineOffset` blank lines first, then the source and its sourceURL. */
+/**
+ * The code as the engine sees it: `lineOffset` blank lines first, then the
+ * source, with the `import()` its options ask for, and its sourceURL.
+ */
 function prepare(code: string, options: ScriptOptions): string {
   const lineOffset = Math.trunc(options.lineOffset ?? 0);
   const prefix = lineOffset > 0 ? "\n".repeat(lineOffset) : "";
-  return prefix + code + sourceUrlSuffix(options.filename ?? DEFAULT_FILENAME);
+  const source = withImporter(code, options.filename, importerFor(options.importModuleDynamically));
+  return prefix + source + sourceUrlSuffix(options.filename ?? DEFAULT_FILENAME);
 }
 
 // Evaluating code is what `vm` is for.
@@ -477,7 +555,8 @@ const SCOPE = "__webnode_vm_scope__";
 const CODE = "__webnode_vm_code__";
 const NAMES = "__webnode_vm_names__";
 const OUT = "__webnode_vm_out__";
-const INTERNAL_NAMES = new Set([SCOPE, CODE, NAMES, OUT, "__webnode_vm_i__"]);
+// The function rewritten code calls for its `import()` is the real global's.
+const INTERNAL_NAMES = new Set([SCOPE, CODE, NAMES, OUT, "__webnode_vm_i__", EVALUATED_BINDING]);
 
 type Runner = (
   this: object,
@@ -747,6 +826,7 @@ export function compileFunction(
   validateObject(options, "options");
   const filename = options.filename ?? "";
   validateString(filename, "options.filename");
+  const body = withImporter(code, filename, importerFor(options.importModuleDynamically));
   const extensions = options.contextExtensions ?? [];
   if (!Array.isArray(extensions)) {
     throw invalidArgType("options.contextExtensions", "Array", extensions);
@@ -767,14 +847,14 @@ export function compileFunction(
   const head = `function (${params.join(", ")}) {`;
   const sourceUrl = sourceUrlSuffix(filename || DEFAULT_FILENAME);
   if (scopes.length === 0) {
-    return indirectEval(`${prefix}(${head}${code}\n})${sourceUrl}`) as (
+    return indirectEval(`${prefix}(${head}${body}\n})${sourceUrl}`) as (
       ...args: unknown[]
     ) => unknown;
   }
   const opens = scopes.map((_, index) => `with (${SCOPE}[${index}]) {`).join(" ");
   const closes = " }".repeat(scopes.length);
   const factory = indirectEval(
-    `${prefix}(function (${SCOPE}) { ${opens} return ${head}${code}\n};${closes} })${sourceUrl}`,
+    `${prefix}(function (${SCOPE}) { ${opens} return ${head}${body}\n};${closes} })${sourceUrl}`,
   ) as (scopes: object[]) => (...args: unknown[]) => unknown;
   return factory(scopes);
 }

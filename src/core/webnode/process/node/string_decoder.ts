@@ -29,64 +29,136 @@ function toBase64Url(text: string): string {
   return text.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** `string_decoder.StringDecoder`. */
-export class StringDecoder {
-  readonly encoding: string;
-  readonly #inner: PackageDecoder;
-  readonly #base64url: boolean;
+/** The own property a decoder's state sits under: Node's name for the same slot. */
+const kNativeDecoder = Symbol("kNativeDecoder");
 
-  constructor(encoding?: string) {
-    this.#base64url = typeof encoding === "string" && encoding.toLowerCase() === "base64url";
-    try {
-      // base64url output is base64 output in another alphabet, split the same way.
-      this.#inner = new PackageDecoder(this.#base64url ? "base64" : encoding);
-    } catch {
-      throw makeNodeError("ERR_UNKNOWN_ENCODING", `Unknown encoding: ${encoding}`, TypeError);
-    }
-    this.encoding = this.#base64url ? "base64url" : this.#inner.encoding;
-    // The package allocates it unsafe; Node's starts zeroed.
-    this.#inner.lastChar?.fill(0);
-  }
-
-  #out(text: string): string {
-    return this.#base64url ? toBase64Url(text) : text;
-  }
-
-  /** The text for `buf`, holding back an incomplete trailing character. */
-  write(buf: Uint8Array | ArrayBufferView | string): string {
-    if (typeof buf === "string") {
-      return buf;
-    }
-    return this.#out(this.#inner.write(bufferOf(buf)));
-  }
-
-  /** The text for `buf` (if given) and whatever is held back; the decoder then starts afresh. */
-  end(buf?: Uint8Array | ArrayBufferView | string): string {
-    const head = buf === undefined ? "" : this.write(buf);
-    const tail = this.#out(this.#inner.end());
-    // The package keeps its partial-character state after end(); Node does not.
-    this.#inner.lastNeed = 0;
-    this.#inner.lastTotal = 0;
-    return head + tail;
-  }
-
-  /** Node's `text(buf, offset)`: decodes from `offset`, keeping a partial character. */
-  text(buf: Uint8Array | ArrayBufferView, offset: number): string {
-    return this.#out(this.#inner.text(bufferOf(buf), offset));
-  }
-
-  get lastChar(): Uint8Array {
-    return this.#inner.lastChar;
-  }
-
-  get lastNeed(): number {
-    return this.#inner.lastNeed;
-  }
-
-  get lastTotal(): number {
-    return this.#inner.lastTotal;
-  }
+interface DecoderState {
+  readonly inner: PackageDecoder;
+  readonly base64url: boolean;
 }
+
+type DecoderInput = Uint8Array | ArrayBufferView | string;
+
+/** A `string_decoder.StringDecoder` instance. */
+export interface StringDecoder {
+  encoding: string;
+  /** The text for `buf`, holding back an incomplete trailing character. */
+  write(buf: DecoderInput): string;
+  /** The text for `buf` (if given) and whatever is held back; the decoder then starts afresh. */
+  end(buf?: DecoderInput): string;
+  /** Node's `text(buf, offset)`: decodes from `offset`, keeping a partial character. */
+  text(buf: Uint8Array | ArrayBufferView, offset: number): string;
+  readonly lastChar: Uint8Array;
+  readonly lastNeed: number;
+  readonly lastTotal: number;
+}
+
+/**
+ * Node's StringDecoder is a plain function, and packages rely on it: they call
+ * it on their own objects (`StringDecoder.call(this, encoding)`, iconv-lite
+ * 0.4) and share or inherit its prototype. So it is one here too: called with
+ * `new`, or on an object the caller made.
+ */
+interface StringDecoderConstructor {
+  new (encoding?: string): StringDecoder;
+  (this: StringDecoder, encoding?: string): void;
+  readonly prototype: StringDecoder;
+}
+
+/** The state the constructor put on `decoder`, whatever object that is. */
+function stateOf(decoder: StringDecoder): DecoderState {
+  const state = (decoder as { [kNativeDecoder]?: DecoderState })[kNativeDecoder];
+  if (state === undefined) {
+    throw makeNodeError(
+      "ERR_INVALID_THIS",
+      'Value of "this" must be of type StringDecoder',
+      TypeError,
+    );
+  }
+  return state;
+}
+
+function output(state: DecoderState, text: string): string {
+  return state.base64url ? toBase64Url(text) : text;
+}
+
+/** `string_decoder.StringDecoder`. */
+export const StringDecoder = function StringDecoder(this: StringDecoder, encoding?: string) {
+  // The bundle is not a strict script: without this a call with no `this`
+  // would write `encoding` onto the global object instead of throwing.
+  "use strict";
+  const base64url = typeof encoding === "string" && encoding.toLowerCase() === "base64url";
+  let inner: PackageDecoder;
+  try {
+    // base64url output is base64 output in another alphabet, split the same way.
+    inner = new PackageDecoder(base64url ? "base64" : encoding);
+  } catch {
+    throw makeNodeError("ERR_UNKNOWN_ENCODING", `Unknown encoding: ${encoding}`, TypeError);
+  }
+  // The package allocates it unsafe; Node's starts zeroed.
+  inner.lastChar?.fill(0);
+  this.encoding = base64url ? "base64url" : inner.encoding;
+  const state: DecoderState = { inner, base64url };
+  // Not enumerable, so `encoding` stays the only key; replaceable, so a second
+  // call on the same object starts it afresh, as in Node.
+  Object.defineProperty(this, kNativeDecoder, {
+    value: state,
+    writable: true,
+    configurable: true,
+  });
+} as unknown as StringDecoderConstructor;
+
+StringDecoder.prototype.write = function write(this: StringDecoder, buf: DecoderInput): string {
+  if (typeof buf === "string") {
+    return buf;
+  }
+  const bytes = bufferOf(buf);
+  const state = stateOf(this);
+  return output(state, state.inner.write(bytes));
+};
+
+StringDecoder.prototype.end = function end(this: StringDecoder, buf?: DecoderInput): string {
+  const head = buf === undefined ? "" : this.write(buf);
+  const state = stateOf(this);
+  const tail = output(state, state.inner.end());
+  // The package keeps its partial-character state after end(); Node does not.
+  state.inner.lastNeed = 0;
+  state.inner.lastTotal = 0;
+  return head + tail;
+};
+
+StringDecoder.prototype.text = function text(
+  this: StringDecoder,
+  buf: Uint8Array | ArrayBufferView,
+  offset: number,
+): string {
+  const state = stateOf(this);
+  return output(state, state.inner.text(bufferOf(buf), offset));
+};
+
+Object.defineProperties(StringDecoder.prototype, {
+  lastChar: {
+    configurable: true,
+    enumerable: true,
+    get(this: StringDecoder): Uint8Array {
+      return stateOf(this).inner.lastChar;
+    },
+  },
+  lastNeed: {
+    configurable: true,
+    enumerable: true,
+    get(this: StringDecoder): number {
+      return stateOf(this).inner.lastNeed;
+    },
+  },
+  lastTotal: {
+    configurable: true,
+    enumerable: true,
+    get(this: StringDecoder): number {
+      return stateOf(this).inner.lastTotal;
+    },
+  },
+});
 
 /** `require("string_decoder")`. */
 export default { StringDecoder };

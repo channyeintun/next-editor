@@ -5,6 +5,7 @@ import { setRuntime } from "../runtime";
 import { createFakeRuntime } from "../testing/fakeRuntime";
 import { Buffer } from "./buffer";
 import os from "./os";
+import { createProcess } from "./process";
 
 afterEach(() => {
   setRuntime(null);
@@ -67,6 +68,29 @@ describe("os", () => {
     expect(Buffer.isBuffer(buffers.username)).toBe(true);
   });
 
+  // As on a real system (libuv reads the process's own uid for userInfo): a
+  // program that compares a file's owner with the user finds its own files.
+  it("names the user the process runs as and every file belongs to", () => {
+    const fake = createFakeRuntime();
+    setRuntime(fake);
+    fake.vfs.mkdir("/owned", false, 0o755);
+    const process = createProcess({ loadBuiltin: () => undefined, ipc: null });
+    const { uid, gid } = os.userInfo();
+    const owned = fake.fs.stat("/owned", true);
+    expect([
+      uid,
+      (process.getuid as () => number)(),
+      (process.geteuid as () => number)(),
+      owned.uid,
+    ]).toEqual([uid, uid, uid, uid]);
+    expect([
+      gid,
+      (process.getgid as () => number)(),
+      (process.getegid as () => number)(),
+      owned.gid,
+    ]).toEqual([gid, gid, gid, gid]);
+  });
+
   it("validates and remembers priorities", () => {
     expect(os.getPriority()).toBe(0);
     os.setPriority(5);
@@ -89,6 +113,45 @@ describe("os", () => {
     expect(os.constants.priority.PRIORITY_HIGHEST).toBe(-20);
     expect(os.constants.dlopen.RTLD_NOW).toBe(2);
     expect(os.constants.UV_UDP_REUSEADDR).toBe(4);
+  });
+
+  it("lists the signals as Node does on Linux: its order, with SIGIOT and SIGPOLL", () => {
+    // `node -p "Object.entries(os.constants.signals)"` on Linux (x64), Node v26.
+    expect(Object.entries(os.constants.signals)).toEqual([
+      ["SIGHUP", 1],
+      ["SIGINT", 2],
+      ["SIGQUIT", 3],
+      ["SIGILL", 4],
+      ["SIGTRAP", 5],
+      ["SIGABRT", 6],
+      ["SIGIOT", 6],
+      ["SIGBUS", 7],
+      ["SIGFPE", 8],
+      ["SIGKILL", 9],
+      ["SIGUSR1", 10],
+      ["SIGSEGV", 11],
+      ["SIGUSR2", 12],
+      ["SIGPIPE", 13],
+      ["SIGALRM", 14],
+      ["SIGTERM", 15],
+      ["SIGCHLD", 17],
+      ["SIGSTKFLT", 16],
+      ["SIGCONT", 18],
+      ["SIGSTOP", 19],
+      ["SIGTSTP", 20],
+      ["SIGTTIN", 21],
+      ["SIGTTOU", 22],
+      ["SIGURG", 23],
+      ["SIGXCPU", 24],
+      ["SIGXFSZ", 25],
+      ["SIGVTALRM", 26],
+      ["SIGPROF", 27],
+      ["SIGWINCH", 28],
+      ["SIGIO", 29],
+      ["SIGPOLL", 29],
+      ["SIGPWR", 30],
+      ["SIGSYS", 31],
+    ]);
   });
 
   it("exports every member Node's os has", () => {

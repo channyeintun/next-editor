@@ -5,7 +5,18 @@
 // `os.constants` tables (signals, priority, dlopen) that `constants` merges.
 import { errnoTable } from "../../errors";
 import { runtime } from "../runtime";
-import { ARCH, HOME_DIR, HOSTNAME, PLATFORM, SHELL_PATH, TMP_DIR, USERNAME } from "../platform";
+import {
+  ARCH,
+  GID,
+  HOME_DIR,
+  HOSTNAME,
+  PLATFORM,
+  SHELL_PATH,
+  TMP_DIR,
+  UID,
+  USERNAME,
+} from "../platform";
+import { SIGNAL_NUMBERS } from "../../signals";
 import { Buffer } from "./buffer";
 import { invalidArgType, validateInteger, validateObject } from "./internalErrors";
 
@@ -20,49 +31,55 @@ const bootedAt = performance.now();
 const KERNEL_RELEASE = "6.8.0-webnode";
 const KERNEL_VERSION = "#1 SMP PREEMPT_DYNAMIC webnode";
 
-/** The user every process runs as. */
-const UID = 1000;
-const GID = 1000;
-
 /** Assumed RAM when the browser reports none: 4 GiB. */
 const DEFAULT_TOTAL_MEMORY = 4 * 1024 ** 3;
 
-/** Linux signal numbers, in the order Node lists them on Linux. */
-export const signals: Readonly<Record<string, number>> = Object.freeze({
-  SIGHUP: 1,
-  SIGINT: 2,
-  SIGQUIT: 3,
-  SIGILL: 4,
-  SIGTRAP: 5,
-  SIGABRT: 6,
-  SIGIOT: 6,
-  SIGBUS: 7,
-  SIGFPE: 8,
-  SIGKILL: 9,
-  SIGUSR1: 10,
-  SIGSEGV: 11,
-  SIGUSR2: 12,
-  SIGPIPE: 13,
-  SIGALRM: 14,
-  SIGTERM: 15,
-  SIGCHLD: 17,
-  SIGSTKFLT: 16,
-  SIGCONT: 18,
-  SIGSTOP: 19,
-  SIGTSTP: 20,
-  SIGTTIN: 21,
-  SIGTTOU: 22,
-  SIGURG: 23,
-  SIGXCPU: 24,
-  SIGXFSZ: 25,
-  SIGVTALRM: 26,
-  SIGPROF: 27,
-  SIGWINCH: 28,
-  SIGIO: 29,
-  SIGPOLL: 29,
-  SIGPWR: 30,
-  SIGSYS: 31,
-});
+/** Node's names for the signals on Linux, in its order: SIGCHLD comes before SIGSTKFLT. */
+const NODE_SIGNAL_ORDER = [
+  "SIGHUP",
+  "SIGINT",
+  "SIGQUIT",
+  "SIGILL",
+  "SIGTRAP",
+  "SIGABRT",
+  "SIGIOT",
+  "SIGBUS",
+  "SIGFPE",
+  "SIGKILL",
+  "SIGUSR1",
+  "SIGSEGV",
+  "SIGUSR2",
+  "SIGPIPE",
+  "SIGALRM",
+  "SIGTERM",
+  "SIGCHLD",
+  "SIGSTKFLT",
+  "SIGCONT",
+  "SIGSTOP",
+  "SIGTSTP",
+  "SIGTTIN",
+  "SIGTTOU",
+  "SIGURG",
+  "SIGXCPU",
+  "SIGXFSZ",
+  "SIGVTALRM",
+  "SIGPROF",
+  "SIGWINCH",
+  "SIGIO",
+  "SIGPOLL",
+  "SIGPWR",
+  "SIGSYS",
+];
+
+/** The two names Node gives a signal that has another: SIGIOT is SIGABRT, SIGPOLL is SIGIO. */
+const SIGNAL_ALIASES: Readonly<Record<string, string>> = { SIGIOT: "SIGABRT", SIGPOLL: "SIGIO" };
+
+/** `os.constants.signals`: Node's names, with their Linux numbers (src/core/webnode/signals.ts). */
+export const signals: Readonly<Record<string, number>> = Object.freeze(
+  Object.fromEntries(
+    NODE_SIGNAL_ORDER.map((name) => [name, SIGNAL_NUMBERS[SIGNAL_ALIASES[name] ?? name]]),
+  ),
+);
 
 /** `os.constants.priority`. */
 export const priority: Record<string, number> = {

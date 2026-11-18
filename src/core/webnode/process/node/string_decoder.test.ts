@@ -145,7 +145,125 @@ describe("string_decoder", () => {
         return [d2.lastNeed, d2.lastTotal, [...d2.lastChar], Object.keys(d)];
       },
     ],
+    [
+      "text() from an offset",
+      (D) => {
+        const d = new D("utf8") as unknown as {
+          text(buf: Uint8Array, offset: number): string;
+          lastNeed: number;
+          lastTotal: number;
+        };
+        const bytes = Buffer.from("a€");
+        return [d.text(bytes, 1), d.text(bytes.subarray(0, 3), 1), d.lastNeed, d.lastTotal];
+      },
+    ],
+    [
+      // iconv-lite 0.4 (Express 4's body parsers): a constructor that calls
+      // StringDecoder on its own instances and shares the prototype.
+      "a call on an object that shares the prototype",
+      (D) => {
+        const Base = D as unknown as CallableDecoder;
+        function Internal(this: object, encoding: string) {
+          Base.call(this, encoding);
+        }
+        Internal.prototype = Base.prototype;
+        const d = new (Internal as unknown as typeof NodeStringDecoder)("utf8");
+        const bytes = Buffer.from("héllo");
+        return [
+          d.write(bytes.subarray(0, 2)),
+          d.end(bytes.subarray(2)),
+          d instanceof D,
+          Object.keys(d),
+        ];
+      },
+    ],
+    [
+      "a constructor that inherits from it",
+      (D) => {
+        const Base = D as unknown as CallableDecoder;
+        function Sub(this: { extra: number }, encoding: string) {
+          Base.call(this, encoding);
+          this.extra = 1;
+        }
+        Object.setPrototypeOf(Sub.prototype, Base.prototype);
+        Sub.prototype.write = function (this: object, buf: Uint8Array) {
+          return `[${Base.prototype.write.call(this, buf)}]`;
+        };
+        const d = new (Sub as unknown as typeof NodeStringDecoder)("utf8");
+        const d2 = d as unknown as { lastNeed: number; lastTotal: number };
+        return [
+          d.write(euro.subarray(0, 1)),
+          d2.lastNeed,
+          d2.lastTotal,
+          d.write(euro.subarray(1)),
+          d.end(),
+          d instanceof D,
+          Object.keys(d),
+        ];
+      },
+    ],
+    [
+      "a class that extends it",
+      (D) => {
+        class Sub extends D {
+          constructor() {
+            super("base64");
+          }
+        }
+        const d = new Sub();
+        return [d.write(Buffer.from("ab")), d.end(), d.encoding, d.constructor.name];
+      },
+    ],
+    [
+      "a call that returns nothing and marks a plain object",
+      (D) => {
+        const target = {};
+        const returned = (D as unknown as CallableDecoder).call(target, "hex");
+        return [returned, Object.keys(target)];
+      },
+    ],
+    [
+      "a second call on the same object",
+      (D) => {
+        const d = new D("utf8");
+        d.write(euro.subarray(0, 1));
+        (D as unknown as CallableDecoder).call(d, "hex");
+        return [d.encoding, d.write(Buffer.from([1, 255])), d.end()];
+      },
+    ],
+    ["a call with no this", (D) => (D as unknown as (encoding: string) => void)("utf8")],
+    ["an unknown encoding in a call", (D) => (D as unknown as CallableDecoder).call({}, "nope")],
+    [
+      "write() on an object the constructor never ran on",
+      (D) => D.prototype.write.call({} as never, Buffer.from("a")),
+    ],
+    [
+      "write() of a string on an object the constructor never ran on",
+      (D) => D.prototype.write.call({} as never, "a"),
+    ],
+    [
+      "the constructor and its prototype",
+      (D) => [
+        typeof D,
+        D.name,
+        D.length,
+        Object.entries(Object.getOwnPropertyDescriptors(D.prototype)).map(([key, d]) => [
+          key,
+          d.enumerable,
+          d.configurable,
+          d.writable,
+          typeof d.get,
+          typeof d.value,
+        ]),
+      ],
+    ],
   ];
+
+  /** StringDecoder as old packages use it: a function called on their own object. */
+  type CallableDecoder = {
+    call(target: object, encoding: string): unknown;
+    prototype: { write(this: object, buf: Uint8Array): string };
+  };
 
   it.each(behaviours)("handles %s as Node does", (_label, fn) => {
     expect(outcome(fn)(StringDecoder as unknown as typeof NodeStringDecoder)).toEqual(

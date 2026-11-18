@@ -99,6 +99,21 @@ describe("wasi", () => {
     expect([...(await run(writing([0xff, 0xfe, 0x0a])))]).toEqual([0xff, 0xfe, 0x0a]);
   });
 
+  it("returns EPIPE to the module when stdout's reader has gone, as uvwasi does", () => {
+    fake.closeReader(1);
+    const instance = new WASI({ version: "preview1", args: [], env: {} });
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    instance.initialize({ exports: { memory } } as unknown as WebAssembly.Instance);
+    const view = new DataView(memory.buffer);
+    // One iovec at 8: 3 bytes at 64; the count goes to 16.
+    view.setUint32(8, 64, true);
+    view.setUint32(12, 3, true);
+    const fdWrite = instance.getImportObject().wasi_snapshot_preview1.fd_write as (
+      ...args: number[]
+    ) => number;
+    expect(fdWrite(1, 8, 1, 16)).toBe(64);
+  });
+
   it("reads stdin from the process's fd 0", () => {
     const instance = new WASI({ version: "preview1", args: [], env: {} });
     const memory = new WebAssembly.Memory({ initial: 1 });

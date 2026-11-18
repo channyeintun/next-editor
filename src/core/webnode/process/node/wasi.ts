@@ -26,6 +26,7 @@ const EAGAIN = 6;
 const EBADF = 8;
 const EINVAL = 28;
 const EIO = 29;
+const EPIPE = 64;
 
 type WasiImport = Record<string, (...args: (number | bigint)[]) => number>;
 
@@ -44,7 +45,7 @@ function ioVectors(memory: WebAssembly.Memory, iovs: number, count: number): Uin
 
 function errnoOf(error: unknown): number {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === "EAGAIN" ? EAGAIN : code === "EBADF" ? EBADF : EIO;
+  return code === "EAGAIN" ? EAGAIN : code === "EBADF" ? EBADF : code === "EPIPE" ? EPIPE : EIO;
 }
 
 /** `wasi.WASI`: the system interface a WebAssembly module built for WASI imports. */
@@ -101,10 +102,18 @@ export class WASI extends WasmUtilWASI {
         return EINVAL;
       }
       let written = 0;
-      for (const vector of ioVectors(memory, Number(iovs), Number(iovsLength))) {
-        // A copy: the module may reuse its buffer before the kernel takes it.
-        runtime().fdStream.write(stdio[fd], vector.slice());
-        written += vector.length;
+      try {
+        for (const vector of ioVectors(memory, Number(iovs), Number(iovsLength))) {
+          // A copy: the module may reuse its buffer before the kernel takes it.
+          runtime().fdStream.write(stdio[fd], vector.slice());
+          written += vector.length;
+        }
+      } catch (error) {
+        // As uvwasi: a reader that has gone is EPIPE for the module (Rust's
+        // println! panics on it), unless some bytes went in first.
+        if (written === 0) {
+          return errnoOf(error);
+        }
       }
       new DataView(memory.buffer).setUint32(Number(size), written, true);
       return ESUCCESS;

@@ -46,12 +46,15 @@ function proc(): ProcessLike | undefined {
   return (globalThis as unknown as { process?: ProcessLike }).process;
 }
 
+// The platform's own, taken before a program can replace the global.
+const platformQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
+
 function nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void {
   const tick = proc()?.nextTick;
   if (typeof tick === "function") {
     tick(callback, ...args);
   } else {
-    queueMicrotask(() => callback(...args));
+    platformQueueMicrotask(() => callback(...args));
   }
 }
 
